@@ -1,0 +1,148 @@
+// Neo1.00.cpp: 콘솔 응용 프로그램의 진입점을 정의합니다.
+//
+
+#include "NeoVM.h"
+
+
+std::string str2;
+const char* Str_Substring(char* p, int start, int len)
+{
+	std::string str(p);
+	str2 = str.substr(start, len);
+	return str2.c_str();
+}
+int Str_len(char* p)
+{
+	return strlen(p);
+}
+
+SFunLib _LibString[] =
+{
+{ "str_sub", CNeoVM::Register(Str_Substring) },
+{ "str_len", CNeoVM::Register(Str_len) },
+};
+
+
+double Math_abs(double v)
+{
+	return ::abs(v);
+}
+double Math_acos(double v)
+{
+	return ::acos(v);
+}
+double Math_asin(double v)
+{
+	return ::asin(v);
+}
+double Math_atan(double v)
+{
+	return ::atan(v);
+}
+double Math_ceil(double v)
+{
+	return ::ceil(v);
+}
+double Math_floor(double v)
+{
+	return ::floor(v);
+}
+double Math_sin(double v)
+{
+	return ::sin(v);
+}
+double Math_cos(double v)
+{
+	return ::cos(v);
+}
+double Math_tan(double v)
+{
+	return ::tan(v);
+}
+double Math_log(double v)
+{
+	return ::log(v);
+}
+double Math_log10(double v)
+{
+	return ::log10(v);
+}
+double Math_pow(double v1, double v2)
+{
+	return ::pow(v1, v2);
+}
+#define MATH_PI				3.14159265358979323846f // Pi
+double Math_deg(double radian)
+{
+	return ((radian) * (180.0f / MATH_PI));
+}
+double Math_rad(double degree)
+{
+	return ((degree) * (MATH_PI / 180.0f));
+}
+double Math_sqrt(double v)
+{
+	return ::sqrt(v);
+}
+int	Math_rand()
+{
+	return ::rand();
+}
+
+
+
+
+SFunLib _LibMath[] =
+{
+{ "abs", CNeoVM::Register(Math_abs) },
+{ "acos", CNeoVM::Register(Math_acos) },
+{ "asin", CNeoVM::Register(Math_asin) },
+{ "atan", CNeoVM::Register(Math_atan) },
+{ "ceil", CNeoVM::Register(Math_ceil) },
+{ "floor", CNeoVM::Register(Math_floor) },
+{ "sin", CNeoVM::Register(Math_sin) },
+{ "cos", CNeoVM::Register(Math_cos) },
+{ "tan", CNeoVM::Register(Math_tan) },
+{ "log", CNeoVM::Register(Math_log) },
+{ "log10", CNeoVM::Register(Math_log10) },
+{ "pow", CNeoVM::Register(Math_pow) },
+{ "deg", CNeoVM::Register(Math_deg) },
+{ "rad", CNeoVM::Register(Math_rad) },
+{ "sqrt", CNeoVM::Register(Math_sqrt) },
+{ "rand", CNeoVM::Register(Math_rand) },
+};
+
+void CNeoVM::RegLibrary(VarInfo* pSystem, const char* pLibName, SFunLib* pFuns, int iCount)
+{
+	//VarInfo temp;
+	//Var_SetTable(&temp, TableAlloc());
+	//temp._tbl->_refCount = 1;
+	//pSystem->_tbl->_strMap[pLibName] = temp;
+
+	VarInfo fun;
+	fun.SetType(VAR_PTRFUN);
+
+	TableInfo* pTable = pSystem->_tbl;
+
+	for (int i = 0; i < iCount; i++)
+	{
+		fun._fun = pFuns[i].fn;
+		//temp._tbl->_strMap[pFuns[i].pName] = fun;
+		pTable->_strMap[pFuns[i].pName] = fun;
+	}
+}
+
+
+void CNeoVM::Init()
+{
+	VarInfo* pSystem = GetVarPtr(-1);
+	Var_SetTable(pSystem, TableAlloc());
+	pSystem->_tbl->_refCount = 1;
+
+	//SetTable(, TableAlloc());
+
+	RegLibrary(pSystem, "string", _LibString, _countof(_LibString));
+	RegLibrary(pSystem, "math", _LibMath, _countof(_LibMath));
+
+	Run(0);
+}
