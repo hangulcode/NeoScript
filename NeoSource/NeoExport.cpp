@@ -570,10 +570,10 @@ BOOL WriteLog(SFunctions& funs, SVars& vars)
 			OutAsm("Static [%d] f:%lf", i, vi._float); // double
 			break;
 		case VAR_BOOL:
-			OutAsm("Static [%d] %s", i, vi._bl ? "true" : "false");
+			OutAsm("Static [%d] b:%s", i, vi._bl ? "true" : "false");
 			break;
 		case VAR_STRING:
-			OutAsm("Static [%d] %s", i, ToPtringString(vi._str->_str).c_str());
+			OutAsm("Static [%d] s:%s", i, ToPtringString(vi._str->_str).c_str());
 			break;
 		default:
 			DebugLog("Error VAR Type Error (%d)", vi.GetType());
