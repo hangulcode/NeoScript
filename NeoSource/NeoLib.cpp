@@ -2,7 +2,7 @@
 //
 
 #include "NeoVM.h"
-
+#include <iostream>
 
 std::string str2;
 const char* Str_Substring(char* p, int start, int len)
@@ -15,13 +15,6 @@ int Str_len(char* p)
 {
 	return strlen(p);
 }
-
-SFunLib _LibString[] =
-{
-{ "str_sub", CNeoVM::Register(Str_Substring) },
-{ "str_len", CNeoVM::Register(Str_len) },
-};
-
 
 double Math_abs(double v)
 {
@@ -89,10 +82,15 @@ int	Math_rand()
 	return ::rand();
 }
 
+void io_print(const char* p)
+{
+	std::cout << p;
+}
 
 
 
-SFunLib _LibMath[] =
+
+static SFunLib _Lib[] =
 {
 { "abs", CNeoVM::Register(Math_abs) },
 { "acos", CNeoVM::Register(Math_acos) },
@@ -110,6 +108,11 @@ SFunLib _LibMath[] =
 { "rad", CNeoVM::Register(Math_rad) },
 { "sqrt", CNeoVM::Register(Math_sqrt) },
 { "rand", CNeoVM::Register(Math_rand) },
+
+{ "str_sub", CNeoVM::Register(Str_Substring) },
+{ "str_len", CNeoVM::Register(Str_len) },
+
+{ "print", CNeoVM::Register(io_print) },
 };
 
 void CNeoVM::RegLibrary(VarInfo* pSystem, const char* pLibName, SFunLib* pFuns, int iCount)
@@ -141,8 +144,7 @@ void CNeoVM::Init()
 
 	//SetTable(, TableAlloc());
 
-	RegLibrary(pSystem, "string", _LibString, _countof(_LibString));
-	RegLibrary(pSystem, "math", _LibMath, _countof(_LibMath));
+	RegLibrary(pSystem, "sys", _Lib, _countof(_Lib));
 
 	Run(0);
 }

@@ -180,12 +180,14 @@ struct SFunctionInfo
 		_code.Write(&fun, sizeof(fun));
 		_code.Write(&args, sizeof(args));
 	}
-	void	Push_CallPtr(BYTE op, short fun, short args)
+	void	Push_CallPtr(short table, short index, short args)
 	{
 		_iLastOPOffset = _code.GetBufferOffset();
 
+		BYTE op = NOP_PTRCALL;
 		_code.Write(&op, sizeof(op));
-		_code.Write(&fun, sizeof(fun));
+		_code.Write(&table, sizeof(table));
+		_code.Write(&index, sizeof(index));
 		_code.Write(&args, sizeof(args));
 	}
 	void	Push_MOV(BYTE op, short r, short s)

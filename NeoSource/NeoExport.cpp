@@ -160,9 +160,10 @@ void WriteFun(CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, s
 			ar << op << n1 << n2;
 			break;
 		case NOP_PTRCALL:
-			arRead >> n1 >> n2;
+			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			ar << op << n1 << n2;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
+			ar << op << n1 << n2 << n3;
 			break;
 		case NOP_CALL:
 			arRead >> n1 >> n2;
@@ -406,9 +407,10 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			OutAsm("Far CALL %s", GetFunctionName(funs, n1).c_str());
 			break;
 		case NOP_PTRCALL:
-			arRead >> n1 >> n2;
+			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			OutAsm("Ptr CALL [%d] arg:%d", n1, n2);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
+			OutAsm("Ptr CALL [%d].[%d] arg:%d", n1, n2, n3);
 			break;
 		case NOP_CALL:
 			arRead >> n1 >> n2;

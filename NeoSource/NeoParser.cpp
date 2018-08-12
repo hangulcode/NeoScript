@@ -775,7 +775,7 @@ BOOL IsTempVar(int iVar)
 	return FALSE;
 }
 
-BOOL ParseFunCall(int& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+BOOL ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	std::string tk1, tk2;
 	TK_TYPE tkType1, tkType2;
@@ -820,12 +820,12 @@ BOOL ParseFunCall(int& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun, CAr
 		if(pFun != NULL)
 			funs._cur.Push_Call(pFun->_funType == FUNT_IMPORT ? NOP_FARCALL : NOP_CALL, pFun->_funID, iParamCount);
 		else
-			funs._cur.Push_CallPtr(NOP_PTRCALL, iResultStack, iParamCount);
+			funs._cur.Push_CallPtr(iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
 		iResultStack = funs._cur.AllocLocalTempVar();
 		if(tkTypePre != TK_MINUS)
-			funs._cur.Push_MOV(NOP_MOV, iResultStack, STACK_POS_RETURN);
+			funs._cur.Push_MOV(NOP_MOV, iResultStack._iVar, STACK_POS_RETURN);
 		else
-			funs._cur.Push_MOV(NOP_MOV_MINUS, iResultStack, STACK_POS_RETURN);
+			funs._cur.Push_MOV(NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN);
 	}
 	else
 	{
@@ -958,13 +958,15 @@ BOOL ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 			{
 				PushToken(tkType2, tk2);
 
-				int iTempOffset2 = funs._cur.AllocLocalTempVar();
-				funs._cur.Push_TableRead(iTempOffset._iVar, iArrayIndex, iTempOffset2);
-				iTempOffset = iTempOffset2;
+				//int iTempOffset2 = funs._cur.AllocLocalTempVar();
+				//funs._cur.Push_TableRead(iTempOffset._iVar, iArrayIndex, iTempOffset2);
+				//iTempOffset = iTempOffset2;
 
+				//iArrayIndex = INVALID_ERROR_PARSEJOB;
+				iTempOffset._iArrayIndex = iArrayIndex;
 				iArrayIndex = INVALID_ERROR_PARSEJOB;
 
-				if (FALSE == ParseFunCall(iTempOffset._iVar, tkTypePre, NULL, ar, funs, vars))
+				if (FALSE == ParseFunCall(iTempOffset, tkTypePre, NULL, ar, funs, vars))
 					return FALSE;
 				break;
 			}
@@ -1015,7 +1017,7 @@ BOOL ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 		SFunctionInfo* pFun = funs.FindFun(tk1);
 		if (pFun != NULL)
 		{
-			if (FALSE == ParseFunCall(iTempOffset._iVar, tkTypePre, pFun, ar, funs, vars))
+			if (FALSE == ParseFunCall(iTempOffset, tkTypePre, pFun, ar, funs, vars))
 				return FALSE;
 		}
 		else

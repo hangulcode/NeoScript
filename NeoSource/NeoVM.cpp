@@ -176,7 +176,7 @@ void CNeoVM::TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
 	}
 	case VAR_STRING:
 	{
-		std::string n = pArray->_str->_str;
+		std::string& n = pArray->_str->_str;
 		auto it = pTable->_tbl->_strMap.find(n);
 		if (it != pTable->_tbl->_strMap.end())
 		{
@@ -190,6 +190,53 @@ void CNeoVM::TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
 		break;
 	}
 	}
+}
+FunctionPtr* CNeoVM::GetPtrFunction(VarInfo *pTable, VarInfo *pArray)
+{
+	if (pTable->GetType() != VAR_TABLE)
+		return NULL;
+
+	VarInfo* pValue;
+	switch (pArray->GetType())
+	{
+	case VAR_INT:
+	{
+		int n = (int)pArray->_int;
+		auto it = pTable->_tbl->_intMap.find(n);
+		if (it != pTable->_tbl->_intMap.end())
+		{
+			pValue = &(*it).second;
+			if (pValue->GetType() == VAR_PTRFUN)
+				return &pValue->_fun;
+		}
+		break;
+	}
+	case VAR_FLOAT:
+	{
+		int n = (int)pArray->_float;
+		auto it = pTable->_tbl->_intMap.find(n);
+		if (it != pTable->_tbl->_intMap.end())
+		{
+			pValue = &(*it).second;
+			if (pValue->GetType() == VAR_PTRFUN)
+				return &pValue->_fun;
+		}
+		break;
+	}
+	case VAR_STRING:
+	{
+		std::string& n = pArray->_str->_str;
+		auto it = pTable->_tbl->_strMap.find(n);
+		if (it != pTable->_tbl->_strMap.end())
+		{
+			pValue = &(*it).second;
+			if (pValue->GetType() == VAR_PTRFUN)
+				return &pValue->_fun;
+		}
+		break;
+	}
+	}
+	return NULL;
 }
 void CNeoVM::TableRead(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
 {
@@ -223,7 +270,7 @@ void CNeoVM::TableRead(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
 	}
 	case VAR_STRING:
 	{
-		std::string n = pArray->_str->_str;
+		std::string& n = pArray->_str->_str;
 		auto it = pTable->_tbl->_strMap.find(n);
 		if (it != pTable->_tbl->_strMap.end())
 		{
@@ -675,10 +722,11 @@ BOOL	CNeoVM::Run(int iFunctionID)
 
 	NOP_TYPE op;
 	short n1, n2, n3;
-	VarInfo* v1;
+//	VarInfo* v1;
 //	VarInfo* v2;
 //	VarInfo* v3;
 
+	FunctionPtr* pFunctionPtr;
 	SCallStack callStack;
 	int iTemp;
 
@@ -844,20 +892,25 @@ BOOL	CNeoVM::Run(int iFunctionID)
 				_iSP_Vars_Max2 = iSP_VarsMax;
 			break;
 		case NOP_PTRCALL:
-			m_sCode >> n1 >> n2;
-			v1 = GetVarPtr(n1);
-			if (v1->GetType() == VAR_PTRFUN)
+			m_sCode >> n1 >> n2 >> n3;
+			pFunctionPtr = GetPtrFunction(GetVarPtr(n1), GetVarPtr(n2));
+			if (pFunctionPtr != NULL)
 			{
 				int iSave = _iSP_Vars;
 				_iSP_Vars = iSP_VarsMax;
 
-				if ((*v1->_fun._fn)(this, v1->_fun._func, n2) < 0)
+				if ((pFunctionPtr->_fn)(this, pFunctionPtr->_func, n3) < 0)
 				{
 					SetError("Ptr Call Argument Count Error");
 					return FALSE;
 				}
 
 				_iSP_Vars = iSave;
+			}
+			else
+			{
+				SetError("Ptr Call Not Found");
+				return FALSE;
 			}
 			break;
 		case NOP_RETURN:

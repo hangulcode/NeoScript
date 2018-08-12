@@ -228,6 +228,7 @@ private:
 
 	void TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);
 	void TableRead(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);
+	FunctionPtr* GetPtrFunction(VarInfo *pTable, VarInfo *pArray);
 
 	void ClearArgs()
 	{
