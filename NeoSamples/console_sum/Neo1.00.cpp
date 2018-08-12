@@ -11,10 +11,6 @@ float Mul(float a, float b)
 	return a * b;
 }
 
-void print(const char* p)
-{
-	std::cout << p;
-}
 
 
 
@@ -59,7 +55,6 @@ int main()
 		if (NULL != pVM)
 		{
 			pVM->Register("Mul", Mul);
-			pVM->Register("print", print);
 
 			int i = 5;
 			for (int i = 1; i < 10; i++)
@@ -68,7 +63,7 @@ int main()
 				float r = pVM->Call<float>("Sum", 100, i);
 				DWORD t2 = GetTickCount();
 
-				printf("\nSum %d + %d = %f (T:%d)", 100, i, r, t2 - t1);
+				printf("\nSum %d + %d = %f (Elapse:%d)", 100, i, r, t2 - t1);
 			}
 			Sleep(10);
 			CNeoVM::ReleaseVM(pVM);
