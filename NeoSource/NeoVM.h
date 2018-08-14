@@ -570,42 +570,11 @@ public:
 		}
 	};
 
-
-	template<typename RVal>
-	static int push_functor(FunctionPtr* pOut, RVal(*func)())
+	template<typename RVal, typename ... Types>
+	static int push_functor(FunctionPtr* pOut, RVal(*func)(Types ... args))
 	{
-		neo_pushcclosure(pOut, functor<RVal>::invoke, (void*)func);
-		return 0;
-	}
-	template<typename RVal, typename T1>
-	static int push_functor(FunctionPtr* pOut, RVal(*func)(T1))
-	{
-		neo_pushcclosure(pOut, functor<RVal, T1>::invoke, (void*)func);
-		return 1;
-	}
-	template<typename RVal, typename T1, typename T2>
-	static int push_functor(FunctionPtr* pOut, RVal(*func)(T1, T2))
-	{
-		neo_pushcclosure(pOut, functor<RVal, T1, T2>::invoke, (void*)func);
-		return 2;
-	}
-	template<typename RVal, typename T1, typename T2, typename T3>
-	static int push_functor(FunctionPtr* pOut, RVal(*func)(T1, T2, T3))
-	{
-		neo_pushcclosure(pOut, functor<RVal, T1, T2, T3>::invoke, (void*)func);
-		return 3;
-	}
-	template<typename RVal, typename T1, typename T2, typename T3, typename T4>
-	static int push_functor(FunctionPtr* pOut, RVal(*func)(T1, T2, T3, T4))
-	{
-		neo_pushcclosure(pOut, functor<RVal, T1, T2, T3, T4>::invoke, (void*)func);
-		return 4;
-	}
-	template<typename RVal, typename T1, typename T2, typename T3, typename T4, typename T5>
-	static int push_functor(FunctionPtr* pOut, RVal(*func)(T1, T2, T3, T4, T5))
-	{
-		neo_pushcclosure(pOut, functor<RVal, T1, T2, T3, T4, T5>::invoke, (void*)func);
-		return 5;
+		neo_pushcclosure(pOut, functor<RVal, Types ...>::invoke, (void*)func);
+		return sizeof ...(Types);
 	}
 
 	template<typename F>
