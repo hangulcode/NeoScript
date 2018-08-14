@@ -148,14 +148,9 @@ struct SFunctionInfo
 	}
 	void	FreeLocalTempVar()
 	{
-		if (_localTempCount > 0)
-			_localTempCount--;
+		_localTempCount = 0;
 	}
-	void	FreeLocalTempVar(int cnt)
-	{
-		if (_localTempCount >= cnt)
-			_localTempCount -= cnt;
-	}
+
 
 	int _iLastOPOffset = 0;
 	NOP_TYPE GetLastOP()
