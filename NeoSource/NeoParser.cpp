@@ -1834,7 +1834,7 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	return true;
 }
 
-bool Parse(CArchiveRdWC& ar, CNArchive&arw)
+bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 {
 	g_sTokenQueue.clear();
 
@@ -1853,7 +1853,8 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw)
 	if (true == r)
 	{
 		Write(arw, funs, vars);
-		WriteLog(funs, vars);
+		if(putASM)
+			WriteLog(funs, vars);
 	}
 
 	DelVarsFunction(vars);
@@ -1864,7 +1865,7 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw)
 	return r;
 }
 
-bool CNeoVM::Compile(void* pBufferSrc, int iLenSrc, void* pBufferCode, int iLenCode, int* pLenCode)
+bool CNeoVM::Compile(void* pBufferSrc, int iLenSrc, void* pBufferCode, int iLenCode, int* pLenCode, bool putASM)
 {
 	CArchiveRdWC ar2;
 	ToArchiveRdWC((const char*)pBufferSrc, iLenSrc, ar2);
@@ -1872,7 +1873,7 @@ bool CNeoVM::Compile(void* pBufferSrc, int iLenSrc, void* pBufferCode, int iLenC
 	CNArchive arw;
 	arw.SetData(pBufferCode, iLenCode);
 
-	bool r = Parse(ar2, arw);
+	bool r = Parse(ar2, arw, putASM);
 	if (r)
 		*pLenCode = arw.GetBufferOffset();
 	return r;

@@ -48,7 +48,7 @@ int main()
 	BYTE* pCodeTemp = new BYTE[iLenTemp];
 
 	int iCodeLen = 0;
-	if (CNeoVM::Compile(pFileBuffer, iFileLen, pCodeTemp, iLenTemp, &iCodeLen) == TRUE)
+	if (CNeoVM::Compile(pFileBuffer, iFileLen, pCodeTemp, iLenTemp, &iCodeLen, false) == TRUE)
 	{
 		printf("Comile Success !!\n");
 		CNeoVM* pVM = CNeoVM::LoadVM(pCodeTemp, iCodeLen);
