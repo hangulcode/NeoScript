@@ -924,7 +924,7 @@ BOOL	CNeoVM::Run(int iFunctionID)
 			{
 				return TRUE;
 			}
-			iTemp = m_sCallStack.size() - 1;
+			iTemp = (int)m_sCallStack.size() - 1;
 			callStack = m_sCallStack[iTemp];
 			m_sCallStack.resize(iTemp);
 

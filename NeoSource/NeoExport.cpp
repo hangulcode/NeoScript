@@ -68,7 +68,7 @@ void WriteFun(CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, s
 		return;
 
 
-	int staticCount = funs._staticVars.size();
+	int staticCount = (int)funs._staticVars.size();
 	int localCount = fi._localVarCount;
 
 	CNArchive arRead(fi._code.GetData(), fi._code.GetBufferSize());
@@ -197,7 +197,7 @@ void WriteFun(CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, s
 
 void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 {
-	int staticCount = funs._staticVars.size();
+	int staticCount = (int)funs._staticVars.size();
 	int localCount = fi._localVarCount;
 
 	int curFunStatkSize = 1 + (int)fi._args.size() + localCount + fi._localTempMax;

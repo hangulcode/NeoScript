@@ -686,7 +686,7 @@ BOOL ParseFunctionArg(CArchiveRdWC& ar, SFunctions& funs, SLayerVar* pCurLayer)
 					DebugLog("Error (%d, %d): Already Function Arg (%s)", ar.CurLine(), ar.CurCol(), tk2.c_str());
 					return FALSE;
 				}
-				pCurLayer->AddLocalVar(tk2, 1 + funs._cur._args.size());
+				pCurLayer->AddLocalVar(tk2, 1 + (int)funs._cur._args.size());
 				funs._cur._args.insert(tk2);
 				bPreviusComa = false;
 			}
@@ -728,7 +728,7 @@ void AddLocalVar(SLayerVar* pCurLayer)
 
 void DelLocalVar(SLayerVar* pCurLayer)
 {
-	int sz = pCurLayer->_varsLayer.size();
+	int sz = (int)pCurLayer->_varsLayer.size();
 	if (sz > 0)
 	{
 		SLocalVar* pCurLocal = pCurLayer->_varsLayer[sz - 1];
@@ -750,7 +750,7 @@ SLayerVar* AddVarsFunction(SVars& vars)
 
 SLayerVar* DelVarsFunction(SVars& vars)
 {
-	int cnt = vars._varsFunction.size();
+	int cnt = (int)vars._varsFunction.size();
 	if (cnt > 0)
 	{
 		cnt -= 1;
@@ -1810,7 +1810,7 @@ BOOL ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	{
 		if (tkType1 == TK_SEMICOLON)
 		{
-			funs._cur._funID = funs._funs.size() + 1;
+			funs._cur._funID = (int)funs._funs.size() + 1;
 			funs._funs[funs._cur._name] = funs._cur; // 이름 먼저 등록
 
 			DelVarsFunction(vars);
@@ -1820,7 +1820,7 @@ BOOL ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return FALSE;
 	}
 
-	funs._cur._funID = funs._funs.size() + 1;
+	funs._cur._funID = (int)funs._funs.size() + 1;
 	funs._funs[funs._cur._name] = funs._cur; // 이름 먼저 등록
 
 	if (FALSE == ParseFunctionBody(ar, funs, vars))

@@ -13,7 +13,7 @@ const char* Str_Substring(char* p, int start, int len)
 }
 int Str_len(char* p)
 {
-	return strlen(p);
+	return (int)strlen(p);
 }
 
 double Math_abs(double v)

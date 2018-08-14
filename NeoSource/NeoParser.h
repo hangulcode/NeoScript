@@ -53,14 +53,14 @@ struct SLayerVar
 
 	~SLayerVar()
 	{
-		for (int i = _varsLayer.size() - 1; i >= 0; i--)
+		for (int i = (int)_varsLayer.size() - 1; i >= 0; i--)
 			delete _varsLayer[i];
 		_varsLayer.clear();
 	}
 
 	int FindVar(const std::string& name)
 	{
-		for (int i = _varsLayer.size() - 1; i >= 0; i--)
+		for (int i = (int)_varsLayer.size() - 1; i >= 0; i--)
 		{
 			int r = _varsLayer[i]->FindVar(name);
 			if(r >= 0)
@@ -71,7 +71,7 @@ struct SLayerVar
 
 	void	AddLocalVar(const std::string& name, int offset)
 	{
-		int sz = _varsLayer.size();
+		int sz = (int)_varsLayer.size();
 		if (sz <= 0)
 			return; // Error
 
@@ -84,14 +84,14 @@ struct SVars
 	std::vector<SLayerVar*>	_varsFunction;
 	~SVars()
 	{
-		for (int i = _varsFunction.size() - 1; i >= 0; i--)
+		for (int i = (int)_varsFunction.size() - 1; i >= 0; i--)
 			delete _varsFunction[i];
 		_varsFunction.clear();
 	}
 
 	int FindVar(const std::string& name)
 	{
-		for (int i = _varsFunction.size() - 1; i >= 0; i--)
+		for (int i = (int)_varsFunction.size() - 1; i >= 0; i--)
 		{
 			int r = _varsFunction[i]->FindVar(name);
 			if (r >= 0)
@@ -330,7 +330,7 @@ struct SFunctions
 
 	~SFunctions()
 	{
-		for (int i = _staticVars.size() - 1; i >= 0; i--)
+		for (int i = (int)_staticVars.size() - 1; i >= 0; i--)
 		{
 			VarInfo& v2 = _staticVars[i];
 			if (VAR_STRING == v2.GetType())
@@ -352,7 +352,7 @@ struct SFunctions
 
 	int	AddStaticInt(int num)
 	{
-		for (int i = _staticVars.size() - 1; i >= 0; i--)
+		for (int i = (int)_staticVars.size() - 1; i >= 0; i--)
 		{
 			VarInfo& v2 = _staticVars[i];
 			if (VAR_INT == v2.GetType())
@@ -365,14 +365,14 @@ struct SFunctions
 		v.SetType(VAR_INT);
 		v._int = num;
 
-		int idx = _staticVars.size() + COMPILE_STATIC_VAR_BEGIN;
+		int idx = (int)_staticVars.size() + COMPILE_STATIC_VAR_BEGIN;
 		_staticVars.push_back(v);
 		return idx;
 	}
 
 	int	AddStaticNum(double num)
 	{
-		for (int i = _staticVars.size() - 1; i >= 0; i--)
+		for (int i = (int)_staticVars.size() - 1; i >= 0; i--)
 		{
 			VarInfo& v2 = _staticVars[i];
 			if (VAR_FLOAT == v2.GetType())
@@ -385,13 +385,13 @@ struct SFunctions
 		v.SetType(VAR_FLOAT);
 		v._float = num;
 
-		int idx = _staticVars.size() + COMPILE_STATIC_VAR_BEGIN;
+		int idx = (int)_staticVars.size() + COMPILE_STATIC_VAR_BEGIN;
 		_staticVars.push_back(v);
 		return idx;
 	}
 	int	AddStaticString(const std::string& str)
 	{
-		for (int i = _staticVars.size() - 1; i >= 1; i--) // 0 is System
+		for (int i = (int)_staticVars.size() - 1; i >= 1; i--) // 0 is System
 		{
 			VarInfo& v2 = _staticVars[i];
 			if (VAR_STRING == v2.GetType())
@@ -406,13 +406,13 @@ struct SFunctions
 		v._str = new StringInfo();
 		v._str->_str = str;
 
-		int idx = _staticVars.size() + COMPILE_STATIC_VAR_BEGIN;
+		int idx = (int)_staticVars.size() + COMPILE_STATIC_VAR_BEGIN;
 		_staticVars.push_back(v);
 		return idx;
 	}
 	int	AddStaticBool(bool b)
 	{
-		for (int i = _staticVars.size() - 1; i >= 0; i--)
+		for (int i = (int)_staticVars.size() - 1; i >= 0; i--)
 		{
 			VarInfo& v2 = _staticVars[i];
 			if (VAR_BOOL == v2.GetType())
@@ -425,7 +425,7 @@ struct SFunctions
 		v.SetType(VAR_BOOL);
 		v._bl = b;
 
-		int idx = _staticVars.size() + COMPILE_STATIC_VAR_BEGIN;
+		int idx = (int)_staticVars.size() + COMPILE_STATIC_VAR_BEGIN;
 		_staticVars.push_back(v);
 		return idx;
 	}

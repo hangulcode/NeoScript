@@ -24,11 +24,11 @@ BOOL		ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar)
 		if ((*(WORD*)pBuffer) == FILE_UTF8_HEADER && *(BYTE*)(pBuffer + 2) == FILE_UTF8_SUB)
 		{
 			utf_string::UTF8_UNICODE(pBuffer + 3, iBufferSize - 3, str);
-			size_toUni = str.length();
+			size_toUni = (int)str.length();
 			pWBuffer = new WORD[str.length() + 1];
 			memcpy(pWBuffer, (WORD*)(pBuffer + 2), size_toUni * 2);
 			pWBuffer[size_toUni] = NULL;
-			ar.SetData(pWBuffer, str.length());
+			ar.SetData(pWBuffer, (int)str.length());
 		}
 		else
 		{

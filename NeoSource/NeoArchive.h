@@ -145,7 +145,7 @@ public:
 	}
 	CNArchive& operator << (std::string& strString)
 	{
-		int nLen = strString.length();
+		int nLen = (int)strString.length();
 		*this << nLen;
 
 		Write((char*)strString.data(), nLen);
@@ -153,7 +153,7 @@ public:
 	}
 	CNArchive& operator << (std::wstring& strString)
 	{
-		int nLen = strString.length();
+		int nLen = (int)strString.length();
 		*this << nLen;
 
 		Write((wchar_t*)strString.data(), nLen*sizeof(wchar_t));
