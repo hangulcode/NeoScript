@@ -390,70 +390,20 @@ public:
 	CNeoVM(int iStackSize);
 	virtual ~CNeoVM();
 
-	template<typename RVal>
-	RVal Call(const std::string& funName)
+
+	inline void PushArgs() { }
+	template<typename  T, typename ... Types>
+	inline void PushArgs(T arg1, Types ... args)
 	{
-		ClearArgs();
-		RunFunction(funName);
-		GC();
-		return read<RVal>(&m_sVarStack[_iSP_Vars]);
+		push(arg1);
+		PushArgs(args...);
 	}
 
-	template<typename RVal, typename T1>
-	RVal Call(const std::string& funName, typename T1)
+	template<typename RVal, typename ... Types>
+	RVal Call(const std::string& funName, Types ... args)
 	{
 		ClearArgs();
-		push(arg1);
-		RunFunction(funName);
-		GC();
-		return read<RVal>(&m_sVarStack[_iSP_Vars]);
-	}
-
-	template<typename RVal, typename T1, typename T2>
-	RVal Call(const std::string& funName, T1 arg1, T2 arg2)
-	{
-		ClearArgs();
-		push(arg1);
-		push(arg2);
-		RunFunction(funName);
-		GC();
-		return read<RVal>(&m_sVarStack[_iSP_Vars]);
-	}
-
-	template<typename RVal, typename T1, typename T2, typename T3>
-	RVal Call(const std::string& funName, T1 arg1, T2 arg2, T3 arg3)
-	{
-		ClearArgs();
-		push(arg1);
-		push(arg2);
-		push(arg3);
-		RunFunction(funName);
-		GC();
-		return read<RVal>(&m_sVarStack[_iSP_Vars]);
-	}
-
-	template<typename RVal, typename T1, typename T2, typename T3, typename T4>
-	RVal Call(const std::string& funName, T1 arg1, T2 arg2, T3 arg3, T4 arg4)
-	{
-		ClearArgs();
-		push(arg1);
-		push(arg2);
-		push(arg3);
-		push(arg4);
-		RunFunction(funName);
-		GC();
-		return read<RVal>(&m_sVarStack[_iSP_Vars]);
-	}
-
-	template<typename RVal, typename T1, typename T2, typename T3, typename T4, typename T5>
-	RVal Call(const std::string& funName, T1 arg1, T2 arg2, T3 arg3, T4 arg4, T5 arg5)
-	{
-		ClearArgs();
-		push(arg1);
-		push(arg2);
-		push(arg3);
-		push(arg4);
-		push(arg5);
+		PushArgs(args...);
 		RunFunction(funName);
 		GC();
 		return read<RVal>(&m_sVarStack[_iSP_Vars]);
