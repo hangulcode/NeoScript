@@ -706,7 +706,7 @@ BOOL	CNeoVM::Run(int iFunctionID)
 
 	m_sCode.SetPointer(fun._codePtr, SEEK_SET);
 
-	_iSP_Vars = _header._iStaticVarCount;
+	_iSP_Vars = 0;// _header._iStaticVarCount;
 	int iSP_VarsMax = _iSP_Vars + fun._localAddCount;
 
 	_iSP_Vars_Max2 = iSP_VarsMax;
@@ -1015,9 +1015,10 @@ CNeoVM* CNeoVM::LoadVM(void* pBuffer, int iSize)
 	}
 
 	std::string tempStr;
+	pVM->m_sVarGlobal.resize(header._iStaticVarCount);
 	for (int i = 0; i < header._iStaticVarCount; i++)
 	{
-		VarInfo& vi = pVM->m_sVarStack[i];
+		VarInfo& vi = pVM->m_sVarGlobal[i];
 		pVM->Var_Release(&vi);
 
 		VAR_TYPE type;

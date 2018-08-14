@@ -172,6 +172,7 @@ private:
 	CNArchive				m_sCode;
 	int						_iSP_Vars;
 	int						_iSP_Vars_Max2;
+	std::vector<VarInfo>	m_sVarGlobal;
 	std::vector<VarInfo>	m_sVarStack;
 	std::vector<SCallStack>	m_sCallStack;
 	std::vector<SFunctionTable> m_sFunctionPtr;
@@ -192,7 +193,7 @@ private:
 		{
 			return &m_sVarStack[_iSP_Vars + n];
 		}
-		return &m_sVarStack[-n - 1];
+		return &m_sVarGlobal[-n - 1];
 	}
 
 
