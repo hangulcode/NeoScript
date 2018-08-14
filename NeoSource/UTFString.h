@@ -15,10 +15,10 @@ struct utf_string
 /////////////////////////////////////////////////////////////////////////
 //						UNICODE	-> UTF8
 /////////////////////////////////////////////////////////////////////////
-static int UNICODE_UTF8( const wchar_t* pUniStr, int iLength, BYTE* pUtf8Str )
+static int UNICODE_UTF8( const wchar_t* pUniStr, int iLength, u8* pUtf8Str )
 {
 	wchar_t wChar;
-	BYTE szBytes[6];
+	u8 szBytes[6];
 	int nbytes;
 	int i, j;
 	int iTotelLen = 0;
@@ -34,7 +34,7 @@ static int UNICODE_UTF8( const wchar_t* pUniStr, int iLength, BYTE* pUtf8Str )
 			if( wChar <= 0x7f)
 			{
 				nbytes = 1;
-				szBytes[0] = (BYTE)wChar;
+				szBytes[0] = (u8)wChar;
 			} 
 			else if( wChar <= 0x7ff)
 			{
@@ -91,7 +91,7 @@ static int UNICODE_UTF8( const wchar_t* pUniStr, int iLength, BYTE* pUtf8Str )
 static int UNICODE_UTF8( const wchar_t* pUniStr, int iLength, std::string& str )
 {
 	wchar_t wChar;
-	BYTE szBytes[6];
+	u8 szBytes[6];
 	int nbytes;
 	int i, j;
 
@@ -105,7 +105,7 @@ static int UNICODE_UTF8( const wchar_t* pUniStr, int iLength, std::string& str )
 		if( wChar <= 0x7f)
 		{
 			nbytes = 1;
-			szBytes[0] = (BYTE)wChar;
+			szBytes[0] = (u8)wChar;
 		} 
 		else if( wChar <= 0x7ff)
 		{
@@ -137,9 +137,9 @@ static int UNICODE_UTF8( const wchar_t* pUniStr, int iLength, std::string& str )
 /////////////////////////////////////////////////////////////////////////
 static const char* UTF8_GETWCHAR_FROMUTF8(const char* p, wchar_t& wChar)
 {
-	BYTE* pUtf8Str = (BYTE*)p;
+	u8* pUtf8Str = (u8*)p;
 
-	BYTE byHeader = *pUtf8Str;
+	u8 byHeader = *pUtf8Str;
 	int iIndex = 0;
 	if( ( 0xE0 == ( byHeader & 0xE0 ) ) )
 	{
@@ -169,9 +169,9 @@ static int UTF8_UNICODE( const char* _pUtf8Str, int iLength, wchar_t* pUniStr )
 	int iIndex = 0;
 	int iCount = 0;
 	wchar_t wChar;
-	BYTE byHeader;
+	u8 byHeader;
 
-	const BYTE* pUtf8Str = (const BYTE*)_pUtf8Str;
+	const u8* pUtf8Str = (const u8*)_pUtf8Str;
 
 	if(iLength < 0)
 		iLength = (int)strlen(_pUtf8Str);
@@ -234,9 +234,9 @@ static int UTF8_UNICODE( const char* _pUtf8Str, int iLength, std::wstring& str )
 {
 	int iIndex = 0;
 	wchar_t wChar;
-	BYTE byHeader;
+	u8 byHeader;
 
-	const BYTE* pUtf8Str = (const BYTE*)_pUtf8Str;
+	const u8* pUtf8Str = (const u8*)_pUtf8Str;
 
 	if(iLength < 0)
 		iLength = (int)strlen(_pUtf8Str);

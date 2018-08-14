@@ -2,8 +2,9 @@
 //
 
 #include "NeoVM.h"
+#include "NeoArchive.h"
 
-void	DebugLog(LPCSTR	lpszString, ...);
+void	DebugLog(const char*	lpszString, ...);
 
 void CNeoVM::Var_AddRef(VarInfo *d)
 {
@@ -527,7 +528,7 @@ void CNeoVM::Dec(VarInfo* v1)
 	}
 }
 
-BOOL CNeoVM::CompareEQ(VarInfo* v1, VarInfo* v2)
+bool CNeoVM::CompareEQ(VarInfo* v1, VarInfo* v2)
 {
 	if (v1->GetType() == VAR_INT)
 	{
@@ -535,7 +536,7 @@ BOOL CNeoVM::CompareEQ(VarInfo* v1, VarInfo* v2)
 			return v1->_int == v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_int == v2->_float;
-		return FALSE;
+		return false;
 	}
 	else if (v1->GetType() == VAR_FLOAT)
 	{
@@ -543,11 +544,11 @@ BOOL CNeoVM::CompareEQ(VarInfo* v1, VarInfo* v2)
 			return v1->_float == v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float == v2->_float;
-		return FALSE;
+		return false;
 	}
-	return FALSE;
+	return false;
 }
-BOOL CNeoVM::CompareGR(VarInfo* v1, VarInfo* v2)
+bool CNeoVM::CompareGR(VarInfo* v1, VarInfo* v2)
 {
 	if (v1->GetType() == VAR_INT)
 	{
@@ -555,7 +556,7 @@ BOOL CNeoVM::CompareGR(VarInfo* v1, VarInfo* v2)
 			return v1->_int > v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_int > v2->_float;
-		return FALSE;
+		return false;
 	}
 	else if (v1->GetType() == VAR_FLOAT)
 	{
@@ -563,11 +564,11 @@ BOOL CNeoVM::CompareGR(VarInfo* v1, VarInfo* v2)
 			return v1->_float > v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float > v2->_float;
-		return FALSE;
+		return false;
 	}
-	return FALSE;
+	return false;
 }
-BOOL CNeoVM::CompareGE(VarInfo* v1, VarInfo* v2)
+bool CNeoVM::CompareGE(VarInfo* v1, VarInfo* v2)
 {
 	if (v1->GetType() == VAR_INT)
 	{
@@ -575,7 +576,7 @@ BOOL CNeoVM::CompareGE(VarInfo* v1, VarInfo* v2)
 			return v1->_int >= v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_int >= v2->_float;
-		return FALSE;
+		return false;
 	}
 	else if (v1->GetType() == VAR_FLOAT)
 	{
@@ -583,9 +584,9 @@ BOOL CNeoVM::CompareGE(VarInfo* v1, VarInfo* v2)
 			return v1->_float >= v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float >= v2->_float;
-		return FALSE;
+		return false;
 	}
-	return FALSE;
+	return false;
 }
 std::string CNeoVM::ToString(VarInfo* v1)
 {
@@ -697,14 +698,14 @@ void CNeoVM::SetError(const char* pErrMsg)
 }
 
 
-BOOL	CNeoVM::Run(int iFunctionID)
+bool	CNeoVM::Run(int iFunctionID)
 {
 	SFunctionTable fun = m_sFunctionPtr[iFunctionID];
 	int iArgs = (int)_args.size();
 	if (iArgs != fun._argsCount)
-		return FALSE;
+		return false;
 
-	m_sCode.SetPointer(fun._codePtr, SEEK_SET);
+	SetCodePtr(fun._codePtr);
 
 	_iSP_Vars = 0;// _header._iStaticVarCount;
 	int iSP_VarsMax = _iSP_Vars + fun._localAddCount;
@@ -732,132 +733,148 @@ BOOL	CNeoVM::Run(int iFunctionID)
 
 	while (true)
 	{
-		m_sCode >> op;
+		op = (NOP_TYPE)GetU8();
 		switch (op)
 		{
+		case NOP_MOV:
+			n1 = GetS16(); n2 = GetS16();
+			Move(GetVarPtr(n1), GetVarPtr(n2));
+			break;
+		case NOP_MOV_MINUS:
+			n1 = GetS16(); n2 = GetS16();
+			MoveMinus(GetVarPtr(n1), GetVarPtr(n2));
+			break;
+
 		case NOP_ADD2:
-			m_sCode >> n1 >> n2;
+			n1 = GetS16(); n2 = GetS16();
 			Add2(GetVarPtr(n1), GetVarPtr(n2));
 			break;
 		case NOP_SUB2:
-			m_sCode >> n1 >> n2;
+			n1 = GetS16(); n2 = GetS16();
 			Sub2(GetVarPtr(n1), GetVarPtr(n2));
 			break;
 		case NOP_MUL2:
-			m_sCode >> n1 >> n2;
+			n1 = GetS16(); n2 = GetS16();
 			Mul2(GetVarPtr(n1), GetVarPtr(n2));
 			break;
 		case NOP_DIV2:
-			m_sCode >> n1 >> n2;
+			n1 = GetS16(); n2 = GetS16();
 			Div2(GetVarPtr(n1), GetVarPtr(n2));
 			break;
 
-		case NOP_ADD3:
-			m_sCode >> n1 >> n2 >> n3;
-			Add(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
-			break;
-		case NOP_SUB3:
-			m_sCode >> n1 >> n2 >> n3;
-			Sub(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
-			break;
-		case NOP_MUL3:
-			m_sCode >> n1 >> n2 >> n3;
-			Mul(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
-			break;
-		case NOP_DIV3:
-			m_sCode >> n1 >> n2 >> n3;
-			Div(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
-			break;
-
 		case NOP_INC:
-			m_sCode >> n1;
+			n1 = GetS16();
 			Inc(GetVarPtr(n1));
 			break;
 		case NOP_DEC:
-			m_sCode >> n1;
+			n1 = GetS16();
 			Dec(GetVarPtr(n1));
 			break;
 
+		case NOP_ADD3:
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
+			Add(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
+			break;
+		case NOP_SUB3:
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
+			Sub(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
+			break;
+		case NOP_MUL3:
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
+			Mul(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
+			break;
+		case NOP_DIV3:
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
+			Div(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
+			break;
+
 		case NOP_GREAT:		// >
-			m_sCode >> n1 >> n2 >> n3;
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
 			Var_SetBool(GetVarPtr(n1), CompareGR(GetVarPtr(n2), GetVarPtr(n3)));
 			break;
 		case NOP_GREAT_EQ:	// >=
-			m_sCode >> n1 >> n2 >> n3;
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
 			Var_SetBool(GetVarPtr(n1), CompareGE(GetVarPtr(n2), GetVarPtr(n3)));
 			break;
 		case NOP_LESS:		// <
-			m_sCode >> n1 >> n2 >> n3;
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
 			Var_SetBool(GetVarPtr(n1), CompareGR(GetVarPtr(n3), GetVarPtr(n2)));
 			break;
 		case NOP_LESS_EQ:	// <=
-			m_sCode >> n1 >> n2 >> n3;
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
 			Var_SetBool(GetVarPtr(n1), CompareGE(GetVarPtr(n3), GetVarPtr(n2)));
 			break;
 		case NOP_EQUAL2:	// ==
-			m_sCode >> n1 >> n2 >> n3;
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
 			Var_SetBool(GetVarPtr(n1), CompareEQ(GetVarPtr(n2), GetVarPtr(n3)));
 			break;
 		case NOP_NEQUAL:	// !=
-			m_sCode >> n1 >> n2 >> n3;
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
 			Var_SetBool(GetVarPtr(n1), !CompareEQ(GetVarPtr(n2), GetVarPtr(n3)));
 			break;
 		case NOP_AND:	// &&
-			m_sCode >> n1 >> n2 >> n3;
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
 			Var_SetBool(GetVarPtr(n1), GetVarPtr(n3)->IsTrue() && GetVarPtr(n2)->IsTrue());
 			break;
 		case NOP_OR:	// ||
-			m_sCode >> n1 >> n2 >> n3;
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
 			Var_SetBool(GetVarPtr(n1), GetVarPtr(n2)->IsTrue() || GetVarPtr(n3)->IsTrue());
 			break;
+
 		case NOP_STR_ADD:	// ..
-			m_sCode >> n1 >> n2 >> n3;
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
 			Var_SetString(GetVarPtr(n1), (ToString(GetVarPtr(n2)) + ToString(GetVarPtr(n3))).c_str());
 			break;
 
 		case NOP_TOSTRING:
-			m_sCode >> n1 >> n2;
+			n1 = GetS16(); n2 = GetS16();
 			Var_SetString(GetVarPtr(n1), ToString(GetVarPtr(n2)).c_str());
 			break;
 		case NOP_TOINT:
-			m_sCode >> n1 >> n2;
+			n1 = GetS16(); n2 = GetS16();
 			Var_SetInt(GetVarPtr(n1), ToInt(GetVarPtr(n2)));
 			break;
 		case NOP_TOFLOAT:
-			m_sCode >> n1 >> n2;
+			n1 = GetS16(); n2 = GetS16();
 			Var_SetFloat(GetVarPtr(n1), ToFloat(GetVarPtr(n2)));
 			break;
 		case NOP_GETTYPE:
-			m_sCode >> n1 >> n2;
+			n1 = GetS16(); n2 = GetS16();
 			Var_SetString(GetVarPtr(n1), GetType(GetVarPtr(n2)).c_str());
 			break;
 
 		case NOP_JMP:
-			m_sCode >> n1;
-			m_sCode.SetPointer(n1, SEEK_CUR);
+			n1 = GetS16();
+			SetCodeIncPtr(n1);
 			break;
 		case NOP_JMP_FALSE:
-			m_sCode >> n1 >> n2;
-			if (FALSE == GetVarPtr(n1)->IsTrue())
-				m_sCode.SetPointer(n2, SEEK_CUR);
+			n1 = GetS16(); n2 = GetS16();
+			if (false == GetVarPtr(n1)->IsTrue())
+				SetCodeIncPtr(n2);
 			break;
 		case NOP_JMP_TRUE:
-			m_sCode >> n1 >> n2;
-			if (TRUE == GetVarPtr(n1)->IsTrue())
-				m_sCode.SetPointer(n2, SEEK_CUR);
+			n1 = GetS16(); n2 = GetS16();
+			if (true == GetVarPtr(n1)->IsTrue())
+				SetCodeIncPtr(n2);
 			break;
 
-		case NOP_MOV:
-			m_sCode >> n1 >> n2;
-			Move(GetVarPtr(n1), GetVarPtr(n2));
-			break;
-		case NOP_MOV_MINUS:
-			m_sCode >> n1 >> n2;
-			MoveMinus(GetVarPtr(n1), GetVarPtr(n2));
+		case NOP_CALL:
+			n1 = GetS16(); n2 = GetS16();
+			callStack._iReturnOffset = GetCodeptr();
+			callStack._iSP_Vars = _iSP_Vars;
+			callStack._iSP_VarsMax = iSP_VarsMax;
+			m_sCallStack.push_back(callStack);
+
+			fun = m_sFunctionPtr[n1];
+			SetCodePtr(fun._codePtr);
+			_iSP_Vars = iSP_VarsMax;
+			iSP_VarsMax = _iSP_Vars + fun._localAddCount;
+			if (_iSP_Vars_Max2 < iSP_VarsMax)
+				_iSP_Vars_Max2 = iSP_VarsMax;
 			break;
 		case NOP_FARCALL:
 		{
-			m_sCode >> n1 >> n2;
+			n1 = GetS16(); n2 = GetS16();
 
 			fun = m_sFunctionPtr[n1];
 			if (fun._fun._func == NULL)
@@ -871,28 +888,14 @@ BOOL	CNeoVM::Run(int iFunctionID)
 			if((*fun._fun._fn)(this, fun._fun._func, n2) < 0)
 			{
 				SetError("Ptr Call Argument Count Error");
-				return FALSE;
+				return false;
 			}
 
 			_iSP_Vars = iSave;
 			break;
 		}
-		case NOP_CALL:
-			m_sCode >> n1 >> n2;
-			callStack._iReturnOffset = m_sCode.GetBufferOffset();
-			callStack._iSP_Vars = _iSP_Vars;
-			callStack._iSP_VarsMax = iSP_VarsMax;
-			m_sCallStack.push_back(callStack);
-
-			fun = m_sFunctionPtr[n1];
-			m_sCode.SetPointer(fun._codePtr, SEEK_SET);
-			_iSP_Vars = iSP_VarsMax;
-			iSP_VarsMax = _iSP_Vars + fun._localAddCount;
-			if (_iSP_Vars_Max2 < iSP_VarsMax)
-				_iSP_Vars_Max2 = iSP_VarsMax;
-			break;
 		case NOP_PTRCALL:
-			m_sCode >> n1 >> n2 >> n3;
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
 			pFunctionPtr = GetPtrFunction(GetVarPtr(n1), GetVarPtr(n2));
 			if (pFunctionPtr != NULL)
 			{
@@ -902,7 +905,7 @@ BOOL	CNeoVM::Run(int iFunctionID)
 				if ((pFunctionPtr->_fn)(this, pFunctionPtr->_func, n3) < 0)
 				{
 					SetError("Ptr Call Argument Count Error");
-					return FALSE;
+					return false;
 				}
 
 				_iSP_Vars = iSave;
@@ -910,11 +913,11 @@ BOOL	CNeoVM::Run(int iFunctionID)
 			else
 			{
 				SetError("Ptr Call Not Found");
-				return FALSE;
+				return false;
 			}
 			break;
 		case NOP_RETURN:
-			m_sCode >> n1;
+			n1 = GetS16();
 			if (n1 == 0)
 				Var_Release(&m_sVarStack[_iSP_Vars]); // Clear
 			else
@@ -922,29 +925,29 @@ BOOL	CNeoVM::Run(int iFunctionID)
 
 			if (m_sCallStack.empty())
 			{
-				return TRUE;
+				return true;
 			}
 			iTemp = (int)m_sCallStack.size() - 1;
 			callStack = m_sCallStack[iTemp];
 			m_sCallStack.resize(iTemp);
 
-			m_sCode.SetPointer(callStack._iReturnOffset, SEEK_SET);
+			SetCodePtr(callStack._iReturnOffset);
 			_iSP_Vars = callStack._iSP_Vars;
 			iSP_VarsMax = callStack._iSP_VarsMax;
 			break;
 		case NOP_TABLE_ALLOC:
-			m_sCode >> n1;
+			n1 = GetS16();
 			Var_SetTable(GetVarPtr(n1), TableAlloc());
 			break;
 		case NOP_TABLE_INSERT:
 		{
-			m_sCode >> n1 >> n2 >> n3;
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
 			TableInsert(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
 			break;
 		}
 		case NOP_TABLE_READ:
 		{
-			m_sCode >> n1 >> n2 >> n3;
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
 			TableRead(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
 			break;
 		}
@@ -953,7 +956,7 @@ BOOL	CNeoVM::Run(int iFunctionID)
 			break;
 		}
 	}
-	return TRUE;
+	return true;
 }
 
 static void ReadString(CNArchive& ar, std::string& str)
@@ -990,8 +993,8 @@ CNeoVM* CNeoVM::LoadVM(void* pBuffer, int iSize)
 	}
 
 
-	BYTE* pCode = new BYTE[header._iCodeSize];
-	pVM->m_sCode.SetData(pCode, header._iCodeSize);
+	u8* pCode = new u8[header._iCodeSize];
+	pVM->SetCodeData(pCode, header._iCodeSize);
 	ar.Read(pCode, header._iCodeSize);
 
 	pVM->m_sFunctionPtr.resize(header._iFunctionCount);
@@ -1052,14 +1055,14 @@ CNeoVM* CNeoVM::LoadVM(void* pBuffer, int iSize)
 
 
 
-BOOL CNeoVM::RunFunction(const std::string& funName)
+bool CNeoVM::RunFunction(const std::string& funName)
 {
 	auto it = m_sImExportTable.find(funName);
 	if (it == m_sImExportTable.end())
-		return FALSE;
+		return false;
 
 	int iID = (*it).second;
 	Run(iID);
 
-	return TRUE;
+	return true;
 }

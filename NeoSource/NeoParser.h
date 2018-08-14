@@ -1,5 +1,6 @@
 #pragma once
 
+#include "NeoArchive.h"
 #include "NeoVM.h"
 
 #define INVALID_ERROR_PARSEJOB			(-1)
@@ -10,7 +11,7 @@
 #define COMPILE_CALLARG_VAR_BEGIN		(30000) // 256 개 이상 나오지 않는다.
 #define STACK_POS_RETURN		(32767)
 
-BOOL IsTempVar(int iVar);
+bool IsTempVar(int iVar);
 
 struct SJumpValue
 {
@@ -155,10 +156,10 @@ struct SFunctionInfo
 	int _iLastOPOffset = 0;
 	NOP_TYPE GetLastOP()
 	{
-		return (NOP_TYPE)((BYTE*)_code.GetData())[_iLastOPOffset];
+		return (NOP_TYPE)((u8*)_code.GetData())[_iLastOPOffset];
 	}
 
-	void	Push_OP(BYTE op, short r, short a1, short a2)
+	void	Push_OP(u8 op, short r, short a1, short a2)
 	{
 		_iLastOPOffset = _code.GetBufferOffset();
 
@@ -167,7 +168,7 @@ struct SFunctionInfo
 		_code.Write(&a1, sizeof(a1));
 		_code.Write(&a2, sizeof(a2));
 	}
-	void	Push_Call(BYTE op, short fun, short args)
+	void	Push_Call(u8 op, short fun, short args)
 	{
 		_iLastOPOffset = _code.GetBufferOffset();
 
@@ -179,20 +180,20 @@ struct SFunctionInfo
 	{
 		_iLastOPOffset = _code.GetBufferOffset();
 
-		BYTE op = NOP_PTRCALL;
+		u8 op = NOP_PTRCALL;
 		_code.Write(&op, sizeof(op));
 		_code.Write(&table, sizeof(table));
 		_code.Write(&index, sizeof(index));
 		_code.Write(&args, sizeof(args));
 	}
-	void	Push_MOV(BYTE op, short r, short s)
+	void	Push_MOV(u8 op, short r, short s)
 	{
 		if (op == NOP_MOV)
 		{
 			if (IsTempVar(s))
 			{
 				NOP_TYPE preOP = GetLastOP();
-				BYTE *pre = (BYTE*)_code.GetData() + 1 + _iLastOPOffset;
+				u8 *pre = (u8*)_code.GetData() + 1 + _iLastOPOffset;
 				short* preDest = (short*)pre;
 				switch (preOP)
 				{
@@ -230,7 +231,7 @@ struct SFunctionInfo
 		_code.Write(&r, sizeof(r));
 		_code.Write(&s, sizeof(s));
 	}
-	void	Push_IncDec(BYTE op, short r)
+	void	Push_IncDec(u8 op, short r)
 	{
 		_iLastOPOffset = _code.GetBufferOffset();
 
@@ -241,7 +242,7 @@ struct SFunctionInfo
 	{
 		_iLastOPOffset = _code.GetBufferOffset();
 
-		BYTE op = NOP_RETURN;
+		u8 op = NOP_RETURN;
 		_code.Write(&op, sizeof(op));
 		_code.Write(&r, sizeof(r));
 	}
@@ -250,7 +251,7 @@ struct SFunctionInfo
 	{
 		_iLastOPOffset = _code.GetBufferOffset();
 
-		BYTE op = NOP_JMP;
+		u8 op = NOP_JMP;
 		short add = destOffset - (_code.GetBufferOffset() + 3);
 		_code.Write(&op, sizeof(op));
 		_code.Write(&add, sizeof(add));
@@ -259,7 +260,7 @@ struct SFunctionInfo
 	{
 		_iLastOPOffset = _code.GetBufferOffset();
 
-		BYTE op = NOP_JMP_FALSE;
+		u8 op = NOP_JMP_FALSE;
 		short add = destOffset - (_code.GetBufferOffset() + 5);
 		_code.Write(&op, sizeof(op));
 		_code.Write(&var, sizeof(var));
@@ -269,7 +270,7 @@ struct SFunctionInfo
 	{
 		_iLastOPOffset = _code.GetBufferOffset();
 
-		BYTE op = NOP_JMP_TRUE;
+		u8 op = NOP_JMP_TRUE;
 		short add = destOffset - (_code.GetBufferOffset() + 5);
 		_code.Write(&op, sizeof(op));
 		_code.Write(&var, sizeof(var));
@@ -277,14 +278,14 @@ struct SFunctionInfo
 	}
 	void	Set_JumpOffet(SJumpValue sJmp, int destOffset)
 	{
-		BYTE* p = (BYTE*)_code.GetData();
+		u8* p = (u8*)_code.GetData();
 		*((short*)(p + sJmp._iCodePosOffset)) = (short)(destOffset - sJmp._iBaseJmpOffset);
 	}
 	void	Push_TableAlloc(short r)
 	{
 		_iLastOPOffset = _code.GetBufferOffset();
 
-		BYTE op = NOP_TABLE_ALLOC;
+		u8 op = NOP_TABLE_ALLOC;
 		_code.Write(&op, sizeof(op));
 		_code.Write(&r, sizeof(r));
 	}
@@ -292,7 +293,7 @@ struct SFunctionInfo
 	{
 		_iLastOPOffset = _code.GetBufferOffset();
 
-		BYTE op = NOP_TABLE_INSERT;
+		u8 op = NOP_TABLE_INSERT;
 		_code.Write(&op, sizeof(op));
 		_code.Write(&nTable, sizeof(nTable));
 		_code.Write(&nArray, sizeof(nArray));
@@ -302,14 +303,14 @@ struct SFunctionInfo
 	{
 		_iLastOPOffset = _code.GetBufferOffset();
 
-		BYTE op = NOP_TABLE_READ;
+		u8 op = NOP_TABLE_READ;
 		_code.Write(&op, sizeof(op));
 		_code.Write(&nTable, sizeof(nTable));
 		_code.Write(&nArray, sizeof(nArray));
 		_code.Write(&nValue, sizeof(nValue));
 	}
 
-	void	Push_ToType(BYTE op, short r, short s)
+	void	Push_ToType(u8 op, short r, short s)
 	{
 		_iLastOPOffset = _code.GetBufferOffset();
 

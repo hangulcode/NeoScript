@@ -4,7 +4,7 @@
 #include "NeoTextLoader.h"
 #include "NeoExport.h"
 
-void	DebugLog(LPCSTR	lpszString, ...);
+void	DebugLog(const char*	lpszString, ...);
 
 void ChangeIndex(int staticCount, int localCount, int curFunStatkSize, short& n)
 {
@@ -455,7 +455,7 @@ static void WriteString(CNArchive& ar, const std::string& str)
 	ar.Write((char*)str.data(), nLen);
 }
 
-BOOL Write(CNArchive& ar, SFunctions& funs, SVars& vars)
+bool Write(CNArchive& ar, SFunctions& funs, SVars& vars)
 {
 	int iSaveOffset1 = ar.GetBufferOffset();
 	SNeoVMHeader header;
@@ -482,7 +482,7 @@ BOOL Write(CNArchive& ar, SFunctions& funs, SVars& vars)
 
 	// 함수 포인터 저장
 	if ((int)funPos.size() != header._iFunctionCount)
-		return FALSE;
+		return false;
 
 	for (auto it = funPos.begin(); it != funPos.end(); it++)
 	{
@@ -527,7 +527,7 @@ BOOL Write(CNArchive& ar, SFunctions& funs, SVars& vars)
 	ar << header;
 	ar.SetPointer(iSaveOffset2, SEEK_SET);
 
-	return TRUE;
+	return true;
 }
 
 static std::string ToPtringString(const std::string & str)
@@ -549,7 +549,7 @@ static std::string ToPtringString(const std::string & str)
 	return r;
 }
 
-BOOL WriteLog(SFunctions& funs, SVars& vars)
+bool WriteLog(SFunctions& funs, SVars& vars)
 {
 	SNeoVMHeader header;
 	memset(&header, 0, sizeof(header));
@@ -605,5 +605,5 @@ BOOL WriteLog(SFunctions& funs, SVars& vars)
 
 	//// 함수 포인터 저장
 
-	return TRUE;
+	return true;
 }

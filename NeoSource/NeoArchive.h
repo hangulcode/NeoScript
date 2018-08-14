@@ -1,17 +1,11 @@
 #pragma once 
 
-#include <vector>
-#include <list>
-#include <string>
-#include <map>
-#include <set>
-
-#include <windows.h>
+#include "NeoConfig.h"
 
 class CNArchive
 {
 private:
-	BYTE*	m_lpBufStart;
+	u8*	m_lpBufStart;
 	int		m_iOffset;
 	int		m_iSize;
 public:
@@ -23,13 +17,13 @@ public:
 	}
 	CNArchive(void* pBuffer, int iBufferSize)
 	{
-		m_lpBufStart = (BYTE*)pBuffer;
+		m_lpBufStart = (u8*)pBuffer;
 		m_iOffset = 0;
 		m_iSize = iBufferSize;
 	}
     void    SetData(void* pBuffer, int iBufferSize)
     {
-		m_lpBufStart = (BYTE*)pBuffer;
+		m_lpBufStart = (u8*)pBuffer;
 		m_iOffset = 0;
 		m_iSize = iBufferSize;
     }
@@ -84,7 +78,7 @@ public:
 		Write(&t,sizeof(T));
 		return *this;
 	}
-	UINT Write(const void* lpBuf, int nMax)
+	u32 Write(const void* lpBuf, int nMax)
 	{
 		if (nMax == 0)
 			return 0;
@@ -95,12 +89,12 @@ public:
 		m_iOffset += nMax;
         return nMax;
 	}
-	void WriteCount(DWORD dwCount)
+	void WriteCount(u32 dwCount)
 	{
-		WORD wCount;
+		u16 wCount;
 		if (dwCount < 0xFFFF)
 		{
-			wCount = (WORD)dwCount;
+			wCount = (u16)dwCount;
 			*this << wCount;
 		}
 		else
@@ -117,7 +111,7 @@ public:
 		return *this;
 	}
 
-	UINT Read(void* lpBuf, int nMax)
+	u32 Read(void* lpBuf, int nMax)
 	{
 		if (nMax == 0)
 			return 0;

@@ -1,5 +1,5 @@
 #pragma once
 
 
-BOOL Write(CNArchive& ar, SFunctions& funs, SVars& vars);
-BOOL WriteLog(SFunctions& funs, SVars& vars);
+bool Write(CNArchive& ar, SFunctions& funs, SVars& vars);
+bool WriteLog(SFunctions& funs, SVars& vars);

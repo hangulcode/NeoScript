@@ -10,7 +10,7 @@
 class CArchiveRdWC
 {
 private:
-	WORD *	m_lpBufStart;
+	u16 *	m_lpBufStart;
 	int		m_iOffset;
 	int		m_iSize;
 
@@ -25,34 +25,34 @@ public:
 		m_iCurLine = 1;
 		m_iCurCol = 1;
 	}
-	CArchiveRdWC(WORD* pBuffer, int iBufferSize)
+	CArchiveRdWC(u16* pBuffer, int iBufferSize)
 	{
-		m_lpBufStart = (WORD*)pBuffer;
+		m_lpBufStart = (u16*)pBuffer;
 		m_iOffset = 0;
 		m_iSize = iBufferSize;
 		m_iCurLine = 1;
 		m_iCurCol = 1;
 	}
-	void    SetData(WORD* pBuffer, int iBufferSize)
+	void    SetData(u16* pBuffer, int iBufferSize)
 	{
-		m_lpBufStart = (WORD*)pBuffer;
+		m_lpBufStart = (u16*)pBuffer;
 		m_iOffset = 0;
 		m_iSize = iBufferSize;
 		m_iCurLine = 1;
 		m_iCurCol = 1;
 	}
 
-	inline BOOL IsEOF()
+	inline bool IsEOF()
 	{
 		return (m_iOffset >= m_iSize);
 	}
 
-	WORD GetData(bool offsetMove = true)
+	u16 GetData(bool offsetMove = true)
 	{
 		if (IsEOF())
 			return 0;
 
-		WORD r = m_lpBufStart[m_iOffset];
+		u16 r = m_lpBufStart[m_iOffset];
 		if (offsetMove)
 		{
 			m_iOffset++;
@@ -88,8 +88,8 @@ protected:
 };
 
 
-BOOL	ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar);
-void	OutAsm(LPCSTR	lpszString, ...);
+bool	ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar);
+void	OutAsm(const char*	lpszString, ...);
 
 bool	StringToDouble(double& r, const char *p);
 bool	StringToDoubleLow(double& r, const char *p);

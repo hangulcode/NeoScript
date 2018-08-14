@@ -2,31 +2,32 @@
 #include <math.h>
 #include "NeoTextLoader.h"
 
+#include <windows.h>
 
-BOOL		ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar)
+bool		ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar)
 {
 	if (iBufferSize < 3)
-		return FALSE;
+		return false;
 
-	WORD* pWBuffer;
+	u16* pWBuffer;
 	int size_toUni;
-	if ((*(WORD*)pBuffer) == FILE_UNICODE_HEADER)
+	if ((*(u16*)pBuffer) == FILE_UNICODE_HEADER)
 	{
 		size_toUni = iBufferSize / 2 - 1;
-		pWBuffer = new WORD[size_toUni + 1];
-		memcpy(pWBuffer, (WORD*)(pBuffer + 2), size_toUni * 2);
+		pWBuffer = new u16[size_toUni + 1];
+		memcpy(pWBuffer, (u16*)(pBuffer + 2), size_toUni * 2);
 		pWBuffer[size_toUni] = NULL;
 		ar.SetData(pWBuffer, size_toUni);
 	}
 	else
 	{
 		std::wstring str;
-		if ((*(WORD*)pBuffer) == FILE_UTF8_HEADER && *(BYTE*)(pBuffer + 2) == FILE_UTF8_SUB)
+		if ((*(u16*)pBuffer) == FILE_UTF8_HEADER && *(BYTE*)(pBuffer + 2) == FILE_UTF8_SUB)
 		{
 			utf_string::UTF8_UNICODE(pBuffer + 3, iBufferSize - 3, str);
 			size_toUni = (int)str.length();
-			pWBuffer = new WORD[str.length() + 1];
-			memcpy(pWBuffer, (WORD*)(pBuffer + 2), size_toUni * 2);
+			pWBuffer = new u16[str.length() + 1];
+			memcpy(pWBuffer, (u16*)(pBuffer + 2), size_toUni * 2);
 			pWBuffer[size_toUni] = NULL;
 			ar.SetData(pWBuffer, (int)str.length());
 		}
@@ -41,7 +42,7 @@ BOOL		ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar)
 		}
 		//r = Parse(str.c_str(), (int)str.length());
 	}
-	return TRUE;
+	return true;
 }
 
 

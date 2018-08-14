@@ -19,7 +19,7 @@ BOOL        FileLoad(const char* pFileName, void*& pBuffer, int& iLen)
 	FILE* fp = NULL;
 	int error_t = fopen_s(&fp, pFileName, "rb");
 	if (error_t != 0)
-		return FALSE;
+		return false;
 
 	fseek(fp, 0, SEEK_END);
 	int iFileSize = ftell(fp);
@@ -30,14 +30,14 @@ BOOL        FileLoad(const char* pFileName, void*& pBuffer, int& iLen)
 	fclose(fp);
 
 	iLen = iFileSize;
-	return TRUE;
+	return true;
 }
 
 int main()
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (FALSE == FileLoad("1.neo", pFileBuffer, iFileLen))
+	if (false == FileLoad("1.neo", pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;

@@ -1,11 +1,8 @@
 #pragma once
 
-#include "NeoArchive.h"
+#include "NeoConfig.h"
 
-#define FILE_NEOS	(('N' << 24) | ('E' << 16) | ('O' << 8) | ('S'))
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('0' << 8) | ('0'))
-
-enum VAR_TYPE : byte
+enum VAR_TYPE : u8
 {
 	VAR_NONE,
 	VAR_BOOL,
@@ -17,7 +14,7 @@ enum VAR_TYPE : byte
 };
 
 
-enum NOP_TYPE : byte
+enum NOP_TYPE : u8
 {
 	NOP_NONE = 0,
 	NOP_MOV,
@@ -46,15 +43,14 @@ enum NOP_TYPE : byte
 
 	NOP_STR_ADD,	// ..
 
-	NOP_JMP,
-	NOP_JMP_FALSE,
-	NOP_JMP_TRUE,
-
 	NOP_TOSTRING,
 	NOP_TOINT,
 	NOP_TOFLOAT,
 	NOP_GETTYPE,
 
+	NOP_JMP,
+	NOP_JMP_FALSE,
+	NOP_JMP_TRUE,
 
 	NOP_CALL,
 	NOP_FARCALL,
@@ -117,18 +113,18 @@ public:
 	{
 		_type = VAR_NONE;
 	}
-	inline BOOL IsTrue()
+	inline bool IsTrue()
 	{
 		if (VAR_BOOL == _type)
 			return _bl;
-		return FALSE;
+		return false;
 	}
 };
 
 struct SNeoVMHeader
 {
-	DWORD	_dwFileType;
-	DWORD	_dwNeoVersion;
+	u32		_dwFileType;
+	u32		_dwNeoVersion;
 
 	int		_iFunctionCount;
 	int		_iStaticVarCount;
@@ -143,7 +139,7 @@ struct SCallStack
 	int		_iReturnOffset;
 };
 
-enum FUNCTION_TYPE : byte
+enum FUNCTION_TYPE : u8
 {
 	FUNT_NORMAL = 0,
 	FUNT_IMPORT,
@@ -169,7 +165,37 @@ struct SFunLib
 class CNeoVM
 {
 private:
-	CNArchive				m_sCode;
+	//CNArchive				m_sCode;
+	u8 *					_pCodePtr;
+	int						_iCodeLen;
+	int						_iCodeOffset;
+
+	void	SetCodeData(u8* p, int sz)
+	{
+		_pCodePtr = p;
+		_iCodeLen = sz;
+		_iCodeOffset = 0;
+	}
+
+	inline	u8				GetU8()
+	{
+		return *(_pCodePtr + _iCodeOffset++);
+	}
+	inline	s16				GetS16()
+	{
+		s16 r = *(s16*)(_pCodePtr + _iCodeOffset);
+		_iCodeOffset += 2;
+		return r;
+	}
+	inline int GetCodeptr() { return _iCodeOffset; }
+	inline void SetCodePtr(int off)
+	{
+		_iCodeOffset = off;
+	}
+	inline void SetCodeIncPtr(int off)
+	{
+		_iCodeOffset += off;
+	}
 	int						_iSP_Vars;
 	int						_iSP_Vars_Max2;
 	std::vector<VarInfo>	m_sVarGlobal;
@@ -185,7 +211,7 @@ private:
 	SNeoVMHeader			_header;
 	std::map<std::string, int> m_sImExportTable;
 
-	BOOL	Run(int iFunctionID);
+	bool	Run(int iFunctionID);
 
 	inline VarInfo* GetVarPtr(short n)
 	{
@@ -218,9 +244,9 @@ private:
 	void Div(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Inc(VarInfo* v1);
 	void Dec(VarInfo* v1);
-	BOOL CompareEQ(VarInfo* v1, VarInfo* v2);
-	BOOL CompareGR(VarInfo* v1, VarInfo* v2);
-	BOOL CompareGE(VarInfo* v1, VarInfo* v2);
+	bool CompareEQ(VarInfo* v1, VarInfo* v2);
+	bool CompareGR(VarInfo* v1, VarInfo* v2);
+	bool CompareGE(VarInfo* v1, VarInfo* v2);
 
 	std::string ToString(VarInfo* v1);
 	int ToInt(VarInfo* v1);
@@ -372,7 +398,7 @@ private:
 	template<>	void push(unsigned long long ret) { PushInt((int)ret); }
 
 	std::vector<VarInfo> _args;
-	BOOL RunFunction(const std::string& funName);
+	bool RunFunction(const std::string& funName);
 
 	void GC()
 	{
@@ -578,20 +604,20 @@ public:
 	}
 
 	template<typename F>
-	BOOL Register(const char* name, F func)
+	bool Register(const char* name, F func)
 	{
 		auto it = m_sImExportTable.find(name);
 		if (it == m_sImExportTable.end())
-			return FALSE;
+			return false;
 
 		int iFID = (*it).second;
 		FunctionPtr fun;
 		int iArgCnt = push_functor(&fun, func);
 		if (m_sFunctionPtr[iFID]._argsCount != iArgCnt)
-			return FALSE;
+			return false;
 
 		m_sFunctionPtr[iFID]._fun = fun;
-		return TRUE;
+		return true;
 	}
 
 
@@ -604,12 +630,12 @@ public:
 	}
 
 	const char* GetLastErrorMsg() { return _pErrorMsg;  }
-	BOOL IsLastErrorMsg() { return (NULL != _pErrorMsg); }
+	bool IsLastErrorMsg() { return (NULL != _pErrorMsg); }
 	void ClearLastErrorMsg() { _pErrorMsg = NULL; }
 
 	static CNeoVM*	LoadVM(void* pBuffer, int iSize);
 	static void		ReleaseVM(CNeoVM* pVM);
-	static BOOL		Compile(void* pBufferSrc, int iLenSrc, void* pBufferCode, int iLenCode, int* pLenCode);
+	static bool		Compile(void* pBufferSrc, int iLenSrc, void* pBufferCode, int iLenCode, int* pLenCode);
 };
 
 
