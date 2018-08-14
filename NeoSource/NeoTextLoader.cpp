@@ -33,14 +33,22 @@ bool		ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar)
 		}
 		else
 		{
-			int size_toUni = ::MultiByteToWideChar(CP_ACP, 0, pBuffer, iBufferSize, NULL, 0);
-			pWBuffer = new WORD[size_toUni + 1];
+			std::string ansi_str;
+			ansi_str.resize(iBufferSize);
+			memcpy((void*)ansi_str.c_str(), pBuffer, iBufferSize);
 
-			::MultiByteToWideChar(CP_ACP, 0, pBuffer, iBufferSize, (LPWSTR)str.c_str(), size_toUni);
+			std::wstring wstr = std::wstring(ansi_str.begin(), ansi_str.end());
+			size_toUni = wstr.length();
+			pWBuffer = new u16[size_toUni + 1];
+			memcpy(pWBuffer, wstr.c_str(), sizeof(u16)*(wstr.length() + 1));
+
+			//int size_toUni = ::MultiByteToWideChar(CP_ACP, 0, pBuffer, iBufferSize, NULL, 0);
+			//pWBuffer = new u16[size_toUni + 1];
+
+			//::MultiByteToWideChar(CP_ACP, 0, pBuffer, iBufferSize, (u16*)str.c_str(), size_toUni);
 			pWBuffer[size_toUni] = NULL;
 			ar.SetData(pWBuffer, size_toUni);
 		}
-		//r = Parse(str.c_str(), (int)str.length());
 	}
 	return true;
 }
