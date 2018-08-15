@@ -41,7 +41,9 @@ void CNeoVM::Var_SetInt(VarInfo *d, int v)
 {
 	if (d->GetType() != VAR_INT)
 	{
-		Var_Release(d);
+		if (d->IsAllocType())
+			Var_Release(d);
+
 		d->SetType(VAR_INT);
 	}
 	d->_int = v;
@@ -51,7 +53,9 @@ void CNeoVM::Var_SetFloat(VarInfo *d, double v)
 {
 	if (d->GetType() != VAR_FLOAT)
 	{
-		Var_Release(d);
+		if (d->IsAllocType())
+			Var_Release(d);
+
 		d->SetType(VAR_FLOAT);
 	}
 	d->_float = v;
@@ -60,7 +64,9 @@ void CNeoVM::Var_SetBool(VarInfo *d, bool v)
 {
 	if (d->GetType() != VAR_BOOL)
 	{
-		Var_Release(d);
+		if (d->IsAllocType())
+			Var_Release(d);
+
 		d->SetType(VAR_BOOL);
 	}
 	d->_bl = v;
@@ -70,7 +76,8 @@ void CNeoVM::Var_SetBool(VarInfo *d, bool v)
 
 void CNeoVM::Var_SetString(VarInfo *d, const char* str)
 {
-	Var_Release(d);
+	if (d->IsAllocType())
+		Var_Release(d);
 
 	d->SetType(VAR_STRING);
 	d->_str = StringAlloc(str);
@@ -78,7 +85,8 @@ void CNeoVM::Var_SetString(VarInfo *d, const char* str)
 }
 void CNeoVM::Var_SetTable(VarInfo *d, TableInfo* p)
 {
-	Var_Release(d);
+	if (d->IsAllocType())
+		Var_Release(d);
 
 	d->SetType(VAR_TABLE);
 	d->_tbl = p;
@@ -300,13 +308,13 @@ void CNeoVM::Move(VarInfo* v1, VarInfo* v2)
 		Var_Release(v1);
 		v1->SetType(v2->GetType());
 		v1->_str = v2->_str;
-		v1->_str->_refCount++;
+		++v1->_str->_refCount;
 		break;
 	case VAR_TABLE:
 		Var_Release(v1);
 		v1->SetType(v2->GetType());
 		v1->_tbl = v2->_tbl;
-		v1->_tbl->_refCount++;
+		++v1->_tbl->_refCount;
 		break;
 	}
 }

@@ -113,6 +113,10 @@ public:
 	{
 		_type = VAR_NONE;
 	}
+	inline bool IsAllocType()
+	{
+		return ((_type == VAR_STRING) || (_type == VAR_TABLE));
+	}
 	inline bool IsTrue()
 	{
 		if (VAR_BOOL == _type)
