@@ -24,7 +24,7 @@
     <ClInclude Include="targetver.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="Neo1.00.h">
+    <ClInclude Include="console_sum.h">
       <Filter>소스 파일</Filter>
     </ClInclude>
     <ClInclude Include="..\..\NeoSource\NeoExport.h">
@@ -50,7 +50,7 @@
     <ClCompile Include="stdafx.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="Neo1.00.cpp">
+    <ClCompile Include="console_sum.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="..\..\NeoSource\NeoExport.cpp">

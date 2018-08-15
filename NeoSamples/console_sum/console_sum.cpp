@@ -2,9 +2,8 @@
 //
 
 #include "stdafx.h"
-#include "Neo1.00.h"
+#include "console_sum.h"
 #include "../../NeoSource/NeoVM.h"
-#include <iostream>
 
 float Mul(float a, float b)
 {
