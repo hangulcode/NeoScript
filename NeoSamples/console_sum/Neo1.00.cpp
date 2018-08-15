@@ -12,6 +12,12 @@ float Mul(float a, float b)
 }
 
 
+void Sample1()
+{
+	int a = 3;
+}
+
+
 
 
 BOOL        FileLoad(const char* pFileName, void*& pBuffer, int& iLen)
@@ -44,17 +50,19 @@ int main()
 	}
 
 
-	int iLenTemp = 1 * 1024 * 1024;
-	BYTE* pCodeTemp = new BYTE[iLenTemp];
+	int iCodeTempLen = 1 * 1024 * 1024;
+	BYTE* pCodeTemp = new BYTE[iCodeTempLen];
 
 	int iCodeLen = 0;
-	if (CNeoVM::Compile(pFileBuffer, iFileLen, pCodeTemp, iLenTemp, &iCodeLen, false) == TRUE)
+	if (CNeoVM::Compile(pFileBuffer, iFileLen, pCodeTemp, iCodeTempLen, &iCodeLen, true) == TRUE)
 	{
 		printf("Comile Success !!\n");
 		CNeoVM* pVM = CNeoVM::LoadVM(pCodeTemp, iCodeLen);
 		if (NULL != pVM)
 		{
 			pVM->Register("Mul", Mul);
+			pVM->Register("Sample1", Sample1);
+			
 
 			int i = 5;
 			for (int i = 1; i < 10; i++)
@@ -65,7 +73,6 @@ int main()
 
 				printf("\nSum %d + %d = %f (Elapse:%d)", 100, i, r, t2 - t1);
 			}
-			Sleep(10);
 			CNeoVM::ReleaseVM(pVM);
 		}
 	}

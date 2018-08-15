@@ -1,4 +1,5 @@
 import fun Mul(var a, var b);
+import fun Sample1();
 
 //fun Sum1(var a, var b)
 //{
@@ -9,9 +10,11 @@ import fun Mul(var a, var b);
 export fun Sum(var a, var b)
 {
 	
-	var sum = 1;// = -b + a;
-//*
+	var sum = 1.0;// = -b + a;
+/*
 	Mul(a, b);
+
+	Sample1();
 
 	var bl2 = sum  == 0;
 
@@ -86,7 +89,7 @@ export fun Sum(var a, var b)
 
 	// */
 
-	for (var i = 0; i <= 100000; i++)
+	for (var i = 0.0; i <= 100000; i++)
 	{
 		//print("\nHellow Neo Script1");
 		sum += i;

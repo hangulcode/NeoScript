@@ -202,9 +202,9 @@ private:
 	std::vector<VarInfo>	m_sVarStack;
 	std::vector<SCallStack>	m_sCallStack;
 	std::vector<SFunctionTable> m_sFunctionPtr;
+
 	std::map<int, TableInfo*> _sTables;
 	std::map<int, StringInfo*> _sStrings;
-
 	int iLastIDTable = 0;
 	int iLastIDString = 0;
 
