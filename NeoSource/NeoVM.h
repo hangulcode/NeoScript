@@ -165,7 +165,6 @@ struct SFunLib
 class CNeoVM
 {
 private:
-	//CNArchive				m_sCode;
 	u8 *					_pCodePtr;
 	int						_iCodeLen;
 	int						_iCodeOffset;
