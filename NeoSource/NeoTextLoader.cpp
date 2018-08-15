@@ -1,8 +1,8 @@
+#include <stdarg.h>
+#include <stdio.h>
 
-#include <math.h>
+#include "UTFString.h"
 #include "NeoTextLoader.h"
-
-#include <windows.h>
 
 bool		ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar)
 {
@@ -22,7 +22,7 @@ bool		ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar)
 	else
 	{
 		std::wstring str;
-		if ((*(u16*)pBuffer) == FILE_UTF8_HEADER && *(BYTE*)(pBuffer + 2) == FILE_UTF8_SUB)
+		if ((*(u16*)pBuffer) == FILE_UTF8_HEADER && *(u8*)(pBuffer + 2) == FILE_UTF8_SUB)
 		{
 			utf_string::UTF8_UNICODE(pBuffer + 3, iBufferSize - 3, str);
 			size_toUni = (int)str.length();
@@ -38,9 +38,9 @@ bool		ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar)
 			memcpy((void*)ansi_str.c_str(), pBuffer, iBufferSize);
 
 			std::wstring wstr = std::wstring(ansi_str.begin(), ansi_str.end());
-			size_toUni = wstr.length();
+			size_toUni = (int)wstr.length();
 			pWBuffer = new u16[size_toUni + 1];
-			memcpy(pWBuffer, wstr.c_str(), sizeof(u16)*(wstr.length() + 1));
+			memcpy(pWBuffer, wstr.c_str(), sizeof(u16)*(size_toUni));
 
 			//int size_toUni = ::MultiByteToWideChar(CP_ACP, 0, pBuffer, iBufferSize, NULL, 0);
 			//pWBuffer = new u16[size_toUni + 1];
@@ -143,28 +143,44 @@ bool StringToDouble(double& r, const char *p)
 	return true;
 }
 
-void DebugLog(LPCSTR	lpszString, ...)
+void DebugLog(const char*	lpszString, ...)
 {
 	char buff[4096];
-	va_list ap;
-	va_start(ap, lpszString);
-	vsprintf_s(buff, _countof(buff), lpszString, ap);
-	va_end(ap);
+	va_list arg_ptr;
+	va_start(arg_ptr, lpszString);
+#ifdef _WIN32
+	vsprintf_s(buff, _countof(buff), lpszString, arg_ptr);
+#else
+	vsnprintf(buff, 8, lpszString, arg_ptr);
+#endif
+	va_end(arg_ptr);
 
-	OutputDebugStringA(buff);
+
+#ifdef _WIN32	
 	printf(buff);
+#endif
 }
 
-void OutAsm(LPCSTR	lpszString, ...)
+void OutAsm(const char*	lpszString, ...)
 {
 	char buff[4096];
-	va_list ap;
-	va_start(ap, lpszString);
-	vsprintf_s(buff, _countof(buff), lpszString, ap);
-	va_end(ap);
+	va_list arg_ptr;
+	va_start(arg_ptr, lpszString);
+#ifdef _WIN32
+	vsprintf_s(buff, _countof(buff), lpszString, arg_ptr);
+#else
+	vsnprintf(buff, 8, lpszString, arg_ptr);
+#endif
+	va_end(arg_ptr);
 
+
+#ifdef _WIN32
 	strcat_s(buff, _countof(buff), "\n");
+#else
+	strcat(buff, "\n");
+#endif
 
-	OutputDebugStringA(buff);
+#ifdef _WIN32	
 	printf(buff);
+#endif
 }

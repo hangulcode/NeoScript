@@ -1,6 +1,5 @@
-// Neo1.00.cpp: 콘솔 응용 프로그램의 진입점을 정의합니다.
-//
-
+#include <math.h>
+#include <stdlib.h>
 #include "NeoVM.h"
 #include "NeoArchive.h"
 
@@ -598,10 +597,18 @@ std::string CNeoVM::ToString(VarInfo* v1)
 	case VAR_BOOL:
 		return v1->_bl ? "true" : "false";
 	case VAR_INT:
+#ifdef _WIN32
 		sprintf_s(ch, _countof(ch), "%d", v1->_int);
+#else
+		sprintf(ch, "%d", v1->_int);
+#endif
 		return ch;
 	case VAR_FLOAT:
+#ifdef _WIN32
 		sprintf_s(ch, _countof(ch), "%lf", v1->_float);
+#else
+		sprintf(ch, "%lf", v1->_float);
+#endif
 		return ch;
 	case VAR_STRING:
 		return v1->_str->_str;
@@ -625,7 +632,7 @@ int CNeoVM::ToInt(VarInfo* v1)
 	case VAR_FLOAT:
 		return (int)v1->_float;
 	case VAR_STRING:
-		return atoi(v1->_str->_str.c_str());
+		return ::atoi(v1->_str->_str.c_str());
 	case VAR_TABLE:
 		return -1;
 	case VAR_PTRFUN:

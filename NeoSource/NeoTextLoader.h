@@ -1,11 +1,12 @@
 #pragma once
 
-#define FILE_UNICODE_HEADER		WORD(0xFEFF)
-#define FILE_UTF8_HEADER		WORD(0xBBEF)
+#include "NeoConfig.h"
 
-#define FILE_UTF8_SUB			(BYTE)(0xBF)
+#define FILE_UNICODE_HEADER		u16(0xFEFF)
+#define FILE_UTF8_HEADER		u16(0xBBEF)
 
-#include "UTFString.h"
+#define FILE_UTF8_SUB			(u8)(0xBF)
+
 
 class CArchiveRdWC
 {

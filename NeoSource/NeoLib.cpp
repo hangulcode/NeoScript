@@ -1,8 +1,10 @@
-// Neo1.00.cpp: 콘솔 응용 프로그램의 진입점을 정의합니다.
-//
+#include <math.h>
+#include <stdlib.h>
+#include <iostream>
 
 #include "NeoVM.h"
-#include <iostream>
+
+#define MATH_PI				3.14159265358979323846f // Pi
 
 std::string str2;
 const char* Str_Substring(char* p, int start, int len)
@@ -64,7 +66,6 @@ double Math_pow(double v1, double v2)
 {
 	return ::pow(v1, v2);
 }
-#define MATH_PI				3.14159265358979323846f // Pi
 double Math_deg(double radian)
 {
 	return ((radian) * (180.0f / MATH_PI));
@@ -113,9 +114,11 @@ static SFunLib _Lib[] =
 { "str_len", CNeoVM::Register(Str_len) },
 
 { "print", CNeoVM::Register(io_print) },
+
+{ NULL, FunctionPtr() },
 };
 
-void CNeoVM::RegLibrary(VarInfo* pSystem, const char* pLibName, SFunLib* pFuns, int iCount)
+void CNeoVM::RegLibrary(VarInfo* pSystem, const char* pLibName, SFunLib* pFuns)
 {
 	//VarInfo temp;
 	//Var_SetTable(&temp, TableAlloc());
@@ -127,11 +130,12 @@ void CNeoVM::RegLibrary(VarInfo* pSystem, const char* pLibName, SFunLib* pFuns, 
 
 	TableInfo* pTable = pSystem->_tbl;
 
-	for (int i = 0; i < iCount; i++)
+	while (pFuns->pName != NULL)
 	{
-		fun._fun = pFuns[i].fn;
+		fun._fun = pFuns->fn;
 		//temp._tbl->_strMap[pFuns[i].pName] = fun;
-		pTable->_strMap[pFuns[i].pName] = fun;
+		pTable->_strMap[pFuns->pName] = fun;
+		pFuns++;
 	}
 }
 
@@ -144,7 +148,7 @@ void CNeoVM::Init()
 
 	//SetTable(, TableAlloc());
 
-	RegLibrary(pSystem, "sys", _Lib, _countof(_Lib));
+	RegLibrary(pSystem, "sys", _Lib);
 
 	Run(0);
 }

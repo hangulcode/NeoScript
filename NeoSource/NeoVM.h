@@ -334,68 +334,24 @@ private:
 	TableInfo* TableAlloc();
 	void FreeTable(VarInfo *d);
 
-
+public:
 
 	template<typename T>
-	T read(VarInfo *V) { T t; return r; }
+	T _read(VarInfo *V) { return T(); }
 
-	template<>	char*				read(VarInfo *V) { return (char*)PopString(V); }
-	template<>	const char*			read(VarInfo *V) { return PopString(V); }
-	template<>	char				read(VarInfo *V) { return (char)PopInt(V); }
-	template<>	unsigned char		read(VarInfo *V) { return (unsigned char)PopInt(V); }
-	template<>	short				read(VarInfo *V) { return (short)PopInt(V); }
-	template<>	unsigned short		read(VarInfo *V) { return (unsigned short)PopInt(V); }
-	template<>	long				read(VarInfo *V) { return (long)PopInt(V); }
-	template<>	unsigned long		read(VarInfo *V) { return (unsigned long)PopInt(V); }
-	template<>	int					read(VarInfo *V) { return (int)PopInt(V); }
-	template<>	unsigned int		read(VarInfo *V) { return (unsigned int)PopInt(V); }
-	template<>	float				read(VarInfo *V) { return (float)PopFloat(V); }
-	template<>	double				read(VarInfo *V) { return (double)PopFloat(V); }
-	template<>	bool				read(VarInfo *V) { return PopBool(V); }
-	template<>	void				read(VarInfo *V) {}
-	template<>	long long			read(VarInfo *V) { return (long long)PopInt(V); }
-	template<>	unsigned long long	read(VarInfo *V) { return (unsigned long long)PopInt(V); }
+
 
 	template<typename T>
 	void write(VarInfo *V, T) { }
 
-	template<>	void				write(VarInfo *V, char* p) { Var_SetString(V, p); }
-	template<>	void				write(VarInfo *V, const char* p) { Var_SetString(V, p); }
-	template<>	void				write(VarInfo *V, char p) { Var_SetInt(V, p); }
-	template<>	void				write(VarInfo *V, unsigned char p) { Var_SetInt(V, p); }
-	template<>	void				write(VarInfo *V, short p) { Var_SetInt(V, p); }
-	template<>	void				write(VarInfo *V, unsigned short p) { Var_SetInt(V, p); }
-	template<>	void				write(VarInfo *V, long p) { Var_SetInt(V, p); }
-	template<>	void				write(VarInfo *V, unsigned long p) { Var_SetInt(V, p); }
-	template<>	void				write(VarInfo *V, int p) { Var_SetInt(V, p); }
-	template<>	void				write(VarInfo *V, unsigned int p) { Var_SetInt(V, p); }
-	template<>	void				write(VarInfo *V, float p) { Var_SetFloat(V, p); }
-	template<>	void				write(VarInfo *V, double p) { Var_SetFloat(V, p); }
-	template<>	void				write(VarInfo *V, bool p) { Var_SetBool(V, p); }
-	template<>	void				write(VarInfo *V, long long p) { Var_SetInt(V, (int)p); }
-	template<>	void				write(VarInfo *V, unsigned long long p) { Var_SetInt(V, (int)p); }
+
 
 	template<typename T>
-	T read(int idx) { return read<T>(&m_sVarStack[_iSP_Vars + idx]); }
+	T read(int idx) { return _read<T>(&m_sVarStack[_iSP_Vars + idx]); }
 
 	template<typename T>
 	void push(T ret) {}
 
-	template<>	void push(char ret) { PushInt(ret); }
-	template<>	void push(unsigned char ret) { PushInt(ret); }
-	template<>	void push(short ret) { PushInt(ret); }
-	template<>	void push(unsigned short ret) { PushInt(ret); }
-	template<>	void push(long ret) { PushInt(ret); }
-	template<>	void push(unsigned long ret) { PushInt(ret); }
-	template<>	void push(int ret) { PushInt(ret); }
-	template<>	void push(unsigned int ret) { PushInt(ret); }
-	template<>	void push(float ret) { PushFloat(ret); }
-	template<>	void push(double ret) { PushFloat((double)ret); }
-	template<>	void push(char* ret) { PushString(ret); }
-	template<>	void push(const char* ret) { PushString(ret); }
-	template<>	void push(bool ret) { PushBool(ret); }
-	template<>	void push(long long ret) { PushInt((int)ret); }
-	template<>	void push(unsigned long long ret) { PushInt((int)ret); }
 
 	std::vector<VarInfo> _args;
 	bool RunFunction(const std::string& funName);
@@ -409,7 +365,7 @@ private:
 
 	const char* _pErrorMsg = NULL;
 
-	void RegLibrary(VarInfo* pSystem, const char* pLibName, SFunLib* pFuns, int iCount);
+	void RegLibrary(VarInfo* pSystem, const char* pLibName, SFunLib* pFuns);
 	void Init();
 	void SetError(const char* pErrMsg);
 public:
@@ -432,7 +388,7 @@ public:
 		PushArgs(args...);
 		RunFunction(funName);
 		GC();
-		return read<RVal>(&m_sVarStack[_iSP_Vars]);
+		return _read<RVal>(&m_sVarStack[_iSP_Vars]);
 	}
 
 
@@ -583,18 +539,7 @@ public:
 			return 0;
 		}
 	};
-	template<>
-	struct functor<void>
-	{
-		static int invoke(CNeoVM *N, void* pfun, short args)
-		{
-			if (args != 0)
-				return -1;
-			upvalue_<void(*)()>(pfun)();
-			N->Var_Release(&N->m_sVarStack[N->_iSP_Vars]);
-			return 0;
-		}
-	};
+
 
 	template<typename RVal, typename ... Types>
 	static int push_functor(FunctionPtr* pOut, RVal(*func)(Types ... args))
@@ -638,4 +583,64 @@ public:
 	static bool		Compile(void* pBufferSrc, int iLenSrc, void* pBufferCode, int iLenCode, int* pLenCode, bool putASM);
 };
 
+template<> inline char*			CNeoVM::_read(VarInfo *V) { return (char*)PopString(V); }
+template<> inline const char*		CNeoVM::_read(VarInfo *V) { return PopString(V); }
+template<> inline char				CNeoVM::_read(VarInfo *V) { return (char)PopInt(V); }
+template<> inline unsigned char	CNeoVM::_read(VarInfo *V) { return (unsigned char)PopInt(V); }
+template<> inline short			CNeoVM::_read(VarInfo *V) { return (short)PopInt(V); }
+template<> inline unsigned short	CNeoVM::_read(VarInfo *V) { return (unsigned short)PopInt(V); }
+template<> inline long				CNeoVM::_read(VarInfo *V) { return (long)PopInt(V); }
+template<> inline unsigned long	CNeoVM::_read(VarInfo *V) { return (unsigned long)PopInt(V); }
+template<> inline int				CNeoVM::_read(VarInfo *V) { return (int)PopInt(V); }
+template<> inline unsigned int		CNeoVM::_read(VarInfo *V) { return (unsigned int)PopInt(V); }
+template<> inline float			CNeoVM::_read(VarInfo *V) { return (float)PopFloat(V); }
+template<> inline double			CNeoVM::_read(VarInfo *V) { return (double)PopFloat(V); }
+template<> inline bool				CNeoVM::_read(VarInfo *V) { return PopBool(V); }
+template<> inline void				CNeoVM::_read(VarInfo *V) {}
+template<> inline long long		CNeoVM::_read(VarInfo *V) { return (long long)PopInt(V); }
+template<> inline unsigned long long CNeoVM::_read(VarInfo *V) { return (unsigned long long)PopInt(V); }
 
+template<> void	inline CNeoVM::write(VarInfo *V, char* p) { Var_SetString(V, p); }
+template<> void	inline CNeoVM::write(VarInfo *V, const char* p) { Var_SetString(V, p); }
+template<> void	inline CNeoVM::write(VarInfo *V, char p) { Var_SetInt(V, p); }
+template<> void	inline CNeoVM::write(VarInfo *V, unsigned char p) { Var_SetInt(V, p); }
+template<> void	inline CNeoVM::write(VarInfo *V, short p) { Var_SetInt(V, p); }
+template<> void	inline CNeoVM::write(VarInfo *V, unsigned short p) { Var_SetInt(V, p); }
+template<> void	inline CNeoVM::write(VarInfo *V, long p) { Var_SetInt(V, p); }
+template<> void	inline CNeoVM::write(VarInfo *V, unsigned long p) { Var_SetInt(V, p); }
+template<> void	inline CNeoVM::write(VarInfo *V, int p) { Var_SetInt(V, p); }
+template<> void	inline CNeoVM::write(VarInfo *V, unsigned int p) { Var_SetInt(V, p); }
+template<> void	inline CNeoVM::write(VarInfo *V, float p) { Var_SetFloat(V, p); }
+template<> void	inline CNeoVM::write(VarInfo *V, double p) { Var_SetFloat(V, p); }
+template<> void	inline CNeoVM::write(VarInfo *V, bool p) { Var_SetBool(V, p); }
+template<> void	inline CNeoVM::write(VarInfo *V, long long p) { Var_SetInt(V, (int)p); }
+template<> void	inline CNeoVM::write(VarInfo *V, unsigned long long p) { Var_SetInt(V, (int)p); }
+
+template<>	inline void CNeoVM::push(char ret) { PushInt(ret); }
+template<>	inline void CNeoVM::push(unsigned char ret) { PushInt(ret); }
+template<>	inline void CNeoVM::push(short ret) { PushInt(ret); }
+template<>	inline void CNeoVM::push(unsigned short ret) { PushInt(ret); }
+template<>	inline void CNeoVM::push(long ret) { PushInt(ret); }
+template<>	inline void CNeoVM::push(unsigned long ret) { PushInt(ret); }
+template<>	inline void CNeoVM::push(int ret) { PushInt(ret); }
+template<>	inline void CNeoVM::push(unsigned int ret) { PushInt(ret); }
+template<>	inline void CNeoVM::push(float ret) { PushFloat(ret); }
+template<>	inline void CNeoVM::push(double ret) { PushFloat((double)ret); }
+template<>	inline void CNeoVM::push(char* ret) { PushString(ret); }
+template<>	inline void CNeoVM::push(const char* ret) { PushString(ret); }
+template<>	inline void CNeoVM::push(bool ret) { PushBool(ret); }
+template<>	inline void CNeoVM::push(long long ret) { PushInt((int)ret); }
+template<>	inline void CNeoVM::push(unsigned long long ret) { PushInt((int)ret); }
+
+template<>
+struct CNeoVM::functor<void>
+{
+	static int invoke(CNeoVM *N, void* pfun, short args)
+	{
+		if (args != 0)
+			return -1;
+		upvalue_<void(*)()>(pfun)();
+		N->Var_Release(&N->m_sVarStack[N->_iSP_Vars]);
+		return 0;
+	}
+};
