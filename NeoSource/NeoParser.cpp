@@ -64,6 +64,7 @@ enum TK_TYPE
 	TK_IF,
 	TK_ELSE,
 	TK_FOR,
+	TK_WHILE,
 	TK_TRUE,
 	TK_FALSE,
 
@@ -138,6 +139,7 @@ void InitDefaultTokenString()
 	g_sDefaultTokenString[TK_IF] = "if";
 	g_sDefaultTokenString[TK_ELSE] = "else";
 	g_sDefaultTokenString[TK_FOR] = "for";
+	g_sDefaultTokenString[TK_WHILE] = "while";
 	g_sDefaultTokenString[TK_TRUE] = "true";
 	g_sDefaultTokenString[TK_FALSE] = "false";
 
@@ -265,6 +267,8 @@ TK_TYPE CalcStringToken(std::string& tk)
 		return TK_ELSE;
 	else if (tk == "for")
 		return TK_FOR;
+	else if (tk == "while")
+		return TK_WHILE;
 	else if (tk == "true")
 		return TK_TRUE;
 	else if (tk == "false")
@@ -1472,6 +1476,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_MIDDLE) // {
 	{
+		PushToken(tkType1, tk1);
 		iTempOffset = INVALID_ERROR_PARSEJOB;
 		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars);
 		if (TK_SEMICOLON != r)
@@ -1487,6 +1492,89 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 
 	funs._cur._code.Write(byTempInc, iIncCodeSize);
+
+	funs._cur.Set_JumpOffet(jmp1, funs._cur._code.GetBufferOffset());
+	funs._cur._code.Write(byTempCheck, iCheckCodeSize);
+	funs._cur.Push_JMPTrue(iStackCheckVar, PosLoopTop);
+
+	int forEndPos = funs._cur._code.GetBufferOffset();
+
+	for (int i = 0; i < (int)sJumps.size(); i++)
+	{
+		funs._cur.Set_JumpOffet(sJumps[i], forEndPos);
+	}
+
+	DelLocalVar(vars.GetCurrentLayer());
+
+	return true;
+}
+
+bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+{
+	std::string tk1;
+	TK_TYPE tkType1;
+	TK_TYPE r;
+
+	SOperand iTempOffset;
+	u8 byTempCheck[1024];
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_L_SMALL) // (
+	{
+		DebugLog("Error (%d, %d): while '(' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+
+	AddLocalVar(vars.GetCurrentLayer());
+
+
+	funs._cur.Push_JMP(0); // for Check 위치로 JMP(일단은 위치만 확보)
+	SJumpValue jmp1(funs._cur._code.GetBufferOffset() - 2, funs._cur._code.GetBufferOffset());
+
+	int PosLoopTop = funs._cur._code.GetBufferOffset(); // Loop 의 맨위
+
+	// While Check
+	int Pos1 = PosLoopTop;
+	iTempOffset.Reset();
+	r = ParseJob(true, iTempOffset, NULL, ar, funs, vars);
+	if (TK_R_SMALL != r)
+	{
+		DebugLog("Error (%d, %d): while Check", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+	int iStackCheckVar = iTempOffset._iVar;
+	int Pos2 = funs._cur._code.GetBufferOffset();
+	funs._cur._code.SetPointer(Pos1, SEEK_SET);
+	int iCheckCodeSize = Pos2 - Pos1;
+	if (iCheckCodeSize > sizeof(byTempCheck))
+	{
+		DebugLog("Error (%d, %d): Check Size Over %d", ar.CurLine(), ar.CurCol(), iCheckCodeSize);
+		return false;
+	}
+	funs._cur._code.Read(byTempCheck, iCheckCodeSize);
+	funs._cur._code.SetPointer(Pos1, SEEK_SET);
+
+
+
+	//	while {} Process
+	std::vector<SJumpValue> sJumps;
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_L_MIDDLE) // {
+	{
+		PushToken(tkType1, tk1);
+		iTempOffset = INVALID_ERROR_PARSEJOB;
+		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars);
+		if (TK_SEMICOLON != r)
+		{
+			DebugLog("Error (%d, %d): ;", ar.CurLine(), ar.CurCol());
+			return false;
+		}
+	}
+	else
+	{
+		if (false == ParseMiddleArea(&sJumps, ar, funs, vars))
+			return false;
+	}
 
 	funs._cur.Set_JumpOffet(jmp1, funs._cur._code.GetBufferOffset());
 	funs._cur._code.Write(byTempCheck, iCheckCodeSize);
@@ -1756,6 +1844,10 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			break;
 		case TK_FOR:
 			if (false == ParseFor(ar, funs, vars))
+				return false;
+			break;
+		case TK_WHILE:
+			if (false == ParseWhile(ar, funs, vars))
 				return false;
 			break;
 		default:

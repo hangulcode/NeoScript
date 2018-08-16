@@ -67,10 +67,10 @@ int main()
 			for (int i = 1; i < 10; i++)
 			{
 				DWORD t1 = GetTickCount();
-				float r = pVM->Call<float>("Sum", 100, i);
+				double r = pVM->Call<double>("Sum", 100, i);
 				DWORD t2 = GetTickCount();
 
-				printf("\nSum %d + %d = %f (Elapse:%d)", 100, i, r, t2 - t1);
+				printf("\nSum %d + %d = %lf (Elapse:%d)", 100, i, r, t2 - t1);
 			}
 			CNeoVM::ReleaseVM(pVM);
 		}
