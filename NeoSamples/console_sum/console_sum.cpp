@@ -63,7 +63,6 @@ int main()
 			pVM->Register("Sample1", Sample1);
 			
 
-			int i = 5;
 			for (int i = 1; i < 10; i++)
 			{
 				DWORD t1 = GetTickCount();
