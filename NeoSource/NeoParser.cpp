@@ -114,99 +114,113 @@ enum TK_TYPE
 	TK_NOT, // !
 };
 
-std::map<TK_TYPE, std::string> g_sDefaultTokenString;
+struct STokenValue
+{
+	std::string _str;
+	char		_iPriority;
+	NOP_TYPE	_op;
+
+	STokenValue() {}
+	STokenValue(const char* p, char iPriority, NOP_TYPE	op)
+	{
+		_str = p;
+		_iPriority = iPriority;
+		_op = op;
+	}
+};
+
+std::map<TK_TYPE, STokenValue> g_sTokenToString;
+std::map<std::string, TK_TYPE> g_sStringToToken;
+
+#define TOKEN_STR1(key, str) g_sTokenToString[key] = STokenValue(str, 20, NOP_NONE)
+#define TOKEN_STR2(key, str) g_sTokenToString[key] = STokenValue(str, 20, NOP_NONE); g_sStringToToken[str] = key
+#define TOKEN_STR3(key, str, pri, op) g_sTokenToString[key] = STokenValue(str, pri, op); g_sStringToToken[str] = key
 
 void InitDefaultTokenString()
 {
-	g_sDefaultTokenString.clear();
+	g_sTokenToString.clear();
+	g_sStringToToken.clear();
 
-	g_sDefaultTokenString[TK_UNUSED] = "unused token";
+	TOKEN_STR1(TK_UNUSED, "unused token");
 
-	g_sDefaultTokenString[TK_NONE] = "none token";
-	g_sDefaultTokenString[TK_STRING] = "string token";
-	g_sDefaultTokenString[TK_VAR] = "var";
-	g_sDefaultTokenString[TK_FUN] = "fun";
-	g_sDefaultTokenString[TK_IMPORT] = "import";
-	g_sDefaultTokenString[TK_EXPORT] = "export";
+	TOKEN_STR1(TK_NONE, "none token");
+	TOKEN_STR1(TK_STRING, "string token");
 
-	g_sDefaultTokenString[TK_TOSTRING] = "tostring";
-	g_sDefaultTokenString[TK_TOINT] = "toint";
-	g_sDefaultTokenString[TK_TOFLOAT] = "tofloat";
-	g_sDefaultTokenString[TK_GETTYPE] = "type";
+	TOKEN_STR2(TK_VAR, "var");
+	TOKEN_STR2(TK_FUN, "fun");
+	TOKEN_STR2(TK_IMPORT, "import");
+	TOKEN_STR2(TK_EXPORT, "export");
 
-	g_sDefaultTokenString[TK_RETURN] = "return";
-	g_sDefaultTokenString[TK_BREAK] = "break";
-	g_sDefaultTokenString[TK_IF] = "if";
-	g_sDefaultTokenString[TK_ELSE] = "else";
-	g_sDefaultTokenString[TK_FOR] = "for";
-	g_sDefaultTokenString[TK_WHILE] = "while";
-	g_sDefaultTokenString[TK_TRUE] = "true";
-	g_sDefaultTokenString[TK_FALSE] = "false";
+	TOKEN_STR3(TK_TOSTRING, "tostring", 20, NOP_TOSTRING);
+	TOKEN_STR3(TK_TOINT, "toint", 20, NOP_TOINT);
+	TOKEN_STR3(TK_TOFLOAT, "tofloat", 20, NOP_TOFLOAT);
+	TOKEN_STR3(TK_GETTYPE, "type", 20, NOP_GETTYPE);
 
-	g_sDefaultTokenString[TK_PLUS2] = "++";
-	g_sDefaultTokenString[TK_MINUS2] = "--";
+	TOKEN_STR2(TK_RETURN, "return");
+	TOKEN_STR2(TK_BREAK, "break");
+	TOKEN_STR2(TK_IF, "if");
+	TOKEN_STR2(TK_ELSE, "else");
+	TOKEN_STR2(TK_FOR, "for");
+	TOKEN_STR2(TK_WHILE, "while");
+	TOKEN_STR2(TK_TRUE, "true");
+	TOKEN_STR2(TK_FALSE, "false");
 
-	g_sDefaultTokenString[TK_PLUS] = "+"; // +
-	g_sDefaultTokenString[TK_PLUS_EQ] = "+="; // +=
-	g_sDefaultTokenString[TK_MINUS] = "-"; // -
-	g_sDefaultTokenString[TK_MINUS_EQ] = "-="; // -=
-	g_sDefaultTokenString[TK_MUL] = "*"; // *
-	g_sDefaultTokenString[TK_MUL_EQ] = "*="; // *=
-	g_sDefaultTokenString[TK_DIV] = "/"; // /
-	g_sDefaultTokenString[TK_DIV_EQ] = "/="; // /=
-	g_sDefaultTokenString[TK_PERCENT] = "%"; // %
-	g_sDefaultTokenString[TK_TILDE] = "~"; // ~
-	g_sDefaultTokenString[TK_CIRCUMFLEX] = "^"; // ^
-	g_sDefaultTokenString[TK_EQUAL] = "="; // =
-	g_sDefaultTokenString[TK_EQUAL_EQ] = "=="; // ==
-	g_sDefaultTokenString[TK_EQUAL_NOT] = "!="; // !=
+	TOKEN_STR3(TK_PLUS2, "++", 20, NOP_INC);
+	TOKEN_STR3(TK_MINUS2, "--", 20, NOP_DEC);
 
-	g_sDefaultTokenString[TK_AND] = "&"; // &
-	g_sDefaultTokenString[TK_AND2] = "&&"; // &&
-	g_sDefaultTokenString[TK_OR] = "|"; // |
-	g_sDefaultTokenString[TK_OR2] = "||"; // ||
+	TOKEN_STR3(TK_PLUS, "+", 5, NOP_ADD3);
+	TOKEN_STR3(TK_PLUS_EQ, "+=", 15, NOP_ADD2);
+	TOKEN_STR3(TK_MINUS, "-", 5, NOP_SUB3);
+	TOKEN_STR3(TK_MINUS_EQ, "-=", 15, NOP_SUB2);
+	TOKEN_STR3(TK_MUL, "*", 4, NOP_MUL3);
+	TOKEN_STR3(TK_MUL_EQ, "*=", 15, NOP_MUL2);
+	TOKEN_STR3(TK_DIV, "/", 4, NOP_DIV3);
+	TOKEN_STR3(TK_DIV_EQ, "/=", 15, NOP_DIV2);
+	TOKEN_STR2(TK_PERCENT, "%");
+	TOKEN_STR2(TK_TILDE, "~");
+	TOKEN_STR2(TK_CIRCUMFLEX, "^");
+	TOKEN_STR3(TK_EQUAL, "=", 15, NOP_MOV);
+	TOKEN_STR3(TK_EQUAL_EQ, "==", 8, NOP_EQUAL2);
+	TOKEN_STR3(TK_EQUAL_NOT, "!=", 8, NOP_NEQUAL);
 
-	g_sDefaultTokenString[TK_L_SMALL] = "("; // (
-	g_sDefaultTokenString[TK_R_SMALL] = ")"; // )
-	g_sDefaultTokenString[TK_L_MIDDLE] = "{"; // {
-	g_sDefaultTokenString[TK_R_MIDDLE] = "}"; // }
-	g_sDefaultTokenString[TK_L_ARRAY] = "["; // [
-	g_sDefaultTokenString[TK_R_ARRAY] = "]"; // ]
+	TOKEN_STR2(TK_AND, "&");
+	TOKEN_STR3(TK_AND2, "&&", 12, NOP_AND);
+	TOKEN_STR2(TK_OR, "|");
+	TOKEN_STR3(TK_OR2, "||", 13, NOP_OR);
 
-	g_sDefaultTokenString[TK_GREAT] = ">";		// >
-	g_sDefaultTokenString[TK_GREAT_EQ] = ">=";	// >=
-	g_sDefaultTokenString[TK_LESS] = "<";		// <
-	g_sDefaultTokenString[TK_LESS_EQ] = "<=";	// <=
+	TOKEN_STR2(TK_L_SMALL, "(");
+	TOKEN_STR2(TK_R_SMALL, ")");
+	TOKEN_STR2(TK_L_MIDDLE, "{");
+	TOKEN_STR2(TK_R_MIDDLE, "}");
+	TOKEN_STR2(TK_L_ARRAY, "[");
+	TOKEN_STR2(TK_R_ARRAY, "]");
 
-	g_sDefaultTokenString[TK_COLON] = ":"; // :
-	g_sDefaultTokenString[TK_SEMICOLON] = ";"; // ;
-	g_sDefaultTokenString[TK_COMMA] = ","; // ,
-	g_sDefaultTokenString[TK_DOT] = "."; // .
-	g_sDefaultTokenString[TK_DOT2] = ".."; // .
-	g_sDefaultTokenString[TK_SHARP] = "#"; // #
-	g_sDefaultTokenString[TK_QUOTATION] = "\""; // "
-	g_sDefaultTokenString[TK_QUESTION] = "?"; // ?
-	g_sDefaultTokenString[TK_NOT] = "!"; // !
+	TOKEN_STR3(TK_GREAT, ">", 7, NOP_GREAT);
+	TOKEN_STR3(TK_GREAT_EQ, ">=", 7, NOP_GREAT_EQ);
+	TOKEN_STR3(TK_LESS, "<", 7, NOP_LESS);
+	TOKEN_STR3(TK_LESS_EQ, "<=", 7, NOP_LESS_EQ);
+
+	TOKEN_STR2(TK_COLON, ":");
+	TOKEN_STR2(TK_SEMICOLON, ";");
+	TOKEN_STR2(TK_COMMA, ",");
+	TOKEN_STR2(TK_DOT, ".");
+	TOKEN_STR3(TK_DOT2, "..", 6, NOP_STR_ADD);
+	TOKEN_STR2(TK_SHARP, "#");
+	TOKEN_STR2(TK_QUOTATION, "\"");
+	TOKEN_STR2(TK_QUESTION, "?");
+	TOKEN_STR2(TK_NOT, "!");
 }
 std::string GetTokenString(TK_TYPE tk)
 {
-	if (g_sDefaultTokenString.empty())
-		InitDefaultTokenString();
-
-	auto it = g_sDefaultTokenString.find(tk);
-	if (it == g_sDefaultTokenString.end())
+	auto it = g_sTokenToString.find(tk);
+	if (it == g_sTokenToString.end())
 		return "";
-	return (*it).second;
+	return (*it).second._str;
 }
 
 #define GLOBAL_INIT_FUN_NAME	"##_global_##"
 bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars);
 
-
-u16 GetNextChar(CArchiveRdWC& ar)
-{
-	return ar.GetData(false);
-}
 
 void SkipCurrentLine(CArchiveRdWC& ar)
 {
@@ -257,38 +271,11 @@ TK_TYPE CalcStringToken(std::string& tk)
 	if (true == tk.empty())
 		return TK_NONE;
 
-	if (tk == "return")
-		return TK_RETURN;
-	else if (tk == "break")
-		return TK_BREAK;
-	else if (tk == "if")
-		return TK_IF;
-	else if (tk == "else")
-		return TK_ELSE;
-	else if (tk == "for")
-		return TK_FOR;
-	else if (tk == "while")
-		return TK_WHILE;
-	else if (tk == "true")
-		return TK_TRUE;
-	else if (tk == "false")
-		return TK_FALSE;
-	else if (tk == "var")
-		return TK_VAR;
-	else if (tk == "fun")
-		return TK_FUN;
-	else if (tk == "import")
-		return TK_IMPORT;
-	else if (tk == "export")
-		return TK_EXPORT;
-	else if (tk == "tostring")
-		return TK_TOSTRING;
-	else if (tk == "toint")
-		return TK_TOINT;
-	else if (tk == "tofloat")
-		return TK_TOFLOAT;
-	else if (tk == "type")
-		return TK_GETTYPE;
+	auto it = g_sStringToToken.find(tk);
+	if (it != g_sStringToToken.end())
+	{
+		return (*it).second;
+	}
 
 	return TK_STRING;
 }
@@ -299,74 +286,22 @@ TK_TYPE CalcToken2(TK_TYPE tkTypeOnySingleChar, CArchiveRdWC& ar, std::string& t
 	if (false == tk.empty())
 		return CalcStringToken(tk);
 
-	ar.GetData(true);
+	u16 c1 = ar.GetData(true);
+	u16 c2 = ar.GetData(false);
+	if(c2 > 255)
+		return tkTypeOnySingleChar;
 
-	u16 c = ar.GetData(false);
-	if (tkTypeOnySingleChar == TK_LESS && c == '=')
+	std::string s1;
+	s1 += (u8)c1;
+	s1 += (u8)c2;
+
+	TK_TYPE tkTemp = CalcStringToken(s1);
+	if (tkTemp != TK_STRING && tkTemp != TK_NONE)
 	{
 		ar.GetData(true);
-		return TK_LESS_EQ;
+		return tkTemp;
 	}
-	else if (tkTypeOnySingleChar == TK_GREAT && c == '=')
-	{
-		ar.GetData(true);
-		return TK_GREAT_EQ;
-	}
-	else if (tkTypeOnySingleChar == TK_EQUAL && c == '=')
-	{
-		ar.GetData(true);
-		return TK_EQUAL_EQ;
-	}
-	else if (tkTypeOnySingleChar == TK_NOT && c == '=')
-	{
-		ar.GetData(true);
-		return TK_EQUAL_NOT;
-	}
-	else if (tkTypeOnySingleChar == TK_PLUS && c == '=')
-	{
-		ar.GetData(true);
-		return TK_PLUS_EQ;
-	}
-	else if (tkTypeOnySingleChar == TK_MINUS && c == '=')
-	{
-		ar.GetData(true);
-		return TK_MINUS_EQ;
-	}
-	else if (tkTypeOnySingleChar == TK_MUL && c == '=')
-	{
-		ar.GetData(true);
-		return TK_MUL_EQ;
-	}
-	else if (tkTypeOnySingleChar == TK_DIV && c == '=')
-	{
-		ar.GetData(true);
-		return TK_DIV_EQ;
-	}
-	else if (tkTypeOnySingleChar == TK_PLUS && c == '+')
-	{
-		ar.GetData(true);
-		return TK_PLUS2;
-	}
-	else if (tkTypeOnySingleChar == TK_MINUS && c == '-')
-	{
-		ar.GetData(true);
-		return TK_MINUS2;
-	}
-	else if (tkTypeOnySingleChar == TK_AND && c == '&')
-	{
-		ar.GetData(true);
-		return TK_AND2;
-	}
-	else if (tkTypeOnySingleChar == TK_OR && c == '|')
-	{
-		ar.GetData(true);
-		return TK_OR2;
-	}
-	else if (tkTypeOnySingleChar == TK_DOT && c == '.')
-	{
-		ar.GetData(true);
-		return TK_DOT2;
-	}
+
 	return tkTypeOnySingleChar;
 }
 TK_TYPE CalcToken(TK_TYPE tkTypeOnySingleChar, CArchiveRdWC& ar, std::string& tk)
@@ -379,91 +314,14 @@ TK_TYPE CalcToken(TK_TYPE tkTypeOnySingleChar, CArchiveRdWC& ar, std::string& tk
 
 NOP_TYPE TokenToOP(TK_TYPE tk, int& iPriority)
 {
-	switch (tk)
+	auto it = g_sTokenToString.find(tk);
+	if (it == g_sTokenToString.end())
 	{
-	case TK_PLUS:
-		iPriority = 5;
-		return NOP_ADD3;
-	case TK_MINUS:
-		iPriority = 5;
-		return NOP_SUB3;
-	case TK_MUL:
-		iPriority = 4;
-		return NOP_MUL3;
-	case TK_DIV:
-		iPriority = 4;
-		return NOP_DIV3;
-
-	case TK_EQUAL:
-		iPriority = 15;
-		return NOP_MOV;
-
-	case TK_PLUS_EQ:
-		iPriority = 15;
-		return NOP_ADD2;
-	case TK_MINUS_EQ:
-		iPriority = 15;
-		return NOP_SUB2;
-	case TK_MUL_EQ:
-		iPriority = 15;
-		return NOP_MUL2;
-	case TK_DIV_EQ:
-		iPriority = 15;
-		return NOP_DIV2;
-
-	case TK_PLUS2:
 		iPriority = 20;
-		return NOP_INC;
-	case TK_MINUS2:
-		iPriority = 20;
-		return NOP_DEC;
-
-	case TK_GREAT:		// >
-		iPriority = 7;
-		return NOP_GREAT;
-	case TK_GREAT_EQ:	// >=
-		iPriority = 7;
-		return NOP_GREAT_EQ;
-	case TK_LESS:		// <
-		iPriority = 7;
-		return NOP_LESS;
-	case TK_LESS_EQ:	// <=
-		iPriority = 7;
-		return NOP_LESS_EQ;
-
-	case TK_EQUAL_EQ:	// ==
-		iPriority = 8;
-		return NOP_EQUAL2;
-	case TK_EQUAL_NOT:	// !=
-		iPriority = 8;
-		return NOP_NEQUAL;
-
-	case TK_AND2:	// &&
-		iPriority = 12;
-		return NOP_AND;
-	case TK_OR2:	// ||
-		iPriority = 13;
-		return NOP_OR;
-
-	case TK_DOT2:	// ..
-		iPriority = 6; //
-		return NOP_STR_ADD;
-
-	case TK_TOSTRING:
-		iPriority = 20;
-		return NOP_TOSTRING;
-	case TK_TOINT:
-		iPriority = 20;
-		return NOP_TOINT;
-	case TK_TOFLOAT:
-		iPriority = 20;
-		return NOP_TOFLOAT;
-	case TK_GETTYPE:
-		iPriority = 20;
-		return NOP_GETTYPE;
+		return NOP_NONE;
 	}
-	iPriority = 20;
-	return NOP_NONE;
+	iPriority = (*it).second._iPriority;
+	return (*it).second._op;
 }
 
 bool GetQuotationString(CArchiveRdWC& ar, std::string& str)
@@ -1700,7 +1558,7 @@ bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 == TK_STRING)
 	{
-		if (pCurLayer->FindVar(tk1) >= 0)
+		if (pCurLayer->FindVarOnlyCurrentBlock(tk1) >= 0)
 		{
 			DebugLog("Error (%d, %d): Function Local Var Already (%s) %s", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), tk1.c_str());
 			return false;
@@ -1928,6 +1786,9 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 {
+	if (g_sTokenToString.empty())
+		InitDefaultTokenString();
+
 	g_sTokenQueue.clear();
 
 	SVars	vars;

@@ -59,6 +59,18 @@ struct SLayerVar
 		_varsLayer.clear();
 	}
 
+	int FindVarOnlyCurrentBlock(const std::string& name)
+	{
+		int i = (int)_varsLayer.size() - 1;
+		if(i >= 0)
+		{
+			int r = _varsLayer[i]->FindVar(name);
+			if (r >= 0)
+				return r;
+		}
+		return -1;
+	}
+
 	int FindVar(const std::string& name)
 	{
 		for (int i = (int)_varsLayer.size() - 1; i >= 0; i--)
