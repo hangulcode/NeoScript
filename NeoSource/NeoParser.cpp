@@ -1251,6 +1251,53 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 	return r;
 }
 
+NOP_TYPE ConvertCheckOPToOptimize(NOP_TYPE n)
+{
+	switch (n)
+	{
+	case NOP_GREAT:		// >
+		return NOP_JMP_GREAT;
+	case NOP_GREAT_EQ:	// >=
+		return NOP_JMP_GREAT_EQ;
+	case NOP_LESS:		// <
+		return NOP_JMP_LESS;
+	case NOP_LESS_EQ:	// <=
+		return NOP_JMP_LESS_EQ;
+	case NOP_EQUAL2:	// ==
+		return NOP_JMP_EQUAL2;
+	case NOP_NEQUAL:	// !=
+		return NOP_JMP_NEQUAL;
+	case NOP_AND:	// &&
+		return NOP_JMP_AND;
+	case NOP_OR:	// ||
+		return NOP_JMP_OR;
+	}
+	return NOP_NONE;
+}
+NOP_TYPE ConvertCheckOPToOptimizeInv(NOP_TYPE n)
+{
+	switch (n)
+	{
+	case NOP_GREAT:		// >
+		return NOP_JMP_LESS_EQ;
+	case NOP_GREAT_EQ:	// >=
+		return NOP_JMP_LESS;
+	case NOP_LESS:		// <
+		return NOP_JMP_GREAT_EQ;
+	case NOP_LESS_EQ:	// <=
+		return NOP_JMP_GREAT;
+	case NOP_EQUAL2:	// ==
+		return NOP_JMP_NEQUAL;
+	case NOP_NEQUAL:	// !=
+		return NOP_JMP_EQUAL2;
+	case NOP_AND:	// &&
+		return NOP_JMP_NAND;
+	case NOP_OR:	// ||
+		return NOP_JMP_NOR;
+	}
+	return NOP_NONE;
+}
+
 //	for Init
 //	for {} Process
 //	for Increase
@@ -1300,6 +1347,17 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	int iStackCheckVar = iTempOffset._iVar;
 	int Pos2 = funs._cur._code.GetBufferOffset();
+	NOP_TYPE opCheck = funs._cur.GetLastOP();
+	bool isCheckOPOpt = false;
+	NOP_TYPE opOpz = NOP_NONE;
+	if (IsTempVar(iStackCheckVar))
+	{
+		opOpz = ConvertCheckOPToOptimize(opCheck);
+		if (opOpz != NOP_NONE)
+		{
+			isCheckOPOpt = true;
+		}
+	}
 	funs._cur._code.SetPointer(Pos1, SEEK_SET);
 	int iCheckCodeSize = Pos2 - Pos1;
 	if (iCheckCodeSize > sizeof(byTempCheck))
@@ -1353,7 +1411,16 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	funs._cur.Set_JumpOffet(jmp1, funs._cur._code.GetBufferOffset());
 	funs._cur._code.Write(byTempCheck, iCheckCodeSize);
-	funs._cur.Push_JMPTrue(iStackCheckVar, PosLoopTop);
+	if(false == isCheckOPOpt)
+		funs._cur.Push_JMPTrue(iStackCheckVar, PosLoopTop);
+	else
+	{
+		funs._cur._code.SetPointer(-7, SEEK_CUR); // OP + n1, n2, n3
+		funs._cur._code.Write(&opOpz, sizeof(opOpz));
+		int cur = funs._cur._code.GetBufferOffset();
+		funs._cur.Set_JumpOffet(SJumpValue(cur, cur + 6), PosLoopTop);
+		funs._cur._code.SetPointer(6, SEEK_CUR);
+	}
 
 	int forEndPos = funs._cur._code.GetBufferOffset();
 
@@ -1402,6 +1469,17 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	int iStackCheckVar = iTempOffset._iVar;
 	int Pos2 = funs._cur._code.GetBufferOffset();
+	NOP_TYPE opCheck = funs._cur.GetLastOP();
+	bool isCheckOPOpt = false;
+	NOP_TYPE opOpz = NOP_NONE;
+	if (IsTempVar(iStackCheckVar))
+	{
+		opOpz = ConvertCheckOPToOptimize(opCheck);
+		if (opOpz != NOP_NONE)
+		{
+			isCheckOPOpt = true;
+		}
+	}
 	funs._cur._code.SetPointer(Pos1, SEEK_SET);
 	int iCheckCodeSize = Pos2 - Pos1;
 	if (iCheckCodeSize > sizeof(byTempCheck))
@@ -1436,7 +1514,16 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	funs._cur.Set_JumpOffet(jmp1, funs._cur._code.GetBufferOffset());
 	funs._cur._code.Write(byTempCheck, iCheckCodeSize);
-	funs._cur.Push_JMPTrue(iStackCheckVar, PosLoopTop);
+	if (false == isCheckOPOpt)
+		funs._cur.Push_JMPTrue(iStackCheckVar, PosLoopTop);
+	else
+	{
+		funs._cur._code.SetPointer(-7, SEEK_CUR); // OP + n1, n2, n3
+		funs._cur._code.Write(&opOpz, sizeof(opOpz));
+		int cur = funs._cur._code.GetBufferOffset();
+		funs._cur.Set_JumpOffet(SJumpValue(cur, cur + 6), PosLoopTop);
+		funs._cur._code.SetPointer(6, SEEK_CUR);
+	}
 
 	int forEndPos = funs._cur._code.GetBufferOffset();
 
@@ -1457,7 +1544,6 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 
 	SOperand iTempOffset;
 
-	// "for (var i = 0; i < 789; i++)" 로직 처리
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_SMALL) // (
 	{
@@ -1474,10 +1560,35 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 		return false;
 	}
 
-
-	funs._cur.Push_JMPFalse(iTempOffset._iVar, 0);
-	SJumpValue jmp1(funs._cur._code.GetBufferOffset() - 2, funs._cur._code.GetBufferOffset());
+	SJumpValue jmp1;
 	SJumpValue jmp2;
+
+	NOP_TYPE opCheck = funs._cur.GetLastOP();
+	bool isCheckOPOpt = false;
+	NOP_TYPE opOpz = NOP_NONE;
+	if (IsTempVar(iTempOffset._iVar))
+	{
+		opOpz = ConvertCheckOPToOptimizeInv(opCheck);
+		if (opOpz != NOP_NONE)
+		{
+			isCheckOPOpt = true;
+		}
+	}
+	if (false == isCheckOPOpt)
+	{
+		funs._cur.Push_JMPFalse(iTempOffset._iVar, 0);
+		jmp1.Set(funs._cur._code.GetBufferOffset() - 2, funs._cur._code.GetBufferOffset());
+	}
+	else
+	{
+		funs._cur._code.SetPointer(-7, SEEK_CUR); // OP + n1, n2, n3
+		funs._cur._code.Write(&opOpz, sizeof(opOpz));
+		int cur = funs._cur._code.GetBufferOffset();
+		funs._cur.Set_JumpOffet(SJumpValue(cur, cur + 6), 0);
+		funs._cur._code.SetPointer(6, SEEK_CUR);
+
+		jmp1.Set(funs._cur._code.GetBufferOffset() - 6, funs._cur._code.GetBufferOffset());
+	}
 
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 == TK_L_MIDDLE)

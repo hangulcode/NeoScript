@@ -836,6 +836,61 @@ bool	CNeoVM::Run(int iFunctionID)
 			Var_SetBool(GetVarPtr(n1), GetVarPtr(n2)->IsTrue() || GetVarPtr(n3)->IsTrue());
 			break;
 
+
+
+		case NOP_JMP_GREAT:		// >
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
+			if (true == CompareGR(GetVarPtr(n2), GetVarPtr(n3)))
+				SetCodeIncPtr(n1);
+			break;
+		case NOP_JMP_GREAT_EQ:	// >=
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
+			if (true == CompareGE(GetVarPtr(n2), GetVarPtr(n3)))
+				SetCodeIncPtr(n1);
+			break;
+		case NOP_JMP_LESS:		// <
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
+			if (true == CompareGR(GetVarPtr(n3), GetVarPtr(n2)))
+				SetCodeIncPtr(n1);
+			break;
+		case NOP_JMP_LESS_EQ:	// <=
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
+			if (true == CompareGE(GetVarPtr(n3), GetVarPtr(n2)))
+				SetCodeIncPtr(n1);
+			break;
+		case NOP_JMP_EQUAL2:	// ==
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
+			if (true == CompareEQ(GetVarPtr(n2), GetVarPtr(n3)))
+				SetCodeIncPtr(n1);
+			break;
+		case NOP_JMP_NEQUAL:	// !=
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
+			if (false == CompareEQ(GetVarPtr(n2), GetVarPtr(n3)))
+				SetCodeIncPtr(n1);
+			break;
+		case NOP_JMP_AND:	// &&
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
+			if (GetVarPtr(n3)->IsTrue() && GetVarPtr(n2)->IsTrue())
+				SetCodeIncPtr(n1);
+			break;
+		case NOP_JMP_OR:		// ||
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
+			if (GetVarPtr(n3)->IsTrue() || GetVarPtr(n2)->IsTrue())
+				SetCodeIncPtr(n1);
+			break;
+		case NOP_JMP_NAND:	// !(&&)
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
+			if (false == (GetVarPtr(n3)->IsTrue() && GetVarPtr(n2)->IsTrue()))
+				SetCodeIncPtr(n1);
+			break;
+		case NOP_JMP_NOR:	// !(||)
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
+			if (false == (GetVarPtr(n3)->IsTrue() || GetVarPtr(n2)->IsTrue()))
+				SetCodeIncPtr(n1);
+			break;
+
+
+
 		case NOP_STR_ADD:	// ..
 			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
 			Var_SetString(GetVarPtr(n1), (ToString(GetVarPtr(n2)) + ToString(GetVarPtr(n3))).c_str());

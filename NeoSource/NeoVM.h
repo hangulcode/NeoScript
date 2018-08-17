@@ -41,6 +41,17 @@ enum NOP_TYPE : u8
 	NOP_AND,	// &&
 	NOP_OR,		// ||
 
+	NOP_JMP_GREAT,		// >
+	NOP_JMP_GREAT_EQ,	// >=
+	NOP_JMP_LESS,		// <
+	NOP_JMP_LESS_EQ,	// <=
+	NOP_JMP_EQUAL2,	// ==
+	NOP_JMP_NEQUAL,	// !=
+	NOP_JMP_AND,	// &&
+	NOP_JMP_OR,		// ||
+	NOP_JMP_NAND,	// !(&&)
+	NOP_JMP_NOR,	// !(||)
+
 	NOP_STR_ADD,	// ..
 
 	NOP_TOSTRING,

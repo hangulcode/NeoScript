@@ -170,6 +170,10 @@ struct SFunctionInfo
 	{
 		return (NOP_TYPE)((u8*)_code.GetData())[_iLastOPOffset];
 	}
+	NOP_TYPE GetOP(int iOffsetOP)
+	{
+		return (NOP_TYPE)*((u8*)_code.GetData() + iOffsetOP);
+	}
 
 	void	Push_OP(u8 op, short r, short a1, short a2)
 	{
@@ -330,6 +334,7 @@ struct SFunctionInfo
 		_code.Write(&r, sizeof(r));
 		_code.Write(&s, sizeof(s));
 	}
+
 };
 
 
