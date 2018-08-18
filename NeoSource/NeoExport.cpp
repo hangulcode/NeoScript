@@ -245,7 +245,7 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 		arRead >> dbg;
 		arRead >> op;
 
-		OutAsm("%4d : ", dbg._lineseq);
+		OutAsm("%6d : ", dbg._lineseq);
 
 		switch (op)
 		{
@@ -564,6 +564,7 @@ bool Write(CNArchive& ar, SFunctions& funs, SVars& vars)
 
 	// Main 함수 코드 저장
 	header._iMainFunctionOffset = ar.GetBufferOffset();
+	header._iGlobalVarCount = funs._cur._localVarCount;
 	WriteFun(ar, funs, funs._cur, vars, funPos);
 	// Sub 함수 코드 저장
 	for (auto it = funs._funs.begin(); it != funs._funs.end(); it++)
@@ -683,7 +684,7 @@ bool WriteLog(SFunctions& funs, SVars& vars)
 			SLocalVar* pLocalLayer = (*it1);
 			for (auto it2 = pLocalLayer->_localVars.begin(); it2 != pLocalLayer->_localVars.end(); it2++)
 			{
-				OutAsm("Global [%d] %s", (*it2).second - COMPILE_GLObAL_VAR_BEGIN + header._iStaticVarCount, (*it2).first.c_str());
+				OutAsm("Global [%d] %s\n", (*it2).second - COMPILE_GLObAL_VAR_BEGIN + header._iStaticVarCount, (*it2).first.c_str());
 			}
 		}
 	}

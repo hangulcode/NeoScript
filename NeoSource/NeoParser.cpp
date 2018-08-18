@@ -1696,11 +1696,11 @@ bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			DebugLog("Error (%d, %d): Function Local Var Already (%s) %s", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), tk1.c_str());
 			return false;
 		}
-		int iLocalVar = 1 + (int)funs._cur._args.size() + funs._cur._localVarCount++;
+		int iLocalVar;
 		if (funs._cur._name == GLOBAL_INIT_FUN_NAME)
-		{
-			iLocalVar += COMPILE_GLObAL_VAR_BEGIN;
-		}
+			iLocalVar = COMPILE_GLObAL_VAR_BEGIN + funs._cur._localVarCount++;
+		else
+			iLocalVar = 1 + (int)funs._cur._args.size() + funs._cur._localVarCount++; // 0 번은 리턴 저장용
 		pCurLayer->AddLocalVar(tk1, iLocalVar);
 		PushToken(tkType1, tk1);
 

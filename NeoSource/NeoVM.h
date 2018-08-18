@@ -144,6 +144,7 @@ struct SNeoVMHeader
 
 	int		_iFunctionCount;
 	int		_iStaticVarCount;
+	int		_iGlobalVarCount;
 	int		_iMainFunctionOffset;
 	int		_iCodeSize;
 };

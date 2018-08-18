@@ -1222,7 +1222,8 @@ CNeoVM* CNeoVM::LoadVM(void* pBuffer, int iSize)
 	}
 
 	std::string tempStr;
-	pVM->m_sVarGlobal.resize(header._iStaticVarCount);
+	int iMaxVar = header._iStaticVarCount + header._iGlobalVarCount;
+	pVM->m_sVarGlobal.resize(iMaxVar);
 	for (int i = 0; i < header._iStaticVarCount; i++)
 	{
 		VarInfo& vi = pVM->m_sVarGlobal[i];
@@ -1251,7 +1252,10 @@ CNeoVM* CNeoVM::LoadVM(void* pBuffer, int iSize)
 			break;
 		}
 	}
-
+	for (int i = header._iStaticVarCount; i < iMaxVar; i++)
+	{
+		pVM->m_sVarGlobal[i].ClearType();
+	}
 	pVM->Init();
 
 	return pVM;
