@@ -381,7 +381,7 @@ public:
 
 	void RegLibrary(VarInfo* pSystem, const char* pLibName, SFunLib* pFuns);
 	void Init();
-	void SetError(const char* pErrMsg);
+	inline void SetError(const char* pErrMsg);
 public:
 	CNeoVM(int iStackSize);
 	virtual ~CNeoVM();

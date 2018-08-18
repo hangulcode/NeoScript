@@ -811,11 +811,6 @@ CNeoVM::~CNeoVM()
 void CNeoVM::SetError(const char* pErrMsg)
 {
 	_pErrorMsg = pErrMsg;
-	if (_pErrorMsg != NULL)
-	{
-		m_sCallStack.clear();
-		_iSP_Vars = _header._iStaticVarCount;
-	}
 }
 
 
@@ -1126,11 +1121,12 @@ bool	CNeoVM::Run(int iFunctionID)
 			break;
 		}
 		default:
-			DebugLog("Error OP Type Error (%d)", op);
+			SetError("Unkonwn OP");
 			break;
 		}
 		if (_pErrorMsg != NULL)
 		{
+			m_sCallStack.clear();
 			_iSP_Vars = 0;
 			return false;
 		}
