@@ -1848,7 +1848,6 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
-	//OutAsm("%s -> Begin", funs._cur._name.c_str());
 	int iLenTemp = 1 * 1024 * 1024;
 	u8* pCodeTemp = new u8[iLenTemp];
 	funs._cur._code.SetData(pCodeTemp, iLenTemp);
@@ -1856,7 +1855,7 @@ bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	if (false == ParseMiddleArea(NULL, ar, funs, vars))
 		return false;
 
-	funs._cur.Push_RETURN(ar, 0);
+	funs._cur.Push_FUNEND(ar);
 
 	int iLenCode = funs._cur._code.GetBufferOffset();
 	u8* pCode = new u8[iLenCode + 1];
@@ -1866,8 +1865,6 @@ bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	funs._cur._code.SetPointer(iLenCode, SEEK_SET);
 
 	delete pCodeTemp;
-
-	//OutAsm("%s <- End [Arg:%d, Vars:%d, Temp:%d]", funs._cur._name.c_str(), (int)funs._cur._args.size(), funs._cur._localVarCount, funs._cur._localTempMax);
 	return true;
 }
 bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)

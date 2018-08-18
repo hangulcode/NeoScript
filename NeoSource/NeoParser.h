@@ -275,7 +275,15 @@ struct SFunctionInfo
 		_code.Write(&op, sizeof(op));
 		_code.Write(&r, sizeof(r));
 	}
+	void	Push_FUNEND(CArchiveRdWC& ar)
+	{
+		debug_info dbg(ar.CurFile(), ar.CurLine());
+		_code.Write(&dbg, sizeof(dbg));
+		_iLastOPOffset = _code.GetBufferOffset();
 
+		u8 op = NOP_FUNEND;
+		_code.Write(&op, sizeof(op));
+	}
 	void	Push_JMP(CArchiveRdWC& ar, int destOffset)
 	{
 		debug_info dbg(ar.CurFile(), ar.CurLine());

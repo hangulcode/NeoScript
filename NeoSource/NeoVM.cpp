@@ -1110,6 +1110,20 @@ bool	CNeoVM::Run(int iFunctionID)
 			_iSP_Vars = callStack._iSP_Vars;
 			iSP_VarsMax = callStack._iSP_VarsMax;
 			break;
+		case NOP_FUNEND:
+			Var_Release(&m_sVarStack[_iSP_Vars]); // Clear
+			if (m_sCallStack.empty())
+			{
+				return true;
+			}
+			iTemp = (int)m_sCallStack.size() - 1;
+			callStack = m_sCallStack[iTemp];
+			m_sCallStack.resize(iTemp);
+
+			SetCodePtr(callStack._iReturnOffset);
+			_iSP_Vars = callStack._iSP_Vars;
+			iSP_VarsMax = callStack._iSP_VarsMax;
+			break;
 		case NOP_TABLE_ALLOC:
 			n1 = GetS16();
 			Var_SetTable(GetVarPtr(n1), TableAlloc());

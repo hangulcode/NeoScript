@@ -195,6 +195,9 @@ void WriteFun(CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, s
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ar << op << n1;
 			break;
+		case NOP_FUNEND:
+			ar << op;
+			break;
 		case NOP_TABLE_ALLOC:
 			arRead >> n1;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
@@ -508,6 +511,9 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			arRead >> n1;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			OutAsm("RET [%d]\n", n1);
+			break;
+		case NOP_FUNEND:
+			OutAsm("- End -\n", n1);
 			break;
 		case NOP_TABLE_ALLOC:
 			arRead >> n1;
