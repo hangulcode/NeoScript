@@ -513,7 +513,7 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			OutAsm("RET [%d]\n", n1);
 			break;
 		case NOP_FUNEND:
-			OutAsm("- End -\n", n1);
+			OutAsm("- End -\n");
 			break;
 		case NOP_TABLE_ALLOC:
 			arRead >> n1;
