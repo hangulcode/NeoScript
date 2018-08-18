@@ -166,16 +166,27 @@ struct SFunctionInfo
 	}
 
 
-	int _iLastOPOffset = 0;
+	int _iLastOPOffset = -1;
+	void ClearLastOP()
+	{
+		_iLastOPOffset = -1;
+	}
 	NOP_TYPE GetLastOP()
 	{
+		if (_iLastOPOffset < 0)
+			return NOP_NONE;
+
 		return (NOP_TYPE)((u8*)_code.GetData())[_iLastOPOffset];
 	}
 	NOP_TYPE GetOP(int iOffsetOP)
 	{
 		return (NOP_TYPE)*((u8*)_code.GetData() + iOffsetOP);
 	}
-
+	s16 GetN(int iOffsetOP, int n)
+	{
+		s16* pN = (s16*)((u8*)_code.GetData() + iOffsetOP + 1);
+		return pN[n];
+	}
 	void	Push_OP(CArchiveRdWC& ar, u8 op, short r, short a1, short a2)
 	{
 		debug_info dbg(ar.CurFile(), ar.CurLine());

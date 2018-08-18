@@ -1440,6 +1440,8 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		funs._cur.Set_JumpOffet(SJumpValue(cur, cur + 6), PosLoopTop);
 		funs._cur._code.SetPointer(6, SEEK_CUR);
 	}
+	funs._cur.ClearLastOP();
+
 
 	int forEndPos = funs._cur._code.GetBufferOffset();
 
@@ -1543,6 +1545,7 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		funs._cur.Set_JumpOffet(SJumpValue(cur, cur + 6), PosLoopTop);
 		funs._cur._code.SetPointer(6, SEEK_CUR);
 	}
+	funs._cur.ClearLastOP();
 
 	int forEndPos = funs._cur._code.GetBufferOffset();
 
@@ -1732,6 +1735,18 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 	while (blEnd == false)
 	{
 		funs._cur.FreeLocalTempVar();
+		NOP_TYPE opLast = funs._cur.GetLastOP();
+		if (opLast == NOP_MOV || opLast == NOP_MOV_MINUS)
+		{
+			int iVar = funs._cur.GetN(funs._cur._iLastOPOffset, 0);
+			if (IsTempVar(iVar))
+			{
+				funs._cur._code.SetPointer(funs._cur._iLastOPOffset - sizeof(debug_info), SEEK_SET);
+				funs._cur.ClearLastOP();
+			}
+		}
+
+
 
 		tkType1 = GetToken(ar, tk1);
 		switch (tkType1)
