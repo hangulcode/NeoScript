@@ -149,7 +149,10 @@ void CNeoVM::FreeTable(VarInfo *d)
 void CNeoVM::TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
 {
 	if (pTable->GetType() != VAR_TABLE)
+	{
+		SetError("TableInsert Error");
 		return;
+	}
 	switch (pArray->GetType())
 	{
 	case VAR_INT:
@@ -249,7 +252,10 @@ FunctionPtr* CNeoVM::GetPtrFunction(VarInfo *pTable, VarInfo *pArray)
 void CNeoVM::TableRead(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
 {
 	if (pTable->GetType() != VAR_TABLE)
+	{
+		SetError("TableRead Error");
 		return;
+	}
 
 	Var_Release(pValue);
 	switch (pArray->GetType())
@@ -324,10 +330,10 @@ void CNeoVM::MoveMinus(VarInfo* v1, VarInfo* v2)
 	{
 	case VAR_INT:
 		Var_SetInt(v1, -v2->_int);
-		break;
+		return;
 	case VAR_FLOAT:
 		Var_SetFloat(v1, -v2->_float);
-		break;
+		return;
 	case VAR_BOOL:
 		break;
 	case VAR_STRING:
@@ -335,32 +341,46 @@ void CNeoVM::MoveMinus(VarInfo* v1, VarInfo* v2)
 	case VAR_TABLE:
 		break;
 	}
+	SetError("Minus Error");
 }
 void CNeoVM::Add2(VarInfo* r, VarInfo* v2)
 {
 	if (r->GetType() == VAR_INT)
 	{
 		if (v2->GetType() == VAR_INT)
+		{
 			r->_int += v2->_int;
+			return;
+		}
 		else if (v2->GetType() == VAR_FLOAT)
 		{
 			r->SetType(VAR_FLOAT);
 			r->_float = (double)r->_int + v2->_float;
+			return;
 		}
 	}
 	else if (r->GetType() == VAR_FLOAT)
 	{
 		if (v2->GetType() == VAR_INT)
+		{
 			r->_float += v2->_int;
+			return;
+		}
 		else if (v2->GetType() == VAR_FLOAT)
+		{
 			r->_float += v2->_float;
+			return;
+		}
 	}
 	else if (r->GetType() == VAR_STRING)
 	{
 		if (v2->GetType() == VAR_STRING)
+		{
 			Var_SetString(r, (r->_str->_str + v2->_str->_str).c_str());
-		return;
+			return;
+		}
 	}
+	SetError("+= Error");
 }
 
 void CNeoVM::Sub2(VarInfo* r, VarInfo* v2)
@@ -368,20 +388,31 @@ void CNeoVM::Sub2(VarInfo* r, VarInfo* v2)
 	if (r->GetType() == VAR_INT)
 	{
 		if (v2->GetType() == VAR_INT)
+		{
 			r->_int -= v2->_int;
+			return;
+		}
 		else if (v2->GetType() == VAR_FLOAT)
 		{
 			r->SetType(VAR_FLOAT);
 			r->_float = (double)r->_int - v2->_float;
+			return;
 		}
 	}
 	else if (r->GetType() == VAR_FLOAT)
 	{
 		if (v2->GetType() == VAR_INT)
+		{
 			r->_float -= v2->_int;
+			return;
+		}
 		else if (v2->GetType() == VAR_FLOAT)
+		{
 			r->_float -= v2->_float;
+			return;
+		}
 	}
+	SetError("-= Error");
 }
 
 void CNeoVM::Mul2(VarInfo* r, VarInfo* v2)
@@ -389,20 +420,31 @@ void CNeoVM::Mul2(VarInfo* r, VarInfo* v2)
 	if (r->GetType() == VAR_INT)
 	{
 		if (v2->GetType() == VAR_INT)
+		{
 			r->_int *= v2->_int;
+			return;
+		}
 		else if (v2->GetType() == VAR_FLOAT)
 		{
 			r->SetType(VAR_FLOAT);
 			r->_float = (double)r->_int * v2->_float;
+			return;
 		}
 	}
 	else if (r->GetType() == VAR_FLOAT)
 	{
 		if (v2->GetType() == VAR_INT)
+		{
 			r->_float *= v2->_int;
+			return;
+		}
 		else if (v2->GetType() == VAR_FLOAT)
+		{
 			r->_float *= v2->_float;
+			return;
+		}
 	}
+	SetError("*= Error");
 }
 
 void CNeoVM::Div2(VarInfo* r, VarInfo* v2)
@@ -410,43 +452,69 @@ void CNeoVM::Div2(VarInfo* r, VarInfo* v2)
 	if (r->GetType() == VAR_INT)
 	{
 		if (v2->GetType() == VAR_INT)
+		{
 			r->_int /= v2->_int;
+			return;
+		}
 		else if (v2->GetType() == VAR_FLOAT)
 		{
 			r->SetType(VAR_FLOAT);
 			r->_float = (double)r->_int / v2->_float;
+			return;
 		}
 	}
 	else if (r->GetType() == VAR_FLOAT)
 	{
 		if (v2->GetType() == VAR_INT)
+		{
 			r->_float /= v2->_int;
+			return;
+		}
 		else if (v2->GetType() == VAR_FLOAT)
+		{
 			r->_float /= v2->_float;
+			return;
+		}
 	}
+	SetError("/= Error");
 }
 void CNeoVM::Add(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	if (v1->GetType() == VAR_INT)
 	{
 		if (v2->GetType() == VAR_INT)
+		{
 			Var_SetInt(r, v1->_int + v2->_int);
+			return;
+		}
 		else if (v2->GetType() == VAR_FLOAT)
+		{
 			Var_SetFloat(r, v1->_int + v2->_float);
+			return;
+		}
 	}
 	else if (v1->GetType() == VAR_FLOAT)
 	{
 		if (v2->GetType() == VAR_INT)
+		{
 			Var_SetFloat(r, v1->_float + v2->_int);
+			return;
+		}
 		else if (v2->GetType() == VAR_FLOAT)
+		{
 			Var_SetFloat(r, v1->_float + v2->_float);
+			return;
+		}
 	}
 	else if (v1->GetType() == VAR_STRING)
 	{
 		if (v2->GetType() == VAR_STRING)
+		{
 			Var_SetString(r, (r->_str->_str + v2->_str->_str).c_str());
-		return;
+			return;
+		}
 	}
+	SetError("+ Error");
 }
 
 void CNeoVM::Sub(VarInfo* r, VarInfo* v1, VarInfo* v2)
@@ -454,17 +522,30 @@ void CNeoVM::Sub(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	if (v1->GetType() == VAR_INT)
 	{
 		if (v2->GetType() == VAR_INT)
+		{
 			Var_SetInt(r, v1->_int - v2->_int);
+			return;
+		}
 		else if (v2->GetType() == VAR_FLOAT)
+		{
 			Var_SetFloat(r, v1->_int - v2->_float);
+			return;
+		}
 	}
 	else if (v1->GetType() == VAR_FLOAT)
 	{
 		if (v2->GetType() == VAR_INT)
+		{
 			Var_SetFloat(r, v1->_float - v2->_int);
+			return;
+		}
 		else if (v2->GetType() == VAR_FLOAT)
+		{
 			Var_SetFloat(r, v1->_float - v2->_float);
+			return;
+		}
 	}
+	SetError("- Error");
 }
 
 void CNeoVM::Mul(VarInfo* r, VarInfo* v1, VarInfo* v2)
@@ -472,17 +553,30 @@ void CNeoVM::Mul(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	if (v1->GetType() == VAR_INT)
 	{
 		if (v2->GetType() == VAR_INT)
+		{
 			Var_SetInt(r, v1->_int * v2->_int);
+			return;
+		}
 		else if (v2->GetType() == VAR_FLOAT)
+		{
 			Var_SetFloat(r, v1->_int * v2->_float);
+			return;
+		}
 	}
 	else if (v1->GetType() == VAR_FLOAT)
 	{
 		if (v2->GetType() == VAR_INT)
+		{
 			Var_SetFloat(r, v1->_float * v2->_int);
+			return;
+		}
 		else if (v2->GetType() == VAR_FLOAT)
+		{
 			Var_SetFloat(r, v1->_float * v2->_float);
+			return;
+		}
 	}
+	SetError("* Error");
 }
 
 void CNeoVM::Div(VarInfo* r, VarInfo* v1, VarInfo* v2)
@@ -490,17 +584,30 @@ void CNeoVM::Div(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	if (v1->GetType() == VAR_INT)
 	{
 		if (v2->GetType() == VAR_INT)
+		{
 			Var_SetInt(r, v1->_int / v2->_int);
+			return;
+		}
 		else if (v2->GetType() == VAR_FLOAT)
+		{
 			Var_SetFloat(r, v1->_int / v2->_float);
+			return;
+		}
 	}
 	else if (v1->GetType() == VAR_FLOAT)
 	{
 		if (v2->GetType() == VAR_INT)
+		{
 			Var_SetFloat(r, v1->_float / v2->_int);
+			return;
+		}
 		else if (v2->GetType() == VAR_FLOAT)
+		{
 			Var_SetFloat(r, v1->_float / v2->_float);
+			return;
+		}
 	}
+	SetError("/ Error");
 }
 void CNeoVM::Inc(VarInfo* v1)
 {
@@ -508,15 +615,16 @@ void CNeoVM::Inc(VarInfo* v1)
 	{
 	case VAR_INT:
 		++v1->_int;
-		break;
+		return;
 	case VAR_FLOAT:
 		++v1->_float;
-		break;
+		return;
 	case VAR_BOOL:
 		break;
 	case VAR_STRING:
 		break;
 	}
+	SetError("++ Error");
 }
 void CNeoVM::Dec(VarInfo* v1)
 {
@@ -524,15 +632,16 @@ void CNeoVM::Dec(VarInfo* v1)
 	{
 	case VAR_INT:
 		--v1->_int;
-		break;
+		return;
 	case VAR_FLOAT:
 		--v1->_float;
-		break;
+		return;
 	case VAR_BOOL:
 		break;
 	case VAR_STRING:
 		break;
 	}
+	SetError("-- Error");
 }
 
 bool CNeoVM::CompareEQ(VarInfo* v1, VarInfo* v2)
@@ -543,7 +652,6 @@ bool CNeoVM::CompareEQ(VarInfo* v1, VarInfo* v2)
 			return v1->_int == v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_int == v2->_float;
-		return false;
 	}
 	else if (v1->GetType() == VAR_FLOAT)
 	{
@@ -551,8 +659,8 @@ bool CNeoVM::CompareEQ(VarInfo* v1, VarInfo* v2)
 			return v1->_float == v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float == v2->_float;
-		return false;
 	}
+	SetError("CompareEQ Error");
 	return false;
 }
 bool CNeoVM::CompareGR(VarInfo* v1, VarInfo* v2)
@@ -563,7 +671,6 @@ bool CNeoVM::CompareGR(VarInfo* v1, VarInfo* v2)
 			return v1->_int > v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_int > v2->_float;
-		return false;
 	}
 	else if (v1->GetType() == VAR_FLOAT)
 	{
@@ -571,8 +678,8 @@ bool CNeoVM::CompareGR(VarInfo* v1, VarInfo* v2)
 			return v1->_float > v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float > v2->_float;
-		return false;
 	}
+	SetError("CompareGR Error");
 	return false;
 }
 bool CNeoVM::CompareGE(VarInfo* v1, VarInfo* v2)
@@ -583,7 +690,6 @@ bool CNeoVM::CompareGE(VarInfo* v1, VarInfo* v2)
 			return v1->_int >= v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_int >= v2->_float;
-		return false;
 	}
 	else if (v1->GetType() == VAR_FLOAT)
 	{
@@ -591,8 +697,8 @@ bool CNeoVM::CompareGE(VarInfo* v1, VarInfo* v2)
 			return v1->_float >= v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float >= v2->_float;
-		return false;
 	}
+	SetError("CompareGE Error");
 	return false;
 }
 std::string CNeoVM::ToString(VarInfo* v1)
@@ -738,9 +844,7 @@ bool	CNeoVM::Run(int iFunctionID)
 
 	NOP_TYPE op;
 	short n1, n2, n3;
-//	VarInfo* v1;
-//	VarInfo* v2;
-//	VarInfo* v3;
+
 
 	FunctionPtr* pFunctionPtr;
 	SCallStack callStack;
@@ -1024,6 +1128,11 @@ bool	CNeoVM::Run(int iFunctionID)
 		default:
 			DebugLog("Error OP Type Error (%d)", op);
 			break;
+		}
+		if (_pErrorMsg != NULL)
+		{
+			_iSP_Vars = 0;
+			return false;
 		}
 	}
 	return true;

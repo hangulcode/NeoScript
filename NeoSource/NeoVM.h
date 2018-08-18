@@ -588,8 +588,8 @@ public:
 		return fun;
 	}
 
-	const char* GetLastErrorMsg() { return _pErrorMsg;  }
-	bool IsLastErrorMsg() { return (NULL != _pErrorMsg); }
+	inline const char* GetLastErrorMsg() { return _pErrorMsg;  }
+	inline bool IsLastErrorMsg() { return (NULL != _pErrorMsg); }
 	void ClearLastErrorMsg() { _pErrorMsg = NULL; }
 
 	static CNeoVM*	LoadVM(void* pBuffer, int iSize);

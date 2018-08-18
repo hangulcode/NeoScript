@@ -68,8 +68,13 @@ int main()
 				DWORD t1 = GetTickCount();
 				double r = pVM->Call<double>("Sum", 100, i);
 				DWORD t2 = GetTickCount();
-
-				printf("\nSum %d + %d = %lf (Elapse:%d)", 100, i, r, t2 - t1);
+				if (pVM->IsLastErrorMsg())
+				{
+					printf("\nVM Call Error : %s (Elapse:%d)", pVM->GetLastErrorMsg(), t2 - t1);
+					pVM->ClearLastErrorMsg();
+				}
+				else
+					printf("\nSum %d + %d = %lf (Elapse:%d)", 100, i, r, t2 - t1);
 			}
 			CNeoVM::ReleaseVM(pVM);
 		}
