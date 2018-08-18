@@ -291,15 +291,18 @@ TK_TYPE CalcStringToken(std::string& tk)
 }
 
 
-TK_TYPE CalcToken2(TK_TYPE tkTypeOnySingleChar, CArchiveRdWC& ar, std::string& tk)
+TK_TYPE CalcToken(TK_TYPE tkTypeOnySingleChar, CArchiveRdWC& ar, std::string& tk)
 {
 	if (false == tk.empty())
 		return CalcStringToken(tk);
 
 	u16 c1 = ar.GetData(true);
 	u16 c2 = ar.GetData(false);
-	if(c2 > 255)
+	if (c2 > 255)
+	{
+		tk = GetTokenString(tkTypeOnySingleChar);
 		return tkTypeOnySingleChar;
+	}
 
 	std::string s1;
 	s1 += (u8)c1;
@@ -309,17 +312,12 @@ TK_TYPE CalcToken2(TK_TYPE tkTypeOnySingleChar, CArchiveRdWC& ar, std::string& t
 	if (tkTemp != TK_STRING && tkTemp != TK_NONE)
 	{
 		ar.GetData(true);
+		tk = GetTokenString(tkTemp);
 		return tkTemp;
 	}
 
+	tk = GetTokenString(tkTypeOnySingleChar);
 	return tkTypeOnySingleChar;
-}
-TK_TYPE CalcToken(TK_TYPE tkTypeOnySingleChar, CArchiveRdWC& ar, std::string& tk)
-{
-	auto r = CalcToken2(tkTypeOnySingleChar, ar, tk);
-	if (tk.empty())
-		tk = GetTokenString(r);
-	return r;
 }
 
 NOP_TYPE TokenToOP(TK_TYPE tk, int& iPriority)

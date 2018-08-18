@@ -345,7 +345,7 @@ void CNeoVM::Add2(VarInfo* r, VarInfo* v2)
 		else if (v2->GetType() == VAR_FLOAT)
 		{
 			r->SetType(VAR_FLOAT);
-			r->_float += v2->_float;
+			r->_float = (double)r->_int + v2->_float;
 		}
 	}
 	else if (r->GetType() == VAR_FLOAT)
@@ -372,7 +372,7 @@ void CNeoVM::Sub2(VarInfo* r, VarInfo* v2)
 		else if (v2->GetType() == VAR_FLOAT)
 		{
 			r->SetType(VAR_FLOAT);
-			r->_float -= v2->_float;
+			r->_float = (double)r->_int - v2->_float;
 		}
 	}
 	else if (r->GetType() == VAR_FLOAT)
@@ -393,7 +393,7 @@ void CNeoVM::Mul2(VarInfo* r, VarInfo* v2)
 		else if (v2->GetType() == VAR_FLOAT)
 		{
 			r->SetType(VAR_FLOAT);
-			r->_float *= v2->_float;
+			r->_float = (double)r->_int * v2->_float;
 		}
 	}
 	else if (r->GetType() == VAR_FLOAT)
@@ -414,7 +414,7 @@ void CNeoVM::Div2(VarInfo* r, VarInfo* v2)
 		else if (v2->GetType() == VAR_FLOAT)
 		{
 			r->SetType(VAR_FLOAT);
-			r->_float /= v2->_float;
+			r->_float = (double)r->_int / v2->_float;
 		}
 	}
 	else if (r->GetType() == VAR_FLOAT)
