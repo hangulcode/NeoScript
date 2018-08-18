@@ -678,19 +678,26 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 			if (iTempVar._iVar == INVALID_ERROR_PARSEJOB)
 			{
 				DebugLog("Error (%d, %d): Call Param\n", ar.CurLine(), ar.CurCol());
-				return TK_NONE;
+				return false;
 			}
 
 			if (r2 != TK_R_SMALL && r2 != TK_COMMA)
 			{
 				DebugLog("Error (%d, %d): Call Param\n", ar.CurLine(), ar.CurCol());
-				return TK_NONE;
+				return false;
 			}
 			if (r2 == TK_R_SMALL)
 				break;
 		}
-		if(pFun != NULL)
+		if (pFun != NULL)
+		{
+			if ((int)pFun->_args.size() != iParamCount)
+			{
+				DebugLog("Error (%d, %d): Arg Count Invalid %d != %d", ar.CurLine(), ar.CurCol(), (int)pFun->_args.size(), iParamCount);
+				return false;
+			}
 			funs._cur.Push_Call(pFun->_funType == FUNT_IMPORT ? NOP_FARCALL : NOP_CALL, pFun->_funID, iParamCount);
+		}
 		else
 			funs._cur.Push_CallPtr(iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
 		iResultStack = funs._cur.AllocLocalTempVar();
@@ -1818,7 +1825,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			r = ParseJob(false, iTempOffset, NULL, ar, funs, vars);
 			if (TK_NONE == r)
 			{
-				DebugLog("Error (%d, %d): ", ar.CurLine(), ar.CurCol());
+				//DebugLog("Error (%d, %d): ", ar.CurLine(), ar.CurCol());
 				return false;
 			}
 			break;
