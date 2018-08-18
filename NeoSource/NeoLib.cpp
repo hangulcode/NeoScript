@@ -144,7 +144,6 @@ void CNeoVM::Init()
 {
 	VarInfo* pSystem = GetVarPtr(-1);
 	Var_SetTable(pSystem, TableAlloc());
-	pSystem->_tbl->_refCount = 1;
 
 	//SetTable(, TableAlloc());
 

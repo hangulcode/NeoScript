@@ -22,7 +22,7 @@ void ChangeIndex(int staticCount, int localCount, int curFunStatkSize, short& n)
 			{
 				if (n >= COMPILE_CALLARG_VAR_BEGIN)
 				{
-					n = n - COMPILE_CALLARG_VAR_BEGIN + curFunStatkSize;
+					n = (n - COMPILE_CALLARG_VAR_BEGIN) + curFunStatkSize;
 					return;
 				}
 				n = -(n - COMPILE_GLObAL_VAR_BEGIN) - 1 - staticCount;
@@ -376,7 +376,7 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("String [%d] = ToStr[%d] + ToStr[%d]\n", n1, n2, n3);
+			OutAsm("STR_ADD Str[%d] = ToStr[%d] + ToStr[%d]\n", n1, n2, n3);
 			break;
 
 		case NOP_JMP_GREAT:		// >

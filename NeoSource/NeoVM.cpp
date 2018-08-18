@@ -108,15 +108,22 @@ StringInfo* CNeoVM::StringAlloc(const char* str)
 		}
 	}
 
-	p->_str = str;
+	p->_StringID = iLastIDString;
 	p->_refCount = 0;
+
+	p->_str = str;
 
 	_sStrings[iLastIDString] = p;
 	return p;
 }
 void CNeoVM::FreeString(VarInfo *d)
 {
+	auto it = _sStrings.find(d->_str->_StringID);
+	if (it == _sStrings.end())
+		return; // Error
 
+	_sStrings.erase(it);
+	delete d->_str;
 }
 TableInfo* CNeoVM::TableAlloc()
 {
@@ -1049,6 +1056,8 @@ bool	CNeoVM::Run(int iFunctionID)
 		case NOP_FARCALL:
 		{
 			n1 = GetS16(); n2 = GetS16();
+			if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n2))
+				_iSP_Vars_Max2 = iSP_VarsMax + (1 + n2);
 
 			fun = m_sFunctionPtr[n1];
 			if (fun._fun._func == NULL)
@@ -1071,6 +1080,9 @@ bool	CNeoVM::Run(int iFunctionID)
 		}
 		case NOP_PTRCALL:
 			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
+			if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n3))
+				_iSP_Vars_Max2 = iSP_VarsMax + (1 + n3);
+
 			pFunctionPtr = GetPtrFunction(GetVarPtr(n1), GetVarPtr(n2));
 			if (pFunctionPtr != NULL)
 			{
@@ -1246,6 +1258,7 @@ CNeoVM* CNeoVM::LoadVM(void* pBuffer, int iSize)
 		case VAR_STRING:
 			ReadString(ar, tempStr);
 			vi._str = pVM->StringAlloc(tempStr.c_str());
+			vi._str->_refCount = 1;
 			break;
 		default:
 			DebugLog("Error VAR Type Error (%d)", type);
