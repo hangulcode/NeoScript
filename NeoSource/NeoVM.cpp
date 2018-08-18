@@ -843,10 +843,10 @@ bool	CNeoVM::Run(int iFunctionID)
 
 	FunctionPtr* pFunctionPtr;
 	SCallStack callStack;
-	debug_info dbg;
 	int iTemp;
-	char chMsg[256];
 	int iCodeOffset;
+	char chMsg[256];
+	debug_info dbg;
 
 	while (true)
 	{
