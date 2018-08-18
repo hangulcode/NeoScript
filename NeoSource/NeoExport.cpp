@@ -79,8 +79,13 @@ void WriteFun(CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, s
 	while (arRead.GetBufferOffset() < arRead.GetBufferSize())
 	{
 		NOP_TYPE op;
+		debug_info dbg;
+
+		arRead >> dbg;
 		arRead >> op;
 		iOPCount++;
+
+		ar << dbg;
 
 		switch (op)
 		{
@@ -218,8 +223,8 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 
 	int curFunStatkSize = 1 + (int)fi._args.size() + localCount + fi._localTempMax;
 
-	OutAsm("");
-	OutAsm("Fun - %s [T:%d ID:%d] arg:%d var:%d varTemp:%d", fi._name.c_str(), fi._funType, fi._funID, (int)fi._args.size(), fi._localVarCount, fi._localTempMax);
+	OutAsm("\n");
+	OutAsm("Fun - %s [T:%d ID:%d] arg:%d var:%d varTemp:%d\n", fi._name.c_str(), fi._funType, fi._funID, (int)fi._args.size(), fi._localVarCount, fi._localTempMax);
 
 	if (fi._funType == FUNT_IMPORT)
 		return;
@@ -232,7 +237,12 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 	while (arRead.GetBufferOffset() < arRead.GetBufferSize())
 	{
 		NOP_TYPE op;
+		debug_info dbg;
+
+		arRead >> dbg;
 		arRead >> op;
+
+		OutAsm("%4d : ", dbg._lineseq);
 
 		switch (op)
 		{
@@ -240,25 +250,25 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			arRead >> n1 >> n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			OutAsm("ADD [%d] += [%d]", n1, n2);
+			OutAsm("ADD [%d] += [%d]\n", n1, n2);
 			break;
 		case NOP_SUB2:
 			arRead >> n1 >> n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			OutAsm("SUB [%d] -= [%d]", n1, n2);
+			OutAsm("SUB [%d] -= [%d]\n", n1, n2);
 			break;
 		case NOP_MUL2:
 			arRead >> n1 >> n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			OutAsm("MUL [%d] *= [%d]", n1, n2);
+			OutAsm("MUL [%d] *= [%d]\n", n1, n2);
 			break;
 		case NOP_DIV2:
 			arRead >> n1 >> n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			OutAsm("DIV [%d] /= [%d]", n1, n2);
+			OutAsm("DIV [%d] /= [%d]\n", n1, n2);
 			break;
 
 		case NOP_ADD3:
@@ -266,39 +276,39 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("ADD [%d] = [%d] + [%d]", n1, n2, n3);
+			OutAsm("ADD [%d] = [%d] + [%d]\n", n1, n2, n3);
 			break;
 		case NOP_SUB3:
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("SUB [%d] = [%d] - [%d]", n1, n2, n3);
+			OutAsm("SUB [%d] = [%d] - [%d]\n", n1, n2, n3);
 			break;
 		case NOP_MUL3:
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("MUL [%d] = [%d] * [%d]", n1, n2, n3);
+			OutAsm("MUL [%d] = [%d] * [%d]\n", n1, n2, n3);
 			break;
 		case NOP_DIV3:
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("DIV [%d] = [%d] / [%d]", n1, n2, n3);
+			OutAsm("DIV [%d] = [%d] / [%d]\n", n1, n2, n3);
 			break;
 
 		case NOP_INC:
 			arRead >> n1;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			OutAsm("Inc [%d]", n1);
+			OutAsm("Inc [%d]\n", n1);
 			break;
 		case NOP_DEC:
 			arRead >> n1;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			OutAsm("Dec [%d]", n1);
+			OutAsm("Dec [%d]\n", n1);
 			break;
 
 		case NOP_GREAT:		// >
@@ -306,56 +316,56 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("GR [%d] = [%d] > [%d]", n1, n2, n3);
+			OutAsm("GR [%d] = [%d] > [%d]\n", n1, n2, n3);
 			break;
 		case NOP_GREAT_EQ:	// >=
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("GE [%d] = [%d] >= [%d]", n1, n2, n3);
+			OutAsm("GE [%d] = [%d] >= [%d]\n", n1, n2, n3);
 			break;
 		case NOP_LESS:		// <
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("LS [%d] = [%d] < [%d]", n1, n2, n3);
+			OutAsm("LS [%d] = [%d] < [%d]\n", n1, n2, n3);
 			break;
 		case NOP_LESS_EQ:	// <=
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("LE [%d] = [%d] <= [%d]", n1, n2, n3);
+			OutAsm("LE [%d] = [%d] <= [%d]\n", n1, n2, n3);
 			break;
 		case NOP_EQUAL2:	// ==
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("EQ [%d] = [%d] == [%d]", n1, n2, n3);
+			OutAsm("EQ [%d] = [%d] == [%d]\n", n1, n2, n3);
 			break;
 		case NOP_NEQUAL:	// !=
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("NE [%d] = [%d] != [%d]", n1, n2, n3);
+			OutAsm("NE [%d] = [%d] != [%d]\n", n1, n2, n3);
 			break;
 		case NOP_AND:	// &&
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("AND [%d] = [%d] && [%d]", n1, n2, n3);
+			OutAsm("AND [%d] = [%d] && [%d]\n", n1, n2, n3);
 			break;
 		case NOP_OR:	// ||
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("NE [%d] = [%d] || [%d]", n1, n2, n3);
+			OutAsm("NE [%d] = [%d] || [%d]\n", n1, n2, n3);
 			break;
 
 		case NOP_STR_ADD:	// ..
@@ -363,68 +373,68 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("String [%d] = ToStr[%d] + ToStr[%d]", n1, n2, n3);
+			OutAsm("String [%d] = ToStr[%d] + ToStr[%d]\n", n1, n2, n3);
 			break;
 
 		case NOP_JMP_GREAT:		// >
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JGR %d,  [%d] > [%d]", n1, n2, n3);
+			OutAsm("JGR %d,  [%d] > [%d]\n", n1, n2, n3);
 			break;
 		case NOP_JMP_GREAT_EQ:	// >=
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JGE %d,  [%d] >= [%d]", n1, n2, n3);
+			OutAsm("JGE %d,  [%d] >= [%d]\n", n1, n2, n3);
 			break;
 		case NOP_JMP_LESS:		// <
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JLS %d,  [%d] < [%d]", n1, n2, n3);
+			OutAsm("JLS %d,  [%d] < [%d]\n", n1, n2, n3);
 			break;
 		case NOP_JMP_LESS_EQ:	// <=
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JLE %d,  [%d] <= [%d]", n1, n2, n3);
+			OutAsm("JLE %d,  [%d] <= [%d]\n", n1, n2, n3);
 			break;
 		case NOP_JMP_EQUAL2:	// ==
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JEQ %d,  [%d] == [%d]", n1, n2, n3);
+			OutAsm("JEQ %d,  [%d] == [%d]\n", n1, n2, n3);
 			break;
 		case NOP_JMP_NEQUAL:	// !=
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JNE %d,  [%d] != [%d]", n1, n2, n3);
+			OutAsm("JNE %d,  [%d] != [%d]\n", n1, n2, n3);
 			break;
 		case NOP_JMP_AND:	// &&
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JAND %d,  [%d] && [%d]", n1, n2, n3);
+			OutAsm("JAND %d,  [%d] && [%d]\n", n1, n2, n3);
 			break;
 		case NOP_JMP_OR:		// ||
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JOR %d,  [%d] || [%d]", n1, n2, n3);
+			OutAsm("JOR %d,  [%d] || [%d]\n", n1, n2, n3);
 			break;
 		case NOP_JMP_NAND:	// !(&&)
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JNAND %d,  !([%d] && [%d])", n1, n2, n3);
+			OutAsm("JNAND %d,  !([%d] && [%d])\n", n1, n2, n3);
 			break;
 		case NOP_JMP_NOR:	// !(||)
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JNOR %d,  !([%d] || [%d])", n1, n2, n3);
+			OutAsm("JNOR %d,  !([%d] || [%d])\n", n1, n2, n3);
 			break;
 			break;
 
@@ -432,91 +442,91 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			arRead >> n1 >> n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			OutAsm("ToString [%d] = [%d]", n1, n2);
+			OutAsm("ToString [%d] = [%d]\n", n1, n2);
 			break;
 		case NOP_TOINT:
 			arRead >> n1 >> n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			OutAsm("ToInt [%d] = [%d]", n1, n2);
+			OutAsm("ToInt [%d] = [%d]\n", n1, n2);
 			break;
 		case NOP_TOFLOAT:
 			arRead >> n1 >> n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			OutAsm("ToFloat [%d] = [%d]", n1, n2);
+			OutAsm("ToFloat [%d] = [%d]\n", n1, n2);
 			break;
 		case NOP_GETTYPE:
 			arRead >> n1 >> n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			OutAsm("GetType [%d] = [%d]", n1, n2);
+			OutAsm("GetType [%d] = [%d]\n", n1, n2);
 			break;
 
 		case NOP_JMP:
 			arRead >> n1;
-			OutAsm("JMP  %d", n1);
+			OutAsm("JMP  %d\n", n1);
 			break;
 		case NOP_JMP_FALSE:
 			arRead >> n1 >> n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			OutAsm("JMP is False [%d]  %d", n1, n2);
+			OutAsm("JMP is False [%d]  %d\n", n1, n2);
 			break;
 		case NOP_JMP_TRUE:
 			arRead >> n1 >> n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			OutAsm("JMP is True [%d]  %d", n1, n2);
+			OutAsm("JMP is True [%d]  %d\n", n1, n2);
 			break;
 
 		case NOP_MOV:
 			arRead >> n1 >> n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			OutAsm("MOV [%d] = [%d]", n1, n2);
+			OutAsm("MOV [%d] = [%d]\n", n1, n2);
 			break;
 		case NOP_MOV_MINUS:
 			arRead >> n1 >> n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			OutAsm("MOVI [%d] = -[%d]", n1, n2);
+			OutAsm("MOVI [%d] = -[%d]\n", n1, n2);
 			break;
 		case NOP_FARCALL:
 			arRead >> n1 >> n2;
-			OutAsm("Far CALL %s", GetFunctionName(funs, n1).c_str());
+			OutAsm("Far CALL %s\n", GetFunctionName(funs, n1).c_str());
 			break;
 		case NOP_PTRCALL:
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			OutAsm("Ptr CALL [%d].[%d] arg:%d", n1, n2, n3);
+			OutAsm("Ptr CALL [%d].[%d] arg:%d\n", n1, n2, n3);
 			break;
 		case NOP_CALL:
 			arRead >> n1 >> n2;
-			OutAsm("CALL %s", GetFunctionName(funs, n1).c_str());
+			OutAsm("CALL %s\n", GetFunctionName(funs, n1).c_str());
 			break;
 		case NOP_RETURN:
 			arRead >> n1;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			OutAsm("RET [%d]", n1);
+			OutAsm("RET [%d]\n", n1);
 			break;
 		case NOP_TABLE_ALLOC:
 			arRead >> n1;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			OutAsm("Table Alloc [%d]", n1);
+			OutAsm("Table Alloc [%d]\n", n1);
 			break;
 		case NOP_TABLE_INSERT:
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("Table Insert [%d].[%d] = [%d]", n1, n2, n3);
+			OutAsm("Table Insert [%d].[%d] = [%d]\n", n1, n2, n3);
 			break;
 		case NOP_TABLE_READ:
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("Table Read [%d] = [%d].[%d]", n3, n1, n2);
+			OutAsm("Table Read [%d] = [%d].[%d]\n", n3, n1, n2);
 			break;
 		default:
 			DebugLog("Error OP Type Error (%d)", op);
@@ -642,16 +652,16 @@ bool WriteLog(SFunctions& funs, SVars& vars)
 		switch (vi.GetType())
 		{
 		case VAR_INT:
-			OutAsm("Static [%d] i:%d", i, vi._int);
+			OutAsm("Static [%d] i:%d\n", i, vi._int);
 			break;
 		case VAR_FLOAT:
-			OutAsm("Static [%d] f:%lf", i, vi._float); // double
+			OutAsm("Static [%d] f:%lf\n", i, vi._float); // double
 			break;
 		case VAR_BOOL:
-			OutAsm("Static [%d] b:%s", i, vi._bl ? "true" : "false");
+			OutAsm("Static [%d] b:%s\n", i, vi._bl ? "true" : "false");
 			break;
 		case VAR_STRING:
-			OutAsm("Static [%d] s:%s", i, ToPtringString(vi._str->_str).c_str());
+			OutAsm("Static [%d] s:%s\n", i, ToPtringString(vi._str->_str).c_str());
 			break;
 		default:
 			DebugLog("Error VAR Type Error (%d)", vi.GetType());

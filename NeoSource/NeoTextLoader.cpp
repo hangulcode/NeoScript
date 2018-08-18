@@ -174,12 +174,6 @@ void OutAsm(const char*	lpszString, ...)
 	va_end(arg_ptr);
 
 
-#ifdef _WIN32
-	strcat_s(buff, _countof(buff), "\n");
-#else
-	strcat(buff, "\n");
-#endif
-
 #ifdef _WIN32	
 	printf(buff);
 #endif

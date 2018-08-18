@@ -55,7 +55,7 @@ int main()
 	int iCodeLen = 0;
 	if (CNeoVM::Compile(pFileBuffer, iFileLen, pCodeTemp, iCodeTempLen, &iCodeLen, true) == TRUE)
 	{
-		printf("Comile Success !!\n");
+		printf("Comile Success %d bytes !!\n", iCodeLen);
 		CNeoVM* pVM = CNeoVM::LoadVM(pCodeTemp, iCodeLen);
 		if (NULL != pVM)
 		{
@@ -70,7 +70,7 @@ int main()
 				DWORD t2 = GetTickCount();
 				if (pVM->IsLastErrorMsg())
 				{
-					printf("\nVM Call Error : %s (Elapse:%d)", pVM->GetLastErrorMsg(), t2 - t1);
+					printf("\nError - VM Call : %s (Elapse:%d)", pVM->GetLastErrorMsg(), t2 - t1);
 					pVM->ClearLastErrorMsg();
 				}
 				else

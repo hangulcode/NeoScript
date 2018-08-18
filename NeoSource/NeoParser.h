@@ -2,6 +2,7 @@
 
 #include "NeoArchive.h"
 #include "NeoVM.h"
+#include "NeoTextLoader.h"
 
 #define INVALID_ERROR_PARSEJOB			(-1)
 
@@ -175,8 +176,10 @@ struct SFunctionInfo
 		return (NOP_TYPE)*((u8*)_code.GetData() + iOffsetOP);
 	}
 
-	void	Push_OP(u8 op, short r, short a1, short a2)
+	void	Push_OP(CArchiveRdWC& ar, u8 op, short r, short a1, short a2)
 	{
+		debug_info dbg(ar.CurFile(), ar.CurLine());
+		_code.Write(&dbg, sizeof(dbg));
 		_iLastOPOffset = _code.GetBufferOffset();
 
 		_code.Write(&op, sizeof(op));
@@ -184,16 +187,20 @@ struct SFunctionInfo
 		_code.Write(&a1, sizeof(a1));
 		_code.Write(&a2, sizeof(a2));
 	}
-	void	Push_Call(u8 op, short fun, short args)
+	void	Push_Call(CArchiveRdWC& ar, u8 op, short fun, short args)
 	{
+		debug_info dbg(ar.CurFile(), ar.CurLine());
+		_code.Write(&dbg, sizeof(dbg));
 		_iLastOPOffset = _code.GetBufferOffset();
 
 		_code.Write(&op, sizeof(op));
 		_code.Write(&fun, sizeof(fun));
 		_code.Write(&args, sizeof(args));
 	}
-	void	Push_CallPtr(short table, short index, short args)
+	void	Push_CallPtr(CArchiveRdWC& ar, short table, short index, short args)
 	{
+		debug_info dbg(ar.CurFile(), ar.CurLine());
+		_code.Write(&dbg, sizeof(dbg));
 		_iLastOPOffset = _code.GetBufferOffset();
 
 		u8 op = NOP_PTRCALL;
@@ -202,7 +209,7 @@ struct SFunctionInfo
 		_code.Write(&index, sizeof(index));
 		_code.Write(&args, sizeof(args));
 	}
-	void	Push_MOV(u8 op, short r, short s)
+	void	Push_MOV(CArchiveRdWC& ar, u8 op, short r, short s)
 	{
 		if (op == NOP_MOV)
 		{
@@ -241,21 +248,27 @@ struct SFunctionInfo
 			}
 		}
 
+		debug_info dbg(ar.CurFile(), ar.CurLine());
+		_code.Write(&dbg, sizeof(dbg));
 		_iLastOPOffset = _code.GetBufferOffset();
 
 		_code.Write(&op, sizeof(op));
 		_code.Write(&r, sizeof(r));
 		_code.Write(&s, sizeof(s));
 	}
-	void	Push_IncDec(u8 op, short r)
+	void	Push_IncDec(CArchiveRdWC& ar, u8 op, short r)
 	{
+		debug_info dbg(ar.CurFile(), ar.CurLine());
+		_code.Write(&dbg, sizeof(dbg));
 		_iLastOPOffset = _code.GetBufferOffset();
 
 		_code.Write(&op, sizeof(op));
 		_code.Write(&r, sizeof(r));
 	}
-	void	Push_RETURN(short r)
+	void	Push_RETURN(CArchiveRdWC& ar, short r)
 	{
+		debug_info dbg(ar.CurFile(), ar.CurLine());
+		_code.Write(&dbg, sizeof(dbg));
 		_iLastOPOffset = _code.GetBufferOffset();
 
 		u8 op = NOP_RETURN;
@@ -263,8 +276,10 @@ struct SFunctionInfo
 		_code.Write(&r, sizeof(r));
 	}
 
-	void	Push_JMP(int destOffset)
+	void	Push_JMP(CArchiveRdWC& ar, int destOffset)
 	{
+		debug_info dbg(ar.CurFile(), ar.CurLine());
+		_code.Write(&dbg, sizeof(dbg));
 		_iLastOPOffset = _code.GetBufferOffset();
 
 		u8 op = NOP_JMP;
@@ -272,8 +287,10 @@ struct SFunctionInfo
 		_code.Write(&op, sizeof(op));
 		_code.Write(&add, sizeof(add));
 	}
-	void	Push_JMPFalse(short var, int destOffset)
+	void	Push_JMPFalse(CArchiveRdWC& ar, short var, int destOffset)
 	{
+		debug_info dbg(ar.CurFile(), ar.CurLine());
+		_code.Write(&dbg, sizeof(dbg));
 		_iLastOPOffset = _code.GetBufferOffset();
 
 		u8 op = NOP_JMP_FALSE;
@@ -282,8 +299,10 @@ struct SFunctionInfo
 		_code.Write(&var, sizeof(var));
 		_code.Write(&add, sizeof(add));
 	}
-	void	Push_JMPTrue(short var, int destOffset)
+	void	Push_JMPTrue(CArchiveRdWC& ar, short var, int destOffset)
 	{
+		debug_info dbg(ar.CurFile(), ar.CurLine());
+		_code.Write(&dbg, sizeof(dbg));
 		_iLastOPOffset = _code.GetBufferOffset();
 
 		u8 op = NOP_JMP_TRUE;
@@ -297,16 +316,20 @@ struct SFunctionInfo
 		u8* p = (u8*)_code.GetData();
 		*((short*)(p + sJmp._iCodePosOffset)) = (short)(destOffset - sJmp._iBaseJmpOffset);
 	}
-	void	Push_TableAlloc(short r)
+	void	Push_TableAlloc(CArchiveRdWC& ar, short r)
 	{
+		debug_info dbg(ar.CurFile(), ar.CurLine());
+		_code.Write(&dbg, sizeof(dbg));
 		_iLastOPOffset = _code.GetBufferOffset();
 
 		u8 op = NOP_TABLE_ALLOC;
 		_code.Write(&op, sizeof(op));
 		_code.Write(&r, sizeof(r));
 	}
-	void	Push_TableInsert(short nTable, short nArray, short nValue)
+	void	Push_TableInsert(CArchiveRdWC& ar, short nTable, short nArray, short nValue)
 	{
+		debug_info dbg(ar.CurFile(), ar.CurLine());
+		_code.Write(&dbg, sizeof(dbg));
 		_iLastOPOffset = _code.GetBufferOffset();
 
 		u8 op = NOP_TABLE_INSERT;
@@ -315,8 +338,10 @@ struct SFunctionInfo
 		_code.Write(&nArray, sizeof(nArray));
 		_code.Write(&nValue, sizeof(nValue));
 	}
-	void	Push_TableRead(short nTable, short nArray, short nValue)
+	void	Push_TableRead(CArchiveRdWC& ar, short nTable, short nArray, short nValue)
 	{
+		debug_info dbg(ar.CurFile(), ar.CurLine());
+		_code.Write(&dbg, sizeof(dbg));
 		_iLastOPOffset = _code.GetBufferOffset();
 
 		u8 op = NOP_TABLE_READ;
@@ -326,8 +351,10 @@ struct SFunctionInfo
 		_code.Write(&nValue, sizeof(nValue));
 	}
 
-	void	Push_ToType(u8 op, short r, short s)
+	void	Push_ToType(CArchiveRdWC& ar, u8 op, short r, short s)
 	{
+		debug_info dbg(ar.CurFile(), ar.CurLine());
+		_code.Write(&dbg, sizeof(dbg));
 		_iLastOPOffset = _code.GetBufferOffset();
 
 		_code.Write(&op, sizeof(op));

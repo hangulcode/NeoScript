@@ -15,8 +15,8 @@ private:
 	int		m_iOffset;
 	int		m_iSize;
 
-	int		m_iCurLine;
-	int		m_iCurCol;
+	u16		m_iCurLine;
+	u16		m_iCurCol;
 public:
 	CArchiveRdWC()
 	{
@@ -67,8 +67,9 @@ public:
 		m_iCurCol = 1;
 	}
 
-	int		CurLine() { return m_iCurLine; }
-	int		CurCol() { return m_iCurCol; }
+	u16		CurFile() { return 0; }
+	u16		CurLine() { return m_iCurLine; }
+	u16		CurCol() { return m_iCurCol; }
 
 
 	inline int GetBufferOffset()

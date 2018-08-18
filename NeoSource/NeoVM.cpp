@@ -843,10 +843,15 @@ bool	CNeoVM::Run(int iFunctionID)
 
 	FunctionPtr* pFunctionPtr;
 	SCallStack callStack;
+	debug_info dbg;
 	int iTemp;
+	char chMsg[256];
+	int iCodeOffset;
 
 	while (true)
 	{
+		iCodeOffset = GetCodeptr();
+		SetCodePtr(iCodeOffset + sizeof(debug_info));
 		op = (NOP_TYPE)GetU8();
 		switch (op)
 		{
@@ -1048,6 +1053,7 @@ bool	CNeoVM::Run(int iFunctionID)
 			fun = m_sFunctionPtr[n1];
 			if (fun._fun._func == NULL)
 			{	// Error
+				SetError("Ptr Call is null");
 				break;
 			}
 
@@ -1057,7 +1063,7 @@ bool	CNeoVM::Run(int iFunctionID)
 			if((*fun._fun._fn)(this, fun._fun._func, n2) < 0)
 			{
 				SetError("Ptr Call Argument Count Error");
-				return false;
+				break;
 			}
 
 			_iSP_Vars = iSave;
@@ -1074,7 +1080,7 @@ bool	CNeoVM::Run(int iFunctionID)
 				if ((pFunctionPtr->_fn)(this, pFunctionPtr->_func, n3) < 0)
 				{
 					SetError("Ptr Call Argument Count Error");
-					return false;
+					break;
 				}
 
 				_iSP_Vars = iSave;
@@ -1082,7 +1088,7 @@ bool	CNeoVM::Run(int iFunctionID)
 			else
 			{
 				SetError("Ptr Call Not Found");
-				return false;
+				break;
 			}
 			break;
 		case NOP_RETURN:
@@ -1126,8 +1132,17 @@ bool	CNeoVM::Run(int iFunctionID)
 		}
 		if (_pErrorMsg != NULL)
 		{
+			SetCodePtr(iCodeOffset);
+			dbg._data = GetU16();
+
 			m_sCallStack.clear();
 			_iSP_Vars = 0;
+#ifdef _WIN32
+			sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pErrorMsg, dbg._lineseq);
+#else
+			sprintf(chMsg, "%s : Line (%d)", _pErrorMsg, dbg._lineseq);
+#endif
+			_sErrorMsgDetail = chMsg;
 			return false;
 		}
 	}

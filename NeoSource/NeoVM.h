@@ -201,6 +201,18 @@ private:
 		_iCodeOffset += 2;
 		return r;
 	}
+	inline	u16				GetU16()
+	{
+		u16 r = *(u16*)(_pCodePtr + _iCodeOffset);
+		_iCodeOffset += 2;
+		return r;
+	}
+	inline	u32				GetU32()
+	{
+		s32 r = *(s32*)(_pCodePtr + _iCodeOffset);
+		_iCodeOffset += 4;
+		return r;
+	}
 	inline int GetCodeptr() { return _iCodeOffset; }
 	inline void SetCodePtr(int off)
 	{
@@ -377,6 +389,7 @@ public:
 		_iSP_Vars_Max2 = _iSP_Vars;
 	}
 
+	std::string _sErrorMsgDetail;
 	const char* _pErrorMsg = NULL;
 
 	void RegLibrary(VarInfo* pSystem, const char* pLibName, SFunLib* pFuns);
@@ -588,9 +601,9 @@ public:
 		return fun;
 	}
 
-	inline const char* GetLastErrorMsg() { return _pErrorMsg;  }
-	inline bool IsLastErrorMsg() { return (NULL != _pErrorMsg); }
-	void ClearLastErrorMsg() { _pErrorMsg = NULL; }
+	inline const char* GetLastErrorMsg() { return _sErrorMsgDetail.c_str();  }
+	inline bool IsLastErrorMsg() { return (_sErrorMsgDetail.empty() == false); }
+	void ClearLastErrorMsg() { _pErrorMsg = NULL; _sErrorMsgDetail.clear(); }
 
 	static CNeoVM*	LoadVM(void* pBuffer, int iSize);
 	static void		ReleaseVM(CNeoVM* pVM);
