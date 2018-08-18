@@ -22,10 +22,18 @@ static void RemoveAt(std::vector<T>& array, int index)
 	}
 }
 
+enum IncrementOperator
+{
+	Increment_None,
+	Increment_Prefix,
+	Increment_Postfix,
+};
+
 struct SOperand
 {
 	int _iVar;
 	int _iArrayIndex;
+	IncrementOperator _incementType;
 
 	SOperand()
 	{
@@ -35,10 +43,12 @@ struct SOperand
 	{
 		_iVar = iVar;
 		_iArrayIndex = iArrayIndex;
+		_incementType = Increment_None;
 	}
 	void Reset()
 	{
 		_iVar = _iArrayIndex = INVALID_ERROR_PARSEJOB;
+		_incementType = Increment_None;
 	}
 };
 
@@ -1129,7 +1139,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				{
 					return TK_NONE;
 				}
-
+				a._incementType = Increment_Prefix;
 				funs._cur.Push_IncDec(tkType1 == TK_PLUS2 ? NOP_INC : NOP_DEC, a._iVar);
 
 				operands.push_back(a);
@@ -1146,6 +1156,11 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				if (a._iArrayIndex != INVALID_ERROR_PARSEJOB)
 				{
 					DebugLog("Error (%d, %d): Table Var not Support (%s)\n", ar.CurLine(), ar.CurCol(), tk1.c_str());
+					return TK_NONE;
+				}
+				if (a._incementType != Increment_None)
+				{
+					DebugLog("Error (%d, %d): ++/-- invalid (%s)\n", ar.CurLine(), ar.CurCol(), tk1.c_str());
 					return TK_NONE;
 				}
 				int iTempOffset2;

@@ -370,61 +370,61 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JMP GR %d,  [%d] > [%d]", n1, n2, n3);
+			OutAsm("JGR %d,  [%d] > [%d]", n1, n2, n3);
 			break;
 		case NOP_JMP_GREAT_EQ:	// >=
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JMP GR %d,  [%d] >= [%d]", n1, n2, n3);
+			OutAsm("JGE %d,  [%d] >= [%d]", n1, n2, n3);
 			break;
 		case NOP_JMP_LESS:		// <
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JMP LS %d,  [%d] < [%d]", n1, n2, n3);
+			OutAsm("JLS %d,  [%d] < [%d]", n1, n2, n3);
 			break;
 		case NOP_JMP_LESS_EQ:	// <=
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JMP LE %d,  [%d] <= [%d]", n1, n2, n3);
+			OutAsm("JLE %d,  [%d] <= [%d]", n1, n2, n3);
 			break;
 		case NOP_JMP_EQUAL2:	// ==
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JMP EQ %d,  [%d] == [%d]", n1, n2, n3);
+			OutAsm("JEQ %d,  [%d] == [%d]", n1, n2, n3);
 			break;
 		case NOP_JMP_NEQUAL:	// !=
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JMP NE %d,  [%d] != [%d]", n1, n2, n3);
+			OutAsm("JNE %d,  [%d] != [%d]", n1, n2, n3);
 			break;
 		case NOP_JMP_AND:	// &&
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JMP AND %d,  [%d] && [%d]", n1, n2, n3);
+			OutAsm("JAND %d,  [%d] && [%d]", n1, n2, n3);
 			break;
 		case NOP_JMP_OR:		// ||
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JMP OR %d,  [%d] || [%d]", n1, n2, n3);
+			OutAsm("JOR %d,  [%d] || [%d]", n1, n2, n3);
 			break;
 		case NOP_JMP_NAND:	// !(&&)
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JMP N AND %d,  !([%d] && [%d])", n1, n2, n3);
+			OutAsm("JNAND %d,  !([%d] && [%d])", n1, n2, n3);
 			break;
 		case NOP_JMP_NOR:	// !(||)
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			OutAsm("JMP N OR %d,  !([%d] || [%d])", n1, n2, n3);
+			OutAsm("JNOR %d,  !([%d] || [%d])", n1, n2, n3);
 			break;
 			break;
 
