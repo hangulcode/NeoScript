@@ -1,4 +1,4 @@
-NeoScript is MIT license
+MIT license
 
 NeoScript is free software.
 
