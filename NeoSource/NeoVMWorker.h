@@ -25,6 +25,7 @@ enum NOP_TYPE : u8
 	NOP_DIV2,
 	NOP_PERSENT2,
 
+	NOP_MOV_NULL,
 	NOP_INC,
 	NOP_DEC,
 
@@ -53,6 +54,7 @@ enum NOP_TYPE : u8
 	NOP_JMP_OR,		// ||
 	NOP_JMP_NAND,	// !(&&)
 	NOP_JMP_NOR,	// !(||)
+	NOP_JMP_FOREACH,// foreach
 
 	NOP_STR_ADD,	// ..
 
@@ -287,6 +289,7 @@ private:
 	bool CompareEQ(VarInfo* v1, VarInfo* v2);
 	bool CompareGR(VarInfo* v1, VarInfo* v2);
 	bool CompareGE(VarInfo* v1, VarInfo* v2);
+	bool ForEach(VarInfo* v1, VarInfo* v2, VarInfo* v3);
 
 	std::string ToString(VarInfo* v1);
 	int ToInt(VarInfo* v1);

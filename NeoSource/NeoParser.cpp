@@ -70,6 +70,7 @@ enum TK_TYPE
 	TK_IF,
 	TK_ELSE,
 	TK_FOR,
+	TK_FOREACH,
 	TK_WHILE,
 	TK_TRUE,
 	TK_FALSE,
@@ -168,6 +169,7 @@ void InitDefaultTokenString()
 	TOKEN_STR2(TK_IF, "if");
 	TOKEN_STR2(TK_ELSE, "else");
 	TOKEN_STR2(TK_FOR, "for");
+	TOKEN_STR2(TK_FOREACH, "foreach");
 	TOKEN_STR2(TK_WHILE, "while");
 	TOKEN_STR2(TK_TRUE, "true");
 	TOKEN_STR2(TK_FALSE, "false");
@@ -1319,6 +1321,24 @@ NOP_TYPE ConvertCheckOPToOptimizeInv(NOP_TYPE n)
 	return NOP_NONE;
 }
 
+int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, const std::string& name)
+{
+	SLayerVar* pCurLayer = vars.GetCurrentLayer();
+
+	if (pCurLayer->FindVarOnlyCurrentBlock(name) >= 0)
+	{
+		DebugLog("Error (%d, %d): Function Local Var Already (%s) %s", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), name.c_str());
+		return -1;
+	}
+	int iLocalVar;
+	if (funs._cur._name == GLOBAL_INIT_FUN_NAME)
+		iLocalVar = COMPILE_GLObAL_VAR_BEGIN + funs._cur._localVarCount++;
+	else
+		iLocalVar = 1 + (int)funs._cur._args.size() + funs._cur._localVarCount++; // 0 번은 리턴 저장용
+	pCurLayer->AddLocalVar(name, iLocalVar);
+	return iLocalVar;
+}
+
 //	for Init
 //	for {} Process
 //	for Increase
@@ -1327,7 +1347,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
-		DebugLog("Error (%d, %d): For is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
+		DebugLog("Error (%d, %d): \"for\" is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
 		return false;
 	}
 
@@ -1462,12 +1482,189 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	return true;
 }
+bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+{
+	if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
+	{
+		DebugLog("Error (%d, %d): \"foreach\" is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
+		return false;
+	}
 
+	std::string tk1;
+	TK_TYPE tkType1;
+	TK_TYPE r;
+
+	SOperand iTempOffset;
+//	u8 byTempCheck[1024];
+
+	// "foreach(var a, b in table)" 로직 처리
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_L_SMALL) // (
+	{
+		DebugLog("Error (%d, %d): foreach '(' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+
+	AddLocalVar(vars.GetCurrentLayer());
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_VAR) // var
+	{
+		DebugLog("Error (%d, %d): foreach 'var' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_STRING) // key
+	{
+		DebugLog("Error (%d, %d): foreach 'key' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+	int iKey = AddLocalVarName(ar, funs, vars, tk1);
+	if(iKey < 0)
+		return false;
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_COMMA) // ,
+	{
+		DebugLog("Error (%d, %d): foreach 'comma' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_STRING) // value
+	{
+		DebugLog("Error (%d, %d): foreach 'value' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+	int iValue = AddLocalVarName(ar, funs, vars, tk1);
+	if (iValue < 0)
+		return false;
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_STRING || tk1 != "in") // in
+	{
+		DebugLog("Error (%d, %d): foreach 'in' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_STRING) // Table Name
+	{
+		DebugLog("Error (%d, %d): foreach 'table_name' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+	int iTable = vars.FindVar(tk1);
+	if(iTable < 0)
+	{
+		DebugLog("Error (%d, %d): foreach 'talbe' Not Found %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_R_SMALL) // (
+	{
+		DebugLog("Error (%d, %d): foreach ')' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+
+
+	funs._cur.Push_MOV_NULL(ar, iKey);
+
+	funs._cur.Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
+	SJumpValue jmp1(funs._cur._code.GetBufferOffset() - 2, funs._cur._code.GetBufferOffset());
+
+	int PosLoopTop = funs._cur._code.GetBufferOffset(); // Loop 의 맨위
+
+	/*
+	// For Check
+	int Pos1 = PosLoopTop;
+	iTempOffset.Reset();
+	r = ParseJob(true, iTempOffset, NULL, ar, funs, vars);
+	if (TK_SEMICOLON != r)
+	{
+		DebugLog("Error (%d, %d): for Check", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+	int iStackCheckVar = iTempOffset._iVar;
+	int Pos2 = funs._cur._code.GetBufferOffset();
+	NOP_TYPE opCheck = funs._cur.GetLastOP();
+	bool isCheckOPOpt = false;
+	NOP_TYPE opOpz = NOP_NONE;
+	if (IsTempVar(iStackCheckVar))
+	{
+		opOpz = ConvertCheckOPToOptimize(opCheck);
+		if (opOpz != NOP_NONE)
+		{
+			isCheckOPOpt = true;
+		}
+	}
+	funs._cur._code.SetPointer(Pos1, SEEK_SET);
+	int iCheckCodeSize = Pos2 - Pos1;
+	if (iCheckCodeSize > sizeof(byTempCheck))
+	{
+		DebugLog("Error (%d, %d): Check Size Over %d", ar.CurLine(), ar.CurCol(), iCheckCodeSize);
+		return false;
+	}
+	funs._cur._code.Read(byTempCheck, iCheckCodeSize);
+	funs._cur._code.SetPointer(Pos1, SEEK_SET);
+	*/
+
+	//	foreach {} Process
+	std::vector<SJumpValue> sJumps;
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_L_MIDDLE) // {
+	{
+		PushToken(tkType1, tk1);
+		iTempOffset = INVALID_ERROR_PARSEJOB;
+		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars);
+		if (TK_SEMICOLON != r)
+		{
+			DebugLog("Error (%d, %d): ;", ar.CurLine(), ar.CurCol());
+			return false;
+		}
+	}
+	else
+	{
+		if (false == ParseMiddleArea(&sJumps, ar, funs, vars))
+			return false;
+	}
+
+	//funs._cur._code.Write(byTempInc, iIncCodeSize);
+
+	funs._cur.Set_JumpOffet(jmp1, funs._cur._code.GetBufferOffset());
+	funs._cur.Push_JMPForEach(ar, PosLoopTop, iTable, iKey, iValue);
+
+	//funs._cur._code.Write(byTempCheck, iCheckCodeSize);
+	//if (false == isCheckOPOpt)
+	//	funs._cur.Push_JMPTrue(ar, iStackCheckVar, PosLoopTop);
+	//else
+	//{
+	//	funs._cur._code.SetPointer(-7, SEEK_CUR); // OP + n1, n2, n3
+	//	funs._cur._code.Write(&opOpz, sizeof(opOpz));
+	//	int cur = funs._cur._code.GetBufferOffset();
+	//	funs._cur.Set_JumpOffet(SJumpValue(cur, cur + 6), PosLoopTop);
+	//	funs._cur._code.SetPointer(6, SEEK_CUR);
+	//}
+	funs._cur.ClearLastOP();
+
+
+	int forEndPos = funs._cur._code.GetBufferOffset();
+
+	for (int i = 0; i < (int)sJumps.size(); i++)
+	{
+		funs._cur.Set_JumpOffet(sJumps[i], forEndPos);
+	}
+
+	DelLocalVar(vars.GetCurrentLayer());
+
+	return true;
+}
 bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
-		DebugLog("Error (%d, %d): While is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
+		DebugLog("Error (%d, %d): \"while\" is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
 		return false;
 	}
 
@@ -1576,7 +1773,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 {
 	if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
-		DebugLog("Error (%d, %d): IF is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
+		DebugLog("Error (%d, %d): \"if\" is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
 		return false;
 	}
 
@@ -1700,6 +1897,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 
 	return true;
 }
+
 bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	std::string tk1;
@@ -1711,17 +1909,10 @@ bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 == TK_STRING)
 	{
-		if (pCurLayer->FindVarOnlyCurrentBlock(tk1) >= 0)
-		{
-			DebugLog("Error (%d, %d): Function Local Var Already (%s) %s", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), tk1.c_str());
+		int iLocalVar = AddLocalVarName(ar, funs, vars, tk1);
+		if (iLocalVar < 0)
 			return false;
-		}
-		int iLocalVar;
-		if (funs._cur._name == GLOBAL_INIT_FUN_NAME)
-			iLocalVar = COMPILE_GLObAL_VAR_BEGIN + funs._cur._localVarCount++;
-		else
-			iLocalVar = 1 + (int)funs._cur._args.size() + funs._cur._localVarCount++; // 0 번은 리턴 저장용
-		pCurLayer->AddLocalVar(tk1, iLocalVar);
+
 		PushToken(tkType1, tk1);
 
 		SOperand iTempLocalVar;
@@ -1863,6 +2054,10 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			break;
 		case TK_FOR:
 			if (false == ParseFor(ar, funs, vars))
+				return false;
+			break;
+		case TK_FOREACH:
+			if (false == ParseForEach(ar, funs, vars))
 				return false;
 			break;
 		case TK_WHILE:

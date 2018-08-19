@@ -74,7 +74,7 @@ void WriteFun(CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, s
 	CNArchive arRead(fi._code.GetData(), fi._code.GetBufferSize());
 	arRead.SetPointer(0, SEEK_SET);
 
-	short n1, n2, n3;
+	short n1, n2, n3, n4;
 
 	while (arRead.GetBufferOffset() < arRead.GetBufferSize())
 	{
@@ -112,6 +112,7 @@ void WriteFun(CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, s
 			ar << op << n1 << n2 << n3;
 			break;
 
+		case NOP_MOV_NULL:
 		case NOP_INC:
 		case NOP_DEC:
 			arRead >> n1;
@@ -149,6 +150,13 @@ void WriteFun(CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, s
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
 			ar << op << n1 << n2 << n3;
+			break;
+		case NOP_JMP_FOREACH:	// 
+			arRead >> n1 >> n2 >> n3 >> n4;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n4);
+			ar << op << n1 << n2 << n3 << n4;
 			break;
 
 		case NOP_TOSTRING:
@@ -237,7 +245,7 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 	CNArchive arRead(fi._code.GetData(), fi._code.GetBufferSize());
 	arRead.SetPointer(0, SEEK_SET);
 
-	short n1, n2, n3;
+	short n1, n2, n3, n4;
 
 	while (arRead.GetBufferOffset() < arRead.GetBufferSize())
 	{
@@ -318,6 +326,11 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			OutAsm("PER [%d] = [%d] %% [%d]\n", n1, n2, n3);
 			break;
 
+		case NOP_MOV_NULL:
+			arRead >> n1;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
+			OutAsm("MOVN [%d], null\n", n1);
+			break;
 		case NOP_INC:
 			arRead >> n1;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
@@ -454,6 +467,12 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
 			OutAsm("JNOR %d,  !([%d] || [%d])\n", n1, n2, n3);
 			break;
+		case NOP_JMP_FOREACH:	// foreach
+			arRead >> n1 >> n2 >> n3 >> n4;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n4);
+			OutAsm("JFRE %d,  T[%d], K[%d], V[%d]\n", n1, n2, n3, n4);
 			break;
 
 		case NOP_TOSTRING:

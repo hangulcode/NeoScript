@@ -657,6 +657,72 @@ bool CNeoVMWorker::CompareGE(VarInfo* v1, VarInfo* v2)
 	SetError("CompareGE Error");
 	return false;
 }
+bool CNeoVMWorker::ForEach(VarInfo* pTable, VarInfo* pKey, VarInfo* pValue)
+{
+	if (pTable->GetType() != VAR_TABLE)
+	{
+		SetError("foreach table Error");
+		return false;
+	}
+	TableInfo* tbl = pTable->_tbl;
+	if (pKey->GetType() == VAR_NONE)
+	{
+		if (false == tbl->_intMap.empty())
+		{
+			auto it = tbl->_intMap.begin();
+			Var_SetInt(pKey, (*it).first);
+			Move(pValue, &(*it).second);
+			return true;
+		}
+		return false;
+	}
+	else if (pKey->GetType() == VAR_INT)
+	{
+		auto it = tbl->_intMap.find(pKey->_int);
+		if (it == tbl->_intMap.end())
+			return false;
+		else
+		{
+			if (++it == tbl->_intMap.end())
+			{
+				if (false == tbl->_strMap.empty())
+				{
+					auto it = tbl->_strMap.begin();
+					Var_SetString(pKey, (*it).first.c_str());
+					Move(pValue, &(*it).second);
+					return true;
+				}
+				return false;
+			}
+			else
+			{
+				Var_SetInt(pKey, (*it).first);
+				Move(pValue, &(*it).second);
+				return true;
+			}
+		}
+	}
+	else if (pKey->GetType() == VAR_STRING)
+	{
+		auto it = tbl->_strMap.find(pKey->_str->_str);
+		if (it == tbl->_strMap.end())
+			return false;
+		else
+		{
+			if (++it == tbl->_strMap.end())
+				return false;
+			else
+			{
+				Var_SetString(pKey, (*it).first.c_str());
+				Move(pValue, &(*it).second);
+				return true;
+			}
+		}
+	}
+	SetError("foreach table key Error");
+	return false;
+}
+
 std::string CNeoVMWorker::ToString(VarInfo* v1)
 {
 	char ch[256];
@@ -814,7 +880,7 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 		return false;
 
 	NOP_TYPE op;
-	short n1, n2, n3;
+	short n1, n2, n3, n4;
 
 	SFunctionTable fun;
 	FunctionPtr* pFunctionPtr;
@@ -866,6 +932,10 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 			Per2(GetVarPtr(n1), GetVarPtr(n2));
 			break;
 
+		case NOP_MOV_NULL:
+			n1 = GetS16();
+			Var_Release(GetVarPtr(n1));
+			break;
 		case NOP_INC:
 			n1 = GetS16();
 			Inc(GetVarPtr(n1));
@@ -963,26 +1033,29 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 			break;
 		case NOP_JMP_AND:	// &&
 			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			if (GetVarPtr(n3)->IsTrue() && GetVarPtr(n2)->IsTrue())
+			if (GetVarPtr(n2)->IsTrue() && GetVarPtr(n3)->IsTrue())
 				SetCodeIncPtr(n1);
 			break;
 		case NOP_JMP_OR:		// ||
 			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			if (GetVarPtr(n3)->IsTrue() || GetVarPtr(n2)->IsTrue())
+			if (GetVarPtr(n2)->IsTrue() || GetVarPtr(n3)->IsTrue())
 				SetCodeIncPtr(n1);
 			break;
 		case NOP_JMP_NAND:	// !(&&)
 			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			if (false == (GetVarPtr(n3)->IsTrue() && GetVarPtr(n2)->IsTrue()))
+			if (false == (GetVarPtr(n2)->IsTrue() && GetVarPtr(n3)->IsTrue()))
 				SetCodeIncPtr(n1);
 			break;
 		case NOP_JMP_NOR:	// !(||)
 			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			if (false == (GetVarPtr(n3)->IsTrue() || GetVarPtr(n2)->IsTrue()))
+			if (false == (GetVarPtr(n2)->IsTrue() || GetVarPtr(n3)->IsTrue()))
 				SetCodeIncPtr(n1);
 			break;
-
-
+		case NOP_JMP_FOREACH:	// foreach
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16(); n4 = GetS16();
+			if(ForEach(GetVarPtr(n2), GetVarPtr(n3), GetVarPtr(n4)))
+				SetCodeIncPtr(n1);
+			break;
 
 		case NOP_STR_ADD:	// ..
 			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
