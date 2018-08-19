@@ -321,12 +321,12 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 		case NOP_INC:
 			arRead >> n1;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			OutAsm("Inc [%d]\n", n1);
+			OutAsm("INC [%d]\n", n1);
 			break;
 		case NOP_DEC:
 			arRead >> n1;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			OutAsm("Dec [%d]\n", n1);
+			OutAsm("DEC [%d]\n", n1);
 			break;
 
 		case NOP_GREAT:		// >
