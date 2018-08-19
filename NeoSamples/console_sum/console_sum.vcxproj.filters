@@ -45,6 +45,9 @@
     <ClInclude Include="..\..\NeoSource\NeoArchive.h">
       <Filter>NeoSource</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\NeoSource\NeoVMWorker.h">
+      <Filter>NeoSource</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -66,6 +69,9 @@
       <Filter>NeoSource</Filter>
     </ClCompile>
     <ClCompile Include="..\..\NeoSource\NeoVM.cpp">
+      <Filter>NeoSource</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\NeoSource\NeoVMWorker.cpp">
       <Filter>NeoSource</Filter>
     </ClCompile>
   </ItemGroup>
