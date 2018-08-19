@@ -665,18 +665,7 @@ bool CNeoVMWorker::ForEach(VarInfo* pTable, VarInfo* pKey, VarInfo* pValue)
 		return false;
 	}
 	TableInfo* tbl = pTable->_tbl;
-	if (pKey->GetType() == VAR_NONE)
-	{
-		if (false == tbl->_intMap.empty())
-		{
-			auto it = tbl->_intMap.begin();
-			Var_SetInt(pKey, (*it).first);
-			Move(pValue, &(*it).second);
-			return true;
-		}
-		return false;
-	}
-	else if (pKey->GetType() == VAR_INT)
+	if (pKey->GetType() == VAR_INT)
 	{
 		auto it = tbl->_intMap.find(pKey->_int);
 		if (it == tbl->_intMap.end())
@@ -718,6 +707,17 @@ bool CNeoVMWorker::ForEach(VarInfo* pTable, VarInfo* pKey, VarInfo* pValue)
 				return true;
 			}
 		}
+	}
+	else if (pKey->GetType() == VAR_NONE)
+	{
+		if (false == tbl->_intMap.empty())
+		{
+			auto it = tbl->_intMap.begin();
+			Var_SetInt(pKey, (*it).first);
+			Move(pValue, &(*it).second);
+			return true;
+		}
+		return false;
 	}
 	SetError("foreach table key Error");
 	return false;
