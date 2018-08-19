@@ -75,6 +75,8 @@ public:
 	CNeoVM();
 	virtual ~CNeoVM();
 
+
+
 	template<typename RVal, typename ... Types>
 	static int push_functor(FunctionPtr* pOut, RVal(*func)(Types ... args))
 	{

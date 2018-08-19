@@ -36,8 +36,6 @@ void CNeoVMWorker::Var_Release(VarInfo *d)
 	d->ClearType();
 }
 
-
-
 void CNeoVMWorker::Var_SetInt(VarInfo *d, int v)
 {
 	if (d->GetType() != VAR_INT)
@@ -72,8 +70,6 @@ void CNeoVMWorker::Var_SetBool(VarInfo *d, bool v)
 	}
 	d->_bl = v;
 }
-
-
 
 void CNeoVMWorker::Var_SetString(VarInfo *d, const char* str)
 {
@@ -1107,111 +1103,6 @@ bool	CNeoVMWorker::Run(int iFunctionID)
 	return true;
 }
 
-static void ReadString(CNArchive& ar, std::string& str)
-{
-	short nLen;
-	ar >> nLen;
-	str.resize(nLen);
-
-	ar.Read((char*)str.data(), nLen);
-}
-//
-//bool CNeoVMWorker::Init(void* pBuffer, int iSize)
-//{
-//	CNArchive ar(pBuffer, iSize);
-//	SNeoVMHeader header;
-//	memset(&header, 0, sizeof(header));
-//	ar >> header;
-//	_header = header;
-//
-//	if (header._dwFileType != FILE_NEOS)
-//	{
-//		return false;
-//	}
-//	if (header._dwNeoVersion != NEO_VER)
-//	{
-//		return false;
-//	}
-//
-//
-//	u8* pCode = new u8[header._iCodeSize];
-//	SetCodeData(pCode, header._iCodeSize);
-//	ar.Read(pCode, header._iCodeSize);
-//
-//	m_sFunctionPtr.resize(header._iFunctionCount);
-//
-//	int iID;
-//	SFunctionTable fun;
-//	std::string funName;
-//	for (int i = 0; i < header._iFunctionCount; i++)
-//	{
-//		memset(&fun, 0, sizeof(SFunctionTable));
-//
-//		ar >> iID >> fun._codePtr >> fun._argsCount >> fun._localTempMax >> fun._localVarCount >> fun._funType;
-//		if (fun._funType != FUNT_NORMAL)
-//		{
-//			ReadString(ar, funName);
-//			m_sImExportTable[funName] = iID;
-//		}
-//
-//		fun._localAddCount = 1 + fun._argsCount + fun._localVarCount + fun._localTempMax;
-//		m_sFunctionPtr[iID] = fun;
-//	}
-//
-//	std::string tempStr;
-//	int iMaxVar = header._iStaticVarCount + header._iGlobalVarCount;
-//	m_sVarGlobal.resize(iMaxVar);
-//	for (int i = 0; i < header._iStaticVarCount; i++)
-//	{
-//		VarInfo& vi = m_sVarGlobal[i];
-//		Var_Release(&vi);
-//
-//		VAR_TYPE type;
-//		ar >> type;
-//		vi.SetType(type);
-//		switch (type)
-//		{
-//		case VAR_INT:
-//			ar >> vi._int;
-//			break;
-//		case VAR_FLOAT:
-//			ar >> vi._float;
-//			break;
-//		case VAR_BOOL:
-//			ar >> vi._bl;
-//			break;
-//		case VAR_STRING:
-//			ReadString(ar, tempStr);
-//			vi._str = _pVM->StringAlloc(tempStr.c_str());
-//			vi._str->_refCount = 1;
-//			break;
-//		default:
-//			DebugLog("Error VAR Type Error (%d)", type);
-//			return false;
-//		}
-//	}
-//	for (int i = header._iStaticVarCount; i < iMaxVar; i++)
-//	{
-//		m_sVarGlobal[i].ClearType();
-//	}
-//	InitLib();
-//	Run(0);
-//	return true;
-//}
-//CNeoVM* CNeoVMWorker::LoadVM(void* pBuffer, int iSize)
-//{
-//	CNeoVM* pVM = new CNeoVM(50 * 1024);
-//	if (false == pVM->Init(pBuffer, iSize))
-//	{
-//		delete pVM;
-//		return NULL;
-//	}
-//
-//	return pVM;
-//}
-
-
-
 bool CNeoVMWorker::RunFunction(const std::string& funName)
 {
 	auto it = _pVM->m_sImExportTable.find(funName);
@@ -1223,7 +1114,6 @@ bool CNeoVMWorker::RunFunction(const std::string& funName)
 
 	return true;
 }
-
 
 void CNeoVMWorker::PushString(const char* p)
 {
