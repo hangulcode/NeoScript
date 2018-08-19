@@ -717,6 +717,13 @@ bool CNeoVMWorker::ForEach(VarInfo* pTable, VarInfo* pKey, VarInfo* pValue)
 			Move(pValue, &(*it).second);
 			return true;
 		}
+		if (false == tbl->_strMap.empty())
+		{
+			auto it = tbl->_strMap.begin();
+			Var_SetString(pKey, (*it).first.c_str());
+			Move(pValue, &(*it).second);
+			return true;
+		}
 		return false;
 	}
 	SetError("foreach table key Error");
