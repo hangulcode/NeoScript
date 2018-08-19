@@ -135,11 +135,30 @@ TableInfo* CNeoVM::TableAlloc()
 }
 void CNeoVM::FreeTable(VarInfo *d)
 {
-	auto it = _sTables.find(d->_tbl->_TableID);
+	TableInfo*	tbl = d->_tbl;
+	auto it = _sTables.find(tbl->_TableID);
 	if (it == _sTables.end())
 		return; // Error
 
 	_sTables.erase(it);
+
+	for (auto it2 = tbl->_intMap.begin(); it2 != tbl->_intMap.end(); it2++)
+	{
+		VarInfo& v = (*it2).second;
+		if(v.IsAllocType())
+			Var_Release(&v);
+	}
+	tbl->_intMap.clear();
+
+	for (auto it2 = tbl->_strMap.begin(); it2 != tbl->_strMap.end(); it2++)
+	{
+		VarInfo& v = (*it2).second;
+		if (v.IsAllocType())
+			Var_Release(&v);
+	}
+	tbl->_strMap.clear();
+
+
 	delete d->_tbl;
 }
 void CNeoVM::TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
