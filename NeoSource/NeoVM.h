@@ -15,11 +15,7 @@ private:
 		_iCodeLen = sz;
 	}
 
-	int						_iSP_Vars;
-	int						_iSP_Vars_Max2;
 	std::vector<VarInfo>	m_sVarGlobal;
-	std::vector<VarInfo>	m_sVarStack;
-	std::vector<SCallStack>	m_sCallStack;
 	std::vector<SFunctionTable> m_sFunctionPtr;
 
 	std::map<u32, TableInfo*> _sTables;
@@ -38,7 +34,7 @@ private:
 	{
 		if (n >= 0)
 		{
-			return &m_sVarStack[_iSP_Vars + n];
+			return NULL;
 		}
 		return &m_sVarGlobal[-n - 1];
 	}
@@ -46,108 +42,13 @@ private:
 
 	void Var_AddRef(VarInfo *d);
 	void Var_Release(VarInfo *d);
-	void Var_SetInt(VarInfo *d, int v);
-	void Var_SetFloat(VarInfo *d, double v);
-	void Var_SetBool(VarInfo *d, bool v);
 	void Var_SetString(VarInfo *d, const char* str);
 	void Var_SetTable(VarInfo *d, TableInfo* p);
 
 
-	void Move(VarInfo* v1, VarInfo* v2);
-	void MoveMinus(VarInfo* v1, VarInfo* v2);
-	void Add2(VarInfo* r, VarInfo* v2);
-	void Sub2(VarInfo* r, VarInfo* v2);
-	void Mul2(VarInfo* r, VarInfo* v2);
-	void Div2(VarInfo* r, VarInfo* v2);
-	void Add(VarInfo* r, VarInfo* v1, VarInfo* v2);
-	void Sub(VarInfo* r, VarInfo* v1, VarInfo* v2);
-	void Mul(VarInfo* r, VarInfo* v1, VarInfo* v2);
-	void Div(VarInfo* r, VarInfo* v1, VarInfo* v2);
-	void Inc(VarInfo* v1);
-	void Dec(VarInfo* v1);
-	bool CompareEQ(VarInfo* v1, VarInfo* v2);
-	bool CompareGR(VarInfo* v1, VarInfo* v2);
-	bool CompareGE(VarInfo* v1, VarInfo* v2);
-
-	std::string ToString(VarInfo* v1);
-	int ToInt(VarInfo* v1);
-	double ToFloat(VarInfo* v1);
-	std::string GetType(VarInfo* v1);
-
 	void TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);
 	void TableRead(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);
 	FunctionPtr* GetPtrFunction(VarInfo *pTable, VarInfo *pArray);
-
-	void ClearArgs()
-	{
-		_args.clear();
-	}
-	void PushInt(int v)
-	{
-		VarInfo d;
-		d.SetType(VAR_INT);
-		d._int = v;
-		_args.push_back(d);
-	}
-	void PushFloat(double v)
-	{
-		VarInfo d;
-		d.SetType(VAR_FLOAT);
-		d._float = v;
-		_args.push_back(d);
-	}
-	void PushString(const char* p)
-	{
-		VarInfo d;
-		d.SetType(VAR_STRING);
-		d._str = StringAlloc(p);
-		_args.push_back(d);
-	}
-	void PushBool(bool b)
-	{
-		VarInfo d;
-		d.SetType(VAR_BOOL);
-		d._bl = b;
-		_args.push_back(d);
-	}
-
-	int PopInt(VarInfo *V)
-	{
-		switch (V->GetType())
-		{
-		case VAR_INT:
-			return V->_int;
-		case VAR_FLOAT:
-			return (int)V->_float;
-		}
-		return -1;
-	}
-	double PopFloat(VarInfo *V)
-	{
-		switch (V->GetType())
-		{
-		case VAR_INT:
-			return V->_int;
-		case VAR_FLOAT:
-			return V->_float;
-		}
-		return -1;
-	}
-	const char* PopString(VarInfo *V)
-	{
-		if (V->GetType() == VAR_STRING)
-			return V->_str->_str.c_str();
-
-		return NULL;
-	}
-	bool PopBool(VarInfo *V)
-	{
-		if (V->GetType() == VAR_BOOL)
-			return V->_bl;
-
-		return false;
-	}
-
 
 	CNeoVMWorker* WorkerAlloc(int iStackSize);
 	void FreeWorker(CNeoVMWorker *d);
@@ -160,32 +61,8 @@ private:
 
 public:
 
-	template<typename T>
-	T _read(VarInfo *V) { return T(); }
-
-
-
-	template<typename T>
-	void write(VarInfo *V, T) { }
-
-
-
-	template<typename T>
-	T read(int idx) { return _read<T>(&m_sVarStack[_iSP_Vars + idx]); }
-
-	template<typename T>
-	void push(T ret) {}
-
-
-	std::vector<VarInfo> _args;
 	bool RunFunction(const std::string& funName);
 
-	void GC()
-	{
-		for (int i = _iSP_Vars + 1; i < _iSP_Vars_Max2; i++)
-			Var_Release(&m_sVarStack[i]);
-		_iSP_Vars_Max2 = _iSP_Vars;
-	}
 
 	std::string _sErrorMsgDetail;
 	const char* _pErrorMsg = NULL;
@@ -195,10 +72,8 @@ public:
 	bool Init(void* pBuffer, int iSize);
 	inline void SetError(const char* pErrMsg);
 public:
-	CNeoVM(int iStackSize);
+	CNeoVM();
 	virtual ~CNeoVM();
-
-
 
 	template<typename RVal, typename ... Types>
 	static int push_functor(FunctionPtr* pOut, RVal(*func)(Types ... args))

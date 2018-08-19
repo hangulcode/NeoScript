@@ -548,10 +548,7 @@ public:
 		}
 	};
 
-	std::string _sErrorMsgDetail;
-	const char* _pErrorMsg = NULL;
 
-//	bool Init(void* pBuffer, int iSize);
 	inline void SetError(const char* pErrMsg);
 public:
 	CNeoVMWorker(CNeoVM* pVM, u32 id, int iStackSize);

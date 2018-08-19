@@ -749,7 +749,7 @@ CNeoVMWorker::~CNeoVMWorker()
 
 void CNeoVMWorker::SetError(const char* pErrMsg)
 {
-	_pErrorMsg = pErrMsg;
+	_pVM->_pErrorMsg = pErrMsg;
 }
 
 
@@ -1088,7 +1088,7 @@ bool	CNeoVMWorker::Run(int iFunctionID)
 			SetError("Unkonwn OP");
 			break;
 		}
-		if (_pErrorMsg != NULL)
+		if (_pVM->_pErrorMsg != NULL)
 		{
 			SetCodePtr(iCodeOffset);
 			dbg._data = GetU16();
@@ -1096,11 +1096,11 @@ bool	CNeoVMWorker::Run(int iFunctionID)
 			m_sCallStack.clear();
 			_iSP_Vars = 0;
 #ifdef _WIN32
-			sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pErrorMsg, dbg._lineseq);
+			sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pVM->_pErrorMsg, dbg._lineseq);
 #else
 			sprintf(chMsg, "%s : Line (%d)", _pErrorMsg, dbg._lineseq);
 #endif
-			_sErrorMsgDetail = chMsg;
+			_pVM->_sErrorMsgDetail = chMsg;
 			return false;
 		}
 	}
