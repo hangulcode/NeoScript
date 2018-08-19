@@ -23,6 +23,7 @@ enum NOP_TYPE : u8
 	NOP_SUB2,
 	NOP_MUL2,
 	NOP_DIV2,
+	NOP_PERSENT2,
 
 	NOP_INC,
 	NOP_DEC,
@@ -31,6 +32,7 @@ enum NOP_TYPE : u8
 	NOP_SUB3,
 	NOP_MUL3,
 	NOP_DIV3,
+	NOP_PERSENT3,
 
 	NOP_GREAT,		// >
 	NOP_GREAT_EQ,	// >=
@@ -190,8 +192,10 @@ private:
 	int						_iCodeLen;
 	int						_iCodeOffset;
 
+
 	CNeoVM*					_pVM;
 	u32						_idWorker;
+	bool					_isSetup = false;
 
 
 	void	SetCodeData(u8* p, int sz)
@@ -234,6 +238,7 @@ private:
 	}
 	int						_iSP_Vars;
 	int						_iSP_Vars_Max2;
+	int						iSP_VarsMax;
 	std::vector<VarInfo>	m_sVarStack;
 	std::vector<SCallStack>	m_sCallStack;
 	std::vector<VarInfo>*	m_pVarGlobal;
@@ -242,7 +247,9 @@ private:
 	std::vector<VarInfo> _args;
 	bool RunFunction(const std::string& funName);
 
-	bool	Run(int iFunctionID);
+	bool	Setup(int iFunctionID);
+	bool	Start(int iFunctionID);
+	bool	Run(int iTimeout = 0, int iCheckOpCount = 1000);
 
 	inline VarInfo* GetVarPtr(short n)
 	{
@@ -269,10 +276,12 @@ private:
 	void Sub2(VarInfo* r, VarInfo* v2);
 	void Mul2(VarInfo* r, VarInfo* v2);
 	void Div2(VarInfo* r, VarInfo* v2);
+	void Per2(VarInfo* r, VarInfo* v2);
 	void Add(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Sub(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Mul(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Div(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	void Per(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Inc(VarInfo* v1);
 	void Dec(VarInfo* v1);
 	bool CompareEQ(VarInfo* v1, VarInfo* v2);

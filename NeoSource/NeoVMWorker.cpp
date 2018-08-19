@@ -1,5 +1,6 @@
 #include <math.h>
 #include <stdlib.h>
+#include <time.h>
 #include "NeoVM.h"
 #include "NeoVMWorker.h"
 #include "NeoArchive.h"
@@ -417,6 +418,18 @@ void CNeoVMWorker::Div2(VarInfo* r, VarInfo* v2)
 	}
 	SetError("/= Error");
 }
+void CNeoVMWorker::Per2(VarInfo* r, VarInfo* v2)
+{
+	if (r->GetType() == VAR_INT)
+	{
+		if (v2->GetType() == VAR_INT)
+		{
+			r->_int %= v2->_int;
+			return;
+		}
+	}
+	SetError("%= Error");
+}
 void CNeoVMWorker::Add(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	if (v1->GetType() == VAR_INT)
@@ -543,6 +556,18 @@ void CNeoVMWorker::Div(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		else if (v2->GetType() == VAR_FLOAT)
 		{
 			Var_SetFloat(r, v1->_float / v2->_float);
+			return;
+		}
+	}
+	SetError("/ Error");
+}
+void CNeoVMWorker::Per(VarInfo* r, VarInfo* v1, VarInfo* v2)
+{
+	if (v1->GetType() == VAR_INT)
+	{
+		if (v2->GetType() == VAR_INT)
+		{
+			Var_SetInt(r, v1->_int % v2->_int);
 			return;
 		}
 	}
@@ -747,9 +772,15 @@ void CNeoVMWorker::SetError(const char* pErrMsg)
 {
 	_pVM->_pErrorMsg = pErrMsg;
 }
+bool	CNeoVMWorker::Start(int iFunctionID)
+{
+	if(false == Setup(iFunctionID))
+		return false;
 
+	return Run();
+}
 
-bool	CNeoVMWorker::Run(int iFunctionID)
+bool	CNeoVMWorker::Setup(int iFunctionID)
 {
 	SFunctionTable fun = _pVM->m_sFunctionPtr[iFunctionID];
 	int iArgs = (int)_args.size();
@@ -759,7 +790,7 @@ bool	CNeoVMWorker::Run(int iFunctionID)
 	SetCodePtr(fun._codePtr);
 
 	_iSP_Vars = 0;// _header._iStaticVarCount;
-	int iSP_VarsMax = _iSP_Vars + fun._localAddCount;
+	iSP_VarsMax = _iSP_Vars + fun._localAddCount;
 
 	_iSP_Vars_Max2 = iSP_VarsMax;
 
@@ -772,16 +803,31 @@ bool	CNeoVMWorker::Run(int iFunctionID)
 	for (; iCur < fun._argsCount; iCur++)
 		Var_Release(&m_sVarStack[1 + _iSP_Vars + iCur]);
 
+	_isSetup = true;
+	return true;
+}
+
+
+bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
+{
+	if (false == _isSetup)
+		return false;
+
 	NOP_TYPE op;
 	short n1, n2, n3;
 
-
+	SFunctionTable fun;
 	FunctionPtr* pFunctionPtr;
 	SCallStack callStack;
 	int iTemp;
 	int iCodeOffset;
 	char chMsg[256];
 	debug_info dbg;
+
+	int op_process = 0;
+	clock_t t1, t2;
+	if(iTimeout > 0)
+		t1 = clock();
 
 	while (true)
 	{
@@ -815,6 +861,10 @@ bool	CNeoVMWorker::Run(int iFunctionID)
 			n1 = GetS16(); n2 = GetS16();
 			Div2(GetVarPtr(n1), GetVarPtr(n2));
 			break;
+		case NOP_PERSENT2:
+			n1 = GetS16(); n2 = GetS16();
+			Per2(GetVarPtr(n1), GetVarPtr(n2));
+			break;
 
 		case NOP_INC:
 			n1 = GetS16();
@@ -840,6 +890,10 @@ bool	CNeoVMWorker::Run(int iFunctionID)
 		case NOP_DIV3:
 			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
 			Div(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
+			break;
+		case NOP_PERSENT3:
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
+			Per(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
 			break;
 
 		case NOP_GREAT:		// >
@@ -1040,6 +1094,7 @@ bool	CNeoVMWorker::Run(int iFunctionID)
 
 			if (m_sCallStack.empty())
 			{
+				_isSetup = false;
 				return true;
 			}
 			iTemp = (int)m_sCallStack.size() - 1;
@@ -1054,6 +1109,7 @@ bool	CNeoVMWorker::Run(int iFunctionID)
 			Var_Release(&m_sVarStack[_iSP_Vars]); // Clear
 			if (m_sCallStack.empty())
 			{
+				_isSetup = false;
 				return true;
 			}
 			iTemp = (int)m_sCallStack.size() - 1;
@@ -1099,6 +1155,16 @@ bool	CNeoVMWorker::Run(int iFunctionID)
 			_pVM->_sErrorMsgDetail = chMsg;
 			return false;
 		}
+		if (iTimeout > 0)
+		{
+			if (++op_process >= iCheckOpCount)
+			{
+				op_process = 0;
+				t2 = clock() - t1;
+				if (t2 >= iTimeout || t2 < 0)
+					break;
+			}
+		}
 	}
 	return true;
 }
@@ -1110,7 +1176,7 @@ bool CNeoVMWorker::RunFunction(const std::string& funName)
 		return false;
 
 	int iID = (*it).second;
-	Run(iID);
+	Start(iID);
 
 	return true;
 }

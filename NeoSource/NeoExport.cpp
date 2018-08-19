@@ -93,6 +93,7 @@ void WriteFun(CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, s
 		case NOP_SUB2:
 		case NOP_MUL2:
 		case NOP_DIV2:
+		case NOP_PERSENT2:
 			arRead >> n1 >> n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
@@ -103,6 +104,7 @@ void WriteFun(CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, s
 		case NOP_SUB3:
 		case NOP_MUL3:
 		case NOP_DIV3:
+		case NOP_PERSENT3:
 			arRead >> n1 >> n2 >> n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
@@ -273,6 +275,12 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			OutAsm("DIV [%d] /= [%d]\n", n1, n2);
 			break;
+		case NOP_PERSENT2:
+			arRead >> n1 >> n2;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
+			OutAsm("PER [%d] %%= [%d]\n", n1, n2);
+			break;
 
 		case NOP_ADD3:
 			arRead >> n1 >> n2 >> n3;
@@ -301,6 +309,13 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
 			OutAsm("DIV [%d] = [%d] / [%d]\n", n1, n2, n3);
+			break;
+		case NOP_PERSENT3:
+			arRead >> n1 >> n2 >> n3;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
+			OutAsm("PER [%d] = [%d] %% [%d]\n", n1, n2, n3);
 			break;
 
 		case NOP_INC:

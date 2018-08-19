@@ -404,7 +404,7 @@ bool CNeoVM::Init(void* pBuffer, int iSize)
 	_pMainWorker = WorkerAlloc(50 * 1024);
 
 	InitLib();
-	_pMainWorker->Run(0);
+	_pMainWorker->Start(0);
 	return true;
 }
 CNeoVM* CNeoVM::LoadVM(void* pBuffer, int iSize)
@@ -428,7 +428,59 @@ bool CNeoVM::RunFunction(const std::string& funName)
 		return false;
 
 	int iID = (*it).second;
-	_pMainWorker->Run(iID);
+	_pMainWorker->Start(iID);
 
 	return true;
+}
+u32 CNeoVM::CreateWorker()
+{
+	auto pWorker = WorkerAlloc(50 * 1024);
+	return pWorker->GetWorkerID();
+}
+bool CNeoVM::ReleaseWorker(u32 id)
+{
+	auto it = _sVMWorkers.find(id);
+	if (it == _sVMWorkers.end())
+		return false;
+
+	auto pWorker = (*it).second;
+	FreeWorker(pWorker);
+	_sVMWorkers.erase(it);
+
+	if (pWorker == _pMainWorker)
+		_pMainWorker = NULL;
+	return true;
+}
+bool CNeoVM::BindWorkerFunction(u32 id, const std::string& funName)
+{
+	auto it = m_sImExportTable.find(funName);
+	if (it == m_sImExportTable.end())
+		return false;
+
+	auto it2 = _sVMWorkers.find(id);
+	if (it2 == _sVMWorkers.end())
+		return false;
+
+	auto pWorker = (*it2).second;
+	return pWorker->Setup((*it).second);
+}
+bool CNeoVM::IsWorking(u32 id)
+{
+	auto it = _sVMWorkers.find(id);
+	if (it == _sVMWorkers.end())
+		return false;
+	auto pWorker = (*it).second;
+	return pWorker->_isSetup;
+}
+
+bool CNeoVM::UpdateWorker(u32 id, int iTimeout, int iCheckOpCount)
+{
+	if (NULL != _pErrorMsg)
+		return false;
+
+	auto it = _sVMWorkers.find(id);
+	if (it == _sVMWorkers.end())
+		return false;
+	auto pWorker = (*it).second;
+	return pWorker->Run(iTimeout, iCheckOpCount);
 }

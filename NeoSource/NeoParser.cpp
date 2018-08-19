@@ -86,6 +86,7 @@ enum TK_TYPE
 	TK_DIV, // /
 	TK_DIV_EQ, // /=
 	TK_PERCENT, // %
+	TK_PERCENT_EQ, // %=
 	TK_TILDE, // ~
 	TK_CIRCUMFLEX, // ^
 	TK_EQUAL, // =
@@ -182,7 +183,9 @@ void InitDefaultTokenString()
 	TOKEN_STR3(TK_MUL_EQ, "*=", 15, NOP_MUL2);
 	TOKEN_STR3(TK_DIV, "/", 4, NOP_DIV3);
 	TOKEN_STR3(TK_DIV_EQ, "/=", 15, NOP_DIV2);
-	TOKEN_STR2(TK_PERCENT, "%");
+	TOKEN_STR3(TK_PERCENT, "%", 4, NOP_PERSENT3);
+	TOKEN_STR3(TK_PERCENT_EQ, "%=", 15, NOP_PERSENT2);
+
 	TOKEN_STR2(TK_TILDE, "~");
 	TOKEN_STR2(TK_CIRCUMFLEX, "^");
 	TOKEN_STR3(TK_EQUAL, "=", 15, NOP_MOV);
@@ -1044,6 +1047,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			break;
 		case TK_MUL:		// *
 		case TK_DIV:		// /
+		case TK_PERCENT:	// %
 		case TK_GREAT:		// >
 		case TK_GREAT_EQ:	// >=
 		case TK_LESS:		// <
@@ -1068,6 +1072,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		case TK_MINUS_EQ:	// -=
 		case TK_MUL_EQ:		// *=
 		case TK_DIV_EQ:		// /=
+		case TK_PERCENT_EQ:	// %=
 		{
 			SOperand iTempVar;
 			r = ParseJob(true, iTempVar, NULL, ar, funs, vars);
@@ -1209,7 +1214,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		auto a = operands[iFindOffset];
 		auto b = operands[iFindOffset + 1];
 
-		if (op <= NOP_DIV2)
+		if (op <= NOP_PERSENT2)
 		{
 			if (a._iArrayIndex == INVALID_ERROR_PARSEJOB)
 			{
