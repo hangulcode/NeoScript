@@ -1188,32 +1188,29 @@ void		CNeoVM::ReleaseVM(CNeoVM* pVM)
 {
 	delete pVM;
 }
-
-CNeoVM* CNeoVM::LoadVM(void* pBuffer, int iSize)
+bool CNeoVM::Init(void* pBuffer, int iSize)
 {
 	CNArchive ar(pBuffer, iSize);
-	CNeoVM* pVM = new CNeoVM(50 * 1024);
-
 	SNeoVMHeader header;
 	memset(&header, 0, sizeof(header));
 	ar >> header;
-	pVM->_header = header;
+	_header = header;
 
 	if (header._dwFileType != FILE_NEOS)
 	{
-		return NULL;
+		return false;
 	}
 	if (header._dwNeoVersion != NEO_VER)
 	{
-		return NULL;
+		return false;
 	}
 
 
 	u8* pCode = new u8[header._iCodeSize];
-	pVM->SetCodeData(pCode, header._iCodeSize);
+	SetCodeData(pCode, header._iCodeSize);
 	ar.Read(pCode, header._iCodeSize);
 
-	pVM->m_sFunctionPtr.resize(header._iFunctionCount);
+	m_sFunctionPtr.resize(header._iFunctionCount);
 
 	int iID;
 	SFunctionTable fun;
@@ -1226,20 +1223,20 @@ CNeoVM* CNeoVM::LoadVM(void* pBuffer, int iSize)
 		if (fun._funType != FUNT_NORMAL)
 		{
 			ReadString(ar, funName);
-			pVM->m_sImExportTable[funName] = iID;
+			m_sImExportTable[funName] = iID;
 		}
 
 		fun._localAddCount = 1 + fun._argsCount + fun._localVarCount + fun._localTempMax;
-		pVM->m_sFunctionPtr[iID] = fun;
+		m_sFunctionPtr[iID] = fun;
 	}
 
 	std::string tempStr;
 	int iMaxVar = header._iStaticVarCount + header._iGlobalVarCount;
-	pVM->m_sVarGlobal.resize(iMaxVar);
+	m_sVarGlobal.resize(iMaxVar);
 	for (int i = 0; i < header._iStaticVarCount; i++)
 	{
-		VarInfo& vi = pVM->m_sVarGlobal[i];
-		pVM->Var_Release(&vi);
+		VarInfo& vi = m_sVarGlobal[i];
+		Var_Release(&vi);
 
 		VAR_TYPE type;
 		ar >> type;
@@ -1257,19 +1254,30 @@ CNeoVM* CNeoVM::LoadVM(void* pBuffer, int iSize)
 			break;
 		case VAR_STRING:
 			ReadString(ar, tempStr);
-			vi._str = pVM->StringAlloc(tempStr.c_str());
+			vi._str = StringAlloc(tempStr.c_str());
 			vi._str->_refCount = 1;
 			break;
 		default:
 			DebugLog("Error VAR Type Error (%d)", type);
-			break;
+			return false;
 		}
 	}
 	for (int i = header._iStaticVarCount; i < iMaxVar; i++)
 	{
-		pVM->m_sVarGlobal[i].ClearType();
+		m_sVarGlobal[i].ClearType();
 	}
-	pVM->Init();
+	InitLib();
+	Run(0);
+	return true;
+}
+CNeoVM* CNeoVM::LoadVM(void* pBuffer, int iSize)
+{
+	CNeoVM* pVM = new CNeoVM(50 * 1024);
+	if (false == pVM->Init(pBuffer, iSize))
+	{
+		delete pVM;
+		return NULL;
+	}
 
 	return pVM;
 }

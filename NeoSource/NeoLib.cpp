@@ -140,7 +140,7 @@ void CNeoVM::RegLibrary(VarInfo* pSystem, const char* pLibName, SFunLib* pFuns)
 }
 
 
-void CNeoVM::Init()
+void CNeoVM::InitLib()
 {
 	VarInfo* pSystem = GetVarPtr(-1);
 	Var_SetTable(pSystem, TableAlloc());
@@ -149,5 +149,5 @@ void CNeoVM::Init()
 
 	RegLibrary(pSystem, "sys", _Lib);
 
-	Run(0);
 }
+

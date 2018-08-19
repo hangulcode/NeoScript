@@ -395,7 +395,8 @@ public:
 	const char* _pErrorMsg = NULL;
 
 	void RegLibrary(VarInfo* pSystem, const char* pLibName, SFunLib* pFuns);
-	void Init();
+	void InitLib();
+	bool Init(void* pBuffer, int iSize);
 	inline void SetError(const char* pErrMsg);
 public:
 	CNeoVM(int iStackSize);
