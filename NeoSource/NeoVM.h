@@ -327,7 +327,7 @@ private:
 		case VAR_FLOAT:
 			return (int)V->_float;
 		}
-		return -987654321;
+		return -1;
 	}
 	double PopFloat(VarInfo *V)
 	{
@@ -338,7 +338,7 @@ private:
 		case VAR_FLOAT:
 			return V->_float;
 		}
-		return -987654321;
+		return -1;
 	}
 	const char* PopString(VarInfo *V)
 	{
