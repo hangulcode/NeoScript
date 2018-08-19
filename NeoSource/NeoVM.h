@@ -233,8 +233,8 @@ private:
 
 	std::map<int, TableInfo*> _sTables;
 	std::map<int, StringInfo*> _sStrings;
-	int iLastIDTable = 0;
-	int iLastIDString = 0;
+	u32 _dwLastIDTable = 0;
+	u32 _dwLastIDString = 0;
 
 	SNeoVMHeader			_header;
 	std::map<std::string, int> m_sImExportTable;

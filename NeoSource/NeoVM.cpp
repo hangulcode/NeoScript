@@ -99,21 +99,21 @@ StringInfo* CNeoVM::StringAlloc(const char* str)
 	StringInfo* p = new StringInfo();
 	while (true)
 	{
-		if (++iLastIDString <= 0)
-			iLastIDString = 1;
+		if (++_dwLastIDString == 0)
+			_dwLastIDString = 1;
 
-		if (_sStrings.end() == _sStrings.find(iLastIDString))
+		if (_sStrings.end() == _sStrings.find(_dwLastIDString))
 		{
 			break;
 		}
 	}
 
-	p->_StringID = iLastIDString;
+	p->_StringID = _dwLastIDString;
 	p->_refCount = 0;
 
 	p->_str = str;
 
-	_sStrings[iLastIDString] = p;
+	_sStrings[_dwLastIDString] = p;
 	return p;
 }
 void CNeoVM::FreeString(VarInfo *d)
@@ -130,18 +130,18 @@ TableInfo* CNeoVM::TableAlloc()
 	TableInfo* pTable = new TableInfo();
 	while (true)
 	{
-		if (++iLastIDTable <= 0)
-			iLastIDTable = 1;
+		if (++_dwLastIDTable == 0)
+			_dwLastIDTable = 1;
 
-		if (_sTables.end() == _sTables.find(iLastIDTable))
+		if (_sTables.end() == _sTables.find(_dwLastIDTable))
 		{
 			break;
 		}
 	}
-	pTable->_TableID = iLastIDTable;
+	pTable->_TableID = _dwLastIDTable;
 	pTable->_refCount = 0;
 
-	_sTables[iLastIDTable] = pTable;
+	_sTables[_dwLastIDTable] = pTable;
 	return pTable;
 }
 void CNeoVM::FreeTable(VarInfo *d)
