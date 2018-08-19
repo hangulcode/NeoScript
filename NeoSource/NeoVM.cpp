@@ -308,14 +308,14 @@ void CNeoVM::Move(VarInfo* v1, VarInfo* v2)
 {
 	switch (v2->GetType())
 	{
+	case VAR_BOOL:
+		Var_SetBool(v1, v2->_bl);
+		break;
 	case VAR_INT:
 		Var_SetInt(v1, v2->_int);
 		break;
 	case VAR_FLOAT:
 		Var_SetFloat(v1, v2->_float);
-		break;
-	case VAR_BOOL:
-		Var_SetBool(v1, v2->_bl);
 		break;
 	case VAR_STRING:
 		Var_Release(v1);
@@ -341,12 +341,6 @@ void CNeoVM::MoveMinus(VarInfo* v1, VarInfo* v2)
 	case VAR_FLOAT:
 		Var_SetFloat(v1, -v2->_float);
 		return;
-	case VAR_BOOL:
-		break;
-	case VAR_STRING:
-		break;
-	case VAR_TABLE:
-		break;
 	}
 	SetError("Minus Error");
 }
@@ -626,10 +620,6 @@ void CNeoVM::Inc(VarInfo* v1)
 	case VAR_FLOAT:
 		++v1->_float;
 		return;
-	case VAR_BOOL:
-		break;
-	case VAR_STRING:
-		break;
 	}
 	SetError("++ Error");
 }
@@ -643,10 +633,6 @@ void CNeoVM::Dec(VarInfo* v1)
 	case VAR_FLOAT:
 		--v1->_float;
 		return;
-	case VAR_BOOL:
-		break;
-	case VAR_STRING:
-		break;
 	}
 	SetError("-- Error");
 }
