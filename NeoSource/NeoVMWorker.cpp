@@ -1173,7 +1173,14 @@ bool CNeoVMWorker::RunFunction(const std::string& funName)
 {
 	auto it = _pVM->m_sImExportTable.find(funName);
 	if (it == _pVM->m_sImExportTable.end())
+	{
+		SetError("Function Not Found");
+		_pVM->_sErrorMsgDetail = _pVM->_pErrorMsg;
+		_pVM->_sErrorMsgDetail += "(";
+		_pVM->_sErrorMsgDetail += funName;
+		_pVM->_sErrorMsgDetail += ")";
 		return false;
+	}
 
 	int iID = (*it).second;
 	Start(iID);

@@ -129,6 +129,6 @@ public:
 
 	static CNeoVM*	LoadVM(void* pBuffer, int iSize);
 	static void		ReleaseVM(CNeoVM* pVM);
-	static bool		Compile(void* pBufferSrc, int iLenSrc, void* pBufferCode, int iLenCode, int* pLenCode, bool putASM);
+	static bool		Compile(void* pBufferSrc, int iLenSrc, void* pBufferCode, int iLenCode, int* pLenCode, bool putASM = false, bool allowGlobalInitLogic = true);
 };
 

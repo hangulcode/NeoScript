@@ -18,6 +18,7 @@ private:
 	u16		m_iCurLine;
 	u16		m_iCurCol;
 public:
+	bool	_allowGlobalInitLogic = true;
 	CArchiveRdWC()
 	{
 		m_lpBufStart = NULL;

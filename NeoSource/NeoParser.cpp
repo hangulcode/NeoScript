@@ -690,7 +690,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 		{
 			if ((int)pFun->_args.size() != iParamCount)
 			{
-				DebugLog("Error (%d, %d): Arg Count Invalid %d != %d", ar.CurLine(), ar.CurCol(), (int)pFun->_args.size(), iParamCount);
+				DebugLog("Error (%d, %d): Arg Count Invalid (%d != %d)", ar.CurLine(), ar.CurCol(), (int)pFun->_args.size(), iParamCount);
 				return false;
 			}
 			funs._cur.Push_Call(ar, pFun->_funType == FUNT_IMPORT ? NOP_FARCALL : NOP_CALL, pFun->_funID, iParamCount);
@@ -834,11 +834,6 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 			{
 				PushToken(tkType2, tk2);
 
-				//int iTempOffset2 = funs._cur.AllocLocalTempVar();
-				//funs._cur.Push_TableRead(iTempOffset._iVar, iArrayIndex, iTempOffset2);
-				//iTempOffset = iTempOffset2;
-
-				//iArrayIndex = INVALID_ERROR_PARSEJOB;
 				iTempOffset._iArrayIndex = iArrayIndex;
 				iArrayIndex = INVALID_ERROR_PARSEJOB;
 
@@ -893,6 +888,11 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 		SFunctionInfo* pFun = funs.FindFun(tk1);
 		if (pFun != NULL)
 		{
+			if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
+			{
+				DebugLog("Error (%d, %d): Call is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
+				return false;
+			}
 			if (false == ParseFunCall(iTempOffset, tkTypePre, pFun, ar, funs, vars))
 				return false;
 		}
@@ -1325,6 +1325,12 @@ NOP_TYPE ConvertCheckOPToOptimizeInv(NOP_TYPE n)
 //	for Check
 bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
+	if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
+	{
+		DebugLog("Error (%d, %d): For is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+
 	std::string tk1;
 	TK_TYPE tkType1;
 	TK_TYPE r;
@@ -1459,6 +1465,12 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
+	if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
+	{
+		DebugLog("Error (%d, %d): While is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+
 	std::string tk1;
 	TK_TYPE tkType1;
 	TK_TYPE r;
@@ -1562,6 +1574,12 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 }
 bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
+	if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
+	{
+		DebugLog("Error (%d, %d): IF is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+
 	std::string tk1;
 	TK_TYPE tkType1;
 	TK_TYPE r;
@@ -1710,7 +1728,7 @@ bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		r = ParseJob(false, iTempLocalVar, NULL, ar, funs, vars);
 		if (TK_SEMICOLON != r)
 		{
-			DebugLog("Error (%d, %d): ", ar.CurLine(), ar.CurCol());
+			//DebugLog("Error (%d, %d): ", ar.CurLine(), ar.CurCol());
 			return false;
 		}
 	}
@@ -1958,10 +1976,11 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	return r;
 }
 
-bool CNeoVM::Compile(void* pBufferSrc, int iLenSrc, void* pBufferCode, int iLenCode, int* pLenCode, bool putASM)
+bool CNeoVM::Compile(void* pBufferSrc, int iLenSrc, void* pBufferCode, int iLenCode, int* pLenCode, bool putASM, bool allowGlobalInitLogic)
 {
 	CArchiveRdWC ar2;
 	ToArchiveRdWC((const char*)pBufferSrc, iLenSrc, ar2);
+	ar2._allowGlobalInitLogic = allowGlobalInitLogic;
 
 	CNArchive arw;
 	arw.SetData(pBufferCode, iLenCode);
