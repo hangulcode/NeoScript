@@ -40,7 +40,7 @@ int main()
 	int iCodeLen = 0;
 	if (CNeoVM::Compile(pFileBuffer, iFileLen, pCodeTemp, iCodeTempLen, &iCodeLen, true) == TRUE)
 	{
-		printf("Comile Success %d bytes !!\n", iCodeLen);
+		printf("Comile Success. Code : %d bytes !!\n", iCodeLen);
 		CNeoVM* pVM = CNeoVM::LoadVM(pCodeTemp, iCodeLen);
 		if (NULL != pVM)
 		{
