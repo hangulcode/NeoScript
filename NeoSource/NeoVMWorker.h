@@ -75,7 +75,6 @@ enum NOP_TYPE : u8
 };
 
 struct VarInfo;
-class CNeoVM;
 class CNeoVMWorker;
 typedef int(*Neo_CFunction) (CNeoVMWorker *N, void* pFun, short args);
 
@@ -502,7 +501,7 @@ public:
 	template<typename T1, typename T2, typename T3, typename T4>
 	struct functor<void, T1, T2, T3, T4>
 	{
-		static int invoke(CNeoVM *N, void* pfun, short args)
+		static int invoke(CNeoVMWorker *N, void* pfun, short args)
 		{
 			if (args != 4)
 				return -1;

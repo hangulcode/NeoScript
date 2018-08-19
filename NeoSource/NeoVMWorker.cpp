@@ -1094,7 +1094,7 @@ bool	CNeoVMWorker::Run(int iFunctionID)
 #ifdef _WIN32
 			sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pVM->_pErrorMsg, dbg._lineseq);
 #else
-			sprintf(chMsg, "%s : Line (%d)", _pErrorMsg, dbg._lineseq);
+			sprintf(chMsg, "%s : Line (%d)", _pVM->_pErrorMsg, dbg._lineseq);
 #endif
 			_pVM->_sErrorMsgDetail = chMsg;
 			return false;
