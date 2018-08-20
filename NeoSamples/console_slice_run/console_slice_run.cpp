@@ -62,6 +62,8 @@ int main()
 				}
 			}
 
+			DWORD dwPre = GetTickCount();
+
 			// Run ...
 			int i = 0;
 			while(pVM->IsWorking(id))
@@ -75,7 +77,14 @@ int main()
 					pVM->ClearLastErrorMsg();
 				}
 				else
-					printf("\nSlide Run %d (Elapse:%d)", i++, t2 - t1);
+				{
+					DWORD dwNext = GetTickCount();
+					if (dwNext - dwPre > 500)
+					{
+						printf("\nSlide Run %d (Elapse:%d)", i++, t2 - t1);
+						dwPre = dwNext;
+					}
+				}
 				Sleep(10);
 			}
 			pVM->ReleaseWorker(id);

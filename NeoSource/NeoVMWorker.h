@@ -1,5 +1,6 @@
 #pragma once
 
+#include <time.h>
 #include "NeoConfig.h"
 
 enum VAR_TYPE : u8
@@ -62,6 +63,7 @@ enum NOP_TYPE : u8
 	NOP_TOINT,
 	NOP_TOFLOAT,
 	NOP_GETTYPE,
+	NOP_SLEEP,
 
 	NOP_JMP,
 	NOP_JMP_FALSE,
@@ -200,6 +202,8 @@ private:
 	CNeoVM*					_pVM;
 	u32						_idWorker;
 	bool					_isSetup = false;
+	int						_iRemainSleep = 0;
+	clock_t					_preClock;
 
 
 	void	SetCodeData(u8* p, int sz)
@@ -292,6 +296,7 @@ private:
 	bool CompareGR(VarInfo* v1, VarInfo* v2);
 	bool CompareGE(VarInfo* v1, VarInfo* v2);
 	bool ForEach(VarInfo* v1, VarInfo* v2, VarInfo* v3);
+	bool Sleep(int iTimeout, VarInfo* v1, VarInfo* v2);
 
 	std::string ToString(VarInfo* v1);
 	int ToInt(VarInfo* v1);
@@ -437,18 +442,7 @@ public:
 			return 1;
 		}
 	};
-	template<>
-	struct functorNative<void>
-	{
-		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
-		{
-			if (args != pfun->_argCount)
-				return -1;
-			upvalue_<void(*)(CNeoVMWorker*)>(pfun->_func)(N);
-			N->Var_Release(&N->m_sVarStack[N->_iSP_Vars]);
-			return 0;
-		}
-	};
+
 
 
 	// 리턴값이 있는 Call
@@ -644,6 +638,19 @@ template<>	inline void CNeoVMWorker::push(const char* ret) { PushString(ret); }
 template<>	inline void CNeoVMWorker::push(bool ret) { PushBool(ret); }
 template<>	inline void CNeoVMWorker::push(long long ret) { PushInt((int)ret); }
 template<>	inline void CNeoVMWorker::push(unsigned long long ret) { PushInt((int)ret); }
+
+template<>
+struct CNeoVMWorker::functorNative<void>
+{
+	static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
+	{
+		if (args != pfun->_argCount)
+			return -1;
+		upvalue_<void(*)(CNeoVMWorker*)>(pfun->_func)(N);
+		N->Var_Release(&N->m_sVarStack[N->_iSP_Vars]);
+		return 0;
+	}
+};
 
 template<>
 struct CNeoVMWorker::functor<void>

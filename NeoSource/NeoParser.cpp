@@ -64,6 +64,7 @@ enum TK_TYPE
 	TK_TOINT,
 	TK_TOFLOAT,
 	TK_GETTYPE,
+	TK_SLEEP,
 
 	TK_RETURN,
 	TK_BREAK,
@@ -163,6 +164,7 @@ void InitDefaultTokenString()
 	TOKEN_STR3(TK_TOINT, "toint", 20, NOP_TOINT);
 	TOKEN_STR3(TK_TOFLOAT, "tofloat", 20, NOP_TOFLOAT);
 	TOKEN_STR3(TK_GETTYPE, "type", 20, NOP_GETTYPE);
+	TOKEN_STR3(TK_SLEEP, "sleep", 20, NOP_SLEEP);
 
 	TOKEN_STR2(TK_RETURN, "return");
 	TOKEN_STR2(TK_BREAK, "break");
@@ -1132,6 +1134,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		case TK_TOINT:
 		case TK_TOFLOAT:
 		case TK_GETTYPE:
+		case TK_SLEEP:
 			iTempOffset = INVALID_ERROR_PARSEJOB;
 			if (false == ParseToType(iTempOffset._iVar, tkType1, ar, funs, vars))
 				return TK_NONE;
@@ -2045,6 +2048,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			break;
 
 		case TK_STRING:
+		case TK_SLEEP:
 			PushToken(tkType1, tk1);
 			iTempOffset = INVALID_ERROR_PARSEJOB;
 			r = ParseJob(false, iTempOffset, NULL, ar, funs, vars);

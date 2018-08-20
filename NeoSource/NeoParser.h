@@ -240,6 +240,7 @@ struct SFunctionInfo
 				case NOP_TOINT:
 				case NOP_TOFLOAT:
 				case NOP_GETTYPE:
+				case NOP_SLEEP:
 
 				case NOP_GREAT:		// >
 				case NOP_GREAT_EQ:	// >=

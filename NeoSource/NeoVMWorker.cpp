@@ -1,6 +1,7 @@
 #include <math.h>
 #include <stdlib.h>
-#include <time.h>
+#include <thread>
+#include <chrono>
 #include "NeoVM.h"
 #include "NeoVMWorker.h"
 #include "NeoArchive.h"
@@ -729,6 +730,39 @@ bool CNeoVMWorker::ForEach(VarInfo* pTable, VarInfo* pKey, VarInfo* pValue)
 	SetError("foreach table key Error");
 	return false;
 }
+bool CNeoVMWorker::Sleep(int iTimeout, VarInfo* v1, VarInfo* v2)
+{
+	switch (v2->GetType())
+	{
+	case VAR_INT:
+		if (iTimeout >= 0)
+		{
+			_iRemainSleep = v2->_int;
+			return true;
+		}
+		else
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(v2->_int));
+			return false;
+		}
+		break;
+	case VAR_FLOAT:
+		if (iTimeout >= 0)
+		{
+			_iRemainSleep = (int)v2->_float;
+			return true;
+		}
+		else
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds((int)v2->_float));
+			return false;
+		}
+		break;
+	}
+	SetError("Sleep Value Error");
+	return false;
+}
+
 
 std::string CNeoVMWorker::ToString(VarInfo* v1)
 {
@@ -886,6 +920,20 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 	if (false == _isSetup)
 		return false;
 
+	clock_t t1, t2;
+	if (_iRemainSleep > 0)
+	{
+		t1 = clock();
+		t2 = t1 - _preClock;
+		if (t2 > 0)
+			_iRemainSleep -= t2;
+
+		_preClock = t1;
+
+		if (_iRemainSleep > 0)
+			return true;
+	}
+
 	NOP_TYPE op;
 	short n1, n2, n3;
 
@@ -898,7 +946,6 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 	debug_info dbg;
 
 	int op_process = 0;
-	clock_t t1, t2;
 	if(iTimeout >= 0)
 		t1 = clock();
 
@@ -1084,6 +1131,14 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 		case NOP_GETTYPE:
 			n1 = GetS16(); n2 = GetS16();
 			Var_SetString(GetVarPtr(n1), GetType(GetVarPtr(n2)).c_str());
+			break;
+		case NOP_SLEEP:
+			n1 = GetS16(); n2 = GetS16();
+			if (Sleep(iTimeout, GetVarPtr(n1), GetVarPtr(n2)))
+			{
+				_preClock = clock();
+				return true;
+			}
 			break;
 
 		case NOP_JMP:

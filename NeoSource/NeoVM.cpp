@@ -464,7 +464,6 @@ bool CNeoVM::ReleaseWorker(u32 id)
 
 	auto pWorker = (*it).second;
 	FreeWorker(pWorker);
-	_sVMWorkers.erase(it);
 
 	if (pWorker == _pMainWorker)
 		_pMainWorker = NULL;
