@@ -1541,6 +1541,12 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	if (iValue < 0)
 		return false;
 
+	if (iKey + 1 != iValue)
+	{
+		DebugLog("Error (%d, %d): foreach key / Value Var Alloc Error", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_STRING || tk1 != "in") // in
 	{
@@ -1633,7 +1639,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	//funs._cur._code.Write(byTempInc, iIncCodeSize);
 
 	funs._cur.Set_JumpOffet(jmp1, funs._cur._code.GetBufferOffset());
-	funs._cur.Push_JMPForEach(ar, PosLoopTop, iTable, iKey, iValue);
+	funs._cur.Push_JMPForEach(ar, PosLoopTop, iTable, iKey);
 
 	//funs._cur._code.Write(byTempCheck, iCheckCodeSize);
 	//if (false == isCheckOPOpt)

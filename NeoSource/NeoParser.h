@@ -341,19 +341,19 @@ struct SFunctionInfo
 		_code.Write(&var, sizeof(var));
 		_code.Write(&add, sizeof(add));
 	}
-	void	Push_JMPForEach(CArchiveRdWC& ar, int destOffset, short table, short key, short value)
+	// Always Value is Key Next Alloc ID
+	void	Push_JMPForEach(CArchiveRdWC& ar, int destOffset, short table, short key)
 	{
 		debug_info dbg(ar.CurFile(), ar.CurLine());
 		_code.Write(&dbg, sizeof(dbg));
 		_iLastOPOffset = _code.GetBufferOffset();
 
 		u8 op = NOP_JMP_FOREACH;
-		short add = destOffset - (_code.GetBufferOffset() + 9);
+		short add = destOffset - (_code.GetBufferOffset() + 7);
 		_code.Write(&op, sizeof(op));
 		_code.Write(&add, sizeof(add));
 		_code.Write(&table, sizeof(table));
 		_code.Write(&key, sizeof(key));
-		_code.Write(&value, sizeof(value));
 	}
 	void	Set_JumpOffet(SJumpValue sJmp, int destOffset)
 	{

@@ -887,7 +887,7 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 		return false;
 
 	NOP_TYPE op;
-	short n1, n2, n3, n4;
+	short n1, n2, n3;
 
 	SFunctionTable fun;
 	FunctionPtr* pFunctionPtr;
@@ -899,7 +899,7 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 
 	int op_process = 0;
 	clock_t t1, t2;
-	if(iTimeout > 0)
+	if(iTimeout >= 0)
 		t1 = clock();
 
 	while (true)
@@ -1059,8 +1059,8 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 				SetCodeIncPtr(n1);
 			break;
 		case NOP_JMP_FOREACH:	// foreach
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16(); n4 = GetS16();
-			if(ForEach(GetVarPtr(n2), GetVarPtr(n3), GetVarPtr(n4)))
+			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
+			if(ForEach(GetVarPtr(n2), GetVarPtr(n3), GetVarPtr(n3+1)))
 				SetCodeIncPtr(n1);
 			break;
 
@@ -1235,7 +1235,7 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 			_pVM->_sErrorMsgDetail = chMsg;
 			return false;
 		}
-		if (iTimeout > 0)
+		if (iTimeout >= 0)
 		{
 			if (++op_process >= iCheckOpCount)
 			{

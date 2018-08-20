@@ -253,7 +253,7 @@ private:
 
 	bool	Setup(int iFunctionID);
 	bool	Start(int iFunctionID);
-	bool	Run(int iTimeout = 0, int iCheckOpCount = 1000);
+	bool	Run(int iTimeout = -1, int iCheckOpCount = 1000);
 
 	inline VarInfo* GetVarPtr(short n)
 	{

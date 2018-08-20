@@ -135,7 +135,7 @@ public:
 	bool ReleaseWorker(u32 id);
 	bool BindWorkerFunction(u32 id, const std::string& funName);
 	bool IsWorking(u32 id);
-	bool UpdateWorker(u32 id, int iTimeout = 0, int iCheckOpCount = 1000);
+	bool UpdateWorker(u32 id, int iTimeout = -1, int iCheckOpCount = 1000);
 
 
 	inline const char* GetLastErrorMsg() { return _sErrorMsgDetail.c_str();  }
