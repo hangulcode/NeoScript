@@ -75,7 +75,11 @@ public:
 	CNeoVM();
 	virtual ~CNeoVM();
 
-
+	template<typename RVal>
+	static void push_functorNative(FunctionPtr* pOut, RVal(*func)(CNeoVMWorker*))
+	{
+		CNeoVMWorker::neo_pushcclosure(pOut, CNeoVMWorker::functorNative<RVal>::invoke, (void*)func);
+	}
 
 	template<typename RVal, typename ... Types>
 	static int push_functor(FunctionPtr* pOut, RVal(*func)(Types ... args))
@@ -94,6 +98,7 @@ public:
 		int iFID = (*it).second;
 		FunctionPtr fun;
 		int iArgCnt = push_functor(&fun, func);
+		fun._argCount = iArgCnt;
 		if (m_sFunctionPtr[iFID]._argsCount != iArgCnt)
 			return false;
 
@@ -103,10 +108,20 @@ public:
 
 
 	template<typename F>
+	static FunctionPtr RegisterNative(F func, u8 argCount)
+	{
+		FunctionPtr fun;
+		push_functorNative(&fun, func);
+		fun._argCount = argCount;
+		return fun;
+	}
+
+	template<typename F>
 	static FunctionPtr Register(F func)
 	{
 		FunctionPtr fun;
-		push_functor(&fun, func);
+		int argCount = push_functor(&fun, func);
+		fun._argCount = argCount;
 		return fun;
 	}
 

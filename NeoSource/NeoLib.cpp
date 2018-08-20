@@ -6,12 +6,15 @@
 
 #define MATH_PI				3.14159265358979323846f // Pi
 
-std::string str2;
-const char* Str_Substring(char* p, int start, int len)
+const char* Str_Substring(CNeoVMWorker* pN)
 {
+	char* p = pN->read<char*>(1);
+	int start = pN->read<int>(2);
+	int len = pN->read<int>(3);
+
 	std::string str(p);
-	str2 = str.substr(start, len);
-	return str2.c_str();
+	pN->_sTempString = str.substr(start, len);
+	return pN->_sTempString.c_str();
 }
 int Str_len(char* p)
 {
@@ -110,7 +113,7 @@ static SFunLib _Lib[] =
 { "sqrt", CNeoVM::Register(Math_sqrt) },
 { "rand", CNeoVM::Register(Math_rand) },
 
-{ "str_sub", CNeoVM::Register(Str_Substring) },
+{ "str_sub", CNeoVM::RegisterNative(Str_Substring, 3) },
 { "str_len", CNeoVM::Register(Str_len) },
 
 { "print", CNeoVM::Register(io_print) },

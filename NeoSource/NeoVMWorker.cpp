@@ -1131,7 +1131,7 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 			int iSave = _iSP_Vars;
 			_iSP_Vars = iSP_VarsMax;
 
-			if((*fun._fun._fn)(this, fun._fun._func, n2) < 0)
+			if((*fun._fun._fn)(this, &fun._fun, n2) < 0)
 			{
 				SetError("Ptr Call Argument Count Error");
 				break;
@@ -1151,7 +1151,7 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 				int iSave = _iSP_Vars;
 				_iSP_Vars = iSP_VarsMax;
 
-				if ((pFunctionPtr->_fn)(this, pFunctionPtr->_func, n3) < 0)
+				if ((pFunctionPtr->_fn)(this, pFunctionPtr, n3) < 0)
 				{
 					SetError("Ptr Call Argument Count Error");
 					break;

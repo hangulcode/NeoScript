@@ -80,7 +80,8 @@ enum NOP_TYPE : u8
 
 struct VarInfo;
 class CNeoVMWorker;
-typedef int(*Neo_CFunction) (CNeoVMWorker *N, void* pFun, short args);
+struct FunctionPtr;
+typedef int(*Neo_CFunction) (CNeoVMWorker *N, FunctionPtr* pFun, short args);
 
 struct StringInfo
 {
@@ -99,6 +100,7 @@ struct TableInfo
 
 struct FunctionPtr
 {
+	u8							_argCount;
 	Neo_CFunction				_fn;
 	void*						_func;
 };
@@ -367,6 +369,7 @@ private:
 
 
 public:
+	std::string				_sTempString;
 
 
 	void GC()
@@ -410,7 +413,6 @@ public:
 		return _read<RVal>(&m_sVarStack[_iSP_Vars]);
 	}
 
-
 	static void neo_pushcclosure(FunctionPtr* pOut, Neo_CFunction fn, void* pFun)
 	{
 		pOut->_fn = fn;
@@ -423,15 +425,41 @@ public:
 		return (T)p;
 	}
 
+	template<typename RVal>
+	struct functorNative
+	{
+		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
+		{
+			if (args != pfun->_argCount)
+				return -1;
+			auto a = upvalue_<RVal(*)(CNeoVMWorker*)>(pfun->_func)(N);
+			N->write(&N->m_sVarStack[N->_iSP_Vars], a);
+			return 1;
+		}
+	};
+	template<>
+	struct functorNative<void>
+	{
+		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
+		{
+			if (args != pfun->_argCount)
+				return -1;
+			upvalue_<void(*)(CNeoVMWorker*)>(pfun->_func)(N);
+			N->Var_Release(&N->m_sVarStack[N->_iSP_Vars]);
+			return 0;
+		}
+	};
+
+
 	// 리턴값이 있는 Call
 	template<typename RVal, typename T1 = void, typename T2 = void, typename T3 = void, typename T4 = void, typename T5 = void>
 	struct functor
 	{
-		static int invoke(CNeoVMWorker *N, void* pfun, short args)
+		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
 		{
-			if (args != 5)
+			if (args != pfun->_argCount)
 				return -1;
-			auto a = upvalue_<RVal(*)(T1, T2, T3, T4, T5)>(pfun)(N->read<T1>(1), N->read<T2>(2), N->read<T3>(3), N->read<T4>(4), N->read<T5>(5));
+			auto a = upvalue_<RVal(*)(T1, T2, T3, T4, T5)>(pfun->_func)(N->read<T1>(1), N->read<T2>(2), N->read<T3>(3), N->read<T4>(4), N->read<T5>(5));
 			N->write(&N->m_sVarStack[N->_iSP_Vars], a);
 			return 1;
 		}
@@ -439,11 +467,11 @@ public:
 	template<typename RVal, typename T1, typename T2, typename T3, typename T4>
 	struct functor<RVal, T1, T2, T3, T4>
 	{
-		static int invoke(CNeoVMWorker *N, void* pfun, short args)
+		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
 		{
-			if (args != 4)
+			if (args != pfun->_argCount)
 				return -1;
-			auto a = upvalue_<RVal(*)(T1, T2, T3, T4)>(pfun)(N->read<T1>(1), N->read<T2>(2), N->read<T3>(3), N->read<T4>(4));
+			auto a = upvalue_<RVal(*)(T1, T2, T3, T4)>(pfun->_func)(N->read<T1>(1), N->read<T2>(2), N->read<T3>(3), N->read<T4>(4));
 			N->write(&N->m_sVarStack[N->_iSP_Vars], a);
 			return 1;
 		}
@@ -451,11 +479,11 @@ public:
 	template<typename RVal, typename T1, typename T2, typename T3>
 	struct functor<RVal, T1, T2, T3>
 	{
-		static int invoke(CNeoVMWorker *N, void* pfun, short args)
+		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
 		{
-			if (args != 3)
+			if (args != pfun->_argCount)
 				return -1;
-			auto a = upvalue_<RVal(*)(T1, T2, T3)>(pfun)(N->read<T1>(1), N->read<T2>(2), N->read<T3>(3));
+			auto a = upvalue_<RVal(*)(T1, T2, T3)>(pfun->_func)(N->read<T1>(1), N->read<T2>(2), N->read<T3>(3));
 			N->write(&N->m_sVarStack[N->_iSP_Vars], a);
 			return 1;
 		}
@@ -463,11 +491,11 @@ public:
 	template<typename RVal, typename T1, typename T2>
 	struct functor<RVal, T1, T2>
 	{
-		static int invoke(CNeoVMWorker *N, void* pfun, short args)
+		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
 		{
-			if (args != 2)
+			if (args != pfun->_argCount)
 				return -1;
-			auto a = upvalue_<RVal(*)(T1, T2)>(pfun)(N->read<T1>(1), N->read<T2>(2));
+			auto a = upvalue_<RVal(*)(T1, T2)>(pfun->_func)(N->read<T1>(1), N->read<T2>(2));
 			N->write(&N->m_sVarStack[N->_iSP_Vars], a);
 			return 1;
 		}
@@ -475,11 +503,11 @@ public:
 	template<typename RVal, typename T1>
 	struct functor<RVal, T1>
 	{
-		static int invoke(CNeoVMWorker *N, void* pfun, short args)
+		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
 		{
-			if (args != 1)
+			if (args != pfun->_argCount)
 				return -1;
-			auto a = upvalue_<RVal(*)(T1)>(pfun)(N->read<T1>(1));
+			auto a = upvalue_<RVal(*)(T1)>(pfun->_func)(N->read<T1>(1));
 			N->write(&N->m_sVarStack[N->_iSP_Vars], a);
 			return 1;
 		}
@@ -487,11 +515,11 @@ public:
 	template<typename RVal>
 	struct functor<RVal>
 	{
-		static int invoke(CNeoVMWorker *N, void* pfun, short args)
+		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
 		{
-			if (args != 0)
+			if (args != pfun->_argCount)
 				return -1;
-			auto a = upvalue_<RVal(*)()>(pfun)();
+			auto a = upvalue_<RVal(*)()>(pfun->_func)();
 			N->write(&N->m_sVarStack[N->_iSP_Vars], a);
 			return 1;
 		}
@@ -501,11 +529,11 @@ public:
 	template<typename T1, typename T2, typename T3, typename T4, typename T5>
 	struct functor<void, T1, T2, T3, T4, T5>
 	{
-		static int invoke(CNeoVMWorker *N, void* pfun, short args)
+		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
 		{
-			if (args != 5)
+			if (args != pfun->_argCount)
 				return -1;
-			upvalue_<void(*)(T1, T2, T3, T4, T5)>(pfun)(N->read<T1>(1), N->read<T2>(2), N->read<T3>(3), N->read<T4>(4), N->read<T5>(5));
+			upvalue_<void(*)(T1, T2, T3, T4, T5)>(pfun->_func)(N->read<T1>(1), N->read<T2>(2), N->read<T3>(3), N->read<T4>(4), N->read<T5>(5));
 			N->Var_Release(&N->m_sVarStack[N->_iSP_Vars]);
 			return 0;
 		}
@@ -513,11 +541,11 @@ public:
 	template<typename T1, typename T2, typename T3, typename T4>
 	struct functor<void, T1, T2, T3, T4>
 	{
-		static int invoke(CNeoVMWorker *N, void* pfun, short args)
+		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
 		{
-			if (args != 4)
+			if (args != pfun->_argCount)
 				return -1;
-			upvalue_<void(*)(T1, T2, T3, T4)>(pfun)(N->read<T1>(1), N->read<T2>(2), N->read<T3>(3), N->read<T4>(4));
+			upvalue_<void(*)(T1, T2, T3, T4)>(pfun->_func)(N->read<T1>(1), N->read<T2>(2), N->read<T3>(3), N->read<T4>(4));
 			N->Var_Release(&N->m_sVarStack[N->_iSP_Vars]);
 			return 0;
 		}
@@ -525,11 +553,11 @@ public:
 	template<typename T1, typename T2, typename T3>
 	struct functor<void, T1, T2, T3>
 	{
-		static int invoke(CNeoVMWorker *N, void* pfun, short args)
+		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
 		{
-			if (args != 3)
+			if (args != pfun->_argCount)
 				return -1;
-			upvalue_<void(*)(T1, T2, T3)>(pfun)(N->read<T1>(1), N->read<T2>(2), N->read<T3>(3));
+			upvalue_<void(*)(T1, T2, T3)>(pfun->_func)(N->read<T1>(1), N->read<T2>(2), N->read<T3>(3));
 			N->Var_Release(&N->m_sVarStack[N->_iSP_Vars]);
 			return 0;
 		}
@@ -537,11 +565,11 @@ public:
 	template<typename T1, typename T2>
 	struct functor<void, T1, T2>
 	{
-		static int invoke(CNeoVMWorker *N, void* pfun, short args)
+		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
 		{
-			if (args != 2)
+			if (args != pfun->_argCount)
 				return -1;
-			upvalue_<void(*)(T1, T2)>(pfun)(N->read<T1>(1), N->read<T2>(2));
+			upvalue_<void(*)(T1, T2)>(pfun->_func)(N->read<T1>(1), N->read<T2>(2));
 			N->Var_Release(&N->m_sVarStack[N->_iSP_Vars]);
 			return 0;
 		}
@@ -549,11 +577,11 @@ public:
 	template<typename T1>
 	struct functor<void, T1>
 	{
-		static int invoke(CNeoVMWorker *N, void* pfun, short args)
+		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
 		{
-			if (args != 1)
+			if (args != pfun->_argCount)
 				return -1;
-			upvalue_<void(*)(T1)>(pfun)(N->read<T1>(1));
+			upvalue_<void(*)(T1)>(pfun->_func)(N->read<T1>(1));
 			N->Var_Release(&N->m_sVarStack[N->_iSP_Vars]);
 			return 0;
 		}
@@ -620,11 +648,11 @@ template<>	inline void CNeoVMWorker::push(unsigned long long ret) { PushInt((int
 template<>
 struct CNeoVMWorker::functor<void>
 {
-	static int invoke(CNeoVMWorker *N, void* pfun, short args)
+	static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
 	{
-		if (args != 0)
+		if (args != pfun->_argCount)
 			return -1;
-		upvalue_<void(*)()>(pfun)();
+		upvalue_<void(*)()>(pfun->_func)();
 		N->Var_Release(&N->m_sVarStack[N->_iSP_Vars]);
 		return 0;
 	}
