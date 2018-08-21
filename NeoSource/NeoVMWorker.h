@@ -84,6 +84,7 @@ struct VarInfo;
 class CNeoVMWorker;
 struct FunctionPtr;
 typedef int(*Neo_CFunction) (CNeoVMWorker *N, FunctionPtr* pFun, short args);
+typedef bool(*Neo_NativeFunction) (CNeoVMWorker *N, short args);
 
 struct StringInfo
 {
@@ -107,6 +108,13 @@ struct FunctionPtr
 	void*						_func;
 };
 
+
+#pragma pack(1)
+struct FunctionPtrNative
+{
+	u8							_argCount;
+	Neo_NativeFunction			_func;
+};
 struct VarInfo
 {
 private:
@@ -119,7 +127,7 @@ public:
 		TableInfo*	_tbl;
 		int			_int;
 		double		_float;
-		FunctionPtr _fun;
+		FunctionPtrNative _fun;
 	};
 
 	VarInfo()
@@ -144,6 +152,7 @@ public:
 		return false;
 	}
 };
+#pragma pack()
 
 struct SNeoVMHeader
 {
@@ -186,7 +195,7 @@ struct SFunctionTable
 struct SFunLib
 {
 	const char* pName;
-	FunctionPtr fn;
+	FunctionPtrNative fn;
 };
 
 class CNeoVM;
@@ -305,7 +314,7 @@ private:
 
 	void TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);
 	void TableRead(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);
-	FunctionPtr* GetPtrFunction(VarInfo *pTable, VarInfo *pArray);
+	FunctionPtrNative* GetPtrFunction(VarInfo *pTable, VarInfo *pArray);
 
 	void ClearArgs()
 	{
@@ -382,7 +391,7 @@ private:
 
 public:
 	std::string				_sTempString;
-
+	VarInfo* GetReturnVar() { return &m_sVarStack[_iSP_Vars]; }
 
 	void GC()
 	{
@@ -425,6 +434,10 @@ public:
 		return _read<RVal>(&m_sVarStack[_iSP_Vars]);
 	}
 
+	static void neo_pushcclosureNative(FunctionPtrNative* pOut, Neo_NativeFunction pFun)
+	{
+		pOut->_func = pFun;
+	}
 	static void neo_pushcclosure(FunctionPtr* pOut, Neo_CFunction fn, void* pFun)
 	{
 		pOut->_fn = fn;
@@ -597,7 +610,7 @@ public:
 	inline u32 GetWorkerID() { return _idWorker; }
 };
 
-template<> inline std::string*		CNeoVMWorker::_read(VarInfo *V) { return (std::string*)PopString(V); }
+template<> inline std::string*		CNeoVMWorker::_read(VarInfo *V) { return (std::string*)PopStlString(V); }
 template<> inline char*			CNeoVMWorker::_read(VarInfo *V) { return (char*)PopString(V); }
 template<> inline const char*		CNeoVMWorker::_read(VarInfo *V) { return PopString(V); }
 template<> inline char				CNeoVMWorker::_read(VarInfo *V) { return (char)PopInt(V); }

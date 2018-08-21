@@ -149,7 +149,7 @@ void CNeoVMWorker::TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue
 	}
 	}
 }
-FunctionPtr* CNeoVMWorker::GetPtrFunction(VarInfo *pTable, VarInfo *pArray)
+FunctionPtrNative* CNeoVMWorker::GetPtrFunction(VarInfo *pTable, VarInfo *pArray)
 {
 	if (pTable->GetType() != VAR_TABLE)
 		return NULL;
@@ -938,7 +938,7 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 	short n1, n2, n3;
 
 	SFunctionTable fun;
-	FunctionPtr* pFunctionPtr;
+	FunctionPtrNative* pFunctionPtrNative;
 	SCallStack callStack;
 	int iTemp;
 	int iCodeOffset;
@@ -1200,15 +1200,15 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 			if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n3))
 				_iSP_Vars_Max2 = iSP_VarsMax + (1 + n3);
 
-			pFunctionPtr = GetPtrFunction(GetVarPtr(n1), GetVarPtr(n2));
-			if (pFunctionPtr != NULL)
+			pFunctionPtrNative = GetPtrFunction(GetVarPtr(n1), GetVarPtr(n2));
+			if (pFunctionPtrNative != NULL)
 			{
 				int iSave = _iSP_Vars;
 				_iSP_Vars = iSP_VarsMax;
 
-				if ((pFunctionPtr->_fn)(this, pFunctionPtr, n3) < 0)
+				if ((pFunctionPtrNative->_func)(this, n3) == false)
 				{
-					SetError("Ptr Call Argument Count Error");
+					SetError("Ptr Call Error");
 					break;
 				}
 

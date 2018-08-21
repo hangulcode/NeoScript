@@ -217,7 +217,7 @@ void CNeoVM::TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
 	}
 	}
 }
-FunctionPtr* CNeoVM::GetPtrFunction(VarInfo *pTable, VarInfo *pArray)
+FunctionPtrNative* CNeoVM::GetPtrFunction(VarInfo *pTable, VarInfo *pArray)
 {
 	if (pTable->GetType() != VAR_TABLE)
 		return NULL;

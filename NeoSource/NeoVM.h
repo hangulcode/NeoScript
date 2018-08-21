@@ -48,7 +48,7 @@ private:
 
 	void TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);
 	void TableRead(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);
-	FunctionPtr* GetPtrFunction(VarInfo *pTable, VarInfo *pArray);
+	FunctionPtrNative* GetPtrFunction(VarInfo *pTable, VarInfo *pArray);
 
 	CNeoVMWorker* WorkerAlloc(int iStackSize);
 	void FreeWorker(CNeoVMWorker *d);
@@ -75,10 +75,9 @@ public:
 	CNeoVM();
 	virtual ~CNeoVM();
 
-	template<typename RVal>
-	static void push_functorNative(FunctionPtr* pOut, RVal(*func)(CNeoVMWorker*))
+	static void push_functorNative(FunctionPtrNative* pOut, Neo_NativeFunction func)
 	{
-		CNeoVMWorker::neo_pushcclosure(pOut, CNeoVMWorker::functorNative<RVal>::invoke, (void*)func);
+		CNeoVMWorker::neo_pushcclosureNative(pOut, func);
 	}
 
 	template<typename RVal, typename ... Types>
@@ -107,10 +106,9 @@ public:
 	}
 
 
-	template<typename F>
-	static FunctionPtr RegisterNative(F func, u8 argCount)
+	static FunctionPtrNative RegisterNative(Neo_NativeFunction func, u8 argCount)
 	{
-		FunctionPtr fun;
+		FunctionPtrNative fun;
 		push_functorNative(&fun, func);
 		fun._argCount = argCount;
 		return fun;
