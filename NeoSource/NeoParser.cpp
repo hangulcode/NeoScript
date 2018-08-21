@@ -2000,8 +2000,6 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			}
 		}
 
-
-
 		tkType1 = GetToken(ar, tk1);
 		switch (tkType1)
 		{

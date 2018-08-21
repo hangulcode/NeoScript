@@ -44,7 +44,7 @@ int main()
 		CNeoVM* pVM = CNeoVM::LoadVM(pCodeTemp, iCodeLen);
 		if (NULL != pVM)
 		{
-			// Allock Worker Stack
+			// Alloc Worker Stack
 			u32 id = pVM->CreateWorker();
 			if (id == 0)
 			{
