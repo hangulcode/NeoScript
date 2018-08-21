@@ -372,7 +372,15 @@ bool GetQuotationString(CArchiveRdWC& ar, std::string& str)
 	}
 	return true;
 }
-static bool IsDotChar(u16 c)
+static inline bool IsAlphabet(char c)
+{
+	if ('a' <= c && c <= 'z')
+		return true;
+	if ('A' <= c && c <= 'Z')
+		return true;
+	return false;
+}
+static inline bool IsDotChar(u16 c)
 {
 	if ('a' <= c && c <= 'z')
 		return true;
@@ -380,11 +388,9 @@ static bool IsDotChar(u16 c)
 		return true;
 	if ('0' <= c && c <= '9')
 		return true;
-	switch (c)
-	{
-	case '_':
+	if(c == '_')
 		return true;
-	}
+
 	return false;
 }
 bool GetDotString(CArchiveRdWC& ar, std::string& str)
@@ -402,6 +408,29 @@ bool GetDotString(CArchiveRdWC& ar, std::string& str)
 	}
 	return true;
 }
+bool AbleName(const std::string& str)
+{
+	if (str.empty())
+		return false;
+
+	const char* p = str.c_str();
+	for (int i = 0; i < (int)str.length(); i++)
+	{
+		char c = p[i];
+		if (i == 0)
+		{	// first is Alphabet or '_'
+			if (IsAlphabet(c) == false && c != '_')
+				return false;
+		}
+		else
+		{
+			if (IsDotChar(c) == false)
+				return false;
+		}
+	}
+	return true;
+}
+
 struct SToken
 {
 	TK_TYPE			_type;
@@ -1326,6 +1355,11 @@ NOP_TYPE ConvertCheckOPToOptimizeInv(NOP_TYPE n)
 
 int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, const std::string& name)
 {
+	if (false == AbleName(name))
+	{
+		DebugLog("Error (%d, %d): Function Local Var Unable (%s) %s", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), name.c_str());
+		return -1;
+	}
 	SLayerVar* pCurLayer = vars.GetCurrentLayer();
 
 	if (pCurLayer->FindVarOnlyCurrentBlock(name) >= 0)
@@ -2019,6 +2053,11 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			break;
 		case TK_FUN:
 			tkType2 = GetToken(ar, tk2);
+			if (false == AbleName(tk2))
+			{
+				DebugLog("Error (%d, %d): Unable Fun Name %s\n", ar.CurLine(), ar.CurCol(), tk2.c_str());
+				return false;
+			}
 			if (tkType2 == TK_STRING)
 			{
 				tkType3 = GetToken(ar, tk3);
