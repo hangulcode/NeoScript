@@ -1069,8 +1069,6 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 					return TK_NONE;
 				}
 
-				//funs._cur.Push_IncDec(tkType1 == TK_PLUS2 ? NOP_INC : NOP_DEC, a._iVar);
-
 				operands.push_back(a);
 				blApperOperator = true;
 				break;
@@ -1163,7 +1161,6 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		case TK_TOINT:
 		case TK_TOFLOAT:
 		case TK_GETTYPE:
-		case TK_SLEEP:
 			iTempOffset = INVALID_ERROR_PARSEJOB;
 			if (false == ParseToType(iTempOffset._iVar, tkType1, ar, funs, vars))
 				return TK_NONE;
@@ -1180,7 +1177,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 					return TK_NONE;
 				}
 				a._incementType = Increment_Prefix;
-				funs._cur.Push_IncDec(ar, tkType1 == TK_PLUS2 ? NOP_INC : NOP_DEC, a._iVar);
+				funs._cur.Push_OP1(ar, tkType1 == TK_PLUS2 ? NOP_INC : NOP_DEC, a._iVar);
 
 				operands.push_back(a);
 				blApperOperator = true;
@@ -1209,7 +1206,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 					iTempOffset2 = funs._cur.AllocLocalTempVar();
 					funs._cur.Push_MOV(ar, NOP_MOV, iTempOffset2, a._iVar);
 				}
-				funs._cur.Push_IncDec(ar, tkType1 == TK_PLUS2 ? NOP_INC : NOP_DEC, a._iVar);
+				funs._cur.Push_OP1(ar, tkType1 == TK_PLUS2 ? NOP_INC : NOP_DEC, a._iVar);
 
 				if (bReqReturn)
 					a = SOperand(iTempOffset2);
@@ -1973,6 +1970,45 @@ bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	return true;
 }
+bool ParseSleep(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+{
+	std::string tk1;
+	TK_TYPE tkType1;
+	TK_TYPE r;
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_L_SMALL)
+	{
+		DebugLog("Error (%d, %d): '('", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+	SOperand operand;
+	r = ParseJob(true, operand, NULL, ar, funs, vars);
+	if (TK_R_SMALL != r)
+	{
+		DebugLog("Error (%d, %d): ')'", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_SEMICOLON)
+	{
+		DebugLog("Error (%d, %d): ';'", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+
+	int iTempVar;
+	if (operand._iArrayIndex == INVALID_ERROR_PARSEJOB)
+		iTempVar = operand._iVar;
+	else
+	{
+		iTempVar = funs._cur.AllocLocalTempVar();
+		funs._cur.Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iTempVar);
+	}
+	funs._cur.Push_OP1(ar, NOP_SLEEP, iTempVar);
+
+	return true;
+}
 
 bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
@@ -2084,8 +2120,11 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			}
 			break;
 
-		case TK_STRING:
 		case TK_SLEEP:
+			if (false == ParseSleep(ar, funs, vars))
+				return false;
+			break;
+		case TK_STRING:
 			PushToken(tkType1, tk1);
 			iTempOffset = INVALID_ERROR_PARSEJOB;
 			r = ParseJob(false, iTempOffset, NULL, ar, funs, vars);

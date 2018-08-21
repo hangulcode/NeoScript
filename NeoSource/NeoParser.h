@@ -240,7 +240,6 @@ struct SFunctionInfo
 				case NOP_TOINT:
 				case NOP_TOFLOAT:
 				case NOP_GETTYPE:
-				case NOP_SLEEP:
 
 				case NOP_GREAT:		// >
 				case NOP_GREAT_EQ:	// >=
@@ -268,7 +267,7 @@ struct SFunctionInfo
 		_code.Write(&r, sizeof(r));
 		_code.Write(&s, sizeof(s));
 	}
-	void	Push_IncDec(CArchiveRdWC& ar, u8 op, short r)
+	void	Push_OP1(CArchiveRdWC& ar, u8 op, short r)
 	{
 		debug_info dbg(ar.CurFile(), ar.CurLine());
 		_code.Write(&dbg, sizeof(dbg));

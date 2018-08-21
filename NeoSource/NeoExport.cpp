@@ -162,11 +162,15 @@ void WriteFun(CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, s
 		case NOP_TOINT:
 		case NOP_TOFLOAT:
 		case NOP_GETTYPE:
-		case NOP_SLEEP:
 			arRead >> n1 >> n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ar << op << n1 << n2;
+			break;
+		case NOP_SLEEP:
+			arRead >> n1;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
+			ar << op << n1;
 			break;
 		case NOP_JMP:
 			arRead >> n1;
@@ -499,10 +503,9 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			OutAsm("GetType [%d] = [%d]\n", n1, n2);
 			break;
 		case NOP_SLEEP:
-			arRead >> n1 >> n2;
+			arRead >> n1;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			OutAsm("Sleep [%d] = [%d]\n", n1, n2);
+			OutAsm("Sleep [%d]\n", n1);
 			break;
 		case NOP_JMP:
 			arRead >> n1;

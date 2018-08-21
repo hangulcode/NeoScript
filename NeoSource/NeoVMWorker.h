@@ -296,7 +296,7 @@ private:
 	bool CompareGR(VarInfo* v1, VarInfo* v2);
 	bool CompareGE(VarInfo* v1, VarInfo* v2);
 	bool ForEach(VarInfo* v1, VarInfo* v2, VarInfo* v3);
-	bool Sleep(int iTimeout, VarInfo* v1, VarInfo* v2);
+	bool Sleep(int iTimeout, VarInfo* v1);
 
 	std::string ToString(VarInfo* v1);
 	int ToInt(VarInfo* v1);

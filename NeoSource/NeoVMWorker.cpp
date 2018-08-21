@@ -730,31 +730,31 @@ bool CNeoVMWorker::ForEach(VarInfo* pTable, VarInfo* pKey, VarInfo* pValue)
 	SetError("foreach table key Error");
 	return false;
 }
-bool CNeoVMWorker::Sleep(int iTimeout, VarInfo* v1, VarInfo* v2)
+bool CNeoVMWorker::Sleep(int iTimeout, VarInfo* v1)
 {
-	switch (v2->GetType())
+	switch (v1->GetType())
 	{
 	case VAR_INT:
 		if (iTimeout >= 0)
 		{
-			_iRemainSleep = v2->_int;
+			_iRemainSleep = v1->_int;
 			return true;
 		}
 		else
 		{
-			std::this_thread::sleep_for(std::chrono::milliseconds(v2->_int));
+			std::this_thread::sleep_for(std::chrono::milliseconds(v1->_int));
 			return false;
 		}
 		break;
 	case VAR_FLOAT:
 		if (iTimeout >= 0)
 		{
-			_iRemainSleep = (int)v2->_float;
+			_iRemainSleep = (int)v1->_float;
 			return true;
 		}
 		else
 		{
-			std::this_thread::sleep_for(std::chrono::milliseconds((int)v2->_float));
+			std::this_thread::sleep_for(std::chrono::milliseconds((int)v1->_float));
 			return false;
 		}
 		break;
@@ -1133,8 +1133,8 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 			Var_SetString(GetVarPtr(n1), GetType(GetVarPtr(n2)).c_str());
 			break;
 		case NOP_SLEEP:
-			n1 = GetS16(); n2 = GetS16();
-			if (Sleep(iTimeout, GetVarPtr(n1), GetVarPtr(n2)))
+			n1 = GetS16();
+			if (Sleep(iTimeout, GetVarPtr(n1)))
 			{
 				_preClock = clock();
 				return true;
