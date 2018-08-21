@@ -8,16 +8,20 @@
 
 const char* Str_Substring(CNeoVMWorker* pN)
 {
-	char* p = pN->read<char*>(1);
+	std::string* p = pN->read<std::string*>(1);
+	if (p == NULL)
+		return NULL;
+
 	int start = pN->read<int>(2);
 	int len = pN->read<int>(3);
 
-	std::string str(p);
-	pN->_sTempString = str.substr(start, len);
+	pN->_sTempString = p->substr(start, len);
 	return pN->_sTempString.c_str();
 }
 int Str_len(char* p)
 {
+	if (p == NULL)
+		return -1;
 	return (int)strlen(p);
 }
 
@@ -88,6 +92,9 @@ int	Math_rand()
 
 void io_print(const char* p)
 {
+	if (p == NULL)
+		return;
+
 	std::cout << p;
 }
 

@@ -363,6 +363,13 @@ private:
 
 		return NULL;
 	}
+	const std::string* PopStlString(VarInfo *V)
+	{
+		if (V->GetType() == VAR_STRING)
+			return &V->_str->_str;
+
+		return NULL;
+	}
 	bool PopBool(VarInfo *V)
 	{
 		if (V->GetType() == VAR_BOOL)
@@ -590,6 +597,7 @@ public:
 	inline u32 GetWorkerID() { return _idWorker; }
 };
 
+template<> inline std::string*		CNeoVMWorker::_read(VarInfo *V) { return (std::string*)PopString(V); }
 template<> inline char*			CNeoVMWorker::_read(VarInfo *V) { return (char*)PopString(V); }
 template<> inline const char*		CNeoVMWorker::_read(VarInfo *V) { return PopString(V); }
 template<> inline char				CNeoVMWorker::_read(VarInfo *V) { return (char)PopInt(V); }
