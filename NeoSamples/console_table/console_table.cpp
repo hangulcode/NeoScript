@@ -44,7 +44,7 @@ int main()
 		CNeoVM* pVM = CNeoVM::LoadVM(pCodeTemp, iCodeLen);
 		if (NULL != pVM)
 		{
-			for (int i = 1; i < 10; i++)
+			for (int i = 0; i < 1; i++)
 			{
 				DWORD t1 = GetTickCount();
 				pVM->Call<void>("main");

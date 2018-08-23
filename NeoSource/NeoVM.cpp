@@ -173,15 +173,16 @@ void CNeoVM::TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
 	case VAR_INT:
 	{
 		int n = pArray->_int;
-		auto it = pTable->_tbl->_intMap.find(n);
-		if (it != pTable->_tbl->_intMap.end())
+		std::map<int, VarInfo>& intMap = pTable->_tbl->_intMap;
+		auto it = intMap.find(n);
+		if (it != intMap.end())
 		{
 			VarInfo* pDest = &(*it).second;
 			Var_Release(pDest);
 			*pDest = *pValue;
 		}
 		else
-			pTable->_tbl->_intMap[n] = *pValue;
+			intMap[n] = *pValue;
 		Var_AddRef(pValue);
 		break;
 	}

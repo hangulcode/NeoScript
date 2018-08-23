@@ -26,7 +26,7 @@ enum NOP_TYPE : u8
 	NOP_DIV2,
 	NOP_PERSENT2,
 
-	NOP_MOV_NULL,
+	NOP_VAR_CLEAR,
 	NOP_INC,
 	NOP_DEC,
 
@@ -62,6 +62,7 @@ enum NOP_TYPE : u8
 	NOP_TOSTRING,
 	NOP_TOINT,
 	NOP_TOFLOAT,
+	NOP_TOSIZE,
 	NOP_GETTYPE,
 	NOP_SLEEP,
 
@@ -78,6 +79,7 @@ enum NOP_TYPE : u8
 	NOP_TABLE_ALLOC,
 	NOP_TABLE_INSERT,
 	NOP_TABLE_READ,
+	NOP_TABLE_REMOVE,
 };
 
 struct VarInfo;
@@ -92,6 +94,7 @@ struct StringInfo
 	int	_StringID;
 	int _refCount;
 };
+
 
 struct TableInfo
 {
@@ -112,7 +115,6 @@ struct FunctionPtr
 #pragma pack(1)
 struct FunctionPtrNative
 {
-	u8							_argCount;
 	Neo_NativeFunction			_func;
 };
 struct VarInfo
@@ -310,10 +312,12 @@ private:
 	std::string ToString(VarInfo* v1);
 	int ToInt(VarInfo* v1);
 	double ToFloat(VarInfo* v1);
+	int ToSize(VarInfo* v1);
 	std::string GetType(VarInfo* v1);
 
 	void TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);
 	void TableRead(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);
+	void TableRemove(VarInfo *pTable, VarInfo *pArray);
 	FunctionPtrNative* GetPtrFunction(VarInfo *pTable, VarInfo *pArray);
 
 	void ClearArgs()

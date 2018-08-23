@@ -63,6 +63,7 @@ enum TK_TYPE
 	TK_TOSTRING,
 	TK_TOINT,
 	TK_TOFLOAT,
+	TK_TOSIZE,
 	TK_GETTYPE,
 	TK_SLEEP,
 
@@ -75,6 +76,7 @@ enum TK_TYPE
 	TK_WHILE,
 	TK_TRUE,
 	TK_FALSE,
+	TK_NULL,
 
 	TK_PLUS2, // ++
 	TK_MINUS2, // --
@@ -163,6 +165,7 @@ void InitDefaultTokenString()
 	TOKEN_STR3(TK_TOSTRING, "tostring", 20, NOP_TOSTRING);
 	TOKEN_STR3(TK_TOINT, "toint", 20, NOP_TOINT);
 	TOKEN_STR3(TK_TOFLOAT, "tofloat", 20, NOP_TOFLOAT);
+	TOKEN_STR3(TK_TOSIZE, "tosize", 20, NOP_TOSIZE);
 	TOKEN_STR3(TK_GETTYPE, "type", 20, NOP_GETTYPE);
 	TOKEN_STR3(TK_SLEEP, "sleep", 20, NOP_SLEEP);
 
@@ -175,6 +178,7 @@ void InitDefaultTokenString()
 	TOKEN_STR2(TK_WHILE, "while");
 	TOKEN_STR2(TK_TRUE, "true");
 	TOKEN_STR2(TK_FALSE, "false");
+	TOKEN_STR2(TK_NULL, "null");
 
 	TOKEN_STR3(TK_PLUS2, "++", 20, NOP_INC);
 	TOKEN_STR3(TK_MINUS2, "--", 20, NOP_DEC);
@@ -1151,6 +1155,11 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			blEnd = true;
 			break;
 
+		case TK_NULL:
+			iTempOffset._iVar = COMPILE_VAR_NULL;
+			operands.push_back(SOperand(iTempOffset._iVar));
+			blApperOperator = true;
+			break;
 		case TK_TRUE:
 		case TK_FALSE:
 			iTempOffset._iVar = funs.AddStaticBool(tkType1 == TK_TRUE);
@@ -1160,6 +1169,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		case TK_TOSTRING:
 		case TK_TOINT:
 		case TK_TOFLOAT:
+		case TK_TOSIZE:
 		case TK_GETTYPE:
 			iTempOffset = INVALID_ERROR_PARSEJOB;
 			if (false == ParseToType(iTempOffset._iVar, tkType1, ar, funs, vars))
@@ -1256,7 +1266,14 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				}
 			}
 
-			if (b._iArrayIndex == INVALID_ERROR_PARSEJOB)
+			if (b._iVar == COMPILE_VAR_NULL)
+			{
+				if (a._iArrayIndex == INVALID_ERROR_PARSEJOB)
+					funs._cur.Push_OP1(ar, NOP_VAR_CLEAR, b._iVar);
+				else
+					funs._cur.Push_TableRemove(ar, a._iVar, a._iArrayIndex);
+			}
+			else if (b._iArrayIndex == INVALID_ERROR_PARSEJOB)
 			{
 				if(a._iArrayIndex == INVALID_ERROR_PARSEJOB)
 					funs._cur.Push_MOV(ar, op, a._iVar, b._iVar);
@@ -1609,7 +1626,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 
 
-	funs._cur.Push_MOV_NULL(ar, iKey);
+	funs._cur.Push_OP1(ar, NOP_VAR_CLEAR, iKey);
 
 	funs._cur.Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
 	SJumpValue jmp1(funs._cur._code.GetBufferOffset() - 2, funs._cur._code.GetBufferOffset());

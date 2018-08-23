@@ -10,7 +10,8 @@
 #define COMPILE_STATIC_VAR_BEGIN		(15000)
 #define COMPILE_GLObAL_VAR_BEGIN		(20000)
 #define COMPILE_CALLARG_VAR_BEGIN		(30000) // 256 개 이상 나오지 않는다.
-#define STACK_POS_RETURN		(32767)
+#define COMPILE_VAR_NULL				(32766)
+#define STACK_POS_RETURN				(32767)
 
 bool IsTempVar(int iVar);
 
@@ -239,6 +240,7 @@ struct SFunctionInfo
 				case NOP_TOSTRING:
 				case NOP_TOINT:
 				case NOP_TOFLOAT:
+				case NOP_TOSIZE:
 				case NOP_GETTYPE:
 
 				case NOP_GREAT:		// >
@@ -295,16 +297,7 @@ struct SFunctionInfo
 		u8 op = NOP_FUNEND;
 		_code.Write(&op, sizeof(op));
 	}
-	void	Push_MOV_NULL(CArchiveRdWC& ar, short n)
-	{
-		debug_info dbg(ar.CurFile(), ar.CurLine());
-		_code.Write(&dbg, sizeof(dbg));
-		_iLastOPOffset = _code.GetBufferOffset();
 
-		u8 op = NOP_MOV_NULL;
-		_code.Write(&op, sizeof(op));
-		_code.Write(&n, sizeof(n));
-	}
 
 	void	Push_JMP(CArchiveRdWC& ar, int destOffset)
 	{
@@ -394,7 +387,17 @@ struct SFunctionInfo
 		_code.Write(&nArray, sizeof(nArray));
 		_code.Write(&nValue, sizeof(nValue));
 	}
+	void	Push_TableRemove(CArchiveRdWC& ar, short nTable, short nArray)
+	{
+		debug_info dbg(ar.CurFile(), ar.CurLine());
+		_code.Write(&dbg, sizeof(dbg));
+		_iLastOPOffset = _code.GetBufferOffset();
 
+		u8 op = NOP_TABLE_REMOVE;
+		_code.Write(&op, sizeof(op));
+		_code.Write(&nTable, sizeof(nTable));
+		_code.Write(&nArray, sizeof(nArray));
+	}
 	void	Push_ToType(CArchiveRdWC& ar, u8 op, short r, short s)
 	{
 		debug_info dbg(ar.CurFile(), ar.CurLine());

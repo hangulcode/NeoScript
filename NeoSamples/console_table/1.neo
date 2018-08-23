@@ -9,6 +9,7 @@ export fun main()
 	table["b2"] = 57;
 	table["c3"] = "Hello Neo Script...";
 	table["c4"] = "system";
+	table["c4"] = null;
 
 	for (var i = 0; i < 10; i++)
 	{
@@ -17,10 +18,12 @@ export fun main()
 		else
 			table[i] = i;
 	}
+	table[0] = null;
 
 	foreach(var a, b in table)
 	{
 		system.print(a ..":".. b .. "\n");
 		sleep(200);
 	}
+	system.print("table size : " .. tosize(table).."\n");
 }

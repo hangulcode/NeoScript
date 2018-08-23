@@ -110,7 +110,7 @@ public:
 	{
 		FunctionPtrNative fun;
 		push_functorNative(&fun, func);
-		fun._argCount = argCount;
+//		fun._argCount = argCount;
 		return fun;
 	}
 

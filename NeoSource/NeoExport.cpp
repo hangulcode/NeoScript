@@ -8,6 +8,11 @@ void	DebugLog(const char*	lpszString, ...);
 
 void ChangeIndex(int staticCount, int localCount, int curFunStatkSize, short& n)
 {
+	if (n == COMPILE_VAR_NULL)
+	{
+		DebugLog("Change Index Error COMPILE_VAR_NULL");
+		return;
+	}
 	if (n == STACK_POS_RETURN)
 	{
 		n = curFunStatkSize;
@@ -112,7 +117,7 @@ void WriteFun(CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, s
 			ar << op << n1 << n2 << n3;
 			break;
 
-		case NOP_MOV_NULL:
+		case NOP_VAR_CLEAR:
 		case NOP_INC:
 		case NOP_DEC:
 			arRead >> n1;
@@ -161,6 +166,7 @@ void WriteFun(CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, s
 		case NOP_TOSTRING:
 		case NOP_TOINT:
 		case NOP_TOFLOAT:
+		case NOP_TOSIZE:
 		case NOP_GETTYPE:
 			arRead >> n1 >> n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
@@ -224,6 +230,12 @@ void WriteFun(CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, s
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
 			ar << op << n1 << n2 << n3;
+			break;
+		case NOP_TABLE_REMOVE:
+			arRead >> n1 >> n2;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
+			ar << op << n1 << n2;
 			break;
 		default:
 			DebugLog("Error OP Type Error (%d)", op);
@@ -330,10 +342,10 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			OutAsm("PER [%d] = [%d] %% [%d]\n", n1, n2, n3);
 			break;
 
-		case NOP_MOV_NULL:
+		case NOP_VAR_CLEAR:
 			arRead >> n1;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			OutAsm("MOVN [%d], null\n", n1);
+			OutAsm("CLR [%d]\n", n1);
 			break;
 		case NOP_INC:
 			arRead >> n1;
@@ -496,6 +508,12 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			OutAsm("ToFloat [%d] = [%d]\n", n1, n2);
 			break;
+		case NOP_TOSIZE:
+			arRead >> n1 >> n2;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
+			OutAsm("ToSizes [%d] = [%d]\n", n1, n2);
+			break;
 		case NOP_GETTYPE:
 			arRead >> n1 >> n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
@@ -574,6 +592,12 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
 			OutAsm("Table Read [%d] = [%d].[%d]\n", n3, n1, n2);
+			break;
+		case NOP_TABLE_REMOVE:
+			arRead >> n1 >> n2;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
+			OutAsm("Table Remove [%d].[%d]\n", n1, n2);
 			break;
 		default:
 			DebugLog("Error OP Type Error (%d)", op);

@@ -243,6 +243,55 @@ void CNeoVMWorker::TableRead(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
 	}
 }
 
+void CNeoVMWorker::TableRemove(VarInfo *pTable, VarInfo *pArray)
+{
+	if (pTable->GetType() != VAR_TABLE)
+	{
+		SetError("TableRead Error");
+		return;
+	}
+
+	VarInfo *pValue;
+	switch (pArray->GetType())
+	{
+	case VAR_INT:
+	{
+		int n = (int)pArray->_int;
+		auto it = pTable->_tbl->_intMap.find(n);
+		if (it != pTable->_tbl->_intMap.end())
+		{
+			pValue = &(*it).second;
+			Var_Release(pValue);
+			pTable->_tbl->_intMap.erase(it);
+		}
+		break;
+	}
+	case VAR_FLOAT:
+	{
+		int n = (int)pArray->_float;
+		auto it = pTable->_tbl->_intMap.find(n);
+		if (it != pTable->_tbl->_intMap.end())
+		{
+			pValue = &(*it).second;
+			Var_Release(pValue);
+			pTable->_tbl->_intMap.erase(it);
+		}
+		break;
+	}
+	case VAR_STRING:
+	{
+		std::string& n = pArray->_str->_str;
+		auto it = pTable->_tbl->_strMap.find(n);
+		if (it != pTable->_tbl->_strMap.end())
+		{
+			pValue = &(*it).second;
+			Var_Release(pValue);
+			pTable->_tbl->_strMap.erase(it);
+		}
+		break;
+	}
+	}
+}
 
 void CNeoVMWorker::Move(VarInfo* v1, VarInfo* v2)
 {
@@ -838,6 +887,27 @@ double CNeoVMWorker::ToFloat(VarInfo* v1)
 	}
 	return -1;
 }
+int CNeoVMWorker::ToSize(VarInfo* v1)
+{
+	switch (v1->GetType())
+	{
+	case VAR_NONE:
+		return 0;
+	case VAR_BOOL:
+		return 0;
+	case VAR_INT:
+		return 0;
+	case VAR_FLOAT:
+		return 0;
+	case VAR_STRING:
+		return v1->_str->_str.length();
+	case VAR_TABLE:
+		return (int)v1->_tbl->_intMap.size() + (int)v1->_tbl->_strMap.size();
+	case VAR_PTRFUN:
+		return 0;
+	}
+	return 0;
+}
 std::string CNeoVMWorker::GetType(VarInfo* v1)
 {
 	switch (v1->GetType())
@@ -986,7 +1056,7 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 			Per2(GetVarPtr(n1), GetVarPtr(n2));
 			break;
 
-		case NOP_MOV_NULL:
+		case NOP_VAR_CLEAR:
 			n1 = GetS16();
 			Var_Release(GetVarPtr(n1));
 			break;
@@ -1127,6 +1197,10 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 		case NOP_TOFLOAT:
 			n1 = GetS16(); n2 = GetS16();
 			Var_SetFloat(GetVarPtr(n1), ToFloat(GetVarPtr(n2)));
+			break;
+		case NOP_TOSIZE:
+			n1 = GetS16(); n2 = GetS16();
+			Var_SetInt(GetVarPtr(n1), ToSize(GetVarPtr(n2)));
 			break;
 		case NOP_GETTYPE:
 			n1 = GetS16(); n2 = GetS16();
@@ -1269,6 +1343,12 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 		{
 			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
 			TableRead(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
+			break;
+		}
+		case NOP_TABLE_REMOVE:
+		{
+			n1 = GetS16(); n2 = GetS16();
+			TableRemove(GetVarPtr(n1), GetVarPtr(n2));
 			break;
 		}
 		default:
