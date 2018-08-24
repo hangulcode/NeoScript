@@ -724,16 +724,16 @@ bool WriteLog(SFunctions& funs, SVars& vars)
 		switch (vi.GetType())
 		{
 		case VAR_INT:
-			OutAsm("Static [%d] i:%d\n", i, vi._int);
+			OutAsm("Static [%d] %d\n", i, vi._int);
 			break;
 		case VAR_FLOAT:
-			OutAsm("Static [%d] f:%lf\n", i, vi._float); // double
+			OutAsm("Static [%d] %lf\n", i, vi._float); // double
 			break;
 		case VAR_BOOL:
-			OutAsm("Static [%d] b:%s\n", i, vi._bl ? "true" : "false");
+			OutAsm("Static [%d] %s\n", i, vi._bl ? "true" : "false");
 			break;
 		case VAR_STRING:
-			OutAsm("Static [%d] s:%s\n", i, ToPtringString(vi._str->_str).c_str());
+			OutAsm("Static [%d] '%s'\n", i, ToPtringString(vi._str->_str).c_str());
 			break;
 		default:
 			DebugLog("Error VAR Type Error (%d)", vi.GetType());
