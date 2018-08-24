@@ -458,10 +458,16 @@ public:
 			if (Setup(iFID))
 			{
 				Run(iTimeout, iCheckOpCount);
+				if (_isSetup == false)
+				{
+					GC();
+					return _read<RVal>(&m_sVarStack[_iSP_Vars]);
+				}
 			}
 		}
 
 		GC();
+		Var_Release(&m_sVarStack[_iSP_Vars]);
 		return _read<RVal>(&m_sVarStack[_iSP_Vars]);
 	}
 
