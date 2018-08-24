@@ -129,6 +129,19 @@ public:
 		return _pMainWorker->Call<RVal>(funName, args...);
 	}
 
+	template<typename RVal, typename ... Types>
+	RVal Call_TL(int iTimeout, int iCheckOpCount, const std::string& funName, Types ... args) // Time Limit
+	{
+		int iFID = -1;
+		auto it = m_sImExportTable.find(funName);
+		if (it != m_sImExportTable.end())
+		{
+			iFID = (*it).second;
+		}
+
+		return _pMainWorker->Call_TL<RVal>(iTimeout, iCheckOpCount, iFID, args...);
+	}
+
 	u32 CreateWorker();
 	bool ReleaseWorker(u32 id);
 	bool BindWorkerFunction(u32 id, const std::string& funName);

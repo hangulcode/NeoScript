@@ -447,6 +447,24 @@ public:
 		return _read<RVal>(&m_sVarStack[_iSP_Vars]);
 	}
 
+	template<typename RVal, typename ... Types>
+	RVal Call_TL(int iTimeout, int iCheckOpCount, int iFID, Types ... args)
+	{
+		ClearArgs();
+		PushArgs(args...);
+		//RunFunction(funName, );
+		if (iFID >= 0)
+		{
+			if (Setup(iFID))
+			{
+				Run(iTimeout, iCheckOpCount);
+			}
+		}
+
+		GC();
+		return _read<RVal>(&m_sVarStack[_iSP_Vars]);
+	}
+
 	static void neo_pushcclosureNative(FunctionPtrNative* pOut, Neo_NativeFunction pFun)
 	{
 		pOut->_func = pFun;
