@@ -984,6 +984,15 @@ bool	CNeoVMWorker::Setup(int iFunctionID)
 	return true;
 }
 
+#pragma pack(1)
+struct SVMOperation
+{
+	debug_info dbg;
+	NOP_TYPE   op;
+	short n1, n2, n3;
+};
+#pragma pack()
+
 
 bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 {
@@ -1004,16 +1013,12 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 			return true;
 	}
 
-	NOP_TYPE op;
-	short n1, n2, n3;
-
 	SFunctionTable fun;
 	FunctionPtrNative* pFunctionPtrNative;
 	SCallStack callStack;
 	int iTemp;
-	int iCodeOffset;
 	char chMsg[256];
-	debug_info dbg;
+	SVMOperation* pOP;
 
 	int op_process = 0;
 	if(iTimeout >= 0)
@@ -1021,194 +1026,192 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 
 	while (true)
 	{
-		iCodeOffset = GetCodeptr();
-		SetCodePtr(iCodeOffset + sizeof(debug_info));
-		op = (NOP_TYPE)GetU8();
-		switch (op)
+		pOP = (SVMOperation*)GetCurPtr();
+		switch (pOP->op)
 		{
 		case NOP_MOV:
-			n1 = GetS16(); n2 = GetS16();
-			Move(GetVarPtr(n1), GetVarPtr(n2));
+			NextOP(2);
+			Move(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
 			break;
 		case NOP_MOV_MINUS:
-			n1 = GetS16(); n2 = GetS16();
-			MoveMinus(GetVarPtr(n1), GetVarPtr(n2));
+			NextOP(2);
+			MoveMinus(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
 			break;
 
 		case NOP_ADD2:
-			n1 = GetS16(); n2 = GetS16();
-			Add2(GetVarPtr(n1), GetVarPtr(n2));
+			NextOP(2);
+			Add2(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
 			break;
 		case NOP_SUB2:
-			n1 = GetS16(); n2 = GetS16();
-			Sub2(GetVarPtr(n1), GetVarPtr(n2));
+			NextOP(2);
+			Sub2(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
 			break;
 		case NOP_MUL2:
-			n1 = GetS16(); n2 = GetS16();
-			Mul2(GetVarPtr(n1), GetVarPtr(n2));
+			NextOP(2);
+			Mul2(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
 			break;
 		case NOP_DIV2:
-			n1 = GetS16(); n2 = GetS16();
-			Div2(GetVarPtr(n1), GetVarPtr(n2));
+			NextOP(2);
+			Div2(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
 			break;
 		case NOP_PERSENT2:
-			n1 = GetS16(); n2 = GetS16();
-			Per2(GetVarPtr(n1), GetVarPtr(n2));
+			NextOP(2);
+			Per2(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
 			break;
 
 		case NOP_VAR_CLEAR:
-			n1 = GetS16();
-			Var_Release(GetVarPtr(n1));
+			NextOP(1);
+			Var_Release(GetVarPtr(pOP->n1));
 			break;
 		case NOP_INC:
-			n1 = GetS16();
-			Inc(GetVarPtr(n1));
+			NextOP(1);
+			Inc(GetVarPtr(pOP->n1));
 			break;
 		case NOP_DEC:
-			n1 = GetS16();
-			Dec(GetVarPtr(n1));
+			NextOP(1);
+			Dec(GetVarPtr(pOP->n1));
 			break;
 
 		case NOP_ADD3:
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			Add(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
+			NextOP(3);
+			Add(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
 			break;
 		case NOP_SUB3:
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			Sub(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
+			NextOP(3);
+			Sub(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
 			break;
 		case NOP_MUL3:
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			Mul(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
+			NextOP(3);
+			Mul(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
 			break;
 		case NOP_DIV3:
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			Div(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
+			NextOP(3);
+			Div(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
 			break;
 		case NOP_PERSENT3:
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			Per(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
+			NextOP(3);
+			Per(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
 			break;
 
 		case NOP_GREAT:		// >
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			Var_SetBool(GetVarPtr(n1), CompareGR(GetVarPtr(n2), GetVarPtr(n3)));
+			NextOP(3);
+			Var_SetBool(GetVarPtr(pOP->n1), CompareGR(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)));
 			break;
 		case NOP_GREAT_EQ:	// >=
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			Var_SetBool(GetVarPtr(n1), CompareGE(GetVarPtr(n2), GetVarPtr(n3)));
+			NextOP(3);
+			Var_SetBool(GetVarPtr(pOP->n1), CompareGE(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)));
 			break;
 		case NOP_LESS:		// <
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			Var_SetBool(GetVarPtr(n1), CompareGR(GetVarPtr(n3), GetVarPtr(n2)));
+			NextOP(3);
+			Var_SetBool(GetVarPtr(pOP->n1), CompareGR(GetVarPtr(pOP->n3), GetVarPtr(pOP->n2)));
 			break;
 		case NOP_LESS_EQ:	// <=
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			Var_SetBool(GetVarPtr(n1), CompareGE(GetVarPtr(n3), GetVarPtr(n2)));
+			NextOP(3);
+			Var_SetBool(GetVarPtr(pOP->n1), CompareGE(GetVarPtr(pOP->n3), GetVarPtr(pOP->n2)));
 			break;
 		case NOP_EQUAL2:	// ==
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			Var_SetBool(GetVarPtr(n1), CompareEQ(GetVarPtr(n2), GetVarPtr(n3)));
+			NextOP(3);
+			Var_SetBool(GetVarPtr(pOP->n1), CompareEQ(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)));
 			break;
 		case NOP_NEQUAL:	// !=
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			Var_SetBool(GetVarPtr(n1), !CompareEQ(GetVarPtr(n2), GetVarPtr(n3)));
+			NextOP(3);
+			Var_SetBool(GetVarPtr(pOP->n1), !CompareEQ(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)));
 			break;
 		case NOP_AND:	// &&
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			Var_SetBool(GetVarPtr(n1), GetVarPtr(n3)->IsTrue() && GetVarPtr(n2)->IsTrue());
+			NextOP(3);
+			Var_SetBool(GetVarPtr(pOP->n1), GetVarPtr(pOP->n3)->IsTrue() && GetVarPtr(pOP->n2)->IsTrue());
 			break;
 		case NOP_OR:	// ||
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			Var_SetBool(GetVarPtr(n1), GetVarPtr(n2)->IsTrue() || GetVarPtr(n3)->IsTrue());
+			NextOP(3);
+			Var_SetBool(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2)->IsTrue() || GetVarPtr(pOP->n3)->IsTrue());
 			break;
 
 
 
 		case NOP_JMP_GREAT:		// >
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			if (true == CompareGR(GetVarPtr(n2), GetVarPtr(n3)))
-				SetCodeIncPtr(n1);
+			NextOP(3);
+			if (true == CompareGR(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)))
+				SetCodeIncPtr(pOP->n1);
 			break;
 		case NOP_JMP_GREAT_EQ:	// >=
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			if (true == CompareGE(GetVarPtr(n2), GetVarPtr(n3)))
-				SetCodeIncPtr(n1);
+			NextOP(3);
+			if (true == CompareGE(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)))
+				SetCodeIncPtr(pOP->n1);
 			break;
 		case NOP_JMP_LESS:		// <
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			if (true == CompareGR(GetVarPtr(n3), GetVarPtr(n2)))
-				SetCodeIncPtr(n1);
+			NextOP(3);
+			if (true == CompareGR(GetVarPtr(pOP->n3), GetVarPtr(pOP->n2)))
+				SetCodeIncPtr(pOP->n1);
 			break;
 		case NOP_JMP_LESS_EQ:	// <=
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			if (true == CompareGE(GetVarPtr(n3), GetVarPtr(n2)))
-				SetCodeIncPtr(n1);
+			NextOP(3);
+			if (true == CompareGE(GetVarPtr(pOP->n3), GetVarPtr(pOP->n2)))
+				SetCodeIncPtr(pOP->n1);
 			break;
 		case NOP_JMP_EQUAL2:	// ==
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			if (true == CompareEQ(GetVarPtr(n2), GetVarPtr(n3)))
-				SetCodeIncPtr(n1);
+			NextOP(3);
+			if (true == CompareEQ(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)))
+				SetCodeIncPtr(pOP->n1);
 			break;
 		case NOP_JMP_NEQUAL:	// !=
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			if (false == CompareEQ(GetVarPtr(n2), GetVarPtr(n3)))
-				SetCodeIncPtr(n1);
+			NextOP(3);
+			if (false == CompareEQ(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)))
+				SetCodeIncPtr(pOP->n1);
 			break;
 		case NOP_JMP_AND:	// &&
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			if (GetVarPtr(n2)->IsTrue() && GetVarPtr(n3)->IsTrue())
-				SetCodeIncPtr(n1);
+			NextOP(3);
+			if (GetVarPtr(pOP->n2)->IsTrue() && GetVarPtr(pOP->n3)->IsTrue())
+				SetCodeIncPtr(pOP->n1);
 			break;
 		case NOP_JMP_OR:		// ||
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			if (GetVarPtr(n2)->IsTrue() || GetVarPtr(n3)->IsTrue())
-				SetCodeIncPtr(n1);
+			NextOP(3);
+			if (GetVarPtr(pOP->n2)->IsTrue() || GetVarPtr(pOP->n3)->IsTrue())
+				SetCodeIncPtr(pOP->n1);
 			break;
 		case NOP_JMP_NAND:	// !(&&)
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			if (false == (GetVarPtr(n2)->IsTrue() && GetVarPtr(n3)->IsTrue()))
-				SetCodeIncPtr(n1);
+			NextOP(3);
+			if (false == (GetVarPtr(pOP->n2)->IsTrue() && GetVarPtr(pOP->n3)->IsTrue()))
+				SetCodeIncPtr(pOP->n1);
 			break;
 		case NOP_JMP_NOR:	// !(||)
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			if (false == (GetVarPtr(n2)->IsTrue() || GetVarPtr(n3)->IsTrue()))
-				SetCodeIncPtr(n1);
+			NextOP(3);
+			if (false == (GetVarPtr(pOP->n2)->IsTrue() || GetVarPtr(pOP->n3)->IsTrue()))
+				SetCodeIncPtr(pOP->n1);
 			break;
 		case NOP_JMP_FOREACH:	// foreach
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			if(ForEach(GetVarPtr(n2), GetVarPtr(n3), GetVarPtr(n3+1)))
-				SetCodeIncPtr(n1);
+			NextOP(3);
+			if(ForEach(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3), GetVarPtr(pOP->n3+1)))
+				SetCodeIncPtr(pOP->n1);
 			break;
 
 		case NOP_STR_ADD:	// ..
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			Var_SetString(GetVarPtr(n1), (ToString(GetVarPtr(n2)) + ToString(GetVarPtr(n3))).c_str());
+			NextOP(3);
+			Var_SetString(GetVarPtr(pOP->n1), (ToString(GetVarPtr(pOP->n2)) + ToString(GetVarPtr(pOP->n3))).c_str());
 			break;
 
 		case NOP_TOSTRING:
-			n1 = GetS16(); n2 = GetS16();
-			Var_SetString(GetVarPtr(n1), ToString(GetVarPtr(n2)).c_str());
+			NextOP(2);
+			Var_SetString(GetVarPtr(pOP->n1), ToString(GetVarPtr(pOP->n2)).c_str());
 			break;
 		case NOP_TOINT:
-			n1 = GetS16(); n2 = GetS16();
-			Var_SetInt(GetVarPtr(n1), ToInt(GetVarPtr(n2)));
+			NextOP(2);
+			Var_SetInt(GetVarPtr(pOP->n1), ToInt(GetVarPtr(pOP->n2)));
 			break;
 		case NOP_TOFLOAT:
-			n1 = GetS16(); n2 = GetS16();
-			Var_SetFloat(GetVarPtr(n1), ToFloat(GetVarPtr(n2)));
+			NextOP(2);
+			Var_SetFloat(GetVarPtr(pOP->n1), ToFloat(GetVarPtr(pOP->n2)));
 			break;
 		case NOP_TOSIZE:
-			n1 = GetS16(); n2 = GetS16();
-			Var_SetInt(GetVarPtr(n1), ToSize(GetVarPtr(n2)));
+			NextOP(2);
+			Var_SetInt(GetVarPtr(pOP->n1), ToSize(GetVarPtr(pOP->n2)));
 			break;
 		case NOP_GETTYPE:
-			n1 = GetS16(); n2 = GetS16();
-			Var_SetString(GetVarPtr(n1), GetType(GetVarPtr(n2)).c_str());
+			NextOP(2);
+			Var_SetString(GetVarPtr(pOP->n1), GetType(GetVarPtr(pOP->n2)).c_str());
 			break;
 		case NOP_SLEEP:
-			n1 = GetS16();
-			if (Sleep(iTimeout, GetVarPtr(n1)))
+			NextOP(1);
+			if (Sleep(iTimeout, GetVarPtr(pOP->n1)))
 			{
 				_preClock = clock();
 				return true;
@@ -1216,28 +1219,29 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 			break;
 
 		case NOP_JMP:
-			n1 = GetS16();
-			SetCodeIncPtr(n1);
+			NextOP(1);
+			SetCodeIncPtr(pOP->n1);
 			break;
 		case NOP_JMP_FALSE:
-			n1 = GetS16(); n2 = GetS16();
-			if (false == GetVarPtr(n1)->IsTrue())
-				SetCodeIncPtr(n2);
+			NextOP(2);
+			if (false == GetVarPtr(pOP->n1)->IsTrue())
+				SetCodeIncPtr(pOP->n2);
 			break;
 		case NOP_JMP_TRUE:
-			n1 = GetS16(); n2 = GetS16();
-			if (true == GetVarPtr(n1)->IsTrue())
-				SetCodeIncPtr(n2);
+			NextOP(2);
+			if (true == GetVarPtr(pOP->n1)->IsTrue())
+				SetCodeIncPtr(pOP->n2);
 			break;
 
 		case NOP_CALL:
-			n1 = GetS16(); n2 = GetS16();
+			NextOP(2);
+			// n2 is Arg Count not use
 			callStack._iReturnOffset = GetCodeptr();
 			callStack._iSP_Vars = _iSP_Vars;
 			callStack._iSP_VarsMax = iSP_VarsMax;
 			m_sCallStack.push_back(callStack);
 
-			fun = _pVM->m_sFunctionPtr[n1];
+			fun = _pVM->m_sFunctionPtr[pOP->n1];
 			SetCodePtr(fun._codePtr);
 			_iSP_Vars = iSP_VarsMax;
 			iSP_VarsMax = _iSP_Vars + fun._localAddCount;
@@ -1246,11 +1250,12 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 			break;
 		case NOP_FARCALL:
 		{
-			n1 = GetS16(); n2 = GetS16();
+			NextOP(2);
+			short n2 = pOP->n2;
 			if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n2))
 				_iSP_Vars_Max2 = iSP_VarsMax + (1 + n2);
 
-			fun = _pVM->m_sFunctionPtr[n1];
+			fun = _pVM->m_sFunctionPtr[pOP->n1];
 			if (fun._fun._func == NULL)
 			{	// Error
 				SetError("Ptr Call is null");
@@ -1270,11 +1275,14 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 			break;
 		}
 		case NOP_PTRCALL:
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
+		{
+			NextOP(3);
+			short n3 = pOP->n3;
+
 			if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n3))
 				_iSP_Vars_Max2 = iSP_VarsMax + (1 + n3);
 
-			pFunctionPtrNative = GetPtrFunction(GetVarPtr(n1), GetVarPtr(n2));
+			pFunctionPtrNative = GetPtrFunction(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
 			if (pFunctionPtrNative != NULL)
 			{
 				int iSave = _iSP_Vars;
@@ -1294,12 +1302,13 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 				break;
 			}
 			break;
+		}
 		case NOP_RETURN:
-			n1 = GetS16();
-			if (n1 == 0)
+			NextOP(1);
+			if (pOP->n1 == 0)
 				Var_Release(&m_sVarStack[_iSP_Vars]); // Clear
 			else
-				Move(&m_sVarStack[_iSP_Vars], GetVarPtr(n1));
+				Move(&m_sVarStack[_iSP_Vars], GetVarPtr(pOP->n1));
 
 			if (m_sCallStack.empty())
 			{
@@ -1315,6 +1324,7 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 			iSP_VarsMax = callStack._iSP_VarsMax;
 			break;
 		case NOP_FUNEND:
+			NextOP(0);
 			Var_Release(&m_sVarStack[_iSP_Vars]); // Clear
 			if (m_sCallStack.empty())
 			{
@@ -1330,42 +1340,40 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 			iSP_VarsMax = callStack._iSP_VarsMax;
 			break;
 		case NOP_TABLE_ALLOC:
-			n1 = GetS16();
-			Var_SetTable(GetVarPtr(n1), _pVM->TableAlloc());
+			NextOP(1);
+			Var_SetTable(GetVarPtr(pOP->n1), _pVM->TableAlloc());
 			break;
 		case NOP_TABLE_INSERT:
 		{
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			TableInsert(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
+			NextOP(3);
+			TableInsert(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
 			break;
 		}
 		case NOP_TABLE_READ:
 		{
-			n1 = GetS16(); n2 = GetS16(); n3 = GetS16();
-			TableRead(GetVarPtr(n1), GetVarPtr(n2), GetVarPtr(n3));
+			NextOP(3);
+			TableRead(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
 			break;
 		}
 		case NOP_TABLE_REMOVE:
 		{
-			n1 = GetS16(); n2 = GetS16();
-			TableRemove(GetVarPtr(n1), GetVarPtr(n2));
+			NextOP(2);
+			TableRemove(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
 			break;
 		}
 		default:
+			NextOP(0);
 			SetError("Unkonwn OP");
 			break;
 		}
 		if (_pVM->_pErrorMsg != NULL)
 		{
-			SetCodePtr(iCodeOffset);
-			dbg._data = GetU16();
-
 			m_sCallStack.clear();
 			_iSP_Vars = 0;
 #ifdef _WIN32
-			sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pVM->_pErrorMsg, dbg._lineseq);
+			sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pVM->_pErrorMsg, pOP->dbg._lineseq);
 #else
-			sprintf(chMsg, "%s : Line (%d)", _pVM->_pErrorMsg, dbg._lineseq);
+			sprintf(chMsg, "%s : Line (%d)", _pVM->_pErrorMsg, pOP->dbg._lineseq);
 #endif
 			_pVM->_sErrorMsgDetail = chMsg;
 			return false;

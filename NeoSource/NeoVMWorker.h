@@ -224,6 +224,15 @@ private:
 		_iCodeOffset = 0;
 	}
 
+	inline void*			GetCurPtr()
+	{
+		return (_pCodePtr + _iCodeOffset);
+	}
+	inline void				NextOP(int n)
+	{
+		_iCodeOffset += 1 + ((n + 1) * 2);
+	}
+
 	inline	u8				GetU8()
 	{
 		return *(_pCodePtr + _iCodeOffset++);
