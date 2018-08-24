@@ -512,7 +512,7 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			arRead >> n1 >> n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			OutAsm("ToSizes [%d] = [%d]\n", n1, n2);
+			OutAsm("ToSize [%d] = [%d]\n", n1, n2);
 			break;
 		case NOP_GETTYPE:
 			arRead >> n1 >> n2;

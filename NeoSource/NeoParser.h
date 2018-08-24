@@ -243,6 +243,9 @@ struct SFunctionInfo
 				case NOP_TOSIZE:
 				case NOP_GETTYPE:
 
+				case NOP_TABLE_ALLOC:
+				case NOP_STR_ADD:
+
 				case NOP_GREAT:		// >
 				case NOP_GREAT_EQ:	// >=
 				case NOP_LESS:		// <
