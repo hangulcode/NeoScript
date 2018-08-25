@@ -1145,7 +1145,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				return TK_NONE;
 			}
 			funs._cur.Push_JMP(ar, 0);
-			pJumps->push_back(SJumpValue(funs._cur._code.GetBufferOffset() - 2, funs._cur._code.GetBufferOffset()));
+			pJumps->push_back(SJumpValue(funs._cur._code->GetBufferOffset() - 2, funs._cur._code->GetBufferOffset()));
 			break;
 		case TK_L_MIDDLE:
 			iTempOffset.Reset();
@@ -1430,9 +1430,9 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 
 	funs._cur.Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
-	SJumpValue jmp1(funs._cur._code.GetBufferOffset() - 2, funs._cur._code.GetBufferOffset());
+	SJumpValue jmp1(funs._cur._code->GetBufferOffset() - 2, funs._cur._code->GetBufferOffset());
 
-	int PosLoopTop = funs._cur._code.GetBufferOffset(); // Loop 의 맨위
+	int PosLoopTop = funs._cur._code->GetBufferOffset(); // Loop 의 맨위
 
 	// For Check
 	int Pos1 = PosLoopTop;
@@ -1444,7 +1444,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 	}
 	int iStackCheckVar = iTempOffset._iVar;
-	int Pos2 = funs._cur._code.GetBufferOffset();
+	int Pos2 = funs._cur._code->GetBufferOffset();
 	NOP_TYPE opCheck = funs._cur.GetLastOP();
 	bool isCheckOPOpt = false;
 	NOP_TYPE opOpz = NOP_NONE;
@@ -1456,15 +1456,15 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			isCheckOPOpt = true;
 		}
 	}
-	funs._cur._code.SetPointer(Pos1, SEEK_SET);
+	funs._cur._code->SetPointer(Pos1, SEEK_SET);
 	int iCheckCodeSize = Pos2 - Pos1;
 	if (iCheckCodeSize > sizeof(byTempCheck))
 	{
 		DebugLog("Error (%d, %d): Check Size Over %d", ar.CurLine(), ar.CurCol(), iCheckCodeSize);
 		return false;
 	}
-	funs._cur._code.Read(byTempCheck, iCheckCodeSize);
-	funs._cur._code.SetPointer(Pos1, SEEK_SET);
+	funs._cur._code->Read(byTempCheck, iCheckCodeSize);
+	funs._cur._code->SetPointer(Pos1, SEEK_SET);
 
 	// For Increase
 	iTempOffset = INVALID_ERROR_PARSEJOB;
@@ -1474,16 +1474,16 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		DebugLog("Error (%d, %d): for Inc", ar.CurLine(), ar.CurCol());
 		return false;
 	}
-	Pos2 = funs._cur._code.GetBufferOffset();
-	funs._cur._code.SetPointer(Pos1, SEEK_SET);
+	Pos2 = funs._cur._code->GetBufferOffset();
+	funs._cur._code->SetPointer(Pos1, SEEK_SET);
 	int iIncCodeSize = Pos2 - Pos1;
 	if (iIncCodeSize > sizeof(byTempInc))
 	{
 		DebugLog("Error (%d, %d): Inc Size Over %d", ar.CurLine(), ar.CurCol(), iIncCodeSize);
 		return false;
 	}
-	funs._cur._code.Read(byTempInc, iIncCodeSize);
-	funs._cur._code.SetPointer(Pos1, SEEK_SET);
+	funs._cur._code->Read(byTempInc, iIncCodeSize);
+	funs._cur._code->SetPointer(Pos1, SEEK_SET);
 
 	//	for {} Process
 	std::vector<SJumpValue> sJumps;
@@ -1505,24 +1505,24 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			return false;
 	}
 
-	funs._cur._code.Write(byTempInc, iIncCodeSize);
+	funs._cur._code->Write(byTempInc, iIncCodeSize);
 
-	funs._cur.Set_JumpOffet(jmp1, funs._cur._code.GetBufferOffset());
-	funs._cur._code.Write(byTempCheck, iCheckCodeSize);
+	funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
+	funs._cur._code->Write(byTempCheck, iCheckCodeSize);
 	if(false == isCheckOPOpt)
 		funs._cur.Push_JMPTrue(ar, iStackCheckVar, PosLoopTop);
 	else
 	{
-		funs._cur._code.SetPointer(-7, SEEK_CUR); // OP + n1, n2, n3
-		funs._cur._code.Write(&opOpz, sizeof(opOpz));
-		int cur = funs._cur._code.GetBufferOffset();
+		funs._cur._code->SetPointer(-7, SEEK_CUR); // OP + n1, n2, n3
+		funs._cur._code->Write(&opOpz, sizeof(opOpz));
+		int cur = funs._cur._code->GetBufferOffset();
 		funs._cur.Set_JumpOffet(SJumpValue(cur, cur + 6), PosLoopTop);
-		funs._cur._code.SetPointer(6, SEEK_CUR);
+		funs._cur._code->SetPointer(6, SEEK_CUR);
 	}
 	funs._cur.ClearLastOP();
 
 
-	int forEndPos = funs._cur._code.GetBufferOffset();
+	int forEndPos = funs._cur._code->GetBufferOffset();
 
 	for (int i = 0; i < (int)sJumps.size(); i++)
 	{
@@ -1629,43 +1629,10 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	funs._cur.Push_OP1(ar, NOP_VAR_CLEAR, iKey);
 
 	funs._cur.Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
-	SJumpValue jmp1(funs._cur._code.GetBufferOffset() - 2, funs._cur._code.GetBufferOffset());
+	SJumpValue jmp1(funs._cur._code->GetBufferOffset() - 2, funs._cur._code->GetBufferOffset());
 
-	int PosLoopTop = funs._cur._code.GetBufferOffset(); // Loop 의 맨위
+	int PosLoopTop = funs._cur._code->GetBufferOffset(); // Loop 의 맨위
 
-	/*
-	// For Check
-	int Pos1 = PosLoopTop;
-	iTempOffset.Reset();
-	r = ParseJob(true, iTempOffset, NULL, ar, funs, vars);
-	if (TK_SEMICOLON != r)
-	{
-		DebugLog("Error (%d, %d): for Check", ar.CurLine(), ar.CurCol());
-		return false;
-	}
-	int iStackCheckVar = iTempOffset._iVar;
-	int Pos2 = funs._cur._code.GetBufferOffset();
-	NOP_TYPE opCheck = funs._cur.GetLastOP();
-	bool isCheckOPOpt = false;
-	NOP_TYPE opOpz = NOP_NONE;
-	if (IsTempVar(iStackCheckVar))
-	{
-		opOpz = ConvertCheckOPToOptimize(opCheck);
-		if (opOpz != NOP_NONE)
-		{
-			isCheckOPOpt = true;
-		}
-	}
-	funs._cur._code.SetPointer(Pos1, SEEK_SET);
-	int iCheckCodeSize = Pos2 - Pos1;
-	if (iCheckCodeSize > sizeof(byTempCheck))
-	{
-		DebugLog("Error (%d, %d): Check Size Over %d", ar.CurLine(), ar.CurCol(), iCheckCodeSize);
-		return false;
-	}
-	funs._cur._code.Read(byTempCheck, iCheckCodeSize);
-	funs._cur._code.SetPointer(Pos1, SEEK_SET);
-	*/
 
 	//	foreach {} Process
 	std::vector<SJumpValue> sJumps;
@@ -1687,26 +1654,13 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			return false;
 	}
 
-	//funs._cur._code.Write(byTempInc, iIncCodeSize);
-
-	funs._cur.Set_JumpOffet(jmp1, funs._cur._code.GetBufferOffset());
+	funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
 	funs._cur.Push_JMPForEach(ar, PosLoopTop, iTable, iKey);
 
-	//funs._cur._code.Write(byTempCheck, iCheckCodeSize);
-	//if (false == isCheckOPOpt)
-	//	funs._cur.Push_JMPTrue(ar, iStackCheckVar, PosLoopTop);
-	//else
-	//{
-	//	funs._cur._code.SetPointer(-7, SEEK_CUR); // OP + n1, n2, n3
-	//	funs._cur._code.Write(&opOpz, sizeof(opOpz));
-	//	int cur = funs._cur._code.GetBufferOffset();
-	//	funs._cur.Set_JumpOffet(SJumpValue(cur, cur + 6), PosLoopTop);
-	//	funs._cur._code.SetPointer(6, SEEK_CUR);
-	//}
 	funs._cur.ClearLastOP();
 
 
-	int forEndPos = funs._cur._code.GetBufferOffset();
+	int forEndPos = funs._cur._code->GetBufferOffset();
 
 	for (int i = 0; i < (int)sJumps.size(); i++)
 	{
@@ -1743,9 +1697,9 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 
 	funs._cur.Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
-	SJumpValue jmp1(funs._cur._code.GetBufferOffset() - 2, funs._cur._code.GetBufferOffset());
+	SJumpValue jmp1(funs._cur._code->GetBufferOffset() - 2, funs._cur._code->GetBufferOffset());
 
-	int PosLoopTop = funs._cur._code.GetBufferOffset(); // Loop 의 맨위
+	int PosLoopTop = funs._cur._code->GetBufferOffset(); // Loop 의 맨위
 
 	// While Check
 	int Pos1 = PosLoopTop;
@@ -1757,7 +1711,7 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 	}
 	int iStackCheckVar = iTempOffset._iVar;
-	int Pos2 = funs._cur._code.GetBufferOffset();
+	int Pos2 = funs._cur._code->GetBufferOffset();
 	NOP_TYPE opCheck = funs._cur.GetLastOP();
 	bool isCheckOPOpt = false;
 	NOP_TYPE opOpz = NOP_NONE;
@@ -1769,15 +1723,15 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			isCheckOPOpt = true;
 		}
 	}
-	funs._cur._code.SetPointer(Pos1, SEEK_SET);
+	funs._cur._code->SetPointer(Pos1, SEEK_SET);
 	int iCheckCodeSize = Pos2 - Pos1;
 	if (iCheckCodeSize > sizeof(byTempCheck))
 	{
 		DebugLog("Error (%d, %d): Check Size Over %d", ar.CurLine(), ar.CurCol(), iCheckCodeSize);
 		return false;
 	}
-	funs._cur._code.Read(byTempCheck, iCheckCodeSize);
-	funs._cur._code.SetPointer(Pos1, SEEK_SET);
+	funs._cur._code->Read(byTempCheck, iCheckCodeSize);
+	funs._cur._code->SetPointer(Pos1, SEEK_SET);
 
 
 
@@ -1801,21 +1755,21 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			return false;
 	}
 
-	funs._cur.Set_JumpOffet(jmp1, funs._cur._code.GetBufferOffset());
-	funs._cur._code.Write(byTempCheck, iCheckCodeSize);
+	funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
+	funs._cur._code->Write(byTempCheck, iCheckCodeSize);
 	if (false == isCheckOPOpt)
 		funs._cur.Push_JMPTrue(ar, iStackCheckVar, PosLoopTop);
 	else
 	{
-		funs._cur._code.SetPointer(-7, SEEK_CUR); // OP + n1, n2, n3
-		funs._cur._code.Write(&opOpz, sizeof(opOpz));
-		int cur = funs._cur._code.GetBufferOffset();
+		funs._cur._code->SetPointer(-7, SEEK_CUR); // OP + n1, n2, n3
+		funs._cur._code->Write(&opOpz, sizeof(opOpz));
+		int cur = funs._cur._code->GetBufferOffset();
 		funs._cur.Set_JumpOffet(SJumpValue(cur, cur + 6), PosLoopTop);
-		funs._cur._code.SetPointer(6, SEEK_CUR);
+		funs._cur._code->SetPointer(6, SEEK_CUR);
 	}
 	funs._cur.ClearLastOP();
 
-	int forEndPos = funs._cur._code.GetBufferOffset();
+	int forEndPos = funs._cur._code->GetBufferOffset();
 
 	for (int i = 0; i < (int)sJumps.size(); i++)
 	{
@@ -1873,17 +1827,17 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	if (false == isCheckOPOpt)
 	{
 		funs._cur.Push_JMPFalse(ar, iTempOffset._iVar, 0);
-		jmp1.Set(funs._cur._code.GetBufferOffset() - 2, funs._cur._code.GetBufferOffset());
+		jmp1.Set(funs._cur._code->GetBufferOffset() - 2, funs._cur._code->GetBufferOffset());
 	}
 	else
 	{
-		funs._cur._code.SetPointer(-7, SEEK_CUR); // OP + n1, n2, n3
-		funs._cur._code.Write(&opOpz, sizeof(opOpz));
-		int cur = funs._cur._code.GetBufferOffset();
+		funs._cur._code->SetPointer(-7, SEEK_CUR); // OP + n1, n2, n3
+		funs._cur._code->Write(&opOpz, sizeof(opOpz));
+		int cur = funs._cur._code->GetBufferOffset();
 		funs._cur.Set_JumpOffet(SJumpValue(cur, cur + 6), 0);
-		funs._cur._code.SetPointer(6, SEEK_CUR);
+		funs._cur._code->SetPointer(6, SEEK_CUR);
 
-		jmp1.Set(funs._cur._code.GetBufferOffset() - 6, funs._cur._code.GetBufferOffset());
+		jmp1.Set(funs._cur._code->GetBufferOffset() - 6, funs._cur._code->GetBufferOffset());
 	}
 
 	tkType1 = GetToken(ar, tk1);
@@ -1913,9 +1867,9 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	if (tkType1 == TK_ELSE)
 	{
 		funs._cur.Push_JMP(ar, 0);
-		jmp2.Set(funs._cur._code.GetBufferOffset() - 2, funs._cur._code.GetBufferOffset());
+		jmp2.Set(funs._cur._code->GetBufferOffset() - 2, funs._cur._code->GetBufferOffset());
 
-		funs._cur.Set_JumpOffet(jmp1, funs._cur._code.GetBufferOffset());
+		funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
 
 		tkType1 = GetToken(ar, tk1);
 		if (tkType1 == TK_IF)
@@ -1944,12 +1898,12 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 				return false;
 			}
 		}
-		funs._cur.Set_JumpOffet(jmp2, funs._cur._code.GetBufferOffset());
+		funs._cur.Set_JumpOffet(jmp2, funs._cur._code->GetBufferOffset());
 	}
 	else
 	{
 		PushToken(tkType1, tk1);
-		funs._cur.Set_JumpOffet(jmp1, funs._cur._code.GetBufferOffset());
+		funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
 	}
 
 	return true;
@@ -2048,7 +2002,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			int iVar = funs._cur.GetN(funs._cur._iLastOPOffset, 0);
 			if (IsTempVar(iVar))
 			{
-				funs._cur._code.SetPointer(funs._cur._iLastOPOffset - sizeof(debug_info), SEEK_SET);
+				funs._cur._code->SetPointer(funs._cur._iLastOPOffset - sizeof(debug_info), SEEK_SET);
 				funs._cur.ClearLastOP();
 			}
 		}
@@ -2094,7 +2048,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				return TK_NONE;
 			}
 			funs._cur.Push_JMP(ar, 0);
-			pJumps->push_back(SJumpValue(funs._cur._code.GetBufferOffset() - 2, funs._cur._code.GetBufferOffset()));
+			pJumps->push_back(SJumpValue(funs._cur._code->GetBufferOffset() - 2, funs._cur._code->GetBufferOffset()));
 			break;
 		case TK_IMPORT:
 			funType = FUNT_IMPORT;
@@ -2119,6 +2073,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 
 					funs._cur._name = tk2;
 					funs._cur._funType = funType;
+					funs._cur._code = &funs._codeLocal;
 					if (false == ParseFunction(ar, funs, vars))
 						return false;
 
@@ -2181,23 +2136,11 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
-	int iLenTemp = 1 * 1024 * 1024;
-	u8* pCodeTemp = new u8[iLenTemp];
-	funs._cur._code.SetData(pCodeTemp, iLenTemp);
-
 	if (false == ParseMiddleArea(NULL, ar, funs, vars))
 		return false;
 
 	funs._cur.Push_FUNEND(ar);
 
-	int iLenCode = funs._cur._code.GetBufferOffset();
-	u8* pCode = new u8[iLenCode + 1];
-	memcpy(pCode, pCodeTemp, iLenCode);
-
-	funs._cur._code.SetData(pCode, iLenCode);
-	funs._cur._code.SetPointer(iLenCode, SEEK_SET);
-
-	delete pCodeTemp;
 	return true;
 }
 bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
@@ -2228,10 +2171,11 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	funs._cur._funID = (int)funs._funs.size() + 1;
 	funs._funs[funs._cur._name] = funs._cur; // 이름 먼저 등록
-
+	funs._cur._iCode_Begin = funs._cur._code->GetBufferOffset();
 	if (false == ParseFunctionBody(ar, funs, vars))
 		return false;
 
+	funs._cur._iCode_Size = funs._cur._code->GetBufferOffset() - funs._cur._iCode_Begin;
 	auto it = funs._funs.find(funs._cur._name);
 	(*it).second = funs._cur;
 
@@ -2251,6 +2195,7 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	SFunctions funs;
 	funs._cur._funID = 0;
 	funs._cur._name = GLOBAL_INIT_FUN_NAME;
+	funs._cur._code = &funs._codeGlobal;
 	funs._cur.Clear();
 
 	SLayerVar* pCurLayer = AddVarsFunction(vars);
@@ -2258,6 +2203,7 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	funs.AddStaticString("system");
 
 	bool r = ParseFunctionBody(ar, funs, vars);
+	funs._cur._iCode_Size = funs._cur._code->GetBufferOffset();
 
 	if (true == r)
 	{
@@ -2274,47 +2220,28 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	return r;
 }
 
-bool CNeoVM::Compile(void* pBufferSrc, int iLenSrc, void* pBufferCode, int iLenCode, int* pLenCode, bool putASM, bool allowGlobalInitLogic)
+bool CNeoVM::Compile(void* pBufferSrc, int iLenSrc, CNArchive& arw, bool putASM, bool allowGlobalInitLogic)
 {
 	CArchiveRdWC ar2;
 	ToArchiveRdWC((const char*)pBufferSrc, iLenSrc, ar2);
 	ar2._allowGlobalInitLogic = allowGlobalInitLogic;
 
-	CNArchive arw;
-	arw.SetData(pBufferCode, iLenCode);
 
-	bool r = Parse(ar2, arw, putASM);
-	if (r)
-		*pLenCode = arw.GetBufferOffset();
-	return r;
+	return Parse(ar2, arw, putASM);
 }
 CNeoVM*	CNeoVM::CompileAndLoadVM(void* pBufferSrc, int iLenSrc, bool putASM, bool allowGlobalInitLogic)
 {
-	u8 stack_buffer[20 * 1024];
-	int iCodeTempLen = sizeof(stack_buffer);
-	u8* bytecode = stack_buffer;
-	bool isAlloc = false;
-	if (iLenSrc >= sizeof(bytecode) / 2)
-	{
-		iCodeTempLen = iLenSrc * 2;
-		bytecode = new u8[iCodeTempLen];
-		isAlloc = true;
-	}
+	CNArchive arCode;
 
-	int iCodeLen = 0;
-	if (false == Compile(pBufferSrc, iLenSrc, bytecode, iCodeTempLen, &iCodeLen, putASM, allowGlobalInitLogic))
+	if (false == Compile(pBufferSrc, iLenSrc, arCode, putASM, allowGlobalInitLogic))
 	{
-		if (isAlloc)
-			delete[] bytecode;
 		return NULL;
 	}
 
 	if(putASM)
-		DebugLog("Comile Success. Code : %d bytes !!\n\n", iCodeLen);
+		DebugLog("Comile Success. Code : %d bytes !!\n\n", arCode.GetBufferOffset());
 
-	CNeoVM* pVM = CNeoVM::LoadVM(bytecode, iCodeLen);
-	if (isAlloc)
-		delete[] bytecode;
+	CNeoVM* pVM = CNeoVM::LoadVM(arCode.GetData(), arCode.GetBufferOffset());
 
 	return pVM;
 }

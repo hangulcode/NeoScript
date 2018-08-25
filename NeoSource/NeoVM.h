@@ -1,7 +1,7 @@
 #pragma once
 
 #include "NeoVMWorker.h"
-
+class CNArchive;
 class CNeoVM
 {
 	friend					CNeoVMWorker;
@@ -145,7 +145,7 @@ public:
 
 	static CNeoVM*	LoadVM(void* pBuffer, int iSize);
 	static void		ReleaseVM(CNeoVM* pVM);
-	static bool		Compile(void* pBufferSrc, int iLenSrc, void* pBufferCode, int iLenCode, int* pLenCode, bool putASM = false, bool allowGlobalInitLogic = true);
+	static bool		Compile(void* pBufferSrc, int iLenSrc, CNArchive& arw, bool putASM = false, bool allowGlobalInitLogic = true);
 
 	static CNeoVM*	CompileAndLoadVM(void* pBufferSrc, int iLenSrc, bool putASM = false, bool allowGlobalInitLogic = true);
 };

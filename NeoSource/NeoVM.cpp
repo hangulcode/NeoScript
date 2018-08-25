@@ -319,7 +319,11 @@ CNeoVM::CNeoVM()
 }
 CNeoVM::~CNeoVM()
 {
-
+	if (_pCodePtr != NULL)
+	{
+		delete [] _pCodePtr;
+		_pCodePtr = NULL;
+	}
 }
 
 void CNeoVM::SetError(const char* pErrMsg)

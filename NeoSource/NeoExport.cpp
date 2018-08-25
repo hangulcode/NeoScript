@@ -76,7 +76,7 @@ void WriteFun(CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, s
 	int staticCount = (int)funs._staticVars.size();
 	int localCount = fi._localVarCount;
 
-	CNArchive arRead(fi._code.GetData(), fi._code.GetBufferSize());
+	CNArchive arRead((u8*)fi._code->GetData() + fi._iCode_Begin, fi._iCode_Size);
 	arRead.SetPointer(0, SEEK_SET);
 
 	short n1, n2, n3;
@@ -258,7 +258,7 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 	if (fi._funType == FUNT_IMPORT)
 		return;
 
-	CNArchive arRead(fi._code.GetData(), fi._code.GetBufferSize());
+	CNArchive arRead((u8*)fi._code->GetData() + fi._iCode_Begin, fi._iCode_Size);
 	arRead.SetPointer(0, SEEK_SET);
 
 	short n1, n2, n3;
