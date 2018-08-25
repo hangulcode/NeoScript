@@ -53,7 +53,7 @@ int main()
 				pVM->ClearLastErrorMsg();
 			}
 			else
-				printf("Sum %d + %d = %lf (Elapse:%d)\n", 100, i, r, t2 - t1);
+				printf("Sum 1 ~ = %lf (Elapse:%d)\n", r, t2 - t1);
 		}
 		CNeoVM::ReleaseVM(pVM);
 	}
