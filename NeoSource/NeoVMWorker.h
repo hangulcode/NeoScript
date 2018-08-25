@@ -448,27 +448,24 @@ public:
 	}
 
 	template<typename RVal, typename ... Types>
-	RVal Call_TL(int iTimeout, int iCheckOpCount, int iFID, Types ... args)
+	bool Call_TL(int iTimeout, int iCheckOpCount, RVal* r, int iFID, Types ... args)
 	{
 		ClearArgs();
 		PushArgs(args...);
 		//RunFunction(funName, );
-		if (iFID >= 0)
-		{
-			if (Setup(iFID))
-			{
-				Run(iTimeout, iCheckOpCount);
-				if (_isSetup == false)
-				{
-					GC();
-					return _read<RVal>(&m_sVarStack[_iSP_Vars]);
-				}
-			}
+		if (false == Setup(iFID))
+			return false;
+
+		Run(iTimeout, iCheckOpCount);
+		if (_isSetup == true)
+		{	// yet ... not completed
+			GC();
+			return false;
 		}
 
 		GC();
-		Var_Release(&m_sVarStack[_iSP_Vars]);
-		return _read<RVal>(&m_sVarStack[_iSP_Vars]);
+		*r = _read<RVal>(&m_sVarStack[_iSP_Vars]);
+		return true;
 	}
 
 	static void neo_pushcclosureNative(FunctionPtrNative* pOut, Neo_NativeFunction pFun)

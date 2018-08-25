@@ -130,16 +130,16 @@ public:
 	}
 
 	template<typename RVal, typename ... Types>
-	RVal Call_TL(int iTimeout, int iCheckOpCount, const std::string& funName, Types ... args) // Time Limit
+	bool Call_TL(int iTimeout, int iCheckOpCount, RVal* r, const std::string& funName, Types ... args) // Time Limit
 	{
 		int iFID = -1;
 		auto it = m_sImExportTable.find(funName);
-		if (it != m_sImExportTable.end())
-		{
-			iFID = (*it).second;
-		}
+		if (it == m_sImExportTable.end())
+			return false;
 
-		return _pMainWorker->Call_TL<RVal>(iTimeout, iCheckOpCount, iFID, args...);
+		iFID = (*it).second;
+
+		return _pMainWorker->Call_TL<RVal>(iTimeout, iCheckOpCount, r, iFID, args...);
 	}
 
 	u32 CreateWorker();
