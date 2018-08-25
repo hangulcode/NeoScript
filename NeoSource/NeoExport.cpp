@@ -8,11 +8,11 @@ void	DebugLog(const char*	lpszString, ...);
 
 void ChangeIndex(int staticCount, int localCount, int curFunStatkSize, short& n)
 {
-	if (n == COMPILE_VAR_NULL)
-	{
-		DebugLog("Change Index Error COMPILE_VAR_NULL");
-		return;
-	}
+	//if (n == COMPILE_VAR_NULL)
+	//{
+	//	DebugLog("Change Index Error COMPILE_VAR_NULL");
+	//	return;
+	//}
 	if (n == STACK_POS_RETURN)
 	{
 		n = curFunStatkSize;

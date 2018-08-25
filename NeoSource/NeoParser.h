@@ -10,7 +10,7 @@
 #define COMPILE_STATIC_VAR_BEGIN		(15000)
 #define COMPILE_GLObAL_VAR_BEGIN		(20000)
 #define COMPILE_CALLARG_VAR_BEGIN		(30000) // 256 개 이상 나오지 않는다.
-#define COMPILE_VAR_NULL				(32766)
+//#define COMPILE_VAR_NULL				(32766)
 #define STACK_POS_RETURN				(32767)
 
 bool IsTempVar(int iVar);
@@ -248,6 +248,8 @@ struct SFunctionInfo
 				case NOP_TABLE_ALLOC:
 				case NOP_STR_ADD:
 
+				case NOP_VAR_CLEAR:
+
 				case NOP_GREAT:		// >
 				case NOP_GREAT_EQ:	// >=
 				case NOP_LESS:		// <
@@ -370,6 +372,24 @@ struct SFunctionInfo
 	}
 	void	Push_TableInsert(CArchiveRdWC& ar, short nTable, short nArray, short nValue)
 	{
+		if (IsTempVar(nValue))
+		{
+			NOP_TYPE preOP = GetLastOP();
+			u8 *pre = (u8*)_code->GetData() + 1 + _iLastOPOffset;
+			short* preDest = (short*)pre;
+			switch (preOP)
+			{
+			case NOP_VAR_CLEAR:
+				if (*preDest == nValue)
+				{
+					_code->SetPointer(_iLastOPOffset - sizeof(debug_info), SEEK_SET);
+					Push_TableRemove(ar, nTable, nArray);
+					return;
+				}
+				break;
+			}
+		}
+
 		debug_info dbg(ar.CurFile(), ar.CurLine());
 		_code->Write(&dbg, sizeof(dbg));
 		_iLastOPOffset = _code->GetBufferOffset();

@@ -1156,7 +1156,9 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			break;
 
 		case TK_NULL:
-			iTempOffset._iVar = COMPILE_VAR_NULL;
+			//iTempOffset._iVar = COMPILE_VAR_NULL;
+			iTempOffset._iVar = funs._cur.AllocLocalTempVar();
+			funs._cur.Push_OP1(ar, NOP_VAR_CLEAR, iTempOffset._iVar);
 			operands.push_back(SOperand(iTempOffset._iVar));
 			blApperOperator = true;
 			break;
@@ -1265,15 +1267,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 					return TK_NONE;
 				}
 			}
-
-			if (b._iVar == COMPILE_VAR_NULL)
-			{
-				if (a._iArrayIndex == INVALID_ERROR_PARSEJOB)
-					funs._cur.Push_OP1(ar, NOP_VAR_CLEAR, b._iVar);
-				else
-					funs._cur.Push_TableRemove(ar, a._iVar, a._iArrayIndex);
-			}
-			else if (b._iArrayIndex == INVALID_ERROR_PARSEJOB)
+			if (b._iArrayIndex == INVALID_ERROR_PARSEJOB)
 			{
 				if(a._iArrayIndex == INVALID_ERROR_PARSEJOB)
 					funs._cur.Push_MOV(ar, op, a._iVar, b._iVar);

@@ -100,6 +100,13 @@ void CNeoVMWorker::TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue
 		SetError("TableInsert Error");
 		return;
 	}
+
+	if (pValue->GetType() == VAR_NONE)
+	{
+		TableRemove(pTable, pArray);
+		return;
+	}
+
 	switch (pArray->GetType())
 	{
 	case VAR_INT:
@@ -666,7 +673,16 @@ bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float == v2->_float;
 	}
-	SetError("CompareEQ Error");
+	else if (v1->GetType() == VAR_BOOL)
+	{
+		if (v2->GetType() == VAR_BOOL)
+			return v1->_bl == v2->_bl;
+	}
+	else if (v1->GetType() == VAR_NONE)
+	{
+		if (v2->GetType() == VAR_NONE)
+			return true;
+	}
 	return false;
 }
 bool CNeoVMWorker::CompareGR(VarInfo* v1, VarInfo* v2)
