@@ -900,7 +900,7 @@ int CNeoVMWorker::ToSize(VarInfo* v1)
 	case VAR_FLOAT:
 		return 0;
 	case VAR_STRING:
-		return v1->_str->_str.length();
+		return (int)v1->_str->_str.length();
 	case VAR_TABLE:
 		return (int)v1->_tbl->_intMap.size() + (int)v1->_tbl->_strMap.size();
 	case VAR_PTRFUN:

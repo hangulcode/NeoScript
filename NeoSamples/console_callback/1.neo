@@ -1,0 +1,27 @@
+
+
+import fun Mul(var a, var b);
+import fun Sample1();
+
+
+
+fun Sum1(var a, var b)
+{
+	return a + b;
+}
+
+
+export fun Sum(var a, var b)
+{
+	Sample1();
+
+	var sum_1 = Sum1(a, b);
+	system.print(sum_1 .. "\n");
+
+	var mul_1 = Mul(a, b);
+	system.print(mul_1 .. "\n");
+
+
+
+	return sum_1 + mul_1;
+}
