@@ -30,16 +30,6 @@ private:
 	CNeoVMWorker*			_pMainWorker;
 	std::map<u32, CNeoVMWorker*> _sVMWorkers;
 
-	inline VarInfo* GetVarPtr(short n)
-	{
-		if (n >= 0)
-		{
-			return NULL;
-		}
-		return &m_sVarGlobal[-n - 1];
-	}
-
-
 	void Var_AddRef(VarInfo *d);
 	void Var_Release(VarInfo *d);
 	void Var_SetString(VarInfo *d, const char* str);
@@ -156,5 +146,7 @@ public:
 	static CNeoVM*	LoadVM(void* pBuffer, int iSize);
 	static void		ReleaseVM(CNeoVM* pVM);
 	static bool		Compile(void* pBufferSrc, int iLenSrc, void* pBufferCode, int iLenCode, int* pLenCode, bool putASM = false, bool allowGlobalInitLogic = true);
+
+	static CNeoVM*	CompileAndLoadVM(void* pBufferSrc, int iLenSrc, bool putASM = false, bool allowGlobalInitLogic = true);
 };
 

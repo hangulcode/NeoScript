@@ -34,34 +34,25 @@ int main()
 	}
 
 
-	int iCodeTempLen = 1 * 1024 * 1024;
-	BYTE* pCodeTemp = new BYTE[iCodeTempLen];
-
-	int iCodeLen = 0;
-	if (CNeoVM::Compile(pFileBuffer, iFileLen, pCodeTemp, iCodeTempLen, &iCodeLen, true) == TRUE)
+	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, true);
+	if (pVM != NULL)
 	{
-		printf("Comile Success. Code : %d bytes !!\n", iCodeLen);
-		CNeoVM* pVM = CNeoVM::LoadVM(pCodeTemp, iCodeLen);
-		if (NULL != pVM)
+		for (int i = 0; i < 1; i++)
 		{
-			for (int i = 0; i < 1; i++)
+			DWORD t1 = GetTickCount();
+			pVM->Call<void>("main");
+			DWORD t2 = GetTickCount();
+			if (pVM->IsLastErrorMsg())
 			{
-				DWORD t1 = GetTickCount();
-				pVM->Call<void>("main");
-				DWORD t2 = GetTickCount();
-				if (pVM->IsLastErrorMsg())
-				{
-					printf("\nError - VM Call : %s (Elapse:%d)", pVM->GetLastErrorMsg(), t2 - t1);
-					pVM->ClearLastErrorMsg();
-				}
-				else
-					printf("\n(Elapse:%d)", t2 - t1);
+				printf("\nError - VM Call : %s (Elapse:%d)", pVM->GetLastErrorMsg(), t2 - t1);
+				pVM->ClearLastErrorMsg();
 			}
-			CNeoVM::ReleaseVM(pVM);
+			else
+				printf("\n(Elapse:%d)", t2 - t1);
 		}
+		CNeoVM::ReleaseVM(pVM);
 	}
 	delete[] pFileBuffer;
-	delete[] pCodeTemp;
 
     return 0;
 }

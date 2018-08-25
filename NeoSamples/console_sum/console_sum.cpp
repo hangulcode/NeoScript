@@ -45,39 +45,34 @@ int main()
 		return -1;
 	}
 
-
-	int iCodeTempLen = 1 * 1024 * 1024;
-	BYTE* pCodeTemp = new BYTE[iCodeTempLen];
-
-	int iCodeLen = 0;
-	if (CNeoVM::Compile(pFileBuffer, iFileLen, pCodeTemp, iCodeTempLen, &iCodeLen, true) == TRUE)
+	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, true);
+	if (pVM != NULL)
 	{
-		printf("Comile Success. Code : %d bytes !!\n", iCodeLen);
-		CNeoVM* pVM = CNeoVM::LoadVM(pCodeTemp, iCodeLen);
-		if (NULL != pVM)
-		{
-			pVM->Register("Mul", Mul);
-			pVM->Register("Sample1", Sample1);
+		pVM->Register("Mul", Mul);
+		pVM->Register("Sample1", Sample1);
 			
 
-			for (int i = 1; i < 10; i++)
+		for (int i = 1; i < 10; i++)
+		{
+			DWORD t1 = GetTickCount();
+			double r = 0;
+			bool bCompleted = pVM->Call_TL<double>((i % 2) ? 1800 : 1500, 1000, &r, "Sum", 100, i);
+			DWORD t2 = GetTickCount();
+			if (false == bCompleted)
 			{
-				DWORD t1 = GetTickCount();
-				double r = pVM->Call<double>("Sum", 100, i);
-				DWORD t2 = GetTickCount();
-				if (pVM->IsLastErrorMsg())
-				{
-					printf("\nError - VM Call : %s (Elapse:%d)", pVM->GetLastErrorMsg(), t2 - t1);
-					pVM->ClearLastErrorMsg();
-				}
-				else
-					printf("\nSum %d + %d = %lf (Elapse:%d)", 100, i, r, t2 - t1);
+				printf("\nJob Not Complete");
 			}
-			CNeoVM::ReleaseVM(pVM);
+			if (pVM->IsLastErrorMsg())
+			{
+				printf("\nError - VM Call : %s (Elapse:%d)", pVM->GetLastErrorMsg(), t2 - t1);
+				pVM->ClearLastErrorMsg();
+			}
+			else
+				printf("\nSum %d + %d = %lf (Elapse:%d)", 100, i, r, t2 - t1);
 		}
+		CNeoVM::ReleaseVM(pVM);
 	}
 	delete[] pFileBuffer;
-	delete[] pCodeTemp;
 
     return 0;
 }

@@ -2288,3 +2288,33 @@ bool CNeoVM::Compile(void* pBufferSrc, int iLenSrc, void* pBufferCode, int iLenC
 		*pLenCode = arw.GetBufferOffset();
 	return r;
 }
+CNeoVM*	CNeoVM::CompileAndLoadVM(void* pBufferSrc, int iLenSrc, bool putASM, bool allowGlobalInitLogic)
+{
+	u8 stack_buffer[32 * 1024];
+	int iCodeTempLen = sizeof(stack_buffer);
+	u8* bytecode = stack_buffer;
+	bool isAlloc = false;
+	if (iLenSrc >= sizeof(bytecode) / 2)
+	{
+		iCodeTempLen = iLenSrc * 2;
+		bytecode = new u8[iCodeTempLen];
+		isAlloc = true;
+	}
+
+	int iCodeLen = 0;
+	if (false == Compile(pBufferSrc, iLenSrc, bytecode, iCodeTempLen, &iCodeLen, putASM, allowGlobalInitLogic))
+	{
+		if (isAlloc)
+			delete[] bytecode;
+		return NULL;
+	}
+
+	if(putASM)
+		DebugLog("Comile Success. Code : %d bytes !!\n\n", iCodeLen);
+
+	CNeoVM* pVM = CNeoVM::LoadVM(bytecode, iCodeLen);
+	if (isAlloc)
+		delete[] bytecode;
+
+	return pVM;
+}
