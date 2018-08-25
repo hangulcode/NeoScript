@@ -10,8 +10,8 @@
 ※ 샘플
 	- console_callback : C++ 와 Neo 스크립트 서로 함수 호출 합니다.
 	- console_9_times : 간단한 구구단 샘플 입니다.
-	- console_slice_run : 스크립트로 제작한 부분을 일정시간 or 명령어 만큼 순차적으로 매프레임 실행합니다.
 	- console_table : 테이블 사용법 샘플 입니다.
+	- console_slice_run : 스크립트로 제작한 부분을 일정시간 or 명령어 만큼 순차적으로 매프레임 실행합니다.
 	- console_time_limit : 스크립트 함수 호출을 일정 시간이 지나면 빠져 나오게 처리 합니다.
 		console_slice_run 와 다르게 console_time_limit은 다음 프레임에 이어서 실행 하지 않습니다.
 
