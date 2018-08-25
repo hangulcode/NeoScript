@@ -1,7 +1,7 @@
+var table = {};
 
-export fun main()
+fun sub1()
 {
-	var table = {};
 	table[5] = 3;
 	table[6] = {};
 	table[6][2] = 999;
@@ -13,7 +13,7 @@ export fun main()
 
 	for (var i = 0; i < 10; i++)
 	{
-		if(i % 2 == 0)
+		if (i % 2 == 0)
 			table[i] = {};
 		else
 			table[i] = i;
@@ -22,8 +22,14 @@ export fun main()
 
 	foreach(var a, b in table)
 	{
-		system.print(a ..":".. b .. "\n");
+		system.print(a ..":"..b .. "\n");
 		sleep(200);
 	}
-	system.print("table size : " .. tosize(table).."\n");
+	system.print("table size : " ..tosize(table).."\n");
+}
+
+
+export fun main()
+{
+	sub1();
 }

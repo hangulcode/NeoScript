@@ -5,7 +5,7 @@ export fun slice_fun()
 	{
 		//print("\nHellow Neo Script1");
 		//if(i % 30000 == 0)
-		system.print("\ni : "..i);
+		system.print("\ni : "..i.. " <-- This is script");
 		sleep(1000);
 		//if (i > 100 && i != 10)
 		//	break;
