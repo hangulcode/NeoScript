@@ -2290,7 +2290,7 @@ bool CNeoVM::Compile(void* pBufferSrc, int iLenSrc, void* pBufferCode, int iLenC
 }
 CNeoVM*	CNeoVM::CompileAndLoadVM(void* pBufferSrc, int iLenSrc, bool putASM, bool allowGlobalInitLogic)
 {
-	u8 stack_buffer[32 * 1024];
+	u8 stack_buffer[20 * 1024];
 	int iCodeTempLen = sizeof(stack_buffer);
 	u8* bytecode = stack_buffer;
 	bool isAlloc = false;
