@@ -41,7 +41,7 @@ int main()
 		u32 id = pVM->CreateWorker();
 		if (id == 0)
 		{
-			printf("\nError - CeateWorker %s", "slice_fun");
+			printf("Error - CeateWorker %s", "slice_fun\n");
 			return - 1;
 		}
 
@@ -50,7 +50,7 @@ int main()
 		{
 			if (false == pVM->BindWorkerFunction(id, "slice_fun"))
 			{
-				printf("\nError - BindWorkerFunction %s", "slice_fun");
+				printf("Error - BindWorkerFunction %s\n", "slice_fun");
 				return -1;
 			}
 		}
@@ -66,7 +66,7 @@ int main()
 			DWORD t2 = GetTickCount();
 			if (pVM->IsLastErrorMsg())
 			{
-				printf("\nError - VM Call : %s (Elapse:%d)", pVM->GetLastErrorMsg(), t2 - t1);
+				printf("Error - VM Call : %s (Elapse:%d)\n", pVM->GetLastErrorMsg(), t2 - t1);
 				pVM->ClearLastErrorMsg();
 			}
 			else
@@ -74,7 +74,7 @@ int main()
 				DWORD dwNext = GetTickCount();
 				if (dwNext - dwPre > 500)
 				{
-					printf("\nSlide Run %d (Elapse:%d)", i++, t2 - t1);
+					printf("Slide Run %d (Elapse:%d)\n", i++, t2 - t1);
 					dwPre = dwNext;
 				}
 			}

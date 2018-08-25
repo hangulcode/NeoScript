@@ -44,11 +44,11 @@ int main()
 			DWORD t2 = GetTickCount();
 			if (pVM->IsLastErrorMsg())
 			{
-				printf("\nError - VM Call : %s (Elapse:%d)", pVM->GetLastErrorMsg(), t2 - t1);
+				printf("Error - VM Call : %s (Elapse:%d)\n", pVM->GetLastErrorMsg(), t2 - t1);
 				pVM->ClearLastErrorMsg();
 			}
 			else
-				printf("\n(Elapse:%d)", t2 - t1);
+				printf("(Elapse:%d)\n", t2 - t1);
 		}
 		CNeoVM::ReleaseVM(pVM);
 	}

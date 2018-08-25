@@ -45,15 +45,15 @@ int main()
 			DWORD t2 = GetTickCount();
 			if (false == bCompleted)
 			{
-				printf("\nJob Not Completed");
+				printf("Job Not Completed\n");
 			}
 			if (pVM->IsLastErrorMsg())
 			{
-				printf("\nError - VM Call : %s (Elapse:%d)", pVM->GetLastErrorMsg(), t2 - t1);
+				printf("Error - VM Call : %s (Elapse:%d)\n", pVM->GetLastErrorMsg(), t2 - t1);
 				pVM->ClearLastErrorMsg();
 			}
 			else
-				printf("\nSum %d + %d = %lf (Elapse:%d)", 100, i, r, t2 - t1);
+				printf("Sum %d + %d = %lf (Elapse:%d)\n", 100, i, r, t2 - t1);
 		}
 		CNeoVM::ReleaseVM(pVM);
 	}

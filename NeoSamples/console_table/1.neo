@@ -1,7 +1,7 @@
-var table = {};
 
 fun sub1()
 {
+	var table = {};
 	table[5] = 3;
 	table[6] = {};
 	table[6][2] = 999;
@@ -25,7 +25,7 @@ fun sub1()
 		system.print(a ..":"..b .. "\n");
 		sleep(200);
 	}
-	system.print("table size : " ..tosize(table).."\n");
+	system.print("\nTable Size : " ..tosize(table).."\n");
 }
 
 
