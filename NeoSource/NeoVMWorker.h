@@ -277,7 +277,7 @@ private:
 
 	bool	Setup(int iFunctionID);
 	bool	Start(int iFunctionID);
-	bool	Run(int iTimeout = -1, int iCheckOpCount = 1000);
+	bool	Run(bool isSliceRun, int iTimeout = -1, int iCheckOpCount = 1000);
 
 	inline VarInfo* GetVarPtr(short n)
 	{
@@ -316,7 +316,7 @@ private:
 	bool CompareGR(VarInfo* v1, VarInfo* v2);
 	bool CompareGE(VarInfo* v1, VarInfo* v2);
 	bool ForEach(VarInfo* v1, VarInfo* v2, VarInfo* v3);
-	bool Sleep(int iTimeout, VarInfo* v1);
+	int Sleep(bool isSliceRun, int iTimeout, VarInfo* v1);
 
 	std::string ToString(VarInfo* v1);
 	int ToInt(VarInfo* v1);
@@ -456,7 +456,7 @@ public:
 		if (false == Setup(iFID))
 			return false;
 
-		Run(iTimeout, iCheckOpCount);
+		Run(false, iTimeout, iCheckOpCount);
 		if (_isSetup == true)
 		{	// yet ... not completed
 			GC();

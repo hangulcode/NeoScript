@@ -779,37 +779,55 @@ bool CNeoVMWorker::ForEach(VarInfo* pTable, VarInfo* pKey, VarInfo* pValue)
 	SetError("foreach table key Error");
 	return false;
 }
-bool CNeoVMWorker::Sleep(int iTimeout, VarInfo* v1)
+// -1 : Error
+//  0 : SlieceRun
+//  1 : Continue
+//  2 : Timeout - 
+int CNeoVMWorker::Sleep(bool isSliceRun, int iTimeout, VarInfo* v1)
 {
+	int iSleepTick;
 	switch (v1->GetType())
 	{
 	case VAR_INT:
-		if (iTimeout >= 0)
-		{
-			_iRemainSleep = v1->_int;
-			return true;
-		}
-		else
-		{
-			std::this_thread::sleep_for(std::chrono::milliseconds(v1->_int));
-			return false;
-		}
+		iSleepTick = v1->_int;
 		break;
 	case VAR_FLOAT:
+		iSleepTick = (int)v1->_float;
+		break;
+	default:
+		SetError("Sleep Value Error");
+		return -1;
+	}
+
+	if (isSliceRun)
+	{
+		_iRemainSleep = iSleepTick;
+		return 0;
+	}
+	else
+	{
 		if (iTimeout >= 0)
 		{
-			_iRemainSleep = (int)v1->_float;
-			return true;
+			auto cur = clock();
+			auto delta = cur - _preClock;
+			if (iTimeout > delta)
+			{
+				auto sleepAble = iTimeout - delta;
+				if (iSleepTick > sleepAble)
+					iSleepTick = sleepAble;
+				std::this_thread::sleep_for(std::chrono::milliseconds(iSleepTick));
+				return 1;
+			}
+			return 2;
 		}
 		else
 		{
-			std::this_thread::sleep_for(std::chrono::milliseconds((int)v1->_float));
-			return false;
+			std::this_thread::sleep_for(std::chrono::milliseconds(iSleepTick));
+			return 1;
 		}
-		break;
+		return 1;
 	}
-	SetError("Sleep Value Error");
-	return false;
+	return 1;
 }
 
 
@@ -954,7 +972,7 @@ bool	CNeoVMWorker::Start(int iFunctionID)
 	if(false == Setup(iFunctionID))
 		return false;
 
-	return Run();
+	return Run(false);
 }
 
 bool	CNeoVMWorker::Setup(int iFunctionID)
@@ -994,7 +1012,7 @@ struct SVMOperation
 #pragma pack()
 
 
-bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
+bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 {
 	if (false == _isSetup)
 		return false;
@@ -1021,8 +1039,9 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 	SVMOperation* pOP;
 
 	int op_process = 0;
-	if(iTimeout >= 0)
-		t1 = clock();
+	bool isTimeout = (iTimeout >= 0);
+	if(isTimeout)
+		_preClock = clock();
 
 	while (true)
 	{
@@ -1211,10 +1230,17 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 			break;
 		case NOP_SLEEP:
 			NextOP(1);
-			if (Sleep(iTimeout, GetVarPtr(pOP->n1)))
 			{
-				_preClock = clock();
-				return true;
+				int r = Sleep(isSliceRun, iTimeout, GetVarPtr(pOP->n1));
+				if (r == 0)
+				{
+					_preClock = clock();
+					return true;
+				}
+				else if (r == 2)
+				{
+					op_process = iCheckOpCount;
+				}
 			}
 			break;
 
@@ -1383,7 +1409,7 @@ bool	CNeoVMWorker::Run(int iTimeout, int iCheckOpCount)
 			if (++op_process >= iCheckOpCount)
 			{
 				op_process = 0;
-				t2 = clock() - t1;
+				t2 = clock() - _preClock;
 				if (t2 >= iTimeout || t2 < 0)
 					break;
 			}

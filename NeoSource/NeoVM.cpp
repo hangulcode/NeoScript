@@ -501,5 +501,5 @@ bool CNeoVM::UpdateWorker(u32 id, int iTimeout, int iCheckOpCount)
 	if (it == _sVMWorkers.end())
 		return false;
 	auto pWorker = (*it).second;
-	return pWorker->Run(iTimeout, iCheckOpCount);
+	return pWorker->Run(iTimeout >= 0, iTimeout, iCheckOpCount);
 }
