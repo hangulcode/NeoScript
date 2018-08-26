@@ -9,7 +9,7 @@ fun sub1()
 	table["b2"] = 57;
 	table["c3"] = "Hello Neo Script...";
 	table["c4"] = "system";
-	table["c4"] = null;
+	table["c4"] = null; // Remove
 
 	for (var i = 0; i < 10; i++)
 	{
@@ -18,18 +18,34 @@ fun sub1()
 		else
 			table[i] = i;
 	}
-	table[0] = null;
+	table[0] = null; // Remove
 
 	foreach(var a, b in table)
 	{
 		system.print(a ..":"..b .. "\n");
 		sleep(200);
 	}
-	system.print("\nTable Size : " ..tosize(table).."\n");
+	system.print("\nTable Size : " ..tosize(table).."\n\n");
 }
 
+
+
+fun sub2()
+{
+	//var table = { "cc"={"aa" = "bb",100,101,102}, 1, 2, 3, 4, 5, "test", 65 };
+	var table = { 10, 11, 100=12,"test", 13 };
+	foreach(var a, b in table)
+	{
+		system.print(a ..":"..b .. "\n");
+		sleep(200);
+	}
+
+
+	system.print("\nTable Size : " ..tosize(table).."\n\n");
+}
 
 export fun main()
 {
 	sub1();
+	sub2();
 }

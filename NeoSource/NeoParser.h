@@ -489,6 +489,27 @@ struct SFunctions
 		_staticVars.push_back(v);
 		return idx;
 	}
+	bool GetStaticNum(int var, int* value)
+	{
+		for (int i = (int)_staticVars.size() - 1; i >= 0; i--)
+		{
+			if (i + COMPILE_STATIC_VAR_BEGIN == var)
+			{
+				VarInfo& v2 = _staticVars[i];
+				if (VAR_INT == v2.GetType())
+				{
+					*value = v2._int;
+					return true;
+				}
+				if (VAR_FLOAT == v2.GetType())
+				{
+					*value = (int)v2._float;
+					return true;
+				}
+			}
+		}
+		return false;
+	}
 
 	int	AddStaticNum(double num)
 	{

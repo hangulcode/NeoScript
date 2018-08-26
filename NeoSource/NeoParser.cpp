@@ -792,28 +792,120 @@ bool ParseNum(int& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArchiveRd
 	return true;
 }
 
-TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+bool ParseStringOrNum(int& iResultStack, TK_TYPE tkTypePre, std::string& tkPre, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
-	std::string tk1;
-	TK_TYPE tkType1;
+	if (tkTypePre == TK_QUOTATION)
+	{
+		std::string str;
+		if (false == GetQuotationString(ar, str))
+		{
+			DebugLog("Error (%d, %d): String End Not Found\n", ar.CurLine(), ar.CurCol());
+			return false;
+		}
+		iResultStack = funs.AddStaticString(str);
+		return true;
+	}
+	else if (tkTypePre == TK_STRING)
+	{
+		if (false == ParseNum(iResultStack, TK_NONE, tkPre, ar, funs, vars))
+			return false;
+		return true;
+	}
+	return false;
+}
+
+
+TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, int iTableDeep = 0)
+{
+	std::string tk1, tk2;
+	TK_TYPE tkType1, tkType2;
 	TK_TYPE r = TK_NONE;
 
-	tkType1 = GetToken(ar, tk1);
-	if (tkType1 != TK_R_MIDDLE)
-	{
-		DebugLog("Error (%d, %d): Table } \n", ar.CurLine(), ar.CurCol());
-		return TK_NONE;
-	}
-
-	tkType1 = GetToken(ar, tk1);
-	if (tkType1 != TK_SEMICOLON)
-	{
-		DebugLog("Error (%d, %d): Table ; \n", ar.CurLine(), ar.CurCol());
-		return TK_NONE;
-	}
-	
 	iResultStack = funs._cur.AllocLocalTempVar();
 	funs._cur.Push_TableAlloc(ar, iResultStack);
+
+	int iTempOffsetKey;
+	int iTempOffsetValue;
+	std::string str;
+
+	int iCurArrayOffset = 0;
+	bool bPreviusComa = false;
+
+	bool blEnd = false;
+	while (blEnd == false)
+	{
+		iTempOffsetKey = iTempOffsetValue = INVALID_ERROR_PARSEJOB;
+		tkType1 = GetToken(ar, tk1);
+		
+		if (tkType1 == TK_QUOTATION || tkType1 == TK_STRING)
+		{
+			if (false == ParseStringOrNum(iTempOffsetKey, tkType1, tk1, ar, funs, vars))
+				return TK_NONE;
+		}
+		else if (tkType1 == TK_L_MIDDLE)
+		{
+			if (TK_NONE == ParseTableDef(iTempOffsetKey, ar, funs, vars, iTableDeep + 1))
+			{
+				return TK_NONE;
+			}
+		}
+		else if (tkType1 == TK_R_MIDDLE)
+			break;
+
+		tkType2 = GetToken(ar, tk2);
+		if (tkType2 == TK_COMMA || tkType2 == TK_R_MIDDLE)
+		{
+			iTempOffsetValue = iTempOffsetKey;
+			iTempOffsetKey = funs.AddStaticInt(iCurArrayOffset++);
+			PushToken(tkType2, tk2);
+		}
+		else if (tkType2 == TK_EQUAL)
+		{
+			tkType2 = GetToken(ar, tk2);
+			if (tkType2 == TK_QUOTATION || tkType2 == TK_STRING)
+			{
+				if (false == ParseStringOrNum(iTempOffsetValue, tkType2, tk2, ar, funs, vars))
+					return TK_NONE;
+			}
+			else if (tkType2 == TK_L_MIDDLE)
+			{
+				if (TK_NONE == ParseTableDef(iTempOffsetValue, ar, funs, vars, iTableDeep + 1))
+				{
+					return TK_NONE;
+				}
+			}
+
+			int iIntValue = -1;
+			if (funs.GetStaticNum(iTempOffsetKey, &iIntValue))
+				iCurArrayOffset = iIntValue + 1;
+		}
+		else
+		{
+			DebugLog("Error (%d, %d): Table Init Error %s\n", ar.CurLine(), ar.CurCol(), tk2.c_str());
+			return TK_NONE;
+		}
+
+		funs._cur.Push_TableInsert(ar, iResultStack, iTempOffsetKey, iTempOffsetValue);
+
+		tkType2 = GetToken(ar, tk2);
+		if (tkType2 == TK_R_MIDDLE)
+			break;
+		if (tkType2 != TK_COMMA)
+		{
+			DebugLog("Error (%d, %d): Table Init Error %s\n", ar.CurLine(), ar.CurCol(), tk2.c_str());
+			return TK_NONE;
+		}
+	}
+	if (iTableDeep == 0)
+	{
+		tkType1 = GetToken(ar, tk1);
+		if (tkType1 != TK_SEMICOLON)
+		{
+			DebugLog("Error (%d, %d): Table ; \n", ar.CurLine(), ar.CurCol());
+			return TK_NONE;
+		}
+	}
+	
 	return tkType1;
 }
 TK_TYPE ParseTable(int& iArrayOffset, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
