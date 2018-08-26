@@ -8,6 +8,8 @@
 
 bool Str_Substring(CNeoVMWorker* pN, short args)
 {
+	if (args != 3)
+		return false;
 	std::string* p = pN->read<std::string*>(1);
 	if (p == NULL)
 		return false;
@@ -21,6 +23,8 @@ bool Str_Substring(CNeoVMWorker* pN, short args)
 }
 bool Str_len(CNeoVMWorker* pN, short args)
 {
+	if (args != 1)
+		return false;
 	std::string* p = pN->read<std::string*>(1);
 	if (p == NULL)
 		return false;
@@ -28,75 +32,116 @@ bool Str_len(CNeoVMWorker* pN, short args)
 	pN->write<int>(pN->GetReturnVar(), (int)p->length());
 	return true;
 }
+bool Str_find(CNeoVMWorker* pN, short args)
+{
+	if (args != 2)
+		return false;
+	std::string* p = pN->read<std::string*>(1);
+	if (p == NULL)
+		return false;
+
+	std::string* p2 = pN->read<std::string*>(2);
+	if (p2 == NULL)
+		return false;
+
+	int iFind = (int)p->find(*p2);
+
+	pN->write<int>(pN->GetReturnVar(), (int)iFind);
+	return true;
+}
 
 bool Math_abs(CNeoVMWorker* pN, short args)
 {
+	if (args != 1)
+		return false;
 	double v = pN->read<double>(1);
 	pN->write<double>(pN->GetReturnVar(), ::abs(v));
 	return true;
 }
 bool Math_acos(CNeoVMWorker* pN, short args)
 {
+	if (args != 1)
+		return false;
 	double v = pN->read<double>(1);
 	pN->write<double>(pN->GetReturnVar(), ::acos(v));
 	return true;
 }
 bool Math_asin(CNeoVMWorker* pN, short args)
 {
+	if (args != 1)
+		return false;
 	double v = pN->read<double>(1);
 	pN->write<double>(pN->GetReturnVar(), ::asin(v));
 	return true;
 }
 bool Math_atan(CNeoVMWorker* pN, short args)
 {
+	if (args != 1)
+		return false;
 	double v = pN->read<double>(1);
 	pN->write<double>(pN->GetReturnVar(), ::atan(v));
 	return true;
 }
 bool Math_ceil(CNeoVMWorker* pN, short args)
 {
+	if (args != 1)
+		return false;
 	double v = pN->read<double>(1);
 	pN->write<double>(pN->GetReturnVar(), ::ceil(v));
 	return true;
 }
 bool Math_floor(CNeoVMWorker* pN, short args)
 {
+	if (args != 1)
+		return false;
 	double v = pN->read<double>(1);
 	pN->write<double>(pN->GetReturnVar(), ::floor(v));
 	return true;
 }
 bool Math_sin(CNeoVMWorker* pN, short args)
 {
+	if (args != 1)
+		return false;
 	double v = pN->read<double>(1);
 	pN->write<double>(pN->GetReturnVar(), ::sin(v));
 	return true;
 }
 bool Math_cos(CNeoVMWorker* pN, short args)
 {
+	if (args != 1)
+		return false;
 	double v = pN->read<double>(1);
 	pN->write<double>(pN->GetReturnVar(), ::cos(v));
 	return true;
 }
 bool Math_tan(CNeoVMWorker* pN, short args)
 {
+	if (args != 1)
+		return false;
 	double v = pN->read<double>(1);
 	pN->write<double>(pN->GetReturnVar(), ::tan(v));
 	return true;
 }
 bool Math_log(CNeoVMWorker* pN, short args)
 {
+	if (args != 1)
+		return false;
 	double v = pN->read<double>(1);
 	pN->write<double>(pN->GetReturnVar(), ::log(v));
 	return true;
 }
 bool Math_log10(CNeoVMWorker* pN, short args)
 {
+	if (args != 1)
+		return false;
 	double v = pN->read<double>(1);
 	pN->write<double>(pN->GetReturnVar(), ::log10(v));
 	return true;
 }
 bool Math_pow(CNeoVMWorker* pN, short args)
 {
+	if (args != 2)
+		return false;
 	double v1 = pN->read<double>(1);
 	double v2 = pN->read<double>(2);
 	pN->write<double>(pN->GetReturnVar(), ::pow(v1, v2));
@@ -104,30 +149,40 @@ bool Math_pow(CNeoVMWorker* pN, short args)
 }
 bool Math_deg(CNeoVMWorker* pN, short args)
 {
+	if (args != 1)
+		return false;
 	double radian = pN->read<double>(1);
 	pN->write<double>(pN->GetReturnVar(), ((radian) * (180.0f / MATH_PI)));
 	return true;
 }
 bool Math_rad(CNeoVMWorker* pN, short args)
 {
+	if (args != 1)
+		return false;
 	double degree = pN->read<double>(1);
 	pN->write<double>(pN->GetReturnVar(), ((degree) * (MATH_PI / 180.0f)));
 	return true;
 }
 bool Math_sqrt(CNeoVMWorker* pN, short args)
 {
+	if (args != 1)
+		return false;
 	double v = pN->read<double>(1);
 	pN->write<double>(pN->GetReturnVar(), ::sqrt(v));
 	return true;
 }
 bool	Math_rand(CNeoVMWorker* pN, short args)
 {
+	if (args != 0)
+		return false;
 	pN->write<int>(pN->GetReturnVar(), ::rand());
 	return true;
 }
 
 bool io_print(CNeoVMWorker* pN, short args)
 {
+	if (args != 1)
+		return false;
 	std::string* p = pN->read<std::string*>(1);
 	if (p == NULL)
 		return false;
@@ -142,27 +197,28 @@ bool io_print(CNeoVMWorker* pN, short args)
 
 static SFunLib _Lib[] =
 {
-{ "abs", CNeoVM::RegisterNative(Math_abs, 1) },
-{ "acos", CNeoVM::RegisterNative(Math_acos, 1) },
-{ "asin", CNeoVM::RegisterNative(Math_asin, 1) },
-{ "atan", CNeoVM::RegisterNative(Math_atan, 1) },
-{ "ceil", CNeoVM::RegisterNative(Math_ceil, 1) },
-{ "floor", CNeoVM::RegisterNative(Math_floor, 1) },
-{ "sin", CNeoVM::RegisterNative(Math_sin, 1) },
-{ "cos", CNeoVM::RegisterNative(Math_cos, 1) },
-{ "tan", CNeoVM::RegisterNative(Math_tan, 1) },
-{ "log", CNeoVM::RegisterNative(Math_log, 1) },
-{ "log10", CNeoVM::RegisterNative(Math_log10, 1) },
-{ "pow", CNeoVM::RegisterNative(Math_pow, 2) },
-{ "deg", CNeoVM::RegisterNative(Math_deg, 1) },
-{ "rad", CNeoVM::RegisterNative(Math_rad, 1) },
-{ "sqrt", CNeoVM::RegisterNative(Math_sqrt, 1) },
-{ "rand", CNeoVM::RegisterNative(Math_rand, 0) },
+{ "abs", CNeoVM::RegisterNative(Math_abs) },
+{ "acos", CNeoVM::RegisterNative(Math_acos) },
+{ "asin", CNeoVM::RegisterNative(Math_asin) },
+{ "atan", CNeoVM::RegisterNative(Math_atan) },
+{ "ceil", CNeoVM::RegisterNative(Math_ceil) },
+{ "floor", CNeoVM::RegisterNative(Math_floor) },
+{ "sin", CNeoVM::RegisterNative(Math_sin) },
+{ "cos", CNeoVM::RegisterNative(Math_cos) },
+{ "tan", CNeoVM::RegisterNative(Math_tan) },
+{ "log", CNeoVM::RegisterNative(Math_log) },
+{ "log10", CNeoVM::RegisterNative(Math_log10) },
+{ "pow", CNeoVM::RegisterNative(Math_pow) },
+{ "deg", CNeoVM::RegisterNative(Math_deg) },
+{ "rad", CNeoVM::RegisterNative(Math_rad) },
+{ "sqrt", CNeoVM::RegisterNative(Math_sqrt) },
+{ "rand", CNeoVM::RegisterNative(Math_rand) },
 
-{ "str_sub", CNeoVM::RegisterNative(Str_Substring, 3) },
-{ "str_len", CNeoVM::RegisterNative(Str_len, 1) },
+{ "str_sub", CNeoVM::RegisterNative(Str_Substring) },
+{ "str_len", CNeoVM::RegisterNative(Str_len) },
+{ "str_find", CNeoVM::RegisterNative(Str_find) },
 
-{ "print", CNeoVM::RegisterNative(io_print, 1) },
+{ "print", CNeoVM::RegisterNative(io_print) },
 
 { NULL, FunctionPtrNative() },
 };

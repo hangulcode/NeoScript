@@ -65,10 +65,6 @@ public:
 	CNeoVM();
 	virtual ~CNeoVM();
 
-	static void push_functorNative(FunctionPtrNative* pOut, Neo_NativeFunction func)
-	{
-		CNeoVMWorker::neo_pushcclosureNative(pOut, func);
-	}
 
 	template<typename RVal, typename ... Types>
 	static int push_functor(FunctionPtr* pOut, RVal(*func)(Types ... args))
@@ -96,11 +92,10 @@ public:
 	}
 
 
-	static FunctionPtrNative RegisterNative(Neo_NativeFunction func, u8 argCount)
+	static FunctionPtrNative RegisterNative(Neo_NativeFunction func)
 	{
 		FunctionPtrNative fun;
-		push_functorNative(&fun, func);
-//		fun._argCount = argCount;
+		CNeoVMWorker::neo_pushcclosureNative(&fun, func);
 		return fun;
 	}
 

@@ -72,6 +72,7 @@
 	- rand(x) : c++ 과 동일
 
 	- str_sub(x,y,z) : x문자열을 y 오프셋 부터 z갯수 만큼의 문자열로 변환해서 리턴
+	- str_len(x) : x문자열 길이를 리턴
 	- print(x) : x문자열 출력
 
 - END
