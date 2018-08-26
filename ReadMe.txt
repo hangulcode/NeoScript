@@ -21,7 +21,7 @@
 	- int : 4바이트 signed 정수 값 저장
 	- double : 8바이트 부동 소수점 저장 
 	- string : 문자열 저장 
-	- table : 테이블 저장 (사용법은 Lua 와 비슷함, {1,2,3,} 이런 형태 초기화 아직 미지원)
+	- table : 테이블 저장 (사용법은 Lua 와 비슷함)
 
 	- string / table : 메모리 절약및 성능을 위해서 레퍼런스로 관리
 	- int / double : "a = 1;" 하면 int 가 되며, "a = 1.0" 하면 double 값이 저장됨.
