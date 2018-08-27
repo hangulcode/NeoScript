@@ -54,6 +54,7 @@ void CNeoVM::Var_SetTable(VarInfo *d, TableInfo* p)
 	++d->_tbl->_refCount;
 }
 
+
 CNeoVMWorker* CNeoVM::WorkerAlloc(int iStackSize)
 {
 	while (true)
@@ -129,6 +130,7 @@ TableInfo* CNeoVM::TableAlloc()
 	}
 	pTable->_TableID = _dwLastIDTable;
 	pTable->_refCount = 0;
+	pTable->_pUserData = NULL;
 
 	_sTables[_dwLastIDTable] = pTable;
 	return pTable;
@@ -158,160 +160,8 @@ void CNeoVM::FreeTable(VarInfo *d)
 	}
 	tbl->_strMap.clear();
 
-
 	delete d->_tbl;
 }
-void CNeoVM::TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
-{
-	if (pTable->GetType() != VAR_TABLE)
-	{
-		SetError("TableInsert Error");
-		return;
-	}
-	switch (pArray->GetType())
-	{
-	case VAR_INT:
-	{
-		int n = pArray->_int;
-		std::map<int, VarInfo>& intMap = pTable->_tbl->_intMap;
-		auto it = intMap.find(n);
-		if (it != intMap.end())
-		{
-			VarInfo* pDest = &(*it).second;
-			Var_Release(pDest);
-			*pDest = *pValue;
-		}
-		else
-			intMap[n] = *pValue;
-		Var_AddRef(pValue);
-		break;
-	}
-	case VAR_FLOAT:
-	{
-		int n = (int)pArray->_float;
-		auto it = pTable->_tbl->_intMap.find(n);
-		if (it != pTable->_tbl->_intMap.end())
-		{
-			VarInfo* pDest = &(*it).second;
-			Var_Release(pDest);
-			*pDest = *pValue;
-		}
-		else
-			pTable->_tbl->_intMap[n] = *pValue;
-		Var_AddRef(pValue);
-		break;
-	}
-	case VAR_STRING:
-	{
-		std::string& n = pArray->_str->_str;
-		auto it = pTable->_tbl->_strMap.find(n);
-		if (it != pTable->_tbl->_strMap.end())
-		{
-			VarInfo* pDest = &(*it).second;
-			Var_Release(pDest);
-			*pDest = *pValue;
-		}
-		else
-			pTable->_tbl->_strMap[n] = *pValue;
-		Var_AddRef(pValue);
-		break;
-	}
-	}
-}
-FunctionPtrNative* CNeoVM::GetPtrFunction(VarInfo *pTable, VarInfo *pArray)
-{
-	if (pTable->GetType() != VAR_TABLE)
-		return NULL;
-
-	VarInfo* pValue;
-	switch (pArray->GetType())
-	{
-	case VAR_INT:
-	{
-		int n = (int)pArray->_int;
-		auto it = pTable->_tbl->_intMap.find(n);
-		if (it != pTable->_tbl->_intMap.end())
-		{
-			pValue = &(*it).second;
-			if (pValue->GetType() == VAR_PTRFUN)
-				return &pValue->_fun;
-		}
-		break;
-	}
-	case VAR_FLOAT:
-	{
-		int n = (int)pArray->_float;
-		auto it = pTable->_tbl->_intMap.find(n);
-		if (it != pTable->_tbl->_intMap.end())
-		{
-			pValue = &(*it).second;
-			if (pValue->GetType() == VAR_PTRFUN)
-				return &pValue->_fun;
-		}
-		break;
-	}
-	case VAR_STRING:
-	{
-		std::string& n = pArray->_str->_str;
-		auto it = pTable->_tbl->_strMap.find(n);
-		if (it != pTable->_tbl->_strMap.end())
-		{
-			pValue = &(*it).second;
-			if (pValue->GetType() == VAR_PTRFUN)
-				return &pValue->_fun;
-		}
-		break;
-	}
-	}
-	return NULL;
-}
-void CNeoVM::TableRead(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
-{
-	if (pTable->GetType() != VAR_TABLE)
-	{
-		SetError("TableRead Error");
-		return;
-	}
-
-	Var_Release(pValue);
-	switch (pArray->GetType())
-	{
-	case VAR_INT:
-	{
-		int n = (int)pArray->_int;
-		auto it = pTable->_tbl->_intMap.find(n);
-		if (it != pTable->_tbl->_intMap.end())
-		{
-			*pValue = (*it).second;
-			Var_AddRef(pValue);
-		}
-		break;
-	}
-	case VAR_FLOAT:
-	{
-		int n = (int)pArray->_float;
-		auto it = pTable->_tbl->_intMap.find(n);
-		if (it != pTable->_tbl->_intMap.end())
-		{
-			*pValue = (*it).second;
-			Var_AddRef(pValue);
-		}
-		break;
-	}
-	case VAR_STRING:
-	{
-		std::string& n = pArray->_str->_str;
-		auto it = pTable->_tbl->_strMap.find(n);
-		if (it != pTable->_tbl->_strMap.end())
-		{
-			*pValue = (*it).second;
-			Var_AddRef(pValue);
-		}
-		break;
-	}
-	}
-}
-
 
 
 CNeoVM::CNeoVM()

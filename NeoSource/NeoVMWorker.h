@@ -11,7 +11,7 @@ enum VAR_TYPE : u8
 	VAR_FLOAT,	// double
 	VAR_STRING,
 	VAR_TABLE,
-	VAR_PTRFUN,
+	VAR_TABLEFUN,
 };
 
 
@@ -102,6 +102,7 @@ struct TableInfo
 	std::map<int, VarInfo>			_intMap;
 	int	_TableID;
 	int _refCount;
+	void* _pUserData;
 };
 
 struct FunctionPtr
@@ -215,6 +216,7 @@ private:
 	bool					_isSetup = false;
 	int						_iRemainSleep = 0;
 	clock_t					_preClock;
+	TableInfo*				_pCallTableInfo = NULL;
 
 
 	void	SetCodeData(u8* p, int sz)
@@ -291,6 +293,7 @@ private:
 
 	void Var_AddRef(VarInfo *d);
 	void Var_Release(VarInfo *d);
+	void Var_SetNone(VarInfo *d);
 	void Var_SetInt(VarInfo *d, int v);
 	void Var_SetFloat(VarInfo *d, double v);
 	void Var_SetBool(VarInfo *d, bool v);
@@ -405,6 +408,7 @@ private:
 public:
 	std::string				_sTempString;
 	VarInfo* GetReturnVar() { return &m_sVarStack[_iSP_Vars]; }
+	inline TableInfo* GetCallTableInfo() { return _pCallTableInfo; }
 
 	void GC()
 	{
@@ -635,6 +639,30 @@ public:
 		}
 	};
 
+	inline const std::string* GetArg_StlString(int idx) { return PopStlString(&m_sVarStack[_iSP_Vars + idx]); }
+	inline const char* GetArg_CharPtr(int idx) { return (const char*)PopString(&m_sVarStack[_iSP_Vars + idx]); }
+	inline int GetArg_Int(int idx) { return PopInt(&m_sVarStack[_iSP_Vars + idx]); }
+	inline double GetArg_Double(int idx) { return PopFloat(&m_sVarStack[_iSP_Vars + idx]); }
+	inline bool GetArg_Bool(int idx) { return PopBool(&m_sVarStack[_iSP_Vars + idx]); }
+
+
+	inline void	ReturnValue() { Var_Release(&m_sVarStack[_iSP_Vars]);  }
+	inline void	ReturnValue(char* p) { Var_SetString(&m_sVarStack[_iSP_Vars], p); }
+	inline void	ReturnValue(const char* p) { Var_SetString(&m_sVarStack[_iSP_Vars], p); }
+	inline void	ReturnValue(char p) { Var_SetInt(&m_sVarStack[_iSP_Vars], p); }
+	inline void	ReturnValue(unsigned char p) { Var_SetInt(&m_sVarStack[_iSP_Vars], p); }
+	inline void	ReturnValue(short p) { Var_SetInt(&m_sVarStack[_iSP_Vars], p); }
+	inline void	ReturnValue(unsigned short p) { Var_SetInt(&m_sVarStack[_iSP_Vars], p); }
+	inline void	ReturnValue(long p) { Var_SetInt(&m_sVarStack[_iSP_Vars], p); }
+	inline void	ReturnValue(unsigned long p) { Var_SetInt(&m_sVarStack[_iSP_Vars], p); }
+	inline void	ReturnValue(int p) { Var_SetInt(&m_sVarStack[_iSP_Vars], p); }
+	inline void	ReturnValue(unsigned int p) { Var_SetInt(&m_sVarStack[_iSP_Vars], p); }
+	inline void	ReturnValue(float p) { Var_SetFloat(&m_sVarStack[_iSP_Vars], p); }
+	inline void	ReturnValue(double p) { Var_SetFloat(&m_sVarStack[_iSP_Vars], p); }
+	inline void	ReturnValue(bool p) { Var_SetBool(&m_sVarStack[_iSP_Vars], p); }
+	inline void	ReturnValue(long long p) { Var_SetInt(&m_sVarStack[_iSP_Vars], (int)p); }
+	inline void	ReturnValue(unsigned long long p) { Var_SetInt(&m_sVarStack[_iSP_Vars], (int)p); }
+
 
 	inline void SetError(const char* pErrMsg);
 public:
@@ -661,6 +689,7 @@ template<> inline bool				CNeoVMWorker::_read(VarInfo *V) { return PopBool(V); }
 template<> inline void				CNeoVMWorker::_read(VarInfo *V) {}
 template<> inline long long		CNeoVMWorker::_read(VarInfo *V) { return (long long)PopInt(V); }
 template<> inline unsigned long long CNeoVMWorker::_read(VarInfo *V) { return (unsigned long long)PopInt(V); }
+template<> inline VarInfo*			CNeoVMWorker::_read(VarInfo *V) { return V; }
 
 template<> void	inline CNeoVMWorker::write(VarInfo *V, char* p) { Var_SetString(V, p); }
 template<> void	inline CNeoVMWorker::write(VarInfo *V, const char* p) { Var_SetString(V, p); }

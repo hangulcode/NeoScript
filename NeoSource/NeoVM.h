@@ -36,10 +36,6 @@ private:
 	void Var_SetTable(VarInfo *d, TableInfo* p);
 
 
-	void TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);
-	void TableRead(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);
-	FunctionPtrNative* GetPtrFunction(VarInfo *pTable, VarInfo *pArray);
-
 	CNeoVMWorker* WorkerAlloc(int iStackSize);
 	void FreeWorker(CNeoVMWorker *d);
 
@@ -64,7 +60,6 @@ public:
 public:
 	CNeoVM();
 	virtual ~CNeoVM();
-
 
 	template<typename RVal, typename ... Types>
 	static int push_functor(FunctionPtr* pOut, RVal(*func)(Types ... args))
