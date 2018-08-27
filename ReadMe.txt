@@ -9,6 +9,7 @@
 	
 ※ 샘플
 	- console_callback : C++ 와 Neo 스크립트 서로 함수 호출 합니다.
+	- console_table_callback : Neo 스크립트 테이블에 함수를 매핑해서 실행 시간에 함수를 찾아서 호출 합니다.
 	- console_9_times : 간단한 구구단 샘플 입니다.
 	- console_table : 테이블 사용법 샘플 입니다.
 	- console_slice_run : 스크립트로 제작한 부분을 일정시간 or 명령어 만큼 순차적으로 매프레임 실행합니다.
