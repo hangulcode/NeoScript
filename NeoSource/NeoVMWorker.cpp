@@ -6,7 +6,7 @@
 #include "NeoVMWorker.h"
 #include "NeoArchive.h"
 
-void	DebugLog(const char*	lpszString, ...);
+void	SetCompileError(const char*	lpszString, ...);
 
 void CNeoVMWorker::Var_AddRef(VarInfo *d)
 {

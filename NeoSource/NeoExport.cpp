@@ -4,13 +4,13 @@
 #include "NeoTextLoader.h"
 #include "NeoExport.h"
 
-void	DebugLog(const char*	lpszString, ...);
+void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 
 void ChangeIndex(int staticCount, int localCount, int curFunStatkSize, short& n)
 {
 	//if (n == COMPILE_VAR_NULL)
 	//{
-	//	DebugLog("Change Index Error COMPILE_VAR_NULL");
+	//	SetCompileError(ar, "Change Index Error COMPILE_VAR_NULL");
 	//	return;
 	//}
 	if (n == STACK_POS_RETURN)
@@ -53,7 +53,7 @@ std::string GetFunctionName(SFunctions& funs, short nID)
 	return "Error";
 }
 
-void WriteFun(CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, std::map<int, SFunctionTableForWriter>& funPos)
+void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, std::map<int, SFunctionTableForWriter>& funPos)
 {
 	int iOPCount = 0;
 
@@ -238,14 +238,14 @@ void WriteFun(CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, s
 			ar << op << n1 << n2;
 			break;
 		default:
-			DebugLog("Error OP Type Error (%d)", op);
+			SetCompileError(arText, "Error OP Type Error (%d)", op);
 			break;
 		}
 	}
 }
 
 
-void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
+void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 {
 	int staticCount = (int)funs._staticVars.size();
 	int localCount = fi._localVarCount;
@@ -600,7 +600,7 @@ void WriteFunLog(SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 			OutAsm("Table Remove [%d].[%d]\n", n1, n2);
 			break;
 		default:
-			DebugLog("Error OP Type Error (%d)", op);
+			SetCompileError(arText, "Error OP Type Error (%d)", op);
 			break;
 		}
 	}
@@ -614,7 +614,7 @@ static void WriteString(CNArchive& ar, const std::string& str)
 	ar.Write((char*)str.data(), nLen);
 }
 
-bool Write(CNArchive& ar, SFunctions& funs, SVars& vars)
+bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 {
 	int iSaveOffset1 = ar.GetBufferOffset();
 	SNeoVMHeader header;
@@ -630,12 +630,12 @@ bool Write(CNArchive& ar, SFunctions& funs, SVars& vars)
 	// Main 함수 코드 저장
 	header._iMainFunctionOffset = ar.GetBufferOffset();
 	header._iGlobalVarCount = funs._cur._localVarCount;
-	WriteFun(ar, funs, funs._cur, vars, funPos);
+	WriteFun(arText, ar, funs, funs._cur, vars, funPos);
 	// Sub 함수 코드 저장
 	for (auto it = funs._funs.begin(); it != funs._funs.end(); it++)
 	{
 		SFunctionInfo& fi = (*it).second;
-		WriteFun(ar, funs, fi, vars, funPos);
+		WriteFun(arText, ar, funs, fi, vars, funPos);
 	}
 
 	header._iCodeSize = ar.GetBufferOffset() - sizeof(SNeoVMHeader);
@@ -677,7 +677,7 @@ bool Write(CNArchive& ar, SFunctions& funs, SVars& vars)
 			WriteString(ar, vi._str->_str);
 			break;
 		default:
-			DebugLog("Error VAR Type Error (%d)", vi.GetType());
+			SetCompileError(arText, "Error VAR Type Error (%d)", vi.GetType());
 			break;
 		}
 	}
@@ -709,7 +709,7 @@ static std::string ToPtringString(const std::string & str)
 	return r;
 }
 
-bool WriteLog(SFunctions& funs, SVars& vars)
+bool WriteLog(CArchiveRdWC& arText, SFunctions& funs, SVars& vars)
 {
 	SNeoVMHeader header;
 	memset(&header, 0, sizeof(header));
@@ -736,7 +736,7 @@ bool WriteLog(SFunctions& funs, SVars& vars)
 			OutAsm("Static [%d] '%s'\n", i, ToPtringString(vi._str->_str).c_str());
 			break;
 		default:
-			DebugLog("Error VAR Type Error (%d)", vi.GetType());
+			SetCompileError(arText, "Error VAR Type Error (%d)", vi.GetType());
 			break;
 		}
 	}
@@ -755,12 +755,12 @@ bool WriteLog(SFunctions& funs, SVars& vars)
 	}
 
 	// Main 함수 코드 저장
-	WriteFunLog(funs, funs._cur, vars);
+	WriteFunLog(arText, funs, funs._cur, vars);
 	// Sub 함수 코드 저장
 	for (auto it = funs._funs.begin(); it != funs._funs.end(); it++)
 	{
 		SFunctionInfo& fi = (*it).second;
-		WriteFunLog(funs, fi, vars);
+		WriteFunLog(arText, funs, fi, vars);
 	}
 
 	//// 함수 포인터 저장

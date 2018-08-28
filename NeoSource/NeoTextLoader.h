@@ -8,6 +8,88 @@
 #define FILE_UTF8_SUB			(u8)(0xBF)
 
 
+enum TK_TYPE
+{
+	TK_UNUSED,
+
+	TK_NONE,
+	TK_STRING,
+	TK_VAR,
+	TK_FUN,
+	TK_IMPORT,
+	TK_EXPORT,
+
+	TK_TOSTRING,
+	TK_TOINT,
+	TK_TOFLOAT,
+	TK_TOSIZE,
+	TK_GETTYPE,
+	TK_SLEEP,
+
+	TK_RETURN,
+	TK_BREAK,
+	TK_IF,
+	TK_ELSE,
+	TK_FOR,
+	TK_FOREACH,
+	TK_WHILE,
+	TK_TRUE,
+	TK_FALSE,
+	TK_NULL,
+
+	TK_PLUS2, // ++
+	TK_MINUS2, // --
+
+	TK_PLUS, // +
+	TK_PLUS_EQ, // +=
+	TK_MINUS, // -
+	TK_MINUS_EQ, // -=
+	TK_MUL, // *
+	TK_MUL_EQ, // *=
+	TK_DIV, // /
+	TK_DIV_EQ, // /=
+	TK_PERCENT, // %
+	TK_PERCENT_EQ, // %=
+	TK_TILDE, // ~
+	TK_CIRCUMFLEX, // ^
+	TK_EQUAL, // =
+	TK_EQUAL_EQ, // ==
+	TK_EQUAL_NOT, // !=
+
+	TK_AND, // &
+	TK_AND2, // &&
+	TK_OR, // |
+	TK_OR2, // ||
+
+	TK_L_SMALL, // (
+	TK_R_SMALL, // )
+	TK_L_MIDDLE, // {
+	TK_R_MIDDLE, // }
+	TK_L_ARRAY, // [
+	TK_R_ARRAY, // ]
+
+	TK_GREAT,		// >
+	TK_GREAT_EQ,	// >=
+	TK_LESS,		// <
+	TK_LESS_EQ,		// <=
+
+	TK_COLON, // :
+	TK_SEMICOLON, // ;
+	TK_COMMA, // ,
+	TK_DOT, // .
+	TK_DOT2, // ..
+	TK_SHARP, // #
+	TK_QUOTATION, // "
+	TK_QUESTION, // ?
+	TK_NOT, // !
+};
+
+struct SToken
+{
+	TK_TYPE			_type;
+	std::string		_tk;
+};
+
 class CArchiveRdWC
 {
 private:
@@ -19,6 +101,10 @@ private:
 	u16		m_iCurCol;
 public:
 	bool	_allowGlobalInitLogic = true;
+
+	std::list<SToken> m_sTokenQueue;
+	std::string m_sErrorString;
+
 	CArchiveRdWC()
 	{
 		m_lpBufStart = NULL;
@@ -84,6 +170,14 @@ public:
 	inline int GetBufferSize()
 	{
 		return m_iSize;
+	}
+
+	void PushToken(TK_TYPE tk, const std::string& str)
+	{
+		SToken st;
+		st._type = tk;
+		st._tk = str;
+		m_sTokenQueue.push_front(st);
 	}
 
 protected:

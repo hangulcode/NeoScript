@@ -143,7 +143,7 @@ bool StringToDouble(double& r, const char *p)
 	return true;
 }
 
-void DebugLog(const char*	lpszString, ...)
+void SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...)
 {
 	char buff[4096];
 	va_list arg_ptr;
@@ -156,9 +156,10 @@ void DebugLog(const char*	lpszString, ...)
 	va_end(arg_ptr);
 
 
-#ifdef _WIN32	
-	printf(buff);
-#endif
+	ar.m_sErrorString = buff;
+//#ifdef _WIN32	
+//	printf(buff);
+//#endif
 }
 
 void OutAsm(const char*	lpszString, ...)

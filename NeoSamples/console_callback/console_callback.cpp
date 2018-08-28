@@ -45,9 +45,12 @@ int main()
 		return -1;
 	}
 
-	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, true);
+	std::string err;
+	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true);
 	if (pVM != NULL)
 	{
+		printf("Comile Success. Code : %d bytes !!\n\n", pVM->GetBytesSize());
+
 		pVM->Register("Mul", Mul);
 		pVM->Register("Sample1", Sample1);
 			
@@ -67,6 +70,10 @@ int main()
 				printf("Sum %d + %d = %lf (Elapse:%d)\n", 100, i, r, t2 - t1);
 		}
 		CNeoVM::ReleaseVM(pVM);
+	}
+	else
+	{
+		printf(err.c_str());
 	}
 	delete[] pFileBuffer;
 

@@ -29,6 +29,8 @@ private:
 
 	CNeoVMWorker*			_pMainWorker;
 	std::map<u32, CNeoVMWorker*> _sVMWorkers;
+	int	_BytesSize;
+
 
 	void Var_AddRef(VarInfo *d);
 	void Var_Release(VarInfo *d);
@@ -48,6 +50,7 @@ private:
 public:
 
 	bool RunFunction(const std::string& funName);
+	inline int GetBytesSize() { return _BytesSize; }
 
 
 	std::string _sErrorMsgDetail;
@@ -135,8 +138,8 @@ public:
 
 	static CNeoVM*	LoadVM(void* pBuffer, int iSize);
 	static void		ReleaseVM(CNeoVM* pVM);
-	static bool		Compile(void* pBufferSrc, int iLenSrc, CNArchive& arw, bool putASM = false, bool allowGlobalInitLogic = true);
+	static bool		Compile(void* pBufferSrc, int iLenSrc, CNArchive& arw, std::string& err, bool putASM = false, bool allowGlobalInitLogic = true);
 
-	static CNeoVM*	CompileAndLoadVM(void* pBufferSrc, int iLenSrc, bool putASM = false, bool allowGlobalInitLogic = true);
+	static CNeoVM*	CompileAndLoadVM(void* pBufferSrc, int iLenSrc, std::string& err, bool putASM = false, bool allowGlobalInitLogic = true);
 };
 

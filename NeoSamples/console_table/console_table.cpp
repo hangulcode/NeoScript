@@ -34,9 +34,12 @@ int main()
 	}
 
 
-	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, true);
+	std::string err;
+	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true);
 	if (pVM != NULL)
 	{
+		printf("Comile Success. Code : %d bytes !!\n\n", pVM->GetBytesSize());
+
 		for (int i = 0; i < 1; i++)
 		{
 			DWORD t1 = GetTickCount();
@@ -51,6 +54,10 @@ int main()
 				printf("(Elapse:%d)\n", t2 - t1);
 		}
 		CNeoVM::ReleaseVM(pVM);
+	}
+	else
+	{
+		printf(err.c_str());
 	}
 	delete[] pFileBuffer;
 

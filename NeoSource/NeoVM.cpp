@@ -3,8 +3,6 @@
 #include "NeoVM.h"
 #include "NeoArchive.h"
 
-void	DebugLog(const char*	lpszString, ...);
-
 void CNeoVM::Var_AddRef(VarInfo *d)
 {
 	switch (d->GetType())
@@ -198,6 +196,7 @@ void		CNeoVM::ReleaseVM(CNeoVM* pVM)
 }
 bool CNeoVM::Init(void* pBuffer, int iSize)
 {
+	_BytesSize = iSize;
 	CNArchive ar(pBuffer, iSize);
 	SNeoVMHeader header;
 	memset(&header, 0, sizeof(header));
@@ -266,7 +265,7 @@ bool CNeoVM::Init(void* pBuffer, int iSize)
 			vi._str->_refCount = 1;
 			break;
 		default:
-			DebugLog("Error VAR Type Error (%d)", type);
+			SetError("Error Invalid VAR Type");
 			return false;
 		}
 	}

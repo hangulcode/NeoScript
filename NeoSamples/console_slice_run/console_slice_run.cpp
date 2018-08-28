@@ -34,9 +34,12 @@ int main()
 	}
 
 
-	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, true);
+	std::string err;
+	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true);
 	if (pVM != NULL)
 	{
+		printf("Comile Success. Code : %d bytes !!\n\n", pVM->GetBytesSize());
+
 		// Alloc Worker Stack
 		u32 id = pVM->CreateWorker();
 		if (id == 0)
@@ -82,6 +85,10 @@ int main()
 		}
 		pVM->ReleaseWorker(id);
 		CNeoVM::ReleaseVM(pVM);
+	}
+	else
+	{
+		printf(err.c_str());
 	}
 	delete[] pFileBuffer;
 
