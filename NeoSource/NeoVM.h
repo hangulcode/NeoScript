@@ -58,7 +58,7 @@ public:
 
 	void RegLibrary(VarInfo* pSystem, const char* pLibName, SFunLib* pFuns);
 	void InitLib();
-	bool Init(void* pBuffer, int iSize);
+	bool Init(void* pBuffer, int iSize, int iStackSize);
 	inline void SetError(const char* pErrMsg);
 public:
 	CNeoVM();
@@ -125,7 +125,7 @@ public:
 		return _pMainWorker->Call_TL<RVal>(iTimeout, iCheckOpCount, r, iFID, args...);
 	}
 
-	u32 CreateWorker();
+	u32 CreateWorker(int iStackSize = 50 * 1024);
 	bool ReleaseWorker(u32 id);
 	bool BindWorkerFunction(u32 id, const std::string& funName);
 	bool IsWorking(u32 id);
@@ -136,10 +136,10 @@ public:
 	inline bool IsLastErrorMsg() { return (_sErrorMsgDetail.empty() == false); }
 	void ClearLastErrorMsg() { _pErrorMsg = NULL; _sErrorMsgDetail.clear(); }
 
-	static CNeoVM*	LoadVM(void* pBuffer, int iSize);
+	static CNeoVM*	LoadVM(void* pBuffer, int iSize, int iStackSize = 50 * 1024);
 	static void		ReleaseVM(CNeoVM* pVM);
 	static bool		Compile(void* pBufferSrc, int iLenSrc, CNArchive& arw, std::string& err, bool putASM = false, bool allowGlobalInitLogic = true);
 
-	static CNeoVM*	CompileAndLoadVM(void* pBufferSrc, int iLenSrc, std::string& err, bool putASM = false, bool allowGlobalInitLogic = true);
+	static CNeoVM*	CompileAndLoadVM(void* pBufferSrc, int iLenSrc, std::string& err, bool putASM = false, bool allowGlobalInitLogic = true, int iStackSize = 50 * 1024);
 };
 

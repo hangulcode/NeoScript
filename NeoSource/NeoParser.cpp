@@ -2227,7 +2227,7 @@ bool CNeoVM::Compile(void* pBufferSrc, int iLenSrc, CNArchive& arw, std::string&
 		err = ar2.m_sErrorString;
 	return b;
 }
-CNeoVM*	CNeoVM::CompileAndLoadVM(void* pBufferSrc, int iLenSrc, std::string& err, bool putASM, bool allowGlobalInitLogic)
+CNeoVM*	CNeoVM::CompileAndLoadVM(void* pBufferSrc, int iLenSrc, std::string& err, bool putASM, bool allowGlobalInitLogic, int iStackSize)
 {
 	CNArchive arCode;
 
@@ -2239,7 +2239,7 @@ CNeoVM*	CNeoVM::CompileAndLoadVM(void* pBufferSrc, int iLenSrc, std::string& err
 	//if(putASM)
 	//	SetCompileError(ar, "Comile Success. Code : %d bytes !!\n\n", arCode.GetBufferOffset());
 
-	CNeoVM* pVM = CNeoVM::LoadVM(arCode.GetData(), arCode.GetBufferOffset());
+	CNeoVM* pVM = CNeoVM::LoadVM(arCode.GetData(), arCode.GetBufferOffset(), iStackSize);
 
 	return pVM;
 }

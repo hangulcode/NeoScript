@@ -194,7 +194,7 @@ void		CNeoVM::ReleaseVM(CNeoVM* pVM)
 {
 	delete pVM;
 }
-bool CNeoVM::Init(void* pBuffer, int iSize)
+bool CNeoVM::Init(void* pBuffer, int iSize, int iStackSize)
 {
 	_BytesSize = iSize;
 	CNArchive ar(pBuffer, iSize);
@@ -274,16 +274,16 @@ bool CNeoVM::Init(void* pBuffer, int iSize)
 		m_sVarGlobal[i].ClearType();
 	}
 
-	_pMainWorker = WorkerAlloc(50 * 1024);
+	_pMainWorker = WorkerAlloc(iStackSize);
 
 	InitLib();
 	_pMainWorker->Start(0);
 	return true;
 }
-CNeoVM* CNeoVM::LoadVM(void* pBuffer, int iSize)
+CNeoVM* CNeoVM::LoadVM(void* pBuffer, int iSize, int iStackSize)
 {
 	CNeoVM* pVM = new CNeoVM();
-	if (false == pVM->Init(pBuffer, iSize))
+	if (false == pVM->Init(pBuffer, iSize, iStackSize))
 	{
 		delete pVM;
 		return NULL;
@@ -305,9 +305,9 @@ bool CNeoVM::RunFunction(const std::string& funName)
 
 	return true;
 }
-u32 CNeoVM::CreateWorker()
+u32 CNeoVM::CreateWorker(int iStackSize)
 {
-	auto pWorker = WorkerAlloc(50 * 1024);
+	auto pWorker = WorkerAlloc(iStackSize);
 	return pWorker->GetWorkerID();
 }
 bool CNeoVM::ReleaseWorker(u32 id)
