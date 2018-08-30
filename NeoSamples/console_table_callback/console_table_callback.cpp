@@ -1,6 +1,6 @@
 #include "stdafx.h"
 #include "console_table_callback.h"
-#include "../../NeoSource/NeoVM.h"
+#include "../../NeoSource/Neo.h"
 
 class CA
 {
@@ -31,6 +31,12 @@ public:
 	}
 };
 
+template<typename t1>
+bool TemSum(CNeoVMWorker* pN, short args)
+{
+	return ((t1*)pN->GetCallTableInfo()->_pUserData)->FunSum(pN, args);
+}
+
 bool FunSum(CNeoVMWorker* pN, short args)
 {
 	return ((CA*)pN->GetCallTableInfo()->_pUserData)->FunSum(pN, args);
@@ -43,7 +49,7 @@ bool FunMul(CNeoVMWorker* pN, short args)
 
 static SFunLib g_sTableFun[] =
 {
-	{ "sum", CNeoVM::RegisterNative(FunSum) },
+	{ "sum", CNeoVM::RegisterNative(TemSum<CA>) },
 	{ "mul", CNeoVM::RegisterNative(FunMul) },
 	{ NULL, FunctionPtrNative() },
 };
@@ -87,8 +93,9 @@ int main()
 
 		CA* pClass = new CA();
 
-		VarInfo* g_sData = pVM->Call<VarInfo*>("GetTable");
-		if (g_sData->GetType() == VAR_TABLE)
+		VarInfo* g_sData;
+		pVM->Call<VarInfo*>(&g_sData, "GetTable");
+		if (g_sData != NULL && g_sData->GetType() == VAR_TABLE)
 		{
 			TableInfo* pTable = g_sData->_tbl;
 			pTable->_pUserData = pClass; // <-------------------
@@ -105,7 +112,8 @@ int main()
 		}
 
 		DWORD t1 = GetTickCount();
-		double r = pVM->Call<double>("update", 5, 5);
+		double r;
+		pVM->Call(&r, "update", 5, 5);
 		DWORD t2 = GetTickCount();
 
 		if (pVM->IsLastErrorMsg())

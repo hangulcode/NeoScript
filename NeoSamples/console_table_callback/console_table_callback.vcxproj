@@ -157,6 +157,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\NeoSource\Neo.h" />
     <ClInclude Include="..\..\NeoSource\NeoArchive.h" />
     <ClInclude Include="..\..\NeoSource\NeoExport.h" />
     <ClInclude Include="..\..\NeoSource\NeoParser.h" />

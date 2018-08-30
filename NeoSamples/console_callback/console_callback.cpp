@@ -1,6 +1,6 @@
 #include "stdafx.h"
 #include "console_callback.h"
-#include "../../NeoSource/NeoVM.h"
+#include "../../NeoSource/Neo.h"
 
 float Mul(float a, float b)
 {
@@ -51,14 +51,15 @@ int main()
 	{
 		printf("Comile Success. Code : %d bytes !!\n\n", pVM->GetBytesSize());
 
-		pVM->Register("Mul", Mul);
-		pVM->Register("Sample1", Sample1);
+		NeoHelper::Register(pVM, "Mul", Mul);
+		NeoHelper::Register(pVM, "Sample1", Sample1);
 			
 
 		for (int i = 1; i < 10; i++)
 		{
 			DWORD t1 = GetTickCount();
-			double r = pVM->Call<double>("Sum", 100, i);
+			double r;
+			pVM->Call<double>(&r, "Sum", 100, i);
 			DWORD t2 = GetTickCount();
 
 			if (pVM->IsLastErrorMsg())

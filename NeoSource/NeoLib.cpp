@@ -55,7 +55,7 @@ bool Math_abs(CNeoVMWorker* pN, short args)
 	if (args != 1)
 		return false;
 	double v = pN->read<double>(1);
-	pN->write<double>(pN->GetReturnVar(), ::abs(v));
+	pN->ReturnValue(::abs(v));
 	return true;
 }
 bool Math_acos(CNeoVMWorker* pN, short args)
