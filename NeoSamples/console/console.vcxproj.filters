@@ -106,5 +106,8 @@
     <None Include="time_limit.neo">
       <Filter>Samples</Filter>
     </None>
+    <None Include="table_callback.neo">
+      <Filter>Samples</Filter>
+    </None>
   </ItemGroup>
 </Project>

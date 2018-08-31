@@ -88,8 +88,6 @@ int main()
 			system("pause");
 			break;
 		}
-
-		//system("pause");
 	}
 
     return 0;

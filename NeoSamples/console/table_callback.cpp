@@ -94,7 +94,7 @@ int SAMPLE_table_callback()
 
 		DWORD t1 = GetTickCount();
 		double r;
-		pVM->Call(&r, "update", 5, 5);
+		pVM->Call(&r, "update", 5, 15);
 		DWORD t2 = GetTickCount();
 
 		if (pVM->IsLastErrorMsg())

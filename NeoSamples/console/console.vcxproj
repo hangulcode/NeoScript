@@ -225,6 +225,7 @@
     <None Include="callback.neo" />
     <None Include="slice_run.neo" />
     <None Include="table.neo" />
+    <None Include="table_callback.neo" />
     <None Include="time_limit.neo" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
