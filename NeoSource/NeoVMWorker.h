@@ -195,7 +195,7 @@ struct SFunctionTable
 	FunctionPtr			_fun;
 };
 
-struct SFunLib
+struct SNeoFunLib
 {
 	const char* pName;
 	FunctionPtrNative fn;

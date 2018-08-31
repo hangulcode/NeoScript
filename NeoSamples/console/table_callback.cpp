@@ -30,12 +30,6 @@ public:
 	}
 };
 
-template<typename t1>
-bool TemSum(CNeoVMWorker* pN, short args)
-{
-	return ((t1*)pN->GetCallTableInfo()->_pUserData)->FunSum(pN, args);
-}
-
 bool FunSum(CNeoVMWorker* pN, short args)
 {
 	return ((CA*)pN->GetCallTableInfo()->_pUserData)->FunSum(pN, args);
@@ -46,13 +40,12 @@ bool FunMul(CNeoVMWorker* pN, short args)
 }
 
 
-static SFunLib g_sTableFun[] =
+static SNeoFunLib g_sTableFun[] =
 {
-	{ "sum", CNeoVM::RegisterNative(TemSum<CA>) },
+	{ "sum", CNeoVM::RegisterNative(FunSum) },
 	{ "mul", CNeoVM::RegisterNative(FunMul) },
 	{ NULL, FunctionPtrNative() },
 };
-
 
 
 
@@ -83,7 +76,7 @@ int SAMPLE_table_callback()
 
 			VarInfo fun;
 			fun.SetType(VAR_TABLEFUN);
-			SFunLib* pFuns = g_sTableFun;
+			SNeoFunLib* pFuns = g_sTableFun;
 			while (pFuns->pName != NULL)
 			{
 				fun._fun = pFuns->fn;

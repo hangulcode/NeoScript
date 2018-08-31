@@ -195,7 +195,7 @@ bool io_print(CNeoVMWorker* pN, short args)
 
 
 
-static SFunLib _Lib[] =
+static SNeoFunLib _Lib[] =
 {
 { "abs", CNeoVM::RegisterNative(Math_abs) },
 { "acos", CNeoVM::RegisterNative(Math_acos) },
@@ -223,7 +223,7 @@ static SFunLib _Lib[] =
 { NULL, FunctionPtrNative() },
 };
 
-void CNeoVM::RegLibrary(VarInfo* pSystem, const char* pLibName, SFunLib* pFuns)
+void CNeoVM::RegLibrary(VarInfo* pSystem, const char* pLibName, SNeoFunLib* pFuns)
 {
 	//VarInfo temp;
 	//Var_SetTable(&temp, TableAlloc());
