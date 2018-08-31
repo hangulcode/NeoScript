@@ -195,7 +195,7 @@ struct SFunctionTable
 	FunctionPtr			_fun;
 };
 
-struct SFunLib
+struct SNeoFunLib
 {
 	const char* pName;
 	FunctionPtrNative fn;
@@ -417,21 +417,45 @@ public:
 		_iSP_Vars_Max2 = _iSP_Vars;
 	}
 
-	template<typename T>
-	T _read(VarInfo *V) { return T(); }
-
-
+	VarInfo *GetStack(int idx) { return &m_sVarStack[_iSP_Vars + idx]; }
 
 	template<typename T>
-	void write(VarInfo *V, T) { }
+	T read(int idx) { T r; _read(&m_sVarStack[_iSP_Vars + idx], r); return r; }
 
+	inline void push(char ret) { PushInt(ret); }
+	inline void push(unsigned char ret) { PushInt(ret); }
+	inline void push(short ret) { PushInt(ret); }
+	inline void push(unsigned short ret) { PushInt(ret); }
+	inline void push(long ret) { PushInt(ret); }
+	inline void push(unsigned long ret) { PushInt(ret); }
+	inline void push(int ret) { PushInt(ret); }
+	inline void push(unsigned int ret) { PushInt(ret); }
+	inline void push(float ret) { PushFloat(ret); }
+	inline void push(double ret) { PushFloat((double)ret); }
+	inline void push(char* ret) { PushString(ret); }
+	inline void push(const char* ret) { PushString(ret); }
+	inline void push(bool ret) { PushBool(ret); }
+	inline void push(long long ret) { PushInt((int)ret); }
+	inline void push(unsigned long long ret) { PushInt((int)ret); }
 
-
-	template<typename T>
-	T read(int idx) { return _read<T>(&m_sVarStack[_iSP_Vars + idx]); }
-
-	template<typename T>
-	void push(T ret) {}
+	inline void		_read(VarInfo *V, std::string*& r) { r = (std::string*)PopStlString(V); }
+	inline void		_read(VarInfo *V, char*& r) { r = (char*)PopString(V); }
+	inline void		_read(VarInfo *V, const char*& r) { r = PopString(V); }
+	inline void		_read(VarInfo *V, char& r) { r = (char)PopInt(V); }
+	inline void		_read(VarInfo *V, unsigned char& r) { r = (unsigned char)PopInt(V); }
+	inline void		_read(VarInfo *V, short& r) { r = (short)PopInt(V); }
+	inline void		_read(VarInfo *V, unsigned short& r) { r = (unsigned short)PopInt(V); }
+	inline void		_read(VarInfo *V, long& r) { r = (long)PopInt(V); }
+	inline void		_read(VarInfo *V, unsigned long& r) { r = (unsigned long)PopInt(V); }
+	inline void		_read(VarInfo *V, int& r) { r = (int)PopInt(V); }
+	inline void		_read(VarInfo *V, unsigned int& r) { r = (unsigned int)PopInt(V); }
+	inline void		_read(VarInfo *V, float& r) { r = (float)PopFloat(V); }
+	inline void		_read(VarInfo *V, double& r) { r = (double)PopFloat(V); }
+	inline void		_read(VarInfo *V, bool& r) { r = PopBool(V); }
+	inline void		_read(VarInfo *V) {}
+	inline void		_read(VarInfo *V, long long& r) { r = (long long)PopInt(V); }
+	inline void		_read(VarInfo *V, unsigned long long& r) { r = (unsigned long long)PopInt(V); }
+	inline void		_read(VarInfo *V, VarInfo*& r) { r = V; }
 
 	inline void PushArgs() { }
 	template<typename  T, typename ... Types>
@@ -442,13 +466,25 @@ public:
 	}
 
 	template<typename RVal, typename ... Types>
-	RVal Call(const std::string& funName, Types ... args)
+	bool Call(RVal& r, const std::string& funName, Types ... args)
 	{
 		ClearArgs();
 		PushArgs(args...);
 		RunFunction(funName);
 		GC();
-		return _read<RVal>(&m_sVarStack[_iSP_Vars]);
+		_read(&m_sVarStack[_iSP_Vars], r);
+		return true;
+	}
+
+	template<typename ... Types>
+	bool CallN(const std::string& funName, Types ... args)
+	{
+		ClearArgs();
+		PushArgs(args...);
+		RunFunction(funName);
+		GC();
+		ReturnValue();
+		return true;
 	}
 
 	template<typename RVal, typename ... Types>
@@ -468,10 +504,30 @@ public:
 		}
 
 		GC();
-		*r = _read<RVal>(&m_sVarStack[_iSP_Vars]);
+		_read(&m_sVarStack[_iSP_Vars], *r);
 		return true;
 	}
 
+	template<typename ... Types>
+	bool CallN_TL(int iTimeout, int iCheckOpCount, int iFID, Types ... args)
+	{
+		ClearArgs();
+		PushArgs(args...);
+		//RunFunction(funName, );
+		if (false == Setup(iFID))
+			return false;
+
+		Run(false, iTimeout, iCheckOpCount);
+		if (_isSetup == true)
+		{	// yet ... not completed
+			GC();
+			return false;
+		}
+
+		GC();
+		ReturnValue();
+		return true;
+	}
 	static void neo_pushcclosureNative(FunctionPtrNative* pOut, Neo_NativeFunction pFun)
 	{
 		pOut->_func = pFun;
@@ -481,163 +537,6 @@ public:
 		pOut->_fn = fn;
 		pOut->_func = pFun;
 	}
-
-	template<typename T>
-	inline static T upvalue_(void* p)
-	{
-		return (T)p;
-	}
-
-	template<typename RVal>
-	struct functorNative
-	{
-		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
-		{
-			if (args != pfun->_argCount)
-				return -1;
-			auto a = upvalue_<RVal(*)(CNeoVMWorker*)>(pfun->_func)(N);
-			N->write(&N->m_sVarStack[N->_iSP_Vars], a);
-			return 1;
-		}
-	};
-
-
-
-	// 리턴값이 있는 Call
-	template<typename RVal, typename T1 = void, typename T2 = void, typename T3 = void, typename T4 = void, typename T5 = void>
-	struct functor
-	{
-		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
-		{
-			if (args != pfun->_argCount)
-				return -1;
-			auto a = upvalue_<RVal(*)(T1, T2, T3, T4, T5)>(pfun->_func)(N->read<T1>(1), N->read<T2>(2), N->read<T3>(3), N->read<T4>(4), N->read<T5>(5));
-			N->write(&N->m_sVarStack[N->_iSP_Vars], a);
-			return 1;
-		}
-	};
-	template<typename RVal, typename T1, typename T2, typename T3, typename T4>
-	struct functor<RVal, T1, T2, T3, T4>
-	{
-		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
-		{
-			if (args != pfun->_argCount)
-				return -1;
-			auto a = upvalue_<RVal(*)(T1, T2, T3, T4)>(pfun->_func)(N->read<T1>(1), N->read<T2>(2), N->read<T3>(3), N->read<T4>(4));
-			N->write(&N->m_sVarStack[N->_iSP_Vars], a);
-			return 1;
-		}
-	};
-	template<typename RVal, typename T1, typename T2, typename T3>
-	struct functor<RVal, T1, T2, T3>
-	{
-		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
-		{
-			if (args != pfun->_argCount)
-				return -1;
-			auto a = upvalue_<RVal(*)(T1, T2, T3)>(pfun->_func)(N->read<T1>(1), N->read<T2>(2), N->read<T3>(3));
-			N->write(&N->m_sVarStack[N->_iSP_Vars], a);
-			return 1;
-		}
-	};
-	template<typename RVal, typename T1, typename T2>
-	struct functor<RVal, T1, T2>
-	{
-		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
-		{
-			if (args != pfun->_argCount)
-				return -1;
-			auto a = upvalue_<RVal(*)(T1, T2)>(pfun->_func)(N->read<T1>(1), N->read<T2>(2));
-			N->write(&N->m_sVarStack[N->_iSP_Vars], a);
-			return 1;
-		}
-	};
-	template<typename RVal, typename T1>
-	struct functor<RVal, T1>
-	{
-		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
-		{
-			if (args != pfun->_argCount)
-				return -1;
-			auto a = upvalue_<RVal(*)(T1)>(pfun->_func)(N->read<T1>(1));
-			N->write(&N->m_sVarStack[N->_iSP_Vars], a);
-			return 1;
-		}
-	};
-	template<typename RVal>
-	struct functor<RVal>
-	{
-		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
-		{
-			if (args != pfun->_argCount)
-				return -1;
-			auto a = upvalue_<RVal(*)()>(pfun->_func)();
-			N->write(&N->m_sVarStack[N->_iSP_Vars], a);
-			return 1;
-		}
-	};
-
-	// 리턴값이 없는 Call
-	template<typename T1, typename T2, typename T3, typename T4, typename T5>
-	struct functor<void, T1, T2, T3, T4, T5>
-	{
-		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
-		{
-			if (args != pfun->_argCount)
-				return -1;
-			upvalue_<void(*)(T1, T2, T3, T4, T5)>(pfun->_func)(N->read<T1>(1), N->read<T2>(2), N->read<T3>(3), N->read<T4>(4), N->read<T5>(5));
-			N->Var_Release(&N->m_sVarStack[N->_iSP_Vars]);
-			return 0;
-		}
-	};
-	template<typename T1, typename T2, typename T3, typename T4>
-	struct functor<void, T1, T2, T3, T4>
-	{
-		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
-		{
-			if (args != pfun->_argCount)
-				return -1;
-			upvalue_<void(*)(T1, T2, T3, T4)>(pfun->_func)(N->read<T1>(1), N->read<T2>(2), N->read<T3>(3), N->read<T4>(4));
-			N->Var_Release(&N->m_sVarStack[N->_iSP_Vars]);
-			return 0;
-		}
-	};
-	template<typename T1, typename T2, typename T3>
-	struct functor<void, T1, T2, T3>
-	{
-		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
-		{
-			if (args != pfun->_argCount)
-				return -1;
-			upvalue_<void(*)(T1, T2, T3)>(pfun->_func)(N->read<T1>(1), N->read<T2>(2), N->read<T3>(3));
-			N->Var_Release(&N->m_sVarStack[N->_iSP_Vars]);
-			return 0;
-		}
-	};
-	template<typename T1, typename T2>
-	struct functor<void, T1, T2>
-	{
-		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
-		{
-			if (args != pfun->_argCount)
-				return -1;
-			upvalue_<void(*)(T1, T2)>(pfun->_func)(N->read<T1>(1), N->read<T2>(2));
-			N->Var_Release(&N->m_sVarStack[N->_iSP_Vars]);
-			return 0;
-		}
-	};
-	template<typename T1>
-	struct functor<void, T1>
-	{
-		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
-		{
-			if (args != pfun->_argCount)
-				return -1;
-			upvalue_<void(*)(T1)>(pfun->_func)(N->read<T1>(1));
-			N->Var_Release(&N->m_sVarStack[N->_iSP_Vars]);
-			return 0;
-		}
-	};
 
 	inline const std::string* GetArg_StlString(int idx) { return PopStlString(&m_sVarStack[_iSP_Vars + idx]); }
 	inline const char* GetArg_CharPtr(int idx) { return (const char*)PopString(&m_sVarStack[_iSP_Vars + idx]); }
@@ -670,81 +569,4 @@ public:
 	virtual ~CNeoVMWorker();
 
 	inline u32 GetWorkerID() { return _idWorker; }
-};
-
-template<> inline std::string*		CNeoVMWorker::_read(VarInfo *V) { return (std::string*)PopStlString(V); }
-template<> inline char*			CNeoVMWorker::_read(VarInfo *V) { return (char*)PopString(V); }
-template<> inline const char*		CNeoVMWorker::_read(VarInfo *V) { return PopString(V); }
-template<> inline char				CNeoVMWorker::_read(VarInfo *V) { return (char)PopInt(V); }
-template<> inline unsigned char	CNeoVMWorker::_read(VarInfo *V) { return (unsigned char)PopInt(V); }
-template<> inline short			CNeoVMWorker::_read(VarInfo *V) { return (short)PopInt(V); }
-template<> inline unsigned short	CNeoVMWorker::_read(VarInfo *V) { return (unsigned short)PopInt(V); }
-template<> inline long				CNeoVMWorker::_read(VarInfo *V) { return (long)PopInt(V); }
-template<> inline unsigned long	CNeoVMWorker::_read(VarInfo *V) { return (unsigned long)PopInt(V); }
-template<> inline int				CNeoVMWorker::_read(VarInfo *V) { return (int)PopInt(V); }
-template<> inline unsigned int		CNeoVMWorker::_read(VarInfo *V) { return (unsigned int)PopInt(V); }
-template<> inline float			CNeoVMWorker::_read(VarInfo *V) { return (float)PopFloat(V); }
-template<> inline double			CNeoVMWorker::_read(VarInfo *V) { return (double)PopFloat(V); }
-template<> inline bool				CNeoVMWorker::_read(VarInfo *V) { return PopBool(V); }
-template<> inline void				CNeoVMWorker::_read(VarInfo *V) {}
-template<> inline long long		CNeoVMWorker::_read(VarInfo *V) { return (long long)PopInt(V); }
-template<> inline unsigned long long CNeoVMWorker::_read(VarInfo *V) { return (unsigned long long)PopInt(V); }
-template<> inline VarInfo*			CNeoVMWorker::_read(VarInfo *V) { return V; }
-
-template<> void	inline CNeoVMWorker::write(VarInfo *V, char* p) { Var_SetString(V, p); }
-template<> void	inline CNeoVMWorker::write(VarInfo *V, const char* p) { Var_SetString(V, p); }
-template<> void	inline CNeoVMWorker::write(VarInfo *V, char p) { Var_SetInt(V, p); }
-template<> void	inline CNeoVMWorker::write(VarInfo *V, unsigned char p) { Var_SetInt(V, p); }
-template<> void	inline CNeoVMWorker::write(VarInfo *V, short p) { Var_SetInt(V, p); }
-template<> void	inline CNeoVMWorker::write(VarInfo *V, unsigned short p) { Var_SetInt(V, p); }
-template<> void	inline CNeoVMWorker::write(VarInfo *V, long p) { Var_SetInt(V, p); }
-template<> void	inline CNeoVMWorker::write(VarInfo *V, unsigned long p) { Var_SetInt(V, p); }
-template<> void	inline CNeoVMWorker::write(VarInfo *V, int p) { Var_SetInt(V, p); }
-template<> void	inline CNeoVMWorker::write(VarInfo *V, unsigned int p) { Var_SetInt(V, p); }
-template<> void	inline CNeoVMWorker::write(VarInfo *V, float p) { Var_SetFloat(V, p); }
-template<> void	inline CNeoVMWorker::write(VarInfo *V, double p) { Var_SetFloat(V, p); }
-template<> void	inline CNeoVMWorker::write(VarInfo *V, bool p) { Var_SetBool(V, p); }
-template<> void	inline CNeoVMWorker::write(VarInfo *V, long long p) { Var_SetInt(V, (int)p); }
-template<> void	inline CNeoVMWorker::write(VarInfo *V, unsigned long long p) { Var_SetInt(V, (int)p); }
-
-template<>	inline void CNeoVMWorker::push(char ret) { PushInt(ret); }
-template<>	inline void CNeoVMWorker::push(unsigned char ret) { PushInt(ret); }
-template<>	inline void CNeoVMWorker::push(short ret) { PushInt(ret); }
-template<>	inline void CNeoVMWorker::push(unsigned short ret) { PushInt(ret); }
-template<>	inline void CNeoVMWorker::push(long ret) { PushInt(ret); }
-template<>	inline void CNeoVMWorker::push(unsigned long ret) { PushInt(ret); }
-template<>	inline void CNeoVMWorker::push(int ret) { PushInt(ret); }
-template<>	inline void CNeoVMWorker::push(unsigned int ret) { PushInt(ret); }
-template<>	inline void CNeoVMWorker::push(float ret) { PushFloat(ret); }
-template<>	inline void CNeoVMWorker::push(double ret) { PushFloat((double)ret); }
-template<>	inline void CNeoVMWorker::push(char* ret) { PushString(ret); }
-template<>	inline void CNeoVMWorker::push(const char* ret) { PushString(ret); }
-template<>	inline void CNeoVMWorker::push(bool ret) { PushBool(ret); }
-template<>	inline void CNeoVMWorker::push(long long ret) { PushInt((int)ret); }
-template<>	inline void CNeoVMWorker::push(unsigned long long ret) { PushInt((int)ret); }
-
-template<>
-struct CNeoVMWorker::functorNative<void>
-{
-	static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
-	{
-		if (args != pfun->_argCount)
-			return -1;
-		upvalue_<void(*)(CNeoVMWorker*)>(pfun->_func)(N);
-		N->Var_Release(&N->m_sVarStack[N->_iSP_Vars]);
-		return 0;
-	}
-};
-
-template<>
-struct CNeoVMWorker::functor<void>
-{
-	static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
-	{
-		if (args != pfun->_argCount)
-			return -1;
-		upvalue_<void(*)()>(pfun->_func)();
-		N->Var_Release(&N->m_sVarStack[N->_iSP_Vars]);
-		return 0;
-	}
 };

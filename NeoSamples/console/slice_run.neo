@@ -1,7 +1,7 @@
 
 export fun slice_fun()
 {
-	for (var i = 0; i <= 100; ++i)
+	for (var i = 0; i <= 10; ++i)
 	{
 		//print("\nHellow Neo Script1");
 		//if(i % 30000 == 0)

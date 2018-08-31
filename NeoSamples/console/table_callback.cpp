@@ -1,6 +1,5 @@
 #include "stdafx.h"
-#include "console_table_callback.h"
-#include "../../NeoSource/NeoVM.h"
+#include "../../NeoSource/Neo.h"
 
 class CA
 {
@@ -41,7 +40,7 @@ bool FunMul(CNeoVMWorker* pN, short args)
 }
 
 
-static SFunLib g_sTableFun[] =
+static SNeoFunLib g_sTableFun[] =
 {
 	{ "sum", CNeoVM::RegisterNative(FunSum) },
 	{ "mul", CNeoVM::RegisterNative(FunMul) },
@@ -50,30 +49,11 @@ static SFunLib g_sTableFun[] =
 
 
 
-BOOL        FileLoad(const char* pFileName, void*& pBuffer, int& iLen)
-{
-	FILE* fp = NULL;
-	int error_t = fopen_s(&fp, pFileName, "rb");
-	if (error_t != 0)
-		return false;
-
-	fseek(fp, 0, SEEK_END);
-	int iFileSize = ftell(fp);
-	fseek(fp, 0, SEEK_SET);
-
-	pBuffer = new BYTE[iFileSize + 2];
-	fread(pBuffer, iFileSize, 1, fp);
-	fclose(fp);
-
-	iLen = iFileSize;
-	return true;
-}
-
-int main()
+int SAMPLE_table_callback()
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == FileLoad("1.neo", pFileBuffer, iFileLen))
+	if (false == FileLoad("table_callback.neo", pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;
@@ -87,15 +67,16 @@ int main()
 
 		CA* pClass = new CA();
 
-		VarInfo* g_sData = pVM->Call<VarInfo*>("GetTable");
-		if (g_sData->GetType() == VAR_TABLE)
+		VarInfo* g_sData;
+		pVM->Call<VarInfo*>(&g_sData, "GetTable");
+		if (g_sData != NULL && g_sData->GetType() == VAR_TABLE)
 		{
 			TableInfo* pTable = g_sData->_tbl;
 			pTable->_pUserData = pClass; // <-------------------
 
 			VarInfo fun;
 			fun.SetType(VAR_TABLEFUN);
-			SFunLib* pFuns = g_sTableFun;
+			SNeoFunLib* pFuns = g_sTableFun;
 			while (pFuns->pName != NULL)
 			{
 				fun._fun = pFuns->fn;
@@ -105,7 +86,8 @@ int main()
 		}
 
 		DWORD t1 = GetTickCount();
-		double r = pVM->Call<double>("update", 5, 5);
+		double r;
+		pVM->Call(&r, "update", 5, 15);
 		DWORD t2 = GetTickCount();
 
 		if (pVM->IsLastErrorMsg())

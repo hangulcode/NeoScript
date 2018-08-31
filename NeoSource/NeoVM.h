@@ -56,7 +56,7 @@ public:
 	std::string _sErrorMsgDetail;
 	const char* _pErrorMsg = NULL;
 
-	void RegLibrary(VarInfo* pSystem, const char* pLibName, SFunLib* pFuns);
+	void RegLibrary(VarInfo* pSystem, const char* pLibName, SNeoFunLib* pFuns);
 	void InitLib();
 	bool Init(void* pBuffer, int iSize, int iStackSize);
 	inline void SetError(const char* pErrMsg);
@@ -64,31 +64,22 @@ public:
 	CNeoVM();
 	virtual ~CNeoVM();
 
-	template<typename RVal, typename ... Types>
-	static int push_functor(FunctionPtr* pOut, RVal(*func)(Types ... args))
-	{
-		CNeoVMWorker::neo_pushcclosure(pOut, CNeoVMWorker::functor<RVal, Types ...>::invoke, (void*)func);
-		return sizeof ...(Types);
-	}
-
-	template<typename F>
-	bool Register(const char* name, F func)
+	int FindFunction(const std::string& name)
 	{
 		auto it = m_sImExportTable.find(name);
 		if (it == m_sImExportTable.end())
-			return false;
-
-		int iFID = (*it).second;
-		FunctionPtr fun;
-		int iArgCnt = push_functor(&fun, func);
-		fun._argCount = iArgCnt;
-		if (m_sFunctionPtr[iFID]._argsCount != iArgCnt)
+			return -1;
+		return (*it).second;
+	}
+	bool SetFunction(int iFID, FunctionPtr& fun, int argCount)
+	{
+		fun._argCount = argCount;
+		if (m_sFunctionPtr[iFID]._argsCount != argCount)
 			return false;
 
 		m_sFunctionPtr[iFID]._fun = fun;
 		return true;
 	}
-
 
 	static FunctionPtrNative RegisterNative(Neo_NativeFunction func)
 	{
@@ -107,9 +98,15 @@ public:
 	}
 
 	template<typename RVal, typename ... Types>
-	RVal Call(const std::string& funName, Types ... args)
+	bool Call(RVal* r, const std::string& funName, Types ... args)
 	{
-		return _pMainWorker->Call<RVal>(funName, args...);
+		return _pMainWorker->Call<RVal>(*r, funName, args...);
+	}
+
+	template<typename ... Types>
+	bool CallN(const std::string& funName, Types ... args)
+	{
+		return _pMainWorker->CallN(funName, args...);
 	}
 
 	template<typename RVal, typename ... Types>
@@ -123,6 +120,19 @@ public:
 		iFID = (*it).second;
 
 		return _pMainWorker->Call_TL<RVal>(iTimeout, iCheckOpCount, r, iFID, args...);
+	}
+
+	template<typename ... Types>
+	bool CallN_TL(int iTimeout, int iCheckOpCount, const std::string& funName, Types ... args) // Time Limit
+	{
+		int iFID = -1;
+		auto it = m_sImExportTable.find(funName);
+		if (it == m_sImExportTable.end())
+			return false;
+
+		iFID = (*it).second;
+
+		return _pMainWorker->CallN_TL(iTimeout, iCheckOpCount, iFID, args...);
 	}
 
 	u32 CreateWorker(int iStackSize = 50 * 1024);

@@ -22,7 +22,7 @@
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{45F20DCA-0370-40EB-A1B9-BEEC4CE00B8E}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>console_table_callback</RootNamespace>
+    <RootNamespace>console</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.17134.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -157,6 +157,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\NeoSource\Neo.h" />
     <ClInclude Include="..\..\NeoSource\NeoArchive.h" />
     <ClInclude Include="..\..\NeoSource\NeoExport.h" />
     <ClInclude Include="..\..\NeoSource\NeoParser.h" />
@@ -164,7 +165,7 @@
     <ClInclude Include="..\..\NeoSource\NeoVM.h" />
     <ClInclude Include="..\..\NeoSource\NeoVMWorker.h" />
     <ClInclude Include="..\..\NeoSource\UTFString.h" />
-    <ClInclude Include="console_table_callback.h" />
+    <ClInclude Include="console.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
@@ -205,13 +206,27 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="console_table_callback.cpp" />
+    <ClCompile Include="9_times.cpp" />
+    <ClCompile Include="callback.cpp" />
+    <ClCompile Include="console.cpp" />
+    <ClCompile Include="slice_run.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="table.cpp" />
+    <ClCompile Include="table_callback.cpp" />
+    <ClCompile Include="time_limit.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="9_times.neo" />
+    <None Include="callback.neo" />
+    <None Include="slice_run.neo" />
+    <None Include="table.neo" />
+    <None Include="table_callback.neo" />
+    <None Include="time_limit.neo" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
