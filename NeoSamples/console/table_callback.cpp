@@ -1,5 +1,4 @@
 #include "stdafx.h"
-#include "console_table_callback.h"
 #include "../../NeoSource/Neo.h"
 
 class CA
@@ -56,30 +55,12 @@ static SFunLib g_sTableFun[] =
 
 
 
-BOOL        FileLoad(const char* pFileName, void*& pBuffer, int& iLen)
-{
-	FILE* fp = NULL;
-	int error_t = fopen_s(&fp, pFileName, "rb");
-	if (error_t != 0)
-		return false;
 
-	fseek(fp, 0, SEEK_END);
-	int iFileSize = ftell(fp);
-	fseek(fp, 0, SEEK_SET);
-
-	pBuffer = new BYTE[iFileSize + 2];
-	fread(pBuffer, iFileSize, 1, fp);
-	fclose(fp);
-
-	iLen = iFileSize;
-	return true;
-}
-
-int main()
+int SAMPLE_table_callback()
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == FileLoad("1.neo", pFileBuffer, iFileLen))
+	if (false == FileLoad("table_callback.neo", pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;

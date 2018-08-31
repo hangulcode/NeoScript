@@ -24,7 +24,7 @@
     <ClInclude Include="targetver.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="console_table.h">
+    <ClInclude Include="console.h">
       <Filter>소스 파일</Filter>
     </ClInclude>
     <ClInclude Include="..\..\NeoSource\NeoExport.h">
@@ -48,12 +48,15 @@
     <ClInclude Include="..\..\NeoSource\NeoVMWorker.h">
       <Filter>NeoSource</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\NeoSource\Neo.h">
+      <Filter>NeoSource</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="console_table.cpp">
+    <ClCompile Include="console.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="..\..\NeoSource\NeoExport.cpp">

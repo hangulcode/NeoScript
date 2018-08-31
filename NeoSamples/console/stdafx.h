@@ -16,3 +16,4 @@
 #include <windows.h>
 #include <string>
 
+BOOL        FileLoad(const char* pFileName, void*& pBuffer, int& iLen);

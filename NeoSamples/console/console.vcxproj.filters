@@ -1,0 +1,110 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="..\..\NeoSource\NeoExport.cpp">
+      <Filter>NeoScript</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\NeoSource\NeoLib.cpp">
+      <Filter>NeoScript</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\NeoSource\NeoParser.cpp">
+      <Filter>NeoScript</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\NeoSource\NeoTextLoader.cpp">
+      <Filter>NeoScript</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\NeoSource\NeoVM.cpp">
+      <Filter>NeoScript</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\NeoSource\NeoVMWorker.cpp">
+      <Filter>NeoScript</Filter>
+    </ClCompile>
+    <ClCompile Include="table_callback.cpp">
+      <Filter>Samples</Filter>
+    </ClCompile>
+    <ClCompile Include="callback.cpp">
+      <Filter>Samples</Filter>
+    </ClCompile>
+    <ClCompile Include="9_times.cpp">
+      <Filter>Samples</Filter>
+    </ClCompile>
+    <ClCompile Include="slice_run.cpp">
+      <Filter>Samples</Filter>
+    </ClCompile>
+    <ClCompile Include="table.cpp">
+      <Filter>Samples</Filter>
+    </ClCompile>
+    <ClCompile Include="time_limit.cpp">
+      <Filter>Samples</Filter>
+    </ClCompile>
+    <ClCompile Include="stdafx.cpp">
+      <Filter>main</Filter>
+    </ClCompile>
+    <ClCompile Include="console.cpp">
+      <Filter>main</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\NeoSource\Neo.h">
+      <Filter>NeoScript</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\NeoSource\NeoArchive.h">
+      <Filter>NeoScript</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\NeoSource\NeoExport.h">
+      <Filter>NeoScript</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\NeoSource\NeoParser.h">
+      <Filter>NeoScript</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\NeoSource\NeoTextLoader.h">
+      <Filter>NeoScript</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\NeoSource\NeoVM.h">
+      <Filter>NeoScript</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\NeoSource\NeoVMWorker.h">
+      <Filter>NeoScript</Filter>
+    </ClInclude>
+    <ClInclude Include="stdafx.h">
+      <Filter>main</Filter>
+    </ClInclude>
+    <ClInclude Include="targetver.h">
+      <Filter>main</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\NeoSource\UTFString.h">
+      <Filter>NeoScript</Filter>
+    </ClInclude>
+    <ClInclude Include="console.h">
+      <Filter>main</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="NeoScript">
+      <UniqueIdentifier>{8c72315d-fec6-4ae7-90d8-4750437f9946}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Samples">
+      <UniqueIdentifier>{fb8804e8-1dea-44a0-bafc-27932579d3c5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="main">
+      <UniqueIdentifier>{3f68bb8d-fd00-42da-8b77-5b1ff8351879}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="callback.neo">
+      <Filter>Samples</Filter>
+    </None>
+    <None Include="9_times.neo">
+      <Filter>Samples</Filter>
+    </None>
+    <None Include="slice_run.neo">
+      <Filter>Samples</Filter>
+    </None>
+    <None Include="table.neo">
+      <Filter>Samples</Filter>
+    </None>
+    <None Include="time_limit.neo">
+      <Filter>Samples</Filter>
+    </None>
+  </ItemGroup>
+</Project>

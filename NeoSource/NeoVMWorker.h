@@ -476,6 +476,17 @@ public:
 		return true;
 	}
 
+	template<typename ... Types>
+	bool CallN(const std::string& funName, Types ... args)
+	{
+		ClearArgs();
+		PushArgs(args...);
+		RunFunction(funName);
+		GC();
+		ReturnValue();
+		return true;
+	}
+
 	template<typename RVal, typename ... Types>
 	bool Call_TL(int iTimeout, int iCheckOpCount, RVal* r, int iFID, Types ... args)
 	{
@@ -493,10 +504,30 @@ public:
 		}
 
 		GC();
-		*r = _read<RVal>(&m_sVarStack[_iSP_Vars]);
+		_read(&m_sVarStack[_iSP_Vars], *r);
 		return true;
 	}
 
+	template<typename ... Types>
+	bool CallN_TL(int iTimeout, int iCheckOpCount, int iFID, Types ... args)
+	{
+		ClearArgs();
+		PushArgs(args...);
+		//RunFunction(funName, );
+		if (false == Setup(iFID))
+			return false;
+
+		Run(false, iTimeout, iCheckOpCount);
+		if (_isSetup == true)
+		{	// yet ... not completed
+			GC();
+			return false;
+		}
+
+		GC();
+		ReturnValue();
+		return true;
+	}
 	static void neo_pushcclosureNative(FunctionPtrNative* pOut, Neo_NativeFunction pFun)
 	{
 		pOut->_func = pFun;
