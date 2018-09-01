@@ -8,13 +8,13 @@
 
 	
 ※ 샘플
-	- console_callback : C++ 와 Neo 스크립트 서로 함수 호출 합니다.
-	- console_table_callback : Neo 스크립트 테이블에 함수를 매핑해서 실행 시간에 함수를 찾아서 호출 합니다.
-	- console_9_times : 간단한 구구단 샘플 입니다.
-	- console_table : 테이블 사용법 샘플 입니다.
-	- console_slice_run : 스크립트로 제작한 부분을 일정시간 or 명령어 만큼 순차적으로 매프레임 실행합니다.
-	- console_time_limit : 스크립트 함수 호출을 일정 시간이 지나면 빠져 나오게 처리 합니다.
-		console_slice_run 와 다르게 console_time_limit은 다음 프레임에 이어서 실행 하지 않습니다.
+	- console/callback : C++ 와 Neo 스크립트 서로 함수 호출 합니다.
+	- console/table_callback : Neo 스크립트 테이블에 함수를 매핑해서 실행 시간에 함수를 찾아서 호출 합니다.
+	- console/9_times : 간단한 구구단 샘플 입니다.
+	- console/table : 테이블 사용법 샘플 입니다.
+	- console/slice_run : 스크립트로 제작한 부분을 일정시간 or 명령어 만큼 순차적으로 매프레임 실행합니다.
+	- console/time_limit : 스크립트 함수 호출을 일정 시간이 지나면 빠져 나오게 처리 합니다.
+		console/slice_run 와 다르게 console/time_limit은 다음 프레임에 이어서 실행 하지 않습니다.
 
 ※ var 자료 구조
 	- null : 변수에 아무 값도 없는 상태 (변수를 초기화 하지 않거나 "var a;" or "var a = null;" 인 경우)
