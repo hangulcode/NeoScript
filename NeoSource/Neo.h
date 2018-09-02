@@ -155,6 +155,18 @@ namespace NeoHelper
 			return 0;
 		}
 	};
+	template<>
+	struct functor<void>
+	{
+		static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
+		{
+			if (args != pfun->_argCount)
+				return -1;
+			upvalue_<void(*)()>(pfun->_func)();
+			N->ReturnValue();
+			return 0;
+		}
+	};
 
 	template<typename RVal, typename ... Types>
 	static int push_functor(FunctionPtr* pOut, RVal(*func)(Types ... args))
@@ -176,15 +188,3 @@ namespace NeoHelper
 	}
 };
 
-template<>
-struct NeoHelper::functor<void>
-{
-	static int invoke(CNeoVMWorker *N, FunctionPtr* pfun, short args)
-	{
-		if (args != pfun->_argCount)
-			return -1;
-		upvalue_<void(*)()>(pfun->_func)();
-		N->ReturnValue();
-		return 0;
-	}
-};
