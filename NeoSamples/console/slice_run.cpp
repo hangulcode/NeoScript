@@ -18,7 +18,7 @@ int SAMPLE_slice_run()
 	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true);
 	if (pVM != NULL)
 	{
-		printf("Comile Success. Code : %d bytes !!\n\n", pVM->GetBytesSize());
+		printf("Compile Success. Code : %d bytes !!\n\n", pVM->GetBytesSize());
 
 		// Alloc Worker Stack
 		u32 id = pVM->CreateWorker();

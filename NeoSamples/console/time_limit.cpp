@@ -18,7 +18,7 @@ int SAMPLE_time_limit()
 	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true);
 	if (pVM != NULL)
 	{
-		printf("Comile Success. Code : %d bytes !!\n\n", pVM->GetBytesSize());
+		printf("Compile Success. Code : %d bytes !!\n\n", pVM->GetBytesSize());
 
 		for (int i = 1; i < 10; i++)
 		{
