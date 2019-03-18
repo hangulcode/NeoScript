@@ -179,3 +179,31 @@ void OutAsm(const char*	lpszString, ...)
 	printf(buff);
 #endif
 }
+
+void OutBytes(const u8*	pBuffer, int iCount, int iMaxCount)
+{
+	char buff[4096];
+	buff[0] = 0;
+
+#ifdef _WIN32
+	for (int i = 0; i < iMaxCount; i++)
+	{
+		if(i < iCount)
+			sprintf_s(buff + i * 3, 4, "%02X ", pBuffer[i]);
+		else
+			sprintf_s(buff + i * 3, 4, "   ");
+	}
+#else
+	for (int i = 0; i < iMaxCount; i++)
+	{
+		if (i < iCount)
+			sprintf(buff + i * 3, "%02X ", pBuffer[i]);
+		else
+			sprintf(buff + i * 3, "   ");
+	}
+#endif
+
+#ifdef _WIN32	
+	printf(buff);
+#endif
+}

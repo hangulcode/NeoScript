@@ -42,6 +42,10 @@ public:
     {
         return (void*)m_lpBufStart;
     }
+	void*   GetDataCurrent()
+	{
+		return (void*)((u8*)m_lpBufStart + m_iOffset);
+	}
 
 	inline int GetBufferOffset()
 	{

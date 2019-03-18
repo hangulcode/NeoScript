@@ -186,7 +186,8 @@ protected:
 
 
 bool	ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar);
-void	OutAsm(const char*	lpszString, ...);
+void	OutAsm(const char* lpszString, ...);
+void	OutBytes(const u8* pBuffer, int iCount, int iMaxCount);
 
 bool	StringToDouble(double& r, const char *p);
 bool	StringToDoubleLow(double& r, const char *p);

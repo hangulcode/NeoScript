@@ -1044,15 +1044,6 @@ bool	CNeoVMWorker::Setup(int iFunctionID)
 	return true;
 }
 
-#pragma pack(1)
-struct SVMOperation
-{
-	debug_info dbg;
-	NOP_TYPE   op;
-	short n1, n2, n3;
-};
-#pragma pack()
-
 
 bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 {
@@ -1085,8 +1076,18 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 	if(isTimeout)
 		_preClock = clock();
 
+	bool blDebugInfo = true;
+	debug_info dbg;
+	dbg._lineseq = -1;
+
 	while (true)
 	{
+		if (blDebugInfo)
+		{
+			dbg = *(debug_info*)GetCurPtr();
+			SetCodePtr(GetCodeptr() + sizeof(debug_info));
+		}
+
 		pOP = (SVMOperation*)GetCurPtr();
 		switch (pOP->op)
 		{
@@ -1443,9 +1444,9 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 			m_sCallStack.clear();
 			_iSP_Vars = 0;
 #ifdef _WIN32
-			sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pVM->_pErrorMsg, pOP->dbg._lineseq);
+			sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pVM->_pErrorMsg, dbg._lineseq);
 #else
-			sprintf(chMsg, "%s : Line (%d)", _pVM->_pErrorMsg, pOP->dbg._lineseq);
+			sprintf(chMsg, "%s : Line (%d)", _pVM->_pErrorMsg, dbg._lineseq);
 #endif
 			_pVM->_sErrorMsgDetail = chMsg;
 			return false;

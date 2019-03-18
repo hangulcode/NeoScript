@@ -82,6 +82,14 @@ enum NOP_TYPE : u8
 	NOP_TABLE_REMOVE,
 };
 
+#pragma pack(1)
+struct SVMOperation
+{
+	NOP_TYPE   op;
+	short n1, n2, n3;
+};
+#pragma pack()
+
 struct VarInfo;
 class CNeoVMWorker;
 struct FunctionPtr;
@@ -232,7 +240,7 @@ private:
 	}
 	inline void				NextOP(int n)
 	{
-		_iCodeOffset += 1 + ((n + 1) * 2);
+		_iCodeOffset += 1 + (n * 2);
 	}
 
 	inline	u8				GetU8()
