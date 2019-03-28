@@ -1076,7 +1076,7 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 	if(isTimeout)
 		_preClock = clock();
 
-	bool blDebugInfo = true;
+	bool blDebugInfo = _pVM->IsDebugInfo();
 	debug_info dbg;
 	dbg._lineseq = -1;
 

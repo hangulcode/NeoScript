@@ -101,6 +101,7 @@ private:
 	u16		m_iCurCol;
 public:
 	bool	_allowGlobalInitLogic = true;
+	bool	_debug = false;
 
 	std::list<SToken> m_sTokenQueue;
 	std::string m_sErrorString;

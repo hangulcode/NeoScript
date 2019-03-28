@@ -2001,7 +2001,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			int iVar = funs._cur.GetN(funs._cur._iLastOPOffset, 0);
 			if (IsTempVar(iVar))
 			{
-				funs._cur._code->SetPointer(funs._cur._iLastOPOffset - sizeof(debug_info), SEEK_SET);
+				funs._cur._code->SetPointer(funs._cur._iLastOPOffset - (ar._debug ? sizeof(debug_info) : 0), SEEK_SET);
 				funs._cur.ClearLastOP();
 			}
 		}
@@ -2216,22 +2216,23 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	return r;
 }
 
-bool CNeoVM::Compile(void* pBufferSrc, int iLenSrc, CNArchive& arw, std::string& err, bool putASM, bool allowGlobalInitLogic)
+bool CNeoVM::Compile(void* pBufferSrc, int iLenSrc, CNArchive& arw, std::string& err, bool putASM, bool debug, bool allowGlobalInitLogic)
 {
 	CArchiveRdWC ar2;
 	ToArchiveRdWC((const char*)pBufferSrc, iLenSrc, ar2);
 	ar2._allowGlobalInitLogic = allowGlobalInitLogic;
+	ar2._debug = debug;
 
 	bool b = Parse(ar2, arw, putASM);
 	if(b == false)
 		err = ar2.m_sErrorString;
 	return b;
 }
-CNeoVM*	CNeoVM::CompileAndLoadVM(void* pBufferSrc, int iLenSrc, std::string& err, bool putASM, bool allowGlobalInitLogic, int iStackSize)
+CNeoVM*	CNeoVM::CompileAndLoadVM(void* pBufferSrc, int iLenSrc, std::string& err, bool putASM, bool debug, bool allowGlobalInitLogic, int iStackSize)
 {
 	CNArchive arCode;
 
-	if (false == Compile(pBufferSrc, iLenSrc, arCode, err, putASM, allowGlobalInitLogic))
+	if (false == Compile(pBufferSrc, iLenSrc, arCode, err, putASM, debug, allowGlobalInitLogic))
 	{
 		return NULL;
 	}

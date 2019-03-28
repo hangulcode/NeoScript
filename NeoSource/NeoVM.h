@@ -31,6 +31,7 @@ private:
 	std::map<u32, CNeoVMWorker*> _sVMWorkers;
 	int	_BytesSize;
 
+	inline bool IsDebugInfo() { return (_header._dwFlag & NEO_HEADER_FLAG_DEBUG) != 0; }
 
 	void Var_AddRef(VarInfo *d);
 	void Var_Release(VarInfo *d);
@@ -148,8 +149,8 @@ public:
 
 	static CNeoVM*	LoadVM(void* pBuffer, int iSize, int iStackSize = 50 * 1024);
 	static void		ReleaseVM(CNeoVM* pVM);
-	static bool		Compile(void* pBufferSrc, int iLenSrc, CNArchive& arw, std::string& err, bool putASM = false, bool allowGlobalInitLogic = true);
+	static bool		Compile(void* pBufferSrc, int iLenSrc, CNArchive& arw, std::string& err, bool putASM = false, bool debug = false, bool allowGlobalInitLogic = true);
 
-	static CNeoVM*	CompileAndLoadVM(void* pBufferSrc, int iLenSrc, std::string& err, bool putASM = false, bool allowGlobalInitLogic = true, int iStackSize = 50 * 1024);
+	static CNeoVM*	CompileAndLoadVM(void* pBufferSrc, int iLenSrc, std::string& err, bool putASM = false, bool debug = false, bool allowGlobalInitLogic = true, int iStackSize = 50 * 1024);
 };
 

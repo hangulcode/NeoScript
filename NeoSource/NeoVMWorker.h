@@ -175,7 +175,11 @@ struct SNeoVMHeader
 	int		_iGlobalVarCount;
 	int		_iMainFunctionOffset;
 	int		_iCodeSize;
+
+	u32		_dwFlag;
 };
+
+#define NEO_HEADER_FLAG_DEBUG		0x00000001
 
 struct SCallStack
 {

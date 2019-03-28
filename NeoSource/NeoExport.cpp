@@ -86,11 +86,14 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		NOP_TYPE op;
 		debug_info dbg;
 
-		arRead >> dbg;
+		if(arText._debug)
+			arRead >> dbg;
+
 		arRead >> op;
 		iOPCount++;
 
-		ar << dbg;
+		if (arText._debug)
+			ar << dbg;
 
 		switch (op)
 		{
@@ -267,10 +270,13 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 		debug_info dbg;
 		SVMOperation v;
 
-		arRead >> dbg;
+		if(arText._debug)
+			arRead >> dbg;
+
 		arRead >> v.op;
 
-		OutAsm("%6d : ", dbg._lineseq);
+		if (arText._debug)
+			OutAsm("%6d : ", dbg._lineseq);
 
 		switch (v.op)
 		{
@@ -675,6 +681,7 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	header._dwFileType = FILE_NEOS;
 	header._dwNeoVersion = NEO_VER;
 	header._iFunctionCount = (int)(funs._funs.size() + 1);
+	header._dwFlag = arText._debug ? NEO_HEADER_FLAG_DEBUG : 0;
 	
 	std::map<int, SFunctionTableForWriter> funPos;
 

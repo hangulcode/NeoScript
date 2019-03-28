@@ -192,8 +192,11 @@ struct SFunctionInfo
 	}
 	void	Push_OP(CArchiveRdWC& ar, u8 op, short r, short a1, short a2)
 	{
-		debug_info dbg(ar.CurFile(), ar.CurLine());
-		_code->Write(&dbg, sizeof(dbg));
+		if (ar._debug)
+		{
+			debug_info dbg(ar.CurFile(), ar.CurLine());
+			_code->Write(&dbg, sizeof(dbg));
+		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		_code->Write(&op, sizeof(op));
@@ -203,8 +206,11 @@ struct SFunctionInfo
 	}
 	void	Push_Call(CArchiveRdWC& ar, u8 op, short fun, short args)
 	{
-		debug_info dbg(ar.CurFile(), ar.CurLine());
-		_code->Write(&dbg, sizeof(dbg));
+		if (ar._debug)
+		{
+			debug_info dbg(ar.CurFile(), ar.CurLine());
+			_code->Write(&dbg, sizeof(dbg));
+		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		_code->Write(&op, sizeof(op));
@@ -213,8 +219,11 @@ struct SFunctionInfo
 	}
 	void	Push_CallPtr(CArchiveRdWC& ar, short table, short index, short args)
 	{
-		debug_info dbg(ar.CurFile(), ar.CurLine());
-		_code->Write(&dbg, sizeof(dbg));
+		if (ar._debug)
+		{
+			debug_info dbg(ar.CurFile(), ar.CurLine());
+			_code->Write(&dbg, sizeof(dbg));
+		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		u8 op = NOP_PTRCALL;
@@ -268,8 +277,11 @@ struct SFunctionInfo
 			}
 		}
 
-		debug_info dbg(ar.CurFile(), ar.CurLine());
-		_code->Write(&dbg, sizeof(dbg));
+		if (ar._debug)
+		{
+			debug_info dbg(ar.CurFile(), ar.CurLine());
+			_code->Write(&dbg, sizeof(dbg));
+		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		_code->Write(&op, sizeof(op));
@@ -278,8 +290,11 @@ struct SFunctionInfo
 	}
 	void	Push_OP1(CArchiveRdWC& ar, u8 op, short r)
 	{
-		debug_info dbg(ar.CurFile(), ar.CurLine());
-		_code->Write(&dbg, sizeof(dbg));
+		if (ar._debug)
+		{
+			debug_info dbg(ar.CurFile(), ar.CurLine());
+			_code->Write(&dbg, sizeof(dbg));
+		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		_code->Write(&op, sizeof(op));
@@ -287,8 +302,11 @@ struct SFunctionInfo
 	}
 	void	Push_RETURN(CArchiveRdWC& ar, short r)
 	{
-		debug_info dbg(ar.CurFile(), ar.CurLine());
-		_code->Write(&dbg, sizeof(dbg));
+		if (ar._debug)
+		{
+			debug_info dbg(ar.CurFile(), ar.CurLine());
+			_code->Write(&dbg, sizeof(dbg));
+		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		u8 op = NOP_RETURN;
@@ -297,8 +315,11 @@ struct SFunctionInfo
 	}
 	void	Push_FUNEND(CArchiveRdWC& ar)
 	{
-		debug_info dbg(ar.CurFile(), ar.CurLine());
-		_code->Write(&dbg, sizeof(dbg));
+		if (ar._debug)
+		{
+			debug_info dbg(ar.CurFile(), ar.CurLine());
+			_code->Write(&dbg, sizeof(dbg));
+		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		u8 op = NOP_FUNEND;
@@ -308,8 +329,11 @@ struct SFunctionInfo
 
 	void	Push_JMP(CArchiveRdWC& ar, int destOffset)
 	{
-		debug_info dbg(ar.CurFile(), ar.CurLine());
-		_code->Write(&dbg, sizeof(dbg));
+		if (ar._debug)
+		{
+			debug_info dbg(ar.CurFile(), ar.CurLine());
+			_code->Write(&dbg, sizeof(dbg));
+		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		u8 op = NOP_JMP;
@@ -319,8 +343,11 @@ struct SFunctionInfo
 	}
 	void	Push_JMPFalse(CArchiveRdWC& ar, short var, int destOffset)
 	{
-		debug_info dbg(ar.CurFile(), ar.CurLine());
-		_code->Write(&dbg, sizeof(dbg));
+		if (ar._debug)
+		{
+			debug_info dbg(ar.CurFile(), ar.CurLine());
+			_code->Write(&dbg, sizeof(dbg));
+		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		u8 op = NOP_JMP_FALSE;
@@ -331,8 +358,11 @@ struct SFunctionInfo
 	}
 	void	Push_JMPTrue(CArchiveRdWC& ar, short var, int destOffset)
 	{
-		debug_info dbg(ar.CurFile(), ar.CurLine());
-		_code->Write(&dbg, sizeof(dbg));
+		if (ar._debug)
+		{
+			debug_info dbg(ar.CurFile(), ar.CurLine());
+			_code->Write(&dbg, sizeof(dbg));
+		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		u8 op = NOP_JMP_TRUE;
@@ -344,8 +374,11 @@ struct SFunctionInfo
 	// Always Value is Key Next Alloc ID
 	void	Push_JMPForEach(CArchiveRdWC& ar, int destOffset, short table, short key)
 	{
-		debug_info dbg(ar.CurFile(), ar.CurLine());
-		_code->Write(&dbg, sizeof(dbg));
+		if (ar._debug)
+		{
+			debug_info dbg(ar.CurFile(), ar.CurLine());
+			_code->Write(&dbg, sizeof(dbg));
+		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		u8 op = NOP_JMP_FOREACH;
@@ -362,8 +395,11 @@ struct SFunctionInfo
 	}
 	void	Push_TableAlloc(CArchiveRdWC& ar, short r)
 	{
-		debug_info dbg(ar.CurFile(), ar.CurLine());
-		_code->Write(&dbg, sizeof(dbg));
+		if (ar._debug)
+		{
+			debug_info dbg(ar.CurFile(), ar.CurLine());
+			_code->Write(&dbg, sizeof(dbg));
+		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		u8 op = NOP_TABLE_ALLOC;
@@ -382,7 +418,7 @@ struct SFunctionInfo
 			case NOP_VAR_CLEAR:
 				if (*preDest == nValue)
 				{
-					_code->SetPointer(_iLastOPOffset - sizeof(debug_info), SEEK_SET);
+					_code->SetPointer(_iLastOPOffset - (ar._debug ? sizeof(debug_info) : 0), SEEK_SET);
 					Push_TableRemove(ar, nTable, nArray);
 					return;
 				}
@@ -390,8 +426,11 @@ struct SFunctionInfo
 			}
 		}
 
-		debug_info dbg(ar.CurFile(), ar.CurLine());
-		_code->Write(&dbg, sizeof(dbg));
+		if (ar._debug)
+		{
+			debug_info dbg(ar.CurFile(), ar.CurLine());
+			_code->Write(&dbg, sizeof(dbg));
+		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		u8 op = NOP_TABLE_INSERT;
@@ -402,8 +441,11 @@ struct SFunctionInfo
 	}
 	void	Push_TableRead(CArchiveRdWC& ar, short nTable, short nArray, short nValue)
 	{
-		debug_info dbg(ar.CurFile(), ar.CurLine());
-		_code->Write(&dbg, sizeof(dbg));
+		if (ar._debug)
+		{
+			debug_info dbg(ar.CurFile(), ar.CurLine());
+			_code->Write(&dbg, sizeof(dbg));
+		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		u8 op = NOP_TABLE_READ;
@@ -414,8 +456,11 @@ struct SFunctionInfo
 	}
 	void	Push_TableRemove(CArchiveRdWC& ar, short nTable, short nArray)
 	{
-		debug_info dbg(ar.CurFile(), ar.CurLine());
-		_code->Write(&dbg, sizeof(dbg));
+		if (ar._debug)
+		{
+			debug_info dbg(ar.CurFile(), ar.CurLine());
+			_code->Write(&dbg, sizeof(dbg));
+		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		u8 op = NOP_TABLE_REMOVE;
@@ -425,8 +470,11 @@ struct SFunctionInfo
 	}
 	void	Push_ToType(CArchiveRdWC& ar, u8 op, short r, short s)
 	{
-		debug_info dbg(ar.CurFile(), ar.CurLine());
-		_code->Write(&dbg, sizeof(dbg));
+		if (ar._debug)
+		{
+			debug_info dbg(ar.CurFile(), ar.CurLine());
+			_code->Write(&dbg, sizeof(dbg));
+		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		_code->Write(&op, sizeof(op));
