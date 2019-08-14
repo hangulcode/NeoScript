@@ -379,6 +379,8 @@ private:
 			return V->_int;
 		case VAR_FLOAT:
 			return (int)V->_float;
+		default:
+			break;
 		}
 		return -1;
 	}
@@ -390,6 +392,8 @@ private:
 			return V->_int;
 		case VAR_FLOAT:
 			return V->_float;
+		default:
+			break;
 		}
 		return -1;
 	}

@@ -13,6 +13,8 @@ void CNeoVM::Var_AddRef(VarInfo *d)
 	case VAR_TABLE:
 		++d->_tbl->_refCount;
 		break;
+	default:
+		break;
 	}
 }
 void CNeoVM::Var_Release(VarInfo *d)
@@ -28,6 +30,8 @@ void CNeoVM::Var_Release(VarInfo *d)
 		if (--d->_tbl->_refCount <= 0)
 			FreeTable(d);
 		d->_tbl = NULL;
+		break;
+	default:
 		break;
 	}
 	d->ClearType();

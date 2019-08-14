@@ -273,6 +273,8 @@ struct SFunctionInfo
 						return;
 					}
 					break;
+				default:
+					break;
 				}
 			}
 		}
@@ -422,6 +424,8 @@ struct SFunctionInfo
 					Push_TableRemove(ar, nTable, nArray);
 					return;
 				}
+				break;
+			default:
 				break;
 			}
 		}

@@ -18,6 +18,8 @@ void CNeoVMWorker::Var_AddRef(VarInfo *d)
 	case VAR_TABLE:
 		++d->_tbl->_refCount;
 		break;
+	default:
+		break;
 	}
 }
 void CNeoVMWorker::Var_Release(VarInfo *d)
@@ -33,6 +35,8 @@ void CNeoVMWorker::Var_Release(VarInfo *d)
 		if (--d->_tbl->_refCount <= 0)
 			_pVM->FreeTable(d);
 		d->_tbl = NULL;
+		break;
+	default:
 		break;
 	}
 	d->ClearType();
@@ -168,6 +172,8 @@ void CNeoVMWorker::TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue
 		Var_AddRef(pValue);
 		break;
 	}
+	default:
+		break;
 	}
 }
 FunctionPtrNative* CNeoVMWorker::GetPtrFunction(VarInfo *pTable, VarInfo *pArray)
@@ -217,6 +223,8 @@ FunctionPtrNative* CNeoVMWorker::GetPtrFunction(VarInfo *pTable, VarInfo *pArray
 		}
 		break;
 	}
+	default:
+		break;
 	}
 	return NULL;
 }
@@ -267,6 +275,8 @@ void CNeoVMWorker::TableRead(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
 		}
 		break;
 	}
+	default:
+		break;
 	}
 }
 
@@ -320,6 +330,8 @@ void CNeoVMWorker::TableRemove(VarInfo *pTable, VarInfo *pArray)
 		}
 		break;
 	}
+	default:
+		break;
 	}
 }
 
@@ -351,6 +363,8 @@ void CNeoVMWorker::Move(VarInfo* v1, VarInfo* v2)
 		v1->_tbl = v2->_tbl;
 		++v1->_tbl->_refCount;
 		break;
+	default:
+		break;
 	}
 }
 void CNeoVMWorker::MoveMinus(VarInfo* v1, VarInfo* v2)
@@ -363,6 +377,8 @@ void CNeoVMWorker::MoveMinus(VarInfo* v1, VarInfo* v2)
 	case VAR_FLOAT:
 		Var_SetFloat(v1, -v2->_float);
 		return;
+	default:
+		break;
 	}
 	SetError("Minus Error");
 }
@@ -666,6 +682,8 @@ void CNeoVMWorker::Inc(VarInfo* v1)
 	case VAR_FLOAT:
 		++v1->_float;
 		return;
+	default:
+		break;
 	}
 	SetError("++ Error");
 }
@@ -679,6 +697,8 @@ void CNeoVMWorker::Dec(VarInfo* v1)
 	case VAR_FLOAT:
 		--v1->_float;
 		return;
+	default:
+		break;
 	}
 	SetError("-- Error");
 }
@@ -902,6 +922,8 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 		return "table";
 	case VAR_TABLEFUN:
 		return "function";
+	default:
+		break;
 	}
 	return "null";
 }
@@ -923,6 +945,8 @@ int CNeoVMWorker::ToInt(VarInfo* v1)
 		return -1;
 	case VAR_TABLEFUN:
 		return -1;
+	default:
+		break;
 	}
 	return -1;
 }
@@ -944,6 +968,8 @@ double CNeoVMWorker::ToFloat(VarInfo* v1)
 		return -1;
 	case VAR_TABLEFUN:
 		return -1;
+	default:
+		break;
 	}
 	return -1;
 }
@@ -965,6 +991,8 @@ int CNeoVMWorker::ToSize(VarInfo* v1)
 		return (int)v1->_tbl->_intMap.size() + (int)v1->_tbl->_strMap.size();
 	case VAR_TABLEFUN:
 		return 0;
+	default:
+		break;
 	}
 	return 0;
 }
@@ -986,6 +1014,8 @@ std::string CNeoVMWorker::GetType(VarInfo* v1)
 		return "table";
 	case VAR_TABLEFUN:
 		return "function";
+	default:
+		break;
 	}
 	return "null";
 }

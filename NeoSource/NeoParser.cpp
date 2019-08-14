@@ -273,7 +273,7 @@ bool GetQuotationString(CArchiveRdWC& ar, std::string& str)
 	while (blEnd == false)
 	{
 		u16 c1 = ar.GetData(true);
-		if (c1 == NULL)
+		if (c1 == 0) // null
 			return false;
 		if (c1 == '\n')
 			return false;
@@ -1339,6 +1339,8 @@ NOP_TYPE ConvertCheckOPToOptimize(NOP_TYPE n)
 		return NOP_JMP_AND;
 	case NOP_OR:	// ||
 		return NOP_JMP_OR;
+	default:
+		break;
 	}
 	return NOP_NONE;
 }
@@ -1362,6 +1364,8 @@ NOP_TYPE ConvertCheckOPToOptimizeInv(NOP_TYPE n)
 		return NOP_JMP_NAND;
 	case NOP_OR:	// ||
 		return NOP_JMP_NOR;
+	default:
+		break;
 	}
 	return NOP_NONE;
 }
