@@ -1,8 +1,6 @@
-# Neo Script documentation
-	The grammar uses a C-like syntax, but it is somewhat similar to Lua script.
-
-
-※ It was developed in Visual Studio Pro 2017 C ++.
+# Neo Script Documentation
+	- The grammar uses a C-like syntax, but it is somewhat similar to Lua script.
+	- It was developed in Visual Studio Pro 2017 C++.
 	- After some more features are added, port to C#
 
 
