@@ -3,7 +3,10 @@
 	- It was developed in Visual Studio Pro 2017 C++.
 	- After some more features are added, port to C#
 
-
+### License
+	MIT license
+	NeoScript is free software.
+	The only requirement is that if you do use NeoScript, then you should give us credit by including the copyright notice somewhere in your product or its documentation.
 
 ### Sample
 	- console / callback: Function calls between C ++ and Neo scripts.
