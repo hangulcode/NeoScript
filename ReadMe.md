@@ -80,6 +80,8 @@
 	- / * * / is a multi-line range comment
 
 
-#### Neo Script Image
+#### Neo Script Code Image
 ![](/docs/img/vs001.png)
 
+#### Neo Script Output Image
+![](/docs/img/vs002.png)
