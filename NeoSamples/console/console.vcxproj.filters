@@ -43,6 +43,9 @@
     <ClCompile Include="console.cpp">
       <Filter>main</Filter>
     </ClCompile>
+    <ClCompile Include="etc.cpp">
+      <Filter>Samples</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\NeoSource\Neo.h">
@@ -107,6 +110,9 @@
       <Filter>Samples</Filter>
     </None>
     <None Include="table_callback.neo">
+      <Filter>Samples</Filter>
+    </None>
+    <None Include="etc.neo">
       <Filter>Samples</Filter>
     </None>
   </ItemGroup>

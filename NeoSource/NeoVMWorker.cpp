@@ -1110,387 +1110,401 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 	debug_info dbg;
 	dbg._lineseq = -1;
 
-	while (true)
+	try
 	{
-		if (blDebugInfo)
+		while (true)
 		{
-			dbg = *(debug_info*)GetCurPtr();
-			SetCodePtr(GetCodeptr() + sizeof(debug_info));
-		}
-
-		pOP = (SVMOperation*)GetCurPtr();
-		switch (pOP->op)
-		{
-		case NOP_MOV:
-			NextOP(2);
-			Move(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
-			break;
-		case NOP_MOV_MINUS:
-			NextOP(2);
-			MoveMinus(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
-			break;
-
-		case NOP_ADD2:
-			NextOP(2);
-			Add2(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
-			break;
-		case NOP_SUB2:
-			NextOP(2);
-			Sub2(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
-			break;
-		case NOP_MUL2:
-			NextOP(2);
-			Mul2(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
-			break;
-		case NOP_DIV2:
-			NextOP(2);
-			Div2(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
-			break;
-		case NOP_PERSENT2:
-			NextOP(2);
-			Per2(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
-			break;
-
-		case NOP_VAR_CLEAR:
-			NextOP(1);
-			Var_Release(GetVarPtr(pOP->n1));
-			break;
-		case NOP_INC:
-			NextOP(1);
-			Inc(GetVarPtr(pOP->n1));
-			break;
-		case NOP_DEC:
-			NextOP(1);
-			Dec(GetVarPtr(pOP->n1));
-			break;
-
-		case NOP_ADD3:
-			NextOP(3);
-			Add(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
-			break;
-		case NOP_SUB3:
-			NextOP(3);
-			Sub(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
-			break;
-		case NOP_MUL3:
-			NextOP(3);
-			Mul(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
-			break;
-		case NOP_DIV3:
-			NextOP(3);
-			Div(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
-			break;
-		case NOP_PERSENT3:
-			NextOP(3);
-			Per(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
-			break;
-
-		case NOP_GREAT:		// >
-			NextOP(3);
-			Var_SetBool(GetVarPtr(pOP->n1), CompareGR(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)));
-			break;
-		case NOP_GREAT_EQ:	// >=
-			NextOP(3);
-			Var_SetBool(GetVarPtr(pOP->n1), CompareGE(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)));
-			break;
-		case NOP_LESS:		// <
-			NextOP(3);
-			Var_SetBool(GetVarPtr(pOP->n1), CompareGR(GetVarPtr(pOP->n3), GetVarPtr(pOP->n2)));
-			break;
-		case NOP_LESS_EQ:	// <=
-			NextOP(3);
-			Var_SetBool(GetVarPtr(pOP->n1), CompareGE(GetVarPtr(pOP->n3), GetVarPtr(pOP->n2)));
-			break;
-		case NOP_EQUAL2:	// ==
-			NextOP(3);
-			Var_SetBool(GetVarPtr(pOP->n1), CompareEQ(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)));
-			break;
-		case NOP_NEQUAL:	// !=
-			NextOP(3);
-			Var_SetBool(GetVarPtr(pOP->n1), !CompareEQ(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)));
-			break;
-		case NOP_AND:	// &&
-			NextOP(3);
-			Var_SetBool(GetVarPtr(pOP->n1), GetVarPtr(pOP->n3)->IsTrue() && GetVarPtr(pOP->n2)->IsTrue());
-			break;
-		case NOP_OR:	// ||
-			NextOP(3);
-			Var_SetBool(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2)->IsTrue() || GetVarPtr(pOP->n3)->IsTrue());
-			break;
-
-
-
-		case NOP_JMP_GREAT:		// >
-			NextOP(3);
-			if (true == CompareGR(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)))
-				SetCodeIncPtr(pOP->n1);
-			break;
-		case NOP_JMP_GREAT_EQ:	// >=
-			NextOP(3);
-			if (true == CompareGE(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)))
-				SetCodeIncPtr(pOP->n1);
-			break;
-		case NOP_JMP_LESS:		// <
-			NextOP(3);
-			if (true == CompareGR(GetVarPtr(pOP->n3), GetVarPtr(pOP->n2)))
-				SetCodeIncPtr(pOP->n1);
-			break;
-		case NOP_JMP_LESS_EQ:	// <=
-			NextOP(3);
-			if (true == CompareGE(GetVarPtr(pOP->n3), GetVarPtr(pOP->n2)))
-				SetCodeIncPtr(pOP->n1);
-			break;
-		case NOP_JMP_EQUAL2:	// ==
-			NextOP(3);
-			if (true == CompareEQ(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)))
-				SetCodeIncPtr(pOP->n1);
-			break;
-		case NOP_JMP_NEQUAL:	// !=
-			NextOP(3);
-			if (false == CompareEQ(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)))
-				SetCodeIncPtr(pOP->n1);
-			break;
-		case NOP_JMP_AND:	// &&
-			NextOP(3);
-			if (GetVarPtr(pOP->n2)->IsTrue() && GetVarPtr(pOP->n3)->IsTrue())
-				SetCodeIncPtr(pOP->n1);
-			break;
-		case NOP_JMP_OR:		// ||
-			NextOP(3);
-			if (GetVarPtr(pOP->n2)->IsTrue() || GetVarPtr(pOP->n3)->IsTrue())
-				SetCodeIncPtr(pOP->n1);
-			break;
-		case NOP_JMP_NAND:	// !(&&)
-			NextOP(3);
-			if (false == (GetVarPtr(pOP->n2)->IsTrue() && GetVarPtr(pOP->n3)->IsTrue()))
-				SetCodeIncPtr(pOP->n1);
-			break;
-		case NOP_JMP_NOR:	// !(||)
-			NextOP(3);
-			if (false == (GetVarPtr(pOP->n2)->IsTrue() || GetVarPtr(pOP->n3)->IsTrue()))
-				SetCodeIncPtr(pOP->n1);
-			break;
-		case NOP_JMP_FOREACH:	// foreach
-			NextOP(3);
-			if(ForEach(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3), GetVarPtr(pOP->n3+1)))
-				SetCodeIncPtr(pOP->n1);
-			break;
-
-		case NOP_STR_ADD:	// ..
-			NextOP(3);
-			Var_SetString(GetVarPtr(pOP->n1), (ToString(GetVarPtr(pOP->n2)) + ToString(GetVarPtr(pOP->n3))).c_str());
-			break;
-
-		case NOP_TOSTRING:
-			NextOP(2);
-			Var_SetString(GetVarPtr(pOP->n1), ToString(GetVarPtr(pOP->n2)).c_str());
-			break;
-		case NOP_TOINT:
-			NextOP(2);
-			Var_SetInt(GetVarPtr(pOP->n1), ToInt(GetVarPtr(pOP->n2)));
-			break;
-		case NOP_TOFLOAT:
-			NextOP(2);
-			Var_SetFloat(GetVarPtr(pOP->n1), ToFloat(GetVarPtr(pOP->n2)));
-			break;
-		case NOP_TOSIZE:
-			NextOP(2);
-			Var_SetInt(GetVarPtr(pOP->n1), ToSize(GetVarPtr(pOP->n2)));
-			break;
-		case NOP_GETTYPE:
-			NextOP(2);
-			Var_SetString(GetVarPtr(pOP->n1), GetType(GetVarPtr(pOP->n2)).c_str());
-			break;
-		case NOP_SLEEP:
-			NextOP(1);
+			if (blDebugInfo)
 			{
-				int r = Sleep(isSliceRun, iTimeout, GetVarPtr(pOP->n1));
-				if (r == 0)
-				{
-					_preClock = clock();
-					return true;
-				}
-				else if (r == 2)
-				{
-					op_process = iCheckOpCount;
-				}
+				dbg = *(debug_info*)GetCurPtr();
+				SetCodePtr(GetCodeptr() + sizeof(debug_info));
 			}
-			break;
 
-		case NOP_JMP:
-			NextOP(1);
-			SetCodeIncPtr(pOP->n1);
-			break;
-		case NOP_JMP_FALSE:
-			NextOP(2);
-			if (false == GetVarPtr(pOP->n1)->IsTrue())
-				SetCodeIncPtr(pOP->n2);
-			break;
-		case NOP_JMP_TRUE:
-			NextOP(2);
-			if (true == GetVarPtr(pOP->n1)->IsTrue())
-				SetCodeIncPtr(pOP->n2);
-			break;
-
-		case NOP_CALL:
-			NextOP(2);
-			// n2 is Arg Count not use
-			callStack._iReturnOffset = GetCodeptr();
-			callStack._iSP_Vars = _iSP_Vars;
-			callStack._iSP_VarsMax = iSP_VarsMax;
-			m_sCallStack.push_back(callStack);
-
-			fun = _pVM->m_sFunctionPtr[pOP->n1];
-			SetCodePtr(fun._codePtr);
-			_iSP_Vars = iSP_VarsMax;
-			iSP_VarsMax = _iSP_Vars + fun._localAddCount;
-			if (_iSP_Vars_Max2 < iSP_VarsMax)
-				_iSP_Vars_Max2 = iSP_VarsMax;
-			break;
-		case NOP_FARCALL:
-		{
-			NextOP(2);
-			short n2 = pOP->n2;
-			if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n2))
-				_iSP_Vars_Max2 = iSP_VarsMax + (1 + n2);
-
-			fun = _pVM->m_sFunctionPtr[pOP->n1];
-			if (fun._fun._func == NULL)
-			{	// Error
-				SetError("Ptr Call is null");
+			pOP = (SVMOperation*)GetCurPtr();
+			switch (pOP->op)
+			{
+			case NOP_MOV:
+				NextOP(2);
+				Move(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
 				break;
-			}
-
-			int iSave = _iSP_Vars;
-			_iSP_Vars = iSP_VarsMax;
-
-			if((*fun._fun._fn)(this, &fun._fun, n2) < 0)
-			{
-				SetError("Ptr Call Argument Count Error");
+			case NOP_MOV_MINUS:
+				NextOP(2);
+				MoveMinus(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
 				break;
-			}
 
-			_iSP_Vars = iSave;
-			break;
-		}
-		case NOP_PTRCALL:
-		{
-			NextOP(3);
-			short n3 = pOP->n3;
+			case NOP_ADD2:
+				NextOP(2);
+				Add2(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
+				break;
+			case NOP_SUB2:
+				NextOP(2);
+				Sub2(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
+				break;
+			case NOP_MUL2:
+				NextOP(2);
+				Mul2(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
+				break;
+			case NOP_DIV2:
+				NextOP(2);
+				Div2(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
+				break;
+			case NOP_PERSENT2:
+				NextOP(2);
+				Per2(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
+				break;
 
-			if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n3))
-				_iSP_Vars_Max2 = iSP_VarsMax + (1 + n3);
+			case NOP_VAR_CLEAR:
+				NextOP(1);
+				Var_Release(GetVarPtr(pOP->n1));
+				break;
+			case NOP_INC:
+				NextOP(1);
+				Inc(GetVarPtr(pOP->n1));
+				break;
+			case NOP_DEC:
+				NextOP(1);
+				Dec(GetVarPtr(pOP->n1));
+				break;
 
-			VarInfo* pVar1 = GetVarPtr(pOP->n1);
-			pFunctionPtrNative = GetPtrFunction(pVar1, GetVarPtr(pOP->n2));
-			if (pFunctionPtrNative != NULL)
+			case NOP_ADD3:
+				NextOP(3);
+				Add(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
+				break;
+			case NOP_SUB3:
+				NextOP(3);
+				Sub(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
+				break;
+			case NOP_MUL3:
+				NextOP(3);
+				Mul(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
+				break;
+			case NOP_DIV3:
+				NextOP(3);
+				Div(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
+				break;
+			case NOP_PERSENT3:
+				NextOP(3);
+				Per(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
+				break;
+
+			case NOP_GREAT:		// >
+				NextOP(3);
+				Var_SetBool(GetVarPtr(pOP->n1), CompareGR(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)));
+				break;
+			case NOP_GREAT_EQ:	// >=
+				NextOP(3);
+				Var_SetBool(GetVarPtr(pOP->n1), CompareGE(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)));
+				break;
+			case NOP_LESS:		// <
+				NextOP(3);
+				Var_SetBool(GetVarPtr(pOP->n1), CompareGR(GetVarPtr(pOP->n3), GetVarPtr(pOP->n2)));
+				break;
+			case NOP_LESS_EQ:	// <=
+				NextOP(3);
+				Var_SetBool(GetVarPtr(pOP->n1), CompareGE(GetVarPtr(pOP->n3), GetVarPtr(pOP->n2)));
+				break;
+			case NOP_EQUAL2:	// ==
+				NextOP(3);
+				Var_SetBool(GetVarPtr(pOP->n1), CompareEQ(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)));
+				break;
+			case NOP_NEQUAL:	// !=
+				NextOP(3);
+				Var_SetBool(GetVarPtr(pOP->n1), !CompareEQ(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)));
+				break;
+			case NOP_AND:	// &&
+				NextOP(3);
+				Var_SetBool(GetVarPtr(pOP->n1), GetVarPtr(pOP->n3)->IsTrue() && GetVarPtr(pOP->n2)->IsTrue());
+				break;
+			case NOP_OR:	// ||
+				NextOP(3);
+				Var_SetBool(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2)->IsTrue() || GetVarPtr(pOP->n3)->IsTrue());
+				break;
+
+
+
+			case NOP_JMP_GREAT:		// >
+				NextOP(3);
+				if (true == CompareGR(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)))
+					SetCodeIncPtr(pOP->n1);
+				break;
+			case NOP_JMP_GREAT_EQ:	// >=
+				NextOP(3);
+				if (true == CompareGE(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)))
+					SetCodeIncPtr(pOP->n1);
+				break;
+			case NOP_JMP_LESS:		// <
+				NextOP(3);
+				if (true == CompareGR(GetVarPtr(pOP->n3), GetVarPtr(pOP->n2)))
+					SetCodeIncPtr(pOP->n1);
+				break;
+			case NOP_JMP_LESS_EQ:	// <=
+				NextOP(3);
+				if (true == CompareGE(GetVarPtr(pOP->n3), GetVarPtr(pOP->n2)))
+					SetCodeIncPtr(pOP->n1);
+				break;
+			case NOP_JMP_EQUAL2:	// ==
+				NextOP(3);
+				if (true == CompareEQ(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)))
+					SetCodeIncPtr(pOP->n1);
+				break;
+			case NOP_JMP_NEQUAL:	// !=
+				NextOP(3);
+				if (false == CompareEQ(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3)))
+					SetCodeIncPtr(pOP->n1);
+				break;
+			case NOP_JMP_AND:	// &&
+				NextOP(3);
+				if (GetVarPtr(pOP->n2)->IsTrue() && GetVarPtr(pOP->n3)->IsTrue())
+					SetCodeIncPtr(pOP->n1);
+				break;
+			case NOP_JMP_OR:		// ||
+				NextOP(3);
+				if (GetVarPtr(pOP->n2)->IsTrue() || GetVarPtr(pOP->n3)->IsTrue())
+					SetCodeIncPtr(pOP->n1);
+				break;
+			case NOP_JMP_NAND:	// !(&&)
+				NextOP(3);
+				if (false == (GetVarPtr(pOP->n2)->IsTrue() && GetVarPtr(pOP->n3)->IsTrue()))
+					SetCodeIncPtr(pOP->n1);
+				break;
+			case NOP_JMP_NOR:	// !(||)
+				NextOP(3);
+				if (false == (GetVarPtr(pOP->n2)->IsTrue() || GetVarPtr(pOP->n3)->IsTrue()))
+					SetCodeIncPtr(pOP->n1);
+				break;
+			case NOP_JMP_FOREACH:	// foreach
+				NextOP(3);
+				if (ForEach(GetVarPtr(pOP->n2), GetVarPtr(pOP->n3), GetVarPtr(pOP->n3 + 1)))
+					SetCodeIncPtr(pOP->n1);
+				break;
+
+			case NOP_STR_ADD:	// ..
+				NextOP(3);
+				Var_SetString(GetVarPtr(pOP->n1), (ToString(GetVarPtr(pOP->n2)) + ToString(GetVarPtr(pOP->n3))).c_str());
+				break;
+
+			case NOP_TOSTRING:
+				NextOP(2);
+				Var_SetString(GetVarPtr(pOP->n1), ToString(GetVarPtr(pOP->n2)).c_str());
+				break;
+			case NOP_TOINT:
+				NextOP(2);
+				Var_SetInt(GetVarPtr(pOP->n1), ToInt(GetVarPtr(pOP->n2)));
+				break;
+			case NOP_TOFLOAT:
+				NextOP(2);
+				Var_SetFloat(GetVarPtr(pOP->n1), ToFloat(GetVarPtr(pOP->n2)));
+				break;
+			case NOP_TOSIZE:
+				NextOP(2);
+				Var_SetInt(GetVarPtr(pOP->n1), ToSize(GetVarPtr(pOP->n2)));
+				break;
+			case NOP_GETTYPE:
+				NextOP(2);
+				Var_SetString(GetVarPtr(pOP->n1), GetType(GetVarPtr(pOP->n2)).c_str());
+				break;
+			case NOP_SLEEP:
+				NextOP(1);
+				{
+					int r = Sleep(isSliceRun, iTimeout, GetVarPtr(pOP->n1));
+					if (r == 0)
+					{
+						_preClock = clock();
+						return true;
+					}
+					else if (r == 2)
+					{
+						op_process = iCheckOpCount;
+					}
+				}
+				break;
+
+			case NOP_JMP:
+				NextOP(1);
+				SetCodeIncPtr(pOP->n1);
+				break;
+			case NOP_JMP_FALSE:
+				NextOP(2);
+				if (false == GetVarPtr(pOP->n1)->IsTrue())
+					SetCodeIncPtr(pOP->n2);
+				break;
+			case NOP_JMP_TRUE:
+				NextOP(2);
+				if (true == GetVarPtr(pOP->n1)->IsTrue())
+					SetCodeIncPtr(pOP->n2);
+				break;
+
+			case NOP_CALL:
+				NextOP(2);
+				// n2 is Arg Count not use
+				callStack._iReturnOffset = GetCodeptr();
+				callStack._iSP_Vars = _iSP_Vars;
+				callStack._iSP_VarsMax = iSP_VarsMax;
+				m_sCallStack.push_back(callStack);
+
+				fun = _pVM->m_sFunctionPtr[pOP->n1];
+				SetCodePtr(fun._codePtr);
+				_iSP_Vars = iSP_VarsMax;
+				iSP_VarsMax = _iSP_Vars + fun._localAddCount;
+				if (_iSP_Vars_Max2 < iSP_VarsMax)
+					_iSP_Vars_Max2 = iSP_VarsMax;
+				break;
+			case NOP_FARCALL:
 			{
+				NextOP(2);
+				short n2 = pOP->n2;
+				if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n2))
+					_iSP_Vars_Max2 = iSP_VarsMax + (1 + n2);
+
+				fun = _pVM->m_sFunctionPtr[pOP->n1];
+				if (fun._fun._func == NULL)
+				{	// Error
+					SetError("Ptr Call is null");
+					break;
+				}
+
 				int iSave = _iSP_Vars;
 				_iSP_Vars = iSP_VarsMax;
 
-				_pCallTableInfo = pVar1->_tbl;
-				if ((pFunctionPtrNative->_func)(this, n3) == false)
+				if ((*fun._fun._fn)(this, &fun._fun, n2) < 0)
 				{
-					_pCallTableInfo = NULL;
-					SetError("Ptr Call Error");
+					SetError("Ptr Call Argument Count Error");
 					break;
 				}
-				_pCallTableInfo = NULL;
 
 				_iSP_Vars = iSave;
-			}
-			else
-			{
-				SetError("Ptr Call Not Found");
 				break;
 			}
-			break;
-		}
-		case NOP_RETURN:
-			NextOP(1);
-			if (pOP->n1 == 0)
-				Var_Release(&m_sVarStack[_iSP_Vars]); // Clear
-			else
-				Move(&m_sVarStack[_iSP_Vars], GetVarPtr(pOP->n1));
-
-			if (m_sCallStack.empty())
+			case NOP_PTRCALL:
 			{
-				_isSetup = false;
-				return true;
-			}
-			iTemp = (int)m_sCallStack.size() - 1;
-			callStack = m_sCallStack[iTemp];
-			m_sCallStack.resize(iTemp);
+				NextOP(3);
+				short n3 = pOP->n3;
 
-			SetCodePtr(callStack._iReturnOffset);
-			_iSP_Vars = callStack._iSP_Vars;
-			iSP_VarsMax = callStack._iSP_VarsMax;
-			break;
-		case NOP_FUNEND:
-			NextOP(0);
-			Var_Release(&m_sVarStack[_iSP_Vars]); // Clear
-			if (m_sCallStack.empty())
-			{
-				_isSetup = false;
-				return true;
-			}
-			iTemp = (int)m_sCallStack.size() - 1;
-			callStack = m_sCallStack[iTemp];
-			m_sCallStack.resize(iTemp);
+				if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n3))
+					_iSP_Vars_Max2 = iSP_VarsMax + (1 + n3);
 
-			SetCodePtr(callStack._iReturnOffset);
-			_iSP_Vars = callStack._iSP_Vars;
-			iSP_VarsMax = callStack._iSP_VarsMax;
-			break;
-		case NOP_TABLE_ALLOC:
-			NextOP(1);
-			Var_SetTable(GetVarPtr(pOP->n1), _pVM->TableAlloc());
-			break;
-		case NOP_TABLE_INSERT:
-		{
-			NextOP(3);
-			TableInsert(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
-			break;
-		}
-		case NOP_TABLE_READ:
-		{
-			NextOP(3);
-			TableRead(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
-			break;
-		}
-		case NOP_TABLE_REMOVE:
-		{
-			NextOP(2);
-			TableRemove(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
-			break;
-		}
-		default:
-			NextOP(0);
-			SetError("Unkonwn OP");
-			break;
-		}
-		if (_pVM->_pErrorMsg != NULL)
-		{
-			m_sCallStack.clear();
-			_iSP_Vars = 0;
-#ifdef _WIN32
-			sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pVM->_pErrorMsg, dbg._lineseq);
-#else
-			sprintf(chMsg, "%s : Line (%d)", _pVM->_pErrorMsg, dbg._lineseq);
-#endif
-			_pVM->_sErrorMsgDetail = chMsg;
-			return false;
-		}
-		if (iTimeout >= 0)
-		{
-			if (++op_process >= iCheckOpCount)
-			{
-				op_process = 0;
-				t2 = clock() - _preClock;
-				if (t2 >= iTimeout || t2 < 0)
+				VarInfo* pVar1 = GetVarPtr(pOP->n1);
+				pFunctionPtrNative = GetPtrFunction(pVar1, GetVarPtr(pOP->n2));
+				if (pFunctionPtrNative != NULL)
+				{
+					int iSave = _iSP_Vars;
+					_iSP_Vars = iSP_VarsMax;
+
+					_pCallTableInfo = pVar1->_tbl;
+					if ((pFunctionPtrNative->_func)(this, n3) == false)
+					{
+						_pCallTableInfo = NULL;
+						SetError("Ptr Call Error");
+						break;
+					}
+					_pCallTableInfo = NULL;
+
+					_iSP_Vars = iSave;
+				}
+				else
+				{
+					SetError("Ptr Call Not Found");
 					break;
+				}
+				break;
+			}
+			case NOP_RETURN:
+				NextOP(1);
+				if (pOP->n1 == 0)
+					Var_Release(&m_sVarStack[_iSP_Vars]); // Clear
+				else
+					Move(&m_sVarStack[_iSP_Vars], GetVarPtr(pOP->n1));
+
+				if (m_sCallStack.empty())
+				{
+					_isSetup = false;
+					return true;
+				}
+				iTemp = (int)m_sCallStack.size() - 1;
+				callStack = m_sCallStack[iTemp];
+				m_sCallStack.resize(iTemp);
+
+				SetCodePtr(callStack._iReturnOffset);
+				_iSP_Vars = callStack._iSP_Vars;
+				iSP_VarsMax = callStack._iSP_VarsMax;
+				break;
+			case NOP_FUNEND:
+				NextOP(0);
+				Var_Release(&m_sVarStack[_iSP_Vars]); // Clear
+				if (m_sCallStack.empty())
+				{
+					_isSetup = false;
+					return true;
+				}
+				iTemp = (int)m_sCallStack.size() - 1;
+				callStack = m_sCallStack[iTemp];
+				m_sCallStack.resize(iTemp);
+
+				SetCodePtr(callStack._iReturnOffset);
+				_iSP_Vars = callStack._iSP_Vars;
+				iSP_VarsMax = callStack._iSP_VarsMax;
+				break;
+			case NOP_TABLE_ALLOC:
+				NextOP(1);
+				Var_SetTable(GetVarPtr(pOP->n1), _pVM->TableAlloc());
+				break;
+			case NOP_TABLE_INSERT:
+			{
+				NextOP(3);
+				TableInsert(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
+				break;
+			}
+			case NOP_TABLE_READ:
+			{
+				NextOP(3);
+				TableRead(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2), GetVarPtr(pOP->n3));
+				break;
+			}
+			case NOP_TABLE_REMOVE:
+			{
+				NextOP(2);
+				TableRemove(GetVarPtr(pOP->n1), GetVarPtr(pOP->n2));
+				break;
+			}
+			default:
+				NextOP(0);
+				SetError("Unkonwn OP");
+				break;
+			}
+			if (_pVM->_pErrorMsg != NULL)
+			{
+				m_sCallStack.clear();
+				_iSP_Vars = 0;
+#ifdef _WIN32
+				sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pVM->_pErrorMsg, dbg._lineseq);
+#else
+				sprintf(chMsg, "%s : Line (%d)", _pVM->_pErrorMsg, dbg._lineseq);
+#endif
+				_pVM->_sErrorMsgDetail = chMsg;
+				return false;
+			}
+			if (iTimeout >= 0)
+			{
+				if (++op_process >= iCheckOpCount)
+				{
+					op_process = 0;
+					t2 = clock() - _preClock;
+					if (t2 >= iTimeout || t2 < 0)
+						break;
+				}
 			}
 		}
+	}
+	catch (...)
+	{
+		SetError("Exception");
+#ifdef _WIN32
+		sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pVM->_pErrorMsg, dbg._lineseq);
+#else
+		sprintf(chMsg, "%s : Line (%d)", _pVM->_pErrorMsg, dbg._lineseq);
+#endif
+		_pVM->_sErrorMsgDetail = chMsg;
+		return false;
 	}
 	return true;
 }
