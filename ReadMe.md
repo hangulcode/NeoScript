@@ -81,8 +81,6 @@
 	- // one-line comment
 	- / * * / is a multi-line range comment
 
-- END
-
 
 ※ Sample
 	- console / callback: Function calls between C ++ and Neo scripts.
@@ -161,4 +159,3 @@
 #### Neo Script Image
 ![](/docs/img/vs001.png)
 
-- END
