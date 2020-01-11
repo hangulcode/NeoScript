@@ -33,6 +33,7 @@
 	- fun: Notice the start of the function
 	- import: prefixed to fun and declared to call a c ++ function
 	- export: can be prepended to fun and the function can be called from external (c ++)
+	- system: support for a set of built-in functions.
 	- tostring (x): change the value of x variable to string
 	- toint (x): change the value of x variable to int
 	- tofloat (x): change the value of x variable to double
@@ -51,7 +52,7 @@
 	- > / < / >= / <= : same as c ++
 	- x..y: return the combined string of x and y strings
 
-### Built-in system function (use system.
+### Built-in system function use system.
 	- abs (x): same as c ++
 	- acos (x): same as c ++
 	- asin (x): same as c ++
