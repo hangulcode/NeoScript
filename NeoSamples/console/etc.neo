@@ -1,6 +1,5 @@
 
 
-
 export fun divide_by_zero()
 {
 	var a = 3;

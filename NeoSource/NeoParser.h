@@ -14,6 +14,7 @@
 #define STACK_POS_RETURN				(32767)
 
 bool IsTempVar(int iVar);
+OpType GetOpTypeFromOp(NOP_TYPE op);
 
 struct SJumpValue
 {
@@ -179,18 +180,18 @@ struct SFunctionInfo
 		if (_iLastOPOffset < 0)
 			return NOP_NONE;
 
-		return (NOP_TYPE)((u8*)_code->GetData())[_iLastOPOffset];
+		return (NOP_TYPE)((OpType*)_code->GetData())[_iLastOPOffset];
 	}
 	NOP_TYPE GetOP(int iOffsetOP)
 	{
-		return (NOP_TYPE)*((u8*)_code->GetData() + iOffsetOP);
+		return (NOP_TYPE)*((OpType*)_code->GetData() + iOffsetOP);
 	}
 	s16 GetN(int iOffsetOP, int n)
 	{
 		s16* pN = (s16*)((u8*)_code->GetData() + iOffsetOP + 1);
 		return pN[n];
 	}
-	void	Push_OP(CArchiveRdWC& ar, u8 op, short r, short a1, short a2)
+	void	Push_OP(CArchiveRdWC& ar, NOP_TYPE op, short r, short a1, short a2)
 	{
 		if (ar._debug)
 		{
@@ -199,12 +200,13 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		_code->Write(&op, sizeof(op));
+		OpType optype = GetOpTypeFromOp(op);
+		_code->Write(&optype, sizeof(optype));
 		_code->Write(&r, sizeof(r));
 		_code->Write(&a1, sizeof(a1));
 		_code->Write(&a2, sizeof(a2));
 	}
-	void	Push_Call(CArchiveRdWC& ar, u8 op, short fun, short args)
+	void	Push_Call(CArchiveRdWC& ar, NOP_TYPE op, short fun, short args)
 	{
 		if (ar._debug)
 		{
@@ -213,7 +215,8 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		_code->Write(&op, sizeof(op));
+		OpType optype = GetOpTypeFromOp(op);
+		_code->Write(&optype, sizeof(optype));
 		_code->Write(&fun, sizeof(fun));
 		_code->Write(&args, sizeof(args));
 	}
@@ -226,13 +229,13 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		u8 op = NOP_PTRCALL;
-		_code->Write(&op, sizeof(op));
+		OpType optype = GetOpTypeFromOp(NOP_PTRCALL);
+		_code->Write(&optype, sizeof(optype));
 		_code->Write(&table, sizeof(table));
 		_code->Write(&index, sizeof(index));
 		_code->Write(&args, sizeof(args));
 	}
-	void	Push_MOV(CArchiveRdWC& ar, u8 op, short r, short s)
+	void	Push_MOV(CArchiveRdWC& ar, NOP_TYPE op, short r, short s)
 	{
 		if (op == NOP_MOV)
 		{
@@ -286,11 +289,12 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		_code->Write(&op, sizeof(op));
+		OpType optype = GetOpTypeFromOp(op);
+		_code->Write(&optype, sizeof(optype));
 		_code->Write(&r, sizeof(r));
 		_code->Write(&s, sizeof(s));
 	}
-	void	Push_OP1(CArchiveRdWC& ar, u8 op, short r)
+	void	Push_OP1(CArchiveRdWC& ar, NOP_TYPE op, short r)
 	{
 		if (ar._debug)
 		{
@@ -299,7 +303,8 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		_code->Write(&op, sizeof(op));
+		OpType optype = GetOpTypeFromOp(op);
+		_code->Write(&optype, sizeof(optype));
 		_code->Write(&r, sizeof(r));
 	}
 	void	Push_RETURN(CArchiveRdWC& ar, short r)
@@ -311,8 +316,8 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		u8 op = NOP_RETURN;
-		_code->Write(&op, sizeof(op));
+		OpType optype = GetOpTypeFromOp(NOP_RETURN);
+		_code->Write(&optype, sizeof(optype));
 		_code->Write(&r, sizeof(r));
 	}
 	void	Push_FUNEND(CArchiveRdWC& ar)
@@ -324,8 +329,8 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		u8 op = NOP_FUNEND;
-		_code->Write(&op, sizeof(op));
+		OpType optype = GetOpTypeFromOp(NOP_FUNEND);
+		_code->Write(&optype, sizeof(optype));
 	}
 
 
@@ -338,9 +343,9 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		u8 op = NOP_JMP;
+		OpType optype = GetOpTypeFromOp(NOP_JMP);
 		short add = destOffset - (_code->GetBufferOffset() + 3);
-		_code->Write(&op, sizeof(op));
+		_code->Write(&optype, sizeof(optype));
 		_code->Write(&add, sizeof(add));
 	}
 	void	Push_JMPFalse(CArchiveRdWC& ar, short var, int destOffset)
@@ -352,9 +357,9 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		u8 op = NOP_JMP_FALSE;
+		OpType optype = GetOpTypeFromOp(NOP_JMP_FALSE);
 		short add = destOffset - (_code->GetBufferOffset() + 5);
-		_code->Write(&op, sizeof(op));
+		_code->Write(&optype, sizeof(optype));
 		_code->Write(&var, sizeof(var));
 		_code->Write(&add, sizeof(add));
 	}
@@ -367,9 +372,9 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		u8 op = NOP_JMP_TRUE;
+		OpType optype = GetOpTypeFromOp(NOP_JMP_TRUE);
 		short add = destOffset - (_code->GetBufferOffset() + 5);
-		_code->Write(&op, sizeof(op));
+		_code->Write(&optype, sizeof(optype));
 		_code->Write(&var, sizeof(var));
 		_code->Write(&add, sizeof(add));
 	}
@@ -383,9 +388,9 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		u8 op = NOP_JMP_FOREACH;
+		OpType optype = GetOpTypeFromOp(NOP_JMP_FOREACH);
 		short add = destOffset - (_code->GetBufferOffset() + 7);
-		_code->Write(&op, sizeof(op));
+		_code->Write(&optype, sizeof(optype));
 		_code->Write(&add, sizeof(add));
 		_code->Write(&table, sizeof(table));
 		_code->Write(&key, sizeof(key));
@@ -404,8 +409,8 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		u8 op = NOP_TABLE_ALLOC;
-		_code->Write(&op, sizeof(op));
+		OpType optype = GetOpTypeFromOp(NOP_TABLE_ALLOC);
+		_code->Write(&optype, sizeof(optype));
 		_code->Write(&r, sizeof(r));
 	}
 	void	Push_TableInsert(CArchiveRdWC& ar, short nTable, short nArray, short nValue)
@@ -437,8 +442,8 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		u8 op = NOP_TABLE_INSERT;
-		_code->Write(&op, sizeof(op));
+		OpType optype = GetOpTypeFromOp(NOP_TABLE_INSERT);
+		_code->Write(&optype, sizeof(optype));
 		_code->Write(&nTable, sizeof(nTable));
 		_code->Write(&nArray, sizeof(nArray));
 		_code->Write(&nValue, sizeof(nValue));
@@ -452,8 +457,8 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		u8 op = NOP_TABLE_READ;
-		_code->Write(&op, sizeof(op));
+		OpType optype = GetOpTypeFromOp(NOP_TABLE_READ);
+		_code->Write(&optype, sizeof(optype));
 		_code->Write(&nTable, sizeof(nTable));
 		_code->Write(&nArray, sizeof(nArray));
 		_code->Write(&nValue, sizeof(nValue));
@@ -467,12 +472,12 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		u8 op = NOP_TABLE_REMOVE;
-		_code->Write(&op, sizeof(op));
+		OpType optype = GetOpTypeFromOp(NOP_TABLE_REMOVE);
+		_code->Write(&optype, sizeof(optype));
 		_code->Write(&nTable, sizeof(nTable));
 		_code->Write(&nArray, sizeof(nArray));
 	}
-	void	Push_ToType(CArchiveRdWC& ar, u8 op, short r, short s)
+	void	Push_ToType(CArchiveRdWC& ar, NOP_TYPE op, short r, short s)
 	{
 		if (ar._debug)
 		{
@@ -481,7 +486,8 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		_code->Write(&op, sizeof(op));
+		OpType optype = GetOpTypeFromOp(op);
+		_code->Write(&optype, sizeof(optype));
 		_code->Write(&r, sizeof(r));
 		_code->Write(&s, sizeof(s));
 	}

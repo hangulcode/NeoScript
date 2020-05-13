@@ -3,11 +3,11 @@
 
 
 
-int SAMPLE_etc(const char* pFunctionName)
+int SAMPLE_etc(const char*pFileName, const char* pFunctionName)
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == FileLoad("etc.neo", pFileBuffer, iFileLen))
+	if (false == FileLoad(pFileName, pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;

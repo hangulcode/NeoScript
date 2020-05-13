@@ -36,7 +36,7 @@ struct debug_info
 
 
 #define FILE_NEOS	(('N' << 24) | ('E' << 16) | ('O' << 8) | ('S'))
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('0' << 8) | ('1'))
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('0' << 8) | ('2'))
 
 #include <vector>
 #include <list>

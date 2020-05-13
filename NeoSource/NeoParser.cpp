@@ -48,6 +48,25 @@ struct SOperand
 	}
 };
 
+struct SOperationInfo
+{
+	std::string _str;
+	NOP_TYPE	_op;
+	int			_op_length;
+	OpType		_opType;
+	SOperationInfo() {}
+	SOperationInfo(const char* p, NOP_TYPE	op, int len)
+	{
+		_str = p;
+		_op = op;
+		_op_length = len;
+		_opType = (op<<2) | len;
+	}
+};
+
+#define OP_STR1(op, len) g_sOpInfo[op] = SOperationInfo(#op, op, len)
+
+
 struct STokenValue
 {
 	std::string _str;
@@ -63,6 +82,7 @@ struct STokenValue
 	}
 };
 
+std::vector<SOperationInfo> g_sOpInfo;
 std::map<TK_TYPE, STokenValue> g_sTokenToString;
 std::map<std::string, TK_TYPE> g_sStringToToken;
 
@@ -70,8 +90,14 @@ std::map<std::string, TK_TYPE> g_sStringToToken;
 #define TOKEN_STR2(key, str) g_sTokenToString[key] = STokenValue(str, 20, NOP_NONE); g_sStringToToken[str] = key
 #define TOKEN_STR3(key, str, pri, op) g_sTokenToString[key] = STokenValue(str, pri, op); g_sStringToToken[str] = key
 
+OpType GetOpTypeFromOp(NOP_TYPE op)
+{
+	return g_sOpInfo[op]._opType;
+}
+
 int InitDefaultTokenString()
 {
+	g_sOpInfo.clear();
 	g_sTokenToString.clear();
 	g_sStringToToken.clear();
 
@@ -149,6 +175,73 @@ int InitDefaultTokenString()
 	TOKEN_STR2(TK_QUOTATION, "\"");
 	TOKEN_STR2(TK_QUESTION, "?");
 	TOKEN_STR2(TK_NOT, "!");
+
+	/////////////////////////////////////////////////////
+	g_sOpInfo.resize(NOP_MAX);
+
+	OP_STR1(NOP_NONE, 0);
+	OP_STR1(NOP_MOV, 2);
+	OP_STR1(NOP_MOV_MINUS, 2);
+	OP_STR1(NOP_ADD2, 2);
+	OP_STR1(NOP_SUB2, 2);
+	OP_STR1(NOP_MUL2, 2);
+	OP_STR1(NOP_DIV2, 2);
+	OP_STR1(NOP_PERSENT2, 2);
+
+	OP_STR1(NOP_VAR_CLEAR, 1);
+	OP_STR1(NOP_INC, 1);
+	OP_STR1(NOP_DEC, 1);
+
+	OP_STR1(NOP_ADD3, 3);
+	OP_STR1(NOP_SUB3, 3);
+	OP_STR1(NOP_MUL3, 3);
+	OP_STR1(NOP_DIV3, 3);
+	OP_STR1(NOP_PERSENT3, 3);
+
+	OP_STR1(NOP_GREAT, 3);
+	OP_STR1(NOP_GREAT_EQ, 3);
+	OP_STR1(NOP_LESS, 3);
+	OP_STR1(NOP_LESS_EQ, 3);
+	OP_STR1(NOP_EQUAL2, 3);
+	OP_STR1(NOP_NEQUAL, 3);
+	OP_STR1(NOP_AND, 3);
+	OP_STR1(NOP_OR, 3);
+
+	OP_STR1(NOP_JMP_GREAT, 3);
+	OP_STR1(NOP_JMP_GREAT_EQ, 3);
+	OP_STR1(NOP_JMP_LESS, 3);
+	OP_STR1(NOP_JMP_LESS_EQ, 3);
+	OP_STR1(NOP_JMP_EQUAL2, 3);
+	OP_STR1(NOP_JMP_NEQUAL, 3);
+	OP_STR1(NOP_JMP_AND, 3);
+	OP_STR1(NOP_JMP_OR, 3);
+	OP_STR1(NOP_JMP_NAND, 3);
+	OP_STR1(NOP_JMP_NOR, 3);
+	OP_STR1(NOP_JMP_FOREACH, 3);
+
+	OP_STR1(NOP_STR_ADD, 3);
+
+	OP_STR1(NOP_TOSTRING, 2);
+	OP_STR1(NOP_TOINT, 2);
+	OP_STR1(NOP_TOFLOAT, 2);
+	OP_STR1(NOP_TOSIZE, 2);
+	OP_STR1(NOP_GETTYPE, 2);
+	OP_STR1(NOP_SLEEP, 1);
+
+	OP_STR1(NOP_JMP, 1);
+	OP_STR1(NOP_JMP_FALSE, 2);
+	OP_STR1(NOP_JMP_TRUE, 2);
+
+	OP_STR1(NOP_CALL, 2);
+	OP_STR1(NOP_FARCALL, 2);
+	OP_STR1(NOP_PTRCALL, 3);
+	OP_STR1(NOP_RETURN, 1);
+	OP_STR1(NOP_FUNEND, 0);
+
+	OP_STR1(NOP_TABLE_ALLOC, 1);
+	OP_STR1(NOP_TABLE_INSERT, 3);
+	OP_STR1(NOP_TABLE_READ, 3);
+	OP_STR1(NOP_TABLE_REMOVE, 2);
 
 	return 1;
 }

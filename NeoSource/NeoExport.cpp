@@ -79,33 +79,38 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 	CNArchive arRead((u8*)fi._code->GetData() + fi._iCode_Begin, fi._iCode_Size);
 	arRead.SetPointer(0, SEEK_SET);
 
-	short n1, n2, n3;
+	SVMOperation v;
 
 	while (arRead.GetBufferOffset() < arRead.GetBufferSize())
 	{
-		NOP_TYPE op;
-		debug_info dbg;
+		if (arText._debug)
+			arRead >> v.dbg;
 
-		if(arText._debug)
-			arRead >> dbg;
+		OpType optype;
+		arRead >> optype;
 
-		arRead >> op;
+		v.op = (NOP_TYPE)(optype >> 2);
+		int len = optype & 0x03;
+		if (len)
+		{
+			arRead.Read(&v.n1, len * sizeof(short));
+		}
+
 		iOPCount++;
 
 		if (arText._debug)
-			ar << dbg;
+			ar << v.dbg;
 
-		switch (op)
+		switch (v.op)
 		{
 		case NOP_ADD2:
 		case NOP_SUB2:
 		case NOP_MUL2:
 		case NOP_DIV2:
 		case NOP_PERSENT2:
-			arRead >> n1 >> n2;
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			ar << op << n1 << n2;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
+			ar << optype << v.n1 << v.n2;
 			break;
 
 		case NOP_ADD3:
@@ -113,19 +118,17 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_MUL3:
 		case NOP_DIV3:
 		case NOP_PERSENT3:
-			arRead >> n1 >> n2 >> n3;
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			ar << op << n1 << n2 << n3;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
+			ar << optype << v.n1 << v.n2 << v.n3;
 			break;
 
 		case NOP_VAR_CLEAR:
 		case NOP_INC:
 		case NOP_DEC:
-			arRead >> n1;
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			ar << op << n1;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			ar << optype << v.n1;
 			break;
 
 		case NOP_GREAT:		// >
@@ -137,11 +140,10 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_AND:	// &&
 		case NOP_OR:	// ||
 		case NOP_STR_ADD: // ..
-			arRead >> n1 >> n2 >> n3;
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			ar << op << n1 << n2 << n3;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
+			ar << optype << v.n1 << v.n2 << v.n3;
 			break;
 
 		case NOP_JMP_GREAT:		// >
@@ -154,16 +156,14 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_JMP_OR:		// ||
 		case NOP_JMP_NAND:	// !(&&)
 		case NOP_JMP_NOR:	// !(||)
-			arRead >> n1 >> n2 >> n3;
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			ar << op << n1 << n2 << n3;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
+			ar << optype << v.n1 << v.n2 << v.n3;
 			break;
 		case NOP_JMP_FOREACH:	// 
-			arRead >> n1 >> n2 >> n3;
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			ar << op << n1 << n2 << n3;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
+			ar << optype << v.n1 << v.n2 << v.n3;
 			break;
 
 		case NOP_TOSTRING:
@@ -171,77 +171,65 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_TOFLOAT:
 		case NOP_TOSIZE:
 		case NOP_GETTYPE:
-			arRead >> n1 >> n2;
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			ar << op << n1 << n2;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
+			ar << optype << v.n1 << v.n2;
 			break;
 		case NOP_SLEEP:
-			arRead >> n1;
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			ar << op << n1;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			ar << optype << v.n1;
 			break;
 		case NOP_JMP:
-			arRead >> n1;
-			ar << op << n1;
+			ar << optype << v.n1;
 			break;
 		case NOP_JMP_FALSE:
 		case NOP_JMP_TRUE:
-			arRead >> n1 >> n2;
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			ar << op << n1 << n2;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			ar << optype << v.n1 << v.n2;
 			break;
 
 		case NOP_MOV:
 		case NOP_MOV_MINUS:
-			arRead >> n1 >> n2;
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			ar << op << n1 << n2;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
+			ar << optype << v.n1 << v.n2;
 			break;
 		case NOP_FARCALL:
-			arRead >> n1 >> n2;
-			ar << op << n1 << n2;
+			ar << optype << v.n1 << v.n2;
 			break;
 		case NOP_PTRCALL:
-			arRead >> n1 >> n2 >> n3;
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			ar << op << n1 << n2 << n3;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
+			ar << optype << v.n1 << v.n2 << v.n3;
 			break;
 		case NOP_CALL:
-			arRead >> n1 >> n2;
-			ar << op << n1 << n2;
+			ar << optype << v.n1 << v.n2;
 			break;
 		case NOP_RETURN:
-			arRead >> n1;
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			ar << op << n1;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			ar << optype << v.n1;
 			break;
 		case NOP_FUNEND:
-			ar << op;
+			ar << optype;
 			break;
 		case NOP_TABLE_ALLOC:
-			arRead >> n1;
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			ar << op << n1;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			ar << optype << v.n1;
 			break;
 		case NOP_TABLE_INSERT:
 		case NOP_TABLE_READ:
-			arRead >> n1 >> n2 >> n3;
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n3);
-			ar << op << n1 << n2 << n3;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
+			ar << optype << v.n1 << v.n2 << v.n3;
 			break;
 		case NOP_TABLE_REMOVE:
-			arRead >> n1 >> n2;
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, n2);
-			ar << op << n1 << n2;
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
+			ar << optype << v.n1 << v.n2;
 			break;
 		default:
-			SetCompileError(arText, "Error OP Type Error (%d)", op);
+			SetCompileError(arText, "Error OP Type Error (%d)", v.op);
 			break;
 		}
 	}
@@ -264,52 +252,53 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 	CNArchive arRead((u8*)fi._code->GetData() + fi._iCode_Begin, fi._iCode_Size);
 	arRead.SetPointer(0, SEEK_SET);
 
+	SVMOperation v;
 
 	while (arRead.GetBufferOffset() < arRead.GetBufferSize())
 	{
-		debug_info dbg;
-		SVMOperation v;
-
 		if(arText._debug)
-			arRead >> dbg;
+			arRead >> v.dbg;
 
-		arRead >> v.op;
+		OpType optype;
+		arRead >> optype;
+
+		v.op = (NOP_TYPE)(optype >> 2);
+		int len = optype & 0x03;
+		if (len)
+		{
+			arRead.Read(&v.n1, len * sizeof(short));
+		}
 
 		if (arText._debug)
-			OutAsm("%6d : ", dbg._lineseq);
+			OutAsm("%6d : ", v.dbg._lineseq);
 
 		switch (v.op)
 		{
 		case NOP_ADD2:
-			arRead >> v.n1 >> v.n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			OutBytes((const u8*)&v, 1 + 2 * 2, 7);
 			OutAsm("ADD [%d] += [%d]\n", v.n1, v.n2);
 			break;
 		case NOP_SUB2:
-			arRead >> v.n1 >> v.n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
 			OutAsm("SUB [%d] -= [%d]\n", v.n1, v.n2);
 			break;
 		case NOP_MUL2:
-			arRead >> v.n1 >> v.n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
 			OutAsm("MUL [%d] *= [%d]\n", v.n1, v.n2);
 			break;
 		case NOP_DIV2:
-			arRead >> v.n1 >> v.n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
 			OutAsm("DIV [%d] /= [%d]\n", v.n1, v.n2);
 			break;
 		case NOP_PERSENT2:
-			arRead >> v.n1 >> v.n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
@@ -317,7 +306,6 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			break;
 
 		case NOP_ADD3:
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
@@ -325,7 +313,6 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			OutAsm("ADD [%d] = [%d] + [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_SUB3:
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
@@ -333,7 +320,6 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			OutAsm("SUB [%d] = [%d] - [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_MUL3:
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
@@ -341,7 +327,6 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			OutAsm("MUL [%d] = [%d] * [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_DIV3:
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
@@ -349,7 +334,6 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			OutAsm("DIV [%d] = [%d] / [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_PERSENT3:
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
@@ -358,26 +342,22 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			break;
 
 		case NOP_VAR_CLEAR:
-			arRead >> v.n1;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			OutBytes((const u8*)&v, 1 + 2 * 1, 8);
 			OutAsm("CLR [%d]\n", v.n1);
 			break;
 		case NOP_INC:
-			arRead >> v.n1;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			OutBytes((const u8*)&v, 1 + 2 * 1, 8);
 			OutAsm("INC [%d]\n", v.n1);
 			break;
 		case NOP_DEC:
-			arRead >> v.n1;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			OutBytes((const u8*)&v, 1 + 2 * 1, 8);
 			OutAsm("DEC [%d]\n", v.n1);
 			break;
 
 		case NOP_GREAT:		// >
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
@@ -385,7 +365,6 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			OutAsm("GR [%d] = [%d] > [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_GREAT_EQ:	// >=
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
@@ -393,7 +372,6 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			OutAsm("GE [%d] = [%d] >= [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_LESS:		// <
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
@@ -401,7 +379,6 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			OutAsm("LS [%d] = [%d] < [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_LESS_EQ:	// <=
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
@@ -409,7 +386,6 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			OutAsm("LE [%d] = [%d] <= [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_EQUAL2:	// ==
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
@@ -417,7 +393,6 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			OutAsm("EQ [%d] = [%d] == [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_NEQUAL:	// !=
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
@@ -425,7 +400,6 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			OutAsm("NE [%d] = [%d] != [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_AND:	// &&
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
@@ -433,7 +407,6 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			OutAsm("AND [%d] = [%d] && [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_OR:	// ||
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
@@ -442,7 +415,6 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			break;
 
 		case NOP_STR_ADD:	// ..
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
@@ -451,77 +423,66 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			break;
 
 		case NOP_JMP_GREAT:		// >
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
 			OutAsm("JGR %d,  [%d] > [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_JMP_GREAT_EQ:	// >=
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
 			OutAsm("JGE %d,  [%d] >= [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_JMP_LESS:		// <
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
 			OutAsm("JLS %d,  [%d] < [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_JMP_LESS_EQ:	// <=
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
 			OutAsm("JLE %d,  [%d] <= [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_JMP_EQUAL2:	// ==
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
 			OutAsm("JEQ %d,  [%d] == [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_JMP_NEQUAL:	// !=
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
 			OutAsm("JNE %d,  [%d] != [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_JMP_AND:	// &&
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
 			OutAsm("JAND %d,  [%d] && [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_JMP_OR:		// ||
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
 			OutAsm("JOR %d,  [%d] || [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_JMP_NAND:	// !(&&)
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
 			OutAsm("JNAND %d,  !([%d] && [%d])\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_JMP_NOR:	// !(||)
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
 			OutAsm("JNOR %d,  !([%d] || [%d])\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_JMP_FOREACH:	// foreach
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
@@ -529,97 +490,82 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			break;
 
 		case NOP_TOSTRING:
-			arRead >> v.n1 >> v.n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
 			OutAsm("ToString [%d] = [%d]\n", v.n1, v.n2);
 			break;
 		case NOP_TOINT:
-			arRead >> v.n1 >> v.n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
 			OutAsm("ToInt [%d] = [%d]\n", v.n1, v.n2);
 			break;
 		case NOP_TOFLOAT:
-			arRead >> v.n1 >> v.n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
 			OutAsm("ToFloat [%d] = [%d]\n", v.n1, v.n2);
 			break;
 		case NOP_TOSIZE:
-			arRead >> v.n1 >> v.n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
 			OutAsm("ToSize [%d] = [%d]\n", v.n1, v.n2);
 			break;
 		case NOP_GETTYPE:
-			arRead >> v.n1 >> v.n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
 			OutAsm("GetType [%d] = [%d]\n", v.n1, v.n2);
 			break;
 		case NOP_SLEEP:
-			arRead >> v.n1;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			OutBytes((const u8*)&v, 1 + 2 * 1, 8);
 			OutAsm("Sleep [%d]\n", v.n1);
 			break;
 		case NOP_JMP:
-			arRead >> v.n1;
 			OutBytes((const u8*)&v, 1 + 2 * 1, 8);
 			OutAsm("JMP  %d\n", v.n1);
 			break;
 		case NOP_JMP_FALSE:
-			arRead >> v.n1 >> v.n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
 			OutAsm("JMP is False [%d]  %d\n", v.n1, v.n2);
 			break;
 		case NOP_JMP_TRUE:
-			arRead >> v.n1 >> v.n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
 			OutAsm("JMP is True [%d]  %d\n", v.n1, v.n2);
 			break;
 
 		case NOP_MOV:
-			arRead >> v.n1 >> v.n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
 			OutAsm("MOV [%d] = [%d]\n", v.n1, v.n2);
 			break;
 		case NOP_MOV_MINUS:
-			arRead >> v.n1 >> v.n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
 			OutAsm("MOVI [%d] = -[%d]\n", v.n1, v.n2);
 			break;
 		case NOP_FARCALL:
-			arRead >> v.n1 >> v.n2;
 			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
 			OutAsm("Far CALL %s\n", GetFunctionName(funs, v.n1).c_str());
 			break;
 		case NOP_PTRCALL:
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
 			OutAsm("Ptr CALL [%d].[%d] arg:%d\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_CALL:
-			arRead >> v.n1 >> v.n2;
 			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
 			OutAsm("CALL %s\n", GetFunctionName(funs, v.n1).c_str());
 			break;
 		case NOP_RETURN:
-			arRead >> v.n1;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			OutBytes((const u8*)&v, 1 + 2 * 1, 8);
 			OutAsm("RET [%d]\n", v.n1);
@@ -628,13 +574,11 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			OutAsm("- End -\n");
 			break;
 		case NOP_TABLE_ALLOC:
-			arRead >> v.n1;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			OutBytes((const u8*)&v, 1 + 2 * 1, 8);
 			OutAsm("Table Alloc [%d]\n", v.n1);
 			break;
 		case NOP_TABLE_INSERT:
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
@@ -642,7 +586,6 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			OutAsm("Table Insert [%d].[%d] = [%d]\n", v.n1, v.n2, v.n3);
 			break;
 		case NOP_TABLE_READ:
-			arRead >> v.n1 >> v.n2 >> v.n3;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
@@ -650,7 +593,6 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			OutAsm("Table Read [%d] = [%d].[%d]\n", v.n3, v.n1, v.n2);
 			break;
 		case NOP_TABLE_REMOVE:
-			arRead >> v.n1 >> v.n2;
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			OutBytes((const u8*)&v, 1 + 2 * 2, 8);

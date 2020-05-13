@@ -14,8 +14,9 @@ enum VAR_TYPE : u8
 	VAR_TABLEFUN,
 };
 
+typedef u8	OpType;
 
-enum NOP_TYPE : u8
+enum NOP_TYPE : OpType
 {
 	NOP_NONE = 0,
 	NOP_MOV,
@@ -80,11 +81,16 @@ enum NOP_TYPE : u8
 	NOP_TABLE_INSERT,
 	NOP_TABLE_READ,
 	NOP_TABLE_REMOVE,
-};
+
+
+	NOP_MAX = 64,
+}; // 6Bit OP(Limit 0 ~ 63) + 2Bit Operation length
 
 #pragma pack(1)
 struct SVMOperation
 {
+	debug_info dbg;
+
 	NOP_TYPE   op;
 	short n1, n2, n3;
 };
@@ -238,46 +244,30 @@ private:
 		_iCodeOffset = 0;
 	}
 
-	inline void*			GetCurPtr()
+	inline void	GetOP(bool blDebugInfo, SVMOperation* op)
 	{
-		return (_pCodePtr + _iCodeOffset);
-	}
-	inline void				NextOP(int n)
-	{
-		_iCodeOffset += 1 + (n * 2);
+		if (blDebugInfo)
+		{
+			op->dbg = *(debug_info*)(_pCodePtr + _iCodeOffset);
+			_iCodeOffset += sizeof(debug_info);
+		}
+		OpType optype = *(OpType*)(_pCodePtr + _iCodeOffset);
+		_iCodeOffset += sizeof(OpType);
+
+		op->op = (NOP_TYPE)(optype >> 2);
+		int len = optype & 0x03;
+		if (len)
+		{
+			int bytes = len * sizeof(short);
+			memcpy(&op->n1, _pCodePtr + _iCodeOffset, bytes);
+			_iCodeOffset += bytes;
+		}
 	}
 
-	inline	u8				GetU8()
-	{
-		return *(_pCodePtr + _iCodeOffset++);
-	}
-	inline	s16				GetS16()
-	{
-		s16 r = *(s16*)(_pCodePtr + _iCodeOffset);
-		_iCodeOffset += 2;
-		return r;
-	}
-	inline	u16				GetU16()
-	{
-		u16 r = *(u16*)(_pCodePtr + _iCodeOffset);
-		_iCodeOffset += 2;
-		return r;
-	}
-	inline	u32				GetU32()
-	{
-		s32 r = *(s32*)(_pCodePtr + _iCodeOffset);
-		_iCodeOffset += 4;
-		return r;
-	}
 	inline int GetCodeptr() { return _iCodeOffset; }
-	inline void SetCodePtr(int off)
-	{
-		_iCodeOffset = off;
-	}
-	inline void SetCodeIncPtr(int off)
-	{
-		_iCodeOffset += off;
-	}
+	inline void SetCodePtr(int off) { _iCodeOffset = off; }
+	inline void SetCodeIncPtr(int off) { _iCodeOffset += off; }
+
 	int						_iSP_Vars;
 	int						_iSP_Vars_Max2;
 	int						iSP_VarsMax;
