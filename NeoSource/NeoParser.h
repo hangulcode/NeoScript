@@ -14,7 +14,8 @@
 #define STACK_POS_RETURN				(32767)
 
 bool IsTempVar(int iVar);
-OpType GetOpTypeFromOp(NOP_TYPE op);
+OpType	GetOpTypeFromOp(eNOperation op);
+int		GetOpLength(eNOperation op);
 
 struct SJumpValue
 {
@@ -175,23 +176,23 @@ struct SFunctionInfo
 	{
 		_iLastOPOffset = -1;
 	}
-	NOP_TYPE GetLastOP()
+	eNOperation GetLastOP()
 	{
 		if (_iLastOPOffset < 0)
 			return NOP_NONE;
 
-		return (NOP_TYPE)((OpType*)_code->GetData())[_iLastOPOffset];
+		return CODE_TO_NOP(*(OpType*)((u8*)_code->GetData() + _iLastOPOffset));
 	}
-	NOP_TYPE GetOP(int iOffsetOP)
+	eNOperation GetOP(int iOffsetOP)
 	{
-		return (NOP_TYPE)*((OpType*)_code->GetData() + iOffsetOP);
+		return CODE_TO_NOP(*(OpType*)((u8*)_code->GetData() + iOffsetOP));
 	}
 	s16 GetN(int iOffsetOP, int n)
 	{
-		s16* pN = (s16*)((u8*)_code->GetData() + iOffsetOP + 1);
+		s16* pN = (s16*)((u8*)_code->GetData() + iOffsetOP + sizeof(OpType));
 		return pN[n];
 	}
-	void	Push_OP(CArchiveRdWC& ar, NOP_TYPE op, short r, short a1, short a2)
+	void	Push_OP(CArchiveRdWC& ar, eNOperation op, short r, short a1, short a2)
 	{
 		if (ar._debug)
 		{
@@ -206,7 +207,7 @@ struct SFunctionInfo
 		_code->Write(&a1, sizeof(a1));
 		_code->Write(&a2, sizeof(a2));
 	}
-	void	Push_Call(CArchiveRdWC& ar, NOP_TYPE op, short fun, short args)
+	void	Push_Call(CArchiveRdWC& ar, eNOperation op, short fun, short args)
 	{
 		if (ar._debug)
 		{
@@ -235,15 +236,13 @@ struct SFunctionInfo
 		_code->Write(&index, sizeof(index));
 		_code->Write(&args, sizeof(args));
 	}
-	void	Push_MOV(CArchiveRdWC& ar, NOP_TYPE op, short r, short s)
+	void	Push_MOV(CArchiveRdWC& ar, eNOperation op, short r, short s)
 	{
 		if (op == NOP_MOV)
 		{
 			if (IsTempVar(s))
 			{
-				NOP_TYPE preOP = GetLastOP();
-				u8 *pre = (u8*)_code->GetData() + 1 + _iLastOPOffset;
-				short* preDest = (short*)pre;
+				eNOperation preOP = GetLastOP();
 				switch (preOP)
 				{
 				case NOP_MOV:
@@ -270,12 +269,16 @@ struct SFunctionInfo
 				case NOP_NEQUAL:	// !=
 				case NOP_AND:	// &&
 				case NOP_OR:		// ||
+				{
+					u8 *pre = (u8*)_code->GetData() + sizeof(OpType) + _iLastOPOffset;
+					short* preDest = (short*)pre;
 					if (*preDest == s)
 					{
 						*preDest = r;
 						return;
 					}
 					break;
+				}
 				default:
 					break;
 				}
@@ -294,7 +297,7 @@ struct SFunctionInfo
 		_code->Write(&r, sizeof(r));
 		_code->Write(&s, sizeof(s));
 	}
-	void	Push_OP1(CArchiveRdWC& ar, NOP_TYPE op, short r)
+	void	Push_OP1(CArchiveRdWC& ar, eNOperation op, short r)
 	{
 		if (ar._debug)
 		{
@@ -343,8 +346,9 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		OpType optype = GetOpTypeFromOp(NOP_JMP);
-		short add = destOffset - (_code->GetBufferOffset() + 3);
+		eNOperation op = NOP_JMP;
+		OpType optype = GetOpTypeFromOp(op);
+		short add = destOffset - (_code->GetBufferOffset() + GetOpLength(op));
 		_code->Write(&optype, sizeof(optype));
 		_code->Write(&add, sizeof(add));
 	}
@@ -357,8 +361,9 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		OpType optype = GetOpTypeFromOp(NOP_JMP_FALSE);
-		short add = destOffset - (_code->GetBufferOffset() + 5);
+		eNOperation op = NOP_JMP_FALSE;
+		OpType optype = GetOpTypeFromOp(op);
+		short add = destOffset - (_code->GetBufferOffset() + GetOpLength(op));
 		_code->Write(&optype, sizeof(optype));
 		_code->Write(&var, sizeof(var));
 		_code->Write(&add, sizeof(add));
@@ -372,8 +377,9 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		OpType optype = GetOpTypeFromOp(NOP_JMP_TRUE);
-		short add = destOffset - (_code->GetBufferOffset() + 5);
+		eNOperation op = NOP_JMP_TRUE;
+		OpType optype = GetOpTypeFromOp(op);
+		short add = destOffset - (_code->GetBufferOffset() + GetOpLength(op));
 		_code->Write(&optype, sizeof(optype));
 		_code->Write(&var, sizeof(var));
 		_code->Write(&add, sizeof(add));
@@ -388,8 +394,9 @@ struct SFunctionInfo
 		}
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		OpType optype = GetOpTypeFromOp(NOP_JMP_FOREACH);
-		short add = destOffset - (_code->GetBufferOffset() + 7);
+		eNOperation op = NOP_JMP_FOREACH;
+		OpType optype = GetOpTypeFromOp(op);
+		short add = destOffset - (_code->GetBufferOffset() + GetOpLength(op));
 		_code->Write(&optype, sizeof(optype));
 		_code->Write(&add, sizeof(add));
 		_code->Write(&table, sizeof(table));
@@ -417,8 +424,8 @@ struct SFunctionInfo
 	{
 		if (IsTempVar(nValue))
 		{
-			NOP_TYPE preOP = GetLastOP();
-			u8 *pre = (u8*)_code->GetData() + 1 + _iLastOPOffset;
+			eNOperation preOP = GetLastOP();
+			u8 *pre = (u8*)_code->GetData() + sizeof(OpType) + _iLastOPOffset;
 			short* preDest = (short*)pre;
 			switch (preOP)
 			{
@@ -477,7 +484,7 @@ struct SFunctionInfo
 		_code->Write(&nTable, sizeof(nTable));
 		_code->Write(&nArray, sizeof(nArray));
 	}
-	void	Push_ToType(CArchiveRdWC& ar, NOP_TYPE op, short r, short s)
+	void	Push_ToType(CArchiveRdWC& ar, eNOperation op, short r, short s)
 	{
 		if (ar._debug)
 		{
@@ -491,7 +498,6 @@ struct SFunctionInfo
 		_code->Write(&r, sizeof(r));
 		_code->Write(&s, sizeof(s));
 	}
-
 };
 
 

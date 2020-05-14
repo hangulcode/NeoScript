@@ -51,11 +51,11 @@ struct SOperand
 struct SOperationInfo
 {
 	std::string _str;
-	NOP_TYPE	_op;
+	eNOperation	_op;
 	int			_op_length;
 	OpType		_opType;
 	SOperationInfo() {}
-	SOperationInfo(const char* p, NOP_TYPE	op, int len)
+	SOperationInfo(const char* p, eNOperation	op, int len)
 	{
 		_str = p;
 		_op = op;
@@ -64,17 +64,17 @@ struct SOperationInfo
 	}
 };
 
-#define OP_STR1(op, len) g_sOpInfo[op] = SOperationInfo(#op, op, len)
+#define OP_STR1(op, len) if(op > 63){ g_sOpInfo.clear(); return 0;} g_sOpInfo[op] = SOperationInfo(#op, op, len)
 
 
 struct STokenValue
 {
 	std::string _str;
 	char		_iPriority;
-	NOP_TYPE	_op;
+	eNOperation	_op;
 
 	STokenValue() {}
-	STokenValue(const char* p, char iPriority, NOP_TYPE	op)
+	STokenValue(const char* p, char iPriority, eNOperation	op)
 	{
 		_str = p;
 		_iPriority = iPriority;
@@ -90,9 +90,13 @@ std::map<std::string, TK_TYPE> g_sStringToToken;
 #define TOKEN_STR2(key, str) g_sTokenToString[key] = STokenValue(str, 20, NOP_NONE); g_sStringToToken[str] = key
 #define TOKEN_STR3(key, str, pri, op) g_sTokenToString[key] = STokenValue(str, pri, op); g_sStringToToken[str] = key
 
-OpType GetOpTypeFromOp(NOP_TYPE op)
+OpType GetOpTypeFromOp(eNOperation op)
 {
 	return g_sOpInfo[op]._opType;
+}
+int GetOpLength(eNOperation op)
+{
+	return sizeof(OpType) + g_sOpInfo[op]._op_length*sizeof(short);
 }
 
 int InitDefaultTokenString()
@@ -347,7 +351,7 @@ TK_TYPE CalcToken(TK_TYPE tkTypeOnySingleChar, CArchiveRdWC& ar, std::string& tk
 	return tkTypeOnySingleChar;
 }
 
-NOP_TYPE TokenToOP(TK_TYPE tk, int& iPriority)
+eNOperation TokenToOP(TK_TYPE tk, int& iPriority)
 {
 	auto it = g_sTokenToString.find(tk);
 	if (it == g_sTokenToString.end())
@@ -572,7 +576,6 @@ TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk)
 			break;
 		}
 	}
-
 	return (tk.size() != 0) ? TK_STRING : TK_NONE;
 }
 
@@ -1412,7 +1415,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 	return r;
 }
 
-NOP_TYPE ConvertCheckOPToOptimize(NOP_TYPE n)
+eNOperation ConvertCheckOPToOptimize(eNOperation n)
 {
 	switch (n)
 	{
@@ -1437,7 +1440,7 @@ NOP_TYPE ConvertCheckOPToOptimize(NOP_TYPE n)
 	}
 	return NOP_NONE;
 }
-NOP_TYPE ConvertCheckOPToOptimizeInv(NOP_TYPE n)
+eNOperation ConvertCheckOPToOptimizeInv(eNOperation n)
 {
 	switch (n)
 	{
@@ -1541,9 +1544,9 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	int iStackCheckVar = iTempOffset._iVar;
 	int Pos2 = funs._cur._code->GetBufferOffset();
-	NOP_TYPE opCheck = funs._cur.GetLastOP();
+	eNOperation opCheck = funs._cur.GetLastOP();
 	bool isCheckOPOpt = false;
-	NOP_TYPE opOpz = NOP_NONE;
+	eNOperation opOpz = NOP_NONE;
 	if (IsTempVar(iStackCheckVar))
 	{
 		opOpz = ConvertCheckOPToOptimize(opCheck);
@@ -1609,11 +1612,13 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		funs._cur.Push_JMPTrue(ar, iStackCheckVar, PosLoopTop);
 	else
 	{
-		funs._cur._code->SetPointer(-7, SEEK_CUR); // OP + n1, n2, n3
-		funs._cur._code->Write(&opOpz, sizeof(opOpz));
+		int argLen = sizeof(short) * 3;
+		funs._cur._code->SetPointer(-((int)sizeof(OpType) + argLen), SEEK_CUR); // OP + n1, n2, n3
+		OpType optype = GetOpTypeFromOp(opOpz);
+		funs._cur._code->Write(&optype, sizeof(optype));
 		int cur = funs._cur._code->GetBufferOffset();
-		funs._cur.Set_JumpOffet(SJumpValue(cur, cur + 6), PosLoopTop);
-		funs._cur._code->SetPointer(6, SEEK_CUR);
+		funs._cur.Set_JumpOffet(SJumpValue(cur, cur + argLen), PosLoopTop);
+		funs._cur._code->SetPointer(argLen, SEEK_CUR);
 	}
 	funs._cur.ClearLastOP();
 
@@ -1808,9 +1813,9 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	int iStackCheckVar = iTempOffset._iVar;
 	int Pos2 = funs._cur._code->GetBufferOffset();
-	NOP_TYPE opCheck = funs._cur.GetLastOP();
+	eNOperation opCheck = funs._cur.GetLastOP();
 	bool isCheckOPOpt = false;
-	NOP_TYPE opOpz = NOP_NONE;
+	eNOperation opOpz = NOP_NONE;
 	if (IsTempVar(iStackCheckVar))
 	{
 		opOpz = ConvertCheckOPToOptimize(opCheck);
@@ -1857,11 +1862,13 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		funs._cur.Push_JMPTrue(ar, iStackCheckVar, PosLoopTop);
 	else
 	{
-		funs._cur._code->SetPointer(-7, SEEK_CUR); // OP + n1, n2, n3
-		funs._cur._code->Write(&opOpz, sizeof(opOpz));
+		int argLen = sizeof(short) * 3;
+		funs._cur._code->SetPointer(-((int)sizeof(OpType) + argLen), SEEK_CUR); // OP + n1, n2, n3
+		OpType optype = GetOpTypeFromOp(opOpz);
+		funs._cur._code->Write(&optype, sizeof(optype));
 		int cur = funs._cur._code->GetBufferOffset();
-		funs._cur.Set_JumpOffet(SJumpValue(cur, cur + 6), PosLoopTop);
-		funs._cur._code->SetPointer(6, SEEK_CUR);
+		funs._cur.Set_JumpOffet(SJumpValue(cur, cur + argLen), PosLoopTop);
+		funs._cur._code->SetPointer(argLen, SEEK_CUR);
 	}
 	funs._cur.ClearLastOP();
 
@@ -1909,9 +1916,9 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	SJumpValue jmp1;
 	SJumpValue jmp2;
 
-	NOP_TYPE opCheck = funs._cur.GetLastOP();
+	eNOperation opCheck = funs._cur.GetLastOP();
 	bool isCheckOPOpt = false;
-	NOP_TYPE opOpz = NOP_NONE;
+	eNOperation opOpz = NOP_NONE;
 	if (IsTempVar(iTempOffset._iVar))
 	{
 		opOpz = ConvertCheckOPToOptimizeInv(opCheck);
@@ -1927,11 +1934,13 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	}
 	else
 	{
-		funs._cur._code->SetPointer(-7, SEEK_CUR); // OP + n1, n2, n3
-		funs._cur._code->Write(&opOpz, sizeof(opOpz));
+		int argLen = sizeof(short) * 3;
+		funs._cur._code->SetPointer(-((int)sizeof(OpType) + argLen), SEEK_CUR); // OP + n1, n2, n3
+		OpType optype = GetOpTypeFromOp(opOpz);
+		funs._cur._code->Write(&optype, sizeof(optype));
 		int cur = funs._cur._code->GetBufferOffset();
-		funs._cur.Set_JumpOffet(SJumpValue(cur, cur + 6), 0);
-		funs._cur._code->SetPointer(6, SEEK_CUR);
+		funs._cur.Set_JumpOffet(SJumpValue(cur, cur + argLen), 0);
+		funs._cur._code->SetPointer(argLen, SEEK_CUR);
 
 		jmp1.Set(funs._cur._code->GetBufferOffset() - 6, funs._cur._code->GetBufferOffset());
 	}
@@ -2092,7 +2101,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 	while (blEnd == false)
 	{
 		funs._cur.FreeLocalTempVar();
-		NOP_TYPE opLast = funs._cur.GetLastOP();
+		eNOperation opLast = funs._cur.GetLastOP();
 		if (opLast == NOP_MOV || opLast == NOP_MOV_MINUS)
 		{
 			int iVar = funs._cur.GetN(funs._cur._iLastOPOffset, 0);

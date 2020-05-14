@@ -16,7 +16,7 @@ enum VAR_TYPE : u8
 
 typedef u8	OpType;
 
-enum NOP_TYPE : OpType
+enum eNOperation : OpType
 {
 	NOP_NONE = 0,
 	NOP_MOV,
@@ -86,12 +86,15 @@ enum NOP_TYPE : OpType
 	NOP_MAX = 64,
 }; // 6Bit OP(Limit 0 ~ 63) + 2Bit Operation length
 
+#define CODE_TO_NOP(op) (eNOperation)(op >> 2)
+#define CODE_TO_LEN(op) (op & 0x03)
+
 #pragma pack(1)
 struct SVMOperation
 {
 	debug_info dbg;
 
-	NOP_TYPE   op;
+	eNOperation   op;
 	short n1, n2, n3;
 };
 #pragma pack()
@@ -254,8 +257,8 @@ private:
 		OpType optype = *(OpType*)(_pCodePtr + _iCodeOffset);
 		_iCodeOffset += sizeof(OpType);
 
-		op->op = (NOP_TYPE)(optype >> 2);
-		int len = optype & 0x03;
+		op->op = CODE_TO_NOP(optype);
+		int len = CODE_TO_LEN(optype);
 		if (len)
 		{
 			int bytes = len * sizeof(short);

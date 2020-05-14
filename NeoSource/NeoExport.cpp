@@ -89,8 +89,8 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		OpType optype;
 		arRead >> optype;
 
-		v.op = (NOP_TYPE)(optype >> 2);
-		int len = optype & 0x03;
+		v.op = CODE_TO_NOP(optype);
+		int len = CODE_TO_LEN(optype);
 		if (len)
 		{
 			arRead.Read(&v.n1, len * sizeof(short));
@@ -262,8 +262,8 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 		OpType optype;
 		arRead >> optype;
 
-		v.op = (NOP_TYPE)(optype >> 2);
-		int len = optype & 0x03;
+		v.op = CODE_TO_NOP(optype);
+		int len = CODE_TO_LEN(optype);
 		if (len)
 		{
 			arRead.Read(&v.n1, len * sizeof(short));
