@@ -64,7 +64,7 @@ struct SOperationInfo
 	}
 };
 
-#define OP_STR1(op, len) if(op > 63){ g_sOpInfo.clear(); return 0;} g_sOpInfo[op] = SOperationInfo(#op, op, len)
+#define OP_STR1(op, len) if(op > 63){ blError = true;} g_sOpInfo[op] = SOperationInfo(#op, op, len)
 
 
 struct STokenValue
@@ -83,7 +83,7 @@ struct STokenValue
 };
 
 std::vector<SOperationInfo> g_sOpInfo;
-std::map<TK_TYPE, STokenValue> g_sTokenToString;
+std::vector<STokenValue> g_sTokenToString;
 std::map<std::string, TK_TYPE> g_sStringToToken;
 
 #define TOKEN_STR1(key, str) g_sTokenToString[key] = STokenValue(str, 20, NOP_NONE)
@@ -99,11 +99,19 @@ int GetOpLength(eNOperation op)
 	return sizeof(OpType) + g_sOpInfo[op]._op_length*sizeof(short);
 }
 
-int InitDefaultTokenString()
+void InitDefaultData()
 {
 	g_sOpInfo.clear();
 	g_sTokenToString.clear();
 	g_sStringToToken.clear();
+}
+int InitDefaultTokenString()
+{
+	InitDefaultData();
+	bool blError = false;
+
+	g_sTokenToString.resize(TK_MAX);
+	g_sOpInfo.resize(NOP_MAX);
 
 	TOKEN_STR1(TK_UNUSED, "unused token");
 
@@ -181,7 +189,6 @@ int InitDefaultTokenString()
 	TOKEN_STR2(TK_NOT, "!");
 
 	/////////////////////////////////////////////////////
-	g_sOpInfo.resize(NOP_MAX);
 
 	OP_STR1(NOP_NONE, 0);
 	OP_STR1(NOP_MOV, 2);
@@ -247,16 +254,21 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_TABLE_READ, 3);
 	OP_STR1(NOP_TABLE_REMOVE, 2);
 
+	if (blError)
+	{
+		InitDefaultData();
+		return 0;
+	}
+
 	return 1;
 }
 static int staticTempData = InitDefaultTokenString();
 
 std::string GetTokenString(TK_TYPE tk)
 {
-	auto it = g_sTokenToString.find(tk);
-	if (it == g_sTokenToString.end())
+	if(tk < 0 || tk >= TK_MAX)
 		return "";
-	return (*it).second._str;
+	return g_sTokenToString[tk]._str;
 }
 
 #define GLOBAL_INIT_FUN_NAME	"##_global_##"
@@ -353,14 +365,16 @@ TK_TYPE CalcToken(TK_TYPE tkTypeOnySingleChar, CArchiveRdWC& ar, std::string& tk
 
 eNOperation TokenToOP(TK_TYPE tk, int& iPriority)
 {
-	auto it = g_sTokenToString.find(tk);
-	if (it == g_sTokenToString.end())
+	if (tk < 0 || tk >= TK_MAX)
 	{
 		iPriority = 20;
 		return NOP_NONE;
 	}
-	iPriority = (*it).second._iPriority;
-	return (*it).second._op;
+	
+	STokenValue& tv = g_sTokenToString[tk];
+
+	iPriority = tv._iPriority;
+	return tv._op;
 }
 
 bool GetQuotationString(CArchiveRdWC& ar, std::string& str)

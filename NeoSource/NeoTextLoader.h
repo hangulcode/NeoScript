@@ -82,6 +82,9 @@ enum TK_TYPE
 	TK_QUOTATION, // "
 	TK_QUESTION, // ?
 	TK_NOT, // !
+
+
+	TK_MAX
 };
 
 struct SToken
