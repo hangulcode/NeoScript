@@ -1291,44 +1291,44 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 				break;
 
 			case NOP_CALL:
-				// n2 is Arg Count not use
-				callStack._iReturnOffset = GetCodeptr();
-				callStack._iSP_Vars = _iSP_Vars;
-				callStack._iSP_VarsMax = iSP_VarsMax;
-				m_sCallStack.push_back(callStack);
-
 				fun = _pVM->m_sFunctionPtr[OP.n1];
-				SetCodePtr(fun._codePtr);
-				_iSP_Vars = iSP_VarsMax;
-				iSP_VarsMax = _iSP_Vars + fun._localAddCount;
-				if (_iSP_Vars_Max2 < iSP_VarsMax)
-					_iSP_Vars_Max2 = iSP_VarsMax;
-				break;
-			case NOP_FARCALL:
-			{
-				short n2 = OP.n2;
-				if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n2))
-					_iSP_Vars_Max2 = iSP_VarsMax + (1 + n2);
+				if (fun._funType != FUNT_IMPORT)
+				{	// n2 is Arg Count not use
+					callStack._iReturnOffset = GetCodeptr();
+					callStack._iSP_Vars = _iSP_Vars;
+					callStack._iSP_VarsMax = iSP_VarsMax;
+					m_sCallStack.push_back(callStack);
 
-				fun = _pVM->m_sFunctionPtr[OP.n1];
-				if (fun._fun._func == NULL)
-				{	// Error
-					SetError("Ptr Call is null");
-					break;
+					SetCodePtr(fun._codePtr);
+					_iSP_Vars = iSP_VarsMax;
+					iSP_VarsMax = _iSP_Vars + fun._localAddCount;
+					if (_iSP_Vars_Max2 < iSP_VarsMax)
+						_iSP_Vars_Max2 = iSP_VarsMax;
 				}
-
-				int iSave = _iSP_Vars;
-				_iSP_Vars = iSP_VarsMax;
-
-				if ((*fun._fun._fn)(this, &fun._fun, n2) < 0)
+				else
 				{
-					SetError("Ptr Call Argument Count Error");
-					break;
-				}
+					short n2 = OP.n2;
+					if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n2))
+						_iSP_Vars_Max2 = iSP_VarsMax + (1 + n2);
 
-				_iSP_Vars = iSave;
+					fun = _pVM->m_sFunctionPtr[OP.n1];
+					if (fun._fun._func == NULL)
+					{	// Error
+						SetError("Ptr Call is null");
+						break;
+					}
+
+					int iSave = _iSP_Vars;
+					_iSP_Vars = iSP_VarsMax;
+
+					if ((*fun._fun._fn)(this, &fun._fun, n2) < 0)
+					{
+						SetError("Ptr Call Argument Count Error");
+						break;
+					}
+					_iSP_Vars = iSave;
+				}
 				break;
-			}
 			case NOP_PTRCALL:
 			{
 				short n3 = OP.n3;

@@ -244,7 +244,6 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_JMP_TRUE, 2);
 
 	OP_STR1(NOP_CALL, 2);
-	OP_STR1(NOP_FARCALL, 2);
 	OP_STR1(NOP_PTRCALL, 3);
 	OP_STR1(NOP_RETURN, 1);
 	OP_STR1(NOP_FUNEND, 0);
@@ -753,7 +752,8 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 				SetCompileError(ar, "Error (%d, %d): Arg Count Invalid (%d != %d)", ar.CurLine(), ar.CurCol(), (int)pFun->_args.size(), iParamCount);
 				return false;
 			}
-			funs._cur.Push_Call(ar, pFun->_funType == FUNT_IMPORT ? NOP_FARCALL : NOP_CALL, pFun->_funID, iParamCount);
+			//funs._cur.Push_Call(ar, pFun->_funType == FUNT_IMPORT ? NOP_FARCALL : NOP_CALL, pFun->_funID, iParamCount);
+			funs._cur.Push_Call(ar, NOP_CALL, pFun->_funID, iParamCount);
 		}
 		else
 			funs._cur.Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
@@ -762,6 +762,10 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 			funs._cur.Push_MOV(ar, NOP_MOV, iResultStack._iVar, STACK_POS_RETURN);
 		else
 			funs._cur.Push_MOV(ar, NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN);
+	}
+	else if (tkType1 == TK_SEMICOLON)
+	{
+
 	}
 	else
 	{

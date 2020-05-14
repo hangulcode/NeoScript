@@ -72,7 +72,6 @@ enum eNOperation : OpType
 	NOP_JMP_TRUE,
 
 	NOP_CALL,
-	NOP_FARCALL,
 	NOP_PTRCALL,
 	NOP_RETURN,
 	NOP_FUNEND,

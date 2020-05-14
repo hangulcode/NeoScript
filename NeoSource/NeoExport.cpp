@@ -194,9 +194,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ar << optype << v.n1 << v.n2;
 			break;
-		case NOP_FARCALL:
-			ar << optype << v.n1 << v.n2;
-			break;
+
 		case NOP_PTRCALL:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
@@ -551,10 +549,7 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
 			OutAsm("MOVI [%d] = -[%d]\n", v.n1, v.n2);
 			break;
-		case NOP_FARCALL:
-			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
-			OutAsm("Far CALL %s\n", GetFunctionName(funs, v.n1).c_str());
-			break;
+
 		case NOP_PTRCALL:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
