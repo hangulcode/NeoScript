@@ -357,6 +357,11 @@ void CNeoVMWorker::Move(VarInfo* v1, VarInfo* v2)
 		v1->_tbl = v2->_tbl;
 		++v1->_tbl->_refCount;
 		break;
+	case VAR_FUN:
+		Var_Release(v1);
+		v1->SetType(v2->GetType());
+		v1->_fun_index = v2->_fun_index;
+		break;
 	default:
 		break;
 	}
@@ -1166,10 +1171,6 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 			case NOP_MOV_MINUS:
 				MoveMinus(GetVarPtr(OP.n1), GetVarPtr(OP.n2));
 				break;
-			case NOP_MOV_FUNADDR:
-				Var_SetFun(GetVarPtr(OP.n1), OP.n2);
-				break;
-
 			case NOP_ADD2:
 				Add2(GetVarPtr(OP.n1), GetVarPtr(OP.n2));
 				break;
@@ -1337,9 +1338,15 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 				break;
 			case NOP_PTRCALL:
 			{
+				VarInfo* pVar1 = GetVarPtr(OP.n1);
 				if (-1 == OP.n2)
 				{
-					Call(OP.n1, OP.n2);
+					if (pVar1->GetType() != VAR_FUN)
+					{
+						SetError("Call Function Type Error");
+						break;
+					}
+					Call(pVar1->_fun_index, OP.n3);
 					break;
 				}
 				short n3 = OP.n3;
@@ -1347,9 +1354,10 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 				if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n3))
 					_iSP_Vars_Max2 = iSP_VarsMax + (1 + n3);
 
-				VarInfo* pVar1 = GetVarPtr(OP.n1);
 				VarInfo* pVarItem = GetTableItem(pVar1, GetVarPtr(OP.n2));
-				if (pVarItem->GetType() == VAR_TABLEFUN)
+				if(pVarItem->GetType() == VAR_FUN)
+					Call(pVarItem->_fun_index, n3);
+				else if (pVarItem->GetType() == VAR_TABLEFUN)
 				{
 					pFunctionPtrNative = &pVarItem->_fun;
 					if (pFunctionPtrNative != NULL)

@@ -268,6 +268,9 @@ bool CNeoVM::Init(void* pBuffer, int iSize, int iStackSize)
 			vi._str = StringAlloc(tempStr.c_str());
 			vi._str->_refCount = 1;
 			break;
+		case VAR_FUN:
+			ar >> vi._fun_index;
+			break;
 		default:
 			SetError("Error Invalid VAR Type");
 			return false;

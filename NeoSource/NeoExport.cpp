@@ -190,7 +190,6 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 
 		case NOP_MOV:
 		case NOP_MOV_MINUS:
-		case NOP_MOV_FUNADDR:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ar << optype << v.n1 << v.n2;
@@ -550,11 +549,6 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
 			OutAsm("MOVI [%d] = -[%d]\n", v.n1, v.n2);
 			break;
-		case NOP_MOV_FUNADDR:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
-			OutAsm("MOV fun addr [%d] = [%d]\n", v.n1, v.n2);
-			break;
 
 		case NOP_PTRCALL:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
@@ -677,9 +671,12 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 		case VAR_STRING:
 			WriteString(ar, vi._str->_str);
 			break;
+		case VAR_FUN:
+			ar << vi._fun_index;
+			break;
 		default:
 			SetCompileError(arText, "Error VAR Type Error (%d)", vi.GetType());
-			break;
+			return false;
 		}
 	}
 
@@ -718,6 +715,14 @@ bool WriteLog(CArchiveRdWC& arText, SFunctions& funs, SVars& vars)
 	header._iFunctionCount = (int)(funs._funs.size() + 1);
 	header._iStaticVarCount = (int)funs._staticVars.size();
 
+	std::map<int, std::string> mapFun;
+	for (auto it = funs._funs.begin(); it != funs._funs.end(); it++)
+	{
+		SFunctionInfo& f = (*it).second;
+		mapFun[f._funID] = f._name;
+	}
+
+
 	// Static 변수 저장
 	for (int i = 0; i < header._iStaticVarCount; i++)
 	{
@@ -735,6 +740,9 @@ bool WriteLog(CArchiveRdWC& arText, SFunctions& funs, SVars& vars)
 			break;
 		case VAR_STRING:
 			OutAsm("Static [%d] '%s'\n", i, ToPtringString(vi._str->_str).c_str());
+			break;
+		case VAR_FUN:
+			OutAsm("Static [%d] Fun %d = '%s'\n", i, vi._fun_index, mapFun[vi._fun_index].c_str());
 			break;
 		default:
 			SetCompileError(arText, "Error VAR Type Error (%d)", vi.GetType());

@@ -46,6 +46,8 @@ struct SOperand
 		_iVar = _iArrayIndex = INVALID_ERROR_PARSEJOB;
 		_incementType = Increment_None;
 	}
+
+	inline bool IsArray() { return _iArrayIndex  != INVALID_ERROR_PARSEJOB; }
 };
 
 struct SOperationInfo
@@ -193,7 +195,6 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_NONE, 0);
 	OP_STR1(NOP_MOV, 2);
 	OP_STR1(NOP_MOV_MINUS, 2);
-	OP_STR1(NOP_MOV_FUNADDR, 2);
 	OP_STR1(NOP_ADD2, 2);
 	OP_STR1(NOP_SUB2, 2);
 	OP_STR1(NOP_MUL2, 2);
@@ -767,7 +768,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 	else if (tkType1 == TK_SEMICOLON)
 	{
 		ar.PushToken(tkType1, tk1);
-		iResultStack._iVar = COMPILE_FUN_INDEX_BEGIN + pFun->_funID;
+		iResultStack._iVar = pFun->_staticIndex;
 	}
 	else
 	{
@@ -1380,7 +1381,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 
 		if (op <= NOP_PERSENT2)
 		{
-			if (a._iArrayIndex == INVALID_ERROR_PARSEJOB)
+			if (a.IsArray() == false)
 			{
 				if (IsTempVar(a._iVar))
 				{
@@ -1388,29 +1389,28 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 					return TK_NONE;
 				}
 			}
-			if (b._iArrayIndex == INVALID_ERROR_PARSEJOB)
+			if (b.IsArray() == false)
 			{
-				if (a._iArrayIndex == INVALID_ERROR_PARSEJOB)
+				if (a.IsArray() == false)
 				{
-					if(b._iVar < COMPILE_FUN_INDEX_BEGIN)
-						funs._cur.Push_MOV(ar, op, a._iVar, b._iVar);
-					else
-					{
-						if(op == NOP_MOV)
-							funs._cur.Push_MOV(ar, NOP_MOV_FUNADDR, a._iVar, b._iVar - COMPILE_FUN_INDEX_BEGIN);
-						else
-						{
-							SetCompileError(ar, "Operation Error : Function Address\n", ar.CurLine(), ar.CurCol());
-							return TK_NONE;
-						}
-					}
+					funs._cur.Push_MOV(ar, op, a._iVar, b._iVar);
+					//else
+					//{
+					//	if(op == NOP_MOV)
+					//		funs._cur.Push_MOV(ar, NOP_MOV_FUNADDR, a._iVar, b._iVar - COMPILE_FUN_INDEX_BEGIN);
+					//	else
+					//	{
+					//		SetCompileError(ar, "Operation Error : Function Address\n", ar.CurLine(), ar.CurCol());
+					//		return TK_NONE;
+					//	}
+					//}
 				}
 				else
 					funs._cur.Push_TableInsert(ar, a._iVar, a._iArrayIndex, b._iVar);
 			}
 			else
 			{
-				if (a._iArrayIndex == INVALID_ERROR_PARSEJOB)
+				if (a.IsArray() == false)
 					funs._cur.Push_TableRead(ar, b._iVar, b._iArrayIndex, a._iVar);
 				else
 				{
@@ -1424,13 +1424,13 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		{
 			int iTempOffset2;
 
-			if (a._iArrayIndex != INVALID_ERROR_PARSEJOB)
+			if (a.IsArray() == true)
 			{
 				iTempOffset2 = funs._cur.AllocLocalTempVar();
 				funs._cur.Push_TableRead(ar, a._iVar, a._iArrayIndex, iTempOffset2);
 				a._iVar = iTempOffset2;
 			}
-			if (b._iArrayIndex != INVALID_ERROR_PARSEJOB)
+			if (b.IsArray() == true)
 			{
 				iTempOffset2 = funs._cur.AllocLocalTempVar();
 				funs._cur.Push_TableRead(ar, b._iVar, b._iArrayIndex, iTempOffset2);
@@ -2135,7 +2135,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 	{
 		funs._cur.FreeLocalTempVar();
 		eNOperation opLast = funs._cur.GetLastOP();
-		if (opLast == NOP_MOV || opLast == NOP_MOV_MINUS || opLast == NOP_MOV_FUNADDR)
+		if (opLast == NOP_MOV || opLast == NOP_MOV_MINUS)
 		{
 			int iVar = funs._cur.GetN(funs._cur._iLastOPOffset, 0);
 			if (IsTempVar(iVar))
@@ -2292,13 +2292,15 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	if (false == ParseFunctionArg(ar, funs, pCurLayer))
 		return false;
 
+	funs._cur._funID = (int)funs._funs.size() + 1;
+	funs._funs[funs._cur._name] = funs._cur; // 이름 먼저 등록
+	funs._cur._staticIndex = funs.AddStaticFunction(funs._cur._funID);
+
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_MIDDLE)
 	{
 		if (tkType1 == TK_SEMICOLON)
 		{
-			funs._cur._funID = (int)funs._funs.size() + 1;
-			funs._funs[funs._cur._name] = funs._cur; // 이름 먼저 등록
 
 			DelVarsFunction(vars);
 			return true;
@@ -2307,8 +2309,6 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 	}
 
-	funs._cur._funID = (int)funs._funs.size() + 1;
-	funs._funs[funs._cur._name] = funs._cur; // 이름 먼저 등록
 	funs._cur._iCode_Begin = funs._cur._code->GetBufferOffset();
 	if (false == ParseFunctionBody(ar, funs, vars))
 		return false;
@@ -2342,7 +2342,8 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 
 	if (true == r)
 	{
-		Write(ar, arw, funs, vars);
+		if(false == Write(ar, arw, funs, vars))
+			return false;
 		if(putASM)
 			WriteLog(ar, funs, vars);
 	}

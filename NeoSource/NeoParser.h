@@ -12,7 +12,6 @@
 #define COMPILE_CALLARG_VAR_BEGIN		(30000) // 256 개 이상 나오지 않는다.
 //#define COMPILE_VAR_NULL				(32766)
 #define STACK_POS_RETURN				(32767)
-#define COMPILE_FUN_INDEX_BEGIN			(50000)
 
 bool IsTempVar(int iVar);
 OpType	GetOpTypeFromOp(eNOperation op);
@@ -137,7 +136,8 @@ struct SFunctionTableForWriter
 
 struct SFunctionInfo
 {
-	int							_funID; // Index
+	int							_funID; // Function Index
+	int							_staticIndex;
 	std::string					_name;
 	std::set<std::string>		_args;
 	FUNCTION_TYPE				_funType = FUNT_NORMAL;
@@ -630,6 +630,25 @@ struct SFunctions
 		VarInfo v;
 		v.SetType(VAR_BOOL);
 		v._bl = b;
+
+		int idx = (int)_staticVars.size() + COMPILE_STATIC_VAR_BEGIN;
+		_staticVars.push_back(v);
+		return idx;
+	}
+	int	AddStaticFunction(int iIndex)
+	{
+		for (int i = (int)_staticVars.size() - 1; i >= 0; i--)
+		{
+			VarInfo& v2 = _staticVars[i];
+			if (VAR_FUN == v2.GetType())
+			{
+				//if (b == v2._bl)
+				//	return i + COMPILE_STATIC_VAR_BEGIN;
+			}
+		}
+		VarInfo v;
+		v.SetType(VAR_FUN);
+		v._fun_index = iIndex;
 
 		int idx = (int)_staticVars.size() + COMPILE_STATIC_VAR_BEGIN;
 		_staticVars.push_back(v);

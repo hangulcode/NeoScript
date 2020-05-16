@@ -1,18 +1,24 @@
 
 fun sub1()
 {
-	system.print("sub1");
-//	return 1;
+	system.print("sub1\n");
+	return 1;
 }
 
-//fun sub2()
-//{
-//	system.print("sub2");
-//	return 2;
-//}
+fun sub2()
+{
+	system.print("sub2\n");
+	return 2;
+}
 
 export fun delegate()
 {
 	var fun2 = sub1;
 	fun2();
+	fun2 = sub2;
+	fun2();
+	/*
+	var table = {};
+	table.fun = sub1;
+	table.fun();*/
 }

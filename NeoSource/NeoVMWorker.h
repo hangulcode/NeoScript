@@ -22,7 +22,6 @@ enum eNOperation : OpType
 	NOP_NONE = 0,
 	NOP_MOV,
 	NOP_MOV_MINUS,
-	NOP_MOV_FUNADDR,
 	NOP_ADD2,
 	NOP_SUB2,
 	NOP_MUL2,
@@ -242,9 +241,10 @@ class CNeoVMWorker
 {
 	friend CNeoVM;
 private:
-	u8 *					_pCodePtr;
+	u8 *					_pCodeCurrent;
+	u8 *					_pCodeBegin;
 	int						_iCodeLen;
-	int						_iCodeOffset;
+	//int						_iCodeOffset;
 
 
 	CNeoVM*					_pVM;
@@ -257,20 +257,20 @@ private:
 
 	void	SetCodeData(u8* p, int sz)
 	{
-		_pCodePtr = p;
+		_pCodeBegin = _pCodeCurrent = p;
 		_iCodeLen = sz;
-		_iCodeOffset = 0;
+		//_iCodeOffset = 0;
 	}
 
 	inline void	GetOP(bool blDebugInfo, SVMOperation* op)
 	{
 		if (blDebugInfo)
 		{
-			op->dbg = *(debug_info*)(_pCodePtr + _iCodeOffset);
-			_iCodeOffset += sizeof(debug_info);
+			op->dbg = *(debug_info*)(_pCodeCurrent);
+			_pCodeCurrent += sizeof(debug_info);
 		}
-		OpType optype = *(OpType*)(_pCodePtr + _iCodeOffset);
-		_iCodeOffset += sizeof(OpType);
+		OpType optype = *(OpType*)(_pCodeCurrent);
+		_pCodeCurrent += sizeof(OpType);
 
 		op->op = CODE_TO_NOP(optype);
 		int len = CODE_TO_LEN(optype);
@@ -279,23 +279,23 @@ private:
 		case 0:
 			break;
 		case 1:
-			*(SVMArg1*)&op->n1 = *(SVMArg1*)(_pCodePtr + _iCodeOffset);
-			_iCodeOffset += sizeof(SVMArg1);
+			*(SVMArg1*)&op->n1 = *(SVMArg1*)(_pCodeCurrent);
+			_pCodeCurrent += sizeof(SVMArg1);
 			break;
 		case 2:
-			*(SVMArg2*)&op->n1 = *(SVMArg2*)(_pCodePtr + _iCodeOffset);
-			_iCodeOffset += sizeof(SVMArg2);
+			*(SVMArg2*)&op->n1 = *(SVMArg2*)(_pCodeCurrent);
+			_pCodeCurrent += sizeof(SVMArg2);
 			break;
 		case 3:
-			*(SVMArg3*)&op->n1 = *(SVMArg3*)(_pCodePtr + _iCodeOffset);
-			_iCodeOffset += sizeof(SVMArg3);
+			*(SVMArg3*)&op->n1 = *(SVMArg3*)(_pCodeCurrent);
+			_pCodeCurrent += sizeof(SVMArg3);
 			break;
 		}
 	}
 
-	inline int GetCodeptr() { return _iCodeOffset; }
-	inline void SetCodePtr(int off) { _iCodeOffset = off; }
-	inline void SetCodeIncPtr(int off) { _iCodeOffset += off; }
+	inline int GetCodeptr() { return (int)(_pCodeCurrent - _pCodeBegin); }
+	inline void SetCodePtr(int off) { _pCodeCurrent = _pCodeBegin + off; }
+	inline void SetCodeIncPtr(int off) { _pCodeCurrent += off; }
 
 	int						_iSP_Vars;
 	int						_iSP_Vars_Max2;
