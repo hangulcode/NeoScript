@@ -12,6 +12,7 @@ enum VAR_TYPE : u8
 	VAR_STRING,
 	VAR_TABLE,
 	VAR_TABLEFUN,
+	VAR_FUN,
 };
 
 typedef u8	OpType;
@@ -21,6 +22,7 @@ enum eNOperation : OpType
 	NOP_NONE = 0,
 	NOP_MOV,
 	NOP_MOV_MINUS,
+	NOP_MOV_FUNADDR,
 	NOP_ADD2,
 	NOP_SUB2,
 	NOP_MUL2,
@@ -96,6 +98,19 @@ struct SVMOperation
 	eNOperation   op;
 	short n1, n2, n3;
 };
+
+struct SVMArg1
+{
+	short n1;
+};
+struct SVMArg2
+{
+	short n1, n2;
+};
+struct SVMArg3
+{
+	short n1, n2, n3;
+};
 #pragma pack()
 
 struct VarInfo;
@@ -147,6 +162,7 @@ public:
 		int			_int;
 		double		_float;
 		FunctionPtrNative _fun;
+		int			_fun_index;
 	};
 
 	VarInfo()
@@ -258,11 +274,22 @@ private:
 
 		op->op = CODE_TO_NOP(optype);
 		int len = CODE_TO_LEN(optype);
-		if (len)
+		switch(len)
 		{
-			int bytes = len * sizeof(short);
-			memcpy(&op->n1, _pCodePtr + _iCodeOffset, bytes);
-			_iCodeOffset += bytes;
+		case 0:
+			break;
+		case 1:
+			*(SVMArg1*)&op->n1 = *(SVMArg1*)(_pCodePtr + _iCodeOffset);
+			_iCodeOffset += sizeof(SVMArg1);
+			break;
+		case 2:
+			*(SVMArg2*)&op->n1 = *(SVMArg2*)(_pCodePtr + _iCodeOffset);
+			_iCodeOffset += sizeof(SVMArg2);
+			break;
+		case 3:
+			*(SVMArg3*)&op->n1 = *(SVMArg3*)(_pCodePtr + _iCodeOffset);
+			_iCodeOffset += sizeof(SVMArg3);
+			break;
 		}
 	}
 
@@ -303,6 +330,7 @@ private:
 	void Var_SetBool(VarInfo *d, bool v);
 	void Var_SetString(VarInfo *d, const char* str);
 	void Var_SetTable(VarInfo *d, TableInfo* p);
+	void Var_SetFun(VarInfo* d, int fun_index);
 
 
 	void Move(VarInfo* v1, VarInfo* v2);
@@ -324,6 +352,7 @@ private:
 	bool CompareGE(VarInfo* v1, VarInfo* v2);
 	bool ForEach(VarInfo* v1, VarInfo* v2, VarInfo* v3);
 	int Sleep(bool isSliceRun, int iTimeout, VarInfo* v1);
+	void Call(int n1, int n2);
 
 	std::string ToString(VarInfo* v1);
 	int ToInt(VarInfo* v1);
@@ -334,7 +363,7 @@ private:
 	void TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);
 	void TableRead(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);
 	void TableRemove(VarInfo *pTable, VarInfo *pArray);
-	FunctionPtrNative* GetPtrFunction(VarInfo *pTable, VarInfo *pArray);
+	VarInfo* GetTableItem(VarInfo *pTable, VarInfo *pArray);
 
 	void ClearArgs()
 	{

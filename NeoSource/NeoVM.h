@@ -61,6 +61,7 @@ public:
 	void InitLib();
 	bool Init(void* pBuffer, int iSize, int iStackSize);
 	inline void SetError(const char* pErrMsg);
+	inline bool IsLocalErrorMsg() { return _pErrorMsg != NULL; }
 public:
 	CNeoVM();
 	virtual ~CNeoVM();

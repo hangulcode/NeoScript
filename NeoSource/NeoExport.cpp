@@ -23,14 +23,14 @@ void ChangeIndex(int staticCount, int localCount, int curFunStatkSize, short& n)
 	{
 		if (n >= COMPILE_STATIC_VAR_BEGIN)
 		{
-			if (n >= COMPILE_GLObAL_VAR_BEGIN)
+			if (n >= COMPILE_GLOBAL_VAR_BEGIN)
 			{
 				if (n >= COMPILE_CALLARG_VAR_BEGIN)
 				{
 					n = (n - COMPILE_CALLARG_VAR_BEGIN) + curFunStatkSize;
 					return;
 				}
-				n = -(n - COMPILE_GLObAL_VAR_BEGIN) - 1 - staticCount;
+				n = -(n - COMPILE_GLOBAL_VAR_BEGIN) - 1 - staticCount;
 				return;
 			}
 			n = -(n - COMPILE_STATIC_VAR_BEGIN) - 1;
@@ -190,6 +190,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 
 		case NOP_MOV:
 		case NOP_MOV_MINUS:
+		case NOP_MOV_FUNADDR:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ar << optype << v.n1 << v.n2;
@@ -549,6 +550,11 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
 			OutAsm("MOVI [%d] = -[%d]\n", v.n1, v.n2);
 			break;
+		case NOP_MOV_FUNADDR:
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
+			OutAsm("MOV fun addr [%d] = [%d]\n", v.n1, v.n2);
+			break;
 
 		case NOP_PTRCALL:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
@@ -744,7 +750,7 @@ bool WriteLog(CArchiveRdWC& arText, SFunctions& funs, SVars& vars)
 			SLocalVar* pLocalLayer = (*it1);
 			for (auto it2 = pLocalLayer->_localVars.begin(); it2 != pLocalLayer->_localVars.end(); it2++)
 			{
-				OutAsm("Global [%d] %s\n", (*it2).second - COMPILE_GLObAL_VAR_BEGIN + header._iStaticVarCount, (*it2).first.c_str());
+				OutAsm("Global [%d] %s\n", (*it2).second - COMPILE_GLOBAL_VAR_BEGIN + header._iStaticVarCount, (*it2).first.c_str());
 			}
 		}
 	}

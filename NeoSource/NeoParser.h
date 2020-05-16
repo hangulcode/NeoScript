@@ -8,10 +8,11 @@
 
 #define COMPILE_LOCALTMP_VAR_BEGIN		(10000)
 #define COMPILE_STATIC_VAR_BEGIN		(15000)
-#define COMPILE_GLObAL_VAR_BEGIN		(20000)
+#define COMPILE_GLOBAL_VAR_BEGIN		(20000)
 #define COMPILE_CALLARG_VAR_BEGIN		(30000) // 256 개 이상 나오지 않는다.
 //#define COMPILE_VAR_NULL				(32766)
 #define STACK_POS_RETURN				(32767)
+#define COMPILE_FUN_INDEX_BEGIN			(50000)
 
 bool IsTempVar(int iVar);
 OpType	GetOpTypeFromOp(eNOperation op);

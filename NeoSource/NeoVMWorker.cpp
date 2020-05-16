@@ -107,7 +107,14 @@ void CNeoVMWorker::Var_SetTable(VarInfo *d, TableInfo* p)
 	++d->_tbl->_refCount;
 }
 
+void CNeoVMWorker::Var_SetFun(VarInfo* d, int fun_index)
+{
+	if (d->IsAllocType())
+		Var_Release(d);
 
+	d->SetType(VAR_FUN);
+	d->_fun_index = fun_index;
+}
 void CNeoVMWorker::TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
 {
 	if (pTable->GetType() != VAR_TABLE)
@@ -176,12 +183,11 @@ void CNeoVMWorker::TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue
 		break;
 	}
 }
-FunctionPtrNative* CNeoVMWorker::GetPtrFunction(VarInfo *pTable, VarInfo *pArray)
+VarInfo* CNeoVMWorker::GetTableItem(VarInfo *pTable, VarInfo *pArray)
 {
 	if (pTable->GetType() != VAR_TABLE)
 		return NULL;
 
-	VarInfo* pValue;
 	switch (pArray->GetType())
 	{
 	case VAR_INT:
@@ -190,11 +196,7 @@ FunctionPtrNative* CNeoVMWorker::GetPtrFunction(VarInfo *pTable, VarInfo *pArray
 		std::map<int, VarInfo>& table = pTable->_tbl->_intMap;
 		auto it = table.find(n);
 		if (it != table.end())
-		{
-			pValue = &(*it).second;
-			if (pValue->GetType() == VAR_TABLEFUN)
-				return &pValue->_fun;
-		}
+			return &(*it).second;
 		break;
 	}
 	case VAR_FLOAT:
@@ -203,11 +205,7 @@ FunctionPtrNative* CNeoVMWorker::GetPtrFunction(VarInfo *pTable, VarInfo *pArray
 		std::map<int, VarInfo>& table = pTable->_tbl->_intMap;
 		auto it = table.find(n);
 		if (it != table.end())
-		{
-			pValue = &(*it).second;
-			if (pValue->GetType() == VAR_TABLEFUN)
-				return &pValue->_fun;
-		}
+			return &(*it).second;
 		break;
 	}
 	case VAR_STRING:
@@ -216,11 +214,7 @@ FunctionPtrNative* CNeoVMWorker::GetPtrFunction(VarInfo *pTable, VarInfo *pArray
 		std::map<std::string, VarInfo>& table = pTable->_tbl->_strMap;
 		auto it = table.find(n);
 		if (it != table.end())
-		{
-			pValue = &(*it).second;
-			if (pValue->GetType() == VAR_TABLEFUN)
-				return &pValue->_fun;
-		}
+			return &(*it).second;
 		break;
 	}
 	default:
@@ -382,6 +376,7 @@ void CNeoVMWorker::MoveMinus(VarInfo* v1, VarInfo* v2)
 	}
 	SetError("Minus Error");
 }
+
 void CNeoVMWorker::Add2(VarInfo* r, VarInfo* v2)
 {
 	if (r->GetType() == VAR_INT)
@@ -1020,6 +1015,47 @@ std::string CNeoVMWorker::GetType(VarInfo* v1)
 	return "null";
 }
 
+void CNeoVMWorker::Call(int n1, int n2)
+{
+	SFunctionTable fun = _pVM->m_sFunctionPtr[n1];
+	if (fun._funType != FUNT_IMPORT)
+	{	// n2 is Arg Count not use
+		SCallStack callStack;
+		callStack._iReturnOffset = GetCodeptr();
+		callStack._iSP_Vars = _iSP_Vars;
+		callStack._iSP_VarsMax = iSP_VarsMax;
+		m_sCallStack.push_back(callStack);
+
+		SetCodePtr(fun._codePtr);
+		_iSP_Vars = iSP_VarsMax;
+		iSP_VarsMax = _iSP_Vars + fun._localAddCount;
+		if (_iSP_Vars_Max2 < iSP_VarsMax)
+			_iSP_Vars_Max2 = iSP_VarsMax;
+	}
+	else
+	{
+		if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n2))
+			_iSP_Vars_Max2 = iSP_VarsMax + (1 + n2);
+
+		fun = _pVM->m_sFunctionPtr[n1];
+		if (fun._fun._func == NULL)
+		{	// Error
+			SetError("Ptr Call is null");
+			return;
+		}
+
+		int iSave = _iSP_Vars;
+		_iSP_Vars = iSP_VarsMax;
+
+		if ((*fun._fun._fn)(this, &fun._fun, n2) < 0)
+		{
+			SetError("Ptr Call Argument Count Error");
+			return;
+		}
+		_iSP_Vars = iSave;
+	}
+}
+
 
 CNeoVMWorker::CNeoVMWorker(CNeoVM* pVM, u32 id, int iStackSize)
 {
@@ -1094,7 +1130,6 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 			return true;
 	}
 
-	SFunctionTable fun;
 	FunctionPtrNative* pFunctionPtrNative;
 	SCallStack callStack;
 	int iTemp;
@@ -1123,11 +1158,16 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 			GetOP(blDebugInfo, &OP);
 			switch (OP.op)
 			{
+			case NOP_NONE:
+				break;
 			case NOP_MOV:
 				Move(GetVarPtr(OP.n1), GetVarPtr(OP.n2));
 				break;
 			case NOP_MOV_MINUS:
 				MoveMinus(GetVarPtr(OP.n1), GetVarPtr(OP.n2));
+				break;
+			case NOP_MOV_FUNADDR:
+				Var_SetFun(GetVarPtr(OP.n1), OP.n2);
 				break;
 
 			case NOP_ADD2:
@@ -1291,73 +1331,52 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 				break;
 
 			case NOP_CALL:
-				fun = _pVM->m_sFunctionPtr[OP.n1];
-				if (fun._funType != FUNT_IMPORT)
-				{	// n2 is Arg Count not use
-					callStack._iReturnOffset = GetCodeptr();
-					callStack._iSP_Vars = _iSP_Vars;
-					callStack._iSP_VarsMax = iSP_VarsMax;
-					m_sCallStack.push_back(callStack);
-
-					SetCodePtr(fun._codePtr);
-					_iSP_Vars = iSP_VarsMax;
-					iSP_VarsMax = _iSP_Vars + fun._localAddCount;
-					if (_iSP_Vars_Max2 < iSP_VarsMax)
-						_iSP_Vars_Max2 = iSP_VarsMax;
-				}
-				else
-				{
-					short n2 = OP.n2;
-					if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n2))
-						_iSP_Vars_Max2 = iSP_VarsMax + (1 + n2);
-
-					fun = _pVM->m_sFunctionPtr[OP.n1];
-					if (fun._fun._func == NULL)
-					{	// Error
-						SetError("Ptr Call is null");
-						break;
-					}
-
-					int iSave = _iSP_Vars;
-					_iSP_Vars = iSP_VarsMax;
-
-					if ((*fun._fun._fn)(this, &fun._fun, n2) < 0)
-					{
-						SetError("Ptr Call Argument Count Error");
-						break;
-					}
-					_iSP_Vars = iSave;
-				}
+				Call(OP.n1, OP.n2);
+				if(_pVM->IsLocalErrorMsg())
+					break;
 				break;
 			case NOP_PTRCALL:
 			{
+				if (-1 == OP.n2)
+				{
+					Call(OP.n1, OP.n2);
+					break;
+				}
 				short n3 = OP.n3;
 
 				if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n3))
 					_iSP_Vars_Max2 = iSP_VarsMax + (1 + n3);
 
 				VarInfo* pVar1 = GetVarPtr(OP.n1);
-				pFunctionPtrNative = GetPtrFunction(pVar1, GetVarPtr(OP.n2));
-				if (pFunctionPtrNative != NULL)
+				VarInfo* pVarItem = GetTableItem(pVar1, GetVarPtr(OP.n2));
+				if (pVarItem->GetType() == VAR_TABLEFUN)
 				{
-					int iSave = _iSP_Vars;
-					_iSP_Vars = iSP_VarsMax;
-
-					_pCallTableInfo = pVar1->_tbl;
-					if ((pFunctionPtrNative->_func)(this, n3) == false)
+					pFunctionPtrNative = &pVarItem->_fun;
+					if (pFunctionPtrNative != NULL)
 					{
+						int iSave = _iSP_Vars;
+						_iSP_Vars = iSP_VarsMax;
+
+						_pCallTableInfo = pVar1->_tbl;
+						if ((pFunctionPtrNative->_func)(this, n3) == false)
+						{
+							_pCallTableInfo = NULL;
+							SetError("Ptr Call Error");
+							break;
+						}
 						_pCallTableInfo = NULL;
-						SetError("Ptr Call Error");
+
+						_iSP_Vars = iSave;
+					}
+					else
+					{
+						SetError("Ptr Call Not Found");
 						break;
 					}
-					_pCallTableInfo = NULL;
-
-					_iSP_Vars = iSave;
 				}
-				else
+				else if (pVar1->GetType() == VAR_FUN)
 				{
-					SetError("Ptr Call Not Found");
-					break;
+					int a = 3;
 				}
 				break;
 			}

@@ -193,6 +193,7 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_NONE, 0);
 	OP_STR1(NOP_MOV, 2);
 	OP_STR1(NOP_MOV_MINUS, 2);
+	OP_STR1(NOP_MOV_FUNADDR, 2);
 	OP_STR1(NOP_ADD2, 2);
 	OP_STR1(NOP_SUB2, 2);
 	OP_STR1(NOP_MUL2, 2);
@@ -765,7 +766,8 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 	}
 	else if (tkType1 == TK_SEMICOLON)
 	{
-
+		ar.PushToken(tkType1, tk1);
+		iResultStack._iVar = COMPILE_FUN_INDEX_BEGIN + pFun->_funID;
 	}
 	else
 	{
@@ -1388,8 +1390,21 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			}
 			if (b._iArrayIndex == INVALID_ERROR_PARSEJOB)
 			{
-				if(a._iArrayIndex == INVALID_ERROR_PARSEJOB)
-					funs._cur.Push_MOV(ar, op, a._iVar, b._iVar);
+				if (a._iArrayIndex == INVALID_ERROR_PARSEJOB)
+				{
+					if(b._iVar < COMPILE_FUN_INDEX_BEGIN)
+						funs._cur.Push_MOV(ar, op, a._iVar, b._iVar);
+					else
+					{
+						if(op == NOP_MOV)
+							funs._cur.Push_MOV(ar, NOP_MOV_FUNADDR, a._iVar, b._iVar - COMPILE_FUN_INDEX_BEGIN);
+						else
+						{
+							SetCompileError(ar, "Operation Error : Function Address\n", ar.CurLine(), ar.CurCol());
+							return TK_NONE;
+						}
+					}
+				}
 				else
 					funs._cur.Push_TableInsert(ar, a._iVar, a._iArrayIndex, b._iVar);
 			}
@@ -1500,7 +1515,7 @@ int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, const std:
 	}
 	int iLocalVar;
 	if (funs._cur._name == GLOBAL_INIT_FUN_NAME)
-		iLocalVar = COMPILE_GLObAL_VAR_BEGIN + funs._cur._localVarCount++;
+		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN + funs._cur._localVarCount++;
 	else
 		iLocalVar = 1 + (int)funs._cur._args.size() + funs._cur._localVarCount++; // 0 번은 리턴 저장용
 	pCurLayer->AddLocalVar(name, iLocalVar);
@@ -2120,7 +2135,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 	{
 		funs._cur.FreeLocalTempVar();
 		eNOperation opLast = funs._cur.GetLastOP();
-		if (opLast == NOP_MOV || opLast == NOP_MOV_MINUS)
+		if (opLast == NOP_MOV || opLast == NOP_MOV_MINUS || opLast == NOP_MOV_FUNADDR)
 		{
 			int iVar = funs._cur.GetN(funs._cur._iLastOPOffset, 0);
 			if (IsTempVar(iVar))
