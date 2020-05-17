@@ -186,7 +186,8 @@ int InitDefaultTokenString()
 	TOKEN_STR2(TK_DOT, ".");
 	TOKEN_STR3(TK_DOT2, "..", 6, NOP_STR_ADD);
 	TOKEN_STR2(TK_SHARP, "#");
-	TOKEN_STR2(TK_QUOTATION, "\"");
+	TOKEN_STR2(TK_QUOTE2, "\"");
+	TOKEN_STR2(TK_QUOTE1, "'");
 	TOKEN_STR2(TK_QUESTION, "?");
 	TOKEN_STR2(TK_NOT, "!");
 
@@ -378,7 +379,7 @@ eNOperation TokenToOP(TK_TYPE tk, int& iPriority)
 	return tv._op;
 }
 
-bool GetQuotationString(CArchiveRdWC& ar, std::string& str)
+bool GetQuotationString(CArchiveRdWC& ar, std::string& str, u16 quote)
 {
 	str.clear();
 	bool blEnd = false;
@@ -389,7 +390,7 @@ bool GetQuotationString(CArchiveRdWC& ar, std::string& str)
 			return false;
 		if (c1 == '\n')
 			return false;
-		if (c1 == '"')
+		if (c1 == quote)
 			break;
 		if (c1 == '\\')
 		{
@@ -562,7 +563,9 @@ TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk)
 		case '#':
 			return CalcToken(TK_SHARP, ar, tk);
 		case '"':
-			return CalcToken(TK_QUOTATION, ar, tk);
+			return CalcToken(TK_QUOTE2, ar, tk);
+		case '\'':
+			return CalcToken(TK_QUOTE1, ar, tk);
 		case '?':
 			return CalcToken(TK_QUESTION, ar, tk);
 		case '!':
@@ -824,10 +827,10 @@ bool ParseNum(int& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArchiveRd
 
 bool ParseStringOrNum(int& iResultStack, TK_TYPE tkTypePre, std::string& tkPre, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
-	if (tkTypePre == TK_QUOTATION)
+	if (tkTypePre == TK_QUOTE2 || tkTypePre == TK_QUOTE1)
 	{
 		std::string str;
-		if (false == GetQuotationString(ar, str))
+		if (false == GetQuotationString(ar, str, tkTypePre == TK_QUOTE2 ? '"' : '\''))
 		{
 			SetCompileError(ar, "Error (%d, %d): String End Not Found\n", ar.CurLine(), ar.CurCol());
 			return false;
@@ -867,7 +870,7 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 		iTempOffsetKey = iTempOffsetValue = INVALID_ERROR_PARSEJOB;
 		tkType1 = GetToken(ar, tk1);
 		
-		if (tkType1 == TK_QUOTATION || tkType1 == TK_STRING)
+		if (tkType1 == TK_QUOTE2 || tkType1 == TK_QUOTE1 || tkType1 == TK_STRING)
 		{
 			if (false == ParseStringOrNum(iTempOffsetKey, tkType1, tk1, ar, funs, vars))
 				return TK_NONE;
@@ -892,7 +895,7 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 		else if (tkType2 == TK_EQUAL)
 		{
 			tkType2 = GetToken(ar, tk2);
-			if (tkType2 == TK_QUOTATION || tkType2 == TK_STRING)
+			if (tkType2 == TK_QUOTE2 || tkType2 == TK_QUOTE1 || tkType2 == TK_STRING)
 			{
 				if (false == ParseStringOrNum(iTempOffsetValue, tkType2, tk2, ar, funs, vars))
 					return TK_NONE;
@@ -1172,10 +1175,11 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			operands.push_back(iTempOffset);
 			blApperOperator = true;
 			break;
-		case TK_QUOTATION:
+		case TK_QUOTE2:
+		case TK_QUOTE1:
 		{
 			std::string str;
-			if (false == GetQuotationString(ar, str))
+			if (false == GetQuotationString(ar, str, tkType1 == TK_QUOTE2 ? '"' : '\''))
 			{
 				SetCompileError(ar, "Error (%d, %d): String End Not Found\n", ar.CurLine(), ar.CurCol());
 				return TK_NONE;

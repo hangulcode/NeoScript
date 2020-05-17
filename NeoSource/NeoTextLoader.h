@@ -79,7 +79,8 @@ enum TK_TYPE
 	TK_DOT, // .
 	TK_DOT2, // ..
 	TK_SHARP, // #
-	TK_QUOTATION, // "
+	TK_QUOTE2, // "
+	TK_QUOTE1, // '
 	TK_QUESTION, // ?
 	TK_NOT, // !
 
