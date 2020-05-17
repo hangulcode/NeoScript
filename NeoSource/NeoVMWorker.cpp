@@ -1349,12 +1349,17 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 					Call(pVar1->_fun_index, OP.n3);
 					break;
 				}
+				VarInfo* pVarItem = GetTableItem(pVar1, GetVarPtr(OP.n2));
+				if (pVarItem == NULL)
+				{
+					SetError("Ptr Call Error");
+					break;
+				}
 				short n3 = OP.n3;
 
 				if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n3))
 					_iSP_Vars_Max2 = iSP_VarsMax + (1 + n3);
 
-				VarInfo* pVarItem = GetTableItem(pVar1, GetVarPtr(OP.n2));
 				if(pVarItem->GetType() == VAR_FUN)
 					Call(pVarItem->_fun_index, n3);
 				else if (pVarItem->GetType() == VAR_TABLEFUN)

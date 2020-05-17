@@ -2,23 +2,28 @@
 fun sub1()
 {
 	system.print("sub1\n");
-	return 1;
 }
 
 fun sub2()
 {
 	system.print("sub2\n");
-	return 2;
 }
 
 export fun delegate()
 {
-	var fun2 = sub1;
-	fun2();
-	fun2 = sub2;
-	fun2();
-	/*
+	var funPointer = sub1;
+	funPointer();
+
+	funPointer = sub2;
+	funPointer();
+	
 	var table = {};
-	table.fun = sub1;
-	table.fun();*/
+	table.funPointer2 = sub1;
+	table.funPointer2();
+
+	table.tablePointer = system;
+	table.tablePointer.print("Table Pointer\n");
+
+	table.printf = system.print;
+	table.printf("Table Function Poiter\n");
 }
