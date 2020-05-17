@@ -16,6 +16,8 @@
 	- console / slice_run: Executes every part of the script that is produced by the script in sequential order of a certain time or command.
 	- console / time_limit: Processes a script function call to exit after a certain period of time.
 		Unlike console / slice_run, console / time_limit does not execute after the next frame.
+	- console / divide_by_zero: Exception handling.
+	- console / delegate: Function pointer support.
 
 ### var data structure
 	- null: the variable has no value (if the variable is not initialized or "var a;" or "var a = null;")

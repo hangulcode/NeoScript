@@ -1013,6 +1013,8 @@ std::string CNeoVMWorker::GetType(VarInfo* v1)
 	case VAR_TABLE:
 		return "table";
 	case VAR_TABLEFUN:
+		return "table_function";
+	case VAR_FUN:
 		return "function";
 	default:
 		break;
@@ -1386,10 +1388,6 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 						SetError("Ptr Call Not Found");
 						break;
 					}
-				}
-				else if (pVar1->GetType() == VAR_FUN)
-				{
-					int a = 3;
 				}
 				break;
 			}
