@@ -275,7 +275,7 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 		case NOP_ADD2:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			OutBytes((const u8*)&v, 1 + 2 * 2, 7);
+			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
 			OutAsm("ADD [%d] += [%d]\n", v.n1, v.n2);
 			break;
 		case NOP_SUB2:

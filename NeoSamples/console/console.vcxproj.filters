@@ -115,5 +115,8 @@
     <None Include="etc.neo">
       <Filter>Samples</Filter>
     </None>
+    <None Include="delegate.neo">
+      <Filter>Samples</Filter>
+    </None>
   </ItemGroup>
 </Project>
