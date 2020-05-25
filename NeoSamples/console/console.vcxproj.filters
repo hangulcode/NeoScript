@@ -118,5 +118,8 @@
     <None Include="delegate.neo">
       <Filter>Samples</Filter>
     </None>
+    <None Include="meta.neo">
+      <Filter>Samples</Filter>
+    </None>
   </ItemGroup>
 </Project>

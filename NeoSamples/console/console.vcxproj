@@ -230,6 +230,7 @@
     <None Include="callback.neo" />
     <None Include="delegate.neo" />
     <None Include="etc.neo" />
+    <None Include="meta.neo" />
     <None Include="slice_run.neo" />
     <None Include="table.neo" />
     <None Include="table_callback.neo" />
