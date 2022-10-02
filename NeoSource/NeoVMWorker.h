@@ -281,26 +281,6 @@ private:
 	{
 		*op = *(SVMOperation*)(_pCodeCurrent);
 		_pCodeCurrent += sizeof(SVMOperation);
-		/*
-		op->op = CODE_TO_NOP(optype);
-		int len = CODE_TO_LEN(optype);
-		switch(len)
-		{
-		case 0:
-			break;
-		case 1:
-			*(SVMArg1*)&op->n1 = *(SVMArg1*)(_pCodeCurrent);
-			_pCodeCurrent += sizeof(SVMArg1);
-			break;
-		case 2:
-			*(SVMArg2*)&op->n1 = *(SVMArg2*)(_pCodeCurrent);
-			_pCodeCurrent += sizeof(SVMArg2);
-			break;
-		case 3:
-			*(SVMArg3*)&op->n1 = *(SVMArg3*)(_pCodeCurrent);
-			_pCodeCurrent += sizeof(SVMArg3);
-			break;
-		}*/
 	}
 	int GetDebugLine();
 	inline int GetCodeptr() { return (int)(_pCodeCurrent - _pCodeBegin); }
@@ -322,13 +302,20 @@ private:
 	bool	Start(int iFunctionID);
 	bool	Run(bool isSliceRun, int iTimeout = -1, int iCheckOpCount = 1000);
 
-	inline VarInfo* GetVarPtr(short n)
+	inline VarInfo* GetVarPtr1(SVMOperation& OP)
 	{
-		if (n >= 0)
-		{
-			return &m_sVarStack[_iSP_Vars + n];
-		}
-		return &(*m_pVarGlobal)[-n - 1];
+		if (OP.argFlag & 0x4) return &m_sVarStack[_iSP_Vars + OP.n1];
+		else return &(*m_pVarGlobal)[OP.n1];
+	}
+	inline VarInfo* GetVarPtr2(SVMOperation& OP)
+	{
+		if (OP.argFlag & 0x2) return &m_sVarStack[_iSP_Vars + OP.n2];
+		else return &(*m_pVarGlobal)[OP.n2];
+	}
+	inline VarInfo* GetVarPtr3(SVMOperation& OP)
+	{
+		if (OP.argFlag & 0x1) return &m_sVarStack[_iSP_Vars + OP.n3];
+		else return &(*m_pVarGlobal)[OP.n3];
 	}
 	inline VarInfo* GetVarPtr_S(short n) { return &m_sVarStack[_iSP_Vars + n]; }
 	inline VarInfo* GetVarPtr_G(short n) { return &(*m_pVarGlobal)[n]; }
@@ -365,7 +352,7 @@ private:
 	bool CompareEQ(VarInfo* v1, VarInfo* v2);
 	bool CompareGR(VarInfo* v1, VarInfo* v2);
 	bool CompareGE(VarInfo* v1, VarInfo* v2);
-	bool ForEach(VarInfo* v1, VarInfo* v2, VarInfo* v3);
+	bool ForEach(VarInfo* v1, VarInfo* v2);
 	int Sleep(bool isSliceRun, int iTimeout, VarInfo* v1);
 	void Call(int n1, int n2);
 
