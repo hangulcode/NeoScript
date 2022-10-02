@@ -26,6 +26,7 @@ private:
 
 	SNeoVMHeader			_header;
 	std::map<std::string, int> m_sImExportTable;
+	std::vector<debug_info>	_DebugData;
 
 	CNeoVMWorker*			_pMainWorker;
 	std::map<u32, CNeoVMWorker*> _sVMWorkers;

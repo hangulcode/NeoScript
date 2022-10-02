@@ -133,7 +133,6 @@ struct SFunctionTableForWriter
 };
 
 
-
 struct SFunctionInfo
 {
 	int							_funID; // Function Index
@@ -151,6 +150,7 @@ struct SFunctionInfo
 	CNArchive*					_code = NULL;
 	int							_iCode_Begin = 0;
 	int							_iCode_Size = 0;
+	std::vector<debug_info>*	_pDebugData = nullptr;
 
 	void Clear()
 	{
@@ -190,52 +190,54 @@ struct SFunctionInfo
 	}
 	s16 GetN(int iOffsetOP, int n)
 	{
-		s16* pN = (s16*)((u8*)_code->GetData() + iOffsetOP + sizeof(OpType));
+		s16* pN = (s16*)((u8*)_code->GetData() + iOffsetOP + sizeof(OpType) + sizeof(ArgFlag));
 		return pN[n];
+	}
+	void    Push_Arg(short a1, short a2, short a3)
+	{
+		ArgFlag arg = 0;//
+		_code->Write(&arg, sizeof(arg));
+		_code->Write(&a1, sizeof(a1));
+		_code->Write(&a2, sizeof(a2));
+		_code->Write(&a3, sizeof(a3));
 	}
 	void	Push_OP(CArchiveRdWC& ar, eNOperation op, short r, short a1, short a2)
 	{
 		if (ar._debug)
-		{
-			debug_info dbg(ar.CurFile(), ar.CurLine());
-			_code->Write(&dbg, sizeof(dbg));
-		}
+			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(op);
 		_code->Write(&optype, sizeof(optype));
-		_code->Write(&r, sizeof(r));
-		_code->Write(&a1, sizeof(a1));
-		_code->Write(&a2, sizeof(a2));
+		//_code->Write(&r, sizeof(r));
+		//_code->Write(&a1, sizeof(a1));
+		//_code->Write(&a2, sizeof(a2));
+		Push_Arg(r, a1, a2);
 	}
 	void	Push_Call(CArchiveRdWC& ar, eNOperation op, short fun, short args)
 	{
 		if (ar._debug)
-		{
-			debug_info dbg(ar.CurFile(), ar.CurLine());
-			_code->Write(&dbg, sizeof(dbg));
-		}
+			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(op);
 		_code->Write(&optype, sizeof(optype));
-		_code->Write(&fun, sizeof(fun));
-		_code->Write(&args, sizeof(args));
+		//_code->Write(&fun, sizeof(fun));
+		//_code->Write(&args, sizeof(args));
+		Push_Arg(fun, args, 0);
 	}
 	void	Push_CallPtr(CArchiveRdWC& ar, short table, short index, short args)
 	{
 		if (ar._debug)
-		{
-			debug_info dbg(ar.CurFile(), ar.CurLine());
-			_code->Write(&dbg, sizeof(dbg));
-		}
+			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(NOP_PTRCALL);
 		_code->Write(&optype, sizeof(optype));
-		_code->Write(&table, sizeof(table));
-		_code->Write(&index, sizeof(index));
-		_code->Write(&args, sizeof(args));
+		//_code->Write(&table, sizeof(table));
+		//_code->Write(&index, sizeof(index));
+		//_code->Write(&args, sizeof(args));
+		Push_Arg(table, index, args);
 	}
 	void	Push_MOV(CArchiveRdWC& ar, eNOperation op, short r, short s)
 	{
@@ -271,7 +273,7 @@ struct SFunctionInfo
 				case NOP_AND:	// &&
 				case NOP_OR:		// ||
 				{
-					u8 *pre = (u8*)_code->GetData() + sizeof(OpType) + _iLastOPOffset;
+					u8 *pre = (u8*)_code->GetData() + sizeof(OpType) + sizeof(ArgFlag) + _iLastOPOffset;
 					short* preDest = (short*)pre;
 					if (*preDest == s)
 					{
@@ -287,139 +289,120 @@ struct SFunctionInfo
 		}
 
 		if (ar._debug)
-		{
-			debug_info dbg(ar.CurFile(), ar.CurLine());
-			_code->Write(&dbg, sizeof(dbg));
-		}
+			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(op);
 		_code->Write(&optype, sizeof(optype));
-		_code->Write(&r, sizeof(r));
-		_code->Write(&s, sizeof(s));
+		//_code->Write(&r, sizeof(r));
+		//_code->Write(&s, sizeof(s));
+		Push_Arg(r, s, 0);
 	}
 	void	Push_OP1(CArchiveRdWC& ar, eNOperation op, short r)
 	{
 		if (ar._debug)
-		{
-			debug_info dbg(ar.CurFile(), ar.CurLine());
-			_code->Write(&dbg, sizeof(dbg));
-		}
+			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(op);
 		_code->Write(&optype, sizeof(optype));
-		_code->Write(&r, sizeof(r));
+		//_code->Write(&r, sizeof(r));
+		Push_Arg(r, 0, 0);
 	}
 	void	Push_RETURN(CArchiveRdWC& ar, short r)
 	{
 		if (ar._debug)
-		{
-			debug_info dbg(ar.CurFile(), ar.CurLine());
-			_code->Write(&dbg, sizeof(dbg));
-		}
+			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(NOP_RETURN);
 		_code->Write(&optype, sizeof(optype));
-		_code->Write(&r, sizeof(r));
+		//_code->Write(&r, sizeof(r));
+		Push_Arg(r, 0, 0);
 	}
 	void	Push_FUNEND(CArchiveRdWC& ar)
 	{
 		if (ar._debug)
-		{
-			debug_info dbg(ar.CurFile(), ar.CurLine());
-			_code->Write(&dbg, sizeof(dbg));
-		}
+			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(NOP_FUNEND);
 		_code->Write(&optype, sizeof(optype));
+		Push_Arg(0, 0, 0);
 	}
 
 
 	void	Push_JMP(CArchiveRdWC& ar, int destOffset)
 	{
 		if (ar._debug)
-		{
-			debug_info dbg(ar.CurFile(), ar.CurLine());
-			_code->Write(&dbg, sizeof(dbg));
-		}
+			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		eNOperation op = NOP_JMP;
 		OpType optype = GetOpTypeFromOp(op);
 		short add = destOffset - (_code->GetBufferOffset() + GetOpLength(op));
 		_code->Write(&optype, sizeof(optype));
-		_code->Write(&add, sizeof(add));
+		//_code->Write(&add, sizeof(add));
+		Push_Arg(add, 0, 0);
 	}
 	void	Push_JMPFalse(CArchiveRdWC& ar, short var, int destOffset)
 	{
 		if (ar._debug)
-		{
-			debug_info dbg(ar.CurFile(), ar.CurLine());
-			_code->Write(&dbg, sizeof(dbg));
-		}
+			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		eNOperation op = NOP_JMP_FALSE;
 		OpType optype = GetOpTypeFromOp(op);
 		short add = destOffset - (_code->GetBufferOffset() + GetOpLength(op));
 		_code->Write(&optype, sizeof(optype));
-		_code->Write(&var, sizeof(var));
-		_code->Write(&add, sizeof(add));
+		//_code->Write(&var, sizeof(var));
+		//_code->Write(&add, sizeof(add));
+		Push_Arg(var, add, 0);
 	}
 	void	Push_JMPTrue(CArchiveRdWC& ar, short var, int destOffset)
 	{
 		if (ar._debug)
-		{
-			debug_info dbg(ar.CurFile(), ar.CurLine());
-			_code->Write(&dbg, sizeof(dbg));
-		}
+			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		eNOperation op = NOP_JMP_TRUE;
 		OpType optype = GetOpTypeFromOp(op);
 		short add = destOffset - (_code->GetBufferOffset() + GetOpLength(op));
 		_code->Write(&optype, sizeof(optype));
-		_code->Write(&var, sizeof(var));
-		_code->Write(&add, sizeof(add));
+		//_code->Write(&var, sizeof(var));
+		//_code->Write(&add, sizeof(add));
+		Push_Arg(var, add, 0);
 	}
 	// Always Value is Key Next Alloc ID
 	void	Push_JMPForEach(CArchiveRdWC& ar, int destOffset, short table, short key)
 	{
 		if (ar._debug)
-		{
-			debug_info dbg(ar.CurFile(), ar.CurLine());
-			_code->Write(&dbg, sizeof(dbg));
-		}
+			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		eNOperation op = NOP_JMP_FOREACH;
 		OpType optype = GetOpTypeFromOp(op);
 		short add = destOffset - (_code->GetBufferOffset() + GetOpLength(op));
 		_code->Write(&optype, sizeof(optype));
-		_code->Write(&add, sizeof(add));
-		_code->Write(&table, sizeof(table));
-		_code->Write(&key, sizeof(key));
+		//_code->Write(&add, sizeof(add));
+		//_code->Write(&table, sizeof(table));
+		//_code->Write(&key, sizeof(key));
+		Push_Arg(add, table, key);
 	}
 	void	Set_JumpOffet(SJumpValue sJmp, int destOffset)
 	{
-		u8* p = (u8*)_code->GetData();
-		*((short*)(p + sJmp._iCodePosOffset)) = (short)(destOffset - sJmp._iBaseJmpOffset);
+		*((short*)((u8*)_code->GetData() + sJmp._iCodePosOffset)) = (short)(destOffset - sJmp._iBaseJmpOffset);
 	}
 	void	Push_TableAlloc(CArchiveRdWC& ar, short r)
 	{
 		if (ar._debug)
-		{
-			debug_info dbg(ar.CurFile(), ar.CurLine());
-			_code->Write(&dbg, sizeof(dbg));
-		}
+			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(NOP_TABLE_ALLOC);
 		_code->Write(&optype, sizeof(optype));
-		_code->Write(&r, sizeof(r));
+		//_code->Write(&r, sizeof(r));
+		Push_Arg(r, 0, 0);
 	}
 	void	Push_TableInsert(CArchiveRdWC& ar, short nTable, short nArray, short nValue)
 	{
@@ -433,7 +416,8 @@ struct SFunctionInfo
 			case NOP_VAR_CLEAR:
 				if (*preDest == nValue)
 				{
-					_code->SetPointer(_iLastOPOffset - (ar._debug ? sizeof(debug_info) : 0), SEEK_SET);
+					//_code->SetPointer(_iLastOPOffset - (ar._debug ? sizeof(debug_info) : 0), SEEK_SET);
+					_code->SetPointer(_iLastOPOffset, SEEK_SET);
 					Push_TableRemove(ar, nTable, nArray);
 					return;
 				}
@@ -444,60 +428,52 @@ struct SFunctionInfo
 		}
 
 		if (ar._debug)
-		{
-			debug_info dbg(ar.CurFile(), ar.CurLine());
-			_code->Write(&dbg, sizeof(dbg));
-		}
+			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(NOP_TABLE_INSERT);
 		_code->Write(&optype, sizeof(optype));
-		_code->Write(&nTable, sizeof(nTable));
-		_code->Write(&nArray, sizeof(nArray));
-		_code->Write(&nValue, sizeof(nValue));
+		//_code->Write(&nTable, sizeof(nTable));
+		//_code->Write(&nArray, sizeof(nArray));
+		//_code->Write(&nValue, sizeof(nValue));
+		Push_Arg(nTable, nArray, nValue);
 	}
 	void	Push_TableRead(CArchiveRdWC& ar, short nTable, short nArray, short nValue)
 	{
 		if (ar._debug)
-		{
-			debug_info dbg(ar.CurFile(), ar.CurLine());
-			_code->Write(&dbg, sizeof(dbg));
-		}
+			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(NOP_TABLE_READ);
 		_code->Write(&optype, sizeof(optype));
-		_code->Write(&nTable, sizeof(nTable));
-		_code->Write(&nArray, sizeof(nArray));
-		_code->Write(&nValue, sizeof(nValue));
+		//_code->Write(&nTable, sizeof(nTable));
+		//_code->Write(&nArray, sizeof(nArray));
+		//_code->Write(&nValue, sizeof(nValue));
+		Push_Arg(nTable, nArray, nValue);
 	}
 	void	Push_TableRemove(CArchiveRdWC& ar, short nTable, short nArray)
 	{
 		if (ar._debug)
-		{
-			debug_info dbg(ar.CurFile(), ar.CurLine());
-			_code->Write(&dbg, sizeof(dbg));
-		}
+			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(NOP_TABLE_REMOVE);
 		_code->Write(&optype, sizeof(optype));
-		_code->Write(&nTable, sizeof(nTable));
-		_code->Write(&nArray, sizeof(nArray));
+		//_code->Write(&nTable, sizeof(nTable));
+		//_code->Write(&nArray, sizeof(nArray));
+		Push_Arg(nTable, nArray, 0);
 	}
 	void	Push_ToType(CArchiveRdWC& ar, eNOperation op, short r, short s)
 	{
 		if (ar._debug)
-		{
-			debug_info dbg(ar.CurFile(), ar.CurLine());
-			_code->Write(&dbg, sizeof(dbg));
-		}
+			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(op);
 		_code->Write(&optype, sizeof(optype));
-		_code->Write(&r, sizeof(r));
-		_code->Write(&s, sizeof(s));
+		//_code->Write(&r, sizeof(r));
+		//_code->Write(&s, sizeof(s));
+		Push_Arg(r, s, 0);
 	}
 };
 
@@ -512,6 +488,9 @@ struct SFunctions
 
 	CNArchive		_codeGlobal;
 	CNArchive		_codeLocal;
+
+	std::vector<debug_info> m_sDebugGlobal;
+	std::vector<debug_info> m_sDebugLocal;
 
 	~SFunctions()
 	{

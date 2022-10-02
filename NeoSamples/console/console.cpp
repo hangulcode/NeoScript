@@ -39,6 +39,7 @@ int SAMPLE_9_times();
 int SAMPLE_table();
 int SAMPLE_slice_run();
 int SAMPLE_time_limit();
+int SAMPLE_meta();
 int SAMPLE_etc(const char*pFileName, const char* pFunctionName);
 
 int main()
@@ -57,6 +58,7 @@ int main()
 		printf("6.time_limit\n");
 		printf("7.divide_by_zero\n");
 		printf("8.delegate\n");
+		printf("9.meta\n");
 
 		printf("\npress a key ...\n");
 
@@ -96,6 +98,10 @@ int main()
 			break;
 		case '8':
 			SAMPLE_etc("delegate.neo", "delegate");
+			system("pause");
+			break;
+		case '9':
+			SAMPLE_meta();
 			system("pause");
 			break;
 		}

@@ -62,7 +62,7 @@ struct SOperationInfo
 		_str = p;
 		_op = op;
 		_op_length = len;
-		_opType = (op<<2) | len;
+		_opType = op;
 	}
 };
 
@@ -98,7 +98,8 @@ OpType GetOpTypeFromOp(eNOperation op)
 }
 int GetOpLength(eNOperation op)
 {
-	return sizeof(OpType) + g_sOpInfo[op]._op_length*sizeof(short);
+	//return sizeof(OpType) + g_sOpInfo[op]._op_length*sizeof(short);
+	return sizeof(OpType) + sizeof(ArgFlag) + (3 * sizeof(short));
 }
 
 void InitDefaultData()
@@ -437,8 +438,23 @@ static inline bool IsDotChar(u16 c)
 
 	return false;
 }
+void SkipSpace(CArchiveRdWC& ar)
+{
+	while (true)
+	{
+		u16 c1 = ar.GetData(false);
+		if (c1 == ' ' || c1 == '\t')
+		{
+			ar.GetData(true);
+			continue;
+		}
+		return;
+	}
+}
 bool GetDotString(CArchiveRdWC& ar, std::string& str)
 {
+	SkipSpace(ar);
+
 	str.clear();
 	bool blEnd = false;
 	while (blEnd == false)
@@ -763,10 +779,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 		else
 			funs._cur.Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
 		iResultStack = funs._cur.AllocLocalTempVar();
-		if(tkTypePre != TK_MINUS)
-			funs._cur.Push_MOV(ar, NOP_MOV, iResultStack._iVar, STACK_POS_RETURN);
-		else
-			funs._cur.Push_MOV(ar, NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN);
+		funs._cur.Push_MOV(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN);
 	}
 	else if (tkType1 == TK_SEMICOLON)
 	{
@@ -1566,7 +1579,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 
 	funs._cur.Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
-	SJumpValue jmp1(funs._cur._code->GetBufferOffset() - 2, funs._cur._code->GetBufferOffset());
+	SJumpValue jmp1(funs._cur._code->GetBufferOffset() - (sizeof(short)*3), funs._cur._code->GetBufferOffset());
 
 	int PosLoopTop = funs._cur._code->GetBufferOffset(); // Loop 의 맨위
 
@@ -1650,9 +1663,11 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	else
 	{
 		int argLen = sizeof(short) * 3;
-		funs._cur._code->SetPointer(-((int)sizeof(OpType) + argLen), SEEK_CUR); // OP + n1, n2, n3
+		funs._cur._code->SetPointer(-((int)sizeof(OpType) + (int)sizeof(ArgFlag) + argLen), SEEK_CUR); // OP + flag + n1, n2, n3
 		OpType optype = GetOpTypeFromOp(opOpz);
 		funs._cur._code->Write(&optype, sizeof(optype));
+		ArgFlag flag = 0;
+		funs._cur._code->Write(&flag, sizeof(flag));
 		int cur = funs._cur._code->GetBufferOffset();
 		funs._cur.Set_JumpOffet(SJumpValue(cur, cur + argLen), PosLoopTop);
 		funs._cur._code->SetPointer(argLen, SEEK_CUR);
@@ -1767,7 +1782,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	funs._cur.Push_OP1(ar, NOP_VAR_CLEAR, iKey);
 
 	funs._cur.Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
-	SJumpValue jmp1(funs._cur._code->GetBufferOffset() - 2, funs._cur._code->GetBufferOffset());
+	SJumpValue jmp1(funs._cur._code->GetBufferOffset() - (sizeof(short) * 3), funs._cur._code->GetBufferOffset());
 
 	int PosLoopTop = funs._cur._code->GetBufferOffset(); // Loop 의 맨위
 
@@ -1835,7 +1850,7 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 
 	funs._cur.Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
-	SJumpValue jmp1(funs._cur._code->GetBufferOffset() - 2, funs._cur._code->GetBufferOffset());
+	SJumpValue jmp1(funs._cur._code->GetBufferOffset() - (sizeof(short) * 3), funs._cur._code->GetBufferOffset());
 
 	int PosLoopTop = funs._cur._code->GetBufferOffset(); // Loop 의 맨위
 
@@ -2144,7 +2159,8 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			int iVar = funs._cur.GetN(funs._cur._iLastOPOffset, 0);
 			if (IsTempVar(iVar))
 			{
-				funs._cur._code->SetPointer(funs._cur._iLastOPOffset - (ar._debug ? sizeof(debug_info) : 0), SEEK_SET);
+				//funs._cur._code->SetPointer(funs._cur._iLastOPOffset - (ar._debug ? sizeof(debug_info) : 0), SEEK_SET);
+				funs._cur._code->SetPointer(funs._cur._iLastOPOffset, SEEK_SET);
 				funs._cur.ClearLastOP();
 			}
 		}
@@ -2216,6 +2232,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 					funs._cur._name = tk2;
 					funs._cur._funType = funType;
 					funs._cur._code = &funs._codeLocal;
+					funs._cur._pDebugData = &funs.m_sDebugLocal;
 					if (false == ParseFunction(ar, funs, vars))
 						return false;
 
@@ -2335,6 +2352,7 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	funs._cur._funID = 0;
 	funs._cur._name = GLOBAL_INIT_FUN_NAME;
 	funs._cur._code = &funs._codeGlobal;
+	funs._cur._pDebugData = &funs.m_sDebugGlobal;
 	funs._cur.Clear();
 
 	SLayerVar* pCurLayer = AddVarsFunction(vars);

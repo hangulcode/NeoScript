@@ -16,6 +16,7 @@ enum VAR_TYPE : u8
 };
 
 typedef u8	OpType;
+typedef u8	ArgFlag;
 
 enum eNOperation : OpType
 {
@@ -83,36 +84,23 @@ enum eNOperation : OpType
 	NOP_TABLE_REMOVE,
 
 
-	NOP_MAX = 64,
-}; // 6Bit OP(Limit 0 ~ 63) + 2Bit Operation length
+	NOP_MAX,
+}; // Operation length
 
-#define CODE_TO_NOP(op) (eNOperation)(op >> 2)
-#define CODE_TO_LEN(op) (op & 0x03)
+#define CODE_TO_NOP(op) (eNOperation)(op)// >> 2)
+#define CODE_TO_LEN(op) 3 //(op & 0x03)
 
 #pragma pack(1)
 struct SVMOperation
 {
-	debug_info dbg;
-
-	eNOperation   op;
-	short n1, n2, n3;
-};
-
-struct SVMArg1
-{
-	short n1;
-};
-struct SVMArg2
-{
-	short n1, n2;
-};
-struct SVMArg3
-{
-	short n1, n2, n3;
+	eNOperation	  op;
+	u8		argFlag;
+	short	n1, n2, n3;
 };
 #pragma pack()
 
 struct VarInfo;
+struct SVarWrapper;
 class CNeoVMWorker;
 struct FunctionPtr;
 typedef int(*Neo_CFunction) (CNeoVMWorker *N, FunctionPtr* pFun, short args);
@@ -125,6 +113,12 @@ struct StringInfo
 	int _refCount;
 };
 
+struct SNeoMeta
+{
+	virtual  bool GetFunction(std::string& fname, SVarWrapper*) =0;
+	virtual  bool GetVariable(std::string& fname, SVarWrapper*) =0;
+};
+
 
 struct TableInfo
 {
@@ -132,6 +126,7 @@ struct TableInfo
 	std::map<int, VarInfo>			_intMap;
 	int	_TableID;
 	int _refCount;
+	SNeoMeta*	_meta;
 	void* _pUserData;
 };
 
@@ -188,6 +183,7 @@ public:
 };
 #pragma pack()
 
+
 struct SNeoVMHeader
 {
 	u32		_dwFileType;
@@ -198,6 +194,7 @@ struct SNeoVMHeader
 	int		_iGlobalVarCount;
 	int		_iMainFunctionOffset;
 	int		_iCodeSize;
+	int		m_iDebugCount;
 
 	u32		_dwFlag;
 };
@@ -236,10 +233,28 @@ struct SNeoFunLib
 	FunctionPtrNative fn;
 };
 
+struct SVarWrapper
+{
+	VarInfo* _var;
+	CNeoVMWorker*	_vmw;
+	inline SVarWrapper(CNeoVMWorker* p, VarInfo* var) { _var = var; _vmw = p; }
+
+	void SetNone();
+	void SetInt(int v);
+	void SetFloat(double v);
+	void SetBool(bool v);
+	void SetString(const char* str);
+	//void SetTable(TableInfo* p);
+	//void SetFun(int fun_index);
+	void SetTableFun(FunctionPtrNative fun);
+	void SetMeta(SNeoMeta* p);
+};
+
 class CNeoVM;
 class CNeoVMWorker
 {
 	friend CNeoVM;
+	friend SVarWrapper;
 private:
 	u8 *					_pCodeCurrent;
 	u8 *					_pCodeBegin;
@@ -262,16 +277,11 @@ private:
 		//_iCodeOffset = 0;
 	}
 
-	inline void	GetOP(bool blDebugInfo, SVMOperation* op)
+	inline void	GetOP(SVMOperation* op)
 	{
-		if (blDebugInfo)
-		{
-			op->dbg = *(debug_info*)(_pCodeCurrent);
-			_pCodeCurrent += sizeof(debug_info);
-		}
-		OpType optype = *(OpType*)(_pCodeCurrent);
-		_pCodeCurrent += sizeof(OpType);
-
+		*op = *(SVMOperation*)(_pCodeCurrent);
+		_pCodeCurrent += sizeof(SVMOperation);
+		/*
 		op->op = CODE_TO_NOP(optype);
 		int len = CODE_TO_LEN(optype);
 		switch(len)
@@ -290,9 +300,9 @@ private:
 			*(SVMArg3*)&op->n1 = *(SVMArg3*)(_pCodeCurrent);
 			_pCodeCurrent += sizeof(SVMArg3);
 			break;
-		}
+		}*/
 	}
-
+	int GetDebugLine();
 	inline int GetCodeptr() { return (int)(_pCodeCurrent - _pCodeBegin); }
 	inline void SetCodePtr(int off) { _pCodeCurrent = _pCodeBegin + off; }
 	inline void SetCodeIncPtr(int off) { _pCodeCurrent += off; }
@@ -320,6 +330,8 @@ private:
 		}
 		return &(*m_pVarGlobal)[-n - 1];
 	}
+	inline VarInfo* GetVarPtr_S(short n) { return &m_sVarStack[_iSP_Vars + n]; }
+	inline VarInfo* GetVarPtr_G(short n) { return &(*m_pVarGlobal)[n]; }
 
 
 	void Var_AddRef(VarInfo *d);
@@ -331,8 +343,11 @@ private:
 	void Var_SetString(VarInfo *d, const char* str);
 	void Var_SetTable(VarInfo *d, TableInfo* p);
 	void Var_SetFun(VarInfo* d, int fun_index);
+	void Var_SetTableFun(VarInfo* d, FunctionPtrNative fun);
+	void Var_SetMeta(VarInfo* d, SNeoMeta* p);
 
 
+	void Swap(VarInfo* v1, VarInfo* v2);
 	void Move(VarInfo* v1, VarInfo* v2);
 	void MoveMinus(VarInfo* v1, VarInfo* v2);
 	void Add2(VarInfo* r, VarInfo* v2);
@@ -598,6 +613,7 @@ public:
 	inline void	ReturnValue(bool p) { Var_SetBool(&m_sVarStack[_iSP_Vars], p); }
 	inline void	ReturnValue(long long p) { Var_SetInt(&m_sVarStack[_iSP_Vars], (int)p); }
 	inline void	ReturnValue(unsigned long long p) { Var_SetInt(&m_sVarStack[_iSP_Vars], (int)p); }
+	inline void	ReturnValue(SNeoMeta* p) { Var_SetMeta(&m_sVarStack[_iSP_Vars], p); }
 
 
 	inline void SetError(const char* pErrMsg);

@@ -1,0 +1,41 @@
+import fun GetObject();
+/*
+fun sub1()
+{
+	system.print("sub1\n");
+}
+
+fun sub2()
+{
+	system.print("sub2\n");
+}
+*/
+export fun meta()
+{
+	var obj = GetObject();
+
+	var pos = obj._pos;
+
+	system.print("\n x : " .. pos.x);
+
+	//system.print("\n x : " .. obj._pos.x);
+	//system.print("\n y : " .. obj._pos.y);
+	//system.print("\n z : " .. obj._pos.z);
+	//system.print("\n");
+
+	//var funPointer = sub1;
+	//funPointer();
+
+/*	funPointer = sub2;
+	funPointer();
+	
+	var table = {};
+	table.funPointer2 = sub1;
+	table.funPointer2();
+
+	table.tablePointer = system;
+	table.tablePointer.print("Table Pointer\n");
+
+	table.printf = system.print;
+	table.printf("Table Function Poiter\n");*/
+}

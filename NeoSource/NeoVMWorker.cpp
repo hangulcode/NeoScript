@@ -8,6 +8,16 @@
 
 void	SetCompileError(const char*	lpszString, ...);
 
+void SVarWrapper::SetNone() { _vmw->Var_SetNone(_var); }
+void SVarWrapper::SetInt(int v) { _vmw->Var_SetInt(_var, v); }
+void SVarWrapper::SetFloat(double v) { _vmw->Var_SetFloat(_var, v); }
+void SVarWrapper::SetBool(bool v) { _vmw->Var_SetBool(_var, v); }
+void SVarWrapper::SetString(const char* str) { _vmw->Var_SetString(_var, str); }
+//void SVarWrapper::SetTable(TableInfo* p)  { _vmw->Var_SetTable(_var, v); }
+//void SVarWrapper::SetFun(int fun_index)  { _vmw->Var_SetFun(_var, v); }
+void SVarWrapper::SetTableFun(FunctionPtrNative fun) { _vmw->Var_SetTableFun(_var, fun); }
+void SVarWrapper::SetMeta(SNeoMeta* p) { _vmw->Var_SetMeta(_var, p); }
+
 void CNeoVMWorker::Var_AddRef(VarInfo *d)
 {
 	switch (d->GetType())
@@ -106,7 +116,6 @@ void CNeoVMWorker::Var_SetTable(VarInfo *d, TableInfo* p)
 	d->_tbl = p;
 	++d->_tbl->_refCount;
 }
-
 void CNeoVMWorker::Var_SetFun(VarInfo* d, int fun_index)
 {
 	if (d->IsAllocType())
@@ -115,6 +124,21 @@ void CNeoVMWorker::Var_SetFun(VarInfo* d, int fun_index)
 	d->SetType(VAR_FUN);
 	d->_fun_index = fun_index;
 }
+void CNeoVMWorker::Var_SetTableFun(VarInfo* d, FunctionPtrNative fun)
+{
+	if (d->IsAllocType())
+		Var_Release(d);
+
+	d->SetType(VAR_TABLEFUN);
+	d->_fun = fun;
+}
+void CNeoVMWorker::Var_SetMeta(VarInfo* d, SNeoMeta* p)
+{
+	if (d->GetType() != VAR_TABLE)
+		Var_SetTable(d, _pVM->TableAlloc());
+	d->_tbl->_meta = p;
+}
+
 void CNeoVMWorker::TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
 {
 	if (pTable->GetType() != VAR_TABLE)
@@ -230,6 +254,21 @@ void CNeoVMWorker::TableRead(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
 		return;
 	}
 
+	if (pTable->_tbl->_meta)
+	{
+		if (pArray->GetType() == VAR_STRING)
+		{
+			if (pValue->GetType() != VAR_TABLE)
+				Var_SetTable(pValue, _pVM->TableAlloc());
+
+			std::string& n = pArray->_str->_str;
+			SVarWrapper wr(this, pValue);
+			pTable->_tbl->_meta->GetVariable(n, &wr);
+			return;
+		}
+	}
+
+
 	Var_Release(pValue);
 	switch (pArray->GetType())
 	{
@@ -329,6 +368,12 @@ void CNeoVMWorker::TableRemove(VarInfo *pTable, VarInfo *pArray)
 	}
 }
 
+void CNeoVMWorker::Swap(VarInfo* v1, VarInfo* v2)
+{
+	VarInfo* p = v1;
+	v1 = v2;
+	v2 = p;
+}
 void CNeoVMWorker::Move(VarInfo* v1, VarInfo* v2)
 {
 	switch (v2->GetType())
@@ -384,8 +429,9 @@ void CNeoVMWorker::MoveMinus(VarInfo* v1, VarInfo* v2)
 
 void CNeoVMWorker::Add2(VarInfo* r, VarInfo* v2)
 {
-	if (r->GetType() == VAR_INT)
+	switch (r->GetType())
 	{
+	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 		{
 			r->_int += v2->_int;
@@ -397,9 +443,8 @@ void CNeoVMWorker::Add2(VarInfo* r, VarInfo* v2)
 			r->_float = (double)r->_int + v2->_float;
 			return;
 		}
-	}
-	else if (r->GetType() == VAR_FLOAT)
-	{
+		break;
+	case VAR_FLOAT:
 		if (v2->GetType() == VAR_INT)
 		{
 			r->_float += v2->_int;
@@ -410,22 +455,23 @@ void CNeoVMWorker::Add2(VarInfo* r, VarInfo* v2)
 			r->_float += v2->_float;
 			return;
 		}
-	}
-	else if (r->GetType() == VAR_STRING)
-	{
+		break;
+	case VAR_STRING:
 		if (v2->GetType() == VAR_STRING)
 		{
 			Var_SetString(r, (r->_str->_str + v2->_str->_str).c_str());
 			return;
 		}
+		break;
 	}
 	SetError("+= Error");
 }
 
 void CNeoVMWorker::Sub2(VarInfo* r, VarInfo* v2)
 {
-	if (r->GetType() == VAR_INT)
+	switch (r->GetType())
 	{
+	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 		{
 			r->_int -= v2->_int;
@@ -437,9 +483,8 @@ void CNeoVMWorker::Sub2(VarInfo* r, VarInfo* v2)
 			r->_float = (double)r->_int - v2->_float;
 			return;
 		}
-	}
-	else if (r->GetType() == VAR_FLOAT)
-	{
+		break;
+	case VAR_FLOAT:
 		if (v2->GetType() == VAR_INT)
 		{
 			r->_float -= v2->_int;
@@ -450,14 +495,16 @@ void CNeoVMWorker::Sub2(VarInfo* r, VarInfo* v2)
 			r->_float -= v2->_float;
 			return;
 		}
+		break;
 	}
 	SetError("-= Error");
 }
 
 void CNeoVMWorker::Mul2(VarInfo* r, VarInfo* v2)
 {
-	if (r->GetType() == VAR_INT)
+	switch (r->GetType())
 	{
+	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 		{
 			r->_int *= v2->_int;
@@ -469,9 +516,8 @@ void CNeoVMWorker::Mul2(VarInfo* r, VarInfo* v2)
 			r->_float = (double)r->_int * v2->_float;
 			return;
 		}
-	}
-	else if (r->GetType() == VAR_FLOAT)
-	{
+		break;
+	case VAR_FLOAT:
 		if (v2->GetType() == VAR_INT)
 		{
 			r->_float *= v2->_int;
@@ -482,14 +528,16 @@ void CNeoVMWorker::Mul2(VarInfo* r, VarInfo* v2)
 			r->_float *= v2->_float;
 			return;
 		}
+		break;
 	}
 	SetError("*= Error");
 }
 
 void CNeoVMWorker::Div2(VarInfo* r, VarInfo* v2)
 {
-	if (r->GetType() == VAR_INT)
+	switch (r->GetType())
 	{
+	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 		{
 			r->_int /= v2->_int;
@@ -501,9 +549,8 @@ void CNeoVMWorker::Div2(VarInfo* r, VarInfo* v2)
 			r->_float = (double)r->_int / v2->_float;
 			return;
 		}
-	}
-	else if (r->GetType() == VAR_FLOAT)
-	{
+		break;
+	case VAR_FLOAT:
 		if (v2->GetType() == VAR_INT)
 		{
 			r->_float /= v2->_int;
@@ -514,6 +561,7 @@ void CNeoVMWorker::Div2(VarInfo* r, VarInfo* v2)
 			r->_float /= v2->_float;
 			return;
 		}
+		break;
 	}
 	SetError("/= Error");
 }
@@ -531,8 +579,9 @@ void CNeoVMWorker::Per2(VarInfo* r, VarInfo* v2)
 }
 void CNeoVMWorker::Add(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
-	if (v1->GetType() == VAR_INT)
+	switch (v1->GetType())
 	{
+	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 		{
 			Var_SetInt(r, v1->_int + v2->_int);
@@ -543,9 +592,8 @@ void CNeoVMWorker::Add(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			Var_SetFloat(r, v1->_int + v2->_float);
 			return;
 		}
-	}
-	else if (v1->GetType() == VAR_FLOAT)
-	{
+		break;
+	case VAR_FLOAT:
 		if (v2->GetType() == VAR_INT)
 		{
 			Var_SetFloat(r, v1->_float + v2->_int);
@@ -556,22 +604,23 @@ void CNeoVMWorker::Add(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			Var_SetFloat(r, v1->_float + v2->_float);
 			return;
 		}
-	}
-	else if (v1->GetType() == VAR_STRING)
-	{
+		break;
+	case VAR_STRING:
 		if (v2->GetType() == VAR_STRING)
 		{
 			Var_SetString(r, (r->_str->_str + v2->_str->_str).c_str());
 			return;
 		}
+		break;
 	}
 	SetError("+ Error");
 }
 
 void CNeoVMWorker::Sub(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
-	if (v1->GetType() == VAR_INT)
+	switch (v1->GetType())
 	{
+	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 		{
 			Var_SetInt(r, v1->_int - v2->_int);
@@ -582,9 +631,8 @@ void CNeoVMWorker::Sub(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			Var_SetFloat(r, v1->_int - v2->_float);
 			return;
 		}
-	}
-	else if (v1->GetType() == VAR_FLOAT)
-	{
+		break;
+	case VAR_FLOAT:
 		if (v2->GetType() == VAR_INT)
 		{
 			Var_SetFloat(r, v1->_float - v2->_int);
@@ -595,14 +643,16 @@ void CNeoVMWorker::Sub(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			Var_SetFloat(r, v1->_float - v2->_float);
 			return;
 		}
+		break;
 	}
 	SetError("- Error");
 }
 
 void CNeoVMWorker::Mul(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
-	if (v1->GetType() == VAR_INT)
+	switch (v1->GetType())
 	{
+	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 		{
 			Var_SetInt(r, v1->_int * v2->_int);
@@ -613,9 +663,8 @@ void CNeoVMWorker::Mul(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			Var_SetFloat(r, v1->_int * v2->_float);
 			return;
 		}
-	}
-	else if (v1->GetType() == VAR_FLOAT)
-	{
+		break;
+	case VAR_FLOAT:
 		if (v2->GetType() == VAR_INT)
 		{
 			Var_SetFloat(r, v1->_float * v2->_int);
@@ -626,14 +675,16 @@ void CNeoVMWorker::Mul(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			Var_SetFloat(r, v1->_float * v2->_float);
 			return;
 		}
+		break;
 	}
 	SetError("* Error");
 }
 
 void CNeoVMWorker::Div(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
-	if (v1->GetType() == VAR_INT)
+	switch (v1->GetType())
 	{
+	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 		{
 			Var_SetInt(r, v1->_int / v2->_int);
@@ -644,9 +695,8 @@ void CNeoVMWorker::Div(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			Var_SetFloat(r, v1->_int / v2->_float);
 			return;
 		}
-	}
-	else if (v1->GetType() == VAR_FLOAT)
-	{
+		break;
+	case VAR_FLOAT:
 		if (v2->GetType() == VAR_INT)
 		{
 			Var_SetFloat(r, v1->_float / v2->_int);
@@ -657,6 +707,7 @@ void CNeoVMWorker::Div(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			Var_SetFloat(r, v1->_float / v2->_float);
 			return;
 		}
+		break;
 	}
 	SetError("/ Error");
 }
@@ -705,66 +756,67 @@ void CNeoVMWorker::Dec(VarInfo* v1)
 
 bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
 {
-	if (v1->GetType() == VAR_INT)
+	switch (v1->GetType())
 	{
+	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 			return v1->_int == v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_int == v2->_float;
-	}
-	else if (v1->GetType() == VAR_FLOAT)
-	{
+		break;
+	case VAR_FLOAT:
 		if (v2->GetType() == VAR_INT)
 			return v1->_float == v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float == v2->_float;
-	}
-	else if (v1->GetType() == VAR_BOOL)
-	{
+		break;
+	case VAR_BOOL:
 		if (v2->GetType() == VAR_BOOL)
 			return v1->_bl == v2->_bl;
-	}
-	else if (v1->GetType() == VAR_NONE)
-	{
+		break;
+	case VAR_NONE:
 		if (v2->GetType() == VAR_NONE)
 			return true;
+		break;
 	}
 	return false;
 }
 bool CNeoVMWorker::CompareGR(VarInfo* v1, VarInfo* v2)
 {
-	if (v1->GetType() == VAR_INT)
+	switch (v1->GetType())
 	{
+	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 			return v1->_int > v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_int > v2->_float;
-	}
-	else if (v1->GetType() == VAR_FLOAT)
-	{
+		break;
+	case VAR_FLOAT:
 		if (v2->GetType() == VAR_INT)
 			return v1->_float > v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float > v2->_float;
+		break;
 	}
 	SetError("CompareGR Error");
 	return false;
 }
 bool CNeoVMWorker::CompareGE(VarInfo* v1, VarInfo* v2)
 {
-	if (v1->GetType() == VAR_INT)
+	switch (v1->GetType())
 	{
+	case VAR_INT:
 		if(v2->GetType() == VAR_INT)
 			return v1->_int >= v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_int >= v2->_float;
-	}
-	else if (v1->GetType() == VAR_FLOAT)
-	{
+		break;
+	case VAR_FLOAT:
 		if (v2->GetType() == VAR_INT)
 			return v1->_float >= v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float >= v2->_float;
+		break;
 	}
 	SetError("CompareGE Error");
 	return false;
@@ -777,51 +829,54 @@ bool CNeoVMWorker::ForEach(VarInfo* pTable, VarInfo* pKey, VarInfo* pValue)
 		return false;
 	}
 	TableInfo* tbl = pTable->_tbl;
-	if (pKey->GetType() == VAR_INT)
+	switch (pKey->GetType())
 	{
-		auto it = tbl->_intMap.find(pKey->_int);
-		if (it == tbl->_intMap.end())
-			return false;
-		else
+	case VAR_INT:
 		{
-			if (++it == tbl->_intMap.end())
+			auto it = tbl->_intMap.find(pKey->_int);
+			if (it == tbl->_intMap.end())
+				return false;
+			else
 			{
-				if (false == tbl->_strMap.empty())
+				if (++it == tbl->_intMap.end())
 				{
-					auto it = tbl->_strMap.begin();
+					if (false == tbl->_strMap.empty())
+					{
+						auto it = tbl->_strMap.begin();
+						Var_SetString(pKey, (*it).first.c_str());
+						Move(pValue, &(*it).second);
+						return true;
+					}
+					return false;
+				}
+				else
+				{
+					Var_SetInt(pKey, (*it).first);
+					Move(pValue, &(*it).second);
+					return true;
+				}
+			}
+		}
+		break;
+	case VAR_STRING:
+		{
+			auto it = tbl->_strMap.find(pKey->_str->_str);
+			if (it == tbl->_strMap.end())
+				return false;
+			else
+			{
+				if (++it == tbl->_strMap.end())
+					return false;
+				else
+				{
 					Var_SetString(pKey, (*it).first.c_str());
 					Move(pValue, &(*it).second);
 					return true;
 				}
-				return false;
-			}
-			else
-			{
-				Var_SetInt(pKey, (*it).first);
-				Move(pValue, &(*it).second);
-				return true;
 			}
 		}
-	}
-	else if (pKey->GetType() == VAR_STRING)
-	{
-		auto it = tbl->_strMap.find(pKey->_str->_str);
-		if (it == tbl->_strMap.end())
-			return false;
-		else
-		{
-			if (++it == tbl->_strMap.end())
-				return false;
-			else
-			{
-				Var_SetString(pKey, (*it).first.c_str());
-				Move(pValue, &(*it).second);
-				return true;
-			}
-		}
-	}
-	else if (pKey->GetType() == VAR_NONE)
-	{
+		break;
+	case VAR_NONE:
 		if (false == tbl->_intMap.empty())
 		{
 			auto it = tbl->_intMap.begin();
@@ -837,6 +892,7 @@ bool CNeoVMWorker::ForEach(VarInfo* pTable, VarInfo* pKey, VarInfo* pValue)
 			return true;
 		}
 		return false;
+		break;
 	}
 	SetError("foreach table key Error");
 	return false;
@@ -1077,7 +1133,12 @@ CNeoVMWorker::~CNeoVMWorker()
 {
 
 }
-
+int CNeoVMWorker::GetDebugLine()
+{
+	int idx = int(_pCodeCurrent - _pCodeBegin - 1) / sizeof(SVMOperation);
+	if ((int)_pVM->_DebugData.size() <= idx) return -1;
+	return _pVM->_DebugData[idx]._lineseq;
+}
 void CNeoVMWorker::SetError(const char* pErrMsg)
 {
 	_pVM->_pErrorMsg = pErrMsg;
@@ -1149,23 +1210,16 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 		_preClock = clock();
 
 	bool blDebugInfo = _pVM->IsDebugInfo();
-	//debug_info dbg;
-	OP.dbg._lineseq = -1;
+	int _lineseq = -1;
 
 	try
 	{
 		while (true)
 		{
-			//if (blDebugInfo)
-			//{
-			//	dbg = *(debug_info*)GetCurPtr();
-			//	SetCodePtr(GetCodeptr() + sizeof(debug_info));
-			//}
-
-			GetOP(blDebugInfo, &OP);
-			switch (OP.op)
+			GetOP(&OP);
+			switch ((OP.op))
 			{
-			case NOP_NONE:
+			case (NOP_NONE):
 				break;
 			case NOP_MOV:
 				Move(GetVarPtr(OP.n1), GetVarPtr(OP.n2));
@@ -1451,10 +1505,12 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 			{
 				m_sCallStack.clear();
 				_iSP_Vars = 0;
+				if(blDebugInfo)
+					_lineseq = GetDebugLine();
 #ifdef _WIN32
-				sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pVM->_pErrorMsg, OP.dbg._lineseq);
+				sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pVM->_pErrorMsg, _lineseq);
 #else
-				sprintf(chMsg, "%s : Line (%d)", _pVM->_pErrorMsg, OP.dbg._lineseq);
+				sprintf(chMsg, "%s : Line (%d)", _pVM->_pErrorMsg, _lineseq);
 #endif
 				_pVM->_sErrorMsgDetail = chMsg;
 				return false;
@@ -1474,10 +1530,12 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 	catch (...)
 	{
 		SetError("Exception");
+		if(blDebugInfo)
+			_lineseq = GetDebugLine();
 #ifdef _WIN32
-		sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pVM->_pErrorMsg, OP.dbg._lineseq);
+		sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pVM->_pErrorMsg, _lineseq);
 #else
-		sprintf(chMsg, "%s : Line (%d)", _pVM->_pErrorMsg, OP.dbg._lineseq);
+		sprintf(chMsg, "%s : Line (%d)", _pVM->_pErrorMsg, _lineseq);
 #endif
 		_pVM->_sErrorMsgDetail = chMsg;
 		return false;

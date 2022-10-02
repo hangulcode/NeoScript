@@ -6,6 +6,18 @@
 
 void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 
+u8 GetArgIndexToCode(short n1, short n2, short n3)
+{
+	u8 r = 0;
+	if (n1 >= 0)
+		r |= (1 << 2);
+	if (n2 >= 0)
+		r |= (1 << 1);
+	if (n3 >= 0)
+		r |= (1 << 0);
+	return r;
+}
+
 void ChangeIndex(int staticCount, int localCount, int curFunStatkSize, short& n)
 {
 	//if (n == COMPILE_VAR_NULL)
@@ -53,7 +65,7 @@ std::string GetFunctionName(SFunctions& funs, short nID)
 	return "Error";
 }
 
-void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, std::map<int, SFunctionTableForWriter>& funPos)
+void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, std::map<int, SFunctionTableForWriter>& funPos, std::vector< debug_info>& debugInfo)
 {
 	int iOPCount = 0;
 
@@ -80,14 +92,25 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 	arRead.SetPointer(0, SEEK_SET);
 
 	SVMOperation v;
+	memset(&v, 0, sizeof(v));
 
 	while (arRead.GetBufferOffset() < arRead.GetBufferSize())
 	{
 		if (arText._debug)
-			arRead >> v.dbg;
+		{
+			int off = (arRead.GetBufferOffset() + fi._iCode_Begin) / 8;
+			debug_info di = (*fi._pDebugData)[off];
+			debugInfo.push_back(di);
+		}
+		//	arRead >> v.dbg;
 
 		OpType optype;
 		arRead >> optype;
+
+		u8 argFlag;
+		arRead >> argFlag;
+
+
 
 		v.op = CODE_TO_NOP(optype);
 		int len = CODE_TO_LEN(optype);
@@ -96,10 +119,11 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			arRead.Read(&v.n1, len * sizeof(short));
 		}
 
+
 		iOPCount++;
 
-		if (arText._debug)
-			ar << v.dbg;
+		//if (arText._debug)
+		//	ar << v.dbg;
 
 		switch (v.op)
 		{
@@ -110,7 +134,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_PERSENT2:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			ar << optype << v.n1 << v.n2;
+			//ar << optype << v.n1 << v.n2;
 			break;
 
 		case NOP_ADD3:
@@ -121,14 +145,14 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			ar << optype << v.n1 << v.n2 << v.n3;
+			//ar << optype << v.n1 << v.n2 << v.n3;
 			break;
 
 		case NOP_VAR_CLEAR:
 		case NOP_INC:
 		case NOP_DEC:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			ar << optype << v.n1;
+			//ar << optype << v.n1;
 			break;
 
 		case NOP_GREAT:		// >
@@ -143,7 +167,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			ar << optype << v.n1 << v.n2 << v.n3;
+			//ar << optype << v.n1 << v.n2 << v.n3;
 			break;
 
 		case NOP_JMP_GREAT:		// >
@@ -158,12 +182,12 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_JMP_NOR:	// !(||)
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			ar << optype << v.n1 << v.n2 << v.n3;
+			//ar << optype << v.n1 << v.n2 << v.n3;
 			break;
 		case NOP_JMP_FOREACH:	// 
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			ar << optype << v.n1 << v.n2 << v.n3;
+			//ar << optype << v.n1 << v.n2 << v.n3;
 			break;
 
 		case NOP_TOSTRING:
@@ -173,63 +197,66 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_GETTYPE:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			ar << optype << v.n1 << v.n2;
+			//ar << optype << v.n1 << v.n2;
 			break;
 		case NOP_SLEEP:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			ar << optype << v.n1;
+			//ar << optype << v.n1;
 			break;
 		case NOP_JMP:
-			ar << optype << v.n1;
+			//ar << optype << v.n1;
 			break;
 		case NOP_JMP_FALSE:
 		case NOP_JMP_TRUE:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			ar << optype << v.n1 << v.n2;
+			//ar << optype << v.n1 << v.n2;
 			break;
 
 		case NOP_MOV:
 		case NOP_MOV_MINUS:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			ar << optype << v.n1 << v.n2;
+			//ar << optype << v.n1 << v.n2;
 			break;
 
 		case NOP_PTRCALL:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			ar << optype << v.n1 << v.n2 << v.n3;
+			//ar << optype << v.n1 << v.n2 << v.n3;
 			break;
 		case NOP_CALL:
-			ar << optype << v.n1 << v.n2;
+			//ar << optype << v.n1 << v.n2;
 			break;
 		case NOP_RETURN:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			ar << optype << v.n1;
+			//ar << optype << v.n1;
 			break;
 		case NOP_FUNEND:
-			ar << optype;
+			//ar << optype;
 			break;
 		case NOP_TABLE_ALLOC:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			ar << optype << v.n1;
+			//ar << optype << v.n1;
 			break;
 		case NOP_TABLE_INSERT:
 		case NOP_TABLE_READ:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			ar << optype << v.n1 << v.n2 << v.n3;
+			//ar << optype << v.n1 << v.n2 << v.n3;
 			break;
 		case NOP_TABLE_REMOVE:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			ar << optype << v.n1 << v.n2;
+			//ar << optype << v.n1 << v.n2;
 			break;
 		default:
 			SetCompileError(arText, "Error OP Type Error (%d)", v.op);
 			break;
 		}
+
+		argFlag = GetArgIndexToCode(v.n1, v.n2, v.n3);
+		ar << optype << argFlag << v.n1 << v.n2 << v.n3;
 	}
 }
 
@@ -254,11 +281,14 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 
 	while (arRead.GetBufferOffset() < arRead.GetBufferSize())
 	{
-		if(arText._debug)
-			arRead >> v.dbg;
+		//if(arText._debug)
+		//	arRead >> v.dbg;
 
 		OpType optype;
 		arRead >> optype;
+
+		u8 argFlag;
+		arRead >> argFlag;
 
 		v.op = CODE_TO_NOP(optype);
 		int len = CODE_TO_LEN(optype);
@@ -267,8 +297,8 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			arRead.Read(&v.n1, len * sizeof(short));
 		}
 
-		if (arText._debug)
-			OutAsm("%6d : ", v.dbg._lineseq);
+		//if (arText._debug)
+		//	OutAsm("%6d : ", v.dbg._lineseq);
 
 		switch (v.op)
 		{
@@ -622,18 +652,21 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	
 	std::map<int, SFunctionTableForWriter> funPos;
 
+	std::vector< debug_info> debugInfo;
+
 	// Main 함수 코드 저장
 	header._iMainFunctionOffset = ar.GetBufferOffset();
 	header._iGlobalVarCount = funs._cur._localVarCount;
-	WriteFun(arText, ar, funs, funs._cur, vars, funPos);
+	WriteFun(arText, ar, funs, funs._cur, vars, funPos, debugInfo);
 	// Sub 함수 코드 저장
 	for (auto it = funs._funs.begin(); it != funs._funs.end(); it++)
 	{
 		SFunctionInfo& fi = (*it).second;
-		WriteFun(arText, ar, funs, fi, vars, funPos);
+		WriteFun(arText, ar, funs, fi, vars, funPos, debugInfo);
 	}
 
 	header._iCodeSize = ar.GetBufferOffset() - sizeof(SNeoVMHeader);
+	header.m_iDebugCount = (int)debugInfo.size();
 
 	// 함수 포인터 저장
 	if ((int)funPos.size() != header._iFunctionCount)
@@ -678,6 +711,12 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 			SetCompileError(arText, "Error VAR Type Error (%d)", vi.GetType());
 			return false;
 		}
+	}
+
+	// Debug 정보 Save
+	if (header.m_iDebugCount)
+	{
+		ar.Write(&debugInfo[0], sizeof(debug_info) * header.m_iDebugCount);
 	}
 
 	int iSaveOffset2 = ar.GetBufferOffset();

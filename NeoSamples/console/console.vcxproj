@@ -214,6 +214,7 @@
     <ClCompile Include="callback.cpp" />
     <ClCompile Include="console.cpp" />
     <ClCompile Include="etc.cpp" />
+    <ClCompile Include="meta.cpp" />
     <ClCompile Include="slice_run.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
@@ -230,6 +231,7 @@
     <None Include="callback.neo" />
     <None Include="delegate.neo" />
     <None Include="etc.neo" />
+    <None Include="meta.neo" />
     <None Include="slice_run.neo" />
     <None Include="table.neo" />
     <None Include="table_callback.neo" />

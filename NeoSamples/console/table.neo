@@ -37,8 +37,41 @@ fun sub2()
 	}
 	system.print("\nTable Size : " ..tosize(table).."\n\n");
 }
+fun sub3()
+{
+	var table = {};
+	for (var i = 1; i <= 10000000; i++)
+	//for (var i = 1; i <= 1000; i++)
+	{
+		table[i] = i;
+	}
+	var sum = 0.0;
+	var tm = system.clock();
+	system.print("\nTable Size : " ..tosize(table).." Sum " .. sum .. "\n\n");
+	foreach(var a, b in table)
+	{
+		//system.print(a ..":"..b .. "\n");
+		sum += b;
+	}
+	var tm_end = system.clock();
+	system.print("\nTable Size : " ..tosize(table).." Sum " .. sum .. "\n\n");
+	system.print("time : " .. (tm_end - tm));
+}
+fun sub4()
+{
+	var table = {};
+	table[1] = 10;
+	var sum = 0;
+	foreach(var a, b in table)
+	{
+		sum += b;
+	}
+	system.print("time : ");
+}
+
 export fun main()
 {
-	sub1();
-	sub2();
+	//sub1();
+	//sub2();
+	sub3();
 }

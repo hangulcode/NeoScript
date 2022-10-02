@@ -168,6 +168,7 @@ void CNeoVM::FreeTable(VarInfo *d)
 
 CNeoVM::CNeoVM()
 {
+	_pCodePtr = NULL;
 }
 CNeoVM::~CNeoVM()
 {
@@ -280,6 +281,13 @@ bool CNeoVM::Init(void* pBuffer, int iSize, int iStackSize)
 	{
 		m_sVarGlobal[i].ClearType();
 	}
+
+	if (header.m_iDebugCount > 0)
+	{
+		_DebugData.resize(header.m_iDebugCount);
+		ar.Read(&_DebugData[0], sizeof(debug_info) * header.m_iDebugCount);
+	}
+
 
 	_pMainWorker = WorkerAlloc(iStackSize);
 

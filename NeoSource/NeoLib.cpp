@@ -192,6 +192,14 @@ bool io_print(CNeoVMWorker* pN, short args)
 	return true;
 }
 
+bool sys_clock(CNeoVMWorker* pN, short args)
+{
+	if (args != 0)
+		return false;
+
+	pN->ReturnValue(double((double)clock() / (double)CLOCKS_PER_SEC));
+	return true;
+}
 
 
 
@@ -219,6 +227,7 @@ static SNeoFunLib _Lib[] =
 { "str_find", CNeoVM::RegisterNative(Str_find) },
 
 { "print", CNeoVM::RegisterNative(io_print) },
+{ "clock", CNeoVM::RegisterNative(sys_clock) },
 
 { NULL, FunctionPtrNative() },
 };
