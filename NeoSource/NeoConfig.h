@@ -41,4 +41,5 @@ struct debug_info
 #include <list>
 #include <string>
 #include <map>
+#include <unordered_map>
 #include <set>

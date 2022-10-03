@@ -1516,9 +1516,9 @@ eNOperation ConvertCheckOPToOptimizeInv(eNOperation n)
 	return NOP_NONE;
 }
 
-int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, const std::string& name)
+int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, const std::string& name, bool checkName = true)
 {
-	if (false == AbleName(name))
+	if (checkName && false == AbleName(name))
 	{
 		SetCompileError(ar, "Error (%d, %d): Function Local Var Unable (%s) %s", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), name.c_str());
 		return -1;
@@ -1746,6 +1746,17 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 
 	if (iKey + 1 != iValue)
+	{
+		SetCompileError(ar, "Error (%d, %d): foreach key / Value Var Alloc Error", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+
+	// Iterator를 저장할 임시 자동 생성 변수
+	int iIterator = AddLocalVarName(ar, funs, vars, tk1 + "^_#@_temp_", false);
+	if (iIterator < 0)
+		return false;
+
+	if (iKey + 2 != iIterator)
 	{
 		SetCompileError(ar, "Error (%d, %d): foreach key / Value Var Alloc Error", ar.CurLine(), ar.CurCol());
 		return false;
@@ -2314,7 +2325,15 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 
 	funs._cur._funID = (int)funs._funs.size() + 1;
+
+	auto itF = funs._funs.find(funs._cur._name);
+	if (itF != funs._funs.end())
+	{
+		funs._cur._funID = (*itF).second._funID;
+	}
+
 	funs._funs[funs._cur._name] = funs._cur; // 이름 먼저 등록
+	funs._funIDs[funs._cur._funID] = funs._cur._name;
 	funs._cur._staticIndex = funs.AddStaticFunction(funs._cur._funID);
 
 	tkType1 = GetToken(ar, tk1);

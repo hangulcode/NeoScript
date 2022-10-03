@@ -74,13 +74,13 @@ int SAMPLE_table_callback()
 			TableInfo* pTable = g_sData->_tbl;
 			pTable->_pUserData = pClass; // <-------------------
 
-			VarInfo fun;
-			fun.SetType(VAR_TABLEFUN);
+			TableData td;
+			td.value.SetType(VAR_TABLEFUN);
 			SNeoFunLib* pFuns = g_sTableFun;
 			while (pFuns->pName != NULL)
 			{
-				fun._fun = pFuns->fn;
-				pTable->_strMap[pFuns->pName] = fun;
+				td.value._fun = pFuns->fn;
+				pTable->_strMap[pFuns->pName] = td;
 				pFuns++;
 			}
 		}

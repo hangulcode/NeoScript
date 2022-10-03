@@ -1,41 +1,43 @@
-import fun GetObject();
-/*
-fun sub1()
+fun Vector3_Add(var a, var b);
+
+
+fun Vector3_MetaTable()
 {
-	system.print("sub1\n");
+	var temp = {};
+	temp["+"] = Vector3_Add;
+	return temp;
+}
+var Vector3_Operator = Vector3_MetaTable();
+
+fun Vector3_Add(var a, var b)
+{
+	var table = {};
+	table.x = a.x + b.x;
+	table.y = a.y + b.y;
+	table.z = a.z + b.z;
+	table["_Meta_Table_"] = Vector3_Operator;
+	return table;
 }
 
-fun sub2()
+fun Vector3_New(var x, var y, var z)
 {
-	system.print("sub2\n");
+	var table = {};
+	table.x = x;
+	table.y = y;
+	table.z = z;
+	table["_Meta_Table_"] = Vector3_Operator;
+	return table;
 }
-*/
+
 export fun meta()
 {
-	var obj = GetObject();
+	var a = Vector3_New(3.0, 4.0, 5.0);
+	var b = Vector3_New(30.0, 40.0, 50.0);
 
-	var pos = obj._pos;
+	var c1 = Vector3_Add(a, b);
+	var c2 = a + b;// + c1;
 
-	system.print("\n x : " .. pos.x);
-
-	//system.print("\n x : " .. obj._pos.x);
-	//system.print("\n y : " .. obj._pos.y);
-	//system.print("\n z : " .. obj._pos.z);
-	//system.print("\n");
-
-	//var funPointer = sub1;
-	//funPointer();
-
-/*	funPointer = sub2;
-	funPointer();
-	
-	var table = {};
-	table.funPointer2 = sub1;
-	table.funPointer2();
-
-	table.tablePointer = system;
-	table.tablePointer.print("Table Pointer\n");
-
-	table.printf = system.print;
-	table.printf("Table Function Poiter\n");*/
+	system.print("\n x : " .. c2.x);
+	system.print("\n y : " .. c2.y);
+	system.print("\n z : " .. c2.z);
 }

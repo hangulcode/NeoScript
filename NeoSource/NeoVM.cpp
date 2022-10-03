@@ -146,19 +146,21 @@ void CNeoVM::FreeTable(VarInfo *d)
 
 	_sTables.erase(it);
 
-	for (auto it2 = tbl->_intMap.begin(); it2 != tbl->_intMap.end(); it2++)
-	{
-		VarInfo& v = (*it2).second;
-		if(v.IsAllocType())
-			Var_Release(&v);
-	}
-	tbl->_intMap.clear();
+	//for (auto it2 = tbl->_intMap.begin(); it2 != tbl->_intMap.end(); it2++)
+	//{
+	//	VarInfo& v = (*it2).second;
+	//	if(v.IsAllocType())
+	//		Var_Release(&v);
+	//}
+	//tbl->_intMap.clear();
 
 	for (auto it2 = tbl->_strMap.begin(); it2 != tbl->_strMap.end(); it2++)
 	{
-		VarInfo& v = (*it2).second;
-		if (v.IsAllocType())
-			Var_Release(&v);
+		TableData& v = (*it2).second;
+		if (v.key.IsAllocType())
+			Var_Release(&v.key);
+		if (v.value.IsAllocType())
+			Var_Release(&v.value);
 	}
 	tbl->_strMap.clear();
 

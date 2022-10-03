@@ -13,6 +13,8 @@ enum VAR_TYPE : u8
 	VAR_TABLE,
 	VAR_TABLEFUN,
 	VAR_FUN,
+
+	VAR_ITERATOR,
 };
 
 typedef u8	OpType;
@@ -113,20 +115,20 @@ struct StringInfo
 	int _refCount;
 };
 
-struct SNeoMeta
-{
-	virtual  bool GetFunction(std::string& fname, SVarWrapper*) =0;
-	virtual  bool GetVariable(std::string& fname, SVarWrapper*) =0;
-};
+//struct SNeoMeta
+//{
+//	virtual  bool GetFunction(std::string& fname, SVarWrapper*) =0;
+//	virtual  bool GetVariable(std::string& fname, SVarWrapper*) =0;
+//};
 
+struct TableData;
 
 struct TableInfo
 {
-	std::map<std::string, VarInfo>	_strMap;
-	std::map<int, VarInfo>			_intMap;
+	std::map<std::string, TableData>	_strMap;
 	int	_TableID;
 	int _refCount;
-	SNeoMeta*	_meta;
+//	SNeoMeta*	_meta;
 	void* _pUserData;
 };
 
@@ -136,6 +138,7 @@ struct FunctionPtr
 	Neo_CFunction				_fn;
 	void*						_func;
 };
+
 
 
 #pragma pack(1)
@@ -158,6 +161,7 @@ public:
 		FunctionPtrNative _fun;
 		int			_fun_index;
 	};
+	std::map<std::string, TableData>::iterator _it;
 
 	VarInfo()
 	{
@@ -183,6 +187,13 @@ public:
 };
 #pragma pack()
 
+struct TableData
+{
+	VarInfo	key;
+	VarInfo	value;
+};
+
+
 
 struct SNeoVMHeader
 {
@@ -206,6 +217,7 @@ struct SCallStack
 	int		_iSP_Vars;
 	int		_iSP_VarsMax;
 	int		_iReturnOffset;
+	VarInfo* _pReturnValue;
 };
 
 enum FUNCTION_TYPE : u8
@@ -247,7 +259,7 @@ struct SVarWrapper
 	//void SetTable(TableInfo* p);
 	//void SetFun(int fun_index);
 	void SetTableFun(FunctionPtrNative fun);
-	void SetMeta(SNeoMeta* p);
+//	void SetMeta(SNeoMeta* p);
 };
 
 class CNeoVM;
@@ -331,7 +343,7 @@ private:
 	void Var_SetTable(VarInfo *d, TableInfo* p);
 	void Var_SetFun(VarInfo* d, int fun_index);
 	void Var_SetTableFun(VarInfo* d, FunctionPtrNative fun);
-	void Var_SetMeta(VarInfo* d, SNeoMeta* p);
+//	void Var_SetMeta(VarInfo* d, SNeoMeta* p);
 
 
 	void Swap(VarInfo* v1, VarInfo* v2);
@@ -354,7 +366,8 @@ private:
 	bool CompareGE(VarInfo* v1, VarInfo* v2);
 	bool ForEach(VarInfo* v1, VarInfo* v2);
 	int Sleep(bool isSliceRun, int iTimeout, VarInfo* v1);
-	void Call(int n1, int n2);
+	void Call(int n1, int n2, VarInfo* pReturnValue = NULL);
+	bool Call_MetaTable(VarInfo* pTable, const char* pFunName, VarInfo* r, VarInfo* a, VarInfo* b);
 
 	std::string ToString(VarInfo* v1);
 	int ToInt(VarInfo* v1);
@@ -600,7 +613,7 @@ public:
 	inline void	ReturnValue(bool p) { Var_SetBool(&m_sVarStack[_iSP_Vars], p); }
 	inline void	ReturnValue(long long p) { Var_SetInt(&m_sVarStack[_iSP_Vars], (int)p); }
 	inline void	ReturnValue(unsigned long long p) { Var_SetInt(&m_sVarStack[_iSP_Vars], (int)p); }
-	inline void	ReturnValue(SNeoMeta* p) { Var_SetMeta(&m_sVarStack[_iSP_Vars], p); }
+//	inline void	ReturnValue(SNeoMeta* p) { Var_SetMeta(&m_sVarStack[_iSP_Vars], p); }
 
 
 	inline void SetError(const char* pErrMsg);

@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "../../NeoSource/Neo.h"
 
+/*
 class Vector3 : public SNeoMeta
 {
 public:
@@ -71,7 +72,7 @@ static SNeoMeta* _GetObject()
 	//return &tr;
 	return new Transform();
 }
-
+*/
 
 
 
@@ -92,7 +93,7 @@ int SAMPLE_meta()
 	{
 		printf("Compile Success. Code : %d bytes !!\n\n", pVM->GetBytesSize());
 
-		NeoHelper::Register(pVM, "GetObject", _GetObject);
+//		NeoHelper::Register(pVM, "GetObject", _GetObject);
 			
 
 		DWORD t1 = GetTickCount();
