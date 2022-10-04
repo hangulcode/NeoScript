@@ -553,6 +553,10 @@ void CNeoVMWorker::Sub(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			return;
 		}
 		break;
+	case VAR_TABLE:
+		if (Call_MetaTable(v1, "-", r, v1, v2))
+			return;
+		break;
 	}
 	SetError("- Error");
 }
@@ -584,6 +588,10 @@ void CNeoVMWorker::Mul(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			Var_SetFloat(r, v1->_float * v2->_float);
 			return;
 		}
+		break;
+	case VAR_TABLE:
+		if (Call_MetaTable(v1, "*", r, v1, v2))
+			return;
 		break;
 	}
 	SetError("* Error");
@@ -617,18 +625,28 @@ void CNeoVMWorker::Div(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			return;
 		}
 		break;
+	case VAR_TABLE:
+		if (Call_MetaTable(v1, "/", r, v1, v2))
+			return;
+		break;
 	}
 	SetError("/ Error");
 }
 void CNeoVMWorker::Per(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
-	if (v1->GetType() == VAR_INT)
+	switch (v1->GetType())
 	{
+	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 		{
 			Var_SetInt(r, v1->_int % v2->_int);
 			return;
 		}
+		break;
+	case VAR_TABLE:
+		if (Call_MetaTable(v1, "%", r, v1, v2))
+			return;
+		break;
 	}
 	SetError("/ Error");
 }

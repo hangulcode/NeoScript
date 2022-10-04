@@ -1,41 +1,51 @@
-fun Vector3_Add(var a, var b);
-
-
-fun Vector3_MetaTable()
-{
-	var temp = {};
-	temp["+"] = Vector3_Add;
-	return temp;
-}
-var Vector3_Operator = Vector3_MetaTable();
-
-fun Vector3_Add(var a, var b)
-{
-	var table = {};
-	table.x = a.x + b.x;
-	table.y = a.y + b.y;
-	table.z = a.z + b.z;
-	table["_Meta_Table_"] = Vector3_Operator;
-	return table;
-}
-
+fun Vector3_MetaTable(var r);
 fun Vector3_New(var x, var y, var z)
 {
-	var table = {};
-	table.x = x;
-	table.y = y;
-	table.z = z;
-	table["_Meta_Table_"] = Vector3_Operator;
-	return table;
+	var r = {};
+	r.x = x;
+	r.y = y;
+	r.z = z;
+	Vector3_MetaTable(r);
+	return r;
 }
+fun Vector3_Add(var a, var b)
+{
+	var r = {};
+	r.x = a.x + b.x;
+	r.y = a.y + b.y;
+	r.z = a.z + b.z;
+	Vector3_MetaTable(r);
+	return r;
+}
+fun Vector3_Sub(var a, var b)
+{
+	var r = {};
+	r.x = a.x - b.x;
+	r.y = a.y - b.y;
+	r.z = a.z - b.z;
+	Vector3_MetaTable(r);
+	return r;
+}
+var staticVector3Meta = null;
+fun Vector3_MetaTable(var r)
+{	
+	if(staticVector3Meta == null)
+	{
+		staticVector3Meta = {};
+		staticVector3Meta["+"] = Vector3_Add;
+		staticVector3Meta["-"] = Vector3_Sub;
+	}
+	r["_Meta_Table_"] = staticVector3Meta;
+}
+
 
 export fun meta()
 {
 	var a = Vector3_New(3.0, 4.0, 5.0);
 	var b = Vector3_New(30.0, 40.0, 50.0);
+	var c = Vector3_New(300.0, 400.0, 500.0);
 
-	var c1 = Vector3_Add(a, b);
-	var c2 = a + b;// + c1;
+	var c2 = a + b - c;
 
 	system.print("\n x : " .. c2.x);
 	system.print("\n y : " .. c2.y);

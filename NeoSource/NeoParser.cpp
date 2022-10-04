@@ -2324,25 +2324,31 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	if (false == ParseFunctionArg(ar, funs, pCurLayer))
 		return false;
 
-	funs._cur._funID = (int)funs._funs.size() + 1;
 
 	auto itF = funs._funs.find(funs._cur._name);
 	if (itF != funs._funs.end())
 	{
-		funs._cur._funID = (*itF).second._funID;
+		funs._cur = (*itF).second;
+	}
+	else
+	{
+		funs._cur._funID = (int)funs._funs.size() + 1;
+
+		funs._funs[funs._cur._name] = funs._cur; // 이름 먼저 등록
+		funs._funIDs[funs._cur._funID] = funs._cur._name;
+		funs._cur._staticIndex = funs.AddStaticFunction(funs._cur._funID);
 	}
 
-	funs._funs[funs._cur._name] = funs._cur; // 이름 먼저 등록
-	funs._funIDs[funs._cur._funID] = funs._cur._name;
-	funs._cur._staticIndex = funs.AddStaticFunction(funs._cur._funID);
 
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_MIDDLE)
 	{
 		if (tkType1 == TK_SEMICOLON)
 		{
-
 			DelVarsFunction(vars);
+
+			auto it = funs._funs.find(funs._cur._name);
+			(*it).second = funs._cur;
 			return true;
 		}
 		SetCompileError(ar, "Error (%d, %d): Function Start (%s) %d\n", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), tk1.c_str());
