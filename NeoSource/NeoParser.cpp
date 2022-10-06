@@ -55,7 +55,7 @@ struct SOperationInfo
 	std::string _str;
 	eNOperation	_op;
 	int			_op_length;
-	OpType		_opType;
+	eNOperation		_opType;
 	SOperationInfo() {}
 	SOperationInfo(const char* p, eNOperation	op, int len)
 	{
@@ -92,7 +92,7 @@ std::map<std::string, TK_TYPE> g_sStringToToken;
 #define TOKEN_STR2(key, str) g_sTokenToString[key] = STokenValue(str, 20, NOP_NONE); g_sStringToToken[str] = key
 #define TOKEN_STR3(key, str, pri, op) g_sTokenToString[key] = STokenValue(str, pri, op); g_sStringToToken[str] = key
 
-OpType GetOpTypeFromOp(eNOperation op)
+eNOperation GetOpTypeFromOp(eNOperation op)
 {
 	return g_sOpInfo[op]._opType;
 }
@@ -1993,14 +1993,17 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	if (false == isCheckOPOpt)
 	{
 		funs._cur.Push_JMPFalse(ar, iTempOffset._iVar, 0);
-		jmp1.Set(funs._cur._code->GetBufferOffset() - 2, funs._cur._code->GetBufferOffset());
+		jmp1.Set(funs._cur._code->GetBufferOffset() - 6, funs._cur._code->GetBufferOffset()); // before "- 2"
 	}
 	else
 	{
 		int argLen = sizeof(short) * 3;
-		funs._cur._code->SetPointer(-((int)sizeof(OpType) + argLen), SEEK_CUR); // OP + n1, n2, n3
-		OpType optype = GetOpTypeFromOp(opOpz);
+		funs._cur._code->SetPointer(-((int)sizeof(OpType) + (int)sizeof(ArgFlag) + argLen), SEEK_CUR); // OP + flag +  n1, n2, n3
+		
+		eNOperation optype = GetOpTypeFromOp(opOpz);
 		funs._cur._code->Write(&optype, sizeof(optype));
+		funs._cur._code->SetPointer((int)sizeof(ArgFlag), SEEK_CUR);
+
 		int cur = funs._cur._code->GetBufferOffset();
 		funs._cur.Set_JumpOffet(SJumpValue(cur, cur + argLen), 0);
 		funs._cur._code->SetPointer(argLen, SEEK_CUR);
@@ -2392,7 +2395,7 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 		if(false == Write(ar, arw, funs, vars))
 			return false;
 		if(putASM)
-			WriteLog(ar, funs, vars);
+			WriteLog(ar, arw, funs, vars);
 	}
 
 	DelVarsFunction(vars);

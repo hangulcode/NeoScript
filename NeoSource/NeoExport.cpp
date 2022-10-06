@@ -99,6 +99,8 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 	CNArchive arRead((u8*)fi._code->GetData() + fi._iCode_Begin, fi._iCode_Size);
 	arRead.SetPointer(0, SEEK_SET);
 
+	int iNewCodeBegin = ar.GetBufferOffset();
+
 	SVMOperation v;
 	memset(&v, 0, sizeof(v));
 
@@ -278,6 +280,9 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 
 		ar << optype << argFlag << v.n1 << v.n2 << v.n3;
 	}
+	int iNewCodeEnd = ar.GetBufferOffset();
+	fi._iCode_Begin = iNewCodeBegin;
+	fi._iCode_Size = iNewCodeEnd - iNewCodeBegin;
 }
 
 std::string GetLog(SVMOperation& op, int argIndex)
@@ -294,7 +299,7 @@ std::string GetLog(SVMOperation& op, int argIndex)
 }
 
 
-void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVars& vars)
+void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFunctionInfo& fi, SVars& vars)
 {
 	int staticCount = (int)funs._staticVars.size();
 	int localCount = fi._localVarCount;
@@ -307,7 +312,8 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 	if (fi._funType == FUNT_IMPORT)
 		return;
 
-	CNArchive arRead((u8*)fi._code->GetData() + fi._iCode_Begin, fi._iCode_Size);
+	//CNArchive arRead((u8*)fi._code->GetData() + fi._iCode_Begin, fi._iCode_Size);
+	CNArchive arRead((u8*)arw.GetData() + fi._iCode_Begin, fi._iCode_Size);
 	arRead.SetPointer(0, SEEK_SET);
 
 	SVMOperation v;
@@ -317,18 +323,20 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 		//if(arText._debug)
 		//	arRead >> v.dbg;
 
-		OpType optype;
-		arRead >> optype;
+		//OpType optype;
+		//arRead >> optype;
 
-		u8 argFlag;
-		arRead >> argFlag;
+		//u8 argFlag;
+		//arRead >> argFlag;
 
-		v.op = CODE_TO_NOP(optype);
-		int len = CODE_TO_LEN(optype);
-		if (len)
-		{
-			arRead.Read(&v.n1, len * sizeof(short));
-		}
+		//v.op = CODE_TO_NOP(optype);
+		//int len = CODE_TO_LEN(optype);
+		//if (len)
+		//{
+		//	arRead.Read(&v.n1, len * sizeof(short));
+		//}
+
+		arRead >> v;
 
 		//if (arText._debug)
 		//	OutAsm("%6d : ", v.dbg._lineseq);
@@ -487,61 +495,61 @@ void WriteFunLog(CArchiveRdWC& arText, SFunctions& funs, SFunctionInfo& fi, SVar
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JGR %d,  [%s] > [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutAsm("JGR %d,  [%s] > [%s]\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_GREAT_EQ:	// >=
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JGE %d,  [%s] >= [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutAsm("JGE %d,  [%s] >= [%s]\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_LESS:		// <
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JLS %d,  [%s] < [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutAsm("JLS %d,  [%s] < [%s]\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_LESS_EQ:	// <=
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JLE %d,  [%s] <= [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutAsm("JLE %d,  [%s] <= [%s]\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_EQUAL2:	// ==
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JEQ %d,  [%s] == [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutAsm("JEQ %d,  [%s] == [%s]\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_NEQUAL:	// !=
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JNE %d,  [%s] != [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutAsm("JNE %d,  [%s] != [%s]\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_AND:	// &&
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JAND %d,  [%s] && [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutAsm("JAND %d,  [%s] && [%s]\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_OR:		// ||
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JOR %d,  [%s] || [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutAsm("JOR %d,  [%s] || [%s]\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_NAND:	// !(&&)
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JNAND %d,  !([%s] && [%s])\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutAsm("JNAND %d,  !([%s] && [%s])\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_NOR:	// !(||)
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JNOR %d,  !([%s] || [%s])\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutAsm("JNOR %d,  !([%s] || [%s])\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_FOREACH:	// foreach
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
@@ -783,7 +791,7 @@ static std::string ToPtringString(const std::string & str)
 	return r;
 }
 
-bool WriteLog(CArchiveRdWC& arText, SFunctions& funs, SVars& vars)
+bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& vars)
 {
 	SNeoVMHeader header;
 	memset(&header, 0, sizeof(header));
@@ -841,13 +849,13 @@ bool WriteLog(CArchiveRdWC& arText, SFunctions& funs, SVars& vars)
 	}
 
 	// Main 함수 코드 저장
-	WriteFunLog(arText, funs, funs._cur, vars);
+	WriteFunLog(arText, arw, funs, funs._cur, vars);
 	// Sub 함수 코드 저장
 	for (auto it = funs._funIDs.begin(); it != funs._funIDs.end(); it++)
 	{
 		auto it2 = funs._funs.find((*it).second);
 		SFunctionInfo& fi = (*it2).second;
-		WriteFunLog(arText, funs, fi, vars);
+		WriteFunLog(arText, arw, funs, fi, vars);
 	}
 
 	//// 함수 포인터 저장

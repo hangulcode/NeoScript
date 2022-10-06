@@ -14,7 +14,7 @@
 #define STACK_POS_RETURN				(32767)
 
 bool IsTempVar(int iVar);
-OpType	GetOpTypeFromOp(eNOperation op);
+eNOperation	GetOpTypeFromOp(eNOperation op);
 int		GetOpLength(eNOperation op);
 
 struct SJumpValue
