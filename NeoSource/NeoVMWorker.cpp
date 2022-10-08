@@ -141,33 +141,6 @@ void CNeoVMWorker::Var_SetTableFun(VarInfo* d, FunctionPtrNative fun)
 	d->_fun = fun;
 }
 
-std::string VarToTableKey(VarInfo *p)
-{
-	char ch[256];
-	switch (p->GetType())
-	{
-	case VAR_INT:
-		{
-			sprintf_s(ch, _countof(ch), "_#@_int:%d", p->_int);
-			return ch;
-			break;
-		}
-	case VAR_FLOAT:
-		{
-			sprintf_s(ch, _countof(ch), "_#@_flt:%lf", p->_float);
-			return ch;
-			break;
-		}
-	case VAR_STRING:
-		{
-			return p->_str->_str;
-			break;
-		}
-	default:
-		return "null value ...";
-	}
-}
-
 void CNeoVMWorker::TableInsert(VarInfo *pTable, VarInfo *pKey, VarInfo *pValue)
 {
 	if (pTable->GetType() != VAR_TABLE)
@@ -192,8 +165,6 @@ VarInfo* CNeoVMWorker::GetTableItem(VarInfo *pTable, VarInfo *pKey)
 		return NULL;
 	}
 
-	//std::string hkey = VarToTableKey(pKey);
-
 	return pTable->_tbl->GetTableItem(pKey);
 }
 void CNeoVMWorker::TableRead(VarInfo *pTable, VarInfo *pKey, VarInfo *pValue)
@@ -214,7 +185,6 @@ void CNeoVMWorker::TableRemove(VarInfo *pTable, VarInfo *pKey)
 	}
 
 	pTable->_tbl->Remove(this, pKey);
-//	std::string hkey = VarToTableKey(pKey);
 }
 
 void CNeoVMWorker::Swap(VarInfo* v1, VarInfo* v2)

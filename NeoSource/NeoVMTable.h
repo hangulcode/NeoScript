@@ -20,11 +20,19 @@ struct TableBocket3
 	TableNode*	_used;	// used begin pointer [linked list]
 	TableNode*	_free;	// unused begin pointer [linked list]
 
+#ifdef _DEBUG
+	int			_size_use;
+	int			_size_free;
+#endif
+
 	void Push_Use(TableNode* p)
 	{
 		TableNode* n = _used;
 		_used = p;
 		_used->_next = n;
+#ifdef _DEBUG
+		_size_use++;
+#endif
 	}
 
 	void Push_Free(TableNode* p)
@@ -32,6 +40,9 @@ struct TableBocket3
 		TableNode* n = _free;
 		_free = p;
 		_free->_next = n;
+#ifdef _DEBUG
+		_size_free++;
+#endif
 	}
 	TableNode* Find(VarInfo* pKey);
 	bool	Pop_Used(TableNode* pTar);

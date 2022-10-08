@@ -252,6 +252,9 @@ bool	TableBocket3::Pop_Used(TableNode* pTar)
 			else
 				pPre->_next = pCur->_next;
 			pTar->_next = NULL;
+#ifdef _DEBUG
+			--_size_use;
+#endif
 			return true;
 		}
 		pPre = pCur;
@@ -405,6 +408,10 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 		{
 			bocket->_table = new TableNode[DefualtTableSize];
 			bocket->_size = DefualtTableSize;
+#ifdef _DEBUG
+			bocket->_size_use = 0;
+			bocket->_size_free = 0;
+#endif
 			for (int i = 0; i < DefualtTableSize; i++)
 				bocket->Push_Free(&bocket->_table[i]);
 		}
@@ -419,6 +426,10 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 			if (bocket->_table) delete[] bocket->_table;
 			bocket->_table = table;
 			bocket->_size = iNewTableSize;
+#ifdef _DEBUG
+			bocket->_size_use = 0;
+			bocket->_size_free = 0;
+#endif
 
 			bocket->_free = NULL;
 			bocket->_used = NULL;
@@ -433,6 +444,9 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 		pCur = bocket->_free;
 		bocket->_free = pCur->_next;
 		bocket->Push_Use(pCur);
+#ifdef _DEBUG
+		--bocket->_size_free;
+#endif
 		_itemCount++;
 	}
 
