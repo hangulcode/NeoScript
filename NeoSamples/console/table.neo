@@ -1,3 +1,4 @@
+
 fun sub1()
 {
 	var table = {};
@@ -22,7 +23,7 @@ fun sub1()
 	foreach(var a, b in table)
 	{
 		system.print(a ..":"..b .. "\n");
-		sleep(200);
+		//sleep(200);
 	}
 	system.print("\nTable Size : " ..tosize(table).."\n\n");
 }
@@ -40,22 +41,24 @@ fun sub2()
 fun sub3()
 {
 	var table = {};
-	for (var i = 1; i <= 10000000; i++)
-	//for (var i = 1; i <= 1000; i++)
+	var tm = system.clock();
+	//for (var i = 1; i <= 10000000; i++)
+	for (var i = 1; i <= 10000; i++)
 	{
 		table[i] = i;
 	}
 	var sum = 0.0;
-	var tm = system.clock();
-	system.print("\nTable Size : " ..tosize(table).." Sum " .. sum .. "\n\n");
+	system.print("\nTable Size : " ..tosize(table).." Sum " .. sum .. "");
+	system.print(" time : " .. (system.clock() - tm)  .. "\n\n");
+
+	tm = system.clock();
 	foreach(var a, b in table)
 	{
 		//system.print(a ..":"..b .. "\n");
 		sum += b;
 	}
-	var tm_end = system.clock();
-	system.print("\nTable Size : " ..tosize(table).." Sum " .. sum .. "\n\n");
-	system.print("time : " .. (tm_end - tm));
+	system.print("\nTable Size : " ..tosize(table).." Sum " .. sum .. "");
+	system.print(" time : " .. (system.clock() - tm) .. "\n\n");
 }
 fun sub4()
 {
@@ -67,12 +70,12 @@ fun sub4()
 	{
 		sum += b;
 	}
-	system.print("time : ");
+	system.print(" time : ");
 }
 
 export fun main()
 {
-	//sub1();
-	//sub2();
+	sub1();
+	sub2();
 	sub3();
 }

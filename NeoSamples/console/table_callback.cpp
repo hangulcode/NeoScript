@@ -44,7 +44,7 @@ static SNeoFunLib g_sTableFun[] =
 {
 	{ "sum", CNeoVM::RegisterNative(FunSum) },
 	{ "mul", CNeoVM::RegisterNative(FunMul) },
-	{ NULL, FunctionPtrNative() },
+	{ "", FunctionPtrNative() },
 };
 
 
@@ -74,13 +74,13 @@ int SAMPLE_table_callback()
 			TableInfo* pTable = g_sData->_tbl;
 			pTable->_pUserData = pClass; // <-------------------
 
-			TableData td;
-			td.value.SetType(VAR_TABLEFUN);
+			VarInfo value;
+			value.SetType(VAR_TABLEFUN);
 			SNeoFunLib* pFuns = g_sTableFun;
-			while (pFuns->pName != NULL)
+			while (pFuns->pName.empty() == false)
 			{
-				td.value._fun = pFuns->fn;
-				pTable->_strMap[pFuns->pName] = td;
+				value._fun = pFuns->fn;
+				pTable->Insert(pVM, pFuns->pName, &value);
 				pFuns++;
 			}
 		}

@@ -150,7 +150,7 @@ struct SFunctionInfo
 	CNArchive*					_code = NULL;
 	int							_iCode_Begin = 0;
 	int							_iCode_Size = 0;
-	std::vector<debug_info>*	_pDebugData = nullptr;
+	std::map<int, debug_info>*	_pDebugData = nullptr;
 
 	void Clear()
 	{
@@ -201,10 +201,15 @@ struct SFunctionInfo
 		_code->Write(&a2, sizeof(a2));
 		_code->Write(&a3, sizeof(a3));
 	}
+	void	AddDebugData(CArchiveRdWC& ar)
+	{
+		if (ar._debug == false) return;
+		int iOff = _code->GetBufferOffset();
+		(*_pDebugData)[iOff / 8] = debug_info(ar.CurFile(), ar.CurLine());
+	}
 	void	Push_OP(CArchiveRdWC& ar, eNOperation op, short r, short a1, short a2)
 	{
-		if (ar._debug)
-			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
+		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(op);
@@ -216,8 +221,7 @@ struct SFunctionInfo
 	}
 	void	Push_Call(CArchiveRdWC& ar, eNOperation op, short fun, short args)
 	{
-		if (ar._debug)
-			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
+		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(op);
@@ -228,8 +232,7 @@ struct SFunctionInfo
 	}
 	void	Push_CallPtr(CArchiveRdWC& ar, short table, short index, short args)
 	{
-		if (ar._debug)
-			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
+		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(NOP_PTRCALL);
@@ -288,8 +291,7 @@ struct SFunctionInfo
 			}
 		}
 
-		if (ar._debug)
-			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
+		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(op);
@@ -300,8 +302,7 @@ struct SFunctionInfo
 	}
 	void	Push_OP1(CArchiveRdWC& ar, eNOperation op, short r)
 	{
-		if (ar._debug)
-			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
+		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(op);
@@ -311,8 +312,7 @@ struct SFunctionInfo
 	}
 	void	Push_RETURN(CArchiveRdWC& ar, short r)
 	{
-		if (ar._debug)
-			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
+		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(NOP_RETURN);
@@ -322,8 +322,7 @@ struct SFunctionInfo
 	}
 	void	Push_FUNEND(CArchiveRdWC& ar)
 	{
-		if (ar._debug)
-			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
+		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(NOP_FUNEND);
@@ -334,8 +333,7 @@ struct SFunctionInfo
 
 	void	Push_JMP(CArchiveRdWC& ar, int destOffset)
 	{
-		if (ar._debug)
-			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
+		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		eNOperation op = NOP_JMP;
@@ -347,8 +345,7 @@ struct SFunctionInfo
 	}
 	void	Push_JMPFalse(CArchiveRdWC& ar, short var, int destOffset)
 	{
-		if (ar._debug)
-			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
+		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		eNOperation op = NOP_JMP_FALSE;
@@ -361,8 +358,7 @@ struct SFunctionInfo
 	}
 	void	Push_JMPTrue(CArchiveRdWC& ar, short var, int destOffset)
 	{
-		if (ar._debug)
-			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
+		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		eNOperation op = NOP_JMP_TRUE;
@@ -376,8 +372,7 @@ struct SFunctionInfo
 	// Always Value is Key Next Alloc ID
 	void	Push_JMPForEach(CArchiveRdWC& ar, int destOffset, short table, short key)
 	{
-		if (ar._debug)
-			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
+		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		eNOperation op = NOP_JMP_FOREACH;
@@ -395,8 +390,7 @@ struct SFunctionInfo
 	}
 	void	Push_TableAlloc(CArchiveRdWC& ar, short r)
 	{
-		if (ar._debug)
-			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
+		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(NOP_TABLE_ALLOC);
@@ -426,9 +420,7 @@ struct SFunctionInfo
 				break;
 			}
 		}
-
-		if (ar._debug)
-			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
+		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(NOP_TABLE_INSERT);
@@ -440,8 +432,7 @@ struct SFunctionInfo
 	}
 	void	Push_TableRead(CArchiveRdWC& ar, short nTable, short nArray, short nValue)
 	{
-		if (ar._debug)
-			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
+		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(NOP_TABLE_READ);
@@ -453,8 +444,7 @@ struct SFunctionInfo
 	}
 	void	Push_TableRemove(CArchiveRdWC& ar, short nTable, short nArray)
 	{
-		if (ar._debug)
-			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
+		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(NOP_TABLE_REMOVE);
@@ -465,8 +455,7 @@ struct SFunctionInfo
 	}
 	void	Push_ToType(CArchiveRdWC& ar, eNOperation op, short r, short s)
 	{
-		if (ar._debug)
-			_pDebugData->push_back(debug_info(ar.CurFile(), ar.CurLine()));
+		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(op);
@@ -484,14 +473,15 @@ struct SFunctions
 {
 	std::map<std::string, SFunctionInfo>_funs;
 	std::map<int, std::string>			_funIDs;
+
 	SFunctionInfo						_cur;
 	std::vector<VarInfo>				_staticVars;
 
 	CNArchive		_codeGlobal;
 	CNArchive		_codeLocal;
 
-	std::vector<debug_info> m_sDebugGlobal;
-	std::vector<debug_info> m_sDebugLocal;
+	std::map<int, debug_info> m_sDebugGlobal;
+	std::map<int, debug_info> m_sDebugLocal;
 
 	~SFunctions()
 	{

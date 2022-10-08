@@ -229,7 +229,7 @@ static SNeoFunLib _Lib[] =
 { "print", CNeoVM::RegisterNative(io_print) },
 { "clock", CNeoVM::RegisterNative(sys_clock) },
 
-{ NULL, FunctionPtrNative() },
+{ "", FunctionPtrNative() },
 };
 
 void CNeoVM::RegLibrary(VarInfo* pSystem, const char* pLibName, SNeoFunLib* pFuns)
@@ -239,18 +239,18 @@ void CNeoVM::RegLibrary(VarInfo* pSystem, const char* pLibName, SNeoFunLib* pFun
 	//temp._tbl->_refCount = 1;
 	//pSystem->_tbl->_strMap[pLibName] = temp;
 
-	TableData td;
-	td.value.SetType(VAR_TABLEFUN);
+	VarInfo value;
+	value.SetType(VAR_TABLEFUN);
 	//VarInfo fun;
 	//fun.SetType(VAR_TABLEFUN);
 
 	TableInfo* pTable = pSystem->_tbl;
 
-	while (pFuns->pName != NULL)
+	while (pFuns->pName.empty() == false)
 	{
-		td.value._fun = pFuns->fn;
+		value._fun = pFuns->fn;
 		//temp._tbl->_strMap[pFuns[i].pName] = fun;
-		pTable->_strMap[pFuns->pName] = td;
+		pTable->Insert(this, pFuns->pName, &value);
 		pFuns++;
 	}
 }

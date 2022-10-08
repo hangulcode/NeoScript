@@ -5,6 +5,7 @@ class CNArchive;
 class CNeoVM
 {
 	friend					CNeoVMWorker;
+	friend					TableInfo;
 private:
 	u8 *					_pCodePtr;
 	int						_iCodeLen;

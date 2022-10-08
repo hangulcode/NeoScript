@@ -121,9 +121,7 @@ struct StringInfo
 //	virtual  bool GetVariable(std::string& fname, SVarWrapper*) =0;
 //};
 
-struct TableData;
 
-#include "NeoVMTable.h"
 
 struct FunctionPtr
 {
@@ -133,6 +131,19 @@ struct FunctionPtr
 };
 
 
+struct TableInfo;
+struct TableNode;
+
+
+#pragma pack(1)
+struct TableIterator
+{
+	u16			_hash1;
+	u16			_hash2;
+	u16			_hash3;
+	TableNode*	_node;
+};
+#pragma pack()
 
 #pragma pack(1)
 struct FunctionPtrNative
@@ -153,8 +164,9 @@ public:
 		double		_float;
 		FunctionPtrNative _fun;
 		int			_fun_index;
+		TableIterator	_it;
 	};
-	std::map<std::string, TableData>::iterator _it;
+	//std::map<std::string, TableData>::iterator _it;
 
 	VarInfo()
 	{
@@ -186,6 +198,7 @@ struct TableData
 	VarInfo	value;
 };
 
+#include "NeoVMTable.h"
 
 
 struct SNeoVMHeader
@@ -234,7 +247,7 @@ struct SFunctionTable
 
 struct SNeoFunLib
 {
-	const char* pName;
+	std::string pName;
 	FunctionPtrNative fn;
 };
 
@@ -260,6 +273,7 @@ class CNeoVMWorker
 {
 	friend CNeoVM;
 	friend SVarWrapper;
+	friend TableInfo;
 private:
 	u8 *					_pCodeCurrent;
 	u8 *					_pCodeBegin;
@@ -336,7 +350,6 @@ private:
 	void Var_SetTable(VarInfo *d, TableInfo* p);
 	void Var_SetFun(VarInfo* d, int fun_index);
 	void Var_SetTableFun(VarInfo* d, FunctionPtrNative fun);
-//	void Var_SetMeta(VarInfo* d, SNeoMeta* p);
 
 
 	void Swap(VarInfo* v1, VarInfo* v2);
@@ -360,7 +373,7 @@ private:
 	bool ForEach(VarInfo* v1, VarInfo* v2);
 	int Sleep(bool isSliceRun, int iTimeout, VarInfo* v1);
 	void Call(int n1, int n2, VarInfo* pReturnValue = NULL);
-	bool Call_MetaTable(VarInfo* pTable, const char* pFunName, VarInfo* r, VarInfo* a, VarInfo* b);
+	bool Call_MetaTable(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, VarInfo* b);
 
 	std::string ToString(VarInfo* v1);
 	int ToInt(VarInfo* v1);
@@ -447,9 +460,6 @@ private:
 
 		return false;
 	}
-
-
-
 public:
 	std::string				_sTempString;
 	VarInfo* GetReturnVar() { return &m_sVarStack[_iSP_Vars]; }
@@ -616,3 +626,4 @@ public:
 
 	inline u32 GetWorkerID() { return _idWorker; }
 };
+

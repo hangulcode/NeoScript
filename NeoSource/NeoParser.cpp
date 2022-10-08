@@ -1538,6 +1538,21 @@ int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, const std:
 	pCurLayer->AddLocalVar(name, iLocalVar);
 	return iLocalVar;
 }
+void ClearTempVars(SFunctions& funs)
+{
+	funs._cur.FreeLocalTempVar();
+	eNOperation opLast = funs._cur.GetLastOP();
+	if (opLast == NOP_MOV || opLast == NOP_MOV_MINUS)
+	{
+		int iVar = funs._cur.GetN(funs._cur._iLastOPOffset, 0);
+		if (IsTempVar(iVar))
+		{
+			//funs._cur._code->SetPointer(funs._cur._iLastOPOffset - (ar._debug ? sizeof(debug_info) : 0), SEEK_SET);
+			funs._cur._code->SetPointer(funs._cur._iLastOPOffset, SEEK_SET);
+			funs._cur.ClearLastOP();
+		}
+	}
+}
 
 //	for Init
 //	for {} Process
@@ -2034,11 +2049,13 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 		}
 	}
 
+	ClearTempVars(funs);
+
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 == TK_ELSE)
 	{
 		funs._cur.Push_JMP(ar, 0);
-		jmp2.Set(funs._cur._code->GetBufferOffset() - 2, funs._cur._code->GetBufferOffset());
+		jmp2.Set(funs._cur._code->GetBufferOffset() - 6, funs._cur._code->GetBufferOffset());
 
 		funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
 
@@ -2069,6 +2086,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 				return false;
 			}
 		}
+		ClearTempVars(funs);
 		funs._cur.Set_JumpOffet(jmp2, funs._cur._code->GetBufferOffset());
 	}
 	else
@@ -2076,7 +2094,6 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 		ar.PushToken(tkType1, tk1);
 		funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
 	}
-
 	return true;
 }
 
@@ -2152,6 +2169,8 @@ bool ParseSleep(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	return true;
 }
 
+
+
 bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	std::string tk1, tk2, tk3;
@@ -2166,18 +2185,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 	bool blEnd = false;
 	while (blEnd == false)
 	{
-		funs._cur.FreeLocalTempVar();
-		eNOperation opLast = funs._cur.GetLastOP();
-		if (opLast == NOP_MOV || opLast == NOP_MOV_MINUS)
-		{
-			int iVar = funs._cur.GetN(funs._cur._iLastOPOffset, 0);
-			if (IsTempVar(iVar))
-			{
-				//funs._cur._code->SetPointer(funs._cur._iLastOPOffset - (ar._debug ? sizeof(debug_info) : 0), SEEK_SET);
-				funs._cur._code->SetPointer(funs._cur._iLastOPOffset, SEEK_SET);
-				funs._cur.ClearLastOP();
-			}
-		}
+		ClearTempVars(funs);
 
 		tkType1 = GetToken(ar, tk1);
 		switch (tkType1)

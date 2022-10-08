@@ -700,10 +700,10 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	header._iGlobalVarCount = funs._cur._localVarCount;
 	WriteFun(arText, ar, funs, funs._cur, vars, funPos, debugInfo);
 	// Sub 함수 코드 저장
-	for (auto it = funs._funIDs.begin(); it != funs._funIDs.end(); it++)
+	for (auto it = funs._funs.begin(); it != funs._funs.end(); it++)
 	{
-		auto it2 = funs._funs.find((*it).second);
-		SFunctionInfo& fi = (*it2).second;
+		//auto it2 = funs._funs.find((*it));
+		SFunctionInfo& fi = (*it).second;
 		WriteFun(arText, ar, funs, fi, vars, funPos, debugInfo);
 	}
 
@@ -800,10 +800,10 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 	header._iStaticVarCount = (int)funs._staticVars.size();
 
 	std::map<int, std::string> mapFun;
-	for (auto it = funs._funIDs.begin(); it != funs._funIDs.end(); it++)
+	for (auto it = funs._funs.begin(); it != funs._funs.end(); it++)
 	{
-		auto it2 = funs._funs.find((*it).second);
-		SFunctionInfo& fi = (*it2).second;
+		//auto it2 = funs._funs.find((*it));
+		SFunctionInfo& fi = (*it).second;
 		mapFun[fi._funID] = fi._name;
 	}
 
@@ -851,10 +851,10 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 	// Main 함수 코드 저장
 	WriteFunLog(arText, arw, funs, funs._cur, vars);
 	// Sub 함수 코드 저장
-	for (auto it = funs._funIDs.begin(); it != funs._funIDs.end(); it++)
+	for (auto it = funs._funs.begin(); it != funs._funs.end(); it++)
 	{
-		auto it2 = funs._funs.find((*it).second);
-		SFunctionInfo& fi = (*it2).second;
+		//auto it2 = funs._funs.find((*it));
+		SFunctionInfo& fi = (*it).second;
 		WriteFunLog(arText, arw, funs, fi, vars);
 	}
 

@@ -132,6 +132,8 @@ TableInfo* CNeoVM::TableAlloc()
 	}
 	pTable->_TableID = _dwLastIDTable;
 	pTable->_refCount = 0;
+	pTable->_itemCount = 0;
+	pTable->_bocket1 = NULL;
 	pTable->_pUserData = NULL;
 
 	_sTables[_dwLastIDTable] = pTable;
@@ -154,15 +156,7 @@ void CNeoVM::FreeTable(VarInfo *d)
 	//}
 	//tbl->_intMap.clear();
 
-	for (auto it2 = tbl->_strMap.begin(); it2 != tbl->_strMap.end(); it2++)
-	{
-		TableData& v = (*it2).second;
-		if (v.key.IsAllocType())
-			Var_Release(&v.key);
-		if (v.value.IsAllocType())
-			Var_Release(&v.value);
-	}
-	tbl->_strMap.clear();
+	tbl->Free(this);
 
 	delete d->_tbl;
 }
