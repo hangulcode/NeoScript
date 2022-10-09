@@ -3,7 +3,7 @@
 struct TableData;
 
 
-#define MAX_TABLE	100
+#define MAX_TABLE	128
 
 struct TableNode
 {

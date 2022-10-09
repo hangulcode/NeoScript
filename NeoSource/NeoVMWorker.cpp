@@ -601,6 +601,14 @@ bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
 	{
+	case VAR_NONE:
+		if (v2->GetType() == VAR_NONE)
+			return true;
+		break;
+	case VAR_BOOL:
+		if (v2->GetType() == VAR_BOOL)
+			return v1->_bl == v2->_bl;
+		break;
 	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 			return v1->_int == v2->_int;
@@ -613,13 +621,9 @@ bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float == v2->_float;
 		break;
-	case VAR_BOOL:
-		if (v2->GetType() == VAR_BOOL)
-			return v1->_bl == v2->_bl;
-		break;
-	case VAR_NONE:
-		if (v2->GetType() == VAR_NONE)
-			return true;
+	case VAR_STRING:
+		if (v2->GetType() == VAR_STRING)
+			return v1->_str->_str == v2->_str->_str;
 		break;
 	}
 	return false;
@@ -640,6 +644,10 @@ bool CNeoVMWorker::CompareGR(VarInfo* v1, VarInfo* v2)
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float > v2->_float;
 		break;
+	case VAR_STRING:
+		if (v2->GetType() == VAR_STRING)
+			return v1->_str->_str > v2->_str->_str;
+		break;
 	}
 	SetError("CompareGR Error");
 	return false;
@@ -659,6 +667,10 @@ bool CNeoVMWorker::CompareGE(VarInfo* v1, VarInfo* v2)
 			return v1->_float >= v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float >= v2->_float;
+		break;
+	case VAR_STRING:
+		if (v2->GetType() == VAR_STRING)
+			return v1->_str->_str >= v2->_str->_str;
 		break;
 	}
 	SetError("CompareGE Error");
@@ -1034,25 +1046,6 @@ bool	CNeoVMWorker::Setup(int iFunctionID)
 	_isSetup = true;
 	return true;
 }
-
-#define ARG0		0x07
-
-#define ARG1_S		0x07
-#define ARG1_G		0x03
-
-#define ARG2_SS		0x07
-#define ARG2_SG		0x05
-#define ARG2_GS		0x03
-#define ARG2_GG		0x01
-
-#define ARG3_SSS	0x07
-#define ARG3_SSG	0x06
-#define ARG3_SGS	0x05
-#define ARG3_SGG	0x04
-#define ARG3_GSS	0x03
-#define ARG3_GSG	0x02
-#define ARG3_GGS	0x01
-#define ARG3_GGG	0x00
 
 bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 {
