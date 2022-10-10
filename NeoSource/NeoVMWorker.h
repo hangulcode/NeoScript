@@ -288,6 +288,8 @@ private:
 	clock_t					_preClock;
 	TableInfo*				_pCallTableInfo = NULL;
 
+	int m_iTimeout = -1;
+	int m_iCheckOpCount = 1000;
 
 	void	SetCodeData(u8* p, int sz)
 	{
@@ -319,7 +321,7 @@ private:
 
 	bool	Setup(int iFunctionID);
 	bool	Start(int iFunctionID);
-	bool	Run(bool isSliceRun, int iTimeout = -1, int iCheckOpCount = 1000);
+	bool	Run(int iBreakingCallStack = 0);
 
 	inline VarInfo* GetVarPtr1(SVMOperation& OP)
 	{
@@ -347,6 +349,7 @@ private:
 	void Var_SetFloat(VarInfo *d, double v);
 	void Var_SetBool(VarInfo *d, bool v);
 	void Var_SetString(VarInfo *d, const char* str);
+	void Var_SetStringA(VarInfo *d, const std::string& str);
 	void Var_SetTable(VarInfo *d, TableInfo* p);
 	void Var_SetFun(VarInfo* d, int fun_index);
 	void Var_SetTableFun(VarInfo* d, FunctionPtrNative fun);
@@ -371,7 +374,7 @@ private:
 	bool CompareGR(VarInfo* v1, VarInfo* v2);
 	bool CompareGE(VarInfo* v1, VarInfo* v2);
 	bool ForEach(VarInfo* v1, VarInfo* v2);
-	int Sleep(bool isSliceRun, int iTimeout, VarInfo* v1);
+	int Sleep(int iTimeout, VarInfo* v1);
 	void Call(int n1, int n2, VarInfo* pReturnValue = NULL);
 	bool Call_MetaTable(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, VarInfo* b);
 
@@ -543,7 +546,7 @@ public:
 	}
 
 	template<typename RVal, typename ... Types>
-	bool Call_TL(int iTimeout, int iCheckOpCount, RVal* r, int iFID, Types ... args)
+	bool Call_TL(RVal* r, int iFID, Types ... args)
 	{
 		ClearArgs();
 		PushArgs(args...);
@@ -551,7 +554,7 @@ public:
 		if (false == Setup(iFID))
 			return false;
 
-		Run(false, iTimeout, iCheckOpCount);
+		Run();
 		if (_isSetup == true)
 		{	// yet ... not completed
 			GC();
@@ -564,7 +567,7 @@ public:
 	}
 
 	template<typename ... Types>
-	bool CallN_TL(int iTimeout, int iCheckOpCount, int iFID, Types ... args)
+	bool CallN_TL(int iFID, Types ... args)
 	{
 		ClearArgs();
 		PushArgs(args...);
@@ -572,7 +575,7 @@ public:
 		if (false == Setup(iFID))
 			return false;
 
-		Run(false, iTimeout, iCheckOpCount);
+		Run();
 		if (_isSetup == true)
 		{	// yet ... not completed
 			GC();
@@ -583,6 +586,10 @@ public:
 		ReturnValue();
 		return true;
 	}
+
+	bool testCall(VarInfo** r, int iFID, VarInfo* args[], int argc);
+
+
 	static void neo_pushcclosureNative(FunctionPtrNative* pOut, Neo_NativeFunction pFun)
 	{
 		pOut->_func = pFun;

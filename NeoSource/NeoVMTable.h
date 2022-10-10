@@ -2,15 +2,17 @@
 
 struct TableData;
 
-
-#define MAX_TABLE	128
-
 struct TableNode
 {
 	TableData	_data;
 	TableNode*	_next;
 };
 
+struct TableSortInfo
+{
+	CNeoVMWorker*	_pN;
+	int				_compareFunction;
+};
 
 struct TableBocket3
 {
@@ -81,6 +83,9 @@ struct TableInfo
 
 	TableIterator FirstNode();
 	TableIterator NextNode(TableIterator);
+
+	bool ToList(std::vector<VarInfo*>& lst);
+
 private:
 	void Var_Release(CNeoVM* pVM, VarInfo *d);
 };

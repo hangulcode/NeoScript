@@ -171,11 +171,43 @@ bool Math_sqrt(CNeoVMWorker* pN, short args)
 	pN->ReturnValue(::sqrt(v));
 	return true;
 }
+bool	Math_srand(CNeoVMWorker* pN, short args)
+{
+	if (args != 1)
+		return false;
+	int init = pN->read<int>(1);
+	::srand((u32)init);
+	return true;
+}
 bool	Math_rand(CNeoVMWorker* pN, short args)
 {
 	if (args != 0)
 		return false;
 	pN->ReturnValue((int)::rand());
+	return true;
+}
+
+void quickSort(CNeoVMWorker* pN, int compare, VarInfo** array, int start, int end);
+bool alg_sort(CNeoVMWorker* pN, short args)
+{
+	if (args != 2) // table, fun
+		return false;
+	VarInfo *pTable = pN->GetStack(1);
+	VarInfo *pFun = pN->GetStack(2);
+
+	if (pTable->GetType() != VAR_TABLE)
+		return false;
+
+	if (pFun->GetType() != VAR_FUN)
+		return false;
+
+	std::vector<VarInfo*> lst;
+	if(false == pTable->_tbl->ToList(lst))
+		return false;
+	if (lst.size() >= 2)
+	{
+		quickSort(pN, pFun->_fun_index, &lst[0], 0, (int)lst.size() - 1);
+	}
 	return true;
 }
 
@@ -220,12 +252,14 @@ static SNeoFunLib _Lib[] =
 { "deg", CNeoVM::RegisterNative(Math_deg) },
 { "rad", CNeoVM::RegisterNative(Math_rad) },
 { "sqrt", CNeoVM::RegisterNative(Math_sqrt) },
+{ "srand", CNeoVM::RegisterNative(Math_srand) },
 { "rand", CNeoVM::RegisterNative(Math_rand) },
 
 { "str_sub", CNeoVM::RegisterNative(Str_Substring) },
 { "str_len", CNeoVM::RegisterNative(Str_len) },
 { "str_find", CNeoVM::RegisterNative(Str_find) },
 
+{ "sort", CNeoVM::RegisterNative(alg_sort) },
 { "print", CNeoVM::RegisterNative(io_print) },
 { "clock", CNeoVM::RegisterNative(sys_clock) },
 

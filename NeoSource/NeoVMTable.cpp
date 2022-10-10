@@ -6,6 +6,7 @@
 #include "NeoVMWorker.h"
 #include "NeoVMTable.h"
 
+#define MAX_TABLE	128
 const int DefualtTableSize = 4;
 
 u32 GetHashCode(u8 *buffer, int len)
@@ -220,7 +221,7 @@ void TableInfo::Insert(CNeoVM* pVM, std::string& Key, VarInfo* pValue)
 {
 	VarInfo var;
 	var.SetType(VAR_STRING);
-	var._str = pVM->StringAlloc(Key.c_str());
+	var._str = pVM->StringAlloc(Key);
 	VarInfo* pKey = &var;
 
 	Insert(NULL, &var, pValue);
@@ -540,4 +541,101 @@ VarInfo* TableInfo::GetTableItem(std::string& key)
 	return NULL;
 }
 
+bool TableInfo::ToList(std::vector<VarInfo*>& lst)
+{
+	lst.resize(_itemCount);
+	int cnt = 0;
+
+	if (_bocket1 == NULL)
+		return true;
+	for (int hash1 = 0; hash1 < MAX_TABLE; hash1++)
+	{
+		TableBocket2* bocket2 = _bocket1[hash1]._bocket2;
+		if (bocket2 == NULL) continue;
+
+		for (int hash2 = 0; hash2 < MAX_TABLE; hash2++)
+		{
+			TableBocket3* bocket3 = bocket2[hash2]._bocket3;
+			if (bocket3 == NULL) continue;
+
+			for (int hash3 = 0; hash3 < MAX_TABLE; hash3++)
+			{
+				TableBocket3* bocket = &bocket3[hash3];
+
+				TableNode* pCur = bocket->_used;
+				while (pCur)
+				{
+					lst[cnt++] = &pCur->_data.value;
+					pCur = pCur->_next;
+				}
+			}
+		}
+	}
+	if (cnt != _itemCount)
+		return false;
+	return true;
+}
+
+
+static void Swap(VarInfo *a, VarInfo *b)
+{
+	VarInfo t = *a;
+	*a = *b;
+	*b = t;
+}
+//
+//static bool CompareGE(TableSortInfo* tsi, VarInfo *a, VarInfo *b)
+//{
+//	VarInfo* args[2];
+//	VarInfo* r;
+//	args[0] = a;
+//	args[1] = b;
+//	tsi->_pN->testCall(&r, tsi->_compareFunction, args, 2);
+//	if (r->GetType() == VAR_BOOL)
+//	{
+//		return r->_bl;
+//	}
+//	return false;
+//}
+
+void quickSort(CNeoVMWorker* pN, int compare, VarInfo** array, int start, int end)
+{
+	int left = start + 1;
+	int right = end;
+	VarInfo* pivot = array[start];
+
+	VarInfo* args[2];
+	VarInfo* r;
+	args[1] = pivot;
+
+	while (left <= right)
+	{
+		while (left <= end)
+		{
+			args[0] = array[left];
+			pN->testCall(&r, compare, args, 2);
+			if (r->GetType() != VAR_BOOL) break; // error
+			if (!r->_bl) break;
+			left++;
+		}
+		while (right > start)
+		{
+			args[0] = array[right];
+			pN->testCall(&r, compare, args, 2);
+			if (r->GetType() != VAR_BOOL) break; // error
+			if (r->_bl) break;
+			right--;
+		}
+
+		if (right < left)	// ¾ù°¥¸²
+			Swap(array[right], pivot);
+		else
+			Swap(array[right], array[left]);
+	}
+	
+	if(start < right - 1)
+		quickSort(pN, compare, array, start, right - 1);
+	if(right + 1 < end)
+		quickSort(pN, compare, array, right + 1, end);
+}
 

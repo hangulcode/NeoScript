@@ -39,6 +39,11 @@ void CNeoVM::Var_Release(VarInfo *d)
 
 void CNeoVM::Var_SetString(VarInfo *d, const char* str)
 {
+	std::string s(str);
+	Var_SetStringA(d, s);
+}
+void CNeoVM::Var_SetStringA(VarInfo *d, const std::string& str)
+{
 	if (d->IsAllocType())
 		Var_Release(d);
 
@@ -86,7 +91,7 @@ void CNeoVM::FreeWorker(CNeoVMWorker *d)
 	delete d;
 }
 
-StringInfo* CNeoVM::StringAlloc(const char* str)
+StringInfo* CNeoVM::StringAlloc(const std::string& str)
 {
 	StringInfo* p = new StringInfo();
 	while (true)
@@ -262,7 +267,7 @@ bool CNeoVM::Init(void* pBuffer, int iSize, int iStackSize)
 			break;
 		case VAR_STRING:
 			ReadString(ar, tempStr);
-			vi._str = StringAlloc(tempStr.c_str());
+			vi._str = StringAlloc(tempStr);
 			vi._str->_refCount = 1;
 			break;
 		case VAR_FUN:
@@ -347,6 +352,25 @@ bool CNeoVM::BindWorkerFunction(u32 id, const std::string& funName)
 	auto pWorker = (*it2).second;
 	return pWorker->Setup((*it).second);
 }
+bool CNeoVM::SetTimeout(u32 id, int iTimeout, int iCheckOpCount)
+{
+	CNeoVMWorker* pWorker;
+	if (id == -1)
+	{
+		pWorker = _pMainWorker;
+	}
+	else
+	{
+		auto it = _sVMWorkers.find(id);
+		if (it == _sVMWorkers.end())
+			return false;
+		pWorker = (*it).second;
+	}
+	pWorker->m_iTimeout = iTimeout;
+	pWorker->m_iCheckOpCount = iCheckOpCount;
+	return true;
+}
+
 bool CNeoVM::IsWorking(u32 id)
 {
 	auto it = _sVMWorkers.find(id);
@@ -356,7 +380,7 @@ bool CNeoVM::IsWorking(u32 id)
 	return pWorker->_isSetup;
 }
 
-bool CNeoVM::UpdateWorker(u32 id, int iTimeout, int iCheckOpCount)
+bool CNeoVM::UpdateWorker(u32 id)
 {
 	if (NULL != _pErrorMsg)
 		return false;
@@ -365,5 +389,5 @@ bool CNeoVM::UpdateWorker(u32 id, int iTimeout, int iCheckOpCount)
 	if (it == _sVMWorkers.end())
 		return false;
 	auto pWorker = (*it).second;
-	return pWorker->Run(iTimeout >= 0, iTimeout, iCheckOpCount);
+	return pWorker->Run();// iTimeout >= 0, iTimeout, iCheckOpCount);
 }

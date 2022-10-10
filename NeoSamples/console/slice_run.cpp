@@ -38,6 +38,8 @@ int SAMPLE_slice_run()
 			}
 		}
 
+		pVM->SetTimeout(id, 1000, 1000);
+
 		DWORD dwPre = GetTickCount();
 
 		// Run ...
@@ -45,7 +47,7 @@ int SAMPLE_slice_run()
 		while(pVM->IsWorking(id))
 		{
 			DWORD t1 = GetTickCount();
-			bool r = pVM->UpdateWorker(id, 1000, 1000);
+			bool r = pVM->UpdateWorker(id);
 			DWORD t2 = GetTickCount();
 			if (pVM->IsLastErrorMsg())
 			{
