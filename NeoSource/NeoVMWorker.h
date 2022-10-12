@@ -192,11 +192,11 @@ public:
 };
 #pragma pack()
 
-struct TableData
-{
-	VarInfo	key;
-	VarInfo	value;
-};
+//struct TableData
+//{
+//	VarInfo	key;
+//	VarInfo	value;
+//};
 
 #include "NeoVMTable.h"
 

@@ -1,10 +1,9 @@
 #pragma once
 
-struct TableData;
-
 struct TableNode
 {
-	TableData	_data;
+	VarInfo	key;
+	VarInfo	value;
 	TableNode*	_next;
 };
 

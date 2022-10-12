@@ -201,18 +201,18 @@ void TableInfo::Free(CNeoVM* pVM)
 				TableNode* pCur = bocket->_used;
 				while (pCur)
 				{
-					Var_Release(pVM, &pCur->_data.key);
-					Var_Release(pVM, &pCur->_data.value);
+					Var_Release(pVM, &pCur->key);
+					Var_Release(pVM, &pCur->value);
 					pCur = pCur->_next;
 				}
 				if(bocket->_table)
-					delete [] bocket->_table;
+					free(bocket->_table);
 			}
-			delete [] bocket3;
+			free(bocket3);
 		}
-		delete[] bocket2;
+		free(bocket2);
 	}
-	delete[] _bocket1;
+	free(_bocket1);
 	_bocket1 = NULL;
 	_itemCount = 0;
 }
@@ -231,9 +231,9 @@ TableNode* FindString(TableNode* pCur, std::string& key)
 {
 	while (pCur)
 	{
-		if (pCur->_data.key.GetType() == VAR_STRING)
+		if (pCur->key.GetType() == VAR_STRING)
 		{
-			if (pCur->_data.key._str->_str == key)
+			if (pCur->key._str->_str == key)
 				return pCur;
 		}
 		pCur = pCur->_next;
@@ -273,7 +273,7 @@ TableNode* TableBocket3::Find(VarInfo* pKey)
 	case VAR_NONE:
 		while (pCur)
 		{
-			if (pCur->_data.key.GetType() == VAR_NONE)
+			if (pCur->key.GetType() == VAR_NONE)
 				return pCur;
 			pCur = pCur->_next;
 		}
@@ -283,9 +283,9 @@ TableNode* TableBocket3::Find(VarInfo* pKey)
 			bool b = pKey->_bl;
 			while (pCur)
 			{
-				if (pCur->_data.key.GetType() == VAR_BOOL)
+				if (pCur->key.GetType() == VAR_BOOL)
 				{
-					if (pCur->_data.key._bl == b)
+					if (pCur->key._bl == b)
 						return pCur;
 				}
 				pCur = pCur->_next;
@@ -297,9 +297,9 @@ TableNode* TableBocket3::Find(VarInfo* pKey)
 			int iKey = pKey->_int;
 			while (pCur)
 			{
-				if (pCur->_data.key.GetType() == VAR_INT)
+				if (pCur->key.GetType() == VAR_INT)
 				{
-					if (pCur->_data.key._int == iKey)
+					if (pCur->key._int == iKey)
 						return pCur;
 				}
 				pCur = pCur->_next;
@@ -311,9 +311,9 @@ TableNode* TableBocket3::Find(VarInfo* pKey)
 			auto fKey = pKey->_float;
 			while (pCur)
 			{
-				if (pCur->_data.key.GetType() == VAR_FLOAT)
+				if (pCur->key.GetType() == VAR_FLOAT)
 				{
-					if (pCur->_data.key._float == fKey)
+					if (pCur->key._float == fKey)
 						return pCur;
 				}
 				pCur = pCur->_next;
@@ -330,9 +330,9 @@ TableNode* TableBocket3::Find(VarInfo* pKey)
 			TableInfo* pTableInfo = pKey->_tbl;
 			while (pCur)
 			{
-				if (pCur->_data.key.GetType() == VAR_TABLE)
+				if (pCur->key.GetType() == VAR_TABLE)
 				{
-					if (pCur->_data.key._tbl == pTableInfo)
+					if (pCur->key._tbl == pTableInfo)
 						return pCur;
 				}
 				pCur = pCur->_next;
@@ -344,9 +344,9 @@ TableNode* TableBocket3::Find(VarInfo* pKey)
 			Neo_NativeFunction funKey = pKey->_fun._func;
 			while (pCur)
 			{
-				if (pCur->_data.key.GetType() == VAR_TABLEFUN)
+				if (pCur->key.GetType() == VAR_TABLEFUN)
 				{
-					if (pCur->_data.key._fun._func == funKey)
+					if (pCur->key._fun._func == funKey)
 						return pCur;
 				}
 				pCur = pCur->_next;
@@ -358,9 +358,9 @@ TableNode* TableBocket3::Find(VarInfo* pKey)
 			int iFunKey = pKey->_fun_index;
 			while (pCur)
 			{
-				if (pCur->_data.key.GetType() == VAR_FUN)
+				if (pCur->key.GetType() == VAR_FUN)
 				{
-					if (pCur->_data.key._fun_index == iFunKey)
+					if (pCur->key._fun_index == iFunKey)
 						return pCur;
 				}
 				pCur = pCur->_next;
@@ -380,14 +380,14 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 
 	if (_bocket1 == NULL)
 	{
-		_bocket1 = new TableBocket1[MAX_TABLE];
+		_bocket1 = (TableBocket1*)malloc(sizeof(TableBocket1) * MAX_TABLE);
 		memset(_bocket1, 0, sizeof(TableBocket1) * MAX_TABLE);
 	}
 
 	TableBocket2* bocket2 = _bocket1[hash1]._bocket2;
 	if (bocket2 == NULL)
 	{
-		bocket2 = new TableBocket2[MAX_TABLE];
+		bocket2 = (TableBocket2*)malloc(sizeof(TableBocket2) * MAX_TABLE);
 		memset(bocket2, 0, sizeof(TableBocket2) * MAX_TABLE);
 		_bocket1[hash1]._bocket2 = bocket2;
 	}
@@ -395,7 +395,7 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 	TableBocket3* bocket3 = bocket2[hash2]._bocket3;
 	if (bocket3 == NULL)
 	{
-		bocket3 = new TableBocket3[MAX_TABLE];
+		bocket3 = (TableBocket3*)malloc(sizeof(TableBocket3) * MAX_TABLE);
 		memset(bocket3, 0, sizeof(TableBocket3) * MAX_TABLE);
 		bocket2[hash2]._bocket3 = bocket3;
 	}
@@ -405,9 +405,12 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 	TableNode* pCur = bocket->Find(pKey);
 	if (pCur == NULL)
 	{
+		TableNode* table;
 		if (bocket->_size == 0)
 		{
-			bocket->_table = new TableNode[DefualtTableSize];
+			table = (TableNode*)malloc(sizeof(TableNode) * DefualtTableSize);
+			for (int i = 0; i < DefualtTableSize; i++) { table[i].key.SetType(VAR_NONE); table[i].value.SetType(VAR_NONE); }
+			bocket->_table = table;
 			bocket->_size = DefualtTableSize;
 #ifdef _DEBUG
 			bocket->_size_use = 0;
@@ -422,9 +425,14 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 			int iPreTableSize = bocket->_size;
 			int iNewTableSize = iPreTableSize * 2;
 
-			TableNode* table = new TableNode[iNewTableSize];
+			table = (TableNode*)malloc(sizeof(TableNode) * iNewTableSize);
 			memcpy(table, bocket->_table, sizeof(TableNode) * iPreTableSize);
-			if (bocket->_table) delete[] bocket->_table;
+			if (bocket->_table) free(bocket->_table);
+
+			int AddCount = iNewTableSize - iPreTableSize;
+			TableNode* table2 = table + iPreTableSize;
+			for (int i = 0; i < AddCount; i++) { table2[i].key.SetType(VAR_NONE); table2[i].value.SetType(VAR_NONE); }
+
 			bocket->_table = table;
 			bocket->_size = iNewTableSize;
 #ifdef _DEBUG
@@ -453,13 +461,13 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 
 	if (pVMW)
 	{
-		pVMW->Move(&pCur->_data.key, pKey);
-		pVMW->Move(&pCur->_data.value, pValue);
+		pVMW->Move(&pCur->key, pKey);
+		pVMW->Move(&pCur->value, pValue);
 	}
 	else
 	{
-		pCur->_data.key = *pKey;
-		pCur->_data.value = *pValue;
+		pCur->key = *pKey;
+		pCur->value = *pValue;
 	}
 }
 void TableInfo::Remove(CNeoVMWorker* pVMW, VarInfo* pKey)
@@ -473,8 +481,8 @@ void TableInfo::Remove(CNeoVMWorker* pVMW, VarInfo* pKey)
 	{
 		if (bocket->Pop_Used(pCur))
 		{
-			pVMW->Var_Release(&pCur->_data.key);
-			pVMW->Var_Release(&pCur->_data.value);
+			pVMW->Var_Release(&pCur->key);
+			pVMW->Var_Release(&pCur->value);
 
 			bocket->Push_Free(pCur);
 			_itemCount--;
@@ -512,7 +520,7 @@ VarInfo* TableInfo::GetTableItem(VarInfo *pKey)
 
 	TableNode* pCur = bocket->Find(pKey);
 	if (pCur) 
-		return &pCur->_data.value;
+		return &pCur->value;
 	return NULL;
 }
 VarInfo* TableInfo::GetTableItem(std::string& key)
@@ -537,7 +545,7 @@ VarInfo* TableInfo::GetTableItem(std::string& key)
 
 	TableNode* pCur = FindString(bocket->_used, key);
 	if (pCur) 
-		return &pCur->_data.value;
+		return &pCur->value;
 	return NULL;
 }
 
@@ -565,7 +573,7 @@ bool TableInfo::ToList(std::vector<VarInfo*>& lst)
 				TableNode* pCur = bocket->_used;
 				while (pCur)
 				{
-					lst[cnt++] = &pCur->_data.value;
+					lst[cnt++] = &pCur->value;
 					pCur = pCur->_next;
 				}
 			}
