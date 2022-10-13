@@ -944,12 +944,9 @@ void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 
 bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo* r, VarInfo* a, VarInfo* b)
 {
-	VarInfo* p = pTable->_tbl->GetTableItem(g_metaString);
-	if (p == NULL)
+	if (pTable->_tbl->_meta == NULL)
 		return false;
-	if (p->GetType() != VAR_TABLE)
-		return false;
-	VarInfo* pVarItem = p->_tbl->GetTableItem(funName);
+	VarInfo* pVarItem = pTable->_tbl->_meta->GetTableItem(funName);
 	if (pVarItem == NULL)
 		return false;
 

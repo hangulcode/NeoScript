@@ -227,6 +227,8 @@ struct TableInfo
 	int _itemCount;
 	void* _pUserData;
 
+	TableInfo*		_meta;
+
 	//CAllocPool m_sPool3;
 
 	void Free(CNeoVM* pVM);

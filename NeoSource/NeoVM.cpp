@@ -140,13 +140,13 @@ TableInfo* CNeoVM::TableAlloc()
 	pTable->_itemCount = 0;
 	pTable->_bocket1 = NULL;
 	pTable->_pUserData = NULL;
+	pTable->_meta = NULL;
 
 	_sTables[_dwLastIDTable] = pTable;
 	return pTable;
 }
-void CNeoVM::FreeTable(VarInfo *d)
+void CNeoVM::FreeTable(TableInfo* tbl)
 {
-	TableInfo*	tbl = d->_tbl;
 	auto it = _sTables.find(tbl->_TableID);
 	if (it == _sTables.end())
 		return; // Error
@@ -161,9 +161,23 @@ void CNeoVM::FreeTable(VarInfo *d)
 	//}
 	//tbl->_intMap.clear();
 
+	if (tbl->_meta)
+	{
+		if (--tbl->_meta->_refCount <= 0)
+		{
+			FreeTable(tbl->_meta);
+		}
+		tbl->_meta = NULL;
+	}
+
 	tbl->Free(this);
 
-	delete d->_tbl;
+	delete tbl;
+}
+
+void CNeoVM::FreeTable(VarInfo *d)
+{
+	FreeTable(d->_tbl);
 }
 
 

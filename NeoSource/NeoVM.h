@@ -49,7 +49,8 @@ private:
 	void FreeString(VarInfo *d);
 
 	TableInfo* TableAlloc();
-	void FreeTable(VarInfo *d);
+	void FreeTable(VarInfo* d);
+	void FreeTable(TableInfo* tbl);
 
 public:
 

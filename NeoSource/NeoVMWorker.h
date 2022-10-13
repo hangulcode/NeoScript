@@ -343,10 +343,11 @@ private:
 	inline VarInfo* GetVarPtr_S(short n) { return &m_sVarStack[_iSP_Vars + n]; }
 	inline VarInfo* GetVarPtr_G(short n) { return &(*m_pVarGlobal)[n]; }
 
-
+public:
 	void Var_AddRef(VarInfo *d);
 	void Var_Release(VarInfo *d);
 	void Var_SetNone(VarInfo *d);
+private:
 	void Var_SetInt(VarInfo *d, int v);
 	void Var_SetFloat(VarInfo *d, double v);
 	void Var_SetBool(VarInfo *d, bool v);
@@ -357,8 +358,10 @@ private:
 	void Var_SetTableFun(VarInfo* d, FunctionPtrNative fun);
 
 
-	void Swap(VarInfo* v1, VarInfo* v2);
+public:
 	void Move(VarInfo* v1, VarInfo* v2);
+	void Swap(VarInfo* v1, VarInfo* v2);
+private:
 	void MoveMinus(VarInfo* v1, VarInfo* v2);
 	void Add2(VarInfo* r, VarInfo* v2);
 	void Sub2(VarInfo* r, VarInfo* v2);

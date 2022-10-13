@@ -187,6 +187,34 @@ bool	Math_rand(CNeoVMWorker* pN, short args)
 	return true;
 }
 
+bool util_meta(CNeoVMWorker* pN, short args)
+{
+	if (args != 2) // table, meta
+		return false;
+	VarInfo *pTable = pN->GetStack(1);
+	VarInfo *pMeta = pN->GetStack(2);
+
+	if (pTable->GetType() != VAR_TABLE)
+		return false;
+
+	if (pMeta->GetType() != VAR_TABLE)
+		return false;
+
+	VarInfo var;
+	var.ClearType();
+	if (pTable->_tbl->_meta)
+	{
+		var.SetType(VAR_TABLE);
+		var._tbl = pTable->_tbl->_meta;
+	}
+
+	pN->Move(&var, pMeta); // for Referance
+	pTable->_tbl->_meta = pMeta->_tbl;
+
+	return true;
+}
+
+
 void quickSort(CNeoVMWorker* pN, int compare, VarInfo** array, int start, int end);
 bool alg_sort(CNeoVMWorker* pN, short args)
 {
@@ -260,6 +288,7 @@ static SNeoFunLib _Lib[] =
 { "str_find", CNeoVM::RegisterNative(Str_find) },
 
 { "sort", CNeoVM::RegisterNative(alg_sort) },
+{ "meta", CNeoVM::RegisterNative(util_meta) },
 { "print", CNeoVM::RegisterNative(io_print) },
 { "clock", CNeoVM::RegisterNative(sys_clock) },
 
