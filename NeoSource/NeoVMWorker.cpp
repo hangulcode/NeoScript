@@ -701,11 +701,12 @@ bool CNeoVMWorker::ForEach(VarInfo* pTable, VarInfo* pKey)
 	else
 		it = tbl->NextNode(pIterator->_it);
 
-	if (it._node)
+	if (it._bocket)
 	{
 		pIterator->_it = it;
-		Move(pKey, &it._node->key);
-		Move(pValue, &it._node->value);
+		TableNode* n = &it._bocket->_table[it._offset];
+		Move(pKey, &n->key);
+		Move(pValue, &n->value);
 		return true;
 	}
 	else

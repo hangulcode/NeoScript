@@ -4,7 +4,6 @@ struct TableNode
 {
 	VarInfo	key;
 	VarInfo	value;
-	TableNode*	_next;
 };
 
 struct TableSortInfo
@@ -13,44 +12,23 @@ struct TableSortInfo
 	int				_compareFunction;
 };
 
+
+const int DefualtTableSize = 4;
+
+
 struct TableBocket3
 {
-	int			_size;
 	TableNode*	_table; // alloc pointer [array]
 
-	TableNode*	_used;	// used begin pointer [linked list]
-	TableNode*	_free;	// unused begin pointer [linked list]
 
-#ifdef _DEBUG
 	int			_size_use;
-	int			_size_free;
-#endif
 
-	void Push_Use(TableNode* p)
-	{
-		TableNode* n = _used;
-		_used = p;
-		_used->_next = n;
-#ifdef _DEBUG
-		_size_use++;
-#endif
-	}
-
-	void Push_Free(TableNode* p)
-	{
-		TableNode* n = _free;
-		_free = p;
-		_free->_next = n;
-#ifdef _DEBUG
-		_size_free++;
-#endif
-	}
-	TableNode* Find(VarInfo* pKey);
-	bool	Pop_Used(TableNode* pTar);
+	int Find(VarInfo* pKey);
 };
 
 struct TableBocket2
 {
+	int*			_capa;
 	TableBocket3* _bocket3;
 };
 
