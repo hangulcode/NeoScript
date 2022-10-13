@@ -6,7 +6,7 @@
 #include "NeoVMWorker.h"
 #include "NeoVMTable.h"
 
-const int DefualtTableSize = 4;
+#define MAX_TABLE	128
 
 u32 GetHashCode(u8 *buffer, int len)
 {
@@ -46,7 +46,7 @@ u32 GetHashCode(VarInfo *p)
 TableIterator TableInfo::FirstNode()
 {
 	TableIterator r;
-	r._node = NULL;
+	r._bocket = NULL;
 
 	if(_bocket1 == NULL)
 		return r;
@@ -62,16 +62,17 @@ TableIterator TableInfo::FirstNode()
 
 			for (int hash3 = 0; hash3 < MAX_TABLE; hash3++)
 			{
+				if (bocket2[hash2]._capa[hash3] == 0)
+					continue;
 				TableBocket3* bocket = &bocket3[hash3];
+				if (bocket->_size_use == 0) continue;
 
-				if (bocket->_used)
-				{
-					r._hash1 = hash1;
-					r._hash2 = hash2;
-					r._hash3 = hash3;
-					r._node = bocket->_used;
-					return r;
-				}
+				r._hash1 = hash1;
+				r._hash2 = hash2;
+				r._hash3 = hash3;
+				r._offset = 0;
+				r._bocket = bocket;
+				return r;
 			}
 		}
 	}
@@ -79,12 +80,12 @@ TableIterator TableInfo::FirstNode()
 }
 TableIterator TableInfo::NextNode(TableIterator r)
 {
-	TableNode* TN = r._node;
-	if (TN == NULL) return r;
+	TableBocket3* bocket = r._bocket;
+	if (bocket == NULL) return r;
 
-	if (TN->_next)
+	if (r._offset + 1 < bocket->_size_use)
 	{
-		r._node = TN->_next;
+		r._offset++;
 		return r;
 	}
 	
@@ -93,16 +94,17 @@ TableIterator TableInfo::NextNode(TableIterator r)
 		TableBocket3* bocket3 = bocket2[r._hash2]._bocket3;
 		for (int hash3 = r._hash3 + 1; hash3 < MAX_TABLE; hash3++)
 		{
+			if (bocket2[r._hash2]._capa[hash3] == 0)
+				continue;
 			TableBocket3* bocket = &bocket3[hash3];
+			if (bocket->_size_use == 0) continue;
 
-			if (bocket->_used)
-			{
-				//r._hash1 = hash1;
-				//r._hash2 = hash2;
-				r._hash3 = hash3;
-				r._node = bocket->_used;
-				return r;
-			}
+			//r._hash1 = hash1;
+			//r._hash2 = hash2;
+			r._hash3 = hash3;
+			r._offset = 0;
+			r._bocket = bocket;
+			return r;
 		}
 	}
 
@@ -114,16 +116,17 @@ TableIterator TableInfo::NextNode(TableIterator r)
 
 		for (int hash3 = 0; hash3 < MAX_TABLE; hash3++)
 		{
+			if (bocket2[hash2]._capa[hash3] == 0)
+				continue;
 			TableBocket3* bocket = &bocket3[hash3];
+			if (bocket->_size_use == 0) continue;
 
-			if (bocket->_used)
-			{
-				//r._hash1 = hash1;
-				r._hash2 = hash2;
-				r._hash3 = hash3;
-				r._node = bocket->_used;
-				return r;
-			}
+			//r._hash1 = hash1;
+			r._hash2 = hash2;
+			r._hash3 = hash3;
+			r._offset = 0;
+			r._bocket = bocket;
+			return r;
 		}
 	}
 
@@ -139,20 +142,21 @@ TableIterator TableInfo::NextNode(TableIterator r)
 
 			for (int hash3 = 0; hash3 < MAX_TABLE; hash3++)
 			{
+				if (bocket2[hash2]._capa[hash3] == 0)
+					continue;
 				TableBocket3* bocket = &bocket3[hash3];
+				if (bocket->_size_use == 0) continue;
 
-				if (bocket->_used)
-				{
-					r._hash1 = hash1;
-					r._hash2 = hash2;
-					r._hash3 = hash3;
-					r._node = bocket->_used;
-					return r;
-				}
+				r._hash1 = hash1;
+				r._hash2 = hash2;
+				r._hash3 = hash3;
+				r._offset = 0;
+				r._bocket = bocket;
+				return r;
 			}
 		}
 	}
-	r._node = NULL;
+	r._bocket = NULL;
 	return r;
 }
 
@@ -193,25 +197,26 @@ void TableInfo::Free(CNeoVM* pVM)
 
 			for (int hash3 = 0; hash3 < MAX_TABLE; hash3++)
 			{
-				TableBocket3* bocket = &bocket3[hash3];
-				if (bocket->_size == 0)
+				if (bocket2[hash2]._capa[hash3] == 0)
 					continue;
-
-				TableNode* pCur = bocket->_used;
-				while (pCur)
+				TableBocket3* bocket = &bocket3[hash3];
+				if (bocket->_size_use != 0)
 				{
-					Var_Release(pVM, &pCur->_data.key);
-					Var_Release(pVM, &pCur->_data.value);
-					pCur = pCur->_next;
+					for (int i = bocket->_size_use - 1; i >= 0; i--)
+					{
+						TableNode* pCur = &bocket->_table[i];
+						Var_Release(pVM, &pCur->key);
+						Var_Release(pVM, &pCur->value);
+					}
 				}
-				if(bocket->_table)
-					delete [] bocket->_table;
+				if(bocket->_table && bocket2[hash2]._capa[hash3] > DefualtTableSize)
+					free(bocket->_table);
 			}
-			delete [] bocket3;
+			free(bocket3);
 		}
-		delete[] bocket2;
+		free(bocket2);
 	}
-	delete[] _bocket1;
+	free(_bocket1);
 	_bocket1 = NULL;
 	_itemCount = 0;
 }
@@ -220,154 +225,118 @@ void TableInfo::Insert(CNeoVM* pVM, std::string& Key, VarInfo* pValue)
 {
 	VarInfo var;
 	var.SetType(VAR_STRING);
-	var._str = pVM->StringAlloc(Key.c_str());
+	var._str = pVM->StringAlloc(Key);
 	VarInfo* pKey = &var;
 
 	Insert(NULL, &var, pValue);
 }
 
-TableNode* FindString(TableNode* pCur, std::string& key)
+int TableBocket3::Find(VarInfo* pKey)
 {
-	while (pCur)
-	{
-		if (pCur->_data.key.GetType() == VAR_STRING)
-		{
-			if (pCur->_data.key._str->_str == key)
-				return pCur;
-		}
-		pCur = pCur->_next;
-	}
-	return NULL;
-}
-bool	TableBocket3::Pop_Used(TableNode* pTar)
-{
-	TableNode* pCur = _used;
-	TableNode* pPre = NULL;
-	while (pCur)
-	{
-		if (pCur == pTar)
-		{
-			if (pPre == NULL)
-				_used = pCur->_next;
-			else
-				pPre->_next = pCur->_next;
-			pTar->_next = NULL;
-#ifdef _DEBUG
-			--_size_use;
-#endif
-			return true;
-		}
-		pPre = pCur;
-		pCur = pCur->_next;
-	}
-	return false;
-}
-
-TableNode* TableBocket3::Find(VarInfo* pKey)
-{
-	if (_size == 0) return NULL;
-	TableNode* pCur = _used;
+	if (_size_use == 0) return -1;
+	TableNode*	table = _table;
 	switch (pKey->GetType())
 	{
 	case VAR_NONE:
-		while (pCur)
+		for (int i = _size_use - 1; i >= 0; i--)
 		{
-			if (pCur->_data.key.GetType() == VAR_NONE)
-				return pCur;
-			pCur = pCur->_next;
+			if (table[i].key.GetType() == VAR_NONE)
+				return i;
 		}
 		break;
 	case VAR_BOOL:
 		{
 			bool b = pKey->_bl;
-			while (pCur)
+			for (int i = _size_use - 1; i >= 0; i--)
 			{
-				if (pCur->_data.key.GetType() == VAR_BOOL)
+				if (table[i].key.GetType() == VAR_BOOL)
 				{
-					if (pCur->_data.key._bl == b)
-						return pCur;
+					if (table[i].key._bl == b)
+						return i;
 				}
-				pCur = pCur->_next;
 			}
 		}
 		break;
 	case VAR_INT:
 		{
 			int iKey = pKey->_int;
-			while (pCur)
+			for (int i = _size_use - 1; i >= 0; i--)
 			{
-				if (pCur->_data.key.GetType() == VAR_INT)
+				if (table[i].key.GetType() == VAR_INT)
 				{
-					if (pCur->_data.key._int == iKey)
-						return pCur;
+					if (table[i].key._int == iKey)
+						return i;
 				}
-				pCur = pCur->_next;
 			}
 		}
 		break;
 	case VAR_FLOAT:
 		{
 			auto fKey = pKey->_float;
-			while (pCur)
+			for (int i = _size_use - 1; i >= 0; i--)
 			{
-				if (pCur->_data.key.GetType() == VAR_FLOAT)
+				if (table[i].key.GetType() == VAR_FLOAT)
 				{
-					if (pCur->_data.key._float == fKey)
-						return pCur;
+					if (table[i].key._float == fKey)
+						return i;
 				}
-				pCur = pCur->_next;
 			}
 		}
 		break;
 	case VAR_STRING:
 		{
-			return FindString(pCur, pKey->_str->_str);
+			std::string& str = pKey->_str->_str;
+			for (int i = _size_use - 1; i >= 0; i--)
+			{
+				if (table[i].key.GetType() == VAR_STRING)
+				{
+					if (table[i].key._str->_str == str)
+						return i;
+				}
+			}
 		}
 		break;
 	case VAR_TABLE:
 		{
 			TableInfo* pTableInfo = pKey->_tbl;
-			while (pCur)
+			for (int i = _size_use - 1; i >= 0; i--)
 			{
-				if (pCur->_data.key.GetType() == VAR_TABLE)
+				if (table[i].key.GetType() == VAR_TABLE)
 				{
-					if (pCur->_data.key._tbl == pTableInfo)
-						return pCur;
+					if (table[i].key._tbl == pTableInfo)
+						return i;
 				}
-				pCur = pCur->_next;
 			}
 		}
 		break;
 	case VAR_TABLEFUN:
 		{
 			Neo_NativeFunction funKey = pKey->_fun._func;
-			while (pCur)
+			for (int i = _size_use - 1; i >= 0; i--)
 			{
-				if (pCur->_data.key.GetType() == VAR_TABLEFUN)
+				if (table[i].key.GetType() == VAR_TABLEFUN)
 				{
-					if (pCur->_data.key._fun._func == funKey)
-						return pCur;
+					if (table[i].key._fun._func == funKey)
+						return i;
 				}
-				pCur = pCur->_next;
 			}
 		}
 		break;
 	case VAR_FUN:
 		{
 			int iFunKey = pKey->_fun_index;
-			while (pCur)
+			for (int i = _size_use - 1; i >= 0; i--)
 			{
-				if (pCur->_data.key.GetType() == VAR_FUN)
+				if (table[i].key.GetType() == VAR_FUN)
 				{
-					if (pCur->_data.key._fun_index == iFunKey)
-						return pCur;
+					if (table[i].key._fun_index == iFunKey)
+						return i;
 				}
-				pCur = pCur->_next;
 			}
 		}
 		break;
 	}
-	return NULL;
+	return -1;
 }
 
 void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
@@ -379,14 +348,16 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 
 	if (_bocket1 == NULL)
 	{
-		_bocket1 = new TableBocket1[MAX_TABLE];
+		_bocket1 = (TableBocket1*)malloc(sizeof(TableBocket1) * MAX_TABLE);
 		memset(_bocket1, 0, sizeof(TableBocket1) * MAX_TABLE);
+
+//		m_sPool3.Init(sizeof(TableNode) * DefualtTableSize, 100);
 	}
 
 	TableBocket2* bocket2 = _bocket1[hash1]._bocket2;
 	if (bocket2 == NULL)
 	{
-		bocket2 = new TableBocket2[MAX_TABLE];
+		bocket2 = (TableBocket2*)malloc(sizeof(TableBocket2) * MAX_TABLE);
 		memset(bocket2, 0, sizeof(TableBocket2) * MAX_TABLE);
 		_bocket1[hash1]._bocket2 = bocket2;
 	}
@@ -394,71 +365,73 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 	TableBocket3* bocket3 = bocket2[hash2]._bocket3;
 	if (bocket3 == NULL)
 	{
-		bocket3 = new TableBocket3[MAX_TABLE];
+		bocket3 = (TableBocket3*)malloc(sizeof(TableBocket3) * MAX_TABLE);
 		memset(bocket3, 0, sizeof(TableBocket3) * MAX_TABLE);
 		bocket2[hash2]._bocket3 = bocket3;
+
+		bocket2[hash2]._capa = (int*)malloc(sizeof(int) * MAX_TABLE);
+		memset(bocket2[hash2]._capa, 0, sizeof(int) * MAX_TABLE);
 	}
 
 	TableBocket3* bocket = &bocket3[hash3];
-
-	TableNode* pCur = bocket->Find(pKey);
-	if (pCur == NULL)
+	int iSelect = -1;
+	if (bocket2[hash2]._capa[hash3] == 0)
 	{
-		if (bocket->_size == 0)
-		{
-			bocket->_table = new TableNode[DefualtTableSize];
-			bocket->_size = DefualtTableSize;
-#ifdef _DEBUG
-			bocket->_size_use = 0;
-			bocket->_size_free = 0;
-#endif
-			for (int i = 0; i < DefualtTableSize; i++)
-				bocket->Push_Free(&bocket->_table[i]);
-		}
+		//TableNode* table = (TableNode*)malloc(sizeof(TableNode) * DefualtTableSize);
+		TableNode* table = bocket->_default;
+		for (int i = 0; i < DefualtTableSize; i++) { table[i].key.SetType(VAR_NONE); table[i].value.SetType(VAR_NONE); }
+		bocket->_table = table;
+		bocket2[hash2]._capa[hash3] = DefualtTableSize;
+		bocket->_size_use = 0;
+	}
+	else if (bocket->_size_use > 0)
+	{
+		iSelect = bocket->Find(pKey);
+	}
 
-		if (bocket->_free == NULL)
+	if (iSelect == -1)
+	{
+		TableNode* table;
+		//if (bocket->_size_use + 1 >= bocket2[hash2]._capa[hash3])
+		//{
+		//	table = (TableNode*)malloc(sizeof(TableNode) * DefualtTableSize);
+		//	for (int i = 0; i < DefualtTableSize; i++) { table[i].key.SetType(VAR_NONE); table[i].value.SetType(VAR_NONE); }
+		//	bocket->_table = table;
+		//	bocket->_size = DefualtTableSize;
+		//	bocket->_size_use = 0;
+
+		//	for (int i = 0; i < DefualtTableSize; i++)
+		//		bocket->Push_Free(&bocket->_table[i]);
+		//}
+
+		if (bocket->_size_use + 1 >= bocket2[hash2]._capa[hash3])
 		{
-			int iPreTableSize = bocket->_size;
+			int iPreTableSize = bocket2[hash2]._capa[hash3];
 			int iNewTableSize = iPreTableSize * 2;
 
-			TableNode* table = new TableNode[iNewTableSize];
+			table = (TableNode*)malloc(sizeof(TableNode) * iNewTableSize);
 			memcpy(table, bocket->_table, sizeof(TableNode) * iPreTableSize);
-			if (bocket->_table) delete[] bocket->_table;
+			if (bocket->_table && iPreTableSize > DefualtTableSize) free(bocket->_table);
+
+			for (int i = iPreTableSize; i < iNewTableSize; i++) { table[i].key.SetType(VAR_NONE); table[i].value.SetType(VAR_NONE); }
+
 			bocket->_table = table;
-			bocket->_size = iNewTableSize;
-#ifdef _DEBUG
-			bocket->_size_use = 0;
-			bocket->_size_free = 0;
-#endif
-
-			bocket->_free = NULL;
-			bocket->_used = NULL;
-
-			for (int i = 0; i < iPreTableSize; i++)
-				bocket->Push_Use(&table[i]);
-
-			for (int i = iPreTableSize; i < iNewTableSize; i++)
-				bocket->Push_Free(&table[i]);
-
+			bocket2[hash2]._capa[hash3] = iNewTableSize;
 		}
-		pCur = bocket->_free;
-		bocket->_free = pCur->_next;
-		bocket->Push_Use(pCur);
-#ifdef _DEBUG
-		--bocket->_size_free;
-#endif
+		iSelect = bocket->_size_use++;
 		_itemCount++;
 	}
 
+	TableNode* pCur = &bocket->_table[iSelect];
 	if (pVMW)
 	{
-		pVMW->Move(&pCur->_data.key, pKey);
-		pVMW->Move(&pCur->_data.value, pValue);
+		pVMW->Move(&pCur->key, pKey);
+		pVMW->Move(&pCur->value, pValue);
 	}
 	else
 	{
-		pCur->_data.key = *pKey;
-		pCur->_data.value = *pValue;
+		pCur->key = *pKey;
+		pCur->value = *pValue;
 	}
 }
 void TableInfo::Remove(CNeoVMWorker* pVMW, VarInfo* pKey)
@@ -467,18 +440,24 @@ void TableInfo::Remove(CNeoVMWorker* pVMW, VarInfo* pKey)
 	if (bocket == NULL)
 		return;
 
-	TableNode* pCur = bocket->Find(pKey);
-	if (pCur)
-	{
-		if (bocket->Pop_Used(pCur))
-		{
-			pVMW->Var_Release(&pCur->_data.key);
-			pVMW->Var_Release(&pCur->_data.value);
+	int idx = bocket->Find(pKey);
+	if(idx < 0)
+		return;
 
-			bocket->Push_Free(pCur);
-			_itemCount--;
-		}
+	TableNode* pCur = &bocket->_table[idx];
+	pVMW->Var_Release(&pCur->key);
+	pVMW->Var_Release(&pCur->value);
+
+	int move_cnt = bocket->_size_use - idx - 1;
+	if (move_cnt > 0)
+	{
+		memmove(&bocket->_table[idx], &bocket->_table[idx + 1], sizeof(TableNode) * move_cnt);
+		int last = bocket->_size_use - 1;
+		bocket->_table[last].key.SetType(VAR_NONE); bocket->_table[last].value.SetType(VAR_NONE);
 	}
+
+	bocket->_size_use--;
+	_itemCount--;
 }
 
 TableBocket3* TableInfo::GetTableBocket(VarInfo *pKey)
@@ -509,10 +488,11 @@ VarInfo* TableInfo::GetTableItem(VarInfo *pKey)
 	if (bocket == NULL)
 		return NULL;
 
-	TableNode* pCur = bocket->Find(pKey);
-	if (pCur) 
-		return &pCur->_data.value;
-	return NULL;
+	int idx = bocket->Find(pKey);
+	if (idx < 0)
+		return NULL;
+
+	return &bocket->_table[idx].value;
 }
 VarInfo* TableInfo::GetTableItem(std::string& key)
 {
@@ -533,11 +513,115 @@ VarInfo* TableInfo::GetTableItem(std::string& key)
 		return NULL;
 
 	TableBocket3* bocket = &bocket3[hash3];
-
-	TableNode* pCur = FindString(bocket->_used, key);
-	if (pCur) 
-		return &pCur->_data.value;
+	TableNode* table = bocket->_table;
+	for (int i = bocket->_size_use - 1; i >= 0; i--)
+	{
+		if (table[i].key.GetType() == VAR_STRING)
+		{
+			if (table[i].key._str->_str == key)
+				return &table[i].value;
+		}
+	}
 	return NULL;
 }
 
+bool TableInfo::ToList(std::vector<VarInfo*>& lst)
+{
+	lst.resize(_itemCount);
+	int cnt = 0;
+
+	if (_bocket1 == NULL)
+		return true;
+	for (int hash1 = 0; hash1 < MAX_TABLE; hash1++)
+	{
+		TableBocket2* bocket2 = _bocket1[hash1]._bocket2;
+		if (bocket2 == NULL) continue;
+
+		for (int hash2 = 0; hash2 < MAX_TABLE; hash2++)
+		{
+			TableBocket3* bocket3 = bocket2[hash2]._bocket3;
+			if (bocket3 == NULL) continue;
+
+			for (int hash3 = 0; hash3 < MAX_TABLE; hash3++)
+			{
+				if (bocket2[hash2]._capa[hash3] == 0)
+					continue;
+				TableBocket3* bocket = &bocket3[hash3];
+				if (bocket->_size_use == 0) continue;
+
+				TableNode* table = bocket->_table;
+				for (int i = bocket->_size_use - 1; i >= 0; i--)
+				{
+					lst[cnt++] = &table[i].value;
+				}
+			}
+		}
+	}
+	if (cnt != _itemCount)
+		return false;
+	return true;
+}
+
+
+static void Swap(VarInfo *a, VarInfo *b)
+{
+	VarInfo t = *a;
+	*a = *b;
+	*b = t;
+}
+//
+//static bool CompareGE(TableSortInfo* tsi, VarInfo *a, VarInfo *b)
+//{
+//	VarInfo* args[2];
+//	VarInfo* r;
+//	args[0] = a;
+//	args[1] = b;
+//	tsi->_pN->testCall(&r, tsi->_compareFunction, args, 2);
+//	if (r->GetType() == VAR_BOOL)
+//	{
+//		return r->_bl;
+//	}
+//	return false;
+//}
+
+void quickSort(CNeoVMWorker* pN, int compare, VarInfo** array, int start, int end)
+{
+	int left = start + 1;
+	int right = end;
+	VarInfo* pivot = array[start];
+
+	VarInfo* args[2];
+	VarInfo* r;
+	args[1] = pivot;
+
+	while (left <= right)
+	{
+		while (left <= end)
+		{
+			args[0] = array[left];
+			pN->testCall(&r, compare, args, 2);
+			if (r->GetType() != VAR_BOOL) break; // error
+			if (!r->_bl) break;
+			left++;
+		}
+		while (right > start)
+		{
+			args[0] = array[right];
+			pN->testCall(&r, compare, args, 2);
+			if (r->GetType() != VAR_BOOL) break; // error
+			if (r->_bl) break;
+			right--;
+		}
+
+		if (right < left)	// ¾ù°¥¸²
+			Swap(array[right], pivot);
+		else
+			Swap(array[right], array[left]);
+	}
+	
+	if(start < right - 1)
+		quickSort(pN, compare, array, start, right - 1);
+	if(right + 1 < end)
+		quickSort(pN, compare, array, right + 1, end);
+}
 

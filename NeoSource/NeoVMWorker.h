@@ -132,7 +132,7 @@ struct FunctionPtr
 
 
 struct TableInfo;
-struct TableNode;
+struct TableBocket3;
 
 
 #pragma pack(1)
@@ -141,7 +141,9 @@ struct TableIterator
 	u16			_hash1;
 	u16			_hash2;
 	u16			_hash3;
-	TableNode*	_node;
+
+	u16			_offset;
+	TableBocket3*	_bocket;
 };
 #pragma pack()
 
@@ -192,11 +194,11 @@ public:
 };
 #pragma pack()
 
-struct TableData
-{
-	VarInfo	key;
-	VarInfo	value;
-};
+//struct TableData
+//{
+//	VarInfo	key;
+//	VarInfo	value;
+//};
 
 #include "NeoVMTable.h"
 
@@ -288,6 +290,8 @@ private:
 	clock_t					_preClock;
 	TableInfo*				_pCallTableInfo = NULL;
 
+	int m_iTimeout = -1;
+	int m_iCheckOpCount = 1000;
 
 	void	SetCodeData(u8* p, int sz)
 	{
@@ -319,7 +323,7 @@ private:
 
 	bool	Setup(int iFunctionID);
 	bool	Start(int iFunctionID);
-	bool	Run(bool isSliceRun, int iTimeout = -1, int iCheckOpCount = 1000);
+	bool	Run(int iBreakingCallStack = 0);
 
 	inline VarInfo* GetVarPtr1(SVMOperation& OP)
 	{
@@ -339,21 +343,25 @@ private:
 	inline VarInfo* GetVarPtr_S(short n) { return &m_sVarStack[_iSP_Vars + n]; }
 	inline VarInfo* GetVarPtr_G(short n) { return &(*m_pVarGlobal)[n]; }
 
-
+public:
 	void Var_AddRef(VarInfo *d);
 	void Var_Release(VarInfo *d);
 	void Var_SetNone(VarInfo *d);
+private:
 	void Var_SetInt(VarInfo *d, int v);
 	void Var_SetFloat(VarInfo *d, double v);
 	void Var_SetBool(VarInfo *d, bool v);
 	void Var_SetString(VarInfo *d, const char* str);
+	void Var_SetStringA(VarInfo *d, const std::string& str);
 	void Var_SetTable(VarInfo *d, TableInfo* p);
 	void Var_SetFun(VarInfo* d, int fun_index);
 	void Var_SetTableFun(VarInfo* d, FunctionPtrNative fun);
 
 
-	void Swap(VarInfo* v1, VarInfo* v2);
+public:
 	void Move(VarInfo* v1, VarInfo* v2);
+	void Swap(VarInfo* v1, VarInfo* v2);
+private:
 	void MoveMinus(VarInfo* v1, VarInfo* v2);
 	void Add2(VarInfo* r, VarInfo* v2);
 	void Sub2(VarInfo* r, VarInfo* v2);
@@ -371,7 +379,7 @@ private:
 	bool CompareGR(VarInfo* v1, VarInfo* v2);
 	bool CompareGE(VarInfo* v1, VarInfo* v2);
 	bool ForEach(VarInfo* v1, VarInfo* v2);
-	int Sleep(bool isSliceRun, int iTimeout, VarInfo* v1);
+	int Sleep(int iTimeout, VarInfo* v1);
 	void Call(int n1, int n2, VarInfo* pReturnValue = NULL);
 	bool Call_MetaTable(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, VarInfo* b);
 
@@ -543,7 +551,7 @@ public:
 	}
 
 	template<typename RVal, typename ... Types>
-	bool Call_TL(int iTimeout, int iCheckOpCount, RVal* r, int iFID, Types ... args)
+	bool Call_TL(RVal* r, int iFID, Types ... args)
 	{
 		ClearArgs();
 		PushArgs(args...);
@@ -551,7 +559,7 @@ public:
 		if (false == Setup(iFID))
 			return false;
 
-		Run(false, iTimeout, iCheckOpCount);
+		Run();
 		if (_isSetup == true)
 		{	// yet ... not completed
 			GC();
@@ -564,7 +572,7 @@ public:
 	}
 
 	template<typename ... Types>
-	bool CallN_TL(int iTimeout, int iCheckOpCount, int iFID, Types ... args)
+	bool CallN_TL(int iFID, Types ... args)
 	{
 		ClearArgs();
 		PushArgs(args...);
@@ -572,7 +580,7 @@ public:
 		if (false == Setup(iFID))
 			return false;
 
-		Run(false, iTimeout, iCheckOpCount);
+		Run();
 		if (_isSetup == true)
 		{	// yet ... not completed
 			GC();
@@ -583,6 +591,10 @@ public:
 		ReturnValue();
 		return true;
 	}
+
+	bool testCall(VarInfo** r, int iFID, VarInfo* args[], int argc);
+
+
 	static void neo_pushcclosureNative(FunctionPtrNative* pOut, Neo_NativeFunction pFun)
 	{
 		pOut->_func = pFun;

@@ -90,7 +90,7 @@ void CNeoVMWorker::Var_SetNone(VarInfo *d)
 		if (d->IsAllocType())
 			Var_Release(d);
 
-		d->SetType(VAR_NONE);
+		d->ClearType();
 	}
 }
 
@@ -105,8 +105,12 @@ void CNeoVMWorker::Var_SetBool(VarInfo *d, bool v)
 	}
 	d->_bl = v;
 }
-
 void CNeoVMWorker::Var_SetString(VarInfo *d, const char* str)
+{
+	Var_SetStringA(d, str);
+}
+
+void CNeoVMWorker::Var_SetStringA(VarInfo *d, const std::string& str)
 {
 	if (d->IsAllocType())
 		Var_Release(d);
@@ -280,7 +284,7 @@ void CNeoVMWorker::Add2(VarInfo* r, VarInfo* v2)
 	case VAR_STRING:
 		if (v2->GetType() == VAR_STRING)
 		{
-			Var_SetString(r, (r->_str->_str + v2->_str->_str).c_str());
+			Var_SetStringA(r, r->_str->_str + v2->_str->_str);
 			return;
 		}
 		break;
@@ -429,7 +433,7 @@ void CNeoVMWorker::Add(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	case VAR_STRING:
 		if (v2->GetType() == VAR_STRING)
 		{
-			Var_SetString(r, (r->_str->_str + v2->_str->_str).c_str());
+			Var_SetStringA(r, r->_str->_str + v2->_str->_str);
 			return;
 		}
 		break;
@@ -601,6 +605,14 @@ bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
 	{
+	case VAR_NONE:
+		if (v2->GetType() == VAR_NONE)
+			return true;
+		break;
+	case VAR_BOOL:
+		if (v2->GetType() == VAR_BOOL)
+			return v1->_bl == v2->_bl;
+		break;
 	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 			return v1->_int == v2->_int;
@@ -613,13 +625,9 @@ bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float == v2->_float;
 		break;
-	case VAR_BOOL:
-		if (v2->GetType() == VAR_BOOL)
-			return v1->_bl == v2->_bl;
-		break;
-	case VAR_NONE:
-		if (v2->GetType() == VAR_NONE)
-			return true;
+	case VAR_STRING:
+		if (v2->GetType() == VAR_STRING)
+			return v1->_str->_str == v2->_str->_str;
 		break;
 	}
 	return false;
@@ -640,6 +648,10 @@ bool CNeoVMWorker::CompareGR(VarInfo* v1, VarInfo* v2)
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float > v2->_float;
 		break;
+	case VAR_STRING:
+		if (v2->GetType() == VAR_STRING)
+			return v1->_str->_str > v2->_str->_str;
+		break;
 	}
 	SetError("CompareGR Error");
 	return false;
@@ -659,6 +671,10 @@ bool CNeoVMWorker::CompareGE(VarInfo* v1, VarInfo* v2)
 			return v1->_float >= v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float >= v2->_float;
+		break;
+	case VAR_STRING:
+		if (v2->GetType() == VAR_STRING)
+			return v1->_str->_str >= v2->_str->_str;
 		break;
 	}
 	SetError("CompareGE Error");
@@ -686,11 +702,12 @@ bool CNeoVMWorker::ForEach(VarInfo* pTable, VarInfo* pKey)
 	else
 		it = tbl->NextNode(pIterator->_it);
 
-	if (it._node)
+	if (it._bocket)
 	{
 		pIterator->_it = it;
-		Move(pKey, &it._node->_data.key);
-		Move(pValue, &it._node->_data.value);
+		TableNode* n = &it._bocket->_table[it._offset];
+		Move(pKey, &n->key);
+		Move(pValue, &n->value);
 		return true;
 	}
 	else
@@ -706,7 +723,7 @@ bool CNeoVMWorker::ForEach(VarInfo* pTable, VarInfo* pKey)
 //  0 : SlieceRun
 //  1 : Continue
 //  2 : Timeout - 
-int CNeoVMWorker::Sleep(bool isSliceRun, int iTimeout, VarInfo* v1)
+int CNeoVMWorker::Sleep(int iTimeout, VarInfo* v1)
 {
 	int iSleepTick;
 	switch (v1->GetType())
@@ -722,7 +739,7 @@ int CNeoVMWorker::Sleep(bool isSliceRun, int iTimeout, VarInfo* v1)
 		return -1;
 	}
 
-	if (isSliceRun)
+	if (iTimeout >= 0)
 	{
 		_iRemainSleep = iSleepTick;
 		return 0;
@@ -927,12 +944,9 @@ void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 
 bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo* r, VarInfo* a, VarInfo* b)
 {
-	VarInfo* p = pTable->_tbl->GetTableItem(g_metaString);
-	if (p == NULL)
+	if (pTable->_tbl->_meta == NULL)
 		return false;
-	if (p->GetType() != VAR_TABLE)
-		return false;
-	VarInfo* pVarItem = p->_tbl->GetTableItem(funName);
+	VarInfo* pVarItem = pTable->_tbl->_meta->GetTableItem(funName);
 	if (pVarItem == NULL)
 		return false;
 
@@ -1005,7 +1019,7 @@ bool	CNeoVMWorker::Start(int iFunctionID)
 	if(false == Setup(iFunctionID))
 		return false;
 
-	return Run(false);
+	return Run();
 }
 
 bool	CNeoVMWorker::Setup(int iFunctionID)
@@ -1035,26 +1049,7 @@ bool	CNeoVMWorker::Setup(int iFunctionID)
 	return true;
 }
 
-#define ARG0		0x07
-
-#define ARG1_S		0x07
-#define ARG1_G		0x03
-
-#define ARG2_SS		0x07
-#define ARG2_SG		0x05
-#define ARG2_GS		0x03
-#define ARG2_GG		0x01
-
-#define ARG3_SSS	0x07
-#define ARG3_SSG	0x06
-#define ARG3_SGS	0x05
-#define ARG3_SGG	0x04
-#define ARG3_GSS	0x03
-#define ARG3_GSG	0x02
-#define ARG3_GGS	0x01
-#define ARG3_GGG	0x00
-
-bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
+bool	CNeoVMWorker::Run(int iBreakingCallStack)
 {
 	if (false == _isSetup)
 		return false;
@@ -1080,7 +1075,7 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 	SVMOperation OP;
 
 	int op_process = 0;
-	bool isTimeout = (iTimeout >= 0);
+	bool isTimeout = (m_iTimeout >= 0);
 	if(isTimeout)
 		_preClock = clock();
 
@@ -1218,11 +1213,11 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 				break;
 
 			case NOP_STR_ADD:	// ..
-				Var_SetString(GetVarPtr1(OP), (ToString(GetVarPtr2(OP)) + ToString(GetVarPtr3(OP))).c_str());
+				Var_SetStringA(GetVarPtr1(OP), ToString(GetVarPtr2(OP)) + ToString(GetVarPtr3(OP)));
 				break;
 
 			case NOP_TOSTRING:
-				Var_SetString(GetVarPtr1(OP), ToString(GetVarPtr2(OP)).c_str());
+				Var_SetStringA(GetVarPtr1(OP), ToString(GetVarPtr2(OP)));
 				break;
 			case NOP_TOINT:
 				Var_SetInt(GetVarPtr1(OP), ToInt(GetVarPtr2(OP)));
@@ -1234,11 +1229,11 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 				Var_SetInt(GetVarPtr1(OP), ToSize(GetVarPtr2(OP)));
 				break;
 			case NOP_GETTYPE:
-				Var_SetString(GetVarPtr1(OP), GetType(GetVarPtr2(OP)).c_str());
+				Var_SetStringA(GetVarPtr1(OP), GetType(GetVarPtr2(OP)));
 				break;
 			case NOP_SLEEP:
 				{
-					int r = Sleep(isSliceRun, iTimeout, GetVarPtr1(OP));
+					int r = Sleep(m_iTimeout, GetVarPtr1(OP));
 					if (r == 0)
 					{
 						_preClock = clock();
@@ -1246,7 +1241,7 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 					}
 					else if (r == 2)
 					{
-						op_process = iCheckOpCount;
+						op_process = m_iCheckOpCount;
 					}
 				}
 				break;
@@ -1328,7 +1323,8 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 				else
 					Move(&m_sVarStack[_iSP_Vars], GetVarPtr1(OP));
 
-				if (m_sCallStack.empty())
+				//if (m_sCallStack.empty())
+				if(iBreakingCallStack == (int)m_sCallStack.size())
 				{
 					_isSetup = false;
 					return true;
@@ -1346,7 +1342,8 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 				break;
 			case NOP_FUNEND:
 				Var_Release(&m_sVarStack[_iSP_Vars]); // Clear
-				if (m_sCallStack.empty())
+				if (iBreakingCallStack == (int)m_sCallStack.size())
+				//if (m_sCallStack.empty())
 				{
 					_isSetup = false;
 					return true;
@@ -1395,13 +1392,13 @@ bool	CNeoVMWorker::Run(bool isSliceRun, int iTimeout, int iCheckOpCount)
 				_pVM->_sErrorMsgDetail = chMsg;
 				return false;
 			}
-			if (iTimeout >= 0)
+			if (isTimeout)
 			{
-				if (++op_process >= iCheckOpCount)
+				if (++op_process >= m_iCheckOpCount)
 				{
 					op_process = 0;
 					t2 = clock() - _preClock;
-					if (t2 >= iTimeout || t2 < 0)
+					if (t2 >= m_iTimeout || t2 < 0)
 						break;
 				}
 			}
@@ -1444,8 +1441,55 @@ bool CNeoVMWorker::RunFunction(const std::string& funName)
 
 void CNeoVMWorker::PushString(const char* p)
 {
+	std::string s(p);
 	VarInfo d;
 	d.SetType(VAR_STRING);
-	d._str = _pVM->StringAlloc(p);
+	d._str = _pVM->StringAlloc(s);
 	_args.push_back(d);
+}
+
+bool CNeoVMWorker::testCall(VarInfo** r, int iFID, VarInfo* args[], int argc)
+{
+	if (_isSetup == false)
+		return false;
+
+	SFunctionTable fun = _pVM->m_sFunctionPtr[iFID];
+	if (argc != fun._argsCount)
+		return false;
+
+	int save_Code = GetCodeptr();
+	int save_iSP_Vars = _iSP_Vars;
+	int save__iSP_VarsMax = iSP_VarsMax;
+
+	SetCodePtr(fun._codePtr);
+
+//	_iSP_Vars = 0;// _header._iStaticVarCount;
+	_iSP_Vars = iSP_VarsMax;
+	iSP_VarsMax = _iSP_Vars + fun._localAddCount;
+	if (_iSP_Vars_Max2 < iSP_VarsMax)
+		_iSP_Vars_Max2 = iSP_VarsMax;
+
+	//_iSP_Vars_Max2 = iSP_VarsMax;
+
+	if (argc > fun._argsCount)
+		argc = fun._argsCount;
+
+	int iCur;
+	for (iCur = 0; iCur < argc; iCur++)
+		Move(&m_sVarStack[1 + _iSP_Vars + iCur], args[iCur]);
+	for (; iCur < fun._argsCount; iCur++)
+		Var_Release(&m_sVarStack[1 + _iSP_Vars + iCur]);
+
+	Run((int)m_sCallStack.size());
+
+	_read(&m_sVarStack[_iSP_Vars], *r);
+
+	SetCodePtr(save_Code);
+	_iSP_Vars = save_iSP_Vars;
+	iSP_VarsMax = save__iSP_VarsMax;
+
+	//GC();
+	
+	_isSetup = true;
+	return true;
 }

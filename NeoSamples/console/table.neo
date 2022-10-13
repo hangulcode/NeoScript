@@ -1,5 +1,23 @@
 
-fun sub1()
+fun dumpTable(var o)
+{
+    if( type(o) == "table")
+	{
+        var s = "{ ";
+        foreach(var k, v in o)
+		{
+            // key 가 숫자가 아닌 경우 "key" 
+            if( type(k) != "int" )
+                k = " "..k.. " " ;
+            s = s .. "[".. k .."] = " .. dumpTable(v) .. ",";
+        }
+        return s .. "} ";
+	}
+    else
+        return tostring(o);
+}
+
+fun Fun_General()
 {
 	var table = {};
 	table[5] = 3;
@@ -27,55 +45,74 @@ fun sub1()
 	}
 	system.print("\nTable Size : " ..tosize(table).."\n\n");
 }
-fun sub2()
+
+
+
+fun sortNumber(var a, var b) 
+{
+	return a < b;
+}
+
+fun sortName(var a, var b) 
+{
+	return a.name < b.name;
+}
+
+fun sortNationality(var a, var b) 
+{
+	return a["nationality"] < b["nationality"];
+}
+
+fun fun_Sort()
 {
 	//var table = { "cc"={"aa" = "bb",100,101,102}, 1, 2, 3, 4, 5, "test", 65 };
-	var table = { 10, 11, 100=12,"test", 13 };
-	foreach(var a, b in table)
-	{
-		system.print(a ..":"..b .. "\n");
-		sleep(200);
-	}
-	system.print("\nTable Size : " ..tosize(table).."\n\n");
+	//var table = { 10, 11, 100=12,"test", 13 };
+	var tableNumber = { 5, 3, 1, 4, 7, 2 };
+
+	system.print("Before    : " .. dumpTable(tableNumber) .. "\n");
+	system.sort(tableNumber, sortNumber);
+	system.print("Ascending : " .. dumpTable(tableNumber) .. "\n");
+	
+	var tablePeople = {
+		{"nationality" = "Ameraca", "name" = "James"},
+		{"nationality" = "Korea",   "name" = "Alice"},
+		{"nationality" = "Japan",   "name" = "Donard"},
+	};
+
+	system.print("Before : " .. dumpTable(tablePeople) .. "\n");
+
+	system.sort(tablePeople, sortName);
+	system.print("Name   : " .. dumpTable(tablePeople) .. "\n");
+
+	system.sort(tablePeople, sortNationality);
+	system.print("Nation : " .. dumpTable(tablePeople) .. "\n");
 }
-fun sub3()
+
+fun Fun_Performanc()
 {
 	var table = {};
 	var tm = system.clock();
-	//for (var i = 1; i <= 10000000; i++)
-	for (var i = 1; i <= 10000; i++)
+	//for (var i = 1; i <= 10000000; i++) // release
+	for (var i = 1; i <= 10000; i++) // debug
 	{
 		table[i] = i;
 	}
 	var sum = 0.0;
-	system.print("\nTable Size : " ..tosize(table).." Sum " .. sum .. "");
-	system.print(" time : " .. (system.clock() - tm)  .. "\n\n");
+	system.print("\nTable Size : " ..tosize(table));
+	system.print("\nInsert Time : " .. (system.clock() - tm)  .. "\n\n");
 
 	tm = system.clock();
 	foreach(var a, b in table)
 	{
-		//system.print(a ..":"..b .. "\n");
 		sum += b;
 	}
 	system.print("\nTable Size : " ..tosize(table).." Sum " .. sum .. "");
-	system.print(" time : " .. (system.clock() - tm) .. "\n\n");
-}
-fun sub4()
-{
-	var table = {};
-	table[1] = 10;
-	table[2] = 20;
-	var sum = 0;
-	foreach(var a, b in table)
-	{
-		sum += b;
-	}
-	system.print(" time : ");
+	system.print("\nLoop  Time : " .. (system.clock() - tm) .. "\n\n");
 }
 
 export fun main()
 {
-	sub1();
-	sub2();
-	sub3();
+	Fun_General();
+	fun_Sort();
+	Fun_Performanc();
 }

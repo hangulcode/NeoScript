@@ -35,7 +35,7 @@ fun Vector3_MetaTable(var r)
 		staticVector3Meta["+"] = Vector3_Add;
 		staticVector3Meta["-"] = Vector3_Sub;
 	}
-	r["_Meta_Table_"] = staticVector3Meta;
+	system.meta(r, staticVector3Meta);
 }
 
 

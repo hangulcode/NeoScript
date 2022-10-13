@@ -18,13 +18,14 @@ int SAMPLE_time_limit()
 	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
 	if (pVM != NULL)
 	{
+		pVM->SetTimeout(-1, 100, 1000); // -1 is main worker
 		printf("Compile Success. Code : %d bytes !!\n\n", pVM->GetBytesSize());
 
 		for (int i = 1; i < 10; i++)
 		{
 			DWORD t1 = GetTickCount();
 			double r = 0;
-			bool bCompleted = pVM->Call_TL<double>(100, 1000, &r, "TimeTest");
+			bool bCompleted = pVM->Call_TL<double>(&r, "TimeTest");
 			DWORD t2 = GetTickCount();
 			if (false == bCompleted)
 			{

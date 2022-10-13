@@ -1068,8 +1068,19 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 				SetCompileError(ar, "Error (%d, %d): Call is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
 				return false;
 			}
-			if (false == ParseFunCall(iTempOffset, tkTypePre, pFun, ar, funs, vars))
-				return false;
+
+			tkType2 = GetToken(ar, tk2);
+			if (tkType2 == TK_L_SMALL)
+			{
+				ar.PushToken(tkType2, tk2);
+				if (false == ParseFunCall(iTempOffset, tkTypePre, pFun, ar, funs, vars))
+					return false;
+			}
+			else
+			{
+				ar.PushToken(tkType2, tk2);
+				iTempOffset._iVar = pFun->_staticIndex;
+			}
 		}
 		else
 		{

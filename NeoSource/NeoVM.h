@@ -38,17 +38,19 @@ private:
 	void Var_AddRef(VarInfo *d);
 	void Var_Release(VarInfo *d);
 	void Var_SetString(VarInfo *d, const char* str);
+	void Var_SetStringA(VarInfo *d, const std::string& str);
 	void Var_SetTable(VarInfo *d, TableInfo* p);
 
 
 	CNeoVMWorker* WorkerAlloc(int iStackSize);
 	void FreeWorker(CNeoVMWorker *d);
 
-	StringInfo* StringAlloc(const char* str);
+	StringInfo* StringAlloc(const std::string& str);
 	void FreeString(VarInfo *d);
 
 	TableInfo* TableAlloc();
-	void FreeTable(VarInfo *d);
+	void FreeTable(VarInfo* d);
+	void FreeTable(TableInfo* tbl);
 
 public:
 
@@ -114,7 +116,7 @@ public:
 	}
 
 	template<typename RVal, typename ... Types>
-	bool Call_TL(int iTimeout, int iCheckOpCount, RVal* r, const std::string& funName, Types ... args) // Time Limit
+	bool Call_TL(RVal* r, const std::string& funName, Types ... args) // Time Limit
 	{
 		int iFID = -1;
 		auto it = m_sImExportTable.find(funName);
@@ -123,11 +125,11 @@ public:
 
 		iFID = (*it).second;
 
-		return _pMainWorker->Call_TL<RVal>(iTimeout, iCheckOpCount, r, iFID, args...);
+		return _pMainWorker->Call_TL<RVal>(r, iFID, args...);
 	}
 
 	template<typename ... Types>
-	bool CallN_TL(int iTimeout, int iCheckOpCount, const std::string& funName, Types ... args) // Time Limit
+	bool CallN_TL(const std::string& funName, Types ... args) // Time Limit
 	{
 		int iFID = -1;
 		auto it = m_sImExportTable.find(funName);
@@ -136,14 +138,15 @@ public:
 
 		iFID = (*it).second;
 
-		return _pMainWorker->CallN_TL(iTimeout, iCheckOpCount, iFID, args...);
+		return _pMainWorker->CallN_TL(iFID, args...);
 	}
 
 	u32 CreateWorker(int iStackSize = 50 * 1024);
 	bool ReleaseWorker(u32 id);
 	bool BindWorkerFunction(u32 id, const std::string& funName);
+	bool SetTimeout(u32 id, int iTimeout = -1, int iCheckOpCount = 1000);
 	bool IsWorking(u32 id);
-	bool UpdateWorker(u32 id, int iTimeout = -1, int iCheckOpCount = 1000);
+	bool UpdateWorker(u32 id);
 
 
 	inline const char* GetLastErrorMsg() { return _sErrorMsgDetail.c_str();  }
