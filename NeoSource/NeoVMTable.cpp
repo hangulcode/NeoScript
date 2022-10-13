@@ -209,7 +209,7 @@ void TableInfo::Free(CNeoVM* pVM)
 						Var_Release(pVM, &pCur->value);
 					}
 				}
-				if(bocket->_table)
+				if(bocket->_table && bocket2[hash2]._capa[hash3] > DefualtTableSize)
 					free(bocket->_table);
 			}
 			free(bocket3);
@@ -350,6 +350,8 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 	{
 		_bocket1 = (TableBocket1*)malloc(sizeof(TableBocket1) * MAX_TABLE);
 		memset(_bocket1, 0, sizeof(TableBocket1) * MAX_TABLE);
+
+//		m_sPool3.Init(sizeof(TableNode) * DefualtTableSize, 100);
 	}
 
 	TableBocket2* bocket2 = _bocket1[hash1]._bocket2;
@@ -375,7 +377,8 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 	int iSelect = -1;
 	if (bocket2[hash2]._capa[hash3] == 0)
 	{
-		TableNode* table = (TableNode*)malloc(sizeof(TableNode) * DefualtTableSize);
+		//TableNode* table = (TableNode*)malloc(sizeof(TableNode) * DefualtTableSize);
+		TableNode* table = bocket->_default;
 		for (int i = 0; i < DefualtTableSize; i++) { table[i].key.SetType(VAR_NONE); table[i].value.SetType(VAR_NONE); }
 		bocket->_table = table;
 		bocket2[hash2]._capa[hash3] = DefualtTableSize;
@@ -408,7 +411,7 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 
 			table = (TableNode*)malloc(sizeof(TableNode) * iNewTableSize);
 			memcpy(table, bocket->_table, sizeof(TableNode) * iPreTableSize);
-			if (bocket->_table) free(bocket->_table);
+			if (bocket->_table && iPreTableSize > DefualtTableSize) free(bocket->_table);
 
 			for (int i = iPreTableSize; i < iNewTableSize; i++) { table[i].key.SetType(VAR_NONE); table[i].value.SetType(VAR_NONE); }
 
