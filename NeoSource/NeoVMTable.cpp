@@ -410,9 +410,7 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 			memcpy(table, bocket->_table, sizeof(TableNode) * iPreTableSize);
 			if (bocket->_table) free(bocket->_table);
 
-			int AddCount = iNewTableSize - iPreTableSize;
-			TableNode* table2 = table + iPreTableSize;
-			for (int i = 0; i < AddCount; i++) { table2[i].key.SetType(VAR_NONE); table2[i].value.SetType(VAR_NONE); }
+			for (int i = iPreTableSize; i < iNewTableSize; i++) { table[i].key.SetType(VAR_NONE); table[i].value.SetType(VAR_NONE); }
 
 			bocket->_table = table;
 			bocket2[hash2]._capa[hash3] = iNewTableSize;

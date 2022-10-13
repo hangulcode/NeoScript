@@ -90,7 +90,7 @@ void CNeoVMWorker::Var_SetNone(VarInfo *d)
 		if (d->IsAllocType())
 			Var_Release(d);
 
-		d->SetType(VAR_NONE);
+		d->ClearType();
 	}
 }
 
@@ -228,6 +228,7 @@ void CNeoVMWorker::Move(VarInfo* v1, VarInfo* v2)
 		++v1->_tbl->_refCount;
 		break;
 	case VAR_FUN:
+		Var_Release(v1);
 		v1->SetType(v2->GetType());
 		v1->_fun_index = v2->_fun_index;
 		break;
