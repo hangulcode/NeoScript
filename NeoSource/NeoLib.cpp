@@ -215,7 +215,7 @@ bool util_meta(CNeoVMWorker* pN, short args)
 }
 
 
-void quickSort(CNeoVMWorker* pN, int compare, VarInfo** array, int start, int end);
+void quickSort(CNeoVMWorker* pN, int compare, std::vector<VarInfo*>& lst);
 bool alg_sort(CNeoVMWorker* pN, short args)
 {
 	if (args != 2) // table, fun
@@ -234,7 +234,16 @@ bool alg_sort(CNeoVMWorker* pN, short args)
 		return false;
 	if (lst.size() >= 2)
 	{
-		quickSort(pN, pFun->_fun_index, &lst[0], 0, (int)lst.size() - 1);
+		std::vector<VarInfo*> lstSorted = lst;
+		quickSort(pN, pFun->_fun_index, lstSorted);
+
+		std::vector<VarInfo> lst3;
+		lst3.resize(lstSorted.size());
+		for (int i = 0; i < lstSorted.size(); i++)
+			lst3[i] = *lstSorted[i];
+
+		for (int i = 0; i < lst.size(); i++)
+			*lst[i] = lst3[i];
 	}
 	return true;
 }

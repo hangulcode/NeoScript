@@ -246,6 +246,28 @@ struct TableInfo
 	bool ToList(std::vector<VarInfo*>& lst);
 
 private:
-	void Var_Release(CNeoVM* pVM, VarInfo *d);
+	inline void Var_AddRef(VarInfo *d)
+	{
+		switch (d->GetType())
+		{
+		case VAR_STRING:
+			++d->_str->_refCount;
+			break;
+		case VAR_TABLE:
+			++d->_tbl->_refCount;
+			break;
+		default:
+			break;
+		}
+	}
+	void Var_ReleaseInternal(CNeoVM* pVM, VarInfo *d);
+	inline void Var_Release(CNeoVM* pVM, VarInfo *d)
+	{
+		if (d->IsAllocType())
+			Var_ReleaseInternal(pVM, d);
+		else
+			d->ClearType();
+	}
+
 };
 

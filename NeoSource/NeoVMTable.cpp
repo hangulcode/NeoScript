@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <thread>
 #include <chrono>
+#include <algorithm>
+
 #include "NeoVM.h"
 #include "NeoVMWorker.h"
 #include "NeoVMTable.h"
@@ -160,7 +162,7 @@ TableIterator TableInfo::NextNode(TableIterator r)
 	return r;
 }
 
-void TableInfo::Var_Release(CNeoVM* pVM, VarInfo *d)
+void TableInfo::Var_ReleaseInternal(CNeoVM* pVM, VarInfo *d)
 {
 	switch (d->GetType())
 	{
@@ -179,7 +181,6 @@ void TableInfo::Var_Release(CNeoVM* pVM, VarInfo *d)
 	}
 	d->ClearType();
 }
-
 
 void TableInfo::Free(CNeoVM* pVM)
 {
@@ -366,7 +367,7 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 	if (bocket3 == NULL)
 	{
 		bocket3 = (TableBocket3*)malloc(sizeof(TableBocket3) * MAX_TABLE);
-		memset(bocket3, 0, sizeof(TableBocket3) * MAX_TABLE);
+//		memset(bocket3, 0, sizeof(TableBocket3) * MAX_TABLE);
 		bocket2[hash2]._bocket3 = bocket3;
 
 		bocket2[hash2]._capa = (int*)malloc(sizeof(int) * MAX_TABLE);
@@ -378,9 +379,9 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 	if (bocket2[hash2]._capa[hash3] == 0)
 	{
 		//TableNode* table = (TableNode*)malloc(sizeof(TableNode) * DefualtTableSize);
-		TableNode* table = bocket->_default;
-		for (int i = 0; i < DefualtTableSize; i++) { table[i].key.SetType(VAR_NONE); table[i].value.SetType(VAR_NONE); }
-		bocket->_table = table;
+//		TableNode* table = bocket->_default;
+//		for (int i = 0; i < DefualtTableSize; i++) { table[i].key.SetType(VAR_NONE); table[i].value.SetType(VAR_NONE); }
+		bocket->_table = bocket->_default;
 		bocket2[hash2]._capa[hash3] = DefualtTableSize;
 		bocket->_size_use = 0;
 	}
@@ -420,18 +421,27 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 		}
 		iSelect = bocket->_size_use++;
 		_itemCount++;
-	}
 
-	TableNode* pCur = &bocket->_table[iSelect];
-	if (pVMW)
-	{
-		pVMW->Move(&pCur->key, pKey);
-		pVMW->Move(&pCur->value, pValue);
+		TableNode* pCur = &bocket->_table[iSelect];
+		pCur->key = *pKey;
+		pCur->value = *pValue;
+
+		if (pKey->IsAllocType()) Var_AddRef(pKey);
+		if (pValue->IsAllocType()) Var_AddRef(pValue);
 	}
 	else
 	{
-		pCur->key = *pKey;
-		pCur->value = *pValue;
+		TableNode* pCur = &bocket->_table[iSelect];
+		if (pVMW)
+		{
+			pVMW->Move(&pCur->key, pKey);
+			pVMW->Move(&pCur->value, pValue);
+		}
+		else
+		{
+			pCur->key = *pKey;
+			pCur->value = *pValue;
+		}
 	}
 }
 void TableInfo::Remove(CNeoVMWorker* pVMW, VarInfo* pKey)
@@ -584,44 +594,31 @@ static void Swap(VarInfo *a, VarInfo *b)
 //	return false;
 //}
 
-void quickSort(CNeoVMWorker* pN, int compare, VarInfo** array, int start, int end)
+struct Local 
 {
-	int left = start + 1;
-	int right = end;
-	VarInfo* pivot = array[start];
+	CNeoVMWorker*	m_pN;
+	int				m_compare;
 
-	VarInfo* args[2];
-	VarInfo* r;
-	args[1] = pivot;
-
-	while (left <= right)
+	Local(CNeoVMWorker* pN, int compare) : m_pN(pN), m_compare(compare) {}
+	bool operator () (VarInfo* a, VarInfo* b)
 	{
-		while (left <= end)
+		VarInfo* args[2];
+		VarInfo* r;
+		args[0] = a;
+		args[1] = b;
+		m_pN->testCall(&r, m_compare, args, 2);
+		if (r->GetType() == VAR_BOOL)
 		{
-			args[0] = array[left];
-			pN->testCall(&r, compare, args, 2);
-			if (r->GetType() != VAR_BOOL) break; // error
-			if (!r->_bl) break;
-			left++;
+			return r->_bl;
 		}
-		while (right > start)
-		{
-			args[0] = array[right];
-			pN->testCall(&r, compare, args, 2);
-			if (r->GetType() != VAR_BOOL) break; // error
-			if (r->_bl) break;
-			right--;
-		}
-
-		if (right < left)	// ¾ù°¥¸²
-			Swap(array[right], pivot);
-		else
-			Swap(array[right], array[left]);
+		return false;
 	}
-	
-	if(start < right - 1)
-		quickSort(pN, compare, array, start, right - 1);
-	if(right + 1 < end)
-		quickSort(pN, compare, array, right + 1, end);
+
+	int paramA;
+};
+
+void quickSort(CNeoVMWorker* pN, int compare, std::vector<VarInfo*>& lst)
+{
+	std::sort(lst.begin(), lst.end(), Local(pN, compare));
 }
 
