@@ -394,6 +394,9 @@ public:
 			v1->_tbl = v2->_tbl;
 			++v1->_tbl->_refCount;
 			break;
+		case VAR_TABLEFUN:
+			v1->_fun = v2->_fun;
+			break;
 		case VAR_FUN:
 			v1->_fun_index = v2->_fun_index;
 			break;

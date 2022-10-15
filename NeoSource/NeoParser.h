@@ -510,6 +510,13 @@ struct SFunctions
 			return NULL;
 		return &(*it).second;
 	}
+	SFunctionInfo*	FindFun(int ifun)
+	{
+		auto it = _funIDs.find(ifun);
+		if (it == _funIDs.end())
+			return NULL;
+		return FindFun((*it).second);
+	}
 
 	int	AddStaticInt(int num)
 	{
