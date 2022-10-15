@@ -479,6 +479,7 @@ struct SFunctions
 {
 	std::map<std::string, SFunctionInfo>_funs;
 	std::map<int, std::string>			_funIDs;
+	std::list<std::string>				_funSequence;
 
 	SFunctionInfo						_cur;
 	std::vector<VarInfo>				_staticVars;

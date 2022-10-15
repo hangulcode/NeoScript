@@ -2332,6 +2332,8 @@ void FinalizeFuction(SFunctions& funs)
 		funs.m_sDebugFinal[i] = (*funs._cur._pDebugData)[i - base];
 
 	funs._cur._pDebugData->resize(iCode_Begin / 8);
+	
+	funs._funSequence.push_back(funs._cur._name);
 }
 
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
@@ -2468,6 +2470,7 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	funs._cur._iCode_Size = funs._cur._code->GetBufferOffset();
 
 	FinalizeFuction(funs);
+	funs._funs[funs._cur._name] = funs._cur;
 
 	if (true == r)
 	{
