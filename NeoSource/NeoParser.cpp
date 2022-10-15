@@ -2264,10 +2264,13 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 
 					funs._cur._name = tk2;
 					funs._cur._funType = funType;
-					funs._cur._code = &funs._codeLocal;
-					funs._cur._pDebugData = &funs.m_sDebugLocal;
+					//funs._codeTemp.SetBufferOffset(0);
+					//funs._cur._iCode_Begin = 0;
+					//funs._cur._code = &funs._codeLocal;
+					//funs._cur._pDebugData = &funs.m_sDebugLocal;
 					if (false == ParseFunction(ar, funs, vars))
 						return false;
+
 
 					funs._cur = save;
 				}
@@ -2326,6 +2329,23 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 	return true;
 }
 
+void FinalizeFuction(SFunctions& funs)
+{
+	int iCode_Begin = funs._cur._iCode_Begin;
+	funs._cur._iCode_Begin = funs._codeFinal.GetBufferOffset();
+
+	funs._codeTemp.SetBufferOffset(iCode_Begin);
+	u8* pSrc = (u8*)funs._codeTemp.GetDataCurrent();
+	funs._codeFinal.Write(pSrc, funs._cur._iCode_Size);
+
+	int base = (int)funs.m_sDebugFinal.size();
+	funs.m_sDebugFinal.resize(funs._codeFinal.GetBufferOffset() / 8);
+	for (int i = base; i < funs.m_sDebugFinal.size(); i++)
+		funs.m_sDebugFinal[i] = (*funs._cur._pDebugData)[i - base];
+
+	funs._cur._pDebugData->resize(iCode_Begin / 8);
+}
+
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	if (false == ParseMiddleArea(NULL, ar, funs, vars))
@@ -2382,8 +2402,14 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 
 	funs._cur._iCode_Size = funs._cur._code->GetBufferOffset() - funs._cur._iCode_Begin;
+	if (funs._cur._iCode_Size)
+	{
+		FinalizeFuction(funs);
+	}
+
 	auto it = funs._funs.find(funs._cur._name);
 	(*it).second = funs._cur;
+
 
 	DelVarsFunction(vars);
 
@@ -2398,8 +2424,8 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	SFunctions funs;
 	funs._cur._funID = 0;
 	funs._cur._name = GLOBAL_INIT_FUN_NAME;
-	funs._cur._code = &funs._codeGlobal;
-	funs._cur._pDebugData = &funs.m_sDebugGlobal;
+	funs._cur._code = &funs._codeTemp;
+	funs._cur._pDebugData = &funs.m_sDebugTemp;
 	funs._cur.Clear();
 
 	SLayerVar* pCurLayer = AddVarsFunction(vars);
@@ -2408,6 +2434,8 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 
 	bool r = ParseFunctionBody(ar, funs, vars);
 	funs._cur._iCode_Size = funs._cur._code->GetBufferOffset();
+
+	FinalizeFuction(funs);
 
 	if (true == r)
 	{

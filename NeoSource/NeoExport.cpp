@@ -96,7 +96,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 	int staticCount = (int)funs._staticVars.size();
 	int localCount = fi._localVarCount;
 
-	CNArchive arRead((u8*)fi._code->GetData() + fi._iCode_Begin, fi._iCode_Size);
+	CNArchive arRead((u8*)funs._codeFinal.GetData() + fi._iCode_Begin, fi._iCode_Size);
 	arRead.SetPointer(0, SEEK_SET);
 
 	int iNewCodeBegin = ar.GetBufferOffset();
@@ -109,7 +109,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		if (arText._debug)
 		{
 			int off = (arRead.GetBufferOffset() + fi._iCode_Begin) / 8;
-			debug_info di = (*fi._pDebugData)[off];
+			debug_info di = (funs.m_sDebugFinal)[off];
 			debugInfo.push_back(di);
 		}
 		//	arRead >> v.dbg;
