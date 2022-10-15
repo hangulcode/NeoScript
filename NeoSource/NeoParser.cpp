@@ -275,7 +275,7 @@ std::string GetTokenString(TK_TYPE tk)
 }
 
 #define GLOBAL_INIT_FUN_NAME	"##_global_##"
-bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars);
+int ParseFunctionBase(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string fname, FUNCTION_TYPE funType); // -1 : error
 
 
 void SkipCurrentLine(CArchiveRdWC& ar)
@@ -1374,6 +1374,16 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 					a = SOperand(iTempOffset2);
 			}
 			break;
+		case TK_FUN: // FUNT_ANONYMOUS ?
+		{
+			int r = ParseFunctionBase(ar, funs, vars, "", FUNT_ANONYMOUS);
+			SFunctionInfo* pFun = funs.FindFun(r);
+			if (pFun == NULL)
+				return TK_NONE; // error
+			operands.push_back(SOperand(pFun->_staticIndex));
+			blApperOperator = true;
+			break;
+		}
 		default:
 			SetCompileError(ar, "Error (%d, %d): Syntex (%s)\n", ar.CurLine(), ar.CurCol(), tk1.c_str());
 			return TK_NONE;
@@ -2184,8 +2194,8 @@ bool ParseSleep(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
-	std::string tk1, tk2, tk3;
-	TK_TYPE tkType1, tkType2, tkType3;
+	std::string tk1, tk2;
+	TK_TYPE tkType1, tkType2;
 	TK_TYPE r;
 
 	SOperand iTempOffset;
@@ -2256,26 +2266,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			}
 			if (tkType2 == TK_STRING)
 			{
-				tkType3 = GetToken(ar, tk3);
-				if (tkType3 == TK_L_SMALL) // 함수
-				{
-					SFunctionInfo save = funs._cur;
-					funs._cur.Clear();
-
-					funs._cur._name = tk2;
-					funs._cur._funType = funType;
-					funs._cur._code = &funs._codeLocal;
-					funs._cur._pDebugData = &funs.m_sDebugLocal;
-					if (false == ParseFunction(ar, funs, vars))
-						return false;
-
-					funs._cur = save;
-				}
-				else
-				{
-					SetCompileError(ar, "Error (%d, %d): Unknow Token(%d,%d) '%s'\n", ar.CurLine(), ar.CurCol(), tk2.c_str(), tkType3, tk2.c_str());
-					return false;
-				}
+				ParseFunctionBase(ar, funs, vars, tk2, funType);
 			}
 			else
 			{
@@ -2326,6 +2317,25 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 	return true;
 }
 
+void FinalizeFuction(SFunctions& funs)
+{
+	int iCode_Begin = funs._cur._iCode_Begin;
+	funs._cur._iCode_Begin = funs._codeFinal.GetBufferOffset();
+
+	funs._codeTemp.SetBufferOffset(iCode_Begin);
+	u8* pSrc = (u8*)funs._codeTemp.GetDataCurrent();
+	funs._codeFinal.Write(pSrc, funs._cur._iCode_Size);
+
+	int base = (int)funs.m_sDebugFinal.size();
+	funs.m_sDebugFinal.resize(funs._codeFinal.GetBufferOffset() / 8);
+	for (int i = base; i < funs.m_sDebugFinal.size(); i++)
+		funs.m_sDebugFinal[i] = (*funs._cur._pDebugData)[i - base];
+
+	funs._cur._pDebugData->resize(iCode_Begin / 8);
+	
+	funs._funSequence.push_back(funs._cur._name);
+}
+
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	if (false == ParseMiddleArea(NULL, ar, funs, vars))
@@ -2346,16 +2356,28 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	if (false == ParseFunctionArg(ar, funs, pCurLayer))
 		return false;
 
-
-	auto itF = funs._funs.find(funs._cur._name);
-	if (itF != funs._funs.end())
+	if (funs._cur._funType != FUNT_ANONYMOUS)
 	{
-		funs._cur = (*itF).second;
+		auto itF = funs._funs.find(funs._cur._name);
+		if (itF != funs._funs.end())
+		{
+			funs._cur = (*itF).second;
+		}
+		else
+		{
+			funs._cur._funID = (int)funs._funs.size() + 1;
+
+			funs._funs[funs._cur._name] = funs._cur; // 이름 먼저 등록
+			funs._funIDs[funs._cur._funID] = funs._cur._name;
+			funs._cur._staticIndex = funs.AddStaticFunction(funs._cur._funID);
+		}
 	}
 	else
 	{
 		funs._cur._funID = (int)funs._funs.size() + 1;
-
+		char ch[128];
+		sprintf_s(ch, _countof(ch), "#@_%d", funs._cur._funID);
+		funs._cur._name = ch;
 		funs._funs[funs._cur._name] = funs._cur; // 이름 먼저 등록
 		funs._funIDs[funs._cur._funID] = funs._cur._name;
 		funs._cur._staticIndex = funs.AddStaticFunction(funs._cur._funID);
@@ -2365,6 +2387,11 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_MIDDLE)
 	{
+		if (funs._cur._funType == FUNT_ANONYMOUS)
+		{
+			SetCompileError(ar, "Error (%d, %d): anonymous function body (%s) %d\n", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), tk1.c_str());
+			return false;
+		}
 		if (tkType1 == TK_SEMICOLON)
 		{
 			DelVarsFunction(vars);
@@ -2382,14 +2409,47 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 
 	funs._cur._iCode_Size = funs._cur._code->GetBufferOffset() - funs._cur._iCode_Begin;
+	if (funs._cur._iCode_Size)
+	{
+		FinalizeFuction(funs);
+	}
+
 	auto it = funs._funs.find(funs._cur._name);
 	(*it).second = funs._cur;
+
 
 	DelVarsFunction(vars);
 
 	return true;
 }
+int ParseFunctionBase(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string fname, FUNCTION_TYPE funType)
+{
+	std::string tk3;
+	auto tkType3 = GetToken(ar, tk3);
+	if (tkType3 == TK_L_SMALL) // 함수
+	{
+		SFunctionInfo save = funs._cur;
+		funs._cur.Clear();
 
+		funs._cur._name = fname;
+		funs._cur._funType = funType;
+		//funs._codeTemp.SetBufferOffset(0);
+		//funs._cur._iCode_Begin = 0;
+		//funs._cur._code = &funs._codeLocal;
+		//funs._cur._pDebugData = &funs.m_sDebugLocal;
+		if (false == ParseFunction(ar, funs, vars))
+			return -1;
+
+		int r = funs._cur._funID;
+		funs._cur = save;
+		return r;
+	}
+	else
+	{
+		SetCompileError(ar, "Error (%d, %d): Unknow Token(%d,%d) '%s'\n", ar.CurLine(), ar.CurCol(), fname.c_str(), tkType3, fname.c_str());
+	}
+	return -1;
+}
 bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 {
 	ar.m_sTokenQueue.clear();
@@ -2398,8 +2458,8 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	SFunctions funs;
 	funs._cur._funID = 0;
 	funs._cur._name = GLOBAL_INIT_FUN_NAME;
-	funs._cur._code = &funs._codeGlobal;
-	funs._cur._pDebugData = &funs.m_sDebugGlobal;
+	funs._cur._code = &funs._codeTemp;
+	funs._cur._pDebugData = &funs.m_sDebugTemp;
 	funs._cur.Clear();
 
 	SLayerVar* pCurLayer = AddVarsFunction(vars);
@@ -2408,6 +2468,9 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 
 	bool r = ParseFunctionBody(ar, funs, vars);
 	funs._cur._iCode_Size = funs._cur._code->GetBufferOffset();
+
+	FinalizeFuction(funs);
+	funs._funs[funs._cur._name] = funs._cur;
 
 	if (true == r)
 	{

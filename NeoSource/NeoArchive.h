@@ -51,7 +51,15 @@ public:
 	{
 		return m_iOffset;
 	}
-    inline int GetBufferSize()
+	inline void SetBufferOffset(int offset)
+	{
+		m_iOffset = offset;
+		if (m_iOffset < 0)
+			m_iOffset = 0;
+		if (m_iOffset > m_iSize)
+			m_iOffset = m_iSize;
+	}
+	inline int GetBufferSize()
 	{
 		return m_iSize;
 	}

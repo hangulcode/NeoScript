@@ -150,13 +150,16 @@ struct SFunctionInfo
 	CNArchive*					_code = NULL;
 	int							_iCode_Begin = 0;
 	int							_iCode_Size = 0;
-	std::map<int, debug_info>*	_pDebugData = nullptr;
+	std::vector<debug_info>*	_pDebugData = nullptr;
 
 	void Clear()
 	{
 		_args.clear();
 		_localVarCount = 0;
 		_localTempMax = _localTempCount = 0;
+
+		_iCode_Begin = 0;
+		_iCode_Size = 0;
 	}
 
 	int	AllocLocalTempVar()
@@ -204,8 +207,11 @@ struct SFunctionInfo
 	void	AddDebugData(CArchiveRdWC& ar)
 	{
 		if (ar._debug == false) return;
-		int iOff = _code->GetBufferOffset();
-		(*_pDebugData)[iOff / 8] = debug_info(ar.CurFile(), ar.CurLine());
+		int iOff = _code->GetBufferOffset() / 8;
+		if (_pDebugData->size() < iOff + 1)
+			_pDebugData->resize(iOff + 1);
+
+		(*_pDebugData)[iOff] = debug_info(ar.CurFile(), ar.CurLine());
 	}
 	void	Push_OP(CArchiveRdWC& ar, eNOperation op, short r, short a1, short a2)
 	{
@@ -473,15 +479,16 @@ struct SFunctions
 {
 	std::map<std::string, SFunctionInfo>_funs;
 	std::map<int, std::string>			_funIDs;
+	std::list<std::string>				_funSequence;
 
 	SFunctionInfo						_cur;
 	std::vector<VarInfo>				_staticVars;
 
-	CNArchive		_codeGlobal;
-	CNArchive		_codeLocal;
+	CNArchive		_codeFinal;
+	CNArchive		_codeTemp;
 
-	std::map<int, debug_info> m_sDebugGlobal;
-	std::map<int, debug_info> m_sDebugLocal;
+	std::vector<debug_info> m_sDebugFinal;
+	std::vector<debug_info> m_sDebugTemp;
 
 	~SFunctions()
 	{
@@ -503,6 +510,13 @@ struct SFunctions
 		if (it == _funs.end())
 			return NULL;
 		return &(*it).second;
+	}
+	SFunctionInfo*	FindFun(int ifun)
+	{
+		auto it = _funIDs.find(ifun);
+		if (it == _funIDs.end())
+			return NULL;
+		return FindFun((*it).second);
 	}
 
 	int	AddStaticInt(int num)

@@ -96,7 +96,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 	int staticCount = (int)funs._staticVars.size();
 	int localCount = fi._localVarCount;
 
-	CNArchive arRead((u8*)fi._code->GetData() + fi._iCode_Begin, fi._iCode_Size);
+	CNArchive arRead((u8*)funs._codeFinal.GetData() + fi._iCode_Begin, fi._iCode_Size);
 	arRead.SetPointer(0, SEEK_SET);
 
 	int iNewCodeBegin = ar.GetBufferOffset();
@@ -109,7 +109,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		if (arText._debug)
 		{
 			int off = (arRead.GetBufferOffset() + fi._iCode_Begin) / 8;
-			debug_info di = (*fi._pDebugData)[off];
+			debug_info di = (funs.m_sDebugFinal)[off];
 			debugInfo.push_back(di);
 		}
 		//	arRead >> v.dbg;
@@ -688,7 +688,7 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 
 	header._dwFileType = FILE_NEOS;
 	header._dwNeoVersion = NEO_VER;
-	header._iFunctionCount = (int)(funs._funs.size() + 1);
+	header._iFunctionCount = (int)(funs._funs.size());
 	header._dwFlag = arText._debug ? NEO_HEADER_FLAG_DEBUG : 0;
 	
 	std::map<int, SFunctionTableForWriter> funPos;
@@ -698,14 +698,23 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	// Main 함수 코드 저장
 	header._iMainFunctionOffset = ar.GetBufferOffset();
 	header._iGlobalVarCount = funs._cur._localVarCount;
-	WriteFun(arText, ar, funs, funs._cur, vars, funPos, debugInfo);
+	//WriteFun(arText, ar, funs, funs._cur, vars, funPos, debugInfo);
 	// Sub 함수 코드 저장
 	for (auto it = funs._funs.begin(); it != funs._funs.end(); it++)
 	{
 		//auto it2 = funs._funs.find((*it));
 		SFunctionInfo& fi = (*it).second;
+		if (fi._funType == FUNT_IMPORT)
+			WriteFun(arText, ar, funs, fi, vars, funPos, debugInfo);
+	}
+	for (auto it = funs._funSequence.begin(); it != funs._funSequence.end(); it++)
+	{
+		auto it2 = funs._funs.find((*it));
+		SFunctionInfo& fi = (*it2).second;
 		WriteFun(arText, ar, funs, fi, vars, funPos, debugInfo);
 	}
+
+
 
 	header._iCodeSize = ar.GetBufferOffset() - sizeof(SNeoVMHeader);
 	header.m_iDebugCount = (int)debugInfo.size();
@@ -849,12 +858,12 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 	}
 
 	// Main 함수 코드 저장
-	WriteFunLog(arText, arw, funs, funs._cur, vars);
+	//WriteFunLog(arText, arw, funs, funs._cur, vars);
 	// Sub 함수 코드 저장
-	for (auto it = funs._funs.begin(); it != funs._funs.end(); it++)
+	for (auto it = funs._funSequence.begin(); it != funs._funSequence.end(); it++)
 	{
-		//auto it2 = funs._funs.find((*it));
-		SFunctionInfo& fi = (*it).second;
+		auto it2 = funs._funs.find((*it));
+		SFunctionInfo& fi = (*it2).second;
 		WriteFunLog(arText, arw, funs, fi, vars);
 	}
 

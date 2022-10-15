@@ -40,7 +40,7 @@ void CNeoVMWorker::Var_AddRef(VarInfo *d)
 		break;
 	}
 }
-void CNeoVMWorker::Var_Release(VarInfo *d)
+void CNeoVMWorker::Var_ReleaseInternal(VarInfo *d)
 {
 	switch (d->GetType())
 	{
@@ -199,43 +199,7 @@ void CNeoVMWorker::Swap(VarInfo* v1, VarInfo* v2)
 }
 
 
-void CNeoVMWorker::Move(VarInfo* v1, VarInfo* v2)
-{
-	switch (v2->GetType())
-	{
-	case VAR_NONE:
-		Var_SetNone(v1);
-		break;
-	case VAR_BOOL:
-		Var_SetBool(v1, v2->_bl);
-		break;
-	case VAR_INT:
-		Var_SetInt(v1, v2->_int);
-		break;
-	case VAR_FLOAT:
-		Var_SetFloat(v1, v2->_float);
-		break;
-	case VAR_STRING:
-		Var_Release(v1);
-		v1->SetType(v2->GetType());
-		v1->_str = v2->_str;
-		++v1->_str->_refCount;
-		break;
-	case VAR_TABLE:
-		Var_Release(v1);
-		v1->SetType(v2->GetType());
-		v1->_tbl = v2->_tbl;
-		++v1->_tbl->_refCount;
-		break;
-	case VAR_FUN:
-		Var_Release(v1);
-		v1->SetType(v2->GetType());
-		v1->_fun_index = v2->_fun_index;
-		break;
-	default:
-		break;
-	}
-}
+
 void CNeoVMWorker::MoveMinus(VarInfo* v1, VarInfo* v2)
 {
 	switch (v2->GetType())
@@ -902,7 +866,7 @@ std::string CNeoVMWorker::GetType(VarInfo* v1)
 
 void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 {
-	SFunctionTable fun = _pVM->m_sFunctionPtr[n1];
+	SFunctionTable& fun = _pVM->m_sFunctionPtr[n1];
 	if (fun._funType != FUNT_IMPORT)
 	{	// n2 is Arg Count not use
 		SCallStack callStack;
@@ -1024,7 +988,7 @@ bool	CNeoVMWorker::Start(int iFunctionID)
 
 bool	CNeoVMWorker::Setup(int iFunctionID)
 {
-	SFunctionTable fun = _pVM->m_sFunctionPtr[iFunctionID];
+	SFunctionTable& fun = _pVM->m_sFunctionPtr[iFunctionID];
 	int iArgs = (int)_args.size();
 	if (iArgs != fun._argsCount)
 		return false;
@@ -1453,7 +1417,7 @@ bool CNeoVMWorker::testCall(VarInfo** r, int iFID, VarInfo* args[], int argc)
 	if (_isSetup == false)
 		return false;
 
-	SFunctionTable fun = _pVM->m_sFunctionPtr[iFID];
+	SFunctionTable& fun = _pVM->m_sFunctionPtr[iFID];
 	if (argc != fun._argsCount)
 		return false;
 

@@ -233,6 +233,7 @@ enum FUNCTION_TYPE : u8
 	FUNT_NORMAL = 0,
 	FUNT_IMPORT,
 	FUNT_EXPORT,
+	FUNT_ANONYMOUS,
 };
 
 
@@ -345,7 +346,14 @@ private:
 
 public:
 	void Var_AddRef(VarInfo *d);
-	void Var_Release(VarInfo *d);
+	void Var_ReleaseInternal(VarInfo *d);
+	inline void Var_Release(VarInfo *d)
+	{
+		if (d->IsAllocType())
+			Var_ReleaseInternal(d);
+		else
+			d->ClearType();
+	}
 	void Var_SetNone(VarInfo *d);
 private:
 	void Var_SetInt(VarInfo *d, int v);
@@ -359,7 +367,43 @@ private:
 
 
 public:
-	void Move(VarInfo* v1, VarInfo* v2);
+	inline void Move(VarInfo* v1, VarInfo* v2)
+	{
+		if (v1->IsAllocType())
+			Var_Release(v1);
+
+		v1->SetType(v2->GetType());
+		switch (v2->GetType())
+		{
+		case VAR_NONE:
+			break;
+		case VAR_BOOL:
+			v1->_bl = v2->_bl;
+			break;
+		case VAR_INT:
+			v1->_int = v2->_int;
+			break;
+		case VAR_FLOAT:
+			v1->_float = v2->_float;
+			break;
+		case VAR_STRING:
+			v1->_str = v2->_str;
+			++v1->_str->_refCount;
+			break;
+		case VAR_TABLE:
+			v1->_tbl = v2->_tbl;
+			++v1->_tbl->_refCount;
+			break;
+		case VAR_TABLEFUN:
+			v1->_fun = v2->_fun;
+			break;
+		case VAR_FUN:
+			v1->_fun_index = v2->_fun_index;
+			break;
+		default:
+			break;
+		}
+	}
 	void Swap(VarInfo* v1, VarInfo* v2);
 private:
 	void MoveMinus(VarInfo* v1, VarInfo* v2);

@@ -12,18 +12,23 @@ fun sub2()
 export fun delegate()
 {
 	var funPointer = sub1;
-	funPointer();
 
+	var funPointer2 = fun(){ system.print("anonymous fun\n"); };
+	
+	funPointer();
+	funPointer2();
+	
 	funPointer = sub2;
 	funPointer();
 	
 	var table = {};
+	
 	table.funPointer2 = sub1;
 	table.funPointer2();
 	
 	table.tablePointer = system;
 	table.tablePointer.print("Table Pointer\n");
-
+	
 	table.printf = system.print;
 	table.printf("Table Function Poiter\n");
 }
