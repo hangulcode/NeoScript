@@ -13,10 +13,7 @@ void SVarWrapper::SetInt(int v) { _vmw->Var_SetInt(_var, v); }
 void SVarWrapper::SetFloat(double v) { _vmw->Var_SetFloat(_var, v); }
 void SVarWrapper::SetBool(bool v) { _vmw->Var_SetBool(_var, v); }
 void SVarWrapper::SetString(const char* str) { _vmw->Var_SetString(_var, str); }
-//void SVarWrapper::SetTable(TableInfo* p)  { _vmw->Var_SetTable(_var, v); }
-//void SVarWrapper::SetFun(int fun_index)  { _vmw->Var_SetFun(_var, v); }
-void SVarWrapper::SetTableFun(FunctionPtrNative fun) { _vmw->Var_SetTableFun(_var, fun); }
-//void SVarWrapper::SetMeta(SNeoMeta* p) { _vmw->Var_SetMeta(_var, p); }
+//void SVarWrapper::SetTableFun(FunctionPtrNative fun) { _vmw->Var_SetTableFun(_var, fun); }
 
 static std::string g_meta_Add3 = "+";
 static std::string g_meta_Sub3 = "-";
@@ -141,14 +138,14 @@ void CNeoVMWorker::Var_SetFun(VarInfo* d, int fun_index)
 	d->SetType(VAR_FUN);
 	d->_fun_index = fun_index;
 }
-void CNeoVMWorker::Var_SetTableFun(VarInfo* d, FunctionPtrNative fun)
-{
-	if (d->IsAllocType())
-		Var_Release(d);
-
-	d->SetType(VAR_TABLEFUN);
-	d->_fun = fun;
-}
+//void CNeoVMWorker::Var_SetTableFun(VarInfo* d, FunctionPtrNative fun)
+//{
+//	if (d->IsAllocType())
+//		Var_Release(d);
+//
+//	d->SetType(VAR_TABLEFUN);
+//	d->_fun = fun;
+//}
 
 void CNeoVMWorker::TableInsert(VarInfo *pTable, VarInfo *pKey, VarInfo *pValue)
 {
@@ -797,8 +794,8 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 		return v1->_str->_str;
 	case VAR_TABLE:
 		return "table";
-	case VAR_TABLEFUN:
-		return "function";
+	//case VAR_TABLEFUN:
+	//	return "function";
 	default:
 		break;
 	}
@@ -820,8 +817,8 @@ int CNeoVMWorker::ToInt(VarInfo* v1)
 		return ::atoi(v1->_str->_str.c_str());
 	case VAR_TABLE:
 		return -1;
-	case VAR_TABLEFUN:
-		return -1;
+	//case VAR_TABLEFUN:
+	//	return -1;
 	default:
 		break;
 	}
@@ -843,8 +840,8 @@ double CNeoVMWorker::ToFloat(VarInfo* v1)
 		return atof(v1->_str->_str.c_str());
 	case VAR_TABLE:
 		return -1;
-	case VAR_TABLEFUN:
-		return -1;
+	//case VAR_TABLEFUN:
+	//	return -1;
 	default:
 		break;
 	}
@@ -866,8 +863,8 @@ int CNeoVMWorker::ToSize(VarInfo* v1)
 		return (int)v1->_str->_str.length();
 	case VAR_TABLE:
 		return (int)v1->_tbl->_itemCount;
-	case VAR_TABLEFUN:
-		return 0;
+	//case VAR_TABLEFUN:
+	//	return 0;
 	default:
 		break;
 	}
@@ -889,8 +886,8 @@ std::string CNeoVMWorker::GetType(VarInfo* v1)
 		return "string";
 	case VAR_TABLE:
 		return "table";
-	case VAR_TABLEFUN:
-		return "table_function";
+	//case VAR_TABLEFUN:
+	//	return "table_function";
 	case VAR_FUN:
 		return "function";
 	default:
@@ -959,31 +956,32 @@ bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo
 
 	if (pVarItem->GetType() == VAR_FUN)
 		Call(pVarItem->_fun_index, n3, r);
-	else if (pVarItem->GetType() == VAR_TABLEFUN)
-	{
-		FunctionPtrNative* pFunctionPtrNative = &pVarItem->_fun;
-		if (pFunctionPtrNative != NULL)
-		{
-			int iSave = _iSP_Vars;
-			_iSP_Vars = iSP_VarsMax;
+	//else if (pVarItem->GetType() == VAR_TABLEFUN)
+	//{
+	//	FunctionPtrNative* pFunctionPtrNative = &pVarItem->_fun;
+	//	if (pFunctionPtrNative != NULL)
+	//	{
+	//		int iSave = _iSP_Vars;
+	//		_iSP_Vars = iSP_VarsMax;
 
-			_pCallTableInfo = pTable->_tbl;
-			if ((pFunctionPtrNative->_func)(this, n3) == false)
-			{
-				_pCallTableInfo = NULL;
-				SetError("Ptr Call Error");
-				return false;
-			}
-			_pCallTableInfo = NULL;
+	//		_pCallTableInfo = pTable->_tbl;
+	//		if ((pFunctionPtrNative->_func)(this, n3) == false)
+	//		{
+	//			_pCallTableInfo = NULL;
+	//			SetError("Ptr Call Error");
+	//			return false;
+	//		}
+	//		_pCallTableInfo = NULL;
 
-			_iSP_Vars = iSave;
-		}
-		else
-		{
-			SetError("Ptr Call Not Found");
-			return false;
-		}
-	}
+	//		_iSP_Vars = iSave;
+	//	}
+	//	else
+	//	{
+	//		SetError("Ptr Call Not Found");
+	//		return false;
+	//	}
+	//}
+
 	//Move(r, &m_sVarStack[iSP_VarsMax]); ???
 	return true;
 }
@@ -1007,31 +1005,31 @@ bool CNeoVMWorker::Call_MetaTable2(VarInfo* pTable, std::string& funName, VarInf
 
 	if (pVarItem->GetType() == VAR_FUN)
 		Call(pVarItem->_fun_index, n3, NULL);
-	else if (pVarItem->GetType() == VAR_TABLEFUN)
-	{
-		FunctionPtrNative* pFunctionPtrNative = &pVarItem->_fun;
-		if (pFunctionPtrNative != NULL)
-		{
-			int iSave = _iSP_Vars;
-			_iSP_Vars = iSP_VarsMax;
+	//else if (pVarItem->GetType() == VAR_TABLEFUN)
+	//{
+	//	FunctionPtrNative* pFunctionPtrNative = &pVarItem->_fun;
+	//	if (pFunctionPtrNative != NULL)
+	//	{
+	//		int iSave = _iSP_Vars;
+	//		_iSP_Vars = iSP_VarsMax;
 
-			_pCallTableInfo = pTable->_tbl;
-			if ((pFunctionPtrNative->_func)(this, n3) == false)
-			{
-				_pCallTableInfo = NULL;
-				SetError("Ptr Call Error");
-				return false;
-			}
-			_pCallTableInfo = NULL;
+	//		_pCallTableInfo = pTable->_tbl;
+	//		if ((pFunctionPtrNative->_func)(this, n3) == false)
+	//		{
+	//			_pCallTableInfo = NULL;
+	//			SetError("Ptr Call Error");
+	//			return false;
+	//		}
+	//		_pCallTableInfo = NULL;
 
-			_iSP_Vars = iSave;
-		}
-		else
-		{
-			SetError("Ptr Call Not Found");
-			return false;
-		}
-	}
+	//		_iSP_Vars = iSave;
+	//	}
+	//	else
+	//	{
+	//		SetError("Ptr Call Not Found");
+	//		return false;
+	//	}
+	//}
 	return true;
 }
 
@@ -1321,44 +1319,51 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 					Call(pVar1->_fun_index, OP.n3);
 					break;
 				}
-				VarInfo* pVarItem = GetTableItem(pVar1, GetVarPtr2(OP));
-				if (pVarItem == NULL)
+				short n3 = OP.n3;
+				VarInfo* pFunName = GetVarPtr2(OP);
+				if (pVar1->GetType() != VAR_TABLE || pFunName->GetType() != VAR_STRING)
 				{
 					SetError("Ptr Call Error");
 					break;
 				}
-				short n3 = OP.n3;
+				VarInfo* pVarItem = GetTableItem(pVar1, pFunName);
+				if (pVarItem == NULL)
+				{
+					if (pVar1->_tbl->_fun._func)
+					{
+						pFunctionPtrNative = &pVar1->_tbl->_fun;
+						if (pFunctionPtrNative != NULL)
+						{
+							int iSave = _iSP_Vars;
+							_iSP_Vars = iSP_VarsMax;
+
+//							_pCallTableInfo = pVar1->_tbl;
+							if ((pFunctionPtrNative->_func)(this, pVar1->_tbl->_pUserData, pFunName->_str->_str, n3) == false)
+							{
+//								_pCallTableInfo = NULL;
+								SetError("Ptr Call Error");
+								break;
+							}
+//							_pCallTableInfo = NULL;
+
+							_iSP_Vars = iSave;
+							break;
+						}
+						else
+						{
+							SetError("Ptr Call Not Found");
+							break;
+						}
+					}
+					SetError("Ptr Call Error");
+					break;
+				}
 
 				if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n3))
 					_iSP_Vars_Max2 = iSP_VarsMax + (1 + n3);
 
 				if(pVarItem->GetType() == VAR_FUN)
 					Call(pVarItem->_fun_index, n3);
-				else if (pVarItem->GetType() == VAR_TABLEFUN)
-				{
-					pFunctionPtrNative = &pVarItem->_fun;
-					if (pFunctionPtrNative != NULL)
-					{
-						int iSave = _iSP_Vars;
-						_iSP_Vars = iSP_VarsMax;
-
-						_pCallTableInfo = pVar1->_tbl;
-						if ((pFunctionPtrNative->_func)(this, n3) == false)
-						{
-							_pCallTableInfo = NULL;
-							SetError("Ptr Call Error");
-							break;
-						}
-						_pCallTableInfo = NULL;
-
-						_iSP_Vars = iSave;
-					}
-					else
-					{
-						SetError("Ptr Call Not Found");
-						break;
-					}
-				}
 				break;
 			}
 			case NOP_RETURN:

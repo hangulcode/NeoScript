@@ -11,7 +11,7 @@ enum VAR_TYPE : u8
 	VAR_FLOAT,	// double
 	VAR_STRING,
 	VAR_TABLE,
-	VAR_TABLEFUN,
+//	VAR_TABLEFUN,
 	VAR_FUN,
 
 	VAR_ITERATOR,
@@ -110,7 +110,7 @@ struct SVarWrapper;
 class CNeoVMWorker;
 struct FunctionPtr;
 typedef int(*Neo_CFunction) (CNeoVMWorker *N, FunctionPtr* pFun, short args);
-typedef bool(*Neo_NativeFunction) (CNeoVMWorker *N, short args);
+typedef bool(*Neo_NativeFunction) (CNeoVMWorker *N, void* pUserData, std::string& fun, short args);
 
 struct StringInfo
 {
@@ -168,7 +168,7 @@ public:
 		TableInfo*	_tbl;
 		int			_int;
 		double		_float;
-		FunctionPtrNative _fun;
+//		FunctionPtrNative _fun;
 		int			_fun_index;
 		TableIterator	_it;
 	};
@@ -253,11 +253,11 @@ struct SFunctionTable
 	FunctionPtr			_fun;
 };
 
-struct SNeoFunLib
-{
-	std::string pName;
-	FunctionPtrNative fn;
-};
+//struct SNeoFunLib
+//{
+//	std::string pName;
+//	FunctionPtrNative fn;
+//};
 
 struct SVarWrapper
 {
@@ -270,10 +270,7 @@ struct SVarWrapper
 	void SetFloat(double v);
 	void SetBool(bool v);
 	void SetString(const char* str);
-	//void SetTable(TableInfo* p);
-	//void SetFun(int fun_index);
-	void SetTableFun(FunctionPtrNative fun);
-//	void SetMeta(SNeoMeta* p);
+//	void SetTableFun(FunctionPtrNative fun);
 };
 
 class CNeoVM;
@@ -294,7 +291,7 @@ private:
 	bool					_isSetup = false;
 	int						_iRemainSleep = 0;
 	clock_t					_preClock;
-	TableInfo*				_pCallTableInfo = NULL;
+//	TableInfo*				_pCallTableInfo = NULL;
 
 	int m_iTimeout = -1;
 	int m_iCheckOpCount = 1000;
@@ -368,7 +365,7 @@ private:
 	void Var_SetStringA(VarInfo *d, const std::string& str);
 	void Var_SetTable(VarInfo *d, TableInfo* p);
 	void Var_SetFun(VarInfo* d, int fun_index);
-	void Var_SetTableFun(VarInfo* d, FunctionPtrNative fun);
+//	void Var_SetTableFun(VarInfo* d, FunctionPtrNative fun);
 
 
 public:
@@ -399,9 +396,9 @@ public:
 			v1->_tbl = v2->_tbl;
 			++v1->_tbl->_refCount;
 			break;
-		case VAR_TABLEFUN:
-			v1->_fun = v2->_fun;
-			break;
+		//case VAR_TABLEFUN:
+		//	v1->_fun = v2->_fun;
+		//	break;
 		case VAR_FUN:
 			v1->_fun_index = v2->_fun_index;
 			break;
@@ -548,7 +545,7 @@ private:
 public:
 	std::string				_sTempString;
 	VarInfo* GetReturnVar() { return &m_sVarStack[_iSP_Vars]; }
-	inline TableInfo* GetCallTableInfo() { return _pCallTableInfo; }
+//	inline TableInfo* GetCallTableInfo() { return _pCallTableInfo; }
 
 	void GC()
 	{

@@ -13,8 +13,6 @@ void Sample1()
 }
 
 
-
-
 int SAMPLE_callback()
 {
 	void* pFileBuffer = NULL;

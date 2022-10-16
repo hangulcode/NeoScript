@@ -270,61 +270,68 @@ bool sys_clock(CNeoVMWorker* pN, short args)
 	return true;
 }
 
+//typedef bool (ClassName::*TYPE_NeoLib)(CNeoVMWorker* pN, short args);
+typedef bool (*TYPE_NeoLib)(CNeoVMWorker* pN, short args);
+static std::map<std::string, TYPE_NeoLib> g_sNeoFunLib;
 
 
-static SNeoFunLib _Lib[] =
+static bool Fun(CNeoVMWorker* pN, void* pUserData, std::string& fun, short args)
 {
-{ "abs", CNeoVM::RegisterNative(Math_abs) },
-{ "acos", CNeoVM::RegisterNative(Math_acos) },
-{ "asin", CNeoVM::RegisterNative(Math_asin) },
-{ "atan", CNeoVM::RegisterNative(Math_atan) },
-{ "ceil", CNeoVM::RegisterNative(Math_ceil) },
-{ "floor", CNeoVM::RegisterNative(Math_floor) },
-{ "sin", CNeoVM::RegisterNative(Math_sin) },
-{ "cos", CNeoVM::RegisterNative(Math_cos) },
-{ "tan", CNeoVM::RegisterNative(Math_tan) },
-{ "log", CNeoVM::RegisterNative(Math_log) },
-{ "log10", CNeoVM::RegisterNative(Math_log10) },
-{ "pow", CNeoVM::RegisterNative(Math_pow) },
-{ "deg", CNeoVM::RegisterNative(Math_deg) },
-{ "rad", CNeoVM::RegisterNative(Math_rad) },
-{ "sqrt", CNeoVM::RegisterNative(Math_sqrt) },
-{ "srand", CNeoVM::RegisterNative(Math_srand) },
-{ "rand", CNeoVM::RegisterNative(Math_rand) },
+	auto it = g_sNeoFunLib.find(fun);
+	if (it == g_sNeoFunLib.end())
+		return false;
 
-{ "str_sub", CNeoVM::RegisterNative(Str_Substring) },
-{ "str_len", CNeoVM::RegisterNative(Str_len) },
-{ "str_find", CNeoVM::RegisterNative(Str_find) },
+	TYPE_NeoLib f = (*it).second;
+	return (*f)(pN, args);
+}
 
-{ "sort", CNeoVM::RegisterNative(alg_sort) },
-{ "meta", CNeoVM::RegisterNative(util_meta) },
-{ "print", CNeoVM::RegisterNative(io_print) },
-{ "clock", CNeoVM::RegisterNative(sys_clock) },
-
-{ "", FunctionPtrNative() },
-};
-
-void CNeoVM::RegLibrary(VarInfo* pSystem, const char* pLibName, SNeoFunLib* pFuns)
+void CNeoVM::RegLibrary(VarInfo* pSystem, const char* pLibName)
 {
-	//VarInfo temp;
-	//Var_SetTable(&temp, TableAlloc());
-	//temp._tbl->_refCount = 1;
-	//pSystem->_tbl->_strMap[pLibName] = temp;
+	TableInfo* pTable = pSystem->_tbl;
+	pTable->_fun = CNeoVM::RegisterNative(Fun);
 
+	if (g_sNeoFunLib.empty() == false)
+		return;
+
+	g_sNeoFunLib["abs"] = &Math_abs;
+	g_sNeoFunLib["acos"] = &Math_acos;
+	g_sNeoFunLib["asin"] = &Math_asin;
+	g_sNeoFunLib["atan"] = &Math_atan;
+	g_sNeoFunLib["ceil"] = &Math_ceil;
+	g_sNeoFunLib["floor"] = &Math_floor;
+	g_sNeoFunLib["sin"] = &Math_sin;
+	g_sNeoFunLib["cos"] = &Math_cos;
+	g_sNeoFunLib["tan"] = &Math_tan;
+	g_sNeoFunLib["log"] = &Math_log;
+	g_sNeoFunLib["log10"] = &Math_log10;
+	g_sNeoFunLib["pow"] = &Math_pow;
+	g_sNeoFunLib["deg"] = &Math_deg;
+	g_sNeoFunLib["rad"] = &Math_rad;
+	g_sNeoFunLib["sqrt"] = &Math_sqrt;
+	g_sNeoFunLib["srand"] = &Math_srand;
+	g_sNeoFunLib["rand"] = &Math_rand;
+
+	g_sNeoFunLib["str_sub"] = &Str_Substring;
+	g_sNeoFunLib["str_len"] = &Str_len;
+	g_sNeoFunLib["str_find"] = &Str_find;
+
+	g_sNeoFunLib["sort"] = &alg_sort;
+	g_sNeoFunLib["meta"] = &util_meta;
+	g_sNeoFunLib["print"] = &io_print;
+	g_sNeoFunLib["clock"] = &sys_clock;
+
+	/*
 	VarInfo value;
 	value.SetType(VAR_TABLEFUN);
-	//VarInfo fun;
-	//fun.SetType(VAR_TABLEFUN);
 
 	TableInfo* pTable = pSystem->_tbl;
 
 	while (pFuns->pName.empty() == false)
 	{
 		value._fun = pFuns->fn;
-		//temp._tbl->_strMap[pFuns[i].pName] = fun;
 		pTable->Insert(this, pFuns->pName, &value);
 		pFuns++;
-	}
+	}*/
 }
 
 
@@ -336,7 +343,7 @@ void CNeoVM::InitLib()
 
 	//SetTable(, TableAlloc());
 
-	RegLibrary(pSystem, "sys", _Lib);
+	RegLibrary(pSystem, "sys");
 
 }
 

@@ -36,8 +36,8 @@ u32 GetHashCode(VarInfo *p)
 		return GetHashCode((u8*)p->_str->_str.c_str(), (int)p->_str->_str.length());
 	case VAR_TABLE:
 		return GetHashCode((u8*)p->_tbl, sizeof(p->_tbl));
-	case VAR_TABLEFUN:
-		return GetHashCode((u8*)&p->_fun, sizeof(p->_fun));
+	//case VAR_TABLEFUN:
+	//	return GetHashCode((u8*)&p->_fun, sizeof(p->_fun));
 	case VAR_FUN:
 		return (u32)p->_fun_index;
 		break;
@@ -310,19 +310,19 @@ int TableBocket3::Find(VarInfo* pKey)
 			}
 		}
 		break;
-	case VAR_TABLEFUN:
-		{
-			Neo_NativeFunction funKey = pKey->_fun._func;
-			for (int i = _size_use - 1; i >= 0; i--)
-			{
-				if (table[i].key.GetType() == VAR_TABLEFUN)
-				{
-					if (table[i].key._fun._func == funKey)
-						return i;
-				}
-			}
-		}
-		break;
+	//case VAR_TABLEFUN:
+	//	{
+	//		Neo_NativeFunction funKey = pKey->_fun._func;
+	//		for (int i = _size_use - 1; i >= 0; i--)
+	//		{
+	//			if (table[i].key.GetType() == VAR_TABLEFUN)
+	//			{
+	//				if (table[i].key._fun._func == funKey)
+	//					return i;
+	//			}
+	//		}
+	//	}
+	//	break;
 	case VAR_FUN:
 		{
 			int iFunKey = pKey->_fun_index;
