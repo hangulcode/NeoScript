@@ -2326,12 +2326,15 @@ void FinalizeFuction(SFunctions& funs)
 	u8* pSrc = (u8*)funs._codeTemp.GetDataCurrent();
 	funs._codeFinal.Write(pSrc, funs._cur._iCode_Size);
 
-	int base = (int)funs.m_sDebugFinal.size();
-	funs.m_sDebugFinal.resize(funs._codeFinal.GetBufferOffset() / 8);
-	for (int i = base; i < funs.m_sDebugFinal.size(); i++)
-		funs.m_sDebugFinal[i] = (*funs._cur._pDebugData)[i - base];
+	if (funs._cur._pDebugData)
+	{
+		int base = (int)funs.m_sDebugFinal.size();
+		funs.m_sDebugFinal.resize(funs._codeFinal.GetBufferOffset() / 8);
+		for (int i = base; i < funs.m_sDebugFinal.size(); i++)
+			funs.m_sDebugFinal[i] = (*funs._cur._pDebugData)[i - base];
 
-	funs._cur._pDebugData->resize(iCode_Begin / 8);
+		funs._cur._pDebugData->resize(iCode_Begin / 8);
+	}
 	
 	funs._funSequence.push_back(funs._cur._name);
 }
@@ -2459,7 +2462,10 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	funs._cur._funID = 0;
 	funs._cur._name = GLOBAL_INIT_FUN_NAME;
 	funs._cur._code = &funs._codeTemp;
-	funs._cur._pDebugData = &funs.m_sDebugTemp;
+	if (ar._debug)
+		funs._cur._pDebugData = &funs.m_sDebugTemp;
+	else
+		funs._cur._pDebugData = NULL;
 	funs._cur.Clear();
 
 	SLayerVar* pCurLayer = AddVarsFunction(vars);
