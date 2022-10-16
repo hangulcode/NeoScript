@@ -18,12 +18,17 @@ void SVarWrapper::SetString(const char* str) { _vmw->Var_SetString(_var, str); }
 void SVarWrapper::SetTableFun(FunctionPtrNative fun) { _vmw->Var_SetTableFun(_var, fun); }
 //void SVarWrapper::SetMeta(SNeoMeta* p) { _vmw->Var_SetMeta(_var, p); }
 
-static std::string g_metaString = "_Meta_Table_";
-static std::string g_meta_Add = "+";
-static std::string g_meta_Sub = "-";
-static std::string g_meta_Mul = "*";
-static std::string g_meta_Div = "/";
-static std::string g_meta_Per = "/";
+static std::string g_meta_Add3 = "+";
+static std::string g_meta_Sub3 = "-";
+static std::string g_meta_Mul3 = "*";
+static std::string g_meta_Div3 = "/";
+static std::string g_meta_Per3 = "%";
+
+static std::string g_meta_Add2 = "+=";
+static std::string g_meta_Sub2 = "-=";
+static std::string g_meta_Mul2 = "*=";
+static std::string g_meta_Div2 = "/=";
+static std::string g_meta_Per2 = "%=";
 
 
 void CNeoVMWorker::Var_AddRef(VarInfo *d)
@@ -171,6 +176,14 @@ VarInfo* CNeoVMWorker::GetTableItem(VarInfo *pTable, VarInfo *pKey)
 
 	return pTable->_tbl->GetTableItem(pKey);
 }
+VarInfo* CNeoVMWorker::GetTableItemValid(VarInfo *pTable, VarInfo *pKey)
+{
+	VarInfo* r = GetTableItem(pTable, pKey);
+	if (r != NULL)
+		return r;
+	SetError("Table Key Not Found");
+	return NULL;
+}
 void CNeoVMWorker::TableRead(VarInfo *pTable, VarInfo *pKey, VarInfo *pValue)
 {
 	VarInfo *pFind = GetTableItem(pTable, pKey);
@@ -252,6 +265,10 @@ void CNeoVMWorker::Add2(VarInfo* r, VarInfo* v2)
 			return;
 		}
 		break;
+	case VAR_TABLE:
+		if (Call_MetaTable2(r, g_meta_Add2, r, v2))
+			return;
+		break;
 	}
 	SetError("+= Error");
 }
@@ -284,6 +301,10 @@ void CNeoVMWorker::Sub2(VarInfo* r, VarInfo* v2)
 			r->_float -= v2->_float;
 			return;
 		}
+		break;
+	case VAR_TABLE:
+		if (Call_MetaTable(r, g_meta_Sub2, r, r, v2))
+			return;
 		break;
 	}
 	SetError("-= Error");
@@ -318,6 +339,10 @@ void CNeoVMWorker::Mul2(VarInfo* r, VarInfo* v2)
 			return;
 		}
 		break;
+	case VAR_TABLE:
+		if (Call_MetaTable(r, g_meta_Mul2, r, r, v2))
+			return;
+		break;
 	}
 	SetError("*= Error");
 }
@@ -351,18 +376,28 @@ void CNeoVMWorker::Div2(VarInfo* r, VarInfo* v2)
 			return;
 		}
 		break;
+	case VAR_TABLE:
+		if (Call_MetaTable(r, g_meta_Div2, r, r, v2))
+			return;
+		break;
 	}
 	SetError("/= Error");
 }
 void CNeoVMWorker::Per2(VarInfo* r, VarInfo* v2)
 {
-	if (r->GetType() == VAR_INT)
+	switch (r->GetType())
 	{
+	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 		{
 			r->_int %= v2->_int;
 			return;
 		}
+		break;
+	case VAR_TABLE:
+		if (Call_MetaTable(r, g_meta_Per2, r, r, v2))
+			return;
+		break;
 	}
 	SetError("%= Error");
 }
@@ -402,7 +437,7 @@ void CNeoVMWorker::Add(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		}
 		break;
 	case VAR_TABLE:
-		if(Call_MetaTable(v1, g_meta_Add, r, v1, v2))
+		if(Call_MetaTable(v1, g_meta_Add3, r, v1, v2))
 			return;
 		break;
 	}
@@ -438,7 +473,7 @@ void CNeoVMWorker::Sub(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		}
 		break;
 	case VAR_TABLE:
-		if (Call_MetaTable(v1, g_meta_Sub, r, v1, v2))
+		if (Call_MetaTable(v1, g_meta_Sub3, r, v1, v2))
 			return;
 		break;
 	}
@@ -474,7 +509,7 @@ void CNeoVMWorker::Mul(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		}
 		break;
 	case VAR_TABLE:
-		if (Call_MetaTable(v1, g_meta_Mul, r, v1, v2))
+		if (Call_MetaTable(v1, g_meta_Mul3, r, v1, v2))
 			return;
 		break;
 	}
@@ -510,7 +545,7 @@ void CNeoVMWorker::Div(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		}
 		break;
 	case VAR_TABLE:
-		if (Call_MetaTable(v1, g_meta_Div, r, v1, v2))
+		if (Call_MetaTable(v1, g_meta_Div3, r, v1, v2))
 			return;
 		break;
 	}
@@ -528,7 +563,7 @@ void CNeoVMWorker::Per(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		}
 		break;
 	case VAR_TABLE:
-		if (Call_MetaTable(v1, g_meta_Per, r, v1, v2))
+		if (Call_MetaTable(v1, g_meta_Per3, r, v1, v2))
 			return;
 		break;
 	}
@@ -954,6 +989,53 @@ bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo
 }
 
 
+bool CNeoVMWorker::Call_MetaTable2(VarInfo* pTable, std::string& funName, VarInfo* r, VarInfo* b)
+{
+	if (pTable->_tbl->_meta == NULL)
+		return false;
+	VarInfo* pVarItem = pTable->_tbl->_meta->GetTableItem(funName);
+	if (pVarItem == NULL)
+		return false;
+
+	int n3 = 2;
+
+	Move(&m_sVarStack[iSP_VarsMax + 1], r);
+	Move(&m_sVarStack[iSP_VarsMax + 2], b);
+
+	if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n3))
+		_iSP_Vars_Max2 = iSP_VarsMax + (1 + n3);
+
+	if (pVarItem->GetType() == VAR_FUN)
+		Call(pVarItem->_fun_index, n3, NULL);
+	else if (pVarItem->GetType() == VAR_TABLEFUN)
+	{
+		FunctionPtrNative* pFunctionPtrNative = &pVarItem->_fun;
+		if (pFunctionPtrNative != NULL)
+		{
+			int iSave = _iSP_Vars;
+			_iSP_Vars = iSP_VarsMax;
+
+			_pCallTableInfo = pTable->_tbl;
+			if ((pFunctionPtrNative->_func)(this, n3) == false)
+			{
+				_pCallTableInfo = NULL;
+				SetError("Ptr Call Error");
+				return false;
+			}
+			_pCallTableInfo = NULL;
+
+			_iSP_Vars = iSave;
+		}
+		else
+		{
+			SetError("Ptr Call Not Found");
+			return false;
+		}
+	}
+	return true;
+}
+
+
 
 CNeoVMWorker::CNeoVMWorker(CNeoVM* pVM, u32 id, int iStackSize)
 {
@@ -1053,8 +1135,6 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			GetOP(&OP);
 			switch (OP.op)
 			{
-			case (NOP_NONE):
-				break;
 			case NOP_MOV:
 				Move(GetVarPtr1(OP), GetVarPtr2(OP));
 				break;
@@ -1316,6 +1396,9 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				callStack = m_sCallStack[iTemp];
 				m_sCallStack.resize(iTemp);
 
+				if (callStack._pReturnValue)
+					Move(callStack._pReturnValue, &m_sVarStack[_iSP_Vars]);
+
 				SetCodePtr(callStack._iReturnOffset);
 				_iSP_Vars = callStack._iSP_Vars;
 				iSP_VarsMax = callStack._iSP_VarsMax;
@@ -1323,21 +1406,33 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			case NOP_TABLE_ALLOC:
 				Var_SetTable(GetVarPtr1(OP), _pVM->TableAlloc());
 				break;
-			case NOP_TABLE_INSERT:
-			{
-				TableInsert(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
-				break;
-			}
 			case NOP_TABLE_READ:
-			{
 				TableRead(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
 				break;
-			}
 			case NOP_TABLE_REMOVE:
-			{
 				TableRemove(GetVarPtr1(OP), GetVarPtr2(OP));
 				break;
-			}
+			case NOP_TABLE_MOV:
+				TableInsert(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+				break;
+			case NOP_TABLE_ADD2:
+				TableAdd2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+				break;
+			case NOP_TABLE_SUB2:
+				TableSub2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+				break;
+			case NOP_TABLE_MUL2:
+				TableMul2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+				break;
+			case NOP_TABLE_DIV2:
+				TableDiv2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+				break;
+			case NOP_TABLE_PERSENT2:
+				TablePer2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+				break;
+
+			case NOP_NONE:
+				break;
 			default:
 				SetError("Unkonwn OP");
 				break;
