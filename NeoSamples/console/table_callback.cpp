@@ -30,23 +30,18 @@ public:
 	}
 };
 
-bool FunSum(CNeoVMWorker* pN, short args)
+typedef bool (CA::*TYPE_FUN)(CNeoVMWorker* pN, short args);
+std::map<std::string, TYPE_FUN> g_sTablesFun;
+
+bool Fun(CNeoVMWorker* pN, void* pUserData, std::string& fun, short args)
 {
-	return ((CA*)pN->GetCallTableInfo()->_pUserData)->FunSum(pN, args);
+	auto it = g_sTablesFun.find(fun);
+	if (it == g_sTablesFun.end())
+		return false;
+
+	TYPE_FUN f = (*it).second;
+	return (((CA*)pUserData)->*f)(pN, args);
 }
-bool FunMul(CNeoVMWorker* pN, short args)
-{
-	return ((CA*)pN->GetCallTableInfo()->_pUserData)->FunMul(pN, args);
-}
-
-
-static SNeoFunLib g_sTableFun[] =
-{
-	{ "sum", CNeoVM::RegisterNative(FunSum) },
-	{ "mul", CNeoVM::RegisterNative(FunMul) },
-	{ "", FunctionPtrNative() },
-};
-
 
 
 int SAMPLE_table_callback()
@@ -73,16 +68,10 @@ int SAMPLE_table_callback()
 		{
 			TableInfo* pTable = g_sData->_tbl;
 			pTable->_pUserData = pClass; // <-------------------
+			pTable->_fun = CNeoVM::RegisterNative(Fun);
 
-			VarInfo value;
-			value.SetType(VAR_TABLEFUN);
-			SNeoFunLib* pFuns = g_sTableFun;
-			while (pFuns->pName.empty() == false)
-			{
-				value._fun = pFuns->fn;
-				pTable->Insert(pVM, pFuns->pName, &value);
-				pFuns++;
-			}
+			g_sTablesFun["sum"] = &CA::FunSum;
+			g_sTablesFun["mul"] = &CA::FunMul;
 		}
 
 		DWORD t1 = GetTickCount();

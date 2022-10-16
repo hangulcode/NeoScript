@@ -28,7 +28,4 @@ export fun delegate()
 	
 	table.tablePointer = system;
 	table.tablePointer.print("Table Pointer\n");
-	
-	table.printf = system.print;
-	table.printf("Table Function Poiter\n");
 }

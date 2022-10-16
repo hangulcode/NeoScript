@@ -61,7 +61,7 @@ public:
 	std::string _sErrorMsgDetail;
 	const char* _pErrorMsg = NULL;
 
-	void RegLibrary(VarInfo* pSystem, const char* pLibName, SNeoFunLib* pFuns);
+	void RegLibrary(VarInfo* pSystem, const char* pLibName);// , SNeoFunLib* pFuns);
 	void InitLib();
 	bool Init(void* pBuffer, int iSize, int iStackSize);
 	inline void SetError(const char* pErrMsg);

@@ -141,6 +141,7 @@ TableInfo* CNeoVM::TableAlloc()
 	pTable->_bocket1 = NULL;
 	pTable->_pUserData = NULL;
 	pTable->_meta = NULL;
+	pTable->_fun._func = NULL;
 
 	_sTables[_dwLastIDTable] = pTable;
 	return pTable;
@@ -169,6 +170,7 @@ void CNeoVM::FreeTable(TableInfo* tbl)
 		}
 		tbl->_meta = NULL;
 	}
+	tbl->_fun._func = NULL;
 
 	tbl->Free(this);
 

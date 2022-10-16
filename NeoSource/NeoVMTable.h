@@ -227,6 +227,7 @@ struct TableInfo
 	int _itemCount;
 	void* _pUserData;
 
+	FunctionPtrNative _fun;
 	TableInfo*		_meta;
 
 	//CAllocPool m_sPool3;
