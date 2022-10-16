@@ -22,7 +22,6 @@ typedef u8	ArgFlag;
 
 enum eNOperation : OpType
 {
-	NOP_NONE = 0,
 	NOP_MOV,
 	NOP_MOV_MINUS,
 	NOP_ADD2,
@@ -86,6 +85,7 @@ enum eNOperation : OpType
 	NOP_TABLE_REMOVE,
 
 
+	NOP_NONE,
 	NOP_MAX,
 }; // Operation length
 

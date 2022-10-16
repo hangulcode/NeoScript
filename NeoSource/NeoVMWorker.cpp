@@ -1053,8 +1053,6 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			GetOP(&OP);
 			switch (OP.op)
 			{
-			case (NOP_NONE):
-				break;
 			case NOP_MOV:
 				Move(GetVarPtr1(OP), GetVarPtr2(OP));
 				break;
@@ -1338,6 +1336,8 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				TableRemove(GetVarPtr1(OP), GetVarPtr2(OP));
 				break;
 			}
+			case NOP_NONE:
+				break;
 			default:
 				SetError("Unkonwn OP");
 				break;

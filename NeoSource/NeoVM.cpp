@@ -247,7 +247,7 @@ bool CNeoVM::Init(void* pBuffer, int iSize, int iStackSize)
 		memset(&fun, 0, sizeof(SFunctionTable));
 
 		ar >> iID >> fun._codePtr >> fun._argsCount >> fun._localTempMax >> fun._localVarCount >> fun._funType;
-		if (fun._funType != FUNT_NORMAL)
+		if (fun._funType != FUNT_NORMAL && fun._funType != FUNT_ANONYMOUS)
 		{
 			ReadString(ar, funName);
 			m_sImExportTable[funName] = iID;

@@ -731,7 +731,7 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 		int iID = (*it).first;
 		SFunctionTableForWriter fun = (*it).second;
 		ar << iID << fun._codePtr << fun._argsCount << fun._localTempMax << fun._localVarCount << fun._funType;
-		if (fun._funType != FUNT_NORMAL)
+		if (fun._funType != FUNT_NORMAL && fun._funType != FUNT_ANONYMOUS)
 		{
 			WriteString(ar, fun._name);
 		}
