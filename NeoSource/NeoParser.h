@@ -15,6 +15,7 @@
 
 bool IsTempVar(int iVar);
 eNOperation	GetOpTypeFromOp(eNOperation op);
+eNOperation GetTableOpTypeFromOp(eNOperation op);
 int		GetOpLength(eNOperation op);
 
 struct SJumpValue
@@ -404,7 +405,7 @@ struct SFunctionInfo
 		//_code->Write(&r, sizeof(r));
 		Push_Arg(r, 0, 0);
 	}
-	void	Push_TableInsert(CArchiveRdWC& ar, short nTable, short nArray, short nValue)
+	void	Push_Table_MASMDP(CArchiveRdWC& ar, eNOperation op, short nTable, short nArray, short nValue)
 	{
 		if (IsTempVar(nValue))
 		{
@@ -429,7 +430,7 @@ struct SFunctionInfo
 		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		OpType optype = GetOpTypeFromOp(NOP_TABLE_INSERT);
+		eNOperation optype = GetTableOpTypeFromOp(op);
 		_code->Write(&optype, sizeof(optype));
 		//_code->Write(&nTable, sizeof(nTable));
 		//_code->Write(&nArray, sizeof(nArray));

@@ -96,6 +96,20 @@ eNOperation GetOpTypeFromOp(eNOperation op)
 {
 	return g_sOpInfo[op]._opType;
 }
+eNOperation GetTableOpTypeFromOp(eNOperation op)
+{
+	switch (op)
+	{
+	case NOP_MOV: op = NOP_TABLE_MOV; break;
+	case NOP_ADD2: op = NOP_TABLE_ADD2; break;
+	case NOP_SUB2: op = NOP_TABLE_SUB2; break;
+	case NOP_MUL2: op = NOP_TABLE_MUL2; break;
+	case NOP_DIV2: op = NOP_TABLE_DIV2; break;
+	case NOP_PERSENT2: op = NOP_TABLE_PERSENT2; break;
+	default: break;
+	}
+	return g_sOpInfo[op]._opType;
+}
 int GetOpLength(eNOperation op)
 {
 	//return sizeof(OpType) + g_sOpInfo[op]._op_length*sizeof(short);
@@ -253,9 +267,14 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_FUNEND, 0);
 
 	OP_STR1(NOP_TABLE_ALLOC, 1);
-	OP_STR1(NOP_TABLE_INSERT, 3);
 	OP_STR1(NOP_TABLE_READ, 3);
 	OP_STR1(NOP_TABLE_REMOVE, 2);
+	OP_STR1(NOP_TABLE_MOV, 3);
+	OP_STR1(NOP_TABLE_ADD2, 3);
+	OP_STR1(NOP_TABLE_SUB2, 3);
+	OP_STR1(NOP_TABLE_MUL2, 3);
+	OP_STR1(NOP_TABLE_DIV2, 3);
+	OP_STR1(NOP_TABLE_PERSENT2, 3);
 
 	if (blError)
 	{
@@ -931,7 +950,7 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 			return TK_NONE;
 		}
 
-		funs._cur.Push_TableInsert(ar, iResultStack, iTempOffsetKey, iTempOffsetValue);
+		funs._cur.Push_Table_MASMDP(ar, NOP_TABLE_MOV, iResultStack, iTempOffsetKey, iTempOffsetValue);
 
 		tkType2 = GetToken(ar, tk2);
 		if (tkType2 == TK_R_MIDDLE)
@@ -1444,7 +1463,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 					//}
 				}
 				else
-					funs._cur.Push_TableInsert(ar, a._iVar, a._iArrayIndex, b._iVar);
+					funs._cur.Push_Table_MASMDP(ar, op, a._iVar, a._iArrayIndex, b._iVar);
 			}
 			else
 			{
@@ -1454,7 +1473,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				{
 					int iTempOffset2 = funs._cur.AllocLocalTempVar();
 					funs._cur.Push_TableRead(ar, b._iVar, b._iArrayIndex, iTempOffset2);
-					funs._cur.Push_TableInsert(ar, a._iVar, a._iArrayIndex, iTempOffset2);
+					funs._cur.Push_Table_MASMDP(ar, op, a._iVar, a._iArrayIndex, iTempOffset2);
 				}
 			}
 		}
@@ -2328,12 +2347,13 @@ void FinalizeFuction(SFunctions& funs)
 
 	if (funs._cur._pDebugData)
 	{
+		int iSrcBeginDebugOff = iCode_Begin / 8;
 		int base = (int)funs.m_sDebugFinal.size();
 		funs.m_sDebugFinal.resize(funs._codeFinal.GetBufferOffset() / 8);
 		for (int i = base; i < funs.m_sDebugFinal.size(); i++)
-			funs.m_sDebugFinal[i] = (*funs._cur._pDebugData)[i - base];
+			funs.m_sDebugFinal[i] = (*funs._cur._pDebugData)[i + iSrcBeginDebugOff - base];
 
-		funs._cur._pDebugData->resize(iCode_Begin / 8);
+		funs._cur._pDebugData->resize(iSrcBeginDebugOff);
 	}
 	
 	funs._funSequence.push_back(funs._cur._name);
@@ -2473,17 +2493,21 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	funs.AddStaticString("system");
 
 	bool r = ParseFunctionBody(ar, funs, vars);
-	funs._cur._iCode_Size = funs._cur._code->GetBufferOffset();
-
-	FinalizeFuction(funs);
-	funs._funs[funs._cur._name] = funs._cur;
-
 	if (true == r)
 	{
+		funs._cur._iCode_Size = funs._cur._code->GetBufferOffset();
+
+		FinalizeFuction(funs);
+		funs._funs[funs._cur._name] = funs._cur;
+
 		if(false == Write(ar, arw, funs, vars))
 			return false;
-		if(putASM)
+		if (putASM)
+		{
+			int off = arw.GetBufferOffset();
 			WriteLog(ar, arw, funs, vars);
+			arw.SetBufferOffset(off);
+		}
 	}
 
 	DelVarsFunction(vars);

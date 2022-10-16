@@ -80,10 +80,14 @@ enum eNOperation : OpType
 	NOP_FUNEND,
 
 	NOP_TABLE_ALLOC,
-	NOP_TABLE_INSERT,
 	NOP_TABLE_READ,
 	NOP_TABLE_REMOVE,
-
+	NOP_TABLE_MOV,
+	NOP_TABLE_ADD2,
+	NOP_TABLE_SUB2,
+	NOP_TABLE_MUL2,
+	NOP_TABLE_DIV2,
+	NOP_TABLE_PERSENT2,
 
 	NOP_NONE,
 	NOP_MAX,
@@ -214,6 +218,7 @@ struct SNeoVMHeader
 	int		_iMainFunctionOffset;
 	int		_iCodeSize;
 	int		m_iDebugCount;
+	int		m_iDebugOffset;
 
 	u32		_dwFlag;
 };
@@ -426,6 +431,7 @@ private:
 	int Sleep(int iTimeout, VarInfo* v1);
 	void Call(int n1, int n2, VarInfo* pReturnValue = NULL);
 	bool Call_MetaTable(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, VarInfo* b);
+	bool Call_MetaTable2(VarInfo* pTable, std::string&, VarInfo* a, VarInfo* b);
 
 	std::string ToString(VarInfo* v1);
 	int ToInt(VarInfo* v1);
@@ -437,6 +443,33 @@ private:
 	void TableRead(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);
 	void TableRemove(VarInfo *pTable, VarInfo *pArray);
 	VarInfo* GetTableItem(VarInfo *pTable, VarInfo *pArray);
+	VarInfo* GetTableItemValid(VarInfo *pTable, VarInfo *pArray);
+
+	void TableAdd2(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
+	{
+		VarInfo* p = GetTableItemValid(pTable, pArray);
+		if (p) Add2(p, pValue);
+	}
+	void TableSub2(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
+	{
+		VarInfo* p = GetTableItemValid(pTable, pArray);
+		if (p) Sub2(p, pValue);
+	}
+	void TableMul2(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
+	{
+		VarInfo* p = GetTableItemValid(pTable, pArray);
+		if (p) Mul2(p, pValue);
+	}
+	void TableDiv2(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
+	{
+		VarInfo* p = GetTableItemValid(pTable, pArray);
+		if (p) Div2(p, pValue);
+	}
+	void TablePer2(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
+	{
+		VarInfo* p = GetTableItemValid(pTable, pArray);
+		if (p) Per2(p, pValue);
+	}
 
 	void ClearArgs()
 	{

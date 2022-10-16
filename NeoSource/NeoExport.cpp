@@ -258,8 +258,13 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			//ar << optype << v.n1;
 			argFlag = GetArgIndexToCode(&v.n1, nullptr, nullptr);
 			break;
-		case NOP_TABLE_INSERT:
+		case NOP_TABLE_MOV:
 		case NOP_TABLE_READ:
+		case NOP_TABLE_ADD2:
+		case NOP_TABLE_SUB2:
+		case NOP_TABLE_MUL2:
+		case NOP_TABLE_DIV2:
+		case NOP_TABLE_PERSENT2:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
@@ -299,7 +304,7 @@ std::string GetLog(SVMOperation& op, int argIndex)
 }
 
 
-void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFunctionInfo& fi, SVars& vars)
+void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFunctionInfo& fi, SVars& vars, std::vector< debug_info>& debugInfo)
 {
 	int staticCount = (int)funs._staticVars.size();
 	int localCount = fi._localVarCount;
@@ -335,11 +340,15 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 		//{
 		//	arRead.Read(&v.n1, len * sizeof(short));
 		//}
+		if (arText._debug)
+		{
+			int off = fi._iCode_Begin - sizeof(SNeoVMHeader) + arRead.GetBufferOffset();
+			OutAsm("%6d : ", debugInfo[off/8]._lineseq);
+		}
 
 		arRead >> v;
 
-		//if (arText._debug)
-		//	OutAsm("%6d : ", v.dbg._lineseq);
+
 
 		switch (v.op)
 		{
@@ -644,13 +653,34 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutBytes((const u8*)&v, 1 + 2 * 1, 8);
 			OutAsm("Table Alloc [%s]\n", GetLog(v, 1).c_str());
 			break;
-		case NOP_TABLE_INSERT:
+		case NOP_TABLE_MOV:
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("Table Insert [%s].[%s] = [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutAsm("Table MOV [%s].[%s] = [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
+		case NOP_TABLE_ADD2:
+			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutAsm("Table ADD [%s].[%s] += [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			break;
+		case NOP_TABLE_SUB2:
+			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutAsm("Table SUB [%s].[%s] -= [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			break;
+		case NOP_TABLE_MUL2:
+			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutAsm("Table MUL [%s].[%s] *= [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			break;
+		case NOP_TABLE_DIV2:
+			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutAsm("Table DIV [%s].[%s] /= [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			break;
+		case NOP_TABLE_PERSENT2:
+			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutAsm("Table PER [%s].[%s] %= [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			break;
+
 		case NOP_TABLE_READ:
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
@@ -770,6 +800,7 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	// Debug 정보 Save
 	if (header.m_iDebugCount)
 	{
+		header.m_iDebugOffset = ar.GetBufferOffset();
 		ar.Write(&debugInfo[0], sizeof(debug_info) * header.m_iDebugCount);
 	}
 
@@ -805,8 +836,12 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 	SNeoVMHeader header;
 	memset(&header, 0, sizeof(header));
 
-	header._iFunctionCount = (int)(funs._funs.size() + 1);
-	header._iStaticVarCount = (int)funs._staticVars.size();
+	//header._iFunctionCount = (int)(funs._funs.size() + 1);
+	//header._iStaticVarCount = (int)funs._staticVars.size();
+
+	arw.SetBufferOffset(0);
+	arw >> header;
+
 
 	std::map<int, std::string> mapFun;
 	for (auto it = funs._funs.begin(); it != funs._funs.end(); it++)
@@ -857,6 +892,17 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 		}
 	}
 
+	std::vector< debug_info> debugInfo;
+	if (header.m_iDebugCount > 0 && header.m_iDebugOffset > 0)
+	{
+		debugInfo.resize(header.m_iDebugCount);
+		int off = arw.GetBufferOffset();
+		arw.SetBufferOffset(header.m_iDebugOffset);
+		arw.Read(&debugInfo[0], header.m_iDebugCount * sizeof(debug_info));
+		arw.SetBufferOffset(off);
+	}
+
+
 	// Main 함수 코드 저장
 	//WriteFunLog(arText, arw, funs, funs._cur, vars);
 	// Sub 함수 코드 저장
@@ -864,7 +910,7 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 	{
 		auto it2 = funs._funs.find((*it));
 		SFunctionInfo& fi = (*it2).second;
-		WriteFunLog(arText, arw, funs, fi, vars);
+		WriteFunLog(arText, arw, funs, fi, vars, debugInfo);
 	}
 
 	//// 함수 포인터 저장
