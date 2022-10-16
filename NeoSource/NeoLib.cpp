@@ -275,7 +275,7 @@ typedef bool (*TYPE_NeoLib)(CNeoVMWorker* pN, short args);
 static std::map<std::string, TYPE_NeoLib> g_sNeoFunLib;
 
 
-static bool Fun(CNeoVMWorker* pN, void* pUserData, std::string& fun, short args)
+static bool Fun(CNeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
 {
 	auto it = g_sNeoFunLib.find(fun);
 	if (it == g_sNeoFunLib.end())

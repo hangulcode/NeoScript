@@ -110,7 +110,7 @@ struct SVarWrapper;
 class CNeoVMWorker;
 struct FunctionPtr;
 typedef int(*Neo_CFunction) (CNeoVMWorker *N, FunctionPtr* pFun, short args);
-typedef bool(*Neo_NativeFunction) (CNeoVMWorker *N, void* pUserData, std::string& fun, short args);
+typedef bool(*Neo_NativeFunction) (CNeoVMWorker *N, void* pUserData, const std::string& fun, short args);
 
 struct StringInfo
 {
