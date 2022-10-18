@@ -33,7 +33,7 @@ public:
 typedef bool (CA::*TYPE_FUN)(CNeoVMWorker* pN, short args);
 std::map<std::string, TYPE_FUN> g_sTablesFun;
 
-bool Fun(CNeoVMWorker* pN, void* pUserData, std::string& fun, short args)
+bool Fun(CNeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
 {
 	auto it = g_sTablesFun.find(fun);
 	if (it == g_sTablesFun.end())

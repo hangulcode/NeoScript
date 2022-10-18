@@ -49,6 +49,10 @@ enum eNOperation : OpType
 	NOP_AND,	// &&
 	NOP_OR,		// ||
 
+	NOP_JMP,
+	NOP_JMP_FALSE,
+	NOP_JMP_TRUE,
+
 	NOP_JMP_GREAT,		// >
 	NOP_JMP_GREAT_EQ,	// >=
 	NOP_JMP_LESS,		// <
@@ -70,9 +74,6 @@ enum eNOperation : OpType
 	NOP_GETTYPE,
 	NOP_SLEEP,
 
-	NOP_JMP,
-	NOP_JMP_FALSE,
-	NOP_JMP_TRUE,
 
 	NOP_CALL,
 	NOP_PTRCALL,
@@ -110,7 +111,7 @@ struct SVarWrapper;
 class CNeoVMWorker;
 struct FunctionPtr;
 typedef int(*Neo_CFunction) (CNeoVMWorker *N, FunctionPtr* pFun, short args);
-typedef bool(*Neo_NativeFunction) (CNeoVMWorker *N, void* pUserData, std::string& fun, short args);
+typedef bool(*Neo_NativeFunction) (CNeoVMWorker *N, void* pUserData, const std::string& fun, short args);
 
 struct StringInfo
 {

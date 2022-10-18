@@ -2127,12 +2127,14 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 			}
 		}
 		ClearTempVars(funs);
-		funs._cur.Set_JumpOffet(jmp2, funs._cur._code->GetBufferOffset());
+		//if(funs._cur.GetLastOP() != NOP_RETURN) // Code Size OPT TODO !!
+			funs._cur.Set_JumpOffet(jmp2, funs._cur._code->GetBufferOffset());
 	}
 	else
 	{
 		ar.PushToken(tkType1, tk1);
-		funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
+		//if (funs._cur.GetLastOP() != NOP_RETURN) // Code Size OPT TODO !!
+			funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
 	}
 	return true;
 }
