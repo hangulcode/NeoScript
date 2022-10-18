@@ -183,6 +183,16 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			argFlag = GetArgIndexToCode(&v.n1, &v.n2, &v.n3);
 			break;
 
+		case NOP_JMP:
+			//ar << optype << v.n1;
+			argFlag = GetArgIndexToCode(nullptr, nullptr, nullptr);
+			break;
+		case NOP_JMP_FALSE:
+		case NOP_JMP_TRUE:
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
+			argFlag = GetArgIndexToCode(nullptr, &v.n2, nullptr);
+			break;
+
 		case NOP_JMP_GREAT:		// >
 		case NOP_JMP_GREAT_EQ:	// >=
 		case NOP_JMP_LESS:		// <
@@ -216,15 +226,6 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			argFlag = GetArgIndexToCode(&v.n1, &v.n2, nullptr);
 			break;
 		case NOP_SLEEP:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			argFlag = GetArgIndexToCode(&v.n1, nullptr, nullptr);
-			break;
-		case NOP_JMP:
-			//ar << optype << v.n1;
-			argFlag = GetArgIndexToCode(nullptr, nullptr, nullptr);
-			break;
-		case NOP_JMP_FALSE:
-		case NOP_JMP_TRUE:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			argFlag = GetArgIndexToCode(&v.n1, nullptr, nullptr);
 			break;
@@ -303,6 +304,19 @@ std::string GetLog(SVMOperation& op, int argIndex)
 	return ch;
 }
 
+std::string JumpMark(std::map<int, int>& sJumpMark, int off)
+{
+	std::string r;
+	auto it = sJumpMark.find(off + 8);
+	if (it == sJumpMark.end())
+		return r;
+	char ch[128];
+	sprintf_s(ch, _countof(ch), " 'go_%d'", (*it).second);
+	r = ch;
+	return r;
+}
+
+
 
 void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFunctionInfo& fi, SVars& vars, std::vector< debug_info>& debugInfo)
 {
@@ -321,25 +335,50 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 	CNArchive arRead((u8*)arw.GetData() + fi._iCode_Begin, fi._iCode_Size);
 	arRead.SetPointer(0, SEEK_SET);
 
+	std::map<int, int> sJumpMark;
 	SVMOperation v;
+	while (arRead.GetBufferOffset() < arRead.GetBufferSize())
+	{
+		int off = arRead.GetBufferOffset();
+		arRead >> v;
+
+		switch (v.op)
+		{
+		case NOP_JMP:
+		case NOP_JMP_FALSE:
+		case NOP_JMP_TRUE:
+		case NOP_JMP_GREAT:		// >
+		case NOP_JMP_GREAT_EQ:	// >=
+		case NOP_JMP_LESS:		// <
+		case NOP_JMP_LESS_EQ:	// <=
+		case NOP_JMP_EQUAL2:	// ==
+		case NOP_JMP_NEQUAL:	// !=
+		case NOP_JMP_AND:	// &&
+		case NOP_JMP_OR:		// ||
+		case NOP_JMP_NAND:	// !(&&)
+		case NOP_JMP_NOR:	// !(||)
+		case NOP_JMP_FOREACH:	// foreach
+			sJumpMark[off + 8 + v.n1] = 0;
+			break;
+		}
+	}
+	int idx = 0;
+	for (auto it = sJumpMark.begin(); it != sJumpMark.end(); it++)
+	{
+		(*it).second = idx++;
+	}
+
+	arRead.SetBufferOffset(0);
 
 	while (arRead.GetBufferOffset() < arRead.GetBufferSize())
 	{
-		//if(arText._debug)
-		//	arRead >> v.dbg;
+		int off = arRead.GetBufferOffset();
+		auto it = sJumpMark.find(off);
+		if (it != sJumpMark.end())
+		{
+			OutAsm("\t\t\t\t\tgo_%d:\n", (*it).second);
+		}
 
-		//OpType optype;
-		//arRead >> optype;
-
-		//u8 argFlag;
-		//arRead >> argFlag;
-
-		//v.op = CODE_TO_NOP(optype);
-		//int len = CODE_TO_LEN(optype);
-		//if (len)
-		//{
-		//	arRead.Read(&v.n1, len * sizeof(short));
-		//}
 		if (arText._debug)
 		{
 			int off = fi._iCode_Begin - sizeof(SNeoVMHeader) + arRead.GetBufferOffset();
@@ -348,350 +387,246 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 
 		arRead >> v;
 
-
+		const int skipByteChars = 12;
+		const int OpFlagByteChars = 2;
 
 		switch (v.op)
 		{
 		case NOP_ADD2:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("ADD [%s] += [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str());
 			break;
 		case NOP_SUB2:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("SUB [%s] -= [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str());
 			break;
 		case NOP_MUL2:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("MUL [%s] *= [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str());
 			break;
 		case NOP_DIV2:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("DIV [%s] /= [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str());
 			break;
 		case NOP_PERSENT2:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("PER [%s] %%= [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str());
 			break;
 
 		case NOP_ADD3:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("ADD [%s] = [%s] + [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_SUB3:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("SUB [%s] = [%s] - [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_MUL3:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("MUL [%s] = [%s] * [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_DIV3:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("DIV [%s] = [%s] / [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_PERSENT3:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("PER [%s] = [%s] %% [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 
 		case NOP_VAR_CLEAR:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			OutBytes((const u8*)&v, 1 + 2 * 1, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
 			OutAsm("CLR [%s]\n", GetLog(v, 1).c_str());
 			break;
 		case NOP_INC:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			OutBytes((const u8*)&v, 1 + 2 * 1, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
 			OutAsm("INC [%s]\n", GetLog(v, 1).c_str());
 			break;
 		case NOP_DEC:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			OutBytes((const u8*)&v, 1 + 2 * 1, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
 			OutAsm("DEC [%s]\n", GetLog(v, 1).c_str());
 			break;
 
 		case NOP_GREAT:		// >
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("GR [%s] = [%s] > [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_GREAT_EQ:	// >=
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("GE [%s] = [%s] >= [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_LESS:		// <
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("LS [%s] = [%s] < [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_LESS_EQ:	// <=
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("LE [%s] = [%s] <= [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_EQUAL2:	// ==
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("EQ [%s] = [%s] == [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_NEQUAL:	// !=
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("NE [%s] = [%s] != [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_AND:	// &&
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("AND [%s] = [%s] && [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_OR:	// ||
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("NE [%s] = [%s] || [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 
 		case NOP_STR_ADD:	// ..
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("STR_ADD Str[%s] = ToStr[%s] + ToStr[%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 
+		case NOP_JMP:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
+			OutAsm("JMP %d%s\n", v.n1, JumpMark(sJumpMark, off+v.n1).c_str());
+			break;
+		case NOP_JMP_FALSE:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
+			OutAsm("JMP %d%s [%s] is False\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(v, 2).c_str());
+			break;
+		case NOP_JMP_TRUE:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
+			OutAsm("JMP %d%s [%s] is True  %d\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(v, 2).c_str());
+			break;
+
 		case NOP_JMP_GREAT:		// >
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JGR %d,  [%s] > [%s]\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("JGR %d%s,  [%s] > [%s]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_GREAT_EQ:	// >=
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JGE %d,  [%s] >= [%s]\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("JGE %d%s,  [%s] >= [%s]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_LESS:		// <
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JLS %d,  [%s] < [%s]\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("JLS %d%s,  [%s] < [%s]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_LESS_EQ:	// <=
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JLE %d,  [%s] <= [%s]\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("JLE %d%s,  [%s] <= [%s]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_EQUAL2:	// ==
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JEQ %d,  [%s] == [%s]\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("JEQ %d%s,  [%s] == [%s]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_NEQUAL:	// !=
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JNE %d,  [%s] != [%s]\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("JNE %d%s,  [%s] != [%s]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_AND:	// &&
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JAND %d,  [%s] && [%s]\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("JAND %d%s,  [%s] && [%s]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_OR:		// ||
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JOR %d,  [%s] || [%s]\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("JOR %d%s,  [%s] || [%s]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_NAND:	// !(&&)
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JNAND %d,  !([%s] && [%s])\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("JNAND %d%s,  !([%s] && [%s])\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_NOR:	// !(||)
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JNOR %d,  !([%s] || [%s])\n", v.n1, GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("JNOR %d%s,  !([%s] || [%s])\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_JMP_FOREACH:	// foreach
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
-			OutAsm("JFRE %d,  T[%s], K[S.%d], V[S.%d]\n", v.n1, GetLog(v, 2).c_str(), v.n3, v.n3+1);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("JFRE %d%s,  T[%s], K[S.%d], V[S.%d]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(v, 2).c_str(), v.n3, v.n3+1);
 			break;
 
 		case NOP_TOSTRING:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("ToString [%s] = [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str());
 			break;
 		case NOP_TOINT:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("ToInt [%s] = [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str());
 			break;
 		case NOP_TOFLOAT:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("ToFloat [%s] = [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str());
 			break;
 		case NOP_TOSIZE:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("ToSize [%s] = [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str());
 			break;
 		case NOP_GETTYPE:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("GetType [%s] = [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str());
 			break;
 		case NOP_SLEEP:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			OutBytes((const u8*)&v, 1 + 2 * 1, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
 			OutAsm("Sleep [%s]\n", GetLog(v, 1).c_str());
-			break;
-		case NOP_JMP:
-			OutBytes((const u8*)&v, 1 + 2 * 1, 8);
-			OutAsm("JMP  %d\n", v.n1);
-			break;
-		case NOP_JMP_FALSE:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
-			OutAsm("JMP is False [%s]  %d\n", GetLog(v, 1).c_str(), v.n2);
-			break;
-		case NOP_JMP_TRUE:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
-			OutAsm("JMP is True [%s]  %d\n", GetLog(v, 1).c_str(), v.n2);
 			break;
 
 		case NOP_MOV:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("MOV [%s] = [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str());
 			break;
 		case NOP_MOV_MINUS:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("MOVI [%s] = -[%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str());
 			break;
 
 		case NOP_PTRCALL:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("Ptr CALL [%s].[%s] arg:%d\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), v.n3);
 			break;
 		case NOP_CALL:
-			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("CALL %s\n", GetFunctionName(funs, v.n1).c_str());
 			break;
 		case NOP_RETURN:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			OutBytes((const u8*)&v, 1 + 2 * 1, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
 			OutAsm("RET [%s]\n", GetLog(v, 1).c_str());
 			break;
 		case NOP_FUNEND:
 			OutAsm("- End -\n");
 			break;
 		case NOP_TABLE_ALLOC:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			OutBytes((const u8*)&v, 1 + 2 * 1, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
 			OutAsm("Table Alloc [%s]\n", GetLog(v, 1).c_str());
 			break;
 		case NOP_TABLE_MOV:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("Table MOV [%s].[%s] = [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_TABLE_ADD2:
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("Table ADD [%s].[%s] += [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_TABLE_SUB2:
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("Table SUB [%s].[%s] -= [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_TABLE_MUL2:
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("Table MUL [%s].[%s] *= [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_TABLE_DIV2:
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("Table DIV [%s].[%s] /= [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 		case NOP_TABLE_PERSENT2:
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("Table PER [%s].[%s] %= [%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str(), GetLog(v, 3).c_str());
 			break;
 
 		case NOP_TABLE_READ:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-			OutBytes((const u8*)&v, 1 + 2 * 3, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("Table Read [%s] = [%s].[%s]\n", GetLog(v, 3).c_str(), GetLog(v, 1).c_str(), GetLog(v, 2).c_str());
 			break;
 		case NOP_TABLE_REMOVE:
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			//ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			OutBytes((const u8*)&v, 1 + 2 * 2, 8);
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("Table Remove [%s].[%s]\n", GetLog(v, 1).c_str(), GetLog(v, 2).c_str());
 			break;
 		default:

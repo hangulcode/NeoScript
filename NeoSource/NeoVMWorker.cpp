@@ -1206,6 +1206,17 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				Var_SetBool(GetVarPtr1(OP), GetVarPtr2(OP)->IsTrue() || GetVarPtr3(OP)->IsTrue());
 				break;
 
+			case NOP_JMP:
+				SetCodeIncPtr(OP.n1);
+				break;
+			case NOP_JMP_FALSE:
+				if (false == GetVarPtr2(OP)->IsTrue())
+					SetCodeIncPtr(OP.n1);
+				break;
+			case NOP_JMP_TRUE:
+				if (true == GetVarPtr2(OP)->IsTrue())
+					SetCodeIncPtr(OP.n1);
+				break;
 
 
 			case NOP_JMP_GREAT:		// >
@@ -1288,17 +1299,6 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				}
 				break;
 
-			case NOP_JMP:
-				SetCodeIncPtr(OP.n1);
-				break;
-			case NOP_JMP_FALSE:
-				if (false == GetVarPtr1(OP)->IsTrue())
-					SetCodeIncPtr(OP.n2);
-				break;
-			case NOP_JMP_TRUE:
-				if (true == GetVarPtr1(OP)->IsTrue())
-					SetCodeIncPtr(OP.n2);
-				break;
 
 			case NOP_CALL:
 				Call(OP.n1, OP.n2);

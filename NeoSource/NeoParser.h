@@ -361,7 +361,7 @@ struct SFunctionInfo
 		_code->Write(&optype, sizeof(optype));
 		//_code->Write(&var, sizeof(var));
 		//_code->Write(&add, sizeof(add));
-		Push_Arg(var, add, 0);
+		Push_Arg(add, var, 0);
 	}
 	void	Push_JMPTrue(CArchiveRdWC& ar, short var, int destOffset)
 	{
@@ -374,7 +374,7 @@ struct SFunctionInfo
 		_code->Write(&optype, sizeof(optype));
 		//_code->Write(&var, sizeof(var));
 		//_code->Write(&add, sizeof(add));
-		Push_Arg(var, add, 0);
+		Push_Arg(add, var, 0);
 	}
 	// Always Value is Key Next Alloc ID
 	void	Push_JMPForEach(CArchiveRdWC& ar, int destOffset, short table, short key)
