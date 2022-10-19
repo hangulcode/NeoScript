@@ -18,7 +18,7 @@ const int DefualtTableSize = 4;
 #define MAX_TABLE	64
 
 
-struct TableBocket3
+struct TableBocket4
 {
 	TableNode*	_table; // alloc pointer [array]
 	TableNode	_default[DefualtTableSize];
@@ -28,6 +28,11 @@ struct TableBocket3
 	int			_capa;
 
 	int Find(VarInfo* pKey);
+};
+
+struct TableBocket3
+{
+	TableBocket4* _bocket4;
 };
 
 struct TableBocket2
@@ -62,7 +67,7 @@ struct TableInfo
 	void Insert(CNeoVM* pVM, std::string& pKey, VarInfo* pValue);
 	void Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue);
 	void Remove(CNeoVMWorker* pVMW, VarInfo* pKey);
-	TableBocket3* GetTableBocket(VarInfo *pKey);
+	TableBocket4* GetTableBocket(VarInfo *pKey);
 	VarInfo* GetTableItem(VarInfo *pKey);
 	VarInfo* GetTableItem(std::string& key);
 

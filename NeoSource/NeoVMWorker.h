@@ -137,7 +137,7 @@ struct FunctionPtr
 
 
 struct TableInfo;
-struct TableBocket3;
+struct TableBocket4;
 
 
 #pragma pack(1)
@@ -146,9 +146,10 @@ struct TableIterator
 	u16			_hash1;
 	u16			_hash2;
 	u16			_hash3;
+	u16			_hash4;
 
 	u16			_offset;
-	TableBocket3*	_bocket;
+	TableBocket4*	_bocket;
 };
 #pragma pack()
 
