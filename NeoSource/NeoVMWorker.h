@@ -137,7 +137,7 @@ struct FunctionPtr
 
 
 struct TableInfo;
-struct TableBocket3;
+struct TableBocket4;
 
 
 #pragma pack(1)
@@ -146,9 +146,10 @@ struct TableIterator
 	u16			_hash1;
 	u16			_hash2;
 	u16			_hash3;
+	u16			_hash4;
 
 	u16			_offset;
-	TableBocket3*	_bocket;
+	TableBocket4*	_bocket;
 };
 #pragma pack()
 
@@ -272,6 +273,22 @@ struct SVarWrapper
 	void SetBool(bool v);
 	void SetString(const char* str);
 //	void SetTableFun(FunctionPtrNative fun);
+};
+
+enum eNeoDefaultString
+{
+	NDF_NULL,
+	NDF_BOOL,
+	NDF_INT,
+	NDF_FLOAT,
+	NDF_STRING,
+	NDF_TABLE,
+	NDF_FUNCTION,
+
+	NDF_TRUE,
+	NDF_FALSE,
+
+	NDF_MAX
 };
 
 class CNeoVM;
@@ -435,7 +452,7 @@ private:
 	int ToInt(VarInfo* v1);
 	double ToFloat(VarInfo* v1);
 	int ToSize(VarInfo* v1);
-	std::string GetType(VarInfo* v1);
+	VarInfo* GetType(VarInfo* v1);
 
 	void TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);
 	void TableRead(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);

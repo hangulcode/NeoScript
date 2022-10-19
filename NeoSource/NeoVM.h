@@ -1,6 +1,8 @@
 #pragma once
 
 #include "NeoVMWorker.h"
+#include "NeoVMMemoryPool.h"
+
 class CNArchive;
 class CNeoVM
 {
@@ -52,6 +54,11 @@ private:
 	void FreeTable(VarInfo* d);
 	void FreeTable(TableInfo* tbl);
 
+	VarInfo m_sDefaultValue[NDF_MAX];
+	CAllocPool< sizeof(TableBocket1) * MAX_TABLE, 10> m_sPool_Bocket1;
+	CAllocPool < sizeof(TableBocket2) * MAX_TABLE, 10> m_sPool_Bocket2;
+	CAllocPool < sizeof(TableBocket3) * MAX_TABLE, 10> m_sPool_Bocket3;
+	CAllocPool < sizeof(TableBocket4) * MAX_TABLE, 50> m_sPool_Bocket4;
 public:
 
 	bool RunFunction(const std::string& funName);
