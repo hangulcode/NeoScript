@@ -25,7 +25,6 @@ struct TableBocket4
 
 
 	int			_size_use;
-	int			_capa;
 
 	int Find(VarInfo* pKey);
 };
@@ -33,6 +32,7 @@ struct TableBocket4
 struct TableBocket3
 {
 	TableBocket4* _bocket4;
+	int			_capa[MAX_TABLE];
 };
 
 struct TableBocket2
@@ -59,8 +59,6 @@ struct TableInfo
 
 	FunctionPtrNative _fun;
 	TableInfo*		_meta;
-
-	//CAllocPool m_sPool3;
 
 	void Free(CNeoVM* pVM);
 
