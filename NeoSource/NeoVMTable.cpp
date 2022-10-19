@@ -8,7 +8,6 @@
 #include "NeoVMWorker.h"
 #include "NeoVMTable.h"
 
-#define MAX_TABLE	128
 
 u32 GetHashCode(u8 *buffer, int len)
 {
@@ -64,10 +63,9 @@ TableIterator TableInfo::FirstNode()
 
 			for (int hash3 = 0; hash3 < MAX_TABLE; hash3++)
 			{
-				if (bocket2[hash2]._capa[hash3] == 0)
+				if (bocket3[hash3]._size_use == 0)
 					continue;
 				TableBocket3* bocket = &bocket3[hash3];
-				if (bocket->_size_use == 0) continue;
 
 				r._hash1 = hash1;
 				r._hash2 = hash2;
@@ -96,10 +94,9 @@ TableIterator TableInfo::NextNode(TableIterator r)
 		TableBocket3* bocket3 = bocket2[r._hash2]._bocket3;
 		for (int hash3 = r._hash3 + 1; hash3 < MAX_TABLE; hash3++)
 		{
-			if (bocket2[r._hash2]._capa[hash3] == 0)
+			if (bocket3[hash3]._size_use == 0)
 				continue;
 			TableBocket3* bocket = &bocket3[hash3];
-			if (bocket->_size_use == 0) continue;
 
 			//r._hash1 = hash1;
 			//r._hash2 = hash2;
@@ -118,10 +115,9 @@ TableIterator TableInfo::NextNode(TableIterator r)
 
 		for (int hash3 = 0; hash3 < MAX_TABLE; hash3++)
 		{
-			if (bocket2[hash2]._capa[hash3] == 0)
+			if (bocket3[hash3]._size_use == 0)
 				continue;
 			TableBocket3* bocket = &bocket3[hash3];
-			if (bocket->_size_use == 0) continue;
 
 			//r._hash1 = hash1;
 			r._hash2 = hash2;
@@ -144,10 +140,9 @@ TableIterator TableInfo::NextNode(TableIterator r)
 
 			for (int hash3 = 0; hash3 < MAX_TABLE; hash3++)
 			{
-				if (bocket2[hash2]._capa[hash3] == 0)
+				if (bocket3[hash3]._size_use == 0)
 					continue;
 				TableBocket3* bocket = &bocket3[hash3];
-				if (bocket->_size_use == 0) continue;
 
 				r._hash1 = hash1;
 				r._hash2 = hash2;
@@ -198,26 +193,26 @@ void TableInfo::Free(CNeoVM* pVM)
 
 			for (int hash3 = 0; hash3 < MAX_TABLE; hash3++)
 			{
-				if (bocket2[hash2]._capa[hash3] == 0)
+				if (bocket3[hash3]._capa == 0)
 					continue;
 				TableBocket3* bocket = &bocket3[hash3];
-				if (bocket->_size_use != 0)
+				for (int i = bocket->_size_use - 1; i >= 0; i--)
 				{
-					for (int i = bocket->_size_use - 1; i >= 0; i--)
-					{
-						TableNode* pCur = &bocket->_table[i];
-						Var_Release(pVM, &pCur->key);
-						Var_Release(pVM, &pCur->value);
-					}
+					TableNode* pCur = &bocket->_table[i];
+					Var_Release(pVM, &pCur->key);
+					Var_Release(pVM, &pCur->value);
 				}
-				if(bocket->_table && bocket2[hash2]._capa[hash3] > DefualtTableSize)
+				if(bocket->_table && bocket->_capa > DefualtTableSize)
 					free(bocket->_table);
 			}
-			free(bocket3);
+			//free(bocket3);
+			pVM->m_sPool_Bocket3.Confer(bocket3);
 		}
-		free(bocket2);
+		//free(bocket2);
+		pVM->m_sPool_Bocket2.Confer(bocket2);
 	}
-	free(_bocket1);
+	//free(_bocket1);
+	pVM->m_sPool_Bocket1.Confer(_bocket1);
 	_bocket1 = NULL;
 	_itemCount = 0;
 }
@@ -349,16 +344,17 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 
 	if (_bocket1 == NULL)
 	{
-		_bocket1 = (TableBocket1*)malloc(sizeof(TableBocket1) * MAX_TABLE);
+//		_bocket1 = (TableBocket1*)malloc(sizeof(TableBocket1) * MAX_TABLE);
+		_bocket1 = (TableBocket1*)pVMW->_pVM->m_sPool_Bocket1.Receive();
 		memset(_bocket1, 0, sizeof(TableBocket1) * MAX_TABLE);
 
-//		m_sPool3.Init(sizeof(TableNode) * DefualtTableSize, 100);
 	}
 
 	TableBocket2* bocket2 = _bocket1[hash1]._bocket2;
 	if (bocket2 == NULL)
 	{
-		bocket2 = (TableBocket2*)malloc(sizeof(TableBocket2) * MAX_TABLE);
+//		bocket2 = (TableBocket2*)malloc(sizeof(TableBocket2) * MAX_TABLE);
+		bocket2 = (TableBocket2*)pVMW->_pVM->m_sPool_Bocket2.Receive();;
 		memset(bocket2, 0, sizeof(TableBocket2) * MAX_TABLE);
 		_bocket1[hash1]._bocket2 = bocket2;
 	}
@@ -366,23 +362,25 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 	TableBocket3* bocket3 = bocket2[hash2]._bocket3;
 	if (bocket3 == NULL)
 	{
-		bocket3 = (TableBocket3*)malloc(sizeof(TableBocket3) * MAX_TABLE);
+//		bocket3 = (TableBocket3*)malloc(sizeof(TableBocket3) * MAX_TABLE);
+		bocket3 = (TableBocket3*)pVMW->_pVM->m_sPool_Bocket3.Receive();;
 //		memset(bocket3, 0, sizeof(TableBocket3) * MAX_TABLE);
 		bocket2[hash2]._bocket3 = bocket3;
 
-		bocket2[hash2]._capa = (int*)malloc(sizeof(int) * MAX_TABLE);
-		memset(bocket2[hash2]._capa, 0, sizeof(int) * MAX_TABLE);
+//		bocket2[hash2]._capa = (int*)malloc(sizeof(int) * MAX_TABLE);
+//		memset(bocket2[hash2]._capa, 0, sizeof(int) * MAX_TABLE);
+		for (int i = 0; i < MAX_TABLE; i++) { bocket3[i]._capa = 0; bocket3[i]._size_use = 0; }
 	}
 
 	TableBocket3* bocket = &bocket3[hash3];
 	int iSelect = -1;
-	if (bocket2[hash2]._capa[hash3] == 0)
+	if (bocket->_capa == 0)
 	{
 		//TableNode* table = (TableNode*)malloc(sizeof(TableNode) * DefualtTableSize);
 //		TableNode* table = bocket->_default;
 //		for (int i = 0; i < DefualtTableSize; i++) { table[i].key.SetType(VAR_NONE); table[i].value.SetType(VAR_NONE); }
 		bocket->_table = bocket->_default;
-		bocket2[hash2]._capa[hash3] = DefualtTableSize;
+		bocket->_capa = DefualtTableSize;
 		bocket->_size_use = 0;
 	}
 	else if (bocket->_size_use > 0)
@@ -405,9 +403,9 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 		//		bocket->Push_Free(&bocket->_table[i]);
 		//}
 
-		if (bocket->_size_use + 1 >= bocket2[hash2]._capa[hash3])
+		if (bocket->_size_use + 1 >= bocket->_capa)
 		{
-			int iPreTableSize = bocket2[hash2]._capa[hash3];
+			int iPreTableSize = bocket->_capa;
 			int iNewTableSize = iPreTableSize * 2;
 
 			table = (TableNode*)malloc(sizeof(TableNode) * iNewTableSize);
@@ -417,7 +415,7 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 			for (int i = iPreTableSize; i < iNewTableSize; i++) { table[i].key.SetType(VAR_NONE); table[i].value.SetType(VAR_NONE); }
 
 			bocket->_table = table;
-			bocket2[hash2]._capa[hash3] = iNewTableSize;
+			bocket->_capa = iNewTableSize;
 		}
 		iSelect = bocket->_size_use++;
 		_itemCount++;
@@ -554,7 +552,7 @@ bool TableInfo::ToList(std::vector<VarInfo*>& lst)
 
 			for (int hash3 = 0; hash3 < MAX_TABLE; hash3++)
 			{
-				if (bocket2[hash2]._capa[hash3] == 0)
+				if (bocket3[hash3]._capa == 0)
 					continue;
 				TableBocket3* bocket = &bocket3[hash3];
 				if (bocket->_size_use == 0) continue;

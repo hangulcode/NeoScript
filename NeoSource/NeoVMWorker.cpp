@@ -870,30 +870,30 @@ int CNeoVMWorker::ToSize(VarInfo* v1)
 	}
 	return 0;
 }
-std::string CNeoVMWorker::GetType(VarInfo* v1)
+VarInfo* CNeoVMWorker::GetType(VarInfo* v1)
 {
 	switch (v1->GetType())
 	{
 	case VAR_NONE:
-		return "null";
+		return &_pVM->m_sDefaultValue[NDF_NULL];
 	case VAR_BOOL:
-		return "bool";
+		return &_pVM->m_sDefaultValue[NDF_BOOL];
 	case VAR_INT:
-		return "int";
+		return &_pVM->m_sDefaultValue[NDF_INT];
 	case VAR_FLOAT:
-		return "float";
+		return &_pVM->m_sDefaultValue[NDF_FLOAT];
 	case VAR_STRING:
-		return "string";
+		return &_pVM->m_sDefaultValue[NDF_STRING];
 	case VAR_TABLE:
-		return "table";
+		return &_pVM->m_sDefaultValue[NDF_TABLE];
 	//case VAR_TABLEFUN:
 	//	return "table_function";
 	case VAR_FUN:
-		return "function";
+		return &_pVM->m_sDefaultValue[NDF_FUNCTION];
 	default:
 		break;
 	}
-	return "null";
+	return &_pVM->m_sDefaultValue[NDF_NULL];
 }
 
 void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
@@ -1282,7 +1282,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				Var_SetInt(GetVarPtr1(OP), ToSize(GetVarPtr2(OP)));
 				break;
 			case NOP_GETTYPE:
-				Var_SetStringA(GetVarPtr1(OP), GetType(GetVarPtr2(OP)));
+				Move(GetVarPtr1(OP), GetType(GetVarPtr2(OP)));
 				break;
 			case NOP_SLEEP:
 				{

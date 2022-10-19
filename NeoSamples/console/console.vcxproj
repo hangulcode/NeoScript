@@ -167,6 +167,7 @@
     <ClInclude Include="..\..\NeoSource\NeoParser.h" />
     <ClInclude Include="..\..\NeoSource\NeoTextLoader.h" />
     <ClInclude Include="..\..\NeoSource\NeoVM.h" />
+    <ClInclude Include="..\..\NeoSource\NeoVMMemoryPool.h" />
     <ClInclude Include="..\..\NeoSource\NeoVMTable.h" />
     <ClInclude Include="..\..\NeoSource\NeoVMWorker.h" />
     <ClInclude Include="..\..\NeoSource\UTFString.h" />

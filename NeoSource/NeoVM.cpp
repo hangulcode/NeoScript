@@ -186,6 +186,25 @@ void CNeoVM::FreeTable(VarInfo *d)
 CNeoVM::CNeoVM()
 {
 	_pCodePtr = NULL;
+	for (int i = 0; i < NDF_MAX; i++)
+	{
+		m_sDefaultValue[i].ClearType();
+		switch (i)
+		{
+		case NDF_NULL: Var_SetStringA(&m_sDefaultValue[i], "null"); break;
+		case NDF_BOOL: Var_SetStringA(&m_sDefaultValue[i], "bool"); break;
+		case NDF_INT: Var_SetStringA(&m_sDefaultValue[i], "int"); break;
+		case NDF_FLOAT: Var_SetStringA(&m_sDefaultValue[i], "float"); break;
+		case NDF_STRING: Var_SetStringA(&m_sDefaultValue[i], "string"); break;
+		case NDF_TABLE: Var_SetStringA(&m_sDefaultValue[i], "table"); break;
+		case NDF_FUNCTION: Var_SetStringA(&m_sDefaultValue[i], "function"); break;
+		case NDF_TRUE: Var_SetStringA(&m_sDefaultValue[i], "true"); break;
+		case NDF_FALSE: Var_SetStringA(&m_sDefaultValue[i], "false"); break;
+		default:
+			SetError("unknown Default Value");
+			break;
+		}
+	}
 }
 CNeoVM::~CNeoVM()
 {

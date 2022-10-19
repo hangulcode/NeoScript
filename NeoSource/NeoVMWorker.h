@@ -274,6 +274,22 @@ struct SVarWrapper
 //	void SetTableFun(FunctionPtrNative fun);
 };
 
+enum eNeoDefaultString
+{
+	NDF_NULL,
+	NDF_BOOL,
+	NDF_INT,
+	NDF_FLOAT,
+	NDF_STRING,
+	NDF_TABLE,
+	NDF_FUNCTION,
+
+	NDF_TRUE,
+	NDF_FALSE,
+
+	NDF_MAX
+};
+
 class CNeoVM;
 class CNeoVMWorker
 {
@@ -435,7 +451,7 @@ private:
 	int ToInt(VarInfo* v1);
 	double ToFloat(VarInfo* v1);
 	int ToSize(VarInfo* v1);
-	std::string GetType(VarInfo* v1);
+	VarInfo* GetType(VarInfo* v1);
 
 	void TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);
 	void TableRead(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);

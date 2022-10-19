@@ -90,6 +90,9 @@
     <ClInclude Include="..\..\NeoSource\NeoVMTable.h">
       <Filter>NeoScript</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\NeoSource\NeoVMMemoryPool.h">
+      <Filter>NeoScript</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="NeoScript">
