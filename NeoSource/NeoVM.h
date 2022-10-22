@@ -55,10 +55,10 @@ private:
 	void FreeTable(TableInfo* tbl);
 
 	VarInfo m_sDefaultValue[NDF_MAX];
-	CAllocPool< sizeof(TableBocket1) * MAX_TABLE, 10> m_sPool_Bocket1;
-	CAllocPool < sizeof(TableBocket2) * MAX_TABLE, 10> m_sPool_Bocket2;
-	CAllocPool < sizeof(TableBocket3) * MAX_TABLE, 10> m_sPool_Bocket3;
-	CAllocPool < sizeof(TableBocket4) * MAX_TABLE, 50> m_sPool_Bocket4;
+//	CAllocPool< sizeof(TableBucket1) * MAX_TABLE, 10> m_sPool_Bucket1;
+	CAllocPool < sizeof(TableBucket2) * MAX_TABLE, 10> m_sPool_Bucket2;
+	CAllocPool < sizeof(TableBucket3) * MAX_TABLE, 10> m_sPool_Bucket3;
+	CAllocPool < sizeof(TableBucket4) * MAX_TABLE, 10> m_sPool_Bucket4;
 public:
 
 	bool RunFunction(const std::string& funName);
