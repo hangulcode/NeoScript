@@ -686,22 +686,20 @@ bool CNeoVMWorker::ForEach(VarInfo* pTable, VarInfo* pKey)
 		return false;
 	}
 	TableInfo* tbl = pTable->_tbl;
-	TableIterator it;
 	if (pIterator->GetType() != VAR_ITERATOR)
 	{
 		if (0 < tbl->_itemCount)
 		{
-			it = tbl->FirstNode();
+			pIterator->_it = tbl->FirstNode();
 			pIterator->SetType(VAR_ITERATOR);
 		}
 	}
 	else
-		it = tbl->NextNode(pIterator->_it);
+		tbl->NextNode(pIterator->_it);
 
-	if (it._bocket)
+	if (pIterator->_it._Bucket)
 	{
-		pIterator->_it = it;
-		TableNode* n = &it._bocket->_table[it._offset];
+		TableNode* n = &pIterator->_it._Bucket->_table[pIterator->_it._offset];
 		Move(pKey, &n->key);
 		Move(pValue, &n->value);
 		return true;

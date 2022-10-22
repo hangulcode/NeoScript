@@ -138,7 +138,7 @@ TableInfo* CNeoVM::TableAlloc()
 	pTable->_TableID = _dwLastIDTable;
 	pTable->_refCount = 0;
 	pTable->_itemCount = 0;
-	pTable->_bocket1 = NULL;
+	memset(pTable->_Flag1, 0, sizeof(pTable->_Flag1));
 	pTable->_pUserData = NULL;
 	pTable->_meta = NULL;
 	pTable->_fun._func = NULL;

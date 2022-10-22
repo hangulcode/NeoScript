@@ -8,6 +8,11 @@
 #include "NeoVMWorker.h"
 #include "NeoVMTable.h"
 
+#define IS_HASH_FLAG(flags, h) ((flags[h / TFLAG_BITS] & (1 << (h % TFLAG_BITS))) != 0)
+#define NO_HASH_FLAG(flags, h) ((flags[h / TFLAG_BITS] & (1 << (h % TFLAG_BITS))) == 0)
+#define SET_HASH_FLAG(flags, h) (flags[h / TFLAG_BITS] |= (1 << (h % TFLAG_BITS)))
+
+#define BIT_LOOP
 
 u32 GetHashCode(u8 *buffer, int len)
 {
@@ -47,35 +52,78 @@ u32 GetHashCode(VarInfo *p)
 TableIterator TableInfo::FirstNode()
 {
 	TableIterator r;
-	r._bocket = NULL;
+	r._Bucket = NULL;
 
-	if(_bocket1 == NULL)
-		return r;
 	for (int hash1 = 0; hash1 < MAX_TABLE; hash1++)
 	{
-		TableBocket2* bocket2 = _bocket1[hash1]._bocket2;
-		if (bocket2 == NULL) continue;
+		if ((hash1 % TFLAG_BITS) == 0 && _Flag1[hash1 / TFLAG_BITS] == 0)
+		{
+			hash1 += (TFLAG_BITS - 1);
+			continue;
+		}
+#ifdef BIT_LOOP
+		if (NO_HASH_FLAG(_Flag1, hash1))
+			continue;
+#endif
 
+		TableBucket2* Bucket2 = _Bucket1[hash1]._Bucket2;
+		if (Bucket2 == NULL)
+			continue;
+		uTFlag* Flag2 = _Bucket1[hash1]._Flag2;
 		for (int hash2 = 0; hash2 < MAX_TABLE; hash2++)
 		{
-			TableBocket3* bocket3 = bocket2[hash2]._bocket3;
-			if (bocket3 == NULL) continue;
+			if ((hash2 % TFLAG_BITS) == 0 && Flag2[hash2 / TFLAG_BITS] == 0)
+			{
+				hash2 += (TFLAG_BITS - 1);
+				continue;
+			}
+#ifdef BIT_LOOP
+			if (NO_HASH_FLAG(Flag2, hash2))
+				continue;
+#endif
+
+			TableBucket3* Bucket3 = Bucket2[hash2]._Bucket3;
+			if (Bucket3 == NULL)
+				continue;
+			uTFlag* Flag3 = Bucket2[hash2]._Flag3;
 			for (int hash3 = 0; hash3 < MAX_TABLE; hash3++)
 			{
-				TableBocket4* bocket4 = bocket3[hash3]._bocket4;
-				if (bocket4 == NULL) continue;
+				if ((hash3 % TFLAG_BITS) == 0 && Flag3[hash3 / TFLAG_BITS] == 0)
+				{
+					hash3 += (TFLAG_BITS - 1);
+					continue;
+				}
+#ifdef BIT_LOOP
+				if (NO_HASH_FLAG(Flag3, hash3))
+					continue;
+#endif
+
+				TableBucket4* Bucket4 = Bucket3[hash3]._Bucket4;
+				if (Bucket4 == NULL)
+					continue;
+				uTFlag* Flag4 = Bucket3[hash3]._Flag4;
 				for (int hash4 = 0; hash4 < MAX_TABLE; hash4++)
 				{
-					if (bocket4[hash4]._size_use == 0)
+					if ((hash4 % TFLAG_BITS) == 0 && Flag4[hash4 / TFLAG_BITS] == 0)
+					{
+						hash4 += (TFLAG_BITS - 1);
 						continue;
-					TableBocket4* bocket = &bocket4[hash4];
+					}
+#ifdef BIT_LOOP
+					if (NO_HASH_FLAG(Flag4, hash4))
+						continue;
+#endif
+
+					if (Bucket4[hash4]._size_use == 0)
+						continue;
+					TableBucket4* Bucket = &Bucket4[hash4];
 
 					r._hash1 = hash1;
 					r._hash2 = hash2;
 					r._hash3 = hash3;
 					r._hash4 = hash4;
 					r._offset = 0;
-					r._bocket = bocket;
+					r._Bucket = Bucket;
 					return r;
 				}
 			}
@@ -83,122 +131,217 @@ TableIterator TableInfo::FirstNode()
 	}
 	return r;
 }
-TableIterator TableInfo::NextNode(TableIterator r)
+bool TableInfo::NextNode(TableIterator& r)
 {
-	TableBocket4* bocket = r._bocket;
-	if (bocket == NULL) return r;
-
-	if (r._offset + 1 < bocket->_size_use)
+	if (++r._offset < r._Bucket->_size_use)
 	{
-		r._offset++;
-		return r;
+		return true;
 	}
 	
 	{
-		TableBocket2* bocket2 = _bocket1[r._hash1]._bocket2;
-		TableBocket3* bocket3 = bocket2[r._hash2]._bocket3;
-		TableBocket4* bocket4 = bocket3[r._hash3]._bocket4;
+		TableBucket2* Bucket2 = _Bucket1[r._hash1]._Bucket2;
+		TableBucket3* Bucket3 = Bucket2[r._hash2]._Bucket3;
+		TableBucket4* Bucket4 = Bucket3[r._hash3]._Bucket4;
+		
+		uTFlag* Flag4 = Bucket3[r._hash3]._Flag4;
 		for (int hash4 = r._hash4 + 1; hash4 < MAX_TABLE; hash4++)
 		{
-			if (bocket4[hash4]._size_use == 0)
+			if ((hash4 % TFLAG_BITS) == 0 && Flag4[hash4 / TFLAG_BITS] == 0)
+			{
+				hash4 += (TFLAG_BITS - 1);
 				continue;
-			TableBocket4* bocket = &bocket4[hash4];
+			}
+#ifdef BIT_LOOP
+			if (NO_HASH_FLAG(Flag4, hash4))
+				continue;
+#endif
+			if (Bucket4[hash4]._size_use == 0)
+				continue;
 
 			//r._hash1 = hash1;
 			//r._hash2 = hash2;
 			//r._hash3 = hash3;
 			r._hash4 = hash4;
 			r._offset = 0;
-			r._bocket = bocket;
-			return r;
+			r._Bucket = &Bucket4[hash4];
+			return true;
 		}
 	}
 
 	{
-		TableBocket2* bocket2 = _bocket1[r._hash1]._bocket2;
-		TableBocket3* bocket3 = bocket2[r._hash2]._bocket3;
+		TableBucket2* Bucket2 = _Bucket1[r._hash1]._Bucket2;
+		TableBucket3* Bucket3 = Bucket2[r._hash2]._Bucket3;
+
+		uTFlag* Flag3 = Bucket2[r._hash2]._Flag3;
 		for (int hash3 = r._hash3 + 1; hash3 < MAX_TABLE; hash3++)
 		{
-			TableBocket4* bocket4 = bocket3[hash3]._bocket4;
-			if (bocket4 == NULL) continue;
+			if ((hash3 % TFLAG_BITS) == 0 && Flag3[hash3 / TFLAG_BITS] == 0)
+			{
+				hash3 += (TFLAG_BITS - 1);
+				continue;
+			}
+#ifdef BIT_LOOP
+			if (NO_HASH_FLAG(Flag3, hash3))
+				continue;
+#endif
 
+			TableBucket4* Bucket4 = Bucket3[hash3]._Bucket4;
+			if (Bucket4 == NULL)
+				continue;
+			uTFlag* Flag4 = Bucket3[hash3]._Flag4;
 			for (int hash4 = 0; hash4 < MAX_TABLE; hash4++)
 			{
-				if (bocket4[hash4]._size_use == 0)
+				if ((hash4 % TFLAG_BITS) == 0 && Flag4[hash4 / TFLAG_BITS] == 0)
+				{
+					hash4 += (TFLAG_BITS - 1);
 					continue;
-				TableBocket4* bocket = &bocket4[hash4];
+				}
+#ifdef BIT_LOOP
+				if (NO_HASH_FLAG(Flag4, hash4))
+					continue;
+#endif
+				if (Bucket4[hash4]._size_use == 0)
+					continue;
 
 				//r._hash1 = hash1;
 				//r._hash2 = hash2;
 				r._hash3 = hash3;
 				r._hash4 = hash4;
 				r._offset = 0;
-				r._bocket = bocket;
-				return r;
+				r._Bucket = &Bucket4[hash4];
+				return true;
 			}
 		}
 	}
 
-	TableBocket2* bocket2 = _bocket1[r._hash1]._bocket2;
+	TableBucket2* Bucket2 = _Bucket1[r._hash1]._Bucket2;
+	uTFlag* Flag2 = _Bucket1[r._hash1]._Flag2;
 	for (int hash2 = r._hash2 + 1; hash2 < MAX_TABLE; hash2++)
 	{
-		TableBocket3* bocket3 = bocket2[hash2]._bocket3;
-		if (bocket3 == NULL) continue;
-
+		if ((hash2 % TFLAG_BITS) == 0 && Flag2[hash2 / TFLAG_BITS] == 0)
+		{
+			hash2 += (TFLAG_BITS - 1);
+			continue;
+		}
+#ifdef BIT_LOOP
+		if (NO_HASH_FLAG(Flag2, hash2))
+			continue;
+#endif
+		TableBucket3* Bucket3 = Bucket2[hash2]._Bucket3;
+		if (Bucket3 == NULL)
+			continue;
+		uTFlag* Flag3 = Bucket2[hash2]._Flag3;
 		for (int hash3 = 0; hash3 < MAX_TABLE; hash3++)
 		{
-			TableBocket4* bocket4 = bocket3[hash3]._bocket4;
-			if (bocket4 == NULL) continue;
-
+			if ((hash3 % TFLAG_BITS) == 0 && Flag3[hash3 / TFLAG_BITS] == 0)
+			{
+				hash3 += (TFLAG_BITS - 1);
+				continue;
+			}
+#ifdef BIT_LOOP
+			if (NO_HASH_FLAG(Flag3, hash3))
+				continue;
+#endif
+			TableBucket4* Bucket4 = Bucket3[hash3]._Bucket4;
+			if (Bucket4 == NULL)
+				continue;
+			uTFlag* Flag4 = Bucket3[hash3]._Flag4;
 			for (int hash4 = 0; hash4 < MAX_TABLE; hash4++)
 			{
-				if (bocket4[hash4]._size_use == 0)
+				if ((hash4 % TFLAG_BITS) == 0 && Flag4[hash4 / TFLAG_BITS] == 0)
+				{
+					hash4 += (TFLAG_BITS - 1);
 					continue;
-				TableBocket4* bocket = &bocket4[hash4];
+				}
+#ifdef BIT_LOOP
+				if (NO_HASH_FLAG(Flag4, hash4))
+					continue;
+#endif
+				if (Bucket4[hash4]._size_use == 0)
+					continue;
 
 				//r._hash1 = hash1;
 				r._hash2 = hash2;
 				r._hash3 = hash3;
 				r._hash4 = hash4;
 				r._offset = 0;
-				r._bocket = bocket;
-				return r;
+				r._Bucket = &Bucket4[hash4];
+				return true;
 			}
 		}
 	}
 
 	for (int hash1 = r._hash1 + 1; hash1 < MAX_TABLE; hash1++)
 	{
-		TableBocket2* bocket2 = _bocket1[hash1]._bocket2;
-		if (bocket2 == NULL) continue;
+		if ((hash1 % TFLAG_BITS) == 0 && _Flag1[hash1 / TFLAG_BITS] == 0)
+		{
+			hash1 += (TFLAG_BITS - 1);
+			continue;
+		}
+#ifdef BIT_LOOP
+		if (NO_HASH_FLAG(_Flag1, hash1))
+			continue;
+#endif
 
+		TableBucket2* Bucket2 = _Bucket1[hash1]._Bucket2;
+		if (Bucket2 == NULL)
+			continue;
+		uTFlag* Flag2 = _Bucket1[hash1]._Flag2;
 		for (int hash2 = 0; hash2 < MAX_TABLE; hash2++)
 		{
-			TableBocket3* bocket3 = bocket2[hash2]._bocket3;
-			if (bocket3 == NULL) continue;
+			if ((hash2 % TFLAG_BITS) == 0 && Flag2[hash2 / TFLAG_BITS] == 0)
+			{
+				hash2 += (TFLAG_BITS - 1);
+				continue;
+			}
+#ifdef BIT_LOOP
+			if (NO_HASH_FLAG(Flag2, hash2))
+				continue;
+#endif
+			TableBucket3* Bucket3 = Bucket2[hash2]._Bucket3;
+			if (Bucket3 == NULL)
+				continue;
+			uTFlag* Flag3 = Bucket2[hash2]._Flag3;
 			for (int hash3 = 0; hash3 < MAX_TABLE; hash3++)
 			{
-				TableBocket4* bocket4 = bocket3[hash3]._bocket4;
-				if (bocket4 == NULL) continue;
+				if ((hash3 % TFLAG_BITS) == 0 && Flag3[hash3 / TFLAG_BITS] == 0)
+				{
+					hash3 += (TFLAG_BITS - 1);
+					continue;
+				}
+#ifdef BIT_LOOP
+				if (NO_HASH_FLAG(Flag3, hash3))
+					continue;
+#endif
+				TableBucket4* Bucket4 = Bucket3[hash3]._Bucket4;
+				if (Bucket4 == NULL)
+					continue;
+				uTFlag* Flag4 = Bucket3[hash3]._Flag4;
 				for (int hash4 = 0; hash4 < MAX_TABLE; hash4++)
 				{
-					if (bocket4[hash4]._size_use == 0)
+					if ((hash4 % TFLAG_BITS) == 0 && Flag4[hash4 / TFLAG_BITS] == 0)
+					{
+						hash4 += (TFLAG_BITS - 1);
 						continue;
-					TableBocket4* bocket = &bocket4[hash4];
+					}
+					if (NO_HASH_FLAG(Flag4, hash4))
+						continue;
+					if (Bucket4[hash4]._size_use == 0)
+						continue;
 
 					r._hash1 = hash1;
 					r._hash2 = hash2;
 					r._hash3 = hash3;
 					r._hash4 = hash4;
 					r._offset = 0;
-					r._bocket = bocket;
-					return r;
+					r._Bucket = &Bucket4[hash4];
+					return true;
 				}
 			}
 		}
 	}
-	r._bocket = NULL;
-	return r;
+	r._Bucket = NULL;
+	return false;
 }
 
 void TableInfo::Var_ReleaseInternal(CNeoVM* pVM, VarInfo *d)
@@ -223,45 +366,78 @@ void TableInfo::Var_ReleaseInternal(CNeoVM* pVM, VarInfo *d)
 
 void TableInfo::Free(CNeoVM* pVM)
 {
-	if (_bocket1 == NULL) 
-		return;
 	for (int hash1 = 0; hash1 < MAX_TABLE; hash1++)
 	{
-		TableBocket2* bocket2 = _bocket1[hash1]._bocket2;
-		if (bocket2 == NULL) continue;
+		if ((hash1 % TFLAG_BITS) == 0 && _Flag1[hash1 / TFLAG_BITS] == 0)
+		{
+			hash1 += (TFLAG_BITS - 1);
+			continue;
+		}
+		if (NO_HASH_FLAG(_Flag1, hash1))
+			continue;
 
+		TableBucket2* Bucket2 = _Bucket1[hash1]._Bucket2;
+		if (Bucket2 == NULL)
+			continue;
+		uTFlag* Flag2 = _Bucket1[hash1]._Flag2;
 		for (int hash2 = 0; hash2 < MAX_TABLE; hash2++)
 		{
-			TableBocket3* bocket3 = bocket2[hash2]._bocket3;
-			if (bocket3 == NULL) continue;
+			if ((hash2 % TFLAG_BITS) == 0 && Flag2[hash2 / TFLAG_BITS] == 0)
+			{
+				hash2 += (TFLAG_BITS - 1);
+				continue;
+			}
+			if (NO_HASH_FLAG(Flag2, hash2))
+				continue;
 
+			TableBucket3* Bucket3 = Bucket2[hash2]._Bucket3;
+			if (Bucket3 == NULL)
+				continue;
+			uTFlag* Flag3 = Bucket2[hash2]._Flag3;
 			for (int hash3 = 0; hash3 < MAX_TABLE; hash3++)
 			{
-				TableBocket4* bocket4 = bocket3[hash3]._bocket4;
-				if (bocket4 == NULL) continue;
+				if ((hash3 % TFLAG_BITS) == 0 && Flag3[hash3 / TFLAG_BITS] == 0)
+				{
+					hash3 += (TFLAG_BITS - 1);
+					continue;
+				}
+				if (NO_HASH_FLAG(Flag3, hash3))
+					continue;
 
+				TableBucket4* Bucket4 = Bucket3[hash3]._Bucket4;
+				if (Bucket4 == NULL)
+					continue;
+				uTFlag* Flag4 = Bucket3[hash3]._Flag4;
 				for (int hash4 = 0; hash4 < MAX_TABLE; hash4++)
 				{
-					if (bocket3[hash3]._capa[hash4] == 0)
-						continue;
-					TableBocket4* bocket = &bocket4[hash4];
-					for (int i = bocket->_size_use - 1; i >= 0; i--)
+					if ((hash4 % TFLAG_BITS) == 0 && Flag4[hash4 / TFLAG_BITS] == 0)
 					{
-						TableNode* pCur = &bocket->_table[i];
+						hash4 += (TFLAG_BITS - 1);
+						continue;
+					}
+					if (NO_HASH_FLAG(Flag4, hash4))
+						continue;
+
+					if (Bucket4[hash4]._capa == 0)
+						continue;
+					TableBucket4* Bucket = &Bucket4[hash4];
+					for (int i = Bucket->_size_use - 1; i >= 0; i--)
+					{
+						TableNode* pCur = &Bucket->_table[i];
 						Var_Release(pVM, &pCur->key);
 						Var_Release(pVM, &pCur->value);
 					}
-					if (bocket->_table && bocket3[hash3]._capa[hash4] > DefualtTableSize)
-						free(bocket->_table);
+					if (Bucket->_table && Bucket->_capa > DefualtTableSize)
+						free(Bucket->_table);
 				}
-				pVM->m_sPool_Bocket4.Confer(bocket4);
+				pVM->m_sPool_Bucket4.Confer(Bucket4);
 			}
-			pVM->m_sPool_Bocket3.Confer(bocket3);
+			pVM->m_sPool_Bucket3.Confer(Bucket3);
 		}
-		pVM->m_sPool_Bocket2.Confer(bocket2);
+		pVM->m_sPool_Bucket2.Confer(Bucket2);
 	}
-	pVM->m_sPool_Bocket1.Confer(_bocket1);
-	_bocket1 = NULL;
+//	pVM->m_sPool_Bucket1.Confer(_Bucket1);
+	memset(_Flag1, 0, sizeof(_Flag1));
 	_itemCount = 0;
 }
 
@@ -275,7 +451,7 @@ void TableInfo::Insert(CNeoVM* pVM, std::string& Key, VarInfo* pValue)
 	Insert(NULL, &var, pValue);
 }
 
-int TableBocket4::Find(VarInfo* pKey)
+int TableBucket4::Find(VarInfo* pKey)
 {
 	if (_size_use == 0) return -1;
 	TableNode*	table = _table;
@@ -391,77 +567,97 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 	u32 hash2 = (hash / (MAX_TABLE * MAX_TABLE)) % MAX_TABLE;
 	u32 hash1 = (hash / (MAX_TABLE * MAX_TABLE * MAX_TABLE)) % MAX_TABLE;
 
-	if (_bocket1 == NULL)
+	TableBucket1* Bucket1 = &_Bucket1[hash1];
+	if (NO_HASH_FLAG(_Flag1, hash1))
 	{
-		_bocket1 = (TableBocket1*)pVMW->_pVM->m_sPool_Bocket1.Receive();
-		memset(_bocket1, 0, sizeof(TableBocket1) * MAX_TABLE);
+		SET_HASH_FLAG(_Flag1, hash1);
+//		_Bucket1 = (TableBucket1*)pVMW->_pVM->m_sPool_Bucket1.Receive();
+		memset(Bucket1, 0, sizeof(TableBucket1));
 	}
 
-	TableBocket2* bocket2 = _bocket1[hash1]._bocket2;
-	if (bocket2 == NULL)
+	if (Bucket1->_Bucket2 == NULL)
 	{
-		bocket2 = (TableBocket2*)pVMW->_pVM->m_sPool_Bocket2.Receive();;
-		memset(bocket2, 0, sizeof(TableBocket2) * MAX_TABLE);
-		_bocket1[hash1]._bocket2 = bocket2;
+		auto Bucket2T = (TableBucket2*)pVMW->_pVM->m_sPool_Bucket2.Receive();
+		memset(Bucket2T, 0, sizeof(TableBucket2) * MAX_TABLE);
+		Bucket1->_Bucket2 = Bucket2T;
 	}
+	TableBucket2* Bucket2 = &Bucket1->_Bucket2[hash2];
+	SET_HASH_FLAG(Bucket1->_Flag2, hash2);
 
-	TableBocket3* bocket3 = bocket2[hash2]._bocket3;
-	if (bocket3 == NULL)
+	if (Bucket2->_Bucket3 == NULL)
 	{
-		bocket3 = (TableBocket3*)pVMW->_pVM->m_sPool_Bocket3.Receive();;
-		memset(bocket3, 0, sizeof(TableBocket3) * MAX_TABLE);
-		bocket2[hash2]._bocket3 = bocket3;
+		auto Bucket3T = (TableBucket3*)pVMW->_pVM->m_sPool_Bucket3.Receive();;
+		memset(Bucket3T, 0, sizeof(TableBucket3) * MAX_TABLE);
+		Bucket2->_Bucket3 = Bucket3T;
 	}
+	TableBucket3* Bucket3 = &Bucket2->_Bucket3[hash3];
+	SET_HASH_FLAG(Bucket2->_Flag3, hash3);
 
-	TableBocket4* bocket4 = bocket3[hash3]._bocket4;
-	if (bocket4 == NULL)
+	if (Bucket3->_Bucket4 == NULL)
 	{
-		bocket4 = (TableBocket4*)pVMW->_pVM->m_sPool_Bocket4.Receive();;
-//		memset(bocket3, 0, sizeof(TableBocket3) * MAX_TABLE);
-		bocket3[hash3]._bocket4 = bocket4;
-
-//		bocket2[hash2]._capa = (int*)malloc(sizeof(int) * MAX_TABLE);
-//		memset(bocket2[hash2]._capa, 0, sizeof(int) * MAX_TABLE);
-//		for (int i = 0; i < MAX_TABLE; i++) { bocket4[i]._capa = 0; bocket4[i]._size_use = 0; }
+		auto Bucket4T = (TableBucket4*)pVMW->_pVM->m_sPool_Bucket4.Receive();
+		//memset(Bucket3, 0, sizeof(TableBucket3) * MAX_TABLE);
+		Bucket3->_Bucket4 = Bucket4T;
 	}
-
-	TableBocket4* bocket = &bocket4[hash4];
-	int iSelect = -1;
-	if (bocket3[hash3]._capa[hash4] == 0)
+	TableBucket4* Bucket = &Bucket3->_Bucket4[hash4];
+	if (NO_HASH_FLAG(Bucket3->_Flag4, hash4))
 	{
-		bocket3[hash3]._capa[hash4] = DefualtTableSize;
+		SET_HASH_FLAG(Bucket3->_Flag4, hash4);
+		//Bucket->_capa = 0;
+		Bucket->_capa = DefualtTableSize;
 		//TableNode* table = (TableNode*)malloc(sizeof(TableNode) * DefualtTableSize);
-//		TableNode* table = bocket->_default;
+//		TableNode* table = Bucket->_default;
 //		for (int i = 0; i < DefualtTableSize; i++) { table[i].key.SetType(VAR_NONE); table[i].value.SetType(VAR_NONE); }
-		bocket->_table = bocket->_default;
-		bocket->_size_use = 0;
+		Bucket->_table = Bucket->_default;
+		Bucket->_size_use = 1;
+
+		_itemCount++;
+
+		TableNode* pCur = &Bucket->_table[0];
+		pCur->key = *pKey;
+		pCur->value = *pValue;
+
+		if (pKey->IsAllocType()) Var_AddRef(pKey);
+		if (pValue->IsAllocType()) Var_AddRef(pValue);
+		return;
 	}
-	else if (bocket->_size_use > 0)
+
+	int iSelect = -1;
+/*	if (Bucket->_capa == 0)
 	{
-		iSelect = bocket->Find(pKey);
+		Bucket->_capa = DefualtTableSize;
+		//TableNode* table = (TableNode*)malloc(sizeof(TableNode) * DefualtTableSize);
+//		TableNode* table = Bucket->_default;
+//		for (int i = 0; i < DefualtTableSize; i++) { table[i].key.SetType(VAR_NONE); table[i].value.SetType(VAR_NONE); }
+		Bucket->_table = Bucket->_default;
+		Bucket->_size_use = 0;
+	}
+	else */if (Bucket->_size_use > 0)
+	{
+		iSelect = Bucket->Find(pKey);
 	}
 
 	if (iSelect == -1)
 	{
 		TableNode* table;
-		if (bocket->_size_use + 1 >= bocket3[hash3]._capa[hash4])
+		if (Bucket->_size_use + 1 >= Bucket->_capa)
 		{
-			int iPreTableSize = bocket3[hash3]._capa[hash4];
+			int iPreTableSize = Bucket->_capa;
 			int iNewTableSize = iPreTableSize * 2;
 
 			table = (TableNode*)malloc(sizeof(TableNode) * iNewTableSize);
-			memcpy(table, bocket->_table, sizeof(TableNode) * iPreTableSize);
-			if (bocket->_table && iPreTableSize > DefualtTableSize) free(bocket->_table);
+			memcpy(table, Bucket->_table, sizeof(TableNode) * iPreTableSize);
+			if (Bucket->_table && iPreTableSize > DefualtTableSize) free(Bucket->_table);
 
 			for (int i = iPreTableSize; i < iNewTableSize; i++) { table[i].key.SetType(VAR_NONE); table[i].value.SetType(VAR_NONE); }
 
-			bocket->_table = table;
-			bocket3[hash3]._capa[hash4] = iNewTableSize;
+			Bucket->_table = table;
+			Bucket->_capa = iNewTableSize;
 		}
-		iSelect = bocket->_size_use++;
+		iSelect = Bucket->_size_use++;
 		_itemCount++;
 
-		TableNode* pCur = &bocket->_table[iSelect];
+		TableNode* pCur = &Bucket->_table[iSelect];
 		pCur->key = *pKey;
 		pCur->value = *pValue;
 
@@ -470,7 +666,7 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 	}
 	else
 	{
-		TableNode* pCur = &bocket->_table[iSelect];
+		TableNode* pCur = &Bucket->_table[iSelect];
 		if (pVMW)
 		{
 			pVMW->Move(&pCur->key, pKey);
@@ -485,72 +681,72 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 }
 void TableInfo::Remove(CNeoVMWorker* pVMW, VarInfo* pKey)
 {
-	TableBocket4* bocket = GetTableBocket(pKey);
-	if (bocket == NULL)
+	TableBucket4* Bucket = GetTableBucket(pKey);
+	if (Bucket == NULL)
 		return;
 
-	int idx = bocket->Find(pKey);
+	int idx = Bucket->Find(pKey);
 	if(idx < 0)
 		return;
 
-	TableNode* pCur = &bocket->_table[idx];
+	TableNode* pCur = &Bucket->_table[idx];
 	pVMW->Var_Release(&pCur->key);
 	pVMW->Var_Release(&pCur->value);
 
-	int move_cnt = bocket->_size_use - idx - 1;
+	int move_cnt = Bucket->_size_use - idx - 1;
 	if (move_cnt > 0)
 	{
-		memmove(&bocket->_table[idx], &bocket->_table[idx + 1], sizeof(TableNode) * move_cnt);
-		int last = bocket->_size_use - 1;
-		bocket->_table[last].key.SetType(VAR_NONE); bocket->_table[last].value.SetType(VAR_NONE);
+		memmove(&Bucket->_table[idx], &Bucket->_table[idx + 1], sizeof(TableNode) * move_cnt);
+		int last = Bucket->_size_use - 1;
+		Bucket->_table[last].key.SetType(VAR_NONE); Bucket->_table[last].value.SetType(VAR_NONE);
 	}
 
-	bocket->_size_use--;
+	Bucket->_size_use--;
 	_itemCount--;
 }
 
-TableBocket4* TableInfo::GetTableBocket(VarInfo *pKey)
+TableBucket4* TableInfo::GetTableBucket(VarInfo *pKey)
 {
-	if (_bocket1 == NULL)
-		return NULL;
-
 	u32 hash = GetHashCode(pKey);
 	u32 hash4 = hash % MAX_TABLE;
 	u32 hash3 = (hash / MAX_TABLE) % MAX_TABLE;
 	u32 hash2 = (hash / (MAX_TABLE * MAX_TABLE)) % MAX_TABLE;
 	u32 hash1 = (hash / (MAX_TABLE * MAX_TABLE * MAX_TABLE)) % MAX_TABLE;
 
-	TableBocket2* bocket2 = _bocket1[hash1]._bocket2;
-	if (bocket2 == NULL)
+	if (NO_HASH_FLAG(_Flag1, hash1))
 		return NULL;
 
-	TableBocket3* bocket3 = bocket2[hash2]._bocket3;
-	if (bocket3 == NULL)
+	TableBucket2* Bucket2 = _Bucket1[hash1]._Bucket2;
+	if (NO_HASH_FLAG(_Bucket1[hash1]._Flag2, hash2))
 		return NULL;
 
-	TableBocket4* bocket4 = bocket3[hash3]._bocket4;
-	if (bocket4 == NULL)
+	TableBucket3* Bucket3 = Bucket2[hash2]._Bucket3;
+	if (NO_HASH_FLAG(Bucket2[hash2]._Flag3, hash3))
 		return NULL;
 
-	return &bocket4[hash4];
+	TableBucket4* Bucket4 = Bucket3[hash3]._Bucket4;
+	if (NO_HASH_FLAG(Bucket3[hash3]._Flag4, hash4))
+		return NULL;
+
+	return &Bucket4[hash4];
 }
 
 
 VarInfo* TableInfo::GetTableItem(VarInfo *pKey)
 {
-	TableBocket4* bocket = GetTableBocket(pKey);
-	if (bocket == NULL)
+	TableBucket4* Bucket = GetTableBucket(pKey);
+	if (Bucket == NULL)
 		return NULL;
 
-	int idx = bocket->Find(pKey);
+	int idx = Bucket->Find(pKey);
 	if (idx < 0)
 		return NULL;
 
-	return &bocket->_table[idx].value;
+	return &Bucket->_table[idx].value;
 }
 VarInfo* TableInfo::GetTableItem(std::string& key)
 {
-	if (_bocket1 == NULL)
+	if (_Bucket1 == NULL)
 		return NULL;
 
 	u32 hash = GetHashCode((u8*)key.c_str(), (int)key.length());
@@ -559,21 +755,24 @@ VarInfo* TableInfo::GetTableItem(std::string& key)
 	u32 hash2 = (hash / (MAX_TABLE * MAX_TABLE)) % MAX_TABLE;
 	u32 hash1 = (hash / (MAX_TABLE * MAX_TABLE * MAX_TABLE)) % MAX_TABLE;
 
-	TableBocket2* bocket2 = _bocket1[hash1]._bocket2;
-	if (bocket2 == NULL)
+	if (NO_HASH_FLAG(_Flag1, hash1))
 		return NULL;
 
-	TableBocket3* bocket3 = bocket2[hash2]._bocket3;
-	if (bocket3 == NULL)
+	TableBucket2* Bucket2 = _Bucket1[hash1]._Bucket2;
+	if (NO_HASH_FLAG(_Bucket1[hash1]._Flag2, hash2))
 		return NULL;
 
-	TableBocket4* bocket4 = bocket3[hash3]._bocket4;
-	if (bocket4 == NULL)
+	TableBucket3* Bucket3 = Bucket2[hash2]._Bucket3;
+	if (NO_HASH_FLAG(Bucket2[hash2]._Flag3, hash3))
 		return NULL;
 
-	TableBocket4* bocket = &bocket4[hash4];
-	TableNode* table = bocket->_table;
-	for (int i = bocket->_size_use - 1; i >= 0; i--)
+	TableBucket4* Bucket4 = Bucket3[hash3]._Bucket4;
+	if (NO_HASH_FLAG(Bucket3[hash3]._Flag4, hash4))
+		return NULL;
+
+	TableBucket4* Bucket = &Bucket4[hash4];
+	TableNode* table = Bucket->_table;
+	for (int i = Bucket->_size_use - 1; i >= 0; i--)
 	{
 		if (table[i].key.GetType() == VAR_STRING)
 		{
@@ -589,32 +788,69 @@ bool TableInfo::ToList(std::vector<VarInfo*>& lst)
 	lst.resize(_itemCount);
 	int cnt = 0;
 
-	if (_bocket1 == NULL)
-		return true;
 	for (int hash1 = 0; hash1 < MAX_TABLE; hash1++)
 	{
-		TableBocket2* bocket2 = _bocket1[hash1]._bocket2;
-		if (bocket2 == NULL) continue;
+		if ((hash1 % TFLAG_BITS) == 0 && _Flag1[hash1 / TFLAG_BITS] == 0)
+		{
+			hash1 += (TFLAG_BITS - 1);
+			continue;
+		}
+#ifdef BIT_LOOP
+		if (NO_HASH_FLAG(_Flag1, hash1))
+			continue;
+#endif
 
+		TableBucket2* Bucket2 = _Bucket1[hash1]._Bucket2;
+		if (Bucket2 == NULL)
+			continue;
+		uTFlag* Flag2 = _Bucket1[hash1]._Flag2;
 		for (int hash2 = 0; hash2 < MAX_TABLE; hash2++)
 		{
-			TableBocket3* bocket3 = bocket2[hash2]._bocket3;
-			if (bocket3 == NULL) continue;
+			if ((hash2 % TFLAG_BITS) == 0 && Flag2[hash2 / TFLAG_BITS] == 0)
+			{
+				hash2 += (TFLAG_BITS - 1);
+				continue;
+			}
+#ifdef BIT_LOOP
+			if (NO_HASH_FLAG(Flag2, hash2))
+				continue;
+#endif
 
+			TableBucket3* Bucket3 = Bucket2[hash2]._Bucket3;
+			if (Bucket3 == NULL)
+				continue;
+			uTFlag* Flag3 = Bucket2[hash2]._Flag3;
 			for (int hash3 = 0; hash3 < MAX_TABLE; hash3++)
 			{
-				TableBocket4* bocket4 = bocket3[hash3]._bocket4;
-				if (bocket4 == NULL) continue;
+				if ((hash3 % TFLAG_BITS) == 0 && Flag3[hash3 / TFLAG_BITS] == 0)
+				{
+					hash3 += (TFLAG_BITS - 1);
+					continue;
+				}
+#ifdef BIT_LOOP
+				if (NO_HASH_FLAG(Flag3, hash3))
+					continue;
+#endif
 
+				TableBucket4* Bucket4 = Bucket3[hash3]._Bucket4;
+				if (Bucket4 == NULL)
+					continue;
+				uTFlag* Flag4 = Bucket3[hash3]._Flag4;
 				for (int hash4 = 0; hash4 < MAX_TABLE; hash4++)
 				{
-					if (bocket3[hash3]._capa[hash4] == 0)
+					if ((hash4 % TFLAG_BITS) == 0 && Flag4[hash4 / TFLAG_BITS] == 0)
+					{
+						hash4 += (TFLAG_BITS - 1);
 						continue;
-					TableBocket4* bocket = &bocket4[hash4];
-					if (bocket->_size_use == 0) continue;
+					}
+#ifdef BIT_LOOP
+					if (NO_HASH_FLAG(Flag4, hash4))
+						continue;
+#endif
 
-					TableNode* table = bocket->_table;
-					for (int i = bocket->_size_use - 1; i >= 0; i--)
+					TableBucket4* Bucket = &Bucket4[hash4];
+					TableNode* table = Bucket->_table;
+					for (int i = Bucket->_size_use - 1; i >= 0; i--)
 					{
 						lst[cnt++] = &table[i].value;
 					}
@@ -646,8 +882,6 @@ struct NeoSortLocal
 		}
 		return false;
 	}
-
-	int paramA;
 };
 
 void NVM_QuickSort(CNeoVMWorker* pN, int compare, std::vector<VarInfo*>& lst)
