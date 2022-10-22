@@ -14,6 +14,13 @@
 
 #define BIT_LOOP
 
+u32 GetHashCode(const std::string& str)
+{
+	static std::hash<std::string> hash{};
+	const size_t       hash_value = hash(str);
+	return (u32)hash_value;
+}
+
 u32 GetHashCode(u8 *buffer, int len)
 {
 	u32 h = 0;
@@ -37,7 +44,8 @@ u32 GetHashCode(VarInfo *p)
 	case VAR_FLOAT:
 		return GetHashCode((u8*)&p->_float, sizeof(p->_float));
 	case VAR_STRING:
-		return GetHashCode((u8*)p->_str->_str.c_str(), (int)p->_str->_str.length());
+		//return GetHashCode((u8*)p->_str->_str.c_str(), (int)p->_str->_str.length());
+		return GetHashCode(p->_str->_str);
 	case VAR_TABLE:
 		return GetHashCode((u8*)p->_tbl, sizeof(p->_tbl));
 	//case VAR_TABLEFUN:
@@ -559,6 +567,7 @@ int TableBucket4::Find(VarInfo* pKey)
 	return -1;
 }
 
+//int g_MaxList = 0;
 void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 {
 	u32 hash = GetHashCode(pKey);
@@ -655,6 +664,8 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 			Bucket->_capa = iNewTableSize;
 		}
 		iSelect = Bucket->_size_use++;
+		//if (g_MaxList < Bucket->_size_use)
+		//	g_MaxList = Bucket->_size_use;
 		_itemCount++;
 
 		TableNode* pCur = &Bucket->_table[iSelect];
@@ -749,7 +760,7 @@ VarInfo* TableInfo::GetTableItem(std::string& key)
 	if (_Bucket1 == NULL)
 		return NULL;
 
-	u32 hash = GetHashCode((u8*)key.c_str(), (int)key.length());
+	u32 hash = GetHashCode(key);
 	u32 hash4 = hash % MAX_TABLE;
 	u32 hash3 = (hash / MAX_TABLE) % MAX_TABLE;
 	u32 hash2 = (hash / (MAX_TABLE * MAX_TABLE)) % MAX_TABLE;
