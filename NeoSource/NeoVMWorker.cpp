@@ -697,9 +697,9 @@ bool CNeoVMWorker::ForEach(VarInfo* pTable, VarInfo* pKey)
 	else
 		tbl->NextNode(pIterator->_it);
 
-	if (pIterator->_it._Bucket)
+	TableNode* n = pIterator->_it._pNode;
+	if (n)
 	{
-		TableNode* n = &pIterator->_it._Bucket->_table[pIterator->_it._offset];
 		Move(pKey, &n->key);
 		Move(pValue, &n->value);
 		return true;
