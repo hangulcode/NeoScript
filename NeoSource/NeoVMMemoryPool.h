@@ -222,20 +222,30 @@ private:
 	void	alloc()
 	{
 		STPool pool;
-		pool.pData = new SNodePool[iBlkSize];
+		pool.pData = new SNodePool[m_iBlkSize];
 
 		m_sMemPagePool.push_back(pool);
 
-		for (int i = 0; i < iBlkSize; i++)
+		for (int i = 0; i < m_iBlkSize; i++)
 		{
 			SNodePool* pNode = &pool.pData[i];
 			pNode->m_sObj.dwpFlag = 0;
 
 			m_sFreeNode.push_head(pNode);
 		}
+
+		m_iBlkSize *= 2;
 	}
 
 public:
+	int m_iBlkSize = 1;
+
+	//friend CMemPoolManager;
+public:
+	CInstPool()
+	{
+		m_iBlkSize = iBlkSize;
+	}
 	virtual ~CInstPool()
 	{
 		clear();

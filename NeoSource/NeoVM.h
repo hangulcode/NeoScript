@@ -55,7 +55,8 @@ private:
 	void FreeTable(TableInfo* tbl);
 
 	VarInfo m_sDefaultValue[NDF_MAX];
-	CAllocPool < sizeof(TableNode), 100> m_sPool_TableNode;
+	//CAllocPool < sizeof(TableNode), 100> m_sPool_TableNode;
+	CInstPool< TableNode, 100 > m_sPool_TableNode;
 	CInstPool< TableInfo, 10 > m_sPool_TableInfo;
 	CInstPool< StringInfo, 10 > m_sPool_String;
 public:

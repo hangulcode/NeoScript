@@ -306,7 +306,7 @@ TableNode* TableBucket::Find(VarInfo* pKey)
 void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 {
 	u32 hash = GetHashCode(pKey);
-	if (_itemCount >= _BucketCapa)
+	if (_itemCount >= _BucketCapa * 2)
 	{
 		if(_BucketCapa > 0)
 			delete[] _Bucket;
@@ -320,14 +320,17 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 		TableNode* pCur = _pHead;
 		while (pCur)
 		{
-			TableBucket* pBucket = &_Bucket[pCur->hash & _HashBase];
-			pBucket->Add_NoCheck(pCur);
+			_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur);
 			pCur = pCur->pNext;
 		}
 	}
 
 	TableBucket* pBucket = &_Bucket[hash & _HashBase];
-	TableNode* pFindNode = pBucket->Find(pKey);
+	TableNode* pFindNode;
+	if (pBucket->pFirst)
+		pFindNode = pBucket->Find(pKey);
+	else
+		pFindNode = NULL;
 	if(pFindNode == NULL)
 	{
 		_itemCount++;

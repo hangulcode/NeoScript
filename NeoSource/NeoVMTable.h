@@ -27,18 +27,10 @@ struct TableBucket
 	TableNode*	pFirst;
 	bool	Pop_Used(TableNode* pTar);
 	TableNode* Find(VarInfo* pKey);
-	void Add_NoCheck(TableNode* p)
+	inline void Add_NoCheck(TableNode* p)
 	{
-		if (pFirst == NULL)
-		{
-			p->pBucektNext = NULL;
-			pFirst = p;
-		}
-		else
-		{
-			p->pBucektNext = pFirst->pBucektNext;
-			pFirst = p;
-		}
+		p->pBucektNext = pFirst;
+		pFirst = p;
 	}
 };
 
