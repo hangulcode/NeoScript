@@ -81,53 +81,34 @@ public:
 	inline int size() { return m_lnSize; }
 };
 
+
 template <int iRecSize, int iBlkSize = 100>
 class CAllocPool
 {
 private:
-
-protected:
-	struct STPool
-	{
-		int			m_iAllocBlkSize;
-	};
-	typedef _SelfNode<STPool>	SMemPool;
-
 	struct STNode
 	{
 		u32 dwpFlag;
+		u8 data[iRecSize];
 	};
+
 	typedef _SelfNode<STNode>	SNodePool;
-	_CSelfList<STPool> m_sMemPagePool;
+
+	struct STPool
+	{
+		SNodePool* pData;
+	};
+
+	std::list<STPool> m_sMemPagePool;
+
 	_CSelfList<STNode> m_sFreeNode;
 
-	int m_iRecSize = 1;
-	int m_iBlkSize = 1;
-
-	//friend CMemPoolManager;
-public:
-	CAllocPool() 
-	{
-		m_iRecSize = iRecSize + sizeof(SNodePool);
-		m_iBlkSize = iBlkSize;
-	}
-	virtual ~CAllocPool()
-	{
-		clear();
-	}
-	void	ForceAllFree()
-	{
-		clear();
-	}
-protected:
 	void	clear()
 	{
-		auto pCur = m_sMemPagePool.get_head();
-		while (pCur)
+		for (auto it = m_sMemPagePool.begin(); it != m_sMemPagePool.end(); it++)
 		{
-			auto p = pCur;
-			pCur = pCur->m_pNext;
-			free(p);
+			STPool& p = (*it);
+			free(p.pData);
 		}
 
 		m_sMemPagePool.clear();
@@ -135,23 +116,34 @@ protected:
 	}
 	void	alloc()
 	{
-		SMemPool* pNewPool = (SMemPool*)malloc(sizeof(SMemPool) + m_iRecSize * m_iBlkSize);
-		pNewPool->m_sObj.m_iAllocBlkSize = m_iBlkSize;
+		STPool pool;
+		pool.pData = (SNodePool*)malloc(sizeof(SNodePool) * m_iBlkSize);
 
+		m_sMemPagePool.push_back(pool);
 
-		m_sMemPagePool.push_tail(pNewPool);
-
-		SNodePool* pNode = (SNodePool*)((u8*)pNewPool + sizeof(SMemPool));
 		for (int i = 0; i < m_iBlkSize; i++)
 		{
+			SNodePool* pNode = &pool.pData[i];
 			pNode->m_sObj.dwpFlag = 0;
 
 			m_sFreeNode.push_head(pNode);
-			pNode = (SNodePool*)((u8*)pNode + m_iRecSize);
 		}
+
+		m_iBlkSize *= 2;
 	}
 
 public:
+	int m_iBlkSize = 1;
+
+public:
+	CAllocPool()
+	{
+		m_iBlkSize = iBlkSize;
+	}
+	virtual ~CAllocPool()
+	{
+		clear();
+	}
 	void*	Receive()
 	{
 		SNodePool* __p = m_sFreeNode.pop_head();
@@ -164,26 +156,18 @@ public:
 		__p->m_sObj.dwpFlag = 1;
 		__p->m_pNext = NULL;
 
-
-		u8 *pObj = (u8*)(__p + 1);
-
-
-		return (u8*)pObj;
+		return &__p->m_sObj.data;
 	}
 
-	void    Confer(void *buf)
+	void    Confer(void* buf)
 	{
-		SNodePool* __p = (SNodePool*)((u8*)buf - sizeof(SNodePool));
+		SNodePool* __p = (SNodePool*)((u8*)buf - offsetof(SNodePool, m_sObj.data));
 		__p->m_sObj.dwpFlag = 0;
 
 		m_sFreeNode.push_tail(__p);
-
-		//if (--m_sPI.m_dwUsedNode == 0)
-		{
-			//clear(false);
-		}
 	}
 };
+
 
 template <typename T, int iBlkSize = 100>
 class CInstPool
@@ -194,8 +178,6 @@ private:
 		u32 dwpFlag;
 		T data;
 	};
-
-
 
 	typedef _SelfNode<STNode>	SNodePool;
 
@@ -240,7 +222,6 @@ private:
 public:
 	int m_iBlkSize = 1;
 
-	//friend CMemPoolManager;
 public:
 	CInstPool()
 	{
