@@ -93,7 +93,7 @@ void CNeoVM::FreeWorker(CNeoVMWorker *d)
 
 StringInfo* CNeoVM::StringAlloc(const std::string& str)
 {
-	StringInfo* p = new StringInfo();
+	StringInfo* p = m_sPool_String.Receive();// new StringInfo();
 	while (true)
 	{
 		if (++_dwLastIDString == 0)
@@ -120,11 +120,13 @@ void CNeoVM::FreeString(VarInfo *d)
 		return; // Error
 
 	_sStrings.erase(it);
-	delete d->_str;
+	//delete d->_str;
+	m_sPool_String.Confer(d->_str);
 }
 TableInfo* CNeoVM::TableAlloc()
 {
-	TableInfo* pTable = new TableInfo();
+	TableInfo* pTable = m_sPool_TableInfo.Receive();
+	//TableInfo* pTable = new TableInfo();
 	while (true)
 	{
 		if (++_dwLastIDTable == 0)
@@ -174,7 +176,8 @@ void CNeoVM::FreeTable(TableInfo* tbl)
 
 	tbl->Free(this);
 
-	delete tbl;
+	//delete tbl;
+	m_sPool_TableInfo.Confer(tbl);
 }
 
 void CNeoVM::FreeTable(VarInfo *d)

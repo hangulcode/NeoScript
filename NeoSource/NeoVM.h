@@ -59,6 +59,8 @@ private:
 	CAllocPool < sizeof(TableBucket2) * MAX_TABLE, 10> m_sPool_Bucket2;
 	CAllocPool < sizeof(TableBucket3) * MAX_TABLE, 10> m_sPool_Bucket3;
 	CAllocPool < sizeof(TableBucket4) * MAX_TABLE, 10> m_sPool_Bucket4;
+	CInstPool< TableInfo, 10 > m_sPool_TableInfo;
+	CInstPool< StringInfo, 10 > m_sPool_String;
 public:
 
 	bool RunFunction(const std::string& funName);

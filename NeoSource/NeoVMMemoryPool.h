@@ -117,10 +117,10 @@ public:
 	}
 	void	ForceAllFree()
 	{
-		clear(false);
+		clear();
 	}
 protected:
-	void	clear(bool blCheckLeak = true)
+	void	clear()
 	{
 		auto pCur = m_sMemPagePool.get_head();
 		while (pCur)
@@ -182,5 +182,84 @@ public:
 		{
 			//clear(false);
 		}
+	}
+};
+
+template <typename T, int iBlkSize = 100>
+class CInstPool
+{
+private:
+	struct STNode
+	{
+		u32 dwpFlag;
+		T data;
+	};
+
+
+
+	typedef _SelfNode<STNode>	SNodePool;
+
+	struct STPool
+	{
+		SNodePool* pData;
+	};
+
+	std::list<STPool> m_sMemPagePool;
+
+	_CSelfList<STNode> m_sFreeNode;
+
+	void	clear()
+	{
+		for(auto it = m_sMemPagePool.begin(); it != m_sMemPagePool.end(); it++)
+		{
+			STPool& p = (*it);
+			delete [] p.pData;
+		}
+
+		m_sMemPagePool.clear();
+		m_sFreeNode.clear();
+	}
+	void	alloc()
+	{
+		STPool pool;
+		pool.pData = new SNodePool[iBlkSize];
+
+		m_sMemPagePool.push_back(pool);
+
+		for (int i = 0; i < iBlkSize; i++)
+		{
+			SNodePool* pNode = &pool.pData[i];
+			pNode->m_sObj.dwpFlag = 0;
+
+			m_sFreeNode.push_head(pNode);
+		}
+	}
+
+public:
+	virtual ~CInstPool()
+	{
+		clear();
+	}
+	T*	Receive()
+	{
+		SNodePool* __p = m_sFreeNode.pop_head();
+		if (__p == NULL)
+		{
+			alloc();
+			__p = m_sFreeNode.pop_head();
+		}
+
+		__p->m_sObj.dwpFlag = 1;
+		__p->m_pNext = NULL;
+
+		return &__p->m_sObj.data;
+	}
+
+	void    Confer(T* buf)
+	{
+		SNodePool* __p = (SNodePool*)((u8*)buf - offsetof(SNodePool, m_sObj.data));
+		__p->m_sObj.dwpFlag = 0;
+
+		m_sFreeNode.push_tail(__p);
 	}
 };
