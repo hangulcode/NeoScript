@@ -161,7 +161,7 @@ void CNeoVMWorker::TableInsert(VarInfo *pTable, VarInfo *pKey, VarInfo *pValue)
 		return;
 	}
 
-	pTable->_tbl->Insert(this, pKey, pValue);
+	pTable->_tbl->Insert(pKey, pValue);
 }
 VarInfo* CNeoVMWorker::GetTableItem(VarInfo *pTable, VarInfo *pKey)
 {
@@ -198,7 +198,7 @@ void CNeoVMWorker::TableRemove(VarInfo *pTable, VarInfo *pKey)
 		return;
 	}
 
-	pTable->_tbl->Remove(this, pKey);
+	pTable->_tbl->Remove(pKey);
 }
 
 void CNeoVMWorker::Swap(VarInfo* v1, VarInfo* v2)
@@ -688,11 +688,13 @@ bool CNeoVMWorker::ForEach(VarInfo* pTable, VarInfo* pKey)
 	TableInfo* tbl = pTable->_tbl;
 	if (pIterator->GetType() != VAR_ITERATOR)
 	{
-		if (0 < tbl->_itemCount)
+		if (0 < tbl->GetCount())
 		{
 			pIterator->_it = tbl->FirstNode();
 			pIterator->SetType(VAR_ITERATOR);
 		}
+		else
+			return false;
 	}
 	else
 		tbl->NextNode(pIterator->_it);

@@ -38,7 +38,6 @@ private:
 	inline bool IsDebugInfo() { return (_header._dwFlag & NEO_HEADER_FLAG_DEBUG) != 0; }
 
 	void Var_AddRef(VarInfo *d);
-	void Var_Release(VarInfo *d);
 	void Var_SetString(VarInfo *d, const char* str);
 	void Var_SetStringA(VarInfo *d, const std::string& str);
 	void Var_SetTable(VarInfo *d, TableInfo* p);
@@ -54,6 +53,75 @@ private:
 	void FreeTable(VarInfo* d);
 	void FreeTable(TableInfo* tbl);
 
+	inline void Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
+	{
+		v1->SetType(v2->GetType());
+		switch (v2->GetType())
+		{
+		case VAR_NONE:
+			break;
+		case VAR_BOOL:
+			v1->_bl = v2->_bl;
+			break;
+		case VAR_INT:
+			v1->_int = v2->_int;
+			break;
+		case VAR_FLOAT:
+			v1->_float = v2->_float;
+			break;
+		case VAR_STRING:
+			v1->_str = v2->_str;
+			++v1->_str->_refCount;
+			break;
+		case VAR_TABLE:
+			v1->_tbl = v2->_tbl;
+			++v1->_tbl->_refCount;
+			break;
+			//case VAR_TABLEFUN:
+			//	v1->_fun = v2->_fun;
+			//	break;
+		case VAR_FUN:
+			v1->_fun_index = v2->_fun_index;
+			break;
+		default:
+			break;
+		}
+	}
+
+	inline void Move(VarInfo* v1, VarInfo* v2)
+	{
+		if (v1->IsAllocType())
+			Var_Release(v1);
+		Move_DestNoRelease(v1, v2);
+	}
+	void Var_ReleaseInternal(VarInfo *d)
+	{
+		switch (d->GetType())
+		{
+		case VAR_STRING:
+			if (--d->_str->_refCount <= 0)
+				FreeString(d);
+			d->_str = NULL;
+			break;
+		case VAR_TABLE:
+			if (--d->_tbl->_refCount <= 0)
+				FreeTable(d);
+			d->_tbl = NULL;
+			break;
+		default:
+			break;
+		}
+		d->ClearType();
+	}
+
+	inline void Var_Release(VarInfo *d)
+	{
+		if (d->IsAllocType())
+			Var_ReleaseInternal(d);
+		else
+			d->ClearType();
+	}
+
 	VarInfo m_sDefaultValue[NDF_MAX];
 	
 	CAllocPool < sizeof(TableNode), 10> m_sPool_TableNode;
@@ -61,6 +129,7 @@ private:
 
 	CInstPool< TableInfo, 10 > m_sPool_TableInfo;
 	CInstPool< StringInfo, 10 > m_sPool_String;
+
 public:
 
 	bool RunFunction(const std::string& funName);

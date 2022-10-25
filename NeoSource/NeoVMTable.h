@@ -40,7 +40,8 @@ struct TableInfo
 {
 	TableBucket*	_Bucket;
 	TableNode*		_pHead;
-//	TableNode*		_pTail;
+
+	CNeoVM*	_pVM;
 
 	int	_HashBase;
 	int _BucketCapa;
@@ -55,9 +56,9 @@ struct TableInfo
 
 	void Free(CNeoVM* pVM);
 
-	void Insert(CNeoVM* pVM, std::string& pKey, VarInfo* pValue);
-	void Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue);
-	void Remove(CNeoVMWorker* pVMW, VarInfo* pKey);
+	void Insert(std::string& pKey, VarInfo* pValue);
+	void Insert(VarInfo* pKey, VarInfo* pValue);
+	void Remove(VarInfo* pKey);
 	TableBucket* GetTableBucket(VarInfo *pKey);
 	VarInfo* GetTableItem(VarInfo *pKey);
 	VarInfo* GetTableItem(std::string& key);
@@ -66,6 +67,10 @@ struct TableInfo
 	bool NextNode(TableIterator&);
 
 	bool ToList(std::vector<VarInfo*>& lst);
+	int		GetCount() 
+	{
+		return _itemCount;
+	}
 
 private:
 	inline void Var_AddRef(VarInfo *d)
@@ -90,6 +95,5 @@ private:
 		else
 			d->ClearType();
 	}
-
 };
 

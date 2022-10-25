@@ -17,25 +17,7 @@ void CNeoVM::Var_AddRef(VarInfo *d)
 		break;
 	}
 }
-void CNeoVM::Var_Release(VarInfo *d)
-{
-	switch (d->GetType())
-	{
-	case VAR_STRING:
-		if (--d->_str->_refCount <= 0)
-			FreeString(d);
-		d->_str = NULL;
-		break;
-	case VAR_TABLE:
-		if (--d->_tbl->_refCount <= 0)
-			FreeTable(d);
-		d->_tbl = NULL;
-		break;
-	default:
-		break;
-	}
-	d->ClearType();
-}
+
 
 void CNeoVM::Var_SetString(VarInfo *d, const char* str)
 {
@@ -137,6 +119,7 @@ TableInfo* CNeoVM::TableAlloc()
 			break;
 		}
 	}
+	pTable->_pVM = this;
 	pTable->_TableID = _dwLastIDTable;
 	pTable->_refCount = 0;
 	pTable->_itemCount = 0;

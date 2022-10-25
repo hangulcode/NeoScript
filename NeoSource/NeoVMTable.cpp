@@ -128,41 +128,46 @@ void TableInfo::Var_ReleaseInternal(CNeoVM* pVM, VarInfo *d)
 
 void TableInfo::Free(CNeoVM* pVM)
 {
-	if (_BucketCapa <= 0)
-		return;
-
-	for (int iBucket = 0; iBucket < _BucketCapa; iBucket++)
+	TableNode* pCur = _pHead;
+	while (pCur)
 	{
-		TableBucket* pBucket = &_Bucket[iBucket];
+		TableNode* pPre = pCur;
+		Var_Release(pVM, &pCur->key);
+		Var_Release(pVM, &pCur->value);
 
-		TableNode*	pFirst = pBucket->pFirst;
-		if (pFirst == NULL)
-			continue;
-
-		TableNode*	pCur = pFirst;
-		while (pCur)
-		{
-			Var_Release(pVM, &pCur->key);
-			Var_Release(pVM, &pCur->value);
-		
-			TableNode* pPre = pCur;
-			pCur = pCur->pBucektNext;
-			pVM->m_sPool_TableNode.Confer(pPre);
-		}
+		pCur = pCur->pNext;
+		pVM->m_sPool_TableNode.Confer(pPre);
 	}
-	delete[] _Bucket;
-	_BucketCapa = _HashBase = 0;
-	_itemCount = 0;
+	_pHead = NULL;
+
+	//pCur = _pReserveFirst;
+	//while (pCur)
+	//{
+	//	TableNode* pPre = pCur;
+	//	Var_Release(pVM, &pCur->key);
+	//	Var_Release(pVM, &pCur->value);
+
+	//	pCur = pCur->pBucektNext;
+	//	pVM->m_sPool_TableNode.Confer(pPre);
+	//}
+	//_pReserveFirst = NULL;
+
+	if (_BucketCapa > 0)
+	{
+		delete[] _Bucket;
+		_BucketCapa = _HashBase = 0;
+		_itemCount = 0;
+	}
 }
 
-void TableInfo::Insert(CNeoVM* pVM, std::string& Key, VarInfo* pValue)
+void TableInfo::Insert(std::string& Key, VarInfo* pValue)
 {
 	VarInfo var;
 	var.SetType(VAR_STRING);
-	var._str = pVM->StringAlloc(Key);
+	var._str = _pVM->StringAlloc(Key);
 	VarInfo* pKey = &var;
 
-	Insert(NULL, &var, pValue);
+	Insert(&var, pValue);
 }
 
 bool	TableBucket::Pop_Used(TableNode* pTar)
@@ -302,17 +307,22 @@ TableNode* TableBucket::Find(VarInfo* pKey)
 	return NULL;
 }
 
+
 //int g_MaxList = 0;
-void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
+void TableInfo::Insert(VarInfo* pKey, VarInfo* pValue)
 {
-	u32 hash = GetHashCode(pKey);
-	if (_itemCount >= _BucketCapa * 2)
+	if (_itemCount >= _BucketCapa * 4)
 	{
-		if(_BucketCapa > 0)
+		if (_BucketCapa > 0)
 			delete[] _Bucket;
 		if (_BucketCapa == 0)
 			_BucketCapa = 1;
-		_BucketCapa *= 2;
+		while (true)
+		{
+			_BucketCapa <<= 1;
+			if (_BucketCapa > _itemCount)
+				break;
+		}
 		_Bucket = new TableBucket[_BucketCapa];
 		memset(_Bucket, 0, sizeof(TableBucket) * _BucketCapa);
 		_HashBase = _BucketCapa - 1;
@@ -325,56 +335,43 @@ void TableInfo::Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue)
 		}
 	}
 
+	u32 hash = GetHashCode(pKey);
 	TableBucket* pBucket = &_Bucket[hash & _HashBase];
 	TableNode* pFindNode;
 	if (pBucket->pFirst)
 		pFindNode = pBucket->Find(pKey);
 	else
 		pFindNode = NULL;
-	if(pFindNode == NULL)
+	if (pFindNode == NULL)
 	{
 		_itemCount++;
 
-		TableNode* pCur = (TableNode*)pVMW->_pVM->m_sPool_TableNode.Receive();
+		TableNode* pNew = (TableNode*)_pVM->m_sPool_TableNode.Receive();
+		_pVM->Move_DestNoRelease(&pNew->key, pKey);
+		_pVM->Move_DestNoRelease(&pNew->value, pValue);
+		pNew->hash = hash;
+
 		if (_pHead == NULL)
 		{
-			_pHead = pCur;
-			pCur->pPre = NULL;
-			pCur->pNext = NULL;
+			_pHead = pNew;
+			pNew->pPre = NULL;
+			pNew->pNext = NULL;
 		}
 		else
 		{	// Insert To Head
-			_pHead->pPre = pCur;
-			pCur->pNext = _pHead;
-			_pHead = pCur;
+			_pHead->pPre = pNew;
+			pNew->pNext = _pHead;
+			_pHead = pNew;
 		}
 
-		pBucket->Add_NoCheck(pCur);
-
-		pCur->hash = hash;
-
-		pCur->key = *pKey;
-		pCur->value = *pValue;
-
-		if (pKey->IsAllocType()) Var_AddRef(pKey);
-		if (pValue->IsAllocType()) Var_AddRef(pValue);
+		pBucket->Add_NoCheck(pNew);
 	}
 	else // Replace
 	{
-		TableNode* pCur = pFindNode;
-		if (pVMW)
-		{
-			pVMW->Move(&pCur->key, pKey);
-			pVMW->Move(&pCur->value, pValue);
-		}
-		else
-		{
-			pCur->key = *pKey;
-			pCur->value = *pValue;
-		}
+		_pVM->Move(&pFindNode->value, pValue);
 	}
 }
-void TableInfo::Remove(CNeoVMWorker* pVMW, VarInfo* pKey)
+void TableInfo::Remove(VarInfo* pKey)
 {
 	if (_BucketCapa <= 0)
 		return;
@@ -385,8 +382,8 @@ void TableInfo::Remove(CNeoVMWorker* pVMW, VarInfo* pKey)
 	if (pCur == NULL)
 		return;
 
-	pVMW->Var_Release(&pCur->key);
-	pVMW->Var_Release(&pCur->value);
+	_pVM->Var_Release(&pCur->key);
+	_pVM->Var_Release(&pCur->value);
 
 	pBucket->Pop_Used(pCur);
 
@@ -403,7 +400,7 @@ void TableInfo::Remove(CNeoVMWorker* pVMW, VarInfo* pKey)
 		pCur->pPre->pNext = pCur->pNext;
 	}
 
-	pVMW->_pVM->m_sPool_TableNode.Confer(pCur);
+	_pVM->m_sPool_TableNode.Confer(pCur);
 
 	_itemCount--;
 }
