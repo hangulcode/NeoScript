@@ -60,8 +60,6 @@ u32 GetHashCode(VarInfo *p)
 TableIterator TableInfo::FirstNode()
 {
 	TableIterator r;
-	r._pNode = NULL;
-
 	for (int iBucket = 0; iBucket < _BucketCapa; iBucket++)
 	{
 		TableBucket* pBucket = &_Bucket[iBucket];
@@ -69,11 +67,11 @@ TableIterator TableInfo::FirstNode()
 		TableNode*	pCur = pBucket->pFirst;
 		if(pCur)
 		{
-			r._bucket = iBucket;
 			r._pNode = pCur;
 			return r;
 		}
 	}
+	r._pNode = NULL;
 	return r;
 }
 bool TableInfo::NextNode(TableIterator& r)
@@ -82,22 +80,20 @@ bool TableInfo::NextNode(TableIterator& r)
 		return false;
 
 	{
-		TableNode*	pCur = r._pNode->pBucektNext;
+		TableNode*	pCur = r._pNode->pNext;
 		if (pCur)
 		{
-			//r._bucket = iBucket;
 			r._pNode = pCur;
 			return true;
 		}
 	}
 
-	for (int iBucket = r._bucket + 1; iBucket < _BucketCapa; iBucket++)
+	for (int iBucket = (r._pNode->hash & _HashBase) + 1; iBucket < _BucketCapa; iBucket++)
 	{
 		TableBucket* pBucket = &_Bucket[iBucket];
 
 		if(pBucket->pFirst)
 		{
-			r._bucket = iBucket;
 			r._pNode = pBucket->pFirst;
 			return true;
 		}
@@ -126,38 +122,36 @@ void TableInfo::Var_ReleaseInternal(CNeoVM* pVM, VarInfo *d)
 	d->ClearType();
 }
 
-void TableInfo::Free(CNeoVM* pVM)
+void TableInfo::Free()
 {
-	TableNode* pCur = _pHead;
-	while (pCur)
+	if (_BucketCapa <= 0)
+		return;
+
+	for (int iBucket = 0; iBucket < _BucketCapa; iBucket++)
 	{
-		TableNode* pPre = pCur;
-		Var_Release(pVM, &pCur->key);
-		Var_Release(pVM, &pCur->value);
+		TableBucket* pBucket = &_Bucket[iBucket];
 
-		pCur = pCur->pNext;
-		pVM->m_sPool_TableNode.Confer(pPre);
+		TableNode*	pFirst = pBucket->pFirst;
+		if (pFirst == NULL)
+			continue;
+
+		TableNode*	pCur = pFirst;
+		while (pCur)
+		{
+			TableNode*	pNext = pCur->pNext;
+
+			Var_Release(_pVM, &pCur->key);
+			Var_Release(_pVM, &pCur->value);
+
+			_pVM->m_sPool_TableNode.Confer(pCur);
+
+			pCur = pNext;
+		}
 	}
-	_pHead = NULL;
 
-	//pCur = _pReserveFirst;
-	//while (pCur)
-	//{
-	//	TableNode* pPre = pCur;
-	//	Var_Release(pVM, &pCur->key);
-	//	Var_Release(pVM, &pCur->value);
-
-	//	pCur = pCur->pBucektNext;
-	//	pVM->m_sPool_TableNode.Confer(pPre);
-	//}
-	//_pReserveFirst = NULL;
-
-	if (_BucketCapa > 0)
-	{
-		delete[] _Bucket;
-		_BucketCapa = _HashBase = 0;
-		_itemCount = 0;
-	}
+	delete[] _Bucket;
+	_BucketCapa = _HashBase = 0;
+	_itemCount = 0;
 }
 
 void TableInfo::Insert(std::string& Key, VarInfo* pValue)
@@ -179,17 +173,17 @@ bool	TableBucket::Pop_Used(TableNode* pTar)
 		if (pCur == pTar)
 		{
 			if (pPre == NULL)
-				pFirst = pCur->pBucektNext;
+				pFirst = pCur->pNext;
 			else
-				pPre->pBucektNext = pCur->pBucektNext;
-			pTar->pBucektNext = NULL;
+				pPre->pNext = pCur->pNext;
+			pTar->pNext = NULL;
 #ifdef _DEBUG
 			//--_size_use;
 #endif
 			return true;
 		}
 		pPre = pCur;
-		pCur = pCur->pBucektNext;
+		pCur = pCur->pNext;
 	}
 	return false;
 }
@@ -203,7 +197,7 @@ TableNode* TableBucket::Find(VarInfo* pKey)
 		{
 			if (pCur->key.GetType() == VAR_NONE)
 				return pCur;
-			pCur = pCur->pBucektNext;
+			pCur = pCur->pNext;
 		}
 		break;
 	case VAR_BOOL:
@@ -216,7 +210,7 @@ TableNode* TableBucket::Find(VarInfo* pKey)
 					if (pCur->key._bl == b)
 						return pCur;
 				}
-				pCur = pCur->pBucektNext;
+				pCur = pCur->pNext;
 			}
 		}
 		break;
@@ -230,7 +224,7 @@ TableNode* TableBucket::Find(VarInfo* pKey)
 					if (pCur->key._int == iKey)
 						return pCur;
 				}
-				pCur = pCur->pBucektNext;
+				pCur = pCur->pNext;
 			}
 		}
 		break;
@@ -244,7 +238,7 @@ TableNode* TableBucket::Find(VarInfo* pKey)
 					if (pCur->key._float == fKey)
 						return pCur;
 				}
-				pCur = pCur->pBucektNext;
+				pCur = pCur->pNext;
 			}
 		}
 		break;
@@ -258,7 +252,7 @@ TableNode* TableBucket::Find(VarInfo* pKey)
 					if (pCur->key._str->_str == str)
 						return pCur;
 				}
-				pCur = pCur->pBucektNext;
+				pCur = pCur->pNext;
 			}
 		}
 		break;
@@ -272,7 +266,7 @@ TableNode* TableBucket::Find(VarInfo* pKey)
 					if (pCur->key._tbl == pTableInfo)
 						return pCur;
 				}
-				pCur = pCur->pBucektNext;
+				pCur = pCur->pNext;
 			}
 		}
 		break;
@@ -299,7 +293,7 @@ TableNode* TableBucket::Find(VarInfo* pKey)
 					if (pCur->key._fun_index == iFunKey)
 						return pCur;
 				}
-				pCur = pCur->pBucektNext;
+				pCur = pCur->pNext;
 			}
 		}
 		break;
@@ -313,8 +307,10 @@ void TableInfo::Insert(VarInfo* pKey, VarInfo* pValue)
 {
 	if (_itemCount >= _BucketCapa * 4)
 	{
-		if (_BucketCapa > 0)
-			delete[] _Bucket;
+		TableBucket* Old_Bucket = _Bucket;
+		int Old_BucketCapa = _BucketCapa;
+		int Old_HashBase = _HashBase;
+
 		if (_BucketCapa == 0)
 			_BucketCapa = 1;
 		while (true)
@@ -327,12 +323,27 @@ void TableInfo::Insert(VarInfo* pKey, VarInfo* pValue)
 		memset(_Bucket, 0, sizeof(TableBucket) * _BucketCapa);
 		_HashBase = _BucketCapa - 1;
 
-		TableNode* pCur = _pHead;
-		while (pCur)
+
+		for (int iBucket = 0; iBucket < Old_BucketCapa; iBucket++)
 		{
-			_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur);
-			pCur = pCur->pNext;
+			TableBucket* pBucket = &Old_Bucket[iBucket];
+
+			TableNode*	pFirst = pBucket->pFirst;
+			if (pFirst == NULL)
+				continue;
+
+			TableNode*	pCur = pFirst;
+			while (pCur)
+			{
+				TableNode*	pNext = pCur->pNext;
+				_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur);
+
+				pCur = pNext;
+			}
 		}
+
+		if (Old_BucketCapa > 0)
+			delete[] Old_Bucket;
 	}
 
 	u32 hash = GetHashCode(pKey);
@@ -350,19 +361,6 @@ void TableInfo::Insert(VarInfo* pKey, VarInfo* pValue)
 		_pVM->Move_DestNoRelease(&pNew->key, pKey);
 		_pVM->Move_DestNoRelease(&pNew->value, pValue);
 		pNew->hash = hash;
-
-		if (_pHead == NULL)
-		{
-			_pHead = pNew;
-			pNew->pPre = NULL;
-			pNew->pNext = NULL;
-		}
-		else
-		{	// Insert To Head
-			_pHead->pPre = pNew;
-			pNew->pNext = _pHead;
-			_pHead = pNew;
-		}
 
 		pBucket->Add_NoCheck(pNew);
 	}
@@ -386,19 +384,6 @@ void TableInfo::Remove(VarInfo* pKey)
 	_pVM->Var_Release(&pCur->value);
 
 	pBucket->Pop_Used(pCur);
-
-	if (_pHead == pCur)
-	{
-		_pHead = pCur->pNext;
-		if (pCur->pNext)
-			pCur->pNext->pPre = NULL;
-	}
-	else
-	{
-		if (pCur->pNext)
-			pCur->pNext->pPre = pCur->pPre;
-		pCur->pPre->pNext = pCur->pNext;
-	}
 
 	_pVM->m_sPool_TableNode.Confer(pCur);
 
@@ -442,7 +427,7 @@ VarInfo* TableInfo::GetTableItem(std::string& key)
 			if (pCur->key._str->_str == key)
 				return &pCur->value;
 		}
-		pCur = pCur->pBucektNext;
+		pCur = pCur->pNext;
 	}
 	return NULL;
 }
@@ -464,7 +449,7 @@ bool TableInfo::ToList(std::vector<VarInfo*>& lst)
 		while (pCur)
 		{
 			lst[cnt++] = &pCur->value;
-			pCur = pCur->pBucektNext;
+			pCur = pCur->pNext;
 		}
 	}
 

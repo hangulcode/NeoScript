@@ -125,7 +125,6 @@ TableInfo* CNeoVM::TableAlloc()
 	pTable->_itemCount = 0;
 	pTable->_HashBase = 0;
 	pTable->_BucketCapa = 0;
-	pTable->_pHead = NULL;
 	pTable->_pUserData = NULL;
 	pTable->_meta = NULL;
 	pTable->_fun._func = NULL;
@@ -159,7 +158,7 @@ void CNeoVM::FreeTable(TableInfo* tbl)
 	}
 	tbl->_fun._func = NULL;
 
-	tbl->Free(this);
+	tbl->Free();
 
 	//delete tbl;
 	m_sPool_TableInfo.Confer(tbl);

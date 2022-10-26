@@ -142,7 +142,6 @@ struct TableNode;
 #pragma pack(1)
 struct TableIterator
 {
-	int			_bucket;
 	TableNode*	_pNode;
 };
 #pragma pack()

@@ -1,6 +1,6 @@
 #pragma once
 
-
+#pragma pack(1)
 struct TableNode
 {
 	VarInfo	key;
@@ -8,11 +8,9 @@ struct TableNode
 
 	u32		hash;
 
-	TableNode* pBucektNext; // List In Bucket
-
-	TableNode* pNext;		// List In Table Node
-	TableNode* pPre;
+	TableNode* pNext; // List In Bucket
 };
+#pragma pack()
 
 struct TableSortInfo
 {
@@ -29,7 +27,7 @@ struct TableBucket
 	TableNode* Find(VarInfo* pKey);
 	inline void Add_NoCheck(TableNode* p)
 	{
-		p->pBucektNext = pFirst;
+		p->pNext = pFirst;
 		pFirst = p;
 	}
 };
@@ -39,7 +37,6 @@ class CNeoVMWorker;
 struct TableInfo
 {
 	TableBucket*	_Bucket;
-	TableNode*		_pHead;
 
 	CNeoVM*	_pVM;
 
@@ -54,7 +51,7 @@ struct TableInfo
 	FunctionPtrNative _fun;
 	TableInfo*		_meta;
 
-	void Free(CNeoVM* pVM);
+	void Free();
 
 	void Insert(std::string& pKey, VarInfo* pValue);
 	void Insert(VarInfo* pKey, VarInfo* pValue);
