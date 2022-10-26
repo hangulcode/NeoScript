@@ -24,7 +24,7 @@ struct TableBucket
 {
 	TableNode*	pFirst;
 	bool	Pop_Used(TableNode* pTar);
-	TableNode* Find(VarInfo* pKey);
+	TableNode* Find(VarInfo* pKey, u32 hash);
 	inline void Add_NoCheck(TableNode* p)
 	{
 		p->pNext = pFirst;
@@ -56,7 +56,6 @@ struct TableInfo
 	void Insert(std::string& pKey, VarInfo* pValue);
 	void Insert(VarInfo* pKey, VarInfo* pValue);
 	void Remove(VarInfo* pKey);
-	TableBucket* GetTableBucket(VarInfo *pKey);
 	VarInfo* GetTableItem(VarInfo *pKey);
 	VarInfo* GetTableItem(std::string& key);
 

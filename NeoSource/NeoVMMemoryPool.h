@@ -155,8 +155,8 @@ public:
 
 #ifdef _DEBUG
 		__p->m_sObj.dwpFlag = 1;
-#endif
 		__p->m_pNext = NULL;
+#endif
 
 		return &__p->m_sObj.data;
 	}

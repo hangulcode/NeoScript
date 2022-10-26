@@ -187,7 +187,7 @@ bool	TableBucket::Pop_Used(TableNode* pTar)
 	}
 	return false;
 }
-TableNode* TableBucket::Find(VarInfo* pKey)
+TableNode* TableBucket::Find(VarInfo* pKey, u32 hash)
 {
 	TableNode* pCur = pFirst;
 	switch (pKey->GetType())
@@ -219,10 +219,13 @@ TableNode* TableBucket::Find(VarInfo* pKey)
 			int iKey = pKey->_int;
 			while (pCur)
 			{
-				if (pCur->key.GetType() == VAR_INT)
+				if (pCur->hash == hash)
 				{
-					if (pCur->key._int == iKey)
-						return pCur;
+					if (pCur->key.GetType() == VAR_INT)
+					{
+						if (pCur->key._int == iKey)
+							return pCur;
+					}
 				}
 				pCur = pCur->pNext;
 			}
@@ -233,10 +236,13 @@ TableNode* TableBucket::Find(VarInfo* pKey)
 			auto fKey = pKey->_float;
 			while (pCur)
 			{
-				if (pCur->key.GetType() == VAR_FLOAT)
+				if (pCur->hash == hash)
 				{
-					if (pCur->key._float == fKey)
-						return pCur;
+					if (pCur->key.GetType() == VAR_FLOAT)
+					{
+						if (pCur->key._float == fKey)
+							return pCur;
+					}
 				}
 				pCur = pCur->pNext;
 			}
@@ -247,10 +253,13 @@ TableNode* TableBucket::Find(VarInfo* pKey)
 			std::string& str = pKey->_str->_str;
 			while (pCur)
 			{
-				if (pCur->key.GetType() == VAR_STRING)
+				if (pCur->hash == hash)
 				{
-					if (pCur->key._str->_str == str)
-						return pCur;
+					if (pCur->key.GetType() == VAR_STRING)
+					{
+						if (pCur->key._str->_str == str)
+							return pCur;
+					}
 				}
 				pCur = pCur->pNext;
 			}
@@ -350,7 +359,7 @@ void TableInfo::Insert(VarInfo* pKey, VarInfo* pValue)
 	TableBucket* pBucket = &_Bucket[hash & _HashBase];
 	TableNode* pFindNode;
 	if (pBucket->pFirst)
-		pFindNode = pBucket->Find(pKey);
+		pFindNode = pBucket->Find(pKey, hash);
 	else
 		pFindNode = NULL;
 	if (pFindNode == NULL)
@@ -376,7 +385,7 @@ void TableInfo::Remove(VarInfo* pKey)
 	u32 hash = GetHashCode(pKey);
 	TableBucket* pBucket = &_Bucket[hash & _HashBase];
 
-	TableNode* pCur = pBucket->Find(pKey);
+	TableNode* pCur = pBucket->Find(pKey, hash);
 	if (pCur == NULL)
 		return;
 
@@ -390,23 +399,16 @@ void TableInfo::Remove(VarInfo* pKey)
 	_itemCount--;
 }
 
-TableBucket* TableInfo::GetTableBucket(VarInfo *pKey)
-{
-	u32 hash = GetHashCode(pKey);
-
-	return &_Bucket[hash & _HashBase];
-}
-
-
 VarInfo* TableInfo::GetTableItem(VarInfo *pKey)
 {
 	if (_BucketCapa <= 0)
 		return NULL;
-	TableBucket* Bucket = GetTableBucket(pKey);
-	if (Bucket == NULL)
-		return NULL;
+	u32 hash = GetHashCode(pKey);
 
-	TableNode* pCur = Bucket->Find(pKey);
+	TableBucket* Bucket = &_Bucket[hash & _HashBase];
+
+
+	TableNode* pCur = Bucket->Find(pKey, hash);
 	if (pCur == 0)
 		return NULL;
 
