@@ -75,15 +75,16 @@ fun Fun_Performanc()
 {
 	var table = {};
 	var tm = system.clock();
-	//for (var i = 1; i <= 10000000; i++) // release
-	for (var i = 1; i <= 100000; i++) // debug
+	for (var i = 1; i <= 10000000; i++) // release
+	//for (var i = 1; i <= 100000; i++) // debug
 	{
 		table[i] = i;
 	}
 	var sum = 0.0;
 	system.print("\nTable Size : " ..tosize(table));
+	//sleep(5000);
 	system.print("\nInsert Time : " .. (system.clock() - tm)  .. "\n\n");
-
+	/*
 	tm = system.clock();
 	system.sort(table, fun(var a, var b) { return a > b; });
 	system.print("\nSort  Time : " .. (system.clock() - tm) .. "\n\n");
@@ -95,12 +96,16 @@ fun Fun_Performanc()
 		sum += b;
 	}
 	system.print("\nTable Size : " ..tosize(table).." Sum " .. sum .. "");
-	system.print("\nLoop  Time : " .. (system.clock() - tm) .. "\n\n");
+	system.print("\nLoop  Time : " .. (system.clock() - tm) .. "\n\n");*/
 }
 
 export fun main()
 {
-	Fun_General();
+	//Fun_General();
 	fun_Sort();
 	Fun_Performanc();
+
+//	var table = {};
+//	table[5] = 3;
+
 }

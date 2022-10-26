@@ -1,6 +1,6 @@
 #pragma once
 
-
+#pragma pack(1)
 
 template<class T>
 struct _SelfNode
@@ -17,17 +17,23 @@ public:
 	typedef _SelfNode<T> __node;
 private:
 	__node*	m_pHead;
+#ifdef _DEBUG
 	int		m_lnSize;
+#endif
 public:
 	_CSelfList()
 	{
 		m_pHead = NULL;
+#ifdef _DEBUG
 		m_lnSize = 0;
+#endif
 	}
 	inline void clear()
 	{
 		m_pHead = NULL;
+#ifdef _DEBUG
 		m_lnSize = 0;
+#endif
 	}
 	inline __node* get_head()
 	{
@@ -39,12 +45,16 @@ public:
 			return NULL;
 		__node* __p = m_pHead;
 		m_pHead = m_pHead->m_pNext;
+#ifdef _DEBUG
 		m_lnSize--;
+#endif
 		return __p;
 	}
 	inline void push_head(__node* __p)
 	{
+#ifdef _DEBUG
 		m_lnSize++;
+#endif
 		__p->m_pNext = m_pHead;
 		m_pHead = __p;
 	}
@@ -52,7 +62,13 @@ public:
 	{
 		return m_pHead ? false : true;
 	}
+	inline void set_head(__node* __p)
+	{
+		m_pHead = __p;
+	}
+#ifdef _DEBUG
 	inline int size() { return m_lnSize; }
+#endif
 };
 
 
@@ -62,7 +78,9 @@ class CAllocPool
 private:
 	struct STNode
 	{
+#ifdef _DEBUG
 		u32 dwpFlag;
+#endif
 		u8 data[iRecSize];
 	};
 
@@ -92,16 +110,24 @@ private:
 	{
 		STPool pool;
 		pool.pData = (SNodePool*)malloc(sizeof(SNodePool) * m_iBlkSize);
+		SNodePool* pData = pool.pData;
 
 		m_sMemPagePool.push_back(pool);
 
 		for (int i = 0; i < m_iBlkSize; i++)
 		{
-			SNodePool* pNode = &pool.pData[i];
+#ifdef _DEBUG
+			SNodePool* pNode = &pData[i];
 			pNode->m_sObj.dwpFlag = 0;
-
 			m_sFreeNode.push_head(pNode);
+#else
+			//m_sFreeNode.push_head(&pData[i]);
+			pData[i].m_pNext = &pData[i + 1];
+#endif
 		}
+
+		m_sFreeNode.set_head(&pData[0]);
+		pData[m_iBlkSize - 1].m_pNext = NULL;
 
 		m_iBlkSize *= 2;
 	}
@@ -127,7 +153,9 @@ public:
 			__p = m_sFreeNode.pop_head();
 		}
 
+#ifdef _DEBUG
 		__p->m_sObj.dwpFlag = 1;
+#endif
 		__p->m_pNext = NULL;
 
 		return &__p->m_sObj.data;
@@ -136,7 +164,10 @@ public:
 	void    Confer(void* buf)
 	{
 		SNodePool* __p = (SNodePool*)((u8*)buf - offsetof(SNodePool, m_sObj.data));
+
+#ifdef _DEBUG
 		__p->m_sObj.dwpFlag = 0;
+#endif
 
 		m_sFreeNode.push_head(__p);
 	}
@@ -228,3 +259,5 @@ public:
 		m_sFreeNode.push_head(__p);
 	}
 };
+
+#pragma pack()
