@@ -17,25 +17,7 @@ void CNeoVM::Var_AddRef(VarInfo *d)
 		break;
 	}
 }
-void CNeoVM::Var_Release(VarInfo *d)
-{
-	switch (d->GetType())
-	{
-	case VAR_STRING:
-		if (--d->_str->_refCount <= 0)
-			FreeString(d);
-		d->_str = NULL;
-		break;
-	case VAR_TABLE:
-		if (--d->_tbl->_refCount <= 0)
-			FreeTable(d);
-		d->_tbl = NULL;
-		break;
-	default:
-		break;
-	}
-	d->ClearType();
-}
+
 
 void CNeoVM::Var_SetString(VarInfo *d, const char* str)
 {
@@ -93,7 +75,7 @@ void CNeoVM::FreeWorker(CNeoVMWorker *d)
 
 StringInfo* CNeoVM::StringAlloc(const std::string& str)
 {
-	StringInfo* p = new StringInfo();
+	StringInfo* p = m_sPool_String.Receive();// new StringInfo();
 	while (true)
 	{
 		if (++_dwLastIDString == 0)
@@ -120,11 +102,13 @@ void CNeoVM::FreeString(VarInfo *d)
 		return; // Error
 
 	_sStrings.erase(it);
-	delete d->_str;
+	//delete d->_str;
+	m_sPool_String.Confer(d->_str);
 }
 TableInfo* CNeoVM::TableAlloc()
 {
-	TableInfo* pTable = new TableInfo();
+	TableInfo* pTable = m_sPool_TableInfo.Receive();
+	//TableInfo* pTable = new TableInfo();
 	while (true)
 	{
 		if (++_dwLastIDTable == 0)
@@ -135,10 +119,12 @@ TableInfo* CNeoVM::TableAlloc()
 			break;
 		}
 	}
+	pTable->_pVM = this;
 	pTable->_TableID = _dwLastIDTable;
 	pTable->_refCount = 0;
 	pTable->_itemCount = 0;
-	memset(pTable->_Flag1, 0, sizeof(pTable->_Flag1));
+	pTable->_HashBase = 0;
+	pTable->_BucketCapa = 0;
 	pTable->_pUserData = NULL;
 	pTable->_meta = NULL;
 	pTable->_fun._func = NULL;
@@ -172,9 +158,10 @@ void CNeoVM::FreeTable(TableInfo* tbl)
 	}
 	tbl->_fun._func = NULL;
 
-	tbl->Free(this);
+	tbl->Free();
 
-	delete tbl;
+	//delete tbl;
+	m_sPool_TableInfo.Confer(tbl);
 }
 
 void CNeoVM::FreeTable(VarInfo *d)
@@ -208,6 +195,14 @@ CNeoVM::CNeoVM()
 }
 CNeoVM::~CNeoVM()
 {
+	for(auto it = _sVMWorkers.begin(); it != _sVMWorkers.end(); it++)
+	{
+		CNeoVMWorker* d = (*it).second;
+		delete d;
+	}
+	_sVMWorkers.clear();
+
+
 	if (_pCodePtr != NULL)
 	{
 		delete [] _pCodePtr;

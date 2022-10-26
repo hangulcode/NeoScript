@@ -1,11 +1,16 @@
 #pragma once
 
-
+#pragma pack(1)
 struct TableNode
 {
 	VarInfo	key;
 	VarInfo	value;
+
+	u32		hash;
+
+	TableNode* pNext; // List In Bucket
 };
+#pragma pack()
 
 struct TableSortInfo
 {
@@ -14,51 +19,29 @@ struct TableSortInfo
 };
 
 
-const int DefualtTableSize = 4;
-#define MAX_TABLE	64
 
-typedef 	u16	uTFlag;
-#define TFLAG_BITS	(sizeof(uTFlag) * 8)
-#define TFLAG_CNT	(MAX_TABLE / TFLAG_BITS)
-
-
-struct TableBucket4
+struct TableBucket
 {
-	TableNode*	_table; // alloc pointer [array]
-	TableNode	_default[DefualtTableSize];
-
-
-	int			_capa;
-	int			_size_use;
-
-	int Find(VarInfo* pKey);
-};
-
-struct TableBucket3
-{
-	TableBucket4* _Bucket4;
-	uTFlag _Flag4[TFLAG_CNT];
-};
-
-struct TableBucket2
-{
-	TableBucket3* _Bucket3;
-	uTFlag _Flag3[TFLAG_CNT];
-};
-
-
-struct TableBucket1
-{
-	TableBucket2* _Bucket2;
-	uTFlag _Flag2[TFLAG_CNT];
+	TableNode*	pFirst;
+	bool	Pop_Used(TableNode* pTar);
+	TableNode* Find(VarInfo* pKey, u32 hash);
+	inline void Add_NoCheck(TableNode* p)
+	{
+		p->pNext = pFirst;
+		pFirst = p;
+	}
 };
 
 class CNeoVM;
 class CNeoVMWorker;
 struct TableInfo
 {
-	TableBucket1	_Bucket1[MAX_TABLE];
-	uTFlag _Flag1[TFLAG_CNT];
+	TableBucket*	_Bucket;
+
+	CNeoVM*	_pVM;
+
+	int	_HashBase;
+	int _BucketCapa;
 
 	int	_TableID;
 	int _refCount;
@@ -68,12 +51,11 @@ struct TableInfo
 	FunctionPtrNative _fun;
 	TableInfo*		_meta;
 
-	void Free(CNeoVM* pVM);
+	void Free();
 
-	void Insert(CNeoVM* pVM, std::string& pKey, VarInfo* pValue);
-	void Insert(CNeoVMWorker* pVMW, VarInfo* pKey, VarInfo* pValue);
-	void Remove(CNeoVMWorker* pVMW, VarInfo* pKey);
-	TableBucket4* GetTableBucket(VarInfo *pKey);
+	void Insert(std::string& pKey, VarInfo* pValue);
+	void Insert(VarInfo* pKey, VarInfo* pValue);
+	void Remove(VarInfo* pKey);
 	VarInfo* GetTableItem(VarInfo *pKey);
 	VarInfo* GetTableItem(std::string& key);
 
@@ -81,6 +63,10 @@ struct TableInfo
 	bool NextNode(TableIterator&);
 
 	bool ToList(std::vector<VarInfo*>& lst);
+	int		GetCount() 
+	{
+		return _itemCount;
+	}
 
 private:
 	inline void Var_AddRef(VarInfo *d)
@@ -105,6 +91,5 @@ private:
 		else
 			d->ClearType();
 	}
-
 };
 

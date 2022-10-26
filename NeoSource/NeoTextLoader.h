@@ -134,6 +134,7 @@ public:
 		m_iCurLine = 1;
 		m_iCurCol = 1;
 	}
+	u16* GetBuffer() { return m_lpBufStart; }
 
 	inline bool IsEOF()
 	{

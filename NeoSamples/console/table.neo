@@ -82,8 +82,9 @@ fun Fun_Performanc()
 	}
 	var sum = 0.0;
 	system.print("\nTable Size : " ..tosize(table));
+	//sleep(5000);
 	system.print("\nInsert Time : " .. (system.clock() - tm)  .. "\n\n");
-
+	
 	tm = system.clock();
 	system.sort(table, fun(var a, var b) { return a > b; });
 	system.print("\nSort  Time : " .. (system.clock() - tm) .. "\n\n");
