@@ -147,13 +147,10 @@ public:
 	}
 	void*	Receive()
 	{
-		SNodePool* __p = m_sFreeNode.pop_head();
-		if (__p == NULL)
-		{
+		if (m_sFreeNode.empty())
 			alloc();
-			__p = m_sFreeNode.pop_head();
-		}
 
+		SNodePool* __p = m_sFreeNode.pop_head();
 #ifdef _DEBUG
 		__p->m_sObj.dwpFlag = 1;
 		__p->m_pNext = NULL;
