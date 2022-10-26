@@ -121,14 +121,15 @@ private:
 			pNode->m_sObj.dwpFlag = 0;
 			m_sFreeNode.push_head(pNode);
 #else
-			//m_sFreeNode.push_head(&pData[i]);
 			pData[i].m_pNext = &pData[i + 1];
 #endif
 		}
 
+#ifdef _DEBUG
+#else
 		m_sFreeNode.set_head(&pData[0]);
 		pData[m_iBlkSize - 1].m_pNext = NULL;
-
+#endif
 		m_iBlkSize *= 2;
 	}
 

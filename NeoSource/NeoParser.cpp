@@ -2530,6 +2530,10 @@ bool CNeoVM::Compile(void* pBufferSrc, int iLenSrc, CNArchive& arw, std::string&
 	bool b = Parse(ar2, arw, putASM);
 	if(b == false)
 		err = ar2.m_sErrorString;
+
+	u16* pBuffer = ar2.GetBuffer();
+	if (pBuffer) delete[] pBuffer;
+
 	return b;
 }
 CNeoVM*	CNeoVM::CompileAndLoadVM(void* pBufferSrc, int iLenSrc, std::string& err, bool putASM, bool debug, bool allowGlobalInitLogic, int iStackSize)

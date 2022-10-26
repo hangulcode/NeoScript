@@ -195,6 +195,14 @@ CNeoVM::CNeoVM()
 }
 CNeoVM::~CNeoVM()
 {
+	for(auto it = _sVMWorkers.begin(); it != _sVMWorkers.end(); it++)
+	{
+		CNeoVMWorker* d = (*it).second;
+		delete d;
+	}
+	_sVMWorkers.clear();
+
+
 	if (_pCodePtr != NULL)
 	{
 		delete [] _pCodePtr;
