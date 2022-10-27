@@ -202,6 +202,15 @@ CNeoVM::~CNeoVM()
 	}
 	_sVMWorkers.clear();
 
+	for (auto it = _sTables.begin(); it != _sTables.end(); it++)
+	{
+		TableInfo* p = (*it).second;
+		p->Free();
+	}
+	_sTables.clear();
+
+	_sStrings.clear();
+
 
 	if (_pCodePtr != NULL)
 	{

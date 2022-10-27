@@ -124,10 +124,9 @@ private:
 
 	VarInfo m_sDefaultValue[NDF_MAX];
 	
-	CAllocPool < sizeof(TableNode), 10> m_sPool_TableNode;
-	//CInstPool< TableNode, 100 > m_sPool_TableNode;
+	CAllocPool < TableNode, 10> m_sPool_TableNode;
+	CAllocPool< TableInfo, 10 > m_sPool_TableInfo;
 
-	CInstPool< TableInfo, 10 > m_sPool_TableInfo;
 	CInstPool< StringInfo, 10 > m_sPool_String;
 
 public:
