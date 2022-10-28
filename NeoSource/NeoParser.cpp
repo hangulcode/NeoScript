@@ -1396,6 +1396,8 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		case TK_FUN: // FUNT_ANONYMOUS ?
 		{
 			int r = ParseFunctionBase(ar, funs, vars, "", FUNT_ANONYMOUS);
+			if(r == -1)
+				return TK_NONE; // error
 			SFunctionInfo* pFun = funs.FindFun(r);
 			if (pFun == NULL)
 				return TK_NONE; // error
@@ -2287,7 +2289,8 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			}
 			if (tkType2 == TK_STRING)
 			{
-				ParseFunctionBase(ar, funs, vars, tk2, funType);
+				if (-1 == ParseFunctionBase(ar, funs, vars, tk2, funType))
+					return false;
 			}
 			else
 			{
@@ -2301,6 +2304,8 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				return false;
 			break;
 		case TK_STRING:
+		case TK_MINUS2:
+		case TK_PLUS2:
 			ar.PushToken(tkType1, tk1);
 			iTempOffset = INVALID_ERROR_PARSEJOB;
 			r = ParseJob(false, iTempOffset, NULL, ar, funs, vars);
