@@ -1613,8 +1613,10 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	TK_TYPE r;
 
 	SOperand iTempOffset;
-	u8 byTempCheck[1024];
-	u8 byTempInc[1024];
+	u8 byTempCheck[128 * 8];
+	u8 byTempInc[128 * 8];
+	debug_info DebugCheck[128];
+	debug_info DebugInc[128];
 
 	// "for (var i = 0; i < 789; i++)" 肺流 贸府
 	tkType1 = GetToken(ar, tk1);
@@ -1671,6 +1673,8 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	funs._cur._code->Read(byTempCheck, iCheckCodeSize);
 	funs._cur._code->SetPointer(Pos1, SEEK_SET);
+	for (int i = 0; i < iCheckCodeSize / 8; i++)
+		DebugCheck[i] = (*funs._cur._pDebugData)[Pos1 / 8 + i];
 
 	// For Increase
 	iTempOffset = INVALID_ERROR_PARSEJOB;
@@ -1690,6 +1694,8 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	funs._cur._code->Read(byTempInc, iIncCodeSize);
 	funs._cur._code->SetPointer(Pos1, SEEK_SET);
+	for (int i = 0; i < iIncCodeSize / 8; i++)
+		DebugInc[i] = (*funs._cur._pDebugData)[Pos1 / 8 + i];
 
 	//	for {} Process
 	std::vector<SJumpValue> sJumps;
@@ -1711,9 +1717,11 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			return false;
 	}
 
+	// Write Inc Code
 	funs._cur._code->Write(byTempInc, iIncCodeSize);
 
 	funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
+	// Write Check Code
 	funs._cur._code->Write(byTempCheck, iCheckCodeSize);
 	if(false == isCheckOPOpt)
 		funs._cur.Push_JMPTrue(ar, iStackCheckVar, PosLoopTop);
@@ -1741,6 +1749,16 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	DelLocalVar(vars.GetCurrentLayer());
 
+	// Debug info Inc, check restore
+	int iAddDebugCnt = iIncCodeSize / 8 + iCheckCodeSize / 8;
+	int iOffDebug = forEndPos / 8 - iAddDebugCnt;
+	funs._cur._pDebugData->resize(iOffDebug + iAddDebugCnt);
+
+	for (int i = 0; i < iIncCodeSize / 8; i++)
+		(*funs._cur._pDebugData)[iOffDebug + i] = DebugInc[i];
+	for (int i = 0; i < iCheckCodeSize / 8; i++)
+		(*funs._cur._pDebugData)[iOffDebug + (iIncCodeSize / 8) + i] = DebugCheck[i];
+
 	return true;
 }
 bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
@@ -1756,7 +1774,6 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	TK_TYPE r;
 
 	SOperand iTempOffset;
-//	u8 byTempCheck[1024];
 
 	// "foreach(var a, b in table)" 肺流 贸府
 	tkType1 = GetToken(ar, tk1);
@@ -1905,7 +1922,8 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	TK_TYPE r;
 
 	SOperand iTempOffset;
-	u8 byTempCheck[1024];
+	u8 byTempCheck[128 * 8];
+	debug_info DebugCheck[128];
 
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_SMALL) // (
@@ -1953,6 +1971,8 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	funs._cur._code->Read(byTempCheck, iCheckCodeSize);
 	funs._cur._code->SetPointer(Pos1, SEEK_SET);
+	for (int i = 0; i < iCheckCodeSize / 8; i++)
+		DebugCheck[i] = (*funs._cur._pDebugData)[Pos1 / 8 + i];
 
 
 
@@ -2000,6 +2020,14 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 
 	DelLocalVar(vars.GetCurrentLayer());
+
+	// Debug info Inc, check restore
+	int iAddDebugCnt = iCheckCodeSize / 8;
+	int iOffDebug = forEndPos / 8 - iAddDebugCnt;
+	funs._cur._pDebugData->resize(iOffDebug + iAddDebugCnt);
+
+	for (int i = 0; i < iCheckCodeSize / 8; i++)
+		(*funs._cur._pDebugData)[iOffDebug + i] = DebugCheck[i];
 
 	return true;
 }
