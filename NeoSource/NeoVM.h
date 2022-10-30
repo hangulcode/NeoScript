@@ -124,10 +124,10 @@ private:
 
 	VarInfo m_sDefaultValue[NDF_MAX];
 	
-	CAllocPool < TableNode, 10> m_sPool_TableNode;
-	CAllocPool< TableInfo, 10 > m_sPool_TableInfo;
+	CNVMAllocPool < TableNode, 10> m_sPool_TableNode;
+	CNVMAllocPool< TableInfo, 10 > m_sPool_TableInfo;
 
-	CInstPool< StringInfo, 10 > m_sPool_String;
+	CNVMInstPool< StringInfo, 10 > m_sPool_String;
 
 public:
 

@@ -23,6 +23,11 @@ typedef u8	ArgFlag;
 enum eNOperation : OpType
 {
 	NOP_MOV,
+	//NOP_MOV_LL,
+	//NOP_MOV_LG,
+	//NOP_MOV_GG,
+	//NOP_MOV_GL,
+
 	NOP_MOV_MINUS,
 	NOP_ADD2,
 	NOP_SUB2,
@@ -354,7 +359,7 @@ private:
 		if (OP.argFlag & 0x1) return &m_sVarStack[_iSP_Vars + OP.n3];
 		else return &(*m_pVarGlobal)[OP.n3];
 	}
-	inline VarInfo* GetVarPtr_S(short n) { return &m_sVarStack[_iSP_Vars + n]; }
+	inline VarInfo* GetVarPtr_L(short n) { return &m_sVarStack[_iSP_Vars + n]; }
 	inline VarInfo* GetVarPtr_G(short n) { return &(*m_pVarGlobal)[n]; }
 
 public:

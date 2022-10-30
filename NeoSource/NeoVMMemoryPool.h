@@ -6,7 +6,7 @@
 
 
 template <typename T, int iBlkSize = 100>
-class CAllocPool
+class CNVMAllocPool
 {
 	template<class T>
 	struct _SelfNode
@@ -141,11 +141,11 @@ public:
 	int m_iBlkSize = 1;
 
 public:
-	CAllocPool()
+	CNVMAllocPool()
 	{
 		m_iBlkSize = iBlkSize;
 	}
-	virtual ~CAllocPool()
+	virtual ~CNVMAllocPool()
 	{
 		clear();
 	}
@@ -177,7 +177,7 @@ public:
 
 
 template <typename T, int iBlkSize = 100>
-class CInstPool
+class CNVMInstPool
 {
 	template<class T>
 	struct _SelfNode
@@ -298,11 +298,11 @@ public:
 	int m_iBlkSize = 1;
 
 public:
-	CInstPool()
+	CNVMInstPool()
 	{
 		m_iBlkSize = iBlkSize;
 	}
-	virtual ~CInstPool()
+	virtual ~CNVMInstPool()
 	{
 		clear();
 	}

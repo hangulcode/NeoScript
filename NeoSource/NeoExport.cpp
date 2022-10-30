@@ -231,6 +231,17 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			break;
 
 		case NOP_MOV:
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
+			argFlag = GetArgIndexToCode(&v.n1, &v.n2, nullptr);
+/*			switch (argFlag)
+			{
+			case 4 | 2: optype = NOP_MOV_LL; break;
+			case 4 | 0: optype = NOP_MOV_LG; break;
+			case 0 | 0: optype = NOP_MOV_GG; break;
+			case 0 | 2: optype = NOP_MOV_GL; break;
+			}*/
+			break;
 		case NOP_MOV_MINUS:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);

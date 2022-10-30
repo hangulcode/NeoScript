@@ -1136,6 +1136,19 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			case NOP_MOV:
 				Move(GetVarPtr1(OP), GetVarPtr2(OP));
 				break;
+			//case NOP_MOV_LL:
+			//	Move(GetVarPtr_L(OP.n1), GetVarPtr_L(OP.n2));
+			//	break;
+			//case NOP_MOV_LG:
+			//	Move(GetVarPtr_L(OP.n1), GetVarPtr_G(OP.n2));
+			//	break;
+			//case NOP_MOV_GG:
+			//	Move(GetVarPtr_G(OP.n1), GetVarPtr_G(OP.n2));
+			//	break;
+			//case NOP_MOV_GL:
+			//	Move(GetVarPtr_G(OP.n1), GetVarPtr_L(OP.n2));
+			//	break;
+
 			case NOP_MOV_MINUS:
 				MoveMinus(GetVarPtr1(OP), GetVarPtr2(OP));
 				break;
