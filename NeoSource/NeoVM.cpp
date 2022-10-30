@@ -222,6 +222,7 @@ CNeoVM::~CNeoVM()
 void CNeoVM::SetError(const char* pErrMsg)
 {
 	_pErrorMsg = pErrMsg;
+	_bError = (pErrMsg != NULL);
 }
 
 

@@ -137,12 +137,13 @@ public:
 
 	std::string _sErrorMsgDetail;
 	const char* _pErrorMsg = NULL;
+	bool _bError = false;
 
 	void RegLibrary(VarInfo* pSystem, const char* pLibName);// , SNeoFunLib* pFuns);
 	void InitLib();
 	bool Init(void* pBuffer, int iSize, int iStackSize);
 	inline void SetError(const char* pErrMsg);
-	inline bool IsLocalErrorMsg() { return _pErrorMsg != NULL; }
+	inline bool IsLocalErrorMsg() { return _bError; }
 public:
 	CNeoVM();
 	virtual ~CNeoVM();
@@ -228,7 +229,7 @@ public:
 
 	inline const char* GetLastErrorMsg() { return _sErrorMsgDetail.c_str();  }
 	inline bool IsLastErrorMsg() { return (_sErrorMsgDetail.empty() == false); }
-	void ClearLastErrorMsg() { _pErrorMsg = NULL; _sErrorMsgDetail.clear(); }
+	void ClearLastErrorMsg() { SetError(NULL); _sErrorMsgDetail.clear(); }
 
 	static CNeoVM*	LoadVM(void* pBuffer, int iSize, int iStackSize = 50 * 1024);
 	static void		ReleaseVM(CNeoVM* pVM);

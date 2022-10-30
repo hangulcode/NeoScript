@@ -8,11 +8,6 @@
 #include "NeoVMWorker.h"
 #include "NeoVMTable.h"
 
-#define IS_HASH_FLAG(flags, h) ((flags[h / TFLAG_BITS] & (1 << (h % TFLAG_BITS))) != 0)
-#define NO_HASH_FLAG(flags, h) ((flags[h / TFLAG_BITS] & (1 << (h % TFLAG_BITS))) == 0)
-#define SET_HASH_FLAG(flags, h) (flags[h / TFLAG_BITS] |= (1 << (h % TFLAG_BITS)))
-
-#define BIT_LOOP
 
 u32 GetHashCode(const std::string& str)
 {

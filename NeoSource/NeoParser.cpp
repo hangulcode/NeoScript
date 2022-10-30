@@ -1006,7 +1006,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_STRING)
 	{
-		SetCompileError(ar, "Error (%d, %d): String", ar.CurLine(), ar.CurCol());
+		SetCompileError(ar, "Error (%d, %d): %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
 		return false;
 	}
 

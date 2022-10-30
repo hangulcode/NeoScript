@@ -1056,7 +1056,7 @@ int CNeoVMWorker::GetDebugLine()
 }
 void CNeoVMWorker::SetError(const char* pErrMsg)
 {
-	_pVM->_pErrorMsg = pErrMsg;
+	_pVM->SetError(pErrMsg);
 }
 bool	CNeoVMWorker::Start(int iFunctionID)
 {
@@ -1442,7 +1442,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				SetError("Unkonwn OP");
 				break;
 			}
-			if (_pVM->_pErrorMsg != NULL)
+			if (_pVM->_bError)
 			{
 				m_sCallStack.clear();
 				_iSP_Vars = 0;
