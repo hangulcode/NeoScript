@@ -38,6 +38,9 @@ void CNeoVMWorker::Var_AddRef(VarInfo *d)
 	case VAR_TABLE:
 		++d->_tbl->_refCount;
 		break;
+	case VAR_COROUTINE:
+		++d->_cor->_refCount;
+		break;
 	default:
 		break;
 	}
@@ -55,6 +58,11 @@ void CNeoVMWorker::Var_ReleaseInternal(VarInfo *d)
 		if (--d->_tbl->_refCount <= 0)
 			_pVM->FreeTable(d);
 		d->_tbl = NULL;
+		break;
+	case VAR_COROUTINE:
+		if (--d->_cor->_refCount <= 0)
+			_pVM->FreeCoroutine(d);
+		d->_cor = NULL;
 		break;
 	default:
 		break;
@@ -107,11 +115,19 @@ void CNeoVMWorker::Var_SetBool(VarInfo *d, bool v)
 	}
 	d->_bl = v;
 }
+void CNeoVMWorker::Var_SetCoroutine(VarInfo *d, CoroutineInfo* p)
+{
+	if (d->IsAllocType())
+		Var_Release(d);
+
+	d->SetType(VAR_COROUTINE);
+	d->_cor = p;
+	++d->_cor->_refCount;
+}
 void CNeoVMWorker::Var_SetString(VarInfo *d, const char* str)
 {
 	Var_SetStringA(d, str);
 }
-
 void CNeoVMWorker::Var_SetStringA(VarInfo *d, const std::string& str)
 {
 	if (d->IsAllocType())
@@ -138,14 +154,6 @@ void CNeoVMWorker::Var_SetFun(VarInfo* d, int fun_index)
 	d->SetType(VAR_FUN);
 	d->_fun_index = fun_index;
 }
-//void CNeoVMWorker::Var_SetTableFun(VarInfo* d, FunctionPtrNative fun)
-//{
-//	if (d->IsAllocType())
-//		Var_Release(d);
-//
-//	d->SetType(VAR_TABLEFUN);
-//	d->_fun = fun;
-//}
 
 void CNeoVMWorker::TableInsert(VarInfo *pTable, VarInfo *pKey, VarInfo *pValue)
 {
@@ -794,8 +802,8 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 		return v1->_str->_str;
 	case VAR_TABLE:
 		return "table";
-	//case VAR_TABLEFUN:
-	//	return "function";
+	case VAR_COROUTINE:
+		return "coroutine";
 	default:
 		break;
 	}
@@ -817,8 +825,6 @@ int CNeoVMWorker::ToInt(VarInfo* v1)
 		return ::atoi(v1->_str->_str.c_str());
 	case VAR_TABLE:
 		return -1;
-	//case VAR_TABLEFUN:
-	//	return -1;
 	default:
 		break;
 	}
@@ -840,8 +846,6 @@ double CNeoVMWorker::ToFloat(VarInfo* v1)
 		return atof(v1->_str->_str.c_str());
 	case VAR_TABLE:
 		return -1;
-	//case VAR_TABLEFUN:
-	//	return -1;
 	default:
 		break;
 	}
@@ -863,8 +867,6 @@ int CNeoVMWorker::ToSize(VarInfo* v1)
 		return (int)v1->_str->_str.length();
 	case VAR_TABLE:
 		return (int)v1->_tbl->_itemCount;
-	//case VAR_TABLEFUN:
-	//	return 0;
 	default:
 		break;
 	}
@@ -886,8 +888,8 @@ VarInfo* CNeoVMWorker::GetType(VarInfo* v1)
 		return &_pVM->m_sDefaultValue[NDF_STRING];
 	case VAR_TABLE:
 		return &_pVM->m_sDefaultValue[NDF_TABLE];
-	//case VAR_TABLEFUN:
-	//	return "table_function";
+	case VAR_COROUTINE:
+		return &_pVM->m_sDefaultValue[NDF_COROUTINE];
 	case VAR_FUN:
 		return &_pVM->m_sDefaultValue[NDF_FUNCTION];
 	default:
@@ -906,7 +908,7 @@ void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 		callStack._iSP_Vars = _iSP_Vars;
 		callStack._iSP_VarsMax = iSP_VarsMax;
 		callStack._pReturnValue = pReturnValue;
-		m_sCallStack.push_back(callStack);
+		m_pCallStack->push_back(callStack);
 
 		SetCodePtr(fun._codePtr);
 		_iSP_Vars = iSP_VarsMax;
@@ -948,41 +950,16 @@ bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo
 
 	int n3 = 2;
 
-	Move(&m_sVarStack[iSP_VarsMax + 1], a);
-	Move(&m_sVarStack[iSP_VarsMax + 2], b);
+	Move(&(*m_pVarStack)[iSP_VarsMax + 1], a);
+	Move(&(*m_pVarStack)[iSP_VarsMax + 2], b);
 
 	if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n3))
 		_iSP_Vars_Max2 = iSP_VarsMax + (1 + n3);
 
 	if (pVarItem->GetType() == VAR_FUN)
 		Call(pVarItem->_fun_index, n3, r);
-	//else if (pVarItem->GetType() == VAR_TABLEFUN)
-	//{
-	//	FunctionPtrNative* pFunctionPtrNative = &pVarItem->_fun;
-	//	if (pFunctionPtrNative != NULL)
-	//	{
-	//		int iSave = _iSP_Vars;
-	//		_iSP_Vars = iSP_VarsMax;
 
-	//		_pCallTableInfo = pTable->_tbl;
-	//		if ((pFunctionPtrNative->_func)(this, n3) == false)
-	//		{
-	//			_pCallTableInfo = NULL;
-	//			SetError("Ptr Call Error");
-	//			return false;
-	//		}
-	//		_pCallTableInfo = NULL;
-
-	//		_iSP_Vars = iSave;
-	//	}
-	//	else
-	//	{
-	//		SetError("Ptr Call Not Found");
-	//		return false;
-	//	}
-	//}
-
-	//Move(r, &m_sVarStack[iSP_VarsMax]); ???
+	//Move(r, &(*m_pVarStack)[iSP_VarsMax]); ???
 	return true;
 }
 
@@ -997,39 +974,15 @@ bool CNeoVMWorker::Call_MetaTable2(VarInfo* pTable, std::string& funName, VarInf
 
 	int n3 = 2;
 
-	Move(&m_sVarStack[iSP_VarsMax + 1], r);
-	Move(&m_sVarStack[iSP_VarsMax + 2], b);
+	Move(&(*m_pVarStack)[iSP_VarsMax + 1], r);
+	Move(&(*m_pVarStack)[iSP_VarsMax + 2], b);
 
 	if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n3))
 		_iSP_Vars_Max2 = iSP_VarsMax + (1 + n3);
 
 	if (pVarItem->GetType() == VAR_FUN)
 		Call(pVarItem->_fun_index, n3, NULL);
-	//else if (pVarItem->GetType() == VAR_TABLEFUN)
-	//{
-	//	FunctionPtrNative* pFunctionPtrNative = &pVarItem->_fun;
-	//	if (pFunctionPtrNative != NULL)
-	//	{
-	//		int iSave = _iSP_Vars;
-	//		_iSP_Vars = iSP_VarsMax;
 
-	//		_pCallTableInfo = pTable->_tbl;
-	//		if ((pFunctionPtrNative->_func)(this, n3) == false)
-	//		{
-	//			_pCallTableInfo = NULL;
-	//			SetError("Ptr Call Error");
-	//			return false;
-	//		}
-	//		_pCallTableInfo = NULL;
-
-	//		_iSP_Vars = iSave;
-	//	}
-	//	else
-	//	{
-	//		SetError("Ptr Call Not Found");
-	//		return false;
-	//	}
-	//}
 	return true;
 }
 
@@ -1041,8 +994,17 @@ CNeoVMWorker::CNeoVMWorker(CNeoVM* pVM, u32 id, int iStackSize)
 	_idWorker = id;
 	SetCodeData(pVM->_pCodePtr, pVM->_iCodeLen);
 	m_pVarGlobal = &pVM->m_sVarGlobal;
-	m_sVarStack.resize(iStackSize);
-	m_sCallStack.reserve(1000);
+
+	m_pCur = &m_sDefault;
+	m_pVarStack = &m_pCur->m_sVarStack;
+	m_pCallStack = &m_pCur->m_sCallStack;
+
+	_iSP_Vars = 0;
+	_iSP_Vars_Max2 = 0;
+	iSP_VarsMax = 0;
+
+	m_pVarStack->resize(iStackSize);
+	m_pCallStack->reserve(1000);
 }
 CNeoVMWorker::~CNeoVMWorker()
 {
@@ -1058,15 +1020,15 @@ void CNeoVMWorker::SetError(const char* pErrMsg)
 {
 	_pVM->SetError(pErrMsg);
 }
-bool	CNeoVMWorker::Start(int iFunctionID)
+bool	CNeoVMWorker::Start(int iFunctionID, std::vector<VarInfo>& _args)
 {
-	if(false == Setup(iFunctionID))
+	if(false == Setup(iFunctionID, _args))
 		return false;
 
 	return Run();
 }
 
-bool	CNeoVMWorker::Setup(int iFunctionID)
+bool	CNeoVMWorker::Setup(int iFunctionID, std::vector<VarInfo>& _args)
 {
 	SFunctionTable& fun = _pVM->m_sFunctionPtr[iFunctionID];
 	int iArgs = (int)_args.size();
@@ -1085,9 +1047,9 @@ bool	CNeoVMWorker::Setup(int iFunctionID)
 
 	int iCur;
 	for (iCur = 0; iCur < iArgs; iCur++)
-		m_sVarStack[1 + _iSP_Vars + iCur] = _args[iCur];
+		(*m_pVarStack)[1 + _iSP_Vars + iCur] = _args[iCur];
 	for (; iCur < fun._argsCount; iCur++)
-		Var_Release(&m_sVarStack[1 + _iSP_Vars + iCur]);
+		Var_Release(&(*m_pVarStack)[1 + _iSP_Vars + iCur]);
 
 	_isSetup = true;
 	return true;
@@ -1136,18 +1098,6 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			case NOP_MOV:
 				Move(GetVarPtr1(OP), GetVarPtr2(OP));
 				break;
-			//case NOP_MOV_LL:
-			//	Move(GetVarPtr_L(OP.n1), GetVarPtr_L(OP.n2));
-			//	break;
-			//case NOP_MOV_LG:
-			//	Move(GetVarPtr_L(OP.n1), GetVarPtr_G(OP.n2));
-			//	break;
-			//case NOP_MOV_GG:
-			//	Move(GetVarPtr_G(OP.n1), GetVarPtr_G(OP.n2));
-			//	break;
-			//case NOP_MOV_GL:
-			//	Move(GetVarPtr_G(OP.n1), GetVarPtr_L(OP.n2));
-			//	break;
 
 			case NOP_MOV_MINUS:
 				MoveMinus(GetVarPtr1(OP), GetVarPtr2(OP));
@@ -1360,6 +1310,10 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 //							_pCallTableInfo = NULL;
 
 							_iSP_Vars = iSave;
+							if (m_pRegisterActive)
+							{
+								m_pRegisterActive = NULL;
+							}
 							break;
 						}
 						else
@@ -1381,41 +1335,41 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			}
 			case NOP_RETURN:
 				if (OP.n1 == 0)
-					Var_Release(&m_sVarStack[_iSP_Vars]); // Clear
+					Var_Release(&(*m_pVarStack)[_iSP_Vars]); // Clear
 				else
-					Move(&m_sVarStack[_iSP_Vars], GetVarPtr1(OP));
+					Move(&(*m_pVarStack)[_iSP_Vars], GetVarPtr1(OP));
 
 				//if (m_sCallStack.empty())
-				if(iBreakingCallStack == (int)m_sCallStack.size())
+				if(iBreakingCallStack == (int)m_pCallStack->size())
 				{
 					_isSetup = false;
 					return true;
 				}
-				iTemp = (int)m_sCallStack.size() - 1;
-				callStack = m_sCallStack[iTemp];
-				m_sCallStack.resize(iTemp);
+				iTemp = (int)m_pCallStack->size() - 1;
+				callStack = (*m_pCallStack)[iTemp];
+				m_pCallStack->resize(iTemp);
 
 				if(callStack._pReturnValue)
-					Move(callStack._pReturnValue, &m_sVarStack[_iSP_Vars]);
+					Move(callStack._pReturnValue, &(*m_pVarStack)[_iSP_Vars]);
 
 				SetCodePtr(callStack._iReturnOffset);
 				_iSP_Vars = callStack._iSP_Vars;
 				iSP_VarsMax = callStack._iSP_VarsMax;
 				break;
 			case NOP_FUNEND:
-				Var_Release(&m_sVarStack[_iSP_Vars]); // Clear
-				if (iBreakingCallStack == (int)m_sCallStack.size())
+				Var_Release(&(*m_pVarStack)[_iSP_Vars]); // Clear
+				if (iBreakingCallStack == (int)m_pCallStack->size())
 				//if (m_sCallStack.empty())
 				{
 					_isSetup = false;
 					return true;
 				}
-				iTemp = (int)m_sCallStack.size() - 1;
-				callStack = m_sCallStack[iTemp];
-				m_sCallStack.resize(iTemp);
+				iTemp = (int)m_pCallStack->size() - 1;
+				callStack = (*m_pCallStack)[iTemp];
+				m_pCallStack->resize(iTemp);
 
 				if (callStack._pReturnValue)
-					Move(callStack._pReturnValue, &m_sVarStack[_iSP_Vars]);
+					Move(callStack._pReturnValue, &(*m_pVarStack)[_iSP_Vars]);
 
 				SetCodePtr(callStack._iReturnOffset);
 				_iSP_Vars = callStack._iSP_Vars;
@@ -1457,7 +1411,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			}
 			if (_pVM->_bError)
 			{
-				m_sCallStack.clear();
+				m_pCallStack->clear();
 				_iSP_Vars = 0;
 				if(blDebugInfo)
 					_lineseq = GetDebugLine();
@@ -1497,7 +1451,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 	return true;
 }
 
-bool CNeoVMWorker::RunFunction(const std::string& funName)
+bool CNeoVMWorker::RunFunction(const std::string& funName, std::vector<VarInfo> _args)
 {
 	auto it = _pVM->m_sImExportTable.find(funName);
 	if (it == _pVM->m_sImExportTable.end())
@@ -1511,7 +1465,7 @@ bool CNeoVMWorker::RunFunction(const std::string& funName)
 	}
 
 	int iID = (*it).second;
-	Start(iID);
+	Start(iID, _args);
 
 	return true;
 }
@@ -1522,7 +1476,7 @@ void CNeoVMWorker::PushString(const char* p)
 	VarInfo d;
 	d.SetType(VAR_STRING);
 	d._str = _pVM->StringAlloc(s);
-	_args.push_back(d);
+	_args->push_back(d);
 }
 
 bool CNeoVMWorker::testCall(VarInfo** r, int iFID, VarInfo* args[], int argc)
@@ -1553,13 +1507,13 @@ bool CNeoVMWorker::testCall(VarInfo** r, int iFID, VarInfo* args[], int argc)
 
 	int iCur;
 	for (iCur = 0; iCur < argc; iCur++)
-		Move(&m_sVarStack[1 + _iSP_Vars + iCur], args[iCur]);
+		Move(&(*m_pVarStack)[1 + _iSP_Vars + iCur], args[iCur]);
 	for (; iCur < fun._argsCount; iCur++)
-		Var_Release(&m_sVarStack[1 + _iSP_Vars + iCur]);
+		Var_Release(&(*m_pVarStack)[1 + _iSP_Vars + iCur]);
 
-	Run((int)m_sCallStack.size());
+	Run((int)m_pCallStack->size());
 
-	_read(&m_sVarStack[_iSP_Vars], *r);
+	_read(&(*m_pVarStack)[_iSP_Vars], *r);
 
 	SetCodePtr(save_Code);
 	_iSP_Vars = save_iSP_Vars;

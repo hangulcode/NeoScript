@@ -79,6 +79,9 @@ private:
 		case VAR_TABLE:
 			++d->_tbl->_refCount;
 			break;
+		case VAR_COROUTINE:
+			++d->_cor->_refCount;
+			break;
 		default:
 			break;
 		}

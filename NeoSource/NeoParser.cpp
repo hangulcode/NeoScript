@@ -206,6 +206,8 @@ int InitDefaultTokenString()
 	TOKEN_STR2(TK_QUESTION, "?");
 	TOKEN_STR2(TK_NOT, "!");
 
+	TOKEN_STR2(TK_YIELD, "yield");
+
 	/////////////////////////////////////////////////////
 
 	OP_STR1(NOP_NONE, 0);
@@ -275,6 +277,8 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_TABLE_MUL2, 3);
 	OP_STR1(NOP_TABLE_DIV2, 3);
 	OP_STR1(NOP_TABLE_PERSENT2, 3);
+
+	OP_STR1(NOP_YIELD, 1);
 
 	if (blError)
 	{
@@ -1150,8 +1154,8 @@ bool ParseToType(int& iResultStack, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 
 TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef)
 {
-	std::string tk1;
-	TK_TYPE tkType1;
+	std::string tk1, tk2;
+	TK_TYPE tkType1, tkType2;
 	TK_TYPE r = TK_NONE;
 
 	SOperand iCurrentStack = INVALID_ERROR_PARSEJOB;
@@ -1403,6 +1407,33 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				return TK_NONE; // error
 			operands.push_back(SOperand(pFun->_staticIndex));
 			blApperOperator = true;
+			break;
+		}
+		case TK_YIELD: // 
+		{
+			if(operands.empty() == false || operators.empty() == false)
+			{
+				SetCompileError(ar, "Error (%d, %d): Invalid Operator", ar.CurLine(), ar.CurCol(), tk1.c_str());
+				return TK_NONE;
+			}
+			blEnd = true;
+
+			tkType2 = GetToken(ar, tk2);
+			if (tkType2 != TK_RETURN)
+			{
+				SetCompileError(ar, "Error (%d, %d): Invalid Operator", ar.CurLine(), ar.CurCol(), tk1.c_str());
+				return TK_NONE;
+			}
+
+			tkType2 = GetToken(ar, tk2);
+			if (tkType2 != TK_SEMICOLON)
+			{
+				SetCompileError(ar, "Error (%d, %d): Invalid Operator", ar.CurLine(), ar.CurCol(), tk1.c_str());
+				return TK_NONE;
+			}
+
+			funs._cur.Push_OP(ar, NOP_YIELD, YILED_RETURN, 0, 0);
+			r = TK_SEMICOLON;
 			break;
 		}
 		default:
@@ -1909,6 +1940,165 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	return true;
 }
+/*
+bool ParseLoop(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+{
+	if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
+	{
+		SetCompileError(ar, "Error (%d, %d): \"loop\" is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+
+	std::string tk1;
+	TK_TYPE tkType1;
+	TK_TYPE r;
+
+	SOperand iTempOffset;
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_L_SMALL) // (
+	{
+		SetCompileError(ar, "Error (%d, %d): loop '(' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+
+	AddLocalVar(vars.GetCurrentLayer());
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_VAR) // var
+	{
+		SetCompileError(ar, "Error (%d, %d): loop 'var' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_STRING) // name
+	{
+		SetCompileError(ar, "Error (%d, %d): loop 'name' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+	int iKey = AddLocalVarName(ar, funs, vars, tk1);
+	if (iKey < 0)
+		return false;
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_EQUAL) // =
+	{
+		SetCompileError(ar, "Error (%d, %d): loop 'comma' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+
+
+
+	if (tkType1 != TK_COMMA) // ,
+	{
+		SetCompileError(ar, "Error (%d, %d): loop 'comma' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+
+
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_STRING) // value
+	{
+		SetCompileError(ar, "Error (%d, %d): loop 'value' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+	int iValue = AddLocalVarName(ar, funs, vars, tk1);
+	if (iValue < 0)
+		return false;
+
+	if (iKey + 1 != iValue)
+	{
+		SetCompileError(ar, "Error (%d, %d): loop key / Value Var Alloc Error", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+
+	// Iterator를 저장할 임시 자동 생성 변수
+	int iIterator = AddLocalVarName(ar, funs, vars, tk1 + "^_#@_temp_", false);
+	if (iIterator < 0)
+		return false;
+
+	if (iKey + 2 != iIterator)
+	{
+		SetCompileError(ar, "Error (%d, %d): loop key / Value Var Alloc Error", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_STRING || tk1 != "in") // in
+	{
+		SetCompileError(ar, "Error (%d, %d): loop 'in' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_STRING) // Table Name
+	{
+		SetCompileError(ar, "Error (%d, %d): loop 'table_name' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+	int iTable = vars.FindVar(tk1);
+	if (iTable < 0)
+	{
+		SetCompileError(ar, "Error (%d, %d): loop 'talbe' Not Found %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_R_SMALL) // (
+	{
+		SetCompileError(ar, "Error (%d, %d): loop ')' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+
+
+	funs._cur.Push_OP1(ar, NOP_VAR_CLEAR, iKey);
+
+	funs._cur.Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
+	SJumpValue jmp1(funs._cur._code->GetBufferOffset() - (sizeof(short) * 3), funs._cur._code->GetBufferOffset());
+
+	int PosLoopTop = funs._cur._code->GetBufferOffset(); // Loop 의 맨위
+
+
+	//	foreach {} Process
+	std::vector<SJumpValue> sJumps;
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_L_MIDDLE) // {
+	{
+		ar.PushToken(tkType1, tk1);
+		iTempOffset = INVALID_ERROR_PARSEJOB;
+		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars);
+		if (TK_SEMICOLON != r)
+		{
+			SetCompileError(ar, "Error (%d, %d): ;", ar.CurLine(), ar.CurCol());
+			return false;
+		}
+	}
+	else
+	{
+		if (false == ParseMiddleArea(&sJumps, ar, funs, vars))
+			return false;
+	}
+
+	funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
+	funs._cur.Push_JMPForEach(ar, PosLoopTop, iTable, iKey);
+
+	funs._cur.ClearLastOP();
+
+
+	int forEndPos = funs._cur._code->GetBufferOffset();
+
+	for (int i = 0; i < (int)sJumps.size(); i++)
+	{
+		funs._cur.Set_JumpOffet(sJumps[i], forEndPos);
+	}
+
+	DelLocalVar(vars.GetCurrentLayer());
+
+	return true;
+}
+*/
 bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
@@ -2334,6 +2524,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 		case TK_STRING:
 		case TK_MINUS2:
 		case TK_PLUS2:
+		case TK_YIELD:
 			ar.PushToken(tkType1, tk1);
 			iTempOffset = INVALID_ERROR_PARSEJOB;
 			r = ParseJob(false, iTempOffset, NULL, ar, funs, vars);

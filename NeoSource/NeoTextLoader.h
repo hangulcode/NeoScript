@@ -84,6 +84,7 @@ enum TK_TYPE
 	TK_QUESTION, // ?
 	TK_NOT, // !
 
+	TK_YIELD,
 
 	TK_MAX
 };

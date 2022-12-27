@@ -13,6 +13,9 @@ void CNeoVM::Var_AddRef(VarInfo *d)
 	case VAR_TABLE:
 		++d->_tbl->_refCount;
 		break;
+	case VAR_COROUTINE:
+		++d->_cor->_refCount;
+		break;
 	default:
 		break;
 	}
@@ -71,6 +74,16 @@ void CNeoVM::FreeWorker(CNeoVMWorker *d)
 
 	_sVMWorkers.erase(it);
 	delete d;
+}
+CoroutineInfo* CNeoVM::CoroutineAlloc()
+{
+	CoroutineInfo* p = m_sPool_Coroutine.Receive();
+	return p;
+}
+void CNeoVM::FreeCoroutine(VarInfo *d)
+{
+	CoroutineInfo* p = d->_cor;
+	m_sPool_Coroutine.Confer(p);
 }
 
 StringInfo* CNeoVM::StringAlloc(const std::string& str)
@@ -168,6 +181,18 @@ void CNeoVM::FreeTable(VarInfo *d)
 {
 	FreeTable(d->_tbl);
 }
+int	 CNeoVM::Coroutine_Create(int iFID)
+{
+	return 0;
+}
+int	 CNeoVM::Coroutine_Resume(int iCID)
+{
+	return 0;
+}
+int	 CNeoVM::Coroutine_Destroy(int iCID)
+{
+	return 0;
+}
 
 
 CNeoVM::CNeoVM()
@@ -184,9 +209,15 @@ CNeoVM::CNeoVM()
 		case NDF_FLOAT: Var_SetStringA(&m_sDefaultValue[i], "float"); break;
 		case NDF_STRING: Var_SetStringA(&m_sDefaultValue[i], "string"); break;
 		case NDF_TABLE: Var_SetStringA(&m_sDefaultValue[i], "table"); break;
+		case NDF_COROUTINE: Var_SetStringA(&m_sDefaultValue[i], "coroutine"); break;
 		case NDF_FUNCTION: Var_SetStringA(&m_sDefaultValue[i], "function"); break;
 		case NDF_TRUE: Var_SetStringA(&m_sDefaultValue[i], "true"); break;
 		case NDF_FALSE: Var_SetStringA(&m_sDefaultValue[i], "false"); break;
+
+		case NDF_SUSPENDED: Var_SetStringA(&m_sDefaultValue[i], "suspended"); break;
+		case NDF_RUNNING: Var_SetStringA(&m_sDefaultValue[i], "running"); break;
+		case NDF_DEAD: Var_SetStringA(&m_sDefaultValue[i], "dead"); break;
+		case NDF_NORMAL: Var_SetStringA(&m_sDefaultValue[i], "normal"); break;
 		default:
 			SetError("unknown Default Value");
 			break;
@@ -333,7 +364,8 @@ bool CNeoVM::Init(void* pBuffer, int iSize, int iStackSize)
 	_pMainWorker = WorkerAlloc(iStackSize);
 
 	InitLib();
-	_pMainWorker->Start(0);
+	std::vector<VarInfo> _args;
+	_pMainWorker->Start(0, _args);
 	return true;
 }
 CNeoVM* CNeoVM::LoadVM(void* pBuffer, int iSize, int iStackSize)
@@ -356,8 +388,9 @@ bool CNeoVM::RunFunction(const std::string& funName)
 	if (it == m_sImExportTable.end())
 		return false;
 
+	std::vector<VarInfo> _args;
 	int iID = (*it).second;
-	_pMainWorker->Start(iID);
+	_pMainWorker->Start(iID, _args);
 
 	return true;
 }
@@ -389,8 +422,9 @@ bool CNeoVM::BindWorkerFunction(u32 id, const std::string& funName)
 	if (it2 == _sVMWorkers.end())
 		return false;
 
+	std::vector<VarInfo> _args;
 	auto pWorker = (*it2).second;
-	return pWorker->Setup((*it).second);
+	return pWorker->Setup((*it).second, _args);
 }
 bool CNeoVM::SetTimeout(u32 id, int iTimeout, int iCheckOpCount)
 {

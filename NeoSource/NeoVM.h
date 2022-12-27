@@ -3,11 +3,13 @@
 #include "NeoVMWorker.h"
 #include "NeoVMMemoryPool.h"
 
+struct neo_libs;
 class CNArchive;
 class CNeoVM
 {
 	friend					CNeoVMWorker;
 	friend					TableInfo;
+	friend					neo_libs;
 private:
 	u8 *					_pCodePtr;
 	int						_iCodeLen;
@@ -46,12 +48,19 @@ private:
 	CNeoVMWorker* WorkerAlloc(int iStackSize);
 	void FreeWorker(CNeoVMWorker *d);
 
+	CoroutineInfo* CoroutineAlloc();
+	void FreeCoroutine(VarInfo *d);
+
 	StringInfo* StringAlloc(const std::string& str);
 	void FreeString(VarInfo *d);
 
 	TableInfo* TableAlloc();
 	void FreeTable(VarInfo* d);
 	void FreeTable(TableInfo* tbl);
+
+	int	 Coroutine_Create(int iFID);
+	int	 Coroutine_Resume(int iCID);
+	int	 Coroutine_Destroy(int iCID);
 
 	inline void Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
 	{
@@ -77,9 +86,10 @@ private:
 			v1->_tbl = v2->_tbl;
 			++v1->_tbl->_refCount;
 			break;
-			//case VAR_TABLEFUN:
-			//	v1->_fun = v2->_fun;
-			//	break;
+		case VAR_COROUTINE:
+			v1->_cor = v2->_cor;
+			++v1->_cor->_refCount;
+			break;
 		case VAR_FUN:
 			v1->_fun_index = v2->_fun_index;
 			break;
@@ -108,6 +118,11 @@ private:
 				FreeTable(d);
 			d->_tbl = NULL;
 			break;
+		case VAR_COROUTINE:
+			if (--d->_cor->_refCount <= 0)
+				FreeCoroutine(d);
+			d->_cor = NULL;
+			break;
 		default:
 			break;
 		}
@@ -128,6 +143,7 @@ private:
 	CNVMAllocPool< TableInfo, 10 > m_sPool_TableInfo;
 
 	CNVMInstPool< StringInfo, 10 > m_sPool_String;
+	CNVMInstPool< CoroutineInfo, 10 > m_sPool_Coroutine;
 
 public:
 

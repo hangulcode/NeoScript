@@ -43,8 +43,9 @@ u32 GetHashCode(VarInfo *p)
 		return GetHashCode(p->_str->_str);
 	case VAR_TABLE:
 		return GetHashCode((u8*)p->_tbl, sizeof(p->_tbl));
-	//case VAR_TABLEFUN:
-	//	return GetHashCode((u8*)&p->_fun, sizeof(p->_fun));
+	case VAR_COROUTINE:
+		//return (u32)p->_cor->_CoroutineID;
+		return GetHashCode((u8*)p->_cor, sizeof(p->_cor));
 	case VAR_FUN:
 		return (u32)p->_fun_index;
 		break;
@@ -110,6 +111,11 @@ void TableInfo::Var_ReleaseInternal(CNeoVM* pVM, VarInfo *d)
 		if (--d->_tbl->_refCount <= 0)
 			pVM->FreeTable(d);
 		d->_tbl = NULL;
+		break;
+	case VAR_COROUTINE:
+		if (--d->_cor->_refCount <= 0)
+			pVM->FreeCoroutine(d);
+		d->_cor = NULL;
 		break;
 	default:
 		break;
@@ -274,19 +280,23 @@ TableNode* TableBucket::Find(VarInfo* pKey, u32 hash)
 			}
 		}
 		break;
-	//case VAR_TABLEFUN:
-	//	{
-	//		Neo_NativeFunction funKey = pKey->_fun._func;
-	//		for (int i = _size_use - 1; i >= 0; i--)
-	//		{
-	//			if (table[i].key.GetType() == VAR_TABLEFUN)
-	//			{
-	//				if (table[i].key._fun._func == funKey)
-	//					return i;
-	//			}
-	//		}
-	//	}
-	//	break;
+	case VAR_COROUTINE:
+		{
+			auto cor = pKey->_cor;
+			while (pCur)
+			{
+				if (pCur->hash == hash)
+				{
+					if (pCur->key.GetType() == VAR_COROUTINE)
+					{
+						if (pCur->key._cor == cor)
+							return pCur;
+					}
+				}
+				pCur = pCur->pNext;
+			}
+		}
+		break;
 	case VAR_FUN:
 		{
 			int iFunKey = pKey->_fun_index;

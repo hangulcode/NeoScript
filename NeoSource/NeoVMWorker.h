@@ -11,7 +11,7 @@ enum VAR_TYPE : u8
 	VAR_FLOAT,	// double
 	VAR_STRING,
 	VAR_TABLE,
-//	VAR_TABLEFUN,
+	VAR_COROUTINE,
 	VAR_FUN,
 
 	VAR_ITERATOR,
@@ -23,10 +23,6 @@ typedef u8	ArgFlag;
 enum eNOperation : OpType
 {
 	NOP_MOV,
-	//NOP_MOV_LL,
-	//NOP_MOV_LG,
-	//NOP_MOV_GG,
-	//NOP_MOV_GL,
 
 	NOP_MOV_MINUS,
 	NOP_ADD2,
@@ -95,9 +91,16 @@ enum eNOperation : OpType
 	NOP_TABLE_DIV2,
 	NOP_TABLE_PERSENT2,
 
+	NOP_YIELD,
+
 	NOP_NONE,
 	NOP_MAX,
 }; // Operation length
+
+enum eYield_Type : s16
+{
+	YILED_RETURN,
+};
 
 #define CODE_TO_NOP(op) (eNOperation)(op)// >> 2)
 #define CODE_TO_LEN(op) 3 //(op & 0x03)
@@ -117,6 +120,38 @@ class CNeoVMWorker;
 struct FunctionPtr;
 typedef int(*Neo_CFunction) (CNeoVMWorker *N, FunctionPtr* pFun, short args);
 typedef bool(*Neo_NativeFunction) (CNeoVMWorker *N, void* pUserData, const std::string& fun, short args);
+
+struct SCallStack
+{
+	int		_iSP_Vars;
+	int		_iSP_VarsMax;
+	int		_iReturnOffset;
+	VarInfo* _pReturnValue;
+};
+
+enum COROUTINE_STATE
+{
+	COROUTINE_STATE_SUSPENDED,
+	COROUTINE_STATE_RUNNING,
+	COROUTINE_STATE_DEAD,
+	//COROUTINE_STATE_NORMAL,
+};
+
+
+struct CoroutineInfo
+{
+//	int	_CoroutineID;
+	int	_fun_index;
+	COROUTINE_STATE _state;
+	int _refCount;
+
+
+	int						_iSP_Vars;
+//	int						_iSP_Vars_Max2;
+	int						iSP_VarsMax;
+	std::vector<VarInfo>	m_sVarStack;
+	std::vector<SCallStack>	m_sCallStack;
+};
 
 struct StringInfo
 {
@@ -164,6 +199,7 @@ public:
 	union
 	{
 		bool		_bl;
+		CoroutineInfo* _cor;
 		StringInfo* _str;
 		TableInfo*	_tbl;
 		int			_int;
@@ -187,7 +223,7 @@ public:
 	}
 	inline bool IsAllocType()
 	{
-		return ((_type == VAR_STRING) || (_type == VAR_TABLE));
+		return ((_type == VAR_STRING) || (_type == VAR_TABLE) || (_type == VAR_COROUTINE));
 	}
 	inline bool IsTrue()
 	{
@@ -225,13 +261,6 @@ struct SNeoVMHeader
 
 #define NEO_HEADER_FLAG_DEBUG		0x00000001
 
-struct SCallStack
-{
-	int		_iSP_Vars;
-	int		_iSP_VarsMax;
-	int		_iReturnOffset;
-	VarInfo* _pReturnValue;
-};
 
 enum FUNCTION_TYPE : u8
 {
@@ -281,25 +310,32 @@ enum eNeoDefaultString
 	NDF_FLOAT,
 	NDF_STRING,
 	NDF_TABLE,
+	NDF_COROUTINE,
 	NDF_FUNCTION,
 
 	NDF_TRUE,
 	NDF_FALSE,
 
+	NDF_SUSPENDED,
+	NDF_RUNNING,
+	NDF_DEAD,
+	NDF_NORMAL,
+
 	NDF_MAX
 };
 
+struct neo_libs;
 class CNeoVM;
 class CNeoVMWorker
 {
-	friend CNeoVM;
-	friend SVarWrapper;
-	friend TableInfo;
+	friend		CNeoVM;
+	friend		SVarWrapper;
+	friend		TableInfo;
+	friend		neo_libs;
 private:
 	u8 *					_pCodeCurrent;
 	u8 *					_pCodeBegin;
 	int						_iCodeLen;
-	//int						_iCodeOffset;
 
 
 	CNeoVM*					_pVM;
@@ -307,7 +343,6 @@ private:
 	bool					_isSetup = false;
 	int						_iRemainSleep = 0;
 	clock_t					_preClock;
-//	TableInfo*				_pCallTableInfo = NULL;
 
 	int m_iTimeout = -1;
 	int m_iCheckOpCount = 1000;
@@ -329,37 +364,43 @@ private:
 	inline void SetCodePtr(int off) { _pCodeCurrent = _pCodeBegin + off; }
 	inline void SetCodeIncPtr(int off) { _pCodeCurrent += off; }
 
+
 	int						_iSP_Vars;
 	int						_iSP_Vars_Max2;
 	int						iSP_VarsMax;
-	std::vector<VarInfo>	m_sVarStack;
-	std::vector<SCallStack>	m_sCallStack;
+	std::vector<VarInfo>*	m_pVarStack;
+	std::vector<SCallStack>* m_pCallStack;
+
 	std::vector<VarInfo>*	m_pVarGlobal;
 
+	std::list< CoroutineInfo*> m_sCoroutines;
 
-	std::vector<VarInfo> _args;
-	bool RunFunction(const std::string& funName);
+	CoroutineInfo m_sDefault;
+	CoroutineInfo* m_pCur = NULL;
+	CoroutineInfo* m_pRegisterActive = NULL;
 
-	bool	Setup(int iFunctionID);
-	bool	Start(int iFunctionID);
+	bool RunFunction(const std::string& funName, std::vector<VarInfo> _args);
+
+	bool	Setup(int iFunctionID, std::vector<VarInfo>& _args);
+	bool	Start(int iFunctionID, std::vector<VarInfo>& _args);
 	bool	Run(int iBreakingCallStack = 0);
 
 	inline VarInfo* GetVarPtr1(SVMOperation& OP)
 	{
-		if (OP.argFlag & 0x4) return &m_sVarStack[_iSP_Vars + OP.n1];
+		if (OP.argFlag & 0x4) return &(*m_pVarStack)[_iSP_Vars + OP.n1];
 		else return &(*m_pVarGlobal)[OP.n1];
 	}
 	inline VarInfo* GetVarPtr2(SVMOperation& OP)
 	{
-		if (OP.argFlag & 0x2) return &m_sVarStack[_iSP_Vars + OP.n2];
+		if (OP.argFlag & 0x2) return &(*m_pVarStack)[_iSP_Vars + OP.n2];
 		else return &(*m_pVarGlobal)[OP.n2];
 	}
 	inline VarInfo* GetVarPtr3(SVMOperation& OP)
 	{
-		if (OP.argFlag & 0x1) return &m_sVarStack[_iSP_Vars + OP.n3];
+		if (OP.argFlag & 0x1) return &(*m_pVarStack)[_iSP_Vars + OP.n3];
 		else return &(*m_pVarGlobal)[OP.n3];
 	}
-	inline VarInfo* GetVarPtr_L(short n) { return &m_sVarStack[_iSP_Vars + n]; }
+	inline VarInfo* GetVarPtr_L(short n) { return &(*m_pVarStack)[_iSP_Vars + n]; }
 	inline VarInfo* GetVarPtr_G(short n) { return &(*m_pVarGlobal)[n]; }
 
 public:
@@ -373,15 +414,16 @@ public:
 			d->ClearType();
 	}
 	void Var_SetNone(VarInfo *d);
+	CNeoVM* GetVM() { return _pVM;  }
 private:
 	void Var_SetInt(VarInfo *d, int v);
 	void Var_SetFloat(VarInfo *d, double v);
 	void Var_SetBool(VarInfo *d, bool v);
+	void Var_SetCoroutine(VarInfo *d, CoroutineInfo* p);
 	void Var_SetString(VarInfo *d, const char* str);
 	void Var_SetStringA(VarInfo *d, const std::string& str);
 	void Var_SetTable(VarInfo *d, TableInfo* p);
 	void Var_SetFun(VarInfo* d, int fun_index);
-//	void Var_SetTableFun(VarInfo* d, FunctionPtrNative fun);
 
 
 public:
@@ -412,9 +454,10 @@ public:
 			v1->_tbl = v2->_tbl;
 			++v1->_tbl->_refCount;
 			break;
-		//case VAR_TABLEFUN:
-		//	v1->_fun = v2->_fun;
-		//	break;
+		case VAR_COROUTINE:
+			v1->_cor = v2->_cor;
+			++v1->_cor->_refCount;
+			break;
 		case VAR_FUN:
 			v1->_fun_index = v2->_fun_index;
 			break;
@@ -484,23 +527,23 @@ private:
 		if (p) Per2(p, pValue);
 	}
 
-	void ClearArgs()
-	{
-		_args.clear();
-	}
+	//void ClearArgs()
+	//{
+	//	_args.clear();
+	//}
 	void PushInt(int v)
 	{
 		VarInfo d;
 		d.SetType(VAR_INT);
 		d._int = v;
-		_args.push_back(d);
+		_args->push_back(d);
 	}
 	void PushFloat(double v)
 	{
 		VarInfo d;
 		d.SetType(VAR_FLOAT);
 		d._float = v;
-		_args.push_back(d);
+		_args->push_back(d);
 	}
 	void PushString(const char* p);
 	void PushBool(bool b)
@@ -508,7 +551,7 @@ private:
 		VarInfo d;
 		d.SetType(VAR_BOOL);
 		d._bl = b;
-		_args.push_back(d);
+		_args->push_back(d);
 	}
 
 	int PopInt(VarInfo *V)
@@ -559,21 +602,21 @@ private:
 		return false;
 	}
 public:
-	std::string				_sTempString;
-	VarInfo* GetReturnVar() { return &m_sVarStack[_iSP_Vars]; }
-//	inline TableInfo* GetCallTableInfo() { return _pCallTableInfo; }
+	VarInfo* GetReturnVar() { return &(*m_pVarStack)[_iSP_Vars]; }
 
 	void GC()
 	{
 		for (int i = _iSP_Vars + 1; i < _iSP_Vars_Max2; i++)
-			Var_Release(&m_sVarStack[i]);
+			Var_Release(&(*m_pVarStack)[i]);
 		_iSP_Vars_Max2 = _iSP_Vars;
 	}
 
-	VarInfo *GetStack(int idx) { return &m_sVarStack[_iSP_Vars + idx]; }
+	VarInfo *GetStack(int idx) { return &(*m_pVarStack)[_iSP_Vars + idx]; }
 
 	template<typename T>
-	T read(int idx) { T r; _read(&m_sVarStack[_iSP_Vars + idx], r); return r; }
+	T read(int idx) { T r; _read(&(*m_pVarStack)[_iSP_Vars + idx], r); return r; }
+
+	std::vector<VarInfo>* _args = NULL;
 
 	inline void push(char ret) { PushInt(ret); }
 	inline void push(unsigned char ret) { PushInt(ret); }
@@ -621,20 +664,26 @@ public:
 	template<typename RVal, typename ... Types>
 	bool Call(RVal& r, const std::string& funName, Types ... args)
 	{
-		ClearArgs();
+		std::vector<VarInfo> args_;
+		_args = &args_;
 		PushArgs(args...);
-		RunFunction(funName);
+		_args = NULL;
+
+		RunFunction(funName, args_);
 		GC();
-		_read(&m_sVarStack[_iSP_Vars], r);
+		_read(&(*m_pVarStack)[_iSP_Vars], r);
 		return true;
 	}
 
 	template<typename ... Types>
 	bool CallN(const std::string& funName, Types ... args)
 	{
-		ClearArgs();
+		std::vector<VarInfo> args_;
+		_args = &args_;
 		PushArgs(args...);
-		RunFunction(funName);
+		_args = NULL;
+
+		RunFunction(funName, args_);
 		GC();
 		ReturnValue();
 		return true;
@@ -643,10 +692,13 @@ public:
 	template<typename RVal, typename ... Types>
 	bool Call_TL(RVal* r, int iFID, Types ... args)
 	{
-		ClearArgs();
+		std::vector<VarInfo> args_;
+		_args = &args_;
 		PushArgs(args...);
+		_args = NULL;
+
 		//RunFunction(funName, );
-		if (false == Setup(iFID))
+		if (false == Setup(iFID, args_))
 			return false;
 
 		Run();
@@ -657,17 +709,20 @@ public:
 		}
 
 		GC();
-		_read(&m_sVarStack[_iSP_Vars], *r);
+		_read(&(*m_pVarStack)[_iSP_Vars], *r);
 		return true;
 	}
 
 	template<typename ... Types>
 	bool CallN_TL(int iFID, Types ... args)
 	{
-		ClearArgs();
+		std::vector<VarInfo> args_;
+		_args = &args_;
 		PushArgs(args...);
+		_args = NULL;
+
 		//RunFunction(funName, );
-		if (false == Setup(iFID))
+		if (false == Setup(iFID, args_))
 			return false;
 
 		Run();
@@ -695,30 +750,32 @@ public:
 		pOut->_func = pFun;
 	}
 
-	inline const std::string* GetArg_StlString(int idx) { return PopStlString(&m_sVarStack[_iSP_Vars + idx]); }
-	inline const char* GetArg_CharPtr(int idx) { return (const char*)PopString(&m_sVarStack[_iSP_Vars + idx]); }
-	inline int GetArg_Int(int idx) { return PopInt(&m_sVarStack[_iSP_Vars + idx]); }
-	inline double GetArg_Double(int idx) { return PopFloat(&m_sVarStack[_iSP_Vars + idx]); }
-	inline bool GetArg_Bool(int idx) { return PopBool(&m_sVarStack[_iSP_Vars + idx]); }
+	inline const std::string* GetArg_StlString(int idx) { return PopStlString(&(*m_pVarStack)[_iSP_Vars + idx]); }
+	inline const char* GetArg_CharPtr(int idx) { return (const char*)PopString(&(*m_pVarStack)[_iSP_Vars + idx]); }
+	inline int GetArg_Int(int idx) { return PopInt(&(*m_pVarStack)[_iSP_Vars + idx]); }
+	inline double GetArg_Double(int idx) { return PopFloat(&(*m_pVarStack)[_iSP_Vars + idx]); }
+	inline bool GetArg_Bool(int idx) { return PopBool(&(*m_pVarStack)[_iSP_Vars + idx]); }
 
 
-	inline void	ReturnValue() { Var_Release(&m_sVarStack[_iSP_Vars]);  }
-	inline void	ReturnValue(char* p) { Var_SetString(&m_sVarStack[_iSP_Vars], p); }
-	inline void	ReturnValue(const char* p) { Var_SetString(&m_sVarStack[_iSP_Vars], p); }
-	inline void	ReturnValue(char p) { Var_SetInt(&m_sVarStack[_iSP_Vars], p); }
-	inline void	ReturnValue(unsigned char p) { Var_SetInt(&m_sVarStack[_iSP_Vars], p); }
-	inline void	ReturnValue(short p) { Var_SetInt(&m_sVarStack[_iSP_Vars], p); }
-	inline void	ReturnValue(unsigned short p) { Var_SetInt(&m_sVarStack[_iSP_Vars], p); }
-	inline void	ReturnValue(long p) { Var_SetInt(&m_sVarStack[_iSP_Vars], p); }
-	inline void	ReturnValue(unsigned long p) { Var_SetInt(&m_sVarStack[_iSP_Vars], p); }
-	inline void	ReturnValue(int p) { Var_SetInt(&m_sVarStack[_iSP_Vars], p); }
-	inline void	ReturnValue(unsigned int p) { Var_SetInt(&m_sVarStack[_iSP_Vars], p); }
-	inline void	ReturnValue(float p) { Var_SetFloat(&m_sVarStack[_iSP_Vars], p); }
-	inline void	ReturnValue(double p) { Var_SetFloat(&m_sVarStack[_iSP_Vars], p); }
-	inline void	ReturnValue(bool p) { Var_SetBool(&m_sVarStack[_iSP_Vars], p); }
-	inline void	ReturnValue(long long p) { Var_SetInt(&m_sVarStack[_iSP_Vars], (int)p); }
-	inline void	ReturnValue(unsigned long long p) { Var_SetInt(&m_sVarStack[_iSP_Vars], (int)p); }
-//	inline void	ReturnValue(SNeoMeta* p) { Var_SetMeta(&m_sVarStack[_iSP_Vars], p); }
+	inline void	ReturnValue() { Var_Release(&(*m_pVarStack)[_iSP_Vars]);  }
+	inline void	ReturnValue(VarInfo* p) { Move(&(*m_pVarStack)[_iSP_Vars], p); }
+	inline void	ReturnValue(char* p) { Var_SetString(&(*m_pVarStack)[_iSP_Vars], p); }
+	inline void	ReturnValue(const char* p) { Var_SetString(&(*m_pVarStack)[_iSP_Vars], p); }
+	inline void	ReturnValue(char p) { Var_SetInt(&(*m_pVarStack)[_iSP_Vars], p); }
+	inline void	ReturnValue(unsigned char p) { Var_SetInt(&(*m_pVarStack)[_iSP_Vars], p); }
+	inline void	ReturnValue(short p) { Var_SetInt(&(*m_pVarStack)[_iSP_Vars], p); }
+	inline void	ReturnValue(unsigned short p) { Var_SetInt(&(*m_pVarStack)[_iSP_Vars], p); }
+	inline void	ReturnValue(long p) { Var_SetInt(&(*m_pVarStack)[_iSP_Vars], p); }
+	inline void	ReturnValue(unsigned long p) { Var_SetInt(&(*m_pVarStack)[_iSP_Vars], p); }
+	inline void	ReturnValue(int p) { Var_SetInt(&(*m_pVarStack)[_iSP_Vars], p); }
+	inline void	ReturnValue(unsigned int p) { Var_SetInt(&(*m_pVarStack)[_iSP_Vars], p); }
+	inline void	ReturnValue(float p) { Var_SetFloat(&(*m_pVarStack)[_iSP_Vars], p); }
+	inline void	ReturnValue(double p) { Var_SetFloat(&(*m_pVarStack)[_iSP_Vars], p); }
+	inline void	ReturnValue(bool p) { Var_SetBool(&(*m_pVarStack)[_iSP_Vars], p); }
+	inline void	ReturnValue(long long p) { Var_SetInt(&(*m_pVarStack)[_iSP_Vars], (int)p); }
+	inline void	ReturnValue(unsigned long long p) { Var_SetInt(&(*m_pVarStack)[_iSP_Vars], (int)p); }
+	inline void	ReturnValue(CoroutineInfo* p) { Var_SetCoroutine(&(*m_pVarStack)[_iSP_Vars], p); }
+//	inline void	ReturnValue(SNeoMeta* p) { Var_SetMeta(&(*m_pVarStack)[_iSP_Vars], p); }
 
 
 	inline void SetError(const char* pErrMsg);
