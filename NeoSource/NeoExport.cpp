@@ -362,7 +362,7 @@ std::string GetLog(SFunctions& funs, SVMOperation& op, int argIndex)
 
 	if (c == 'G')
 	{
-		if((int)funs._staticVars.size() < v)
+		if(v < (int)funs._staticVars.size())
 			sprintf_s(ch, _countof(ch), "%c.%d %s", c, v, GetValueString(funs._staticVars[v]).c_str());
 		else
 			sprintf_s(ch, _countof(ch), "%c.%d %s", c, v, "?");

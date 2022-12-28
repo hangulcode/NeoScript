@@ -147,10 +147,12 @@ struct CoroutineInfo
 
 
 	int						_iSP_Vars;
-//	int						_iSP_Vars_Max2;
+	int						_iSP_Vars_Max2;
 	int						iSP_VarsMax;
 	std::vector<VarInfo>	m_sVarStack;
 	std::vector<SCallStack>	m_sCallStack;
+
+	u8 *					_pCodeCurrent;
 };
 
 struct StringInfo

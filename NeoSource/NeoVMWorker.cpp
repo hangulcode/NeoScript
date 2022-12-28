@@ -898,6 +898,7 @@ VarInfo* CNeoVMWorker::GetType(VarInfo* v1)
 	return &_pVM->m_sDefaultValue[NDF_NULL];
 }
 
+
 void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 {
 	SFunctionTable& fun = _pVM->m_sFunctionPtr[n1];
@@ -1299,19 +1300,61 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 						{
 							int iSave = _iSP_Vars;
 							_iSP_Vars = iSP_VarsMax;
+							if (_iSP_Vars_Max2 < iSP_VarsMax + 1 + n3) // ??????? 이렇게 하면 맞나? 흠...
+								_iSP_Vars_Max2 = iSP_VarsMax + 1 + n3;
 
-//							_pCallTableInfo = pVar1->_tbl;
 							if ((pFunctionPtrNative->_func)(this, pVar1->_tbl->_pUserData, pFunName->_str->_str, n3) == false)
 							{
-//								_pCallTableInfo = NULL;
 								SetError("Ptr Call Error");
 								break;
 							}
-//							_pCallTableInfo = NULL;
 
-							_iSP_Vars = iSave;
-							if (m_pRegisterActive)
+							if (m_pRegisterActive == NULL)
+								_iSP_Vars = iSave;
+							else
 							{
+								if (m_pCur)
+								{
+									// Back up
+									m_pCur->_iSP_Vars = iSave;// _iSP_Vars;
+									m_pCur->iSP_VarsMax = iSP_VarsMax;
+									m_pCur->_iSP_Vars_Max2 = _iSP_Vars_Max2;
+									m_sCoroutines.push_back(m_pCur);
+									CoroutineInfo* pPre = m_pCur;
+
+									m_pCur = m_pRegisterActive;
+									m_pCur->_state = COROUTINE_STATE_RUNNING;
+									m_pVarStack = &m_pCur->m_sVarStack;
+									m_pCallStack = &m_pCur->m_sCallStack;
+
+									if (m_pCur->_pCodeCurrent == NULL) // first run
+									{
+										int iResumeParamCount = n3 - 1;
+										SFunctionTable& fun = _pVM->m_sFunctionPtr[m_pCur->_fun_index];
+										if (fun._funType != FUNT_IMPORT)
+										{
+											for (int i = 0; i < fun._argsCount; i++)
+											{
+												if (i < iResumeParamCount)
+													Move(&m_pCur->m_sVarStack[i + 1], &pPre->m_sVarStack[i + _iSP_Vars + 2]);
+												else
+													Var_Release(&m_pCur->m_sVarStack[i + 1]); // Zero index return value
+											}
+											SetCodePtr(fun._codePtr);
+											_iSP_Vars = 0;// iSP_VarsMax;
+											iSP_VarsMax = _iSP_Vars + fun._localAddCount;
+											_iSP_Vars_Max2 = iSP_VarsMax;
+											m_pCur->_pCodeCurrent = _pCodeCurrent;
+										}
+									}
+									else
+									{
+										_pCodeCurrent = m_pCur->_pCodeCurrent;
+										_iSP_Vars = m_pCur->iSP_VarsMax;
+										iSP_VarsMax = m_pCur->iSP_VarsMax;
+										_iSP_Vars_Max2 = m_pCur->_iSP_Vars_Max2;
+									}
+								}
 								m_pRegisterActive = NULL;
 							}
 							break;
@@ -1402,7 +1445,8 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			case NOP_TABLE_PERSENT2:
 				TablePer2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
 				break;
-
+			case NOP_YIELD:
+				break;
 			case NOP_NONE:
 				break;
 			default:

@@ -78,6 +78,9 @@ void CNeoVM::FreeWorker(CNeoVMWorker *d)
 CoroutineInfo* CNeoVM::CoroutineAlloc()
 {
 	CoroutineInfo* p = m_sPool_Coroutine.Receive();
+	p->_pCodeCurrent = NULL;
+	p->m_sCallStack.resize(1000);
+	p->m_sVarStack.resize(10000);
 	return p;
 }
 void CNeoVM::FreeCoroutine(VarInfo *d)

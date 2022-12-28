@@ -1,0 +1,115 @@
+/*
+fun Vector3_MetaTable(var r);
+fun Vector3_New(var x, var y, var z)
+{
+	var r = {};
+	r.x = x;
+	r.y = y;
+	r.z = z;
+	Vector3_MetaTable(r);
+	return r;
+}
+fun Vector3_Add3(var a, var b)
+{
+	var r = {};
+	if(type(b) == 'table')
+	{
+		r.x = a.x + b.x;
+		r.y = a.y + b.y;
+		r.z = a.z + b.z;
+	}
+	else
+	{
+		r.x = a.x + b;
+		r.y = a.y + b;
+		r.z = a.z + b;
+	}
+	Vector3_MetaTable(r);
+	return r;
+}
+fun Vector3_Sub3(var a, var b)
+{
+	var r = {};
+	if(type(b) == 'table')
+	{
+		r.x = a.x - b.x;
+		r.y = a.y - b.y;
+		r.z = a.z - b.z;
+	}
+	else
+	{
+		r.x = a.x - b;
+		r.y = a.y - b;
+		r.z = a.z - b;
+	}
+	Vector3_MetaTable(r);
+	return r;
+}
+fun Vector3_Add2(var a, var b)
+{
+	if(type(b) == 'table')
+	{
+		a.x += b.x;
+		a.y += b.y;
+		a.z += b.z;
+	}
+	else
+	{
+		a.x += b;
+		a.y += b;
+		a.z += b;
+	}
+}
+var staticVector3Meta = null;
+fun Vector3_MetaTable(var r)
+{	
+	if(staticVector3Meta == null)
+	{
+		staticVector3Meta = {};
+		staticVector3Meta["+"] = Vector3_Add3;
+		staticVector3Meta["-"] = Vector3_Sub3;
+		staticVector3Meta["+="] = Vector3_Add2;
+	}
+	system.meta(r, staticVector3Meta);
+}
+*/
+fun fa(var i)
+{
+	while(true)
+	{
+		system.print("\n Coroutine" .. i);
+		sleep(1000);
+		yield return;
+	}
+}
+
+export fun meta()
+{
+/*	var c;
+	var tm = system.clock();
+	for(var i = 1; i < 10000; i++)
+	{
+		var a = Vector3_New(3.0, 4.0, 5.0);
+		var b = Vector3_New(30.0, 40.0, 50.0);
+
+		c = a + (b - 2.0);
+		c.x = 10;
+	}
+	system.print("\n x : " .. c.x);
+	system.print("\n y : " .. c.y);
+	system.print("\n z : " .. c.z);
+	system.print("\nLoop  Time : " .. (system.clock() - tm) .. "\n\n");
+	*/
+	var cr = system.coroutine_create(fa);
+
+	while(true)
+	{
+		if(system.coroutine_status(cr) == "suspended")
+		{
+			system.coroutine_resume(cr, 2);
+			system.print("\n Main");
+		}
+		sleep(1000);
+	}
+
+}

@@ -295,7 +295,7 @@ struct neo_libs
 	}
 	static bool sys_coroutine_resume(CNeoVMWorker* pN, short args)
 	{
-		if (args != 1)
+		if (args < 1) // param : index 1 ~ 
 			return false;
 		VarInfo* v = pN->GetStack(1);
 		if (v->GetType() != VAR_COROUTINE)
