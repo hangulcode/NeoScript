@@ -134,7 +134,7 @@ enum COROUTINE_STATE
 	COROUTINE_STATE_SUSPENDED,
 	COROUTINE_STATE_RUNNING,
 	COROUTINE_STATE_DEAD,
-	//COROUTINE_STATE_NORMAL,
+	COROUTINE_STATE_NORMAL,
 };
 
 
@@ -386,6 +386,7 @@ private:
 	bool	Setup(int iFunctionID, std::vector<VarInfo>& _args);
 	bool	Start(int iFunctionID, std::vector<VarInfo>& _args);
 	bool	Run(int iBreakingCallStack = 0);
+	bool	StopCoroutine();
 
 	inline VarInfo* GetVarPtr1(SVMOperation& OP)
 	{
@@ -740,6 +741,7 @@ public:
 	}
 
 	bool testCall(VarInfo** r, int iFID, VarInfo* args[], int argc);
+	bool StartCoroutione(int sp, int n3);
 
 
 	static void neo_pushcclosureNative(FunctionPtrNative* pOut, Neo_NativeFunction pFun)

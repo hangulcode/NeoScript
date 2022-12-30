@@ -79,7 +79,7 @@ CoroutineInfo* CNeoVM::CoroutineAlloc()
 {
 	CoroutineInfo* p = m_sPool_Coroutine.Receive();
 	p->_pCodeCurrent = NULL;
-	p->m_sCallStack.resize(1000);
+	p->m_sCallStack.reserve(1000);
 	p->m_sVarStack.resize(10000);
 	return p;
 }

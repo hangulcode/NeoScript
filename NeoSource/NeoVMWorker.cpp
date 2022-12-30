@@ -997,6 +997,7 @@ CNeoVMWorker::CNeoVMWorker(CNeoVM* pVM, u32 id, int iStackSize)
 	m_pVarGlobal = &pVM->m_sVarGlobal;
 
 	m_pCur = &m_sDefault;
+	m_pCur->_state = COROUTINE_STATE_RUNNING;
 	m_pVarStack = &m_pCur->m_sVarStack;
 	m_pCallStack = &m_pCur->m_sCallStack;
 
@@ -1308,55 +1309,10 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 								SetError("Ptr Call Error");
 								break;
 							}
-
 							if (m_pRegisterActive == NULL)
 								_iSP_Vars = iSave;
 							else
-							{
-								if (m_pCur)
-								{
-									// Back up
-									m_pCur->_iSP_Vars = iSave;// _iSP_Vars;
-									m_pCur->iSP_VarsMax = iSP_VarsMax;
-									m_pCur->_iSP_Vars_Max2 = _iSP_Vars_Max2;
-									m_sCoroutines.push_back(m_pCur);
-									CoroutineInfo* pPre = m_pCur;
-
-									m_pCur = m_pRegisterActive;
-									m_pCur->_state = COROUTINE_STATE_RUNNING;
-									m_pVarStack = &m_pCur->m_sVarStack;
-									m_pCallStack = &m_pCur->m_sCallStack;
-
-									if (m_pCur->_pCodeCurrent == NULL) // first run
-									{
-										int iResumeParamCount = n3 - 1;
-										SFunctionTable& fun = _pVM->m_sFunctionPtr[m_pCur->_fun_index];
-										if (fun._funType != FUNT_IMPORT)
-										{
-											for (int i = 0; i < fun._argsCount; i++)
-											{
-												if (i < iResumeParamCount)
-													Move(&m_pCur->m_sVarStack[i + 1], &pPre->m_sVarStack[i + _iSP_Vars + 2]);
-												else
-													Var_Release(&m_pCur->m_sVarStack[i + 1]); // Zero index return value
-											}
-											SetCodePtr(fun._codePtr);
-											_iSP_Vars = 0;// iSP_VarsMax;
-											iSP_VarsMax = _iSP_Vars + fun._localAddCount;
-											_iSP_Vars_Max2 = iSP_VarsMax;
-											m_pCur->_pCodeCurrent = _pCodeCurrent;
-										}
-									}
-									else
-									{
-										_pCodeCurrent = m_pCur->_pCodeCurrent;
-										_iSP_Vars = m_pCur->iSP_VarsMax;
-										iSP_VarsMax = m_pCur->iSP_VarsMax;
-										_iSP_Vars_Max2 = m_pCur->_iSP_Vars_Max2;
-									}
-								}
-								m_pRegisterActive = NULL;
-							}
+								StartCoroutione(iSave, n3);
 							break;
 						}
 						else
@@ -1385,6 +1341,11 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				//if (m_sCallStack.empty())
 				if(iBreakingCallStack == (int)m_pCallStack->size())
 				{
+					if (iBreakingCallStack == 0)
+					{
+						m_pCur->_state = COROUTINE_STATE_DEAD;
+						StopCoroutine();
+					}
 					_isSetup = false;
 					return true;
 				}
@@ -1402,8 +1363,12 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			case NOP_FUNEND:
 				Var_Release(&(*m_pVarStack)[_iSP_Vars]); // Clear
 				if (iBreakingCallStack == (int)m_pCallStack->size())
-				//if (m_sCallStack.empty())
 				{
+					if (iBreakingCallStack == 0)
+					{
+						m_pCur->_state = COROUTINE_STATE_DEAD;
+						StopCoroutine();
+					}
 					_isSetup = false;
 					return true;
 				}
@@ -1446,6 +1411,9 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				TablePer2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
 				break;
 			case NOP_YIELD:
+				m_pCur->_state = COROUTINE_STATE_SUSPENDED;
+				if (StopCoroutine() == false)
+					return true;
 				break;
 			case NOP_NONE:
 				break;
@@ -1522,6 +1490,84 @@ void CNeoVMWorker::PushString(const char* p)
 	d._str = _pVM->StringAlloc(s);
 	_args->push_back(d);
 }
+bool CNeoVMWorker::StopCoroutine()
+{
+	m_pCur->_pCodeCurrent = _pCodeCurrent;
+	m_pCur->_iSP_Vars = _iSP_Vars;
+	m_pCur->iSP_VarsMax = iSP_VarsMax;
+	m_pCur->_iSP_Vars_Max2 = _iSP_Vars_Max2;
+	if (m_sCoroutines.empty() == true)
+	{
+		return false;
+	}
+	else
+	{
+		auto it = m_sCoroutines.begin();
+		m_pCur = (*it);
+		m_sCoroutines.erase(it);
+
+		m_pCur->_state = COROUTINE_STATE_RUNNING;
+		m_pVarStack = &m_pCur->m_sVarStack;
+		m_pCallStack = &m_pCur->m_sCallStack;
+
+		_pCodeCurrent = m_pCur->_pCodeCurrent;
+		_iSP_Vars = m_pCur->_iSP_Vars;
+		iSP_VarsMax = m_pCur->iSP_VarsMax;
+		_iSP_Vars_Max2 = m_pCur->_iSP_Vars_Max2;
+	}
+	return true;
+}
+
+bool CNeoVMWorker::StartCoroutione(int sp, int n3)
+{
+	if (m_pCur)
+	{
+		// Back up
+		m_pCur->_pCodeCurrent = _pCodeCurrent;
+		m_pCur->_iSP_Vars = sp;// _iSP_Vars;
+		m_pCur->iSP_VarsMax = iSP_VarsMax;
+		m_pCur->_iSP_Vars_Max2 = _iSP_Vars_Max2;
+		m_pCur->_state = COROUTINE_STATE_NORMAL;
+		m_sCoroutines.push_front(m_pCur);
+		CoroutineInfo* pPre = m_pCur;
+
+		m_pCur = m_pRegisterActive;
+		m_pCur->_state = COROUTINE_STATE_RUNNING;
+		m_pVarStack = &m_pCur->m_sVarStack;
+		m_pCallStack = &m_pCur->m_sCallStack;
+
+		if (m_pCur->_pCodeCurrent == NULL) // first run
+		{
+			int iResumeParamCount = n3 - 1;
+			SFunctionTable& fun = _pVM->m_sFunctionPtr[m_pCur->_fun_index];
+			if (fun._funType != FUNT_IMPORT)
+			{
+				for (int i = 0; i < fun._argsCount; i++)
+				{
+					if (i < iResumeParamCount)
+						Move(&m_pCur->m_sVarStack[i + 1], &pPre->m_sVarStack[i + _iSP_Vars + 2]);
+					else
+						Var_Release(&m_pCur->m_sVarStack[i + 1]); // Zero index return value
+				}
+				SetCodePtr(fun._codePtr);
+				_iSP_Vars = 0;// iSP_VarsMax;
+				iSP_VarsMax = _iSP_Vars + fun._localAddCount;
+				_iSP_Vars_Max2 = iSP_VarsMax;
+				m_pCur->_pCodeCurrent = _pCodeCurrent;
+			}
+		}
+		else
+		{
+			_pCodeCurrent = m_pCur->_pCodeCurrent;
+			_iSP_Vars = m_pCur->_iSP_Vars;
+			iSP_VarsMax = m_pCur->iSP_VarsMax;
+			_iSP_Vars_Max2 = m_pCur->_iSP_Vars_Max2;
+		}
+	}
+	m_pRegisterActive = NULL;
+	return true;
+}
+
 
 bool CNeoVMWorker::testCall(VarInfo** r, int iFID, VarInfo* args[], int argc)
 {

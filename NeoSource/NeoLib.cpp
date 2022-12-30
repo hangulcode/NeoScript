@@ -328,6 +328,9 @@ struct neo_libs
 		case COROUTINE_STATE_DEAD:
 			pN->ReturnValue(&pVM->m_sDefaultValue[NDF_DEAD]);
 			break;
+		case COROUTINE_STATE_NORMAL:
+			pN->ReturnValue(&pVM->m_sDefaultValue[NDF_NORMAL]);
+			break;
 		default:
 			pN->ReturnValue();
 			return false;

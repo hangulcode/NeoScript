@@ -2460,6 +2460,14 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			}
 			blEnd = true;
 			break;
+		case TK_L_MIDDLE:
+			AddLocalVar(vars.GetCurrentLayer());
+
+			if (false == ParseMiddleArea(pJumps, ar, funs, vars))
+				return false;
+
+			DelLocalVar(vars.GetCurrentLayer());			
+			break;
 		case TK_R_MIDDLE:
 			if (funs._cur._name == GLOBAL_INIT_FUN_NAME)
 			{
