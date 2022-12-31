@@ -229,6 +229,10 @@ CNeoVM::CNeoVM()
 }
 CNeoVM::~CNeoVM()
 {
+	for (int i = 0; i < (int)m_sVarGlobal.size(); i++)
+		Var_Release(&m_sVarGlobal[i]);
+	m_sVarGlobal.clear();
+
 	for(auto it = _sVMWorkers.begin(); it != _sVMWorkers.end(); it++)
 	{
 		CNeoVMWorker* d = (*it).second;

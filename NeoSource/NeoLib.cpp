@@ -287,6 +287,7 @@ struct neo_libs
 		//pVM->Coroutine_Create(v->_fun_index);
 
 		CoroutineInfo* pCI = pVM->CoroutineAlloc();
+		pCI->_refCount = 0;
 		pCI->_fun_index = v->_fun_index;
 		pCI->_state = COROUTINE_STATE_SUSPENDED;
 

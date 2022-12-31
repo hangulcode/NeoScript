@@ -1493,10 +1493,22 @@ void CNeoVMWorker::PushString(const char* p)
 }
 bool CNeoVMWorker::StopCoroutine()
 {
-	m_pCur->_pCodeCurrent = _pCodeCurrent;
-	m_pCur->_iSP_Vars = _iSP_Vars;
-	m_pCur->iSP_VarsMax = iSP_VarsMax;
-	m_pCur->_iSP_Vars_Max2 = _iSP_Vars_Max2;
+	if (m_pCur->_state == COROUTINE_STATE_DEAD)
+	{
+		for (int i = 0; i < _iSP_Vars_Max2; i++)
+			Var_Release(&(*m_pVarStack)[i]);
+
+		m_pCur->_iSP_Vars = 0;
+		m_pCur->iSP_VarsMax = 0;
+		m_pCur->_iSP_Vars_Max2 = 0;
+	}
+	else
+	{
+		m_pCur->_pCodeCurrent = _pCodeCurrent;
+		m_pCur->_iSP_Vars = _iSP_Vars;
+		m_pCur->iSP_VarsMax = iSP_VarsMax;
+		m_pCur->_iSP_Vars_Max2 = _iSP_Vars_Max2;
+	}
 	if (m_sCoroutines.empty() == true)
 	{
 		return false;
