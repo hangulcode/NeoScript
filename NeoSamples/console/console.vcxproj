@@ -222,7 +222,6 @@
     <ClCompile Include="callback.cpp" />
     <ClCompile Include="console.cpp" />
     <ClCompile Include="etc.cpp" />
-    <ClCompile Include="meta.cpp" />
     <ClCompile Include="slice_run.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
@@ -230,7 +229,6 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="table.cpp" />
     <ClCompile Include="table_callback.cpp" />
     <ClCompile Include="time_limit.cpp" />
   </ItemGroup>

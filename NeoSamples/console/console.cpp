@@ -22,13 +22,16 @@ BOOL        FileLoad(const char* pFileName, void*& pBuffer, int& iLen)
 	return true;
 }
 
-int getKey()
+std::string getKeyString()
 {
-	while (1)
+	std::string str;
+	while (true)
 	{
 		int r = getchar();
-		if (r > 0)
-			return r;
+		if (r == '\n') // Enter
+			return str;
+
+		str += (char)r;
 	}
 	return 0;
 }
@@ -36,10 +39,8 @@ int getKey()
 int SAMPLE_callback();
 int SAMPLE_table_callback();
 int SAMPLE_9_times();
-int SAMPLE_table();
 int SAMPLE_slice_run();
 int SAMPLE_time_limit();
-int SAMPLE_meta();
 int SAMPLE_etc(const char*pFileName, const char* pFunctionName);
 
 int main()
@@ -49,64 +50,45 @@ int main()
 	{
 		printf("\n");
 
-		printf("0.exit\n");
-		printf("1.callback\n");
-		printf("2.table_callback\n");
-		printf("3.9_times\n");
-		printf("4.table\n");
-		printf("5.slice_run\n");
-		printf("6.time_limit\n");
-		printf("7.divide_by_zero\n");
-		printf("8.delegate\n");
-		printf("9.meta\n");
+		printf("0 callback\n");
+		printf("1 table_callback\n");
+		printf("2 9_times\n");
+		printf("3 table\n");
+		printf("4 slice_run\n");
+		printf("5 time_limit\n");
+		printf("6 divide_by_zero\n");
+		printf("7 delegate\n");
+		printf("8 meta\n");
+		printf("9 coroutine\n");
 
-		printf("\npress a key ...\n");
+		printf("only enter to exit\n");
+		printf("\npress the number and enter ...\n");
 
-		int key = getKey();
-		switch (key)
-		{
-		case '0':
-			blEnd = true;
+		std::string key = getKeyString();
+		if (key == "")
 			break;
-		case '1':
+		else if (key == "0")
 			SAMPLE_callback();
-			system("pause");
-			break;
-		case '2':
+		else if (key == "1")
 			SAMPLE_table_callback();
-			system("pause");
-			break;
-		case '3':
+		else if (key == "2")
 			SAMPLE_9_times();
-			system("pause");
-			break;
-		case '4':
-			SAMPLE_table();
-			system("pause");
-			break;
-		case '5':
+		else if (key == "3")
+			SAMPLE_etc("table.neo", "main");
+		else if (key == "4")
 			SAMPLE_slice_run();
-			system("pause");
-			break;
-		case '6':
+		else if (key == "5")
 			SAMPLE_time_limit();
-			system("pause");
-			break;
-		case '7':
+		else if (key == "6")
 			SAMPLE_etc("etc.neo", "divide_by_zero");
-			system("pause");
-			break;
-		case '8':
+		else if (key == "7")
 			SAMPLE_etc("delegate.neo", "delegate");
-			system("pause");
-			break;
-		case '9':
-			SAMPLE_meta();
-			system("pause");
-			break;
-		}
+		else if (key == "8")
+			SAMPLE_etc("meta.neo", "meta");
+		else if (key == "9")
+			SAMPLE_etc("coroutine.neo", "test");
+		system("pause");
 	}
-
     return 0;
 }
 

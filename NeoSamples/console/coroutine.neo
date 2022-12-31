@@ -1,0 +1,25 @@
+
+fun fa(var param1)
+{
+	for(var i = 0; i < 1; i++)
+	{
+		system.print("\n Coroutine " .. i);
+		sleep(1000);
+		yield return;
+	}
+}
+
+export fun test()
+{
+	var cr = system.coroutine_create(fa);
+
+	for(var i = 0; i < 10; i++)
+	{
+		if(system.coroutine_status(cr) == "suspended")
+		{
+			system.coroutine_resume(cr, 2);
+		}
+		system.print("\n Main " .. i);
+		sleep(1000);
+	}
+}

@@ -31,9 +31,6 @@
     <ClCompile Include="slice_run.cpp">
       <Filter>Samples</Filter>
     </ClCompile>
-    <ClCompile Include="table.cpp">
-      <Filter>Samples</Filter>
-    </ClCompile>
     <ClCompile Include="time_limit.cpp">
       <Filter>Samples</Filter>
     </ClCompile>
@@ -44,9 +41,6 @@
       <Filter>main</Filter>
     </ClCompile>
     <ClCompile Include="etc.cpp">
-      <Filter>Samples</Filter>
-    </ClCompile>
-    <ClCompile Include="meta.cpp">
       <Filter>Samples</Filter>
     </ClCompile>
     <ClCompile Include="..\..\NeoSource\NeoVMTable.cpp">

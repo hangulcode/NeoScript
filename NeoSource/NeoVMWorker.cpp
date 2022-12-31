@@ -1367,7 +1367,8 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 					if (iBreakingCallStack == 0)
 					{
 						m_pCur->_state = COROUTINE_STATE_DEAD;
-						StopCoroutine();
+						if (StopCoroutine() == true) // Other Coroutine Active (No Stop)
+							break;
 					}
 					_isSetup = false;
 					return true;
