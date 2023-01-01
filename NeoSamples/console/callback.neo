@@ -16,10 +16,10 @@ export fun Sum(var a, var b)
 	Sample1();
 
 	var sum_1 = Sum1(a, b);
-	system.print(sum_1 .. "\n");
+	print(sum_1 .. "\n");
 
 	var mul_1 = Mul(a, b);
-	system.print(mul_1 .. "\n");
+	print(mul_1 .. "\n");
 
 
 

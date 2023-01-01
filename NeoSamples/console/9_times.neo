@@ -5,6 +5,6 @@ export fun Time9(var n)
 	for (var i = 1; i <= 9; i++)
 	{
 		var value = n * i;
-		system.print(n.." x "..i.." = "..value.."\n");
+		print(n.." x "..i.." = "..value.."\n");
 	}
 }

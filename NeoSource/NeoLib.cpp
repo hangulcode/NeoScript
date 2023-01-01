@@ -14,41 +14,43 @@ void NVM_QuickSort(CNeoVMWorker* pN, int compare, std::vector<VarInfo*>& lst);
 
 struct neo_libs
 {
-	static bool Str_Substring(CNeoVMWorker* pN, short args)
+	static bool Str_Substring(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
+		if (pVar->GetType() != VAR_STRING)
+			return false;
 		if (args != 3)
 			return false;
-		std::string* p = pN->read<std::string*>(1);
-		if (p == NULL)
-			return false;
 
-		int start = pN->read<int>(2);
-		int len = pN->read<int>(3);
+		std::string* p = &pVar->_str->_str;
+		int p1 = pN->read<int>(1);
+		int p2 = pN->read<int>(2);
+		int p3 = pN->read<int>(3);
 
-		std::string sTempString = p->substr(start, len);
+
+		std::string sTempString = p->substr(p1, p1 + p2);
 		pN->ReturnValue(sTempString.c_str());
 		return true;
 	}
-	static bool Str_len(CNeoVMWorker* pN, short args)
+	static bool Str_len(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1)
+		if (pVar->GetType() != VAR_STRING)
 			return false;
-		std::string* p = pN->read<std::string*>(1);
-		if (p == NULL)
+		if (args != 0)
 			return false;
 
+		std::string* p = &pVar->_str->_str;
 		pN->ReturnValue((int)p->length());
 		return true;
 	}
-	static bool Str_find(CNeoVMWorker* pN, short args)
+	static bool Str_find(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 2)
+		if (pVar->GetType() != VAR_STRING)
 			return false;
-		std::string* p = pN->read<std::string*>(1);
-		if (p == NULL)
+		if (args != 1)
 			return false;
 
-		std::string* p2 = pN->read<std::string*>(2);
+		std::string* p = &pVar->_str->_str;
+		std::string* p2 = pN->read<std::string*>(1);
 		if (p2 == NULL)
 			return false;
 
@@ -58,7 +60,7 @@ struct neo_libs
 		return true;
 	}
 
-	static bool Math_abs(CNeoVMWorker* pN, short args)
+	static bool Math_abs(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1)
 			return false;
@@ -66,7 +68,7 @@ struct neo_libs
 		pN->ReturnValue(::abs(v));
 		return true;
 	}
-	static bool Math_acos(CNeoVMWorker* pN, short args)
+	static bool Math_acos(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1)
 			return false;
@@ -74,7 +76,7 @@ struct neo_libs
 		pN->ReturnValue(::acos(v));
 		return true;
 	}
-	static bool Math_asin(CNeoVMWorker* pN, short args)
+	static bool Math_asin(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1)
 			return false;
@@ -82,7 +84,7 @@ struct neo_libs
 		pN->ReturnValue(::asin(v));
 		return true;
 	}
-	static bool Math_atan(CNeoVMWorker* pN, short args)
+	static bool Math_atan(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1)
 			return false;
@@ -90,7 +92,7 @@ struct neo_libs
 		pN->ReturnValue(::atan(v));
 		return true;
 	}
-	static bool Math_ceil(CNeoVMWorker* pN, short args)
+	static bool Math_ceil(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1)
 			return false;
@@ -98,7 +100,7 @@ struct neo_libs
 		pN->ReturnValue(::ceil(v));
 		return true;
 	}
-	static bool Math_floor(CNeoVMWorker* pN, short args)
+	static bool Math_floor(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1)
 			return false;
@@ -106,7 +108,7 @@ struct neo_libs
 		pN->ReturnValue(::floor(v));
 		return true;
 	}
-	static bool Math_sin(CNeoVMWorker* pN, short args)
+	static bool Math_sin(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1)
 			return false;
@@ -114,7 +116,7 @@ struct neo_libs
 		pN->ReturnValue(::sin(v));
 		return true;
 	}
-	static bool Math_cos(CNeoVMWorker* pN, short args)
+	static bool Math_cos(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1)
 			return false;
@@ -122,7 +124,7 @@ struct neo_libs
 		pN->ReturnValue(::cos(v));
 		return true;
 	}
-	static bool Math_tan(CNeoVMWorker* pN, short args)
+	static bool Math_tan(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1)
 			return false;
@@ -130,7 +132,7 @@ struct neo_libs
 		pN->ReturnValue(::tan(v));
 		return true;
 	}
-	static bool Math_log(CNeoVMWorker* pN, short args)
+	static bool Math_log(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1)
 			return false;
@@ -138,7 +140,7 @@ struct neo_libs
 		pN->ReturnValue(::log(v));
 		return true;
 	}
-	static bool Math_log10(CNeoVMWorker* pN, short args)
+	static bool Math_log10(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1)
 			return false;
@@ -146,7 +148,7 @@ struct neo_libs
 		pN->ReturnValue(::log10(v));
 		return true;
 	}
-	static bool Math_pow(CNeoVMWorker* pN, short args)
+	static bool Math_pow(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 2)
 			return false;
@@ -155,7 +157,7 @@ struct neo_libs
 		pN->ReturnValue(::pow(v1, v2));
 		return true;
 	}
-	static bool Math_deg(CNeoVMWorker* pN, short args)
+	static bool Math_deg(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1)
 			return false;
@@ -163,7 +165,7 @@ struct neo_libs
 		pN->ReturnValue(((radian) * (180.0f / MATH_PI)));
 		return true;
 	}
-	static bool Math_rad(CNeoVMWorker* pN, short args)
+	static bool Math_rad(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1)
 			return false;
@@ -171,7 +173,7 @@ struct neo_libs
 		pN->ReturnValue(((degree) * (MATH_PI / 180.0f)));
 		return true;
 	}
-	static bool Math_sqrt(CNeoVMWorker* pN, short args)
+	static bool Math_sqrt(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1)
 			return false;
@@ -179,7 +181,7 @@ struct neo_libs
 		pN->ReturnValue(::sqrt(v));
 		return true;
 	}
-	static bool	Math_srand(CNeoVMWorker* pN, short args)
+	static bool	Math_srand(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1)
 			return false;
@@ -187,7 +189,7 @@ struct neo_libs
 		::srand((u32)init);
 		return true;
 	}
-	static bool	Math_rand(CNeoVMWorker* pN, short args)
+	static bool	Math_rand(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 0)
 			return false;
@@ -195,7 +197,7 @@ struct neo_libs
 		return true;
 	}
 
-	static bool util_meta(CNeoVMWorker* pN, short args)
+	static bool util_meta(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 2) // table, meta
 			return false;
@@ -221,21 +223,20 @@ struct neo_libs
 
 		return true;
 	}
-	static bool alg_sort(CNeoVMWorker* pN, short args)
+	static bool alg_sort(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 2) // table, fun
+		if (args != 1) // fun
 			return false;
-		VarInfo *pTable = pN->GetStack(1);
-		VarInfo *pFun = pN->GetStack(2);
+		VarInfo *pFun = pN->GetStack(1);
 
-		if (pTable->GetType() != VAR_TABLE)
+		if (pVar->GetType() != VAR_TABLE)
 			return false;
 
 		if (pFun->GetType() != VAR_FUN)
 			return false;
 
 		std::vector<VarInfo*> lst;
-		if (false == pTable->_tbl->ToList(lst))
+		if (false == pVar->_tbl->ToList(lst))
 			return false;
 		if (lst.size() >= 2)
 		{
@@ -253,7 +254,7 @@ struct neo_libs
 		return true;
 	}
 
-	static bool io_print(CNeoVMWorker* pN, short args)
+	static bool io_print(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1)
 			return false;
@@ -266,7 +267,7 @@ struct neo_libs
 		return true;
 	}
 
-	static bool sys_clock(CNeoVMWorker* pN, short args)
+	static bool sys_clock(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 0)
 			return false;
@@ -274,7 +275,7 @@ struct neo_libs
 		pN->ReturnValue(double((double)clock() / (double)CLOCKS_PER_SEC));
 		return true;
 	}
-	static bool sys_coroutine_create(CNeoVMWorker* pN, short args)
+	static bool sys_coroutine_create(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1)
 			return false;
@@ -294,7 +295,7 @@ struct neo_libs
 		pN->ReturnValue(pCI);
 		return true;
 	}
-	static bool sys_coroutine_resume(CNeoVMWorker* pN, short args)
+	static bool sys_coroutine_resume(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args < 1) // param : index 1 ~ 
 			return false;
@@ -309,7 +310,7 @@ struct neo_libs
 		pN->ReturnValue();
 		return true;
 	}
-	static bool sys_coroutine_status(CNeoVMWorker* pN, short args)
+	static bool sys_coroutine_status(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1)
 			return false;
@@ -344,8 +345,11 @@ struct neo_libs
 
 
 //typedef bool (ClassName::*TYPE_NeoLib)(CNeoVMWorker* pN, short args);
-typedef bool(*TYPE_NeoLib)(CNeoVMWorker* pN, short args);
+//typedef bool(*TYPE_NeoLib)(CNeoVMWorker* pN, short args);
+typedef bool(*TYPE_NeoLib)(CNeoVMWorker* pN, VarInfo* pVar, short args);
 static std::map<std::string, TYPE_NeoLib> g_sNeoFunLib;
+static std::map<std::string, TYPE_NeoLib> g_sNeoFunStrLib;
+static std::map<std::string, TYPE_NeoLib> g_sNeoFunTblLib;
 
 
 static bool Fun(CNeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
@@ -355,14 +359,28 @@ static bool Fun(CNeoVMWorker* pN, void* pUserData, const std::string& fun, short
 		return false;
 
 	TYPE_NeoLib f = (*it).second;
-	return (*f)(pN, args);
+	return (*f)(pN, (VarInfo*)pUserData, args);
 }
-
-void CNeoVM::RegLibrary(VarInfo* pSystem, const char* pLibName)
+static bool FunStr(CNeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
 {
-	TableInfo* pTable = pSystem->_tbl;
-	pTable->_fun = CNeoVM::RegisterNative(Fun);
+	auto it = g_sNeoFunStrLib.find(fun);
+	if (it == g_sNeoFunStrLib.end())
+		return false;
 
+	TYPE_NeoLib f = (*it).second;
+	return (*f)(pN, (VarInfo*)pUserData, args);
+}
+static bool FunTbl(CNeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
+{
+	auto it = g_sNeoFunTblLib.find(fun);
+	if (it == g_sNeoFunTblLib.end())
+		return false;
+
+	TYPE_NeoLib f = (*it).second;
+	return (*f)(pN, (VarInfo*)pUserData, args);
+}
+static void AddGlobalLibFun()
+{
 	if (g_sNeoFunLib.empty() == false)
 		return;
 
@@ -384,11 +402,6 @@ void CNeoVM::RegLibrary(VarInfo* pSystem, const char* pLibName)
 	g_sNeoFunLib["srand"] = &neo_libs::Math_srand;
 	g_sNeoFunLib["rand"] = &neo_libs::Math_rand;
 
-	g_sNeoFunLib["str_sub"] = &neo_libs::Str_Substring;
-	g_sNeoFunLib["str_len"] = &neo_libs::Str_len;
-	g_sNeoFunLib["str_find"] = &neo_libs::Str_find;
-
-	g_sNeoFunLib["sort"] = &neo_libs::alg_sort;
 	g_sNeoFunLib["meta"] = &neo_libs::util_meta;
 	g_sNeoFunLib["print"] = &neo_libs::io_print;
 	g_sNeoFunLib["clock"] = &neo_libs::sys_clock;
@@ -397,7 +410,33 @@ void CNeoVM::RegLibrary(VarInfo* pSystem, const char* pLibName)
 	g_sNeoFunLib["coroutine_resume"] = &neo_libs::sys_coroutine_resume;
 	g_sNeoFunLib["coroutine_status"] = &neo_libs::sys_coroutine_status;
 }
+bool CNeoVM::IsGlobalLibFun(std::string& FunName)
+{
+	AddGlobalLibFun();
+	auto it = g_sNeoFunLib.find(FunName);
+	if(it == g_sNeoFunLib.end())
+		return false;
+	return true;
+}
+void CNeoVM::RegLibrary(VarInfo* pSystem, const char* pLibName)
+{
+	TableInfo* pTable = pSystem->_tbl;
+	pTable->_fun = CNeoVM::RegisterNative(Fun);
+	AddGlobalLibFun();
 
+	_funLib = CNeoVM::RegisterNative(Fun);
+}
+
+void CNeoVM::RegObjLibrary()
+{
+	_funStrLib = CNeoVM::RegisterNative(FunStr);
+	g_sNeoFunStrLib["sub"] = &neo_libs::Str_Substring;
+	g_sNeoFunStrLib["len"] = &neo_libs::Str_len;
+	g_sNeoFunStrLib["find"] = &neo_libs::Str_find;
+
+	_funTblLib = CNeoVM::RegisterNative(FunTbl);
+	g_sNeoFunTblLib["sort"] = &neo_libs::alg_sort;
+}
 
 void CNeoVM::InitLib()
 {
@@ -408,5 +447,6 @@ void CNeoVM::InitLib()
 	//SetTable(, TableAlloc());
 
 	RegLibrary(pSystem, "sys");
+	RegObjLibrary();
 }
 

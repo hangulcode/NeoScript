@@ -1076,7 +1076,6 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			return true;
 	}
 
-	FunctionPtrNative* pFunctionPtrNative;
 	SCallStack callStack;
 	int iTemp;
 	char chMsg[256];
@@ -1288,50 +1287,50 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				VarInfo* pFunName = GetVarPtr2(OP);
 				if (pVar1->GetType() != VAR_TABLE || pFunName->GetType() != VAR_STRING)
 				{
+					if (pVar1->GetType() == VAR_STRING)
+					{
+						CallNative(_pVM->_funStrLib, pVar1, pFunName, n3);
+						break;
+					}
 					SetError("Ptr Call Error");
 					break;
 				}
-				VarInfo* pVarItem = GetTableItem(pVar1, pFunName);
-				if (pVarItem == NULL)
+				VarInfo* pVarMeta = GetTableItem(pVar1, pFunName);
+				if (pVarMeta == NULL)
 				{
-					if (pVar1->_tbl->_fun._func)
+					FunctionPtrNative fun = pVar1->_tbl->_fun;
+					if (fun._func)
 					{
-						pFunctionPtrNative = &pVar1->_tbl->_fun;
-						if (pFunctionPtrNative != NULL)
-						{
-							int iSave = _iSP_Vars;
-							_iSP_Vars = iSP_VarsMax;
-							if (_iSP_Vars_Max2 < iSP_VarsMax + 1 + n3) // ??????? 이렇게 하면 맞나? 흠...
-								_iSP_Vars_Max2 = iSP_VarsMax + 1 + n3;
-
-							if ((pFunctionPtrNative->_func)(this, pVar1->_tbl->_pUserData, pFunName->_str->_str, n3) == false)
-							{
-								SetError("Ptr Call Error");
-								break;
-							}
-							if (m_pRegisterActive == NULL)
-								_iSP_Vars = iSave;
-							else
-								StartCoroutione(iSave, n3);
-							break;
-						}
-						else
-						{
-							SetError("Ptr Call Not Found");
-							break;
-						}
+						CallNative(fun, pVar1, pFunName, n3);
 					}
-					SetError("Ptr Call Error");
+					else
+						CallNative(_pVM->_funTblLib, pVar1, pFunName, n3);
+					//SetError("Ptr Call Error");
 					break;
 				}
 
 				if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n3))
 					_iSP_Vars_Max2 = iSP_VarsMax + (1 + n3);
 
-				if(pVarItem->GetType() == VAR_FUN)
-					Call(pVarItem->_fun_index, n3);
+				if(pVarMeta->GetType() == VAR_FUN)
+					Call(pVarMeta->_fun_index, n3);
 				break;
 			}
+			case NOP_PTRCALL2:
+			{
+				short n3 = OP.n3;
+				VarInfo* pFunName = GetVarPtr2(OP);
+				if (pFunName->GetType() == VAR_STRING)
+				{
+					CallNative(_pVM->_funLib, NULL, pFunName, n3);
+//					SetError("Ptr Call Error");
+					break;
+				}
+
+				if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n3))
+					_iSP_Vars_Max2 = iSP_VarsMax + (1 + n3);
+				break;
+			}			
 			case NOP_RETURN:
 				if (OP.n1 == 0)
 					Var_Release(&(*m_pVarStack)[_iSP_Vars]); // Clear
@@ -1341,7 +1340,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				//if (m_sCallStack.empty())
 				if(iBreakingCallStack == (int)m_pCallStack->size())
 				{
-					if (iBreakingCallStack == 0)
+					if (iBreakingCallStack == 0 && IsMainCoroutine() == false)
 					{
 						m_pCur->_state = COROUTINE_STATE_DEAD;
 						StopCoroutine();
@@ -1364,7 +1363,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				Var_Release(&(*m_pVarStack)[_iSP_Vars]); // Clear
 				if (iBreakingCallStack == (int)m_pCallStack->size())
 				{
-					if (iBreakingCallStack == 0)
+					if (iBreakingCallStack == 0 && IsMainCoroutine() == false)
 					{
 						m_pCur->_state = COROUTINE_STATE_DEAD;
 						if (StopCoroutine() == true) // Other Coroutine Active (No Stop)
@@ -1625,5 +1624,37 @@ bool CNeoVMWorker::testCall(VarInfo** r, int iFID, VarInfo* args[], int argc)
 	//GC();
 	
 	_isSetup = true;
+	return true;
+}
+
+bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFunObj, VarInfo* pFunName, int n3)
+{
+	Neo_NativeFunction func = functionPtrNative._func;
+	if (func == NULL)
+	{
+		SetError("Ptr Call Error");
+		return false;
+	}
+		int iSave = _iSP_Vars;
+		_iSP_Vars = iSP_VarsMax;
+		if (_iSP_Vars_Max2 < iSP_VarsMax + 1 + n3) // ??????? 이렇게 하면 맞나? 흠...
+			_iSP_Vars_Max2 = iSP_VarsMax + 1 + n3;
+
+		if ((func)(this, pFunObj, pFunName->_str->_str, n3) == false)
+		{
+			SetError("Ptr Call Error");
+			return false;
+		}
+		if (m_pRegisterActive == NULL)
+			_iSP_Vars = iSave;
+		else
+			StartCoroutione(iSave, n3);
+	//	break;
+	//}
+	//else
+	//{
+	//	SetError("Ptr Call Not Found");
+	//	break;
+	//}	
 	return true;
 }

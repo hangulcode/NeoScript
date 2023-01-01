@@ -40,10 +40,10 @@ fun Fun_General()
 
 	foreach(var a, b in table)
 	{
-		system.print(a ..":"..b .. "\n");
+		print(a ..":"..b .. "\n");
 		//sleep(200);
 	}
-	system.print("\nTable Size : " ..tosize(table).."\n\n");
+	print("\nTable Size : " ..tosize(table).."\n\n");
 }
 
 fun fun_Sort()
@@ -52,9 +52,9 @@ fun fun_Sort()
 	//var table = { 10, 11, 100=12,"test", 13 };
 	var tableNumber = { 5, 3, 1, 4, 7, 2 };
 
-	system.print("Before    : " .. dumpTable(tableNumber) .. "\n");
-	system.sort(tableNumber, fun(var a, var b) { return a < b; });
-	system.print("Ascending : " .. dumpTable(tableNumber) .. "\n");
+	print("Before    : " .. dumpTable(tableNumber) .. "\n");
+	tableNumber.sort(fun(var a, var b) { return a < b; });
+	print("Ascending : " .. dumpTable(tableNumber) .. "\n");
 	
 	var tablePeople = {
 		{"nationality" = "Ameraca", "name" = "James"},
@@ -62,41 +62,41 @@ fun fun_Sort()
 		{"nationality" = "Japan",   "name" = "Donard"},
 	};
 
-	system.print("Before : " .. dumpTable(tablePeople) .. "\n");
+	print("Before : " .. dumpTable(tablePeople) .. "\n");
 
-	system.sort(tablePeople, fun(var a, var b){return a.name < b.name;});
-	system.print("Name   : " .. dumpTable(tablePeople) .. "\n");
+	tablePeople.sort(fun(var a, var b){return a.name < b.name;});
+	print("Name   : " .. dumpTable(tablePeople) .. "\n");
 
-	system.sort(tablePeople, fun(var a, var b){return a["nationality"] < b["nationality"];});
-	system.print("Nation : " .. dumpTable(tablePeople) .. "\n");
+	tablePeople.sort(fun(var a, var b){return a["nationality"] < b["nationality"];});
+	print("Nation : " .. dumpTable(tablePeople) .. "\n");
 }
 
 fun Fun_Performanc()
 {
 	var table = {};
-	var tm = system.clock();
+	var tm = clock();
 	//for (var i = 1; i <= 10000000; i++) // release
 	for (var i = 1; i <= 100000; i++) // debug
 	{
 		table[i] = i;
 	}
 	var sum = 0.0;
-	system.print("\nTable Size : " ..tosize(table));
+	print("\nTable Size : " ..tosize(table));
 	//sleep(5000);
-	system.print("\nInsert Time : " .. (system.clock() - tm)  .. "\n\n");
+	print("\nInsert Time : " .. (clock() - tm)  .. "\n\n");
 	
-	tm = system.clock();
-	system.sort(table, fun(var a, var b) { return a > b; });
-	system.print("\nSort  Time : " .. (system.clock() - tm) .. "\n\n");
-	//system.print("Sorted   : " .. dumpTable(table) .. "\n");
+	tm = clock();
+	table.sort(fun(var a, var b) { return a > b; });
+	print("\nSort  Time : " .. (clock() - tm) .. "\n\n");
+	//print("Sorted   : " .. dumpTable(table) .. "\n");
 
-	tm = system.clock();
+	tm = clock();
 	foreach(var a, b in table)
 	{
 		sum += b;
 	}
-	system.print("\nTable Size : " ..tosize(table).." Sum " .. sum .. "");
-	system.print("\nLoop  Time : " .. (system.clock() - tm) .. "\n\n");
+	print("\nTable Size : " ..tosize(table).." Sum " .. sum .. "");
+	print("\nLoop  Time : " .. (clock() - tm) .. "\n\n");
 }
 
 export fun main()

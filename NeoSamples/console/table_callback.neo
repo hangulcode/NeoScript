@@ -7,9 +7,9 @@ export fun update(var a, var b)
 	var sum_1 = g_sData.sum(a, b);
 	var mul_1 = g_sData.mul(a, b);
 
-	system.print(sum_1 .. "\n");
+	print(sum_1 .. "\n");
 
-	system.print(mul_1 .. "\n");
+	print(mul_1 .. "\n");
 
 	return sum_1 + mul_1;
 }

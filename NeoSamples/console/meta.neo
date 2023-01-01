@@ -75,7 +75,7 @@ fun Vector3_MetaTable(var r)
 export fun meta()
 {
 	var c;
-	var tm = system.clock();
+	var tm = clock();
 	for(var i = 1; i < 10000; i++)
 	{
 		var a = Vector3_New(3.0, 4.0, 5.0);
@@ -84,8 +84,8 @@ export fun meta()
 		c = a + (b - 2.0);
 		c.x = 10;
 	}
-	system.print("\n x : " .. c.x);
-	system.print("\n y : " .. c.y);
-	system.print("\n z : " .. c.z);
-	system.print("\nLoop  Time : " .. (system.clock() - tm) .. "\n\n");
+	print("\n x : " .. c.x);
+	print("\n y : " .. c.y);
+	print("\n z : " .. c.z);
+	print("\nLoop  Time : " .. (clock() - tm) .. "\n\n");
 }

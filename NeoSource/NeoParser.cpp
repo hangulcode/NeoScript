@@ -265,6 +265,7 @@ int InitDefaultTokenString()
 
 	OP_STR1(NOP_CALL, 2);
 	OP_STR1(NOP_PTRCALL, 3);
+	OP_STR1(NOP_PTRCALL2, 3);
 	OP_STR1(NOP_RETURN, 1);
 	OP_STR1(NOP_FUNEND, 0);
 
@@ -799,8 +800,10 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 			//funs._cur.Push_Call(ar, pFun->_funType == FUNT_IMPORT ? NOP_FARCALL : NOP_CALL, pFun->_funID, iParamCount);
 			funs._cur.Push_Call(ar, NOP_CALL, pFun->_funID, iParamCount);
 		}
-		else
+		else if(iResultStack._iVar >= 0)
 			funs._cur.Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
+		else
+			funs._cur.Push_CallPtr2(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
 		iResultStack = funs._cur.AllocLocalTempVar();
 		funs._cur.Push_MOV(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN);
 	}
@@ -1103,6 +1106,22 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 			{
 				ar.PushToken(tkType2, tk2);
 				iTempOffset._iVar = pFun->_staticIndex;
+			}
+		}
+		else if (CNeoVM::IsGlobalLibFun(tk1))
+		{
+			tkType2 = GetToken(ar, tk2);
+			if (tkType2 == TK_L_SMALL)
+			{
+				iTempOffset = SOperand(-1, funs.AddStaticString(tk1));
+				ar.PushToken(tkType2, tk2);
+				if (false == ParseFunCall(iTempOffset, tkTypePre, pFun, ar, funs, vars))
+					return false;
+			}
+			else
+			{
+				SetCompileError(ar, "Error (%d, %d): function call invalid\n", ar.CurLine(), ar.CurCol());
+				return false;
 			}
 		}
 		else

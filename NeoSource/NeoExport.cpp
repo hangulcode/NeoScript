@@ -253,6 +253,11 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			argFlag = GetArgIndexToCode(&v.n1, &v.n2, nullptr);
 			break;
+		case NOP_PTRCALL2:
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
+			argFlag = GetArgIndexToCode(&v.n1, &v.n2, nullptr);
+			break;
 		case NOP_CALL:
 			//ar << optype << v.n1 << v.n2;
 			argFlag = GetArgIndexToCode(nullptr, nullptr, nullptr);
@@ -648,6 +653,10 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 		case NOP_PTRCALL:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("PCALL [%s].[%s] arg:%d\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str(), v.n3);
+			break;
+		case NOP_PTRCALL2:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("PCALL2 [%s].[%s] arg:%d\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str(), v.n3);
 			break;
 		case NOP_CALL:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);

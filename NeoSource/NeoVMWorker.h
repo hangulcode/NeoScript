@@ -78,6 +78,7 @@ enum eNOperation : OpType
 
 	NOP_CALL,
 	NOP_PTRCALL,
+	NOP_PTRCALL2,
 	NOP_RETURN,
 	NOP_FUNEND,
 
@@ -383,6 +384,7 @@ private:
 
 	bool RunFunction(const std::string& funName, std::vector<VarInfo> _args);
 
+	bool	IsMainCoroutine() { return (&m_sDefault == m_pCur); }
 	bool	Setup(int iFunctionID, std::vector<VarInfo>& _args);
 	bool	Start(int iFunctionID, std::vector<VarInfo>& _args);
 	bool	Run(int iBreakingCallStack = 0);
@@ -491,6 +493,7 @@ private:
 	void Call(int n1, int n2, VarInfo* pReturnValue = NULL);
 	bool Call_MetaTable(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, VarInfo* b);
 	bool Call_MetaTable2(VarInfo* pTable, std::string&, VarInfo* a, VarInfo* b);
+	bool CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFunObj, VarInfo* pFunName, int n3);
 
 	std::string ToString(VarInfo* v1);
 	int ToInt(VarInfo* v1);

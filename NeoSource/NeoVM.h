@@ -145,6 +145,9 @@ private:
 	CNVMInstPool< StringInfo, 10 > m_sPool_String;
 	CNVMInstPool< CoroutineInfo, 10 > m_sPool_Coroutine;
 
+	FunctionPtrNative _funLib;
+	FunctionPtrNative _funStrLib;
+	FunctionPtrNative _funTblLib;
 public:
 
 	bool RunFunction(const std::string& funName);
@@ -155,7 +158,9 @@ public:
 	const char* _pErrorMsg = NULL;
 	bool _bError = false;
 
+	static bool IsGlobalLibFun(std::string& FunName);
 	void RegLibrary(VarInfo* pSystem, const char* pLibName);// , SNeoFunLib* pFuns);
+	void RegObjLibrary();
 	void InitLib();
 	bool Init(void* pBuffer, int iSize, int iStackSize);
 	inline void SetError(const char* pErrMsg);

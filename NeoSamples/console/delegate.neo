@@ -1,19 +1,19 @@
 
 fun sub1()
 {
-	system.print("sub1\n");
+	print("sub1\n");
 }
 
 fun sub2()
 {
-	system.print("sub2\n");
+	print("sub2\n");
 }
 
 export fun delegate()
 {
 	var funPointer = sub1;
 
-	var funPointer2 = fun(){ system.print("anonymous fun\n"); };
+	var funPointer2 = fun(){ print("anonymous fun\n"); };
 	
 	funPointer();
 	funPointer2();
