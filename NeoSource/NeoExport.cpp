@@ -208,6 +208,12 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 
 			argFlag = GetArgIndexToCode(nullptr, &v.n2, &v.n3);
 			break;
+		case NOP_JMP_FOR:	// 
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
+
+			argFlag = GetArgIndexToCode(nullptr, &v.n2, &v.n3);
+			break;
 		case NOP_JMP_FOREACH:	// 
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
@@ -293,6 +299,10 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			//ar << optype << v.n1 << v.n2;
 			argFlag = GetArgIndexToCode(&v.n1, &v.n2, nullptr);
+			break;
+		case NOP_VERIFY_TYPE:
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			argFlag = GetArgIndexToCode(&v.n1, nullptr, nullptr);
 			break;
 		case NOP_YIELD:
 			break;
@@ -389,8 +399,6 @@ std::string JumpMark(std::map<int, int>& sJumpMark, int off)
 	return r;
 }
 
-
-
 void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFunctionInfo& fi, SVars& vars, std::vector< debug_info>& debugInfo)
 {
 	int staticCount = (int)funs._staticVars.size();
@@ -430,6 +438,7 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 		case NOP_JMP_OR:		// ||
 		case NOP_JMP_NAND:	// !(&&)
 		case NOP_JMP_NOR:	// !(||)
+		case NOP_JMP_FOR:	// for
 		case NOP_JMP_FOREACH:	// foreach
 			sJumpMark[off + 8 + v.n1] = 0;
 			break;
@@ -611,6 +620,10 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("JNOR %d%s,  !([%s] || [%s])\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(funs, v, 2).c_str(), GetLog(funs, v, 3).c_str());
 			break;
+		case NOP_JMP_FOR:	// for
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("JFOR %d%s,  C[S.%d] < E[S.%d]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), v.n2, v.n3 + 1);
+			break;
 		case NOP_JMP_FOREACH:	// foreach
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("JFRE %d%s,  T[%s], K[S.%d], V[S.%d]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(funs, v, 2).c_str(), v.n3, v.n3+1);
@@ -656,7 +669,7 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			break;
 		case NOP_PTRCALL2:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("PCALL2 [%s].[%s] arg:%d\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str(), v.n3);
+			OutAsm("PCALL2 [%s] arg:%d\n", GetLog(funs, v, 2).c_str(), v.n3);
 			break;
 		case NOP_CALL:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
@@ -705,6 +718,10 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 		case NOP_TABLE_REMOVE:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("Table Remove [%s].[%s]\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str());
+			break;
+		case NOP_VERIFY_TYPE:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
+			OutAsm("Verify [%s] %s\n", GetLog(funs, v, 1).c_str(), GetDataType((VAR_TYPE)v.n2).c_str());
 			break;
 		case NOP_YIELD:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);

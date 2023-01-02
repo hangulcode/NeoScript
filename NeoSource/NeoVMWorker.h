@@ -64,6 +64,7 @@ enum eNOperation : OpType
 	NOP_JMP_OR,		// ||
 	NOP_JMP_NAND,	// !(&&)
 	NOP_JMP_NOR,	// !(||)
+	NOP_JMP_FOR,	// for
 	NOP_JMP_FOREACH,// foreach
 
 	NOP_STR_ADD,	// ..
@@ -92,6 +93,7 @@ enum eNOperation : OpType
 	NOP_TABLE_DIV2,
 	NOP_TABLE_PERSENT2,
 
+	NOP_VERIFY_TYPE,
 	NOP_YIELD,
 
 	NOP_NONE,
@@ -207,11 +209,9 @@ public:
 		TableInfo*	_tbl;
 		int			_int;
 		double		_float;
-//		FunctionPtrNative _fun;
 		int			_fun_index;
 		TableIterator	_it;
 	};
-	//std::map<std::string, TableData>::iterator _it;
 
 	VarInfo()
 	{
@@ -488,6 +488,7 @@ private:
 	bool CompareEQ(VarInfo* v1, VarInfo* v2);
 	bool CompareGR(VarInfo* v1, VarInfo* v2);
 	bool CompareGE(VarInfo* v1, VarInfo* v2);
+	bool For(VarInfo* v1);
 	bool ForEach(VarInfo* v1, VarInfo* v2);
 	int Sleep(int iTimeout, VarInfo* v1);
 	void Call(int n1, int n2, VarInfo* pReturnValue = NULL);
@@ -532,6 +533,9 @@ private:
 		VarInfo* p = GetTableItemValid(pTable, pArray);
 		if (p) Per2(p, pValue);
 	}
+
+	bool VerifyType(VarInfo *p, VAR_TYPE t);
+
 
 	//void ClearArgs()
 	//{
@@ -792,4 +796,4 @@ public:
 
 	inline u32 GetWorkerID() { return _idWorker; }
 };
-
+extern std::string GetDataType(VAR_TYPE t);

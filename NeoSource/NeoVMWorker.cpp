@@ -684,6 +684,21 @@ bool CNeoVMWorker::CompareGE(VarInfo* v1, VarInfo* v2)
 	SetError("CompareGE Error");
 	return false;
 }
+bool CNeoVMWorker::For(VarInfo* pCur)
+{
+	VarInfo* pCur_Inter = pCur + 1;
+	VarInfo* pBegin		= pCur + 2;
+	VarInfo* pEnd		= pCur + 3;
+	VarInfo* pStep		= pCur + 4;
+
+	Move(pCur, pCur_Inter);
+	if (pCur->_int < pEnd->_int)
+	{
+		pCur_Inter->_int += pStep->_int;
+		return true;
+	}
+	return false;
+}
 bool CNeoVMWorker::ForEach(VarInfo* pTable, VarInfo* pKey)
 {
 	VarInfo* pValue = pKey + 1;
@@ -1223,6 +1238,11 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				if (false == (GetVarPtr2(OP)->IsTrue() || GetVarPtr3(OP)->IsTrue()))
 					SetCodeIncPtr(OP.n1);
 				break;
+			case NOP_JMP_FOR:	// for (cur, cur_protect, begin, end, step)
+				//if (ForEach(GetVarPtr2(OP), GetVarPtr3(OP), GetVarPtr(OP.n3 + 1)))
+				if (For(GetVarPtr2(OP)))
+					SetCodeIncPtr(OP.n1);
+				break;
 			case NOP_JMP_FOREACH:	// foreach
 				//if (ForEach(GetVarPtr2(OP), GetVarPtr3(OP), GetVarPtr(OP.n3 + 1)))
 				if (ForEach(GetVarPtr2(OP), GetVarPtr3(OP)))
@@ -1410,6 +1430,9 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			case NOP_TABLE_PERSENT2:
 				TablePer2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
 				break;
+			case NOP_VERIFY_TYPE:
+				VerifyType(GetVarPtr1(OP), (VAR_TYPE)OP.n2);
+				break;
 			case NOP_YIELD:
 				m_pCur->_state = COROUTINE_STATE_SUSPENDED;
 				if (StopCoroutine() == false)
@@ -1428,7 +1451,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				if(blDebugInfo)
 					_lineseq = GetDebugLine();
 #ifdef _WIN32
-				sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pVM->_pErrorMsg, _lineseq);
+				sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pVM->_pErrorMsg.c_str(), _lineseq);
 #else
 				sprintf(chMsg, "%s : Line (%d)", _pVM->_pErrorMsg, _lineseq);
 #endif
@@ -1453,7 +1476,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 		if(blDebugInfo)
 			_lineseq = GetDebugLine();
 #ifdef _WIN32
-		sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pVM->_pErrorMsg, _lineseq);
+		sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pVM->_pErrorMsg.c_str(), _lineseq);
 #else
 		sprintf(chMsg, "%s : Line (%d)", _pVM->_pErrorMsg, _lineseq);
 #endif
@@ -1657,4 +1680,46 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFun
 	//	break;
 	//}	
 	return true;
+}
+bool CNeoVMWorker::VerifyType(VarInfo *p, VAR_TYPE t)
+{
+	if (p->GetType() == t)
+		return true;
+	char ch[256];
+#ifdef _WIN32
+	sprintf_s(ch, _countof(ch), "VerifyType (%s != %s)", GetDataType(p->GetType()).c_str(), GetDataType(t).c_str());
+#else
+	sprintf(ch, "VerifyType (%s != %s)", GetDataType(p->GetType()).c_str(), GetDataType(t).c_str());
+#endif
+
+	SetError(ch);
+	return false;
+}
+
+std::string GetDataType(VAR_TYPE t)
+{
+	switch (t)
+	{
+	case VAR_NONE:
+		return "none";
+	case VAR_BOOL:
+		return "bool";
+	case VAR_INT:
+		return "int";
+	case VAR_FLOAT:
+		return "float";
+	case VAR_STRING:
+		return "string";
+	case VAR_TABLE:
+		return "table";
+	case VAR_COROUTINE:
+		return "coroutine";
+	case VAR_FUN:
+		return "fun";
+	case VAR_ITERATOR:
+		return "iterator";
+	default:
+		break;
+	}
+	return "unknown";
 }

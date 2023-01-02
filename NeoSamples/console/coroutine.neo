@@ -3,7 +3,7 @@ var cr;
 fun fa(var param1)
 {
 	var cr2 = cr;
-	for(var i = 0; i < 5; i++)
+	for(var i in 0, 5, 1)
 	{
 		system.print("\n Coroutine " .. i);
 		sleep(1000);
@@ -15,7 +15,7 @@ export fun test()
 {
 	cr = system.coroutine_create(fa);
 
-	for(var i = 0; i < 10; i++)
+	for(var i in 0, 10, 1)
 	{
 		var state = system.coroutine_status(cr);
 		if(state == "suspended")

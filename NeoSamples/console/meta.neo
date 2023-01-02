@@ -76,7 +76,7 @@ export fun meta()
 {
 	var c;
 	var tm = clock();
-	for(var i = 1; i < 10000; i++)
+	for(var i in 0, 10000, 1)
 	{
 		var a = Vector3_New(3.0, 4.0, 5.0);
 		var b = Vector3_New(30.0, 40.0, 50.0);

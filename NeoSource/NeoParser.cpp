@@ -2,6 +2,8 @@
 #include "NeoVM.h"
 #include "NeoExport.h"
 
+//#define CSTYLE_FOR
+
 void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 
 template<class T>
@@ -248,6 +250,7 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_JMP_OR, 3);
 	OP_STR1(NOP_JMP_NAND, 3);
 	OP_STR1(NOP_JMP_NOR, 3);
+	OP_STR1(NOP_JMP_FOR, 3);
 	OP_STR1(NOP_JMP_FOREACH, 3);
 
 	OP_STR1(NOP_STR_ADD, 3);
@@ -279,6 +282,7 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_TABLE_DIV2, 3);
 	OP_STR1(NOP_TABLE_PERSENT2, 3);
 
+	OP_STR1(NOP_VERIFY_TYPE, 2);
 	OP_STR1(NOP_YIELD, 1);
 
 	if (blError)
@@ -1646,6 +1650,7 @@ void ClearTempVars(SFunctions& funs)
 	}
 }
 
+#ifdef CSTYLE_FOR
 //	for Init
 //	for {} Process
 //	for Increase
@@ -1811,6 +1816,207 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	return true;
 }
+#else
+bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+{
+	if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
+	{
+		SetCompileError(ar, "Error (%d, %d): \"for\" is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+
+	std::string tk1;
+	TK_TYPE tkType1;
+	TK_TYPE r;
+
+	SOperand iTempVar;
+
+	// "for(var a in range(begin,end,step))" 로직 처리
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_L_SMALL) // (
+	{
+		SetCompileError(ar, "Error (%d, %d): for '(' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+
+	AddLocalVar(vars.GetCurrentLayer());
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_VAR) // var
+	{
+		SetCompileError(ar, "Error (%d, %d): foreach 'var' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_STRING) // key
+	{
+		SetCompileError(ar, "Error (%d, %d): for 'key' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+	int iKey = AddLocalVarName(ar, funs, vars, tk1);
+	if (iKey < 0)
+		return false;
+
+	/*tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_COMMA) // ,
+	{
+		SetCompileError(ar, "Error (%d, %d): for 'comma' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+	
+	tkType1 = GetToken(ar, tk1); // TODO ?
+	if (tkType1 != TK_STRING) // value
+	{
+		SetCompileError(ar, "Error (%d, %d): for 'value' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+	int iValue = AddLocalVarName(ar, funs, vars, tk1);
+	if (iValue < 0)
+		return false;
+
+	if (iKey + 1 != iValue)
+	{
+		SetCompileError(ar, "Error (%d, %d): for key / Value Var Alloc Error", ar.CurLine(), ar.CurCol());
+		return false;
+	}*/
+
+	int iIterator1 = AddLocalVarName(ar, funs, vars, tk1 + "^_#@_temp_1", false); // Current Save
+	if (iIterator1 < 0)
+		return false;
+	int i_Begin = AddLocalVarName(ar, funs, vars, tk1 + "^_#@_temp_2", false); // Begin
+	if (i_Begin < 0)
+		return false;
+	int i_End = AddLocalVarName(ar, funs, vars, tk1 + "^_#@_temp_3", false); // End
+	if (i_End < 0)
+		return false;
+	int i_Step = AddLocalVarName(ar, funs, vars, tk1 + "^_#@_temp_4", false); // Step
+	if (i_Step < 0)
+		return false;
+
+
+	if (iKey + 1 != iIterator1)
+	{
+		SetCompileError(ar, "Error (%d, %d): for key / Value Var Alloc Error", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_STRING || tk1 != "in") // in
+	{
+		SetCompileError(ar, "Error (%d, %d): for 'in' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+
+	iTempVar.Reset();
+	r = ParseJob(true, iTempVar, NULL, ar, funs, vars, true); // begin value
+	if (TK_COMMA != r) 
+	{
+		SetCompileError(ar, "Error (%d, %d): for Init", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+	if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
+		funs._cur.Push_MOV(ar, NOP_MOV, i_Begin, iTempVar._iVar);
+	else
+		funs._cur.Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_Begin);
+
+	iTempVar.Reset();
+	r = ParseJob(true, iTempVar, NULL, ar, funs, vars, true); // end value
+	if (TK_COMMA != r) 
+	{
+		SetCompileError(ar, "Error (%d, %d): for Init", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+	if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
+		funs._cur.Push_MOV(ar, NOP_MOV, i_End, iTempVar._iVar);
+	else
+		funs._cur.Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_End);
+
+	iTempVar.Reset();
+	r = ParseJob(true, iTempVar, NULL, ar, funs, vars, true); // increase value
+	if (TK_R_SMALL != r)
+	{
+		SetCompileError(ar, "Error (%d, %d): for Init", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+	if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
+		funs._cur.Push_MOV(ar, NOP_MOV, i_Step, iTempVar._iVar);
+	else
+		funs._cur.Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_Step);
+
+	/*
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_STRING) // Table Name
+	{
+		SetCompileError(ar, "Error (%d, %d): for 'table_name' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+	int iTable = vars.FindVar(tk1);
+	if (iTable < 0)
+	{
+		SetCompileError(ar, "Error (%d, %d): for 'talbe' Not Found %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+	
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_R_SMALL) // )
+	{
+		SetCompileError(ar, "Error (%d, %d): for ')' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}*/
+	funs._cur.Push_OP(ar, NOP_VERIFY_TYPE, i_Begin, VAR_INT, 0);
+	funs._cur.Push_OP(ar, NOP_VERIFY_TYPE, i_End, VAR_INT, 0);
+	funs._cur.Push_OP(ar, NOP_VERIFY_TYPE, i_Step, VAR_INT, 0);
+
+
+	//funs._cur.Push_OP1(ar, NOP_VAR_CLEAR, iKey);
+	funs._cur.Push_MOV(ar, NOP_MOV, iKey + 1, iKey + 2); // Cur_inter = Begin
+
+	funs._cur.Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
+	SJumpValue jmp1(funs._cur._code->GetBufferOffset() - (sizeof(short) * 3), funs._cur._code->GetBufferOffset());
+
+	int PosLoopTop = funs._cur._code->GetBufferOffset(); // Loop 의 맨위
+
+
+	//	foreach {} Process
+	std::vector<SJumpValue> sJumps;
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_L_MIDDLE) // {
+	{
+		ar.PushToken(tkType1, tk1);
+		iTempVar = INVALID_ERROR_PARSEJOB;
+		r = ParseJob(false, iTempVar, &sJumps, ar, funs, vars);
+		if (TK_SEMICOLON != r)
+		{
+			SetCompileError(ar, "Error (%d, %d): ;", ar.CurLine(), ar.CurCol());
+			return false;
+		}
+	}
+	else
+	{
+		if (false == ParseMiddleArea(&sJumps, ar, funs, vars))
+			return false;
+	}
+
+	funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
+	funs._cur.Push_JMPFor(ar, PosLoopTop, iKey, iKey + 2);
+
+	funs._cur.ClearLastOP();
+
+
+	int forEndPos = funs._cur._code->GetBufferOffset();
+
+	for (int i = 0; i < (int)sJumps.size(); i++)
+	{
+		funs._cur.Set_JumpOffet(sJumps[i], forEndPos);
+	}
+
+	DelLocalVar(vars.GetCurrentLayer());
+
+	return true;
+}
+#endif
+
 bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
@@ -1907,7 +2113,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 
 	tkType1 = GetToken(ar, tk1);
-	if (tkType1 != TK_R_SMALL) // (
+	if (tkType1 != TK_R_SMALL) // )
 	{
 		SetCompileError(ar, "Error (%d, %d): foreach ')' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
 		return false;
@@ -1959,165 +2165,6 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	return true;
 }
-/*
-bool ParseLoop(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
-{
-	if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
-	{
-		SetCompileError(ar, "Error (%d, %d): \"loop\" is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
-		return false;
-	}
-
-	std::string tk1;
-	TK_TYPE tkType1;
-	TK_TYPE r;
-
-	SOperand iTempOffset;
-
-	tkType1 = GetToken(ar, tk1);
-	if (tkType1 != TK_L_SMALL) // (
-	{
-		SetCompileError(ar, "Error (%d, %d): loop '(' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
-		return false;
-	}
-
-	AddLocalVar(vars.GetCurrentLayer());
-
-	tkType1 = GetToken(ar, tk1);
-	if (tkType1 != TK_VAR) // var
-	{
-		SetCompileError(ar, "Error (%d, %d): loop 'var' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
-		return false;
-	}
-
-	tkType1 = GetToken(ar, tk1);
-	if (tkType1 != TK_STRING) // name
-	{
-		SetCompileError(ar, "Error (%d, %d): loop 'name' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
-		return false;
-	}
-	int iKey = AddLocalVarName(ar, funs, vars, tk1);
-	if (iKey < 0)
-		return false;
-
-	tkType1 = GetToken(ar, tk1);
-	if (tkType1 != TK_EQUAL) // =
-	{
-		SetCompileError(ar, "Error (%d, %d): loop 'comma' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
-		return false;
-	}
-
-
-
-	if (tkType1 != TK_COMMA) // ,
-	{
-		SetCompileError(ar, "Error (%d, %d): loop 'comma' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
-		return false;
-	}
-
-
-
-	tkType1 = GetToken(ar, tk1);
-	if (tkType1 != TK_STRING) // value
-	{
-		SetCompileError(ar, "Error (%d, %d): loop 'value' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
-		return false;
-	}
-	int iValue = AddLocalVarName(ar, funs, vars, tk1);
-	if (iValue < 0)
-		return false;
-
-	if (iKey + 1 != iValue)
-	{
-		SetCompileError(ar, "Error (%d, %d): loop key / Value Var Alloc Error", ar.CurLine(), ar.CurCol());
-		return false;
-	}
-
-	// Iterator를 저장할 임시 자동 생성 변수
-	int iIterator = AddLocalVarName(ar, funs, vars, tk1 + "^_#@_temp_", false);
-	if (iIterator < 0)
-		return false;
-
-	if (iKey + 2 != iIterator)
-	{
-		SetCompileError(ar, "Error (%d, %d): loop key / Value Var Alloc Error", ar.CurLine(), ar.CurCol());
-		return false;
-	}
-
-	tkType1 = GetToken(ar, tk1);
-	if (tkType1 != TK_STRING || tk1 != "in") // in
-	{
-		SetCompileError(ar, "Error (%d, %d): loop 'in' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
-		return false;
-	}
-
-	tkType1 = GetToken(ar, tk1);
-	if (tkType1 != TK_STRING) // Table Name
-	{
-		SetCompileError(ar, "Error (%d, %d): loop 'table_name' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
-		return false;
-	}
-	int iTable = vars.FindVar(tk1);
-	if (iTable < 0)
-	{
-		SetCompileError(ar, "Error (%d, %d): loop 'talbe' Not Found %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
-		return false;
-	}
-
-	tkType1 = GetToken(ar, tk1);
-	if (tkType1 != TK_R_SMALL) // (
-	{
-		SetCompileError(ar, "Error (%d, %d): loop ')' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
-		return false;
-	}
-
-
-	funs._cur.Push_OP1(ar, NOP_VAR_CLEAR, iKey);
-
-	funs._cur.Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
-	SJumpValue jmp1(funs._cur._code->GetBufferOffset() - (sizeof(short) * 3), funs._cur._code->GetBufferOffset());
-
-	int PosLoopTop = funs._cur._code->GetBufferOffset(); // Loop 의 맨위
-
-
-	//	foreach {} Process
-	std::vector<SJumpValue> sJumps;
-	tkType1 = GetToken(ar, tk1);
-	if (tkType1 != TK_L_MIDDLE) // {
-	{
-		ar.PushToken(tkType1, tk1);
-		iTempOffset = INVALID_ERROR_PARSEJOB;
-		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars);
-		if (TK_SEMICOLON != r)
-		{
-			SetCompileError(ar, "Error (%d, %d): ;", ar.CurLine(), ar.CurCol());
-			return false;
-		}
-	}
-	else
-	{
-		if (false == ParseMiddleArea(&sJumps, ar, funs, vars))
-			return false;
-	}
-
-	funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
-	funs._cur.Push_JMPForEach(ar, PosLoopTop, iTable, iKey);
-
-	funs._cur.ClearLastOP();
-
-
-	int forEndPos = funs._cur._code->GetBufferOffset();
-
-	for (int i = 0; i < (int)sJumps.size(); i++)
-	{
-		funs._cur.Set_JumpOffet(sJumps[i], forEndPos);
-	}
-
-	DelLocalVar(vars.GetCurrentLayer());
-
-	return true;
-}
-*/
 bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)

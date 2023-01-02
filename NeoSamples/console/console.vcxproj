@@ -235,6 +235,7 @@
   <ItemGroup>
     <None Include="9_times.neo" />
     <None Include="callback.neo" />
+    <None Include="coroutine.neo" />
     <None Include="delegate.neo" />
     <None Include="etc.neo" />
     <None Include="meta.neo" />

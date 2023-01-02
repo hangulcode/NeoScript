@@ -259,8 +259,16 @@ CNeoVM::~CNeoVM()
 
 void CNeoVM::SetError(const char* pErrMsg)
 {
-	_pErrorMsg = pErrMsg;
-	_bError = (pErrMsg != NULL);
+	if (pErrMsg)
+	{
+		_pErrorMsg = pErrMsg;
+		_bError = true;
+	}
+	else
+	{
+		_pErrorMsg.clear();
+		_bError = false;
+	}
 }
 
 
@@ -463,7 +471,7 @@ bool CNeoVM::IsWorking(u32 id)
 
 bool CNeoVM::UpdateWorker(u32 id)
 {
-	if (NULL != _pErrorMsg)
+	if (_pErrorMsg.empty() == false)
 		return false;
 
 	auto it = _sVMWorkers.find(id);

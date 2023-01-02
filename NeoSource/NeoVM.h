@@ -155,7 +155,7 @@ public:
 
 
 	std::string _sErrorMsgDetail;
-	const char* _pErrorMsg = NULL;
+	std::string _pErrorMsg;
 	bool _bError = false;
 
 	static bool IsGlobalLibFun(std::string& FunName);

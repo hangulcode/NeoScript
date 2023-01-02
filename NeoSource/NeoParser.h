@@ -388,6 +388,20 @@ struct SFunctionInfo
 		//_code->Write(&add, sizeof(add));
 		Push_Arg(add, var, 0);
 	}
+	void	Push_JMPFor(CArchiveRdWC& ar, int destOffset, short table, short key)
+	{
+		AddDebugData(ar);
+		_iLastOPOffset = _code->GetBufferOffset();
+
+		eNOperation op = NOP_JMP_FOR;
+		OpType optype = GetOpTypeFromOp(op);
+		short add = destOffset - (_code->GetBufferOffset() + GetOpLength(op));
+		_code->Write(&optype, sizeof(optype));
+		//_code->Write(&add, sizeof(add));
+		//_code->Write(&table, sizeof(table));
+		//_code->Write(&key, sizeof(key));
+		Push_Arg(add, table, key);
+	}
 	// Always Value is Key Next Alloc ID
 	void	Push_JMPForEach(CArchiveRdWC& ar, int destOffset, short table, short key)
 	{
