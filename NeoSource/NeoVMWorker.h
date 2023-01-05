@@ -11,6 +11,7 @@ enum VAR_TYPE : u8
 	VAR_FLOAT,	// double
 	VAR_STRING,
 	VAR_TABLE,
+	VAR_LIST,
 	VAR_COROUTINE,
 	VAR_FUN,
 
@@ -93,6 +94,10 @@ enum eNOperation : OpType
 	NOP_TABLE_DIV2,
 	NOP_TABLE_PERSENT2,
 
+	NOP_LIST_ALLOC,
+	NOP_LIST_REMOVE,
+	NOP_LIST_MOV,
+
 	NOP_VERIFY_TYPE,
 	NOP_YIELD,
 
@@ -140,13 +145,16 @@ enum COROUTINE_STATE
 	COROUTINE_STATE_NORMAL,
 };
 
+struct AllocBase
+{
+	int _refCount;
+};
 
-struct CoroutineInfo
+struct CoroutineInfo : AllocBase
 {
 //	int	_CoroutineID;
 	int	_fun_index;
 	COROUTINE_STATE _state;
-	int _refCount;
 
 
 	int						_iSP_Vars;
@@ -158,11 +166,10 @@ struct CoroutineInfo
 	u8 *					_pCodeCurrent;
 };
 
-struct StringInfo
+struct StringInfo : AllocBase
 {
 	std::string _str;
 	int	_StringID;
-	int _refCount;
 };
 
 //struct SNeoMeta
@@ -183,6 +190,7 @@ struct FunctionPtr
 
 struct TableInfo;
 struct TableNode;
+struct ListInfo;
 
 #pragma pack(1)
 struct TableIterator
@@ -207,6 +215,7 @@ public:
 		CoroutineInfo* _cor;
 		StringInfo* _str;
 		TableInfo*	_tbl;
+		ListInfo*	_lst;
 		int			_int;
 		double		_float;
 		int			_fun_index;
@@ -226,7 +235,7 @@ public:
 	}
 	inline bool IsAllocType()
 	{
-		return ((_type == VAR_STRING) || (_type == VAR_TABLE) || (_type == VAR_COROUTINE));
+		return ((_type == VAR_STRING) || (_type == VAR_TABLE) || (_type == VAR_LIST) || (_type == VAR_COROUTINE));
 	}
 	inline bool IsTrue()
 	{
@@ -244,6 +253,7 @@ public:
 //};
 
 #include "NeoVMTable.h"
+#include "NeoVMList.h"
 
 
 struct SNeoVMHeader
@@ -428,6 +438,7 @@ private:
 	void Var_SetString(VarInfo *d, const char* str);
 	void Var_SetStringA(VarInfo *d, const std::string& str);
 	void Var_SetTable(VarInfo *d, TableInfo* p);
+	void Var_SetList(VarInfo *d, ListInfo* p);
 	void Var_SetFun(VarInfo* d, int fun_index);
 
 

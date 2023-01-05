@@ -76,8 +76,8 @@ fun Fun_Performanc()
 	var table = {};
 	var tm = clock();
 	
-//	var count = 10000001; // release
-	var count = 100001; // debug
+	var count = 10000001; // release
+//	var count = 100001; // debug
 
 	for (var i in 1, count, 1) // release
 	{
@@ -109,7 +109,6 @@ fun Fun_Performanc()
 	}
 	print("\nfor Time : " .. (clock() - tm) .. "\n\n");
 }
-
 export fun main()
 {
 	Fun_General();

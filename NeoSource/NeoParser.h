@@ -16,6 +16,7 @@
 bool IsTempVar(int iVar);
 eNOperation	GetOpTypeFromOp(eNOperation op);
 eNOperation GetTableOpTypeFromOp(eNOperation op);
+eNOperation GetListOpTypeFromOp(eNOperation op);
 int		GetOpLength(eNOperation op);
 
 struct SJumpValue
@@ -421,6 +422,16 @@ struct SFunctionInfo
 	{
 		*((short*)((u8*)_code->GetData() + sJmp._iCodePosOffset)) = (short)(destOffset - sJmp._iBaseJmpOffset);
 	}
+	void	Push_ListAlloc(CArchiveRdWC& ar, short r)
+	{
+		AddDebugData(ar);
+		_iLastOPOffset = _code->GetBufferOffset();
+
+		OpType optype = GetOpTypeFromOp(NOP_LIST_ALLOC);
+		_code->Write(&optype, sizeof(optype));
+		//_code->Write(&r, sizeof(r));
+		Push_Arg(r, 0, 0);
+	}
 	void	Push_TableAlloc(CArchiveRdWC& ar, short r)
 	{
 		AddDebugData(ar);
@@ -463,6 +474,38 @@ struct SFunctionInfo
 		//_code->Write(&nValue, sizeof(nValue));
 		Push_Arg(nTable, nArray, nValue);
 	}
+	void	Push_List_MASMDP(CArchiveRdWC& ar, eNOperation op, short nTable, short nArray, short nValue)
+	{
+		if (IsTempVar(nValue))
+		{
+			eNOperation preOP = GetLastOP();
+			u8 *pre = (u8*)_code->GetData() + sizeof(OpType) + _iLastOPOffset;
+			short* preDest = (short*)pre;
+			switch (preOP)
+			{
+			case NOP_VAR_CLEAR:
+				if (*preDest == nValue)
+				{
+					//_code->SetPointer(_iLastOPOffset - (ar._debug ? sizeof(debug_info) : 0), SEEK_SET);
+					_code->SetPointer(_iLastOPOffset, SEEK_SET);
+					Push_ListRemove(ar, nTable, nArray);
+					return;
+				}
+				break;
+			default:
+				break;
+			}
+		}
+		AddDebugData(ar);
+		_iLastOPOffset = _code->GetBufferOffset();
+
+		eNOperation optype = GetListOpTypeFromOp(op);
+		_code->Write(&optype, sizeof(optype));
+		//_code->Write(&nTable, sizeof(nTable));
+		//_code->Write(&nArray, sizeof(nArray));
+		//_code->Write(&nValue, sizeof(nValue));
+		Push_Arg(nTable, nArray, nValue);
+	}
 	void	Push_TableRead(CArchiveRdWC& ar, short nTable, short nArray, short nValue)
 	{
 		AddDebugData(ar);
@@ -481,6 +524,17 @@ struct SFunctionInfo
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(NOP_TABLE_REMOVE);
+		_code->Write(&optype, sizeof(optype));
+		//_code->Write(&nTable, sizeof(nTable));
+		//_code->Write(&nArray, sizeof(nArray));
+		Push_Arg(nTable, nArray, 0);
+	}
+	void	Push_ListRemove(CArchiveRdWC& ar, short nTable, short nArray)
+	{
+		AddDebugData(ar);
+		_iLastOPOffset = _code->GetBufferOffset();
+
+		OpType optype = GetOpTypeFromOp(NOP_LIST_REMOVE);
 		_code->Write(&optype, sizeof(optype));
 		//_code->Write(&nTable, sizeof(nTable));
 		//_code->Write(&nArray, sizeof(nArray));

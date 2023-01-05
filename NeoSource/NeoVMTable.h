@@ -34,7 +34,7 @@ struct TableBucket
 
 class CNeoVM;
 class CNeoVMWorker;
-struct TableInfo
+struct TableInfo : AllocBase
 {
 	TableBucket*	_Bucket;
 
@@ -44,7 +44,6 @@ struct TableInfo
 	int _BucketCapa;
 
 	int	_TableID;
-	int _refCount;
 	int _itemCount;
 	void* _pUserData;
 

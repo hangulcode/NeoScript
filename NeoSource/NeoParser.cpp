@@ -68,7 +68,7 @@ struct SOperationInfo
 	}
 };
 
-#define OP_STR1(op, len) if(op > 63){ blError = true;} g_sOpInfo[op] = SOperationInfo(#op, op, len)
+#define OP_STR1(op, len) if(op > 255){ blError = true;} g_sOpInfo[op] = SOperationInfo(#op, op, len)
 
 
 struct STokenValue
@@ -108,6 +108,15 @@ eNOperation GetTableOpTypeFromOp(eNOperation op)
 	case NOP_MUL2: op = NOP_TABLE_MUL2; break;
 	case NOP_DIV2: op = NOP_TABLE_DIV2; break;
 	case NOP_PERSENT2: op = NOP_TABLE_PERSENT2; break;
+	default: break;
+	}
+	return g_sOpInfo[op]._opType;
+}
+eNOperation GetListOpTypeFromOp(eNOperation op)
+{
+	switch (op)
+	{
+	case NOP_MOV: op = NOP_LIST_MOV; break;
 	default: break;
 	}
 	return g_sOpInfo[op]._opType;
@@ -281,6 +290,10 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_TABLE_MUL2, 3);
 	OP_STR1(NOP_TABLE_DIV2, 3);
 	OP_STR1(NOP_TABLE_PERSENT2, 3);
+
+	OP_STR1(NOP_LIST_ALLOC, 1);
+	OP_STR1(NOP_LIST_REMOVE, 2);
+	OP_STR1(NOP_LIST_MOV, 3);
 
 	OP_STR1(NOP_VERIFY_TYPE, 2);
 	OP_STR1(NOP_YIELD, 1);
@@ -890,6 +903,104 @@ bool ParseStringOrNum(int& iResultStack, TK_TYPE tkTypePre, std::string& tkPre, 
 	return false;
 }
 
+TK_TYPE ParseListDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, int iTableDeep = 0)
+{
+	std::string tk1, tk2;
+	TK_TYPE tkType1, tkType2;
+	TK_TYPE r = TK_NONE;
+
+	iResultStack = funs._cur.AllocLocalTempVar();
+	funs._cur.Push_ListAlloc(ar, iResultStack);
+
+	// PCALL [S.3].[G.6 'resize'] arg:0 ==> resize force call
+	int iStaticString = funs.AddStaticString("resize");
+	// funs.AddStaticInt(); // 이부분은 임시로 Temp 저장 하고 배열 갯수를 아래서 구한후 다시 over write 한다.
+	funs._cur.Push_CallPtr(ar, iResultStack, iStaticString, 1);
+
+	int iTempOffsetKey;
+	int iTempOffsetValue;
+	std::string str;
+
+	int iCurArrayOffset = 0;
+	bool bPreviusComa = false;
+
+	bool blEnd = false;
+	while (blEnd == false)
+	{
+		iTempOffsetKey = iTempOffsetValue = INVALID_ERROR_PARSEJOB;
+		tkType1 = GetToken(ar, tk1);
+
+		if (tkType1 == TK_QUOTE2 || tkType1 == TK_QUOTE1 || tkType1 == TK_STRING)
+		{
+			if (false == ParseStringOrNum(iTempOffsetKey, tkType1, tk1, ar, funs, vars))
+				return TK_NONE;
+		}
+		else if (tkType1 == TK_L_ARRAY)
+		{
+			if (TK_NONE == ParseListDef(iTempOffsetKey, ar, funs, vars, iTableDeep + 1))
+			{
+				return TK_NONE;
+			}
+		}
+		else if (tkType1 == TK_R_MIDDLE)
+			break;
+
+		tkType2 = GetToken(ar, tk2);
+		if (tkType2 == TK_COMMA || tkType2 == TK_R_ARRAY)
+		{
+			iTempOffsetValue = iTempOffsetKey;
+			iTempOffsetKey = funs.AddStaticInt(iCurArrayOffset++);
+			ar.PushToken(tkType2, tk2);
+		}
+		else if (tkType2 == TK_EQUAL)
+		{
+			tkType2 = GetToken(ar, tk2);
+			if (tkType2 == TK_QUOTE2 || tkType2 == TK_QUOTE1 || tkType2 == TK_STRING)
+			{
+				if (false == ParseStringOrNum(iTempOffsetValue, tkType2, tk2, ar, funs, vars))
+					return TK_NONE;
+			}
+			else if (tkType2 == TK_L_ARRAY)
+			{
+				if (TK_NONE == ParseListDef(iTempOffsetValue, ar, funs, vars, iTableDeep + 1))
+				{
+					return TK_NONE;
+				}
+			}
+
+			int iIntValue = -1;
+			if (funs.GetStaticNum(iTempOffsetKey, &iIntValue))
+				iCurArrayOffset = iIntValue + 1;
+		}
+		else
+		{
+			SetCompileError(ar, "Error (%d, %d): List Init Error %s\n", ar.CurLine(), ar.CurCol(), tk2.c_str());
+			return TK_NONE;
+		}
+
+		funs._cur.Push_List_MASMDP(ar, NOP_LIST_MOV, iResultStack, iTempOffsetKey, iTempOffsetValue);
+
+		tkType2 = GetToken(ar, tk2);
+		if (tkType2 == TK_R_ARRAY)
+			break;
+		if (tkType2 != TK_COMMA)
+		{
+			SetCompileError(ar, "Error (%d, %d): List Init Error %s\n", ar.CurLine(), ar.CurCol(), tk2.c_str());
+			return TK_NONE;
+		}
+	}
+	if (iTableDeep == 0)
+	{
+		tkType1 = GetToken(ar, tk1);
+		if (tkType1 != TK_SEMICOLON)
+		{
+			SetCompileError(ar, "Error (%d, %d): List ; \n", ar.CurLine(), ar.CurCol());
+			return TK_NONE;
+		}
+	}
+
+	return tkType1;
+}
 
 TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, int iTableDeep = 0)
 {
@@ -981,9 +1092,9 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 			return TK_NONE;
 		}
 	}
-	
 	return tkType1;
 }
+
 TK_TYPE ParseTable(int& iArrayOffset, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	TK_TYPE r = TK_NONE;
@@ -1346,6 +1457,13 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		case TK_L_MIDDLE:
 			iTempOffset.Reset();
 			r = ParseTableDef(iTempOffset._iVar, ar, funs, vars);
+			operands.push_back(iTempOffset);
+			blApperOperator = true;
+			blEnd = true;
+			break;
+		case TK_L_ARRAY:
+			iTempOffset.Reset();
+			r = ParseListDef(iTempOffset._iVar, ar, funs, vars);
 			operands.push_back(iTempOffset);
 			blApperOperator = true;
 			blEnd = true;

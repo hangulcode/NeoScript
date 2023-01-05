@@ -124,7 +124,6 @@ void CNeoVM::FreeString(VarInfo *d)
 TableInfo* CNeoVM::TableAlloc()
 {
 	TableInfo* pTable = m_sPool_TableInfo.Receive();
-	//TableInfo* pTable = new TableInfo();
 	while (true)
 	{
 		if (++_dwLastIDTable == 0)
@@ -179,11 +178,53 @@ void CNeoVM::FreeTable(TableInfo* tbl)
 	//delete tbl;
 	m_sPool_TableInfo.Confer(tbl);
 }
-
-void CNeoVM::FreeTable(VarInfo *d)
+ListInfo* CNeoVM::ListAlloc()
 {
-	FreeTable(d->_tbl);
+	ListInfo* pList = m_sPool_ListInfo.Receive();
+	while (true)
+	{
+		if (++_dwLastIDList == 0)
+			_dwLastIDList = 1;
+
+		if (_sLists.end() == _sLists.find(_dwLastIDList))
+		{
+			break;
+		}
+	}
+	pList->_pVM = this;
+	pList->_ListID = _dwLastIDList;
+	pList->_refCount = 0;
+	pList->_itemCount = 0;
+	pList->_BucketCapa = 0;
+	pList->_pUserData = NULL;
+
+	_sLists[_dwLastIDTable] = pList;
+	return pList;
 }
+void CNeoVM::FreeList(ListInfo* lst)
+{
+	auto it = _sLists.find(lst->_ListID);
+	if (it == _sLists.end())
+		return; // Error
+
+	_sLists.erase(it);
+
+	//for (auto it2 = tbl->_intMap.begin(); it2 != tbl->_intMap.end(); it2++)
+	//{
+	//	VarInfo& v = (*it2).second;
+	//	if(v.IsAllocType())
+	//		Var_Release(&v);
+	//}
+	//tbl->_intMap.clear();
+
+//	lst->_fun._func = NULL;
+
+	lst->Free();
+
+	//delete tbl;
+	m_sPool_ListInfo.Confer(lst);
+}
+
 int	 CNeoVM::Coroutine_Create(int iFID)
 {
 	return 0;

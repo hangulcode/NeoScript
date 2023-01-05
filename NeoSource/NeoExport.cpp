@@ -300,6 +300,31 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			//ar << optype << v.n1 << v.n2;
 			argFlag = GetArgIndexToCode(&v.n1, &v.n2, nullptr);
 			break;
+
+		case NOP_LIST_ALLOC:
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			//ar << optype << v.n1;
+			argFlag = GetArgIndexToCode(&v.n1, nullptr, nullptr);
+			break;
+		case NOP_LIST_MOV:
+/*		case NOP_LIST_READ:
+		case NOP_LIST_ADD2:
+		case NOP_LIST_SUB2:
+		case NOP_LIST_MUL2:
+		case NOP_LIST_DIV2:
+		case NOP_LIST_PERSENT2:*/
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
+
+			argFlag = GetArgIndexToCode(&v.n1, &v.n2, &v.n3);
+			break;
+		case NOP_LIST_REMOVE:
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
+			//ar << optype << v.n1 << v.n2;
+			argFlag = GetArgIndexToCode(&v.n1, &v.n2, nullptr);
+			break;
 		case NOP_VERIFY_TYPE:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			argFlag = GetArgIndexToCode(&v.n1, nullptr, nullptr);
@@ -719,6 +744,20 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("Table Remove [%s].[%s]\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str());
 			break;
+
+		case NOP_LIST_ALLOC:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
+			OutAsm("List Alloc [%s]\n", GetLog(funs, v, 1).c_str());
+			break;
+		case NOP_LIST_MOV:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("List MOV [%s].[%s] = [%s]\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str(), GetLog(funs, v, 3).c_str());
+			break;
+		case NOP_LIST_REMOVE:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
+			OutAsm("List Remove [%s].[%s]\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str());
+			break;
+
 		case NOP_VERIFY_TYPE:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("Verify [%s] %s\n", GetLog(funs, v, 1).c_str(), GetDataType((VAR_TYPE)v.n2).c_str());

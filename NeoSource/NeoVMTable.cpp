@@ -107,9 +107,14 @@ void TableInfo::Var_ReleaseInternal(CNeoVM* pVM, VarInfo *d)
 			pVM->FreeString(d);
 		d->_str = NULL;
 		break;
+	case VAR_LIST:
+		if (--d->_lst->_refCount <= 0)
+			pVM->FreeList(d->_lst);
+		d->_lst = NULL;
+		break;
 	case VAR_TABLE:
 		if (--d->_tbl->_refCount <= 0)
-			pVM->FreeTable(d);
+			pVM->FreeTable(d->_tbl);
 		d->_tbl = NULL;
 		break;
 	case VAR_COROUTINE:

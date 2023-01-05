@@ -60,6 +60,19 @@ struct neo_libs
 		return true;
 	}
 
+	static bool List_resize(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_LIST)
+			return false;
+		if (args != 1)
+			return false;
+
+		int size = pN->read<int>(1);
+
+		pVar->_lst->Resize(size);
+		return true;
+	}
+
 	static bool Math_abs(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1)
@@ -348,6 +361,7 @@ struct neo_libs
 //typedef bool(*TYPE_NeoLib)(CNeoVMWorker* pN, short args);
 typedef bool(*TYPE_NeoLib)(CNeoVMWorker* pN, VarInfo* pVar, short args);
 static std::map<std::string, TYPE_NeoLib> g_sNeoFunLib;
+static std::map<std::string, TYPE_NeoLib> g_sNeoFunLstLib;
 static std::map<std::string, TYPE_NeoLib> g_sNeoFunStrLib;
 static std::map<std::string, TYPE_NeoLib> g_sNeoFunTblLib;
 
@@ -365,6 +379,15 @@ static bool FunStr(CNeoVMWorker* pN, void* pUserData, const std::string& fun, sh
 {
 	auto it = g_sNeoFunStrLib.find(fun);
 	if (it == g_sNeoFunStrLib.end())
+		return false;
+
+	TYPE_NeoLib f = (*it).second;
+	return (*f)(pN, (VarInfo*)pUserData, args);
+}
+static bool FunLst(CNeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
+{
+	auto it = g_sNeoFunLstLib.find(fun);
+	if (it == g_sNeoFunLstLib.end())
 		return false;
 
 	TYPE_NeoLib f = (*it).second;
@@ -433,6 +456,9 @@ void CNeoVM::RegObjLibrary()
 	g_sNeoFunStrLib["sub"] = &neo_libs::Str_Substring;
 	g_sNeoFunStrLib["len"] = &neo_libs::Str_len;
 	g_sNeoFunStrLib["find"] = &neo_libs::Str_find;
+
+	_funLstLib = CNeoVM::RegisterNative(FunLst);
+	g_sNeoFunLstLib["resize"] = &neo_libs::List_resize;
 
 	_funTblLib = CNeoVM::RegisterNative(FunTbl);
 	g_sNeoFunTblLib["sort"] = &neo_libs::alg_sort;

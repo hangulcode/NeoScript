@@ -9,6 +9,7 @@ class CNeoVM
 {
 	friend					CNeoVMWorker;
 	friend					TableInfo;
+	friend					ListInfo;
 	friend					neo_libs;
 private:
 	u8 *					_pCodePtr;
@@ -23,8 +24,10 @@ private:
 	std::vector<VarInfo>	m_sVarGlobal;
 	std::vector<SFunctionTable> m_sFunctionPtr;
 
+	std::map<u32, ListInfo*> _sLists;
 	std::map<u32, TableInfo*> _sTables;
 	std::map<u32, StringInfo*> _sStrings;
+	u32 _dwLastIDList = 0;
 	u32 _dwLastIDTable = 0;
 	u32 _dwLastIDString = 0;
 	u32 _dwLastIDVMWorker = 0;
@@ -55,8 +58,10 @@ private:
 	void FreeString(VarInfo *d);
 
 	TableInfo* TableAlloc();
-	void FreeTable(VarInfo* d);
 	void FreeTable(TableInfo* tbl);
+
+	ListInfo* ListAlloc();
+	void FreeList(ListInfo* tbl);
 
 	int	 Coroutine_Create(int iFID);
 	int	 Coroutine_Resume(int iCID);
@@ -115,7 +120,7 @@ private:
 			break;
 		case VAR_TABLE:
 			if (--d->_tbl->_refCount <= 0)
-				FreeTable(d);
+				FreeTable(d->_tbl);
 			d->_tbl = NULL;
 			break;
 		case VAR_COROUTINE:
@@ -141,11 +146,13 @@ private:
 	
 	CNVMAllocPool < TableNode, 10> m_sPool_TableNode;
 	CNVMAllocPool< TableInfo, 10 > m_sPool_TableInfo;
+	CNVMAllocPool< ListInfo, 10 > m_sPool_ListInfo;
 
 	CNVMInstPool< StringInfo, 10 > m_sPool_String;
 	CNVMInstPool< CoroutineInfo, 10 > m_sPool_Coroutine;
 
 	FunctionPtrNative _funLib;
+	FunctionPtrNative _funLstLib;
 	FunctionPtrNative _funStrLib;
 	FunctionPtrNative _funTblLib;
 public:

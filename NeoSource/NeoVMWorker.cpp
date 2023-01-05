@@ -56,7 +56,7 @@ void CNeoVMWorker::Var_ReleaseInternal(VarInfo *d)
 		break;
 	case VAR_TABLE:
 		if (--d->_tbl->_refCount <= 0)
-			_pVM->FreeTable(d);
+			_pVM->FreeTable(d->_tbl);
 		d->_tbl = NULL;
 		break;
 	case VAR_COROUTINE:
@@ -144,7 +144,16 @@ void CNeoVMWorker::Var_SetTable(VarInfo *d, TableInfo* p)
 
 	d->SetType(VAR_TABLE);
 	d->_tbl = p;
-	++d->_tbl->_refCount;
+	++p->_refCount;
+}
+void CNeoVMWorker::Var_SetList(VarInfo *d, ListInfo* p)
+{
+	if (d->IsAllocType())
+		Var_Release(d);
+
+	d->SetType(VAR_LIST);
+	d->_lst = p;
+	++p->_refCount;
 }
 void CNeoVMWorker::Var_SetFun(VarInfo* d, int fun_index)
 {
@@ -1305,35 +1314,37 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				}
 				short n3 = OP.n3;
 				VarInfo* pFunName = GetVarPtr2(OP);
-				if (pVar1->GetType() != VAR_TABLE || pFunName->GetType() != VAR_STRING)
+				if (pVar1->GetType() == VAR_TABLE)
 				{
-					if (pVar1->GetType() == VAR_STRING)
+					VarInfo* pVarMeta = pVar1->_tbl->GetTableItem(pFunName);
+					if (pVarMeta != NULL)
 					{
-						CallNative(_pVM->_funStrLib, pVar1, pFunName, n3);
-						break;
+						if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n3))
+							_iSP_Vars_Max2 = iSP_VarsMax + (1 + n3);
+
+						if (pVarMeta->GetType() == VAR_FUN)
+						{
+							Call(pVarMeta->_fun_index, n3);
+							break;
+						}
 					}
-					SetError("Ptr Call Error");
-					break;
-				}
-				VarInfo* pVarMeta = GetTableItem(pVar1, pFunName);
-				if (pVarMeta == NULL)
-				{
 					FunctionPtrNative fun = pVar1->_tbl->_fun;
 					if (fun._func)
 					{
 						CallNative(fun, pVar1, pFunName, n3);
+						break;
 					}
-					else
-						CallNative(_pVM->_funTblLib, pVar1, pFunName, n3);
-					//SetError("Ptr Call Error");
-					break;
 				}
 
-				if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n3))
-					_iSP_Vars_Max2 = iSP_VarsMax + (1 + n3);
-
-				if(pVarMeta->GetType() == VAR_FUN)
-					Call(pVarMeta->_fun_index, n3);
+				if (pVar1->GetType() == VAR_TABLE)
+					CallNative(_pVM->_funTblLib, pVar1, pFunName, n3);
+				else if (pVar1->GetType() == VAR_LIST)
+					CallNative(_pVM->_funLstLib, pVar1, pFunName, n3);
+				else if (pVar1->GetType() == VAR_STRING)
+					CallNative(_pVM->_funStrLib, pVar1, pFunName, n3);
+				else
+					SetError("Ptr Call Error");
+				//SetError("Ptr Call Error");
 				break;
 			}
 			case NOP_PTRCALL2:
@@ -1430,6 +1441,35 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			case NOP_TABLE_PERSENT2:
 				TablePer2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
 				break;
+
+			case NOP_LIST_ALLOC:
+				Var_SetList(GetVarPtr1(OP), _pVM->ListAlloc());
+				break;
+/*			case NOP_LIST_READ:
+				TableRead(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+				break;*/
+			case NOP_LIST_REMOVE:
+				TableRemove(GetVarPtr1(OP), GetVarPtr2(OP));
+				break;
+			case NOP_LIST_MOV:
+				TableInsert(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+				break;
+/*			case NOP_LIST_ADD2:
+				TableAdd2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+				break;
+			case NOP_LIST_SUB2:
+				TableSub2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+				break;
+			case NOP_LIST_MUL2:
+				TableMul2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+				break;
+			case NOP_LIST_DIV2:
+				TableDiv2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+				break;
+			case NOP_LIST_PERSENT2:
+				TablePer2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+				break;*/
+
 			case NOP_VERIFY_TYPE:
 				VerifyType(GetVarPtr1(OP), (VAR_TYPE)OP.n2);
 				break;
@@ -1441,7 +1481,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			case NOP_NONE:
 				break;
 			default:
-				SetError("Unkonwn OP");
+				SetError("Unknown OP");
 				break;
 			}
 			if (_pVM->_bError)
