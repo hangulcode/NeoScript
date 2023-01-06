@@ -54,12 +54,13 @@ int main()
 		printf("1 table_callback\n");
 		printf("2 9_times\n");
 		printf("3 table\n");
-		printf("4 slice_run\n");
-		printf("5 time_limit\n");
-		printf("6 divide_by_zero\n");
-		printf("7 delegate\n");
-		printf("8 meta\n");
-		printf("9 coroutine\n");
+		printf("4 list\n");
+		printf("5 slice_run\n");
+		printf("6 time_limit\n");
+		printf("7 divide_by_zero\n");
+		printf("8 delegate\n");
+		printf("9 meta\n");
+		printf("10 coroutine\n");
 
 		printf("only enter to exit\n");
 		printf("\npress the number and enter ...\n");
@@ -76,16 +77,18 @@ int main()
 		else if (key == "3")
 			SAMPLE_etc("table.neo", "main");
 		else if (key == "4")
-			SAMPLE_slice_run();
+			SAMPLE_etc("list.neo", "main");
 		else if (key == "5")
-			SAMPLE_time_limit();
+			SAMPLE_slice_run();
 		else if (key == "6")
-			SAMPLE_etc("etc.neo", "divide_by_zero");
+			SAMPLE_time_limit();
 		else if (key == "7")
-			SAMPLE_etc("delegate.neo", "delegate");
+			SAMPLE_etc("etc.neo", "divide_by_zero");
 		else if (key == "8")
-			SAMPLE_etc("meta.neo", "meta");
+			SAMPLE_etc("delegate.neo", "delegate");
 		else if (key == "9")
+			SAMPLE_etc("meta.neo", "meta");
+		else if (key == "10")
 			SAMPLE_etc("coroutine.neo", "test");
 		system("pause");
 	}

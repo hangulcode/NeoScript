@@ -136,5 +136,8 @@
     <None Include="coroutine.neo">
       <Filter>Samples</Filter>
     </None>
+    <None Include="list.neo">
+      <Filter>Samples</Filter>
+    </None>
   </ItemGroup>
 </Project>

@@ -72,6 +72,16 @@ struct neo_libs
 		pVar->_lst->Resize(size);
 		return true;
 	}
+	static bool List_len(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_LIST)
+			return false;
+		if (args != 0)
+			return false;
+
+		pN->ReturnValue((int)pVar->_lst->GetCount());
+		return true;
+	}
 
 	static bool Math_abs(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
@@ -459,6 +469,7 @@ void CNeoVM::RegObjLibrary()
 
 	_funLstLib = CNeoVM::RegisterNative(FunLst);
 	g_sNeoFunLstLib["resize"] = &neo_libs::List_resize;
+	g_sNeoFunLstLib["len"] = &neo_libs::List_len;
 
 	_funTblLib = CNeoVM::RegisterNative(FunTbl);
 	g_sNeoFunTblLib["sort"] = &neo_libs::alg_sort;
