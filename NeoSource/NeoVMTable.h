@@ -58,33 +58,13 @@ struct TableInfo : AllocBase
 	VarInfo* GetTableItem(VarInfo *pKey);
 	VarInfo* GetTableItem(std::string& key);
 
-	TableIterator FirstNode();
-	bool NextNode(TableIterator&);
+	CollectionIterator FirstNode();
+	bool NextNode(CollectionIterator&);
 
 	bool ToList(std::vector<VarInfo*>& lst);
-	int		GetCount() 
-	{
-		return _itemCount;
-	}
+	inline int		GetCount() { return _itemCount; }
 
 private:
-	inline void Var_AddRef(VarInfo *d)
-	{
-		switch (d->GetType())
-		{
-		case VAR_STRING:
-			++d->_str->_refCount;
-			break;
-		case VAR_TABLE:
-			++d->_tbl->_refCount;
-			break;
-		case VAR_COROUTINE:
-			++d->_cor->_refCount;
-			break;
-		default:
-			break;
-		}
-	}
 	void Var_ReleaseInternal(CNeoVM* pVM, VarInfo *d);
 	inline void Var_Release(CNeoVM* pVM, VarInfo *d)
 	{

@@ -240,13 +240,10 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			argFlag = GetArgIndexToCode(&v.n1, &v.n2, nullptr);
-/*			switch (argFlag)
-			{
-			case 4 | 2: optype = NOP_MOV_LL; break;
-			case 4 | 0: optype = NOP_MOV_LG; break;
-			case 0 | 0: optype = NOP_MOV_GG; break;
-			case 0 | 2: optype = NOP_MOV_GL; break;
-			}*/
+			break;
+		case NOP_MOVI:
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			argFlag = GetArgIndexToCode(&v.n1, nullptr, nullptr);
 			break;
 		case NOP_MOV_MINUS:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
@@ -281,8 +278,8 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			//ar << optype << v.n1;
 			argFlag = GetArgIndexToCode(&v.n1, nullptr, nullptr);
 			break;
-		case NOP_TABLE_MOV:
-		case NOP_TABLE_READ:
+		case NOP_CLT_MOV:
+		case NOP_CLT_READ:
 		case NOP_TABLE_ADD2:
 		case NOP_TABLE_SUB2:
 		case NOP_TABLE_MUL2:
@@ -306,19 +303,19 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			//ar << optype << v.n1;
 			argFlag = GetArgIndexToCode(&v.n1, nullptr, nullptr);
 			break;
-		case NOP_LIST_MOV:
-/*		case NOP_LIST_READ:
+/*		case NOP_LIST_MOV:
+		case NOP_LIST_READ:
 		case NOP_LIST_ADD2:
 		case NOP_LIST_SUB2:
 		case NOP_LIST_MUL2:
 		case NOP_LIST_DIV2:
-		case NOP_LIST_PERSENT2:*/
+		case NOP_LIST_PERSENT2:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 
 			argFlag = GetArgIndexToCode(&v.n1, &v.n2, &v.n3);
-			break;
+			break;*/
 		case NOP_LIST_REMOVE:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
@@ -683,6 +680,10 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("MOV [%s] = [%s]\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str());
 			break;
+		case NOP_MOVI:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("MOVI [%s] = %d\n", GetLog(funs, v, 1).c_str(), v.n23);
+			break;
 		case NOP_MOV_MINUS:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("MOVI [%s] = -[%s]\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str());
@@ -711,9 +712,9 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
 			OutAsm("Table Alloc [%s]\n", GetLog(funs, v, 1).c_str());
 			break;
-		case NOP_TABLE_MOV:
+		case NOP_CLT_MOV:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("Table MOV [%s].[%s] = [%s]\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str(), GetLog(funs, v, 3).c_str());
+			OutAsm("MOV [%s].[%s] = [%s]\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str(), GetLog(funs, v, 3).c_str());
 			break;
 		case NOP_TABLE_ADD2:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
@@ -736,9 +737,9 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutAsm("Table PER [%s].[%s] %= [%s]\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str(), GetLog(funs, v, 3).c_str());
 			break;
 
-		case NOP_TABLE_READ:
+		case NOP_CLT_READ:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("Table Read [%s] = [%s].[%s]\n", GetLog(funs, v, 3).c_str(), GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str());
+			OutAsm("Read [%s] = [%s].[%s]\n", GetLog(funs, v, 3).c_str(), GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str());
 			break;
 		case NOP_TABLE_REMOVE:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
@@ -748,10 +749,6 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 		case NOP_LIST_ALLOC:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
 			OutAsm("List Alloc [%s]\n", GetLog(funs, v, 1).c_str());
-			break;
-		case NOP_LIST_MOV:
-			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("List MOV [%s].[%s] = [%s]\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str(), GetLog(funs, v, 3).c_str());
 			break;
 		case NOP_LIST_REMOVE:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);

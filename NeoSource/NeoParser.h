@@ -206,6 +206,13 @@ struct SFunctionInfo
 		_code->Write(&a2, sizeof(a2));
 		_code->Write(&a3, sizeof(a3));
 	}
+	void    Push_Arg(short a1, int a23)
+	{
+		ArgFlag arg = 0;//
+		_code->Write(&arg, sizeof(arg));
+		_code->Write(&a1, sizeof(a1));
+		_code->Write(&a23, sizeof(a23));
+	}
 	void	AddDebugData(CArchiveRdWC& ar)
 	{
 		if (ar._debug == false) return;
@@ -319,6 +326,17 @@ struct SFunctionInfo
 		//_code->Write(&r, sizeof(r));
 		//_code->Write(&s, sizeof(s));
 		Push_Arg(r, s, 0);
+	}
+	void	Push_MOVI(CArchiveRdWC& ar, eNOperation op, short r, int v)
+	{
+		AddDebugData(ar);
+		_iLastOPOffset = _code->GetBufferOffset();
+
+		OpType optype = GetOpTypeFromOp(op);
+		_code->Write(&optype, sizeof(optype));
+		//_code->Write(&r, sizeof(r));
+		//_code->Write(&s, sizeof(s));
+		Push_Arg(r, v);
 	}
 	void	Push_OP1(CArchiveRdWC& ar, eNOperation op, short r)
 	{
@@ -511,7 +529,7 @@ struct SFunctionInfo
 		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		OpType optype = GetOpTypeFromOp(NOP_TABLE_READ);
+		OpType optype = GetOpTypeFromOp(NOP_CLT_READ);
 		_code->Write(&optype, sizeof(optype));
 		//_code->Write(&nTable, sizeof(nTable));
 		//_code->Write(&nArray, sizeof(nArray));

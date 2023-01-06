@@ -23,16 +23,16 @@ struct ListInfo
 
 	void Free();
 	void Resize(int size);
+	void Reserve(int capa);
 
 
-//	TableIterator FirstNode();
-//	bool NextNode(TableIterator&);
+//	CollectionIterator FirstNode();
+//	bool NextNode(CollectionIterator&);
 
-	int		GetCount() 
-	{
-		return _itemCount;
-	}
-	void Insert(VarInfo* pValue);
+	inline int		GetCount() { return _itemCount; }
+	bool GetValue(int idx, VarInfo* pValue);
+	bool SetValue(int idx, VarInfo* pValue);
+	bool InsertLast(VarInfo* pValue);
 
 private:
 	inline void Var_AddRef(VarInfo *d)
@@ -44,6 +44,9 @@ private:
 			break;
 		case VAR_TABLE:
 			++d->_tbl->_refCount;
+			break;
+		case VAR_LIST:
+			++d->_lst->_refCount;
 			break;
 		case VAR_COROUTINE:
 			++d->_cor->_refCount;

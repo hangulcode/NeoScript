@@ -53,9 +53,9 @@ u32 GetHashCode(VarInfo *p)
 	return 0;
 }
 
-TableIterator TableInfo::FirstNode()
+CollectionIterator TableInfo::FirstNode()
 {
-	TableIterator r;
+	CollectionIterator r;
 	for (int iBucket = 0; iBucket < _BucketCapa; iBucket++)
 	{
 		TableBucket* pBucket = &_Bucket[iBucket];
@@ -63,38 +63,38 @@ TableIterator TableInfo::FirstNode()
 		TableNode*	pCur = pBucket->pFirst;
 		if(pCur)
 		{
-			r._pNode = pCur;
+			r._pTableNode = pCur;
 			return r;
 		}
 	}
-	r._pNode = NULL;
+	r._pTableNode = NULL;
 	return r;
 }
-bool TableInfo::NextNode(TableIterator& r)
+bool TableInfo::NextNode(CollectionIterator& r)
 {
-	if (r._pNode == NULL)
+	if (r._pTableNode == NULL)
 		return false;
 
 	{
-		TableNode*	pCur = r._pNode->pNext;
+		TableNode*	pCur = r._pTableNode->pNext;
 		if (pCur)
 		{
-			r._pNode = pCur;
+			r._pTableNode = pCur;
 			return true;
 		}
 	}
 
-	for (int iBucket = (r._pNode->hash & _HashBase) + 1; iBucket < _BucketCapa; iBucket++)
+	for (int iBucket = (r._pTableNode->hash & _HashBase) + 1; iBucket < _BucketCapa; iBucket++)
 	{
 		TableBucket* pBucket = &_Bucket[iBucket];
 
 		if(pBucket->pFirst)
 		{
-			r._pNode = pBucket->pFirst;
+			r._pTableNode = pBucket->pFirst;
 			return true;
 		}
 	}
-	r._pNode = NULL;
+	r._pTableNode = NULL;
 	return false;
 }
 
@@ -107,15 +107,15 @@ void TableInfo::Var_ReleaseInternal(CNeoVM* pVM, VarInfo *d)
 			pVM->FreeString(d);
 		d->_str = NULL;
 		break;
-	case VAR_LIST:
-		if (--d->_lst->_refCount <= 0)
-			pVM->FreeList(d->_lst);
-		d->_lst = NULL;
-		break;
 	case VAR_TABLE:
 		if (--d->_tbl->_refCount <= 0)
 			pVM->FreeTable(d->_tbl);
 		d->_tbl = NULL;
+		break;
+	case VAR_LIST:
+		if (--d->_lst->_refCount <= 0)
+			pVM->FreeList(d->_lst);
+		d->_lst = NULL;
 		break;
 	case VAR_COROUTINE:
 		if (--d->_cor->_refCount <= 0)

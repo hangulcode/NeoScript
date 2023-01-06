@@ -59,6 +59,11 @@ void CNeoVMWorker::Var_ReleaseInternal(VarInfo *d)
 			_pVM->FreeTable(d->_tbl);
 		d->_tbl = NULL;
 		break;
+	case VAR_LIST:
+		if (--d->_lst->_refCount <= 0)
+			_pVM->FreeList(d->_lst);
+		d->_lst = NULL;
+		break;
 	case VAR_COROUTINE:
 		if (--d->_cor->_refCount <= 0)
 			_pVM->FreeCoroutine(d);
@@ -164,21 +169,30 @@ void CNeoVMWorker::Var_SetFun(VarInfo* d, int fun_index)
 	d->_fun_index = fun_index;
 }
 
-void CNeoVMWorker::TableInsert(VarInfo *pTable, VarInfo *pKey, VarInfo *pValue)
+void CNeoVMWorker::CltInsert(VarInfo *pClt, VarInfo *pKey, VarInfo *pValue)
 {
-	if (pTable->GetType() != VAR_TABLE)
+	switch (pClt->GetType())
 	{
-		SetError("TableInsert Error");
+	case VAR_TABLE:
+		if (pValue->GetType() == VAR_NONE)
+		{
+			TableRemove(pClt, pKey);
+			return;
+		}
+		pClt->_tbl->Insert(pKey, pValue);
+		break;
+	case VAR_LIST:
+		if (pKey->GetType() != VAR_INT)
+		{
+			SetError("Collision Insert Error");
+			return;
+		}
+		pClt->_lst->SetValue(pKey->_int, pValue);
+		break;
+	default:
+		SetError("Collision Insert Error");
 		return;
 	}
-
-	if (pValue->GetType() == VAR_NONE)
-	{
-		TableRemove(pTable, pKey);
-		return;
-	}
-
-	pTable->_tbl->Insert(pKey, pValue);
 }
 VarInfo* CNeoVMWorker::GetTableItem(VarInfo *pTable, VarInfo *pKey)
 {
@@ -198,13 +212,31 @@ VarInfo* CNeoVMWorker::GetTableItemValid(VarInfo *pTable, VarInfo *pKey)
 	SetError("Table Key Not Found");
 	return NULL;
 }
-void CNeoVMWorker::TableRead(VarInfo *pTable, VarInfo *pKey, VarInfo *pValue)
+void CNeoVMWorker::CltRead(VarInfo *pClt, VarInfo *pKey, VarInfo *pValue)
 {
-	VarInfo *pFind = GetTableItem(pTable, pKey);
-	if (pFind)
-		Move(pValue, pFind);
-	else
-		Var_Release(pValue);
+	VarInfo *pFind;
+	switch (pClt->GetType())
+	{
+	case VAR_TABLE:
+		pFind = GetTableItem(pClt, pKey);
+		if (pFind)
+			Move(pValue, pFind);
+		else
+			Var_Release(pValue);
+		break;
+	case VAR_LIST:
+		if (pKey->GetType() != VAR_INT)
+		{
+			SetError("Collision Read Error");
+			return;
+		}
+		if(false == pClt->_lst->GetValue(pKey->_int, pValue))
+			SetError("Collision Read Error");
+		break;
+	default:
+		SetError("Collision Read Error");
+		return;
+	}
 }
 
 void CNeoVMWorker::TableRemove(VarInfo *pTable, VarInfo *pKey)
@@ -708,41 +740,75 @@ bool CNeoVMWorker::For(VarInfo* pCur)
 	}
 	return false;
 }
-bool CNeoVMWorker::ForEach(VarInfo* pTable, VarInfo* pKey)
+bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 {
 	VarInfo* pValue = pKey + 1;
 	VarInfo* pIterator = pKey + 2;
-	if (pTable->GetType() != VAR_TABLE)
+
+	TableInfo* tbl;
+	TableNode* n;
+	ListInfo* lst;
+
+	switch (pClt->GetType())
 	{
-		SetError("foreach table Error");
-		return false;
-	}
-	TableInfo* tbl = pTable->_tbl;
-	if (pIterator->GetType() != VAR_ITERATOR)
-	{
-		if (0 < tbl->GetCount())
+	case VAR_TABLE:
+		tbl = pClt->_tbl;
+		if (pIterator->GetType() != VAR_ITERATOR)
 		{
-			pIterator->_it = tbl->FirstNode();
-			pIterator->SetType(VAR_ITERATOR);
+			if (0 < tbl->GetCount())
+			{
+				pIterator->_it = tbl->FirstNode();
+				pIterator->SetType(VAR_ITERATOR);
+			}
+			else
+				return false;
 		}
 		else
-			return false;
-	}
-	else
-		tbl->NextNode(pIterator->_it);
+			tbl->NextNode(pIterator->_it);
 
-	TableNode* n = pIterator->_it._pNode;
-	if (n)
-	{
-		Move(pKey, &n->key);
-		Move(pValue, &n->value);
-		return true;
+		n = pIterator->_it._pTableNode;
+		if (n)
+		{
+			Move(pKey, &n->key);
+			Move(pValue, &n->value);
+			return true;
+		}
+		else
+		{
+			pIterator->ClearType();
+			return false;
+		}
+		break;
+	case VAR_LIST:
+		lst = pClt->_lst;
+		if (pIterator->GetType() != VAR_ITERATOR)
+		{
+			if (0 < lst->GetCount())
+			{
+				pIterator->_it._iListOffset = 0;
+				pIterator->SetType(VAR_ITERATOR);
+			}
+			else
+				return false;
+		}
+		else
+			++pIterator->_it._iListOffset;
+
+		if (pIterator->_it._iListOffset < lst->GetCount())
+		{
+			lst->GetValue(pIterator->_it._iListOffset, pKey);
+			//Move(pValue, &n->value);
+			return true;
+		}
+		else
+		{
+			pIterator->ClearType();
+			return false;
+		}
+		break;
 	}
-	else
-	{
-		pIterator->ClearType();
-		return false;
-	}
+	SetError("foreach table Error");
+	return false;
 
 //	SetError("foreach table key Error");
 //	return false;
@@ -1123,6 +1189,9 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			case NOP_MOV:
 				Move(GetVarPtr1(OP), GetVarPtr2(OP));
 				break;
+			case NOP_MOVI:
+				MoveI(GetVarPtr1(OP), OP.n23);
+				break;
 
 			case NOP_MOV_MINUS:
 				MoveMinus(GetVarPtr1(OP), GetVarPtr2(OP));
@@ -1417,14 +1486,14 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			case NOP_TABLE_ALLOC:
 				Var_SetTable(GetVarPtr1(OP), _pVM->TableAlloc());
 				break;
-			case NOP_TABLE_READ:
-				TableRead(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+			case NOP_CLT_READ:
+				CltRead(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
 				break;
 			case NOP_TABLE_REMOVE:
 				TableRemove(GetVarPtr1(OP), GetVarPtr2(OP));
 				break;
-			case NOP_TABLE_MOV:
-				TableInsert(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+			case NOP_CLT_MOV:
+				CltInsert(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
 				break;
 			case NOP_TABLE_ADD2:
 				TableAdd2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
@@ -1451,10 +1520,10 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			case NOP_LIST_REMOVE:
 				TableRemove(GetVarPtr1(OP), GetVarPtr2(OP));
 				break;
-			case NOP_LIST_MOV:
+/*			case NOP_LIST_MOV:
 				TableInsert(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
 				break;
-/*			case NOP_LIST_ADD2:
+			case NOP_LIST_ADD2:
 				TableAdd2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
 				break;
 			case NOP_LIST_SUB2:

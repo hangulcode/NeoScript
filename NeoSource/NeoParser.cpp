@@ -102,7 +102,7 @@ eNOperation GetTableOpTypeFromOp(eNOperation op)
 {
 	switch (op)
 	{
-	case NOP_MOV: op = NOP_TABLE_MOV; break;
+	case NOP_MOV: op = NOP_CLT_MOV; break;
 	case NOP_ADD2: op = NOP_TABLE_ADD2; break;
 	case NOP_SUB2: op = NOP_TABLE_SUB2; break;
 	case NOP_MUL2: op = NOP_TABLE_MUL2; break;
@@ -116,7 +116,7 @@ eNOperation GetListOpTypeFromOp(eNOperation op)
 {
 	switch (op)
 	{
-	case NOP_MOV: op = NOP_LIST_MOV; break;
+	case NOP_MOV: op = NOP_CLT_MOV; break;
 	default: break;
 	}
 	return g_sOpInfo[op]._opType;
@@ -223,6 +223,7 @@ int InitDefaultTokenString()
 
 	OP_STR1(NOP_NONE, 0);
 	OP_STR1(NOP_MOV, 2);
+	OP_STR1(NOP_MOVI, 3);
 	OP_STR1(NOP_MOV_MINUS, 2);
 	OP_STR1(NOP_ADD2, 2);
 	OP_STR1(NOP_SUB2, 2);
@@ -282,9 +283,9 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_FUNEND, 0);
 
 	OP_STR1(NOP_TABLE_ALLOC, 1);
-	OP_STR1(NOP_TABLE_READ, 3);
+	OP_STR1(NOP_CLT_READ, 3);
 	OP_STR1(NOP_TABLE_REMOVE, 2);
-	OP_STR1(NOP_TABLE_MOV, 3);
+	OP_STR1(NOP_CLT_MOV, 3);
 	OP_STR1(NOP_TABLE_ADD2, 3);
 	OP_STR1(NOP_TABLE_SUB2, 3);
 	OP_STR1(NOP_TABLE_MUL2, 3);
@@ -293,7 +294,6 @@ int InitDefaultTokenString()
 
 	OP_STR1(NOP_LIST_ALLOC, 1);
 	OP_STR1(NOP_LIST_REMOVE, 2);
-	OP_STR1(NOP_LIST_MOV, 3);
 
 	OP_STR1(NOP_VERIFY_TYPE, 2);
 	OP_STR1(NOP_YIELD, 1);
@@ -912,10 +912,21 @@ TK_TYPE ParseListDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVar
 	iResultStack = funs._cur.AllocLocalTempVar();
 	funs._cur.Push_ListAlloc(ar, iResultStack);
 
+	//int iStack = funs._cur.AllocLocalTempVar();
+	funs._cur.Push_MOVI(ar, NOP_MOVI, COMPILE_CALLARG_VAR_BEGIN + 1 + 0, 0);
+	int off = funs._cur._code->GetBufferOffset() - (sizeof(short) * 2);
+
 	// PCALL [S.3].[G.6 'resize'] arg:0 ==> resize force call
 	int iStaticString = funs.AddStaticString("resize");
 	// funs.AddStaticInt(); // 이부분은 임시로 Temp 저장 하고 배열 갯수를 아래서 구한후 다시 over write 한다.
-	funs._cur.Push_CallPtr(ar, iResultStack, iStaticString, 1);
+	funs._cur.Push_CallPtr(ar, iResultStack, iStaticString, 1); // list resize
+
+	//funs._cur.Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
+	//SJumpValue jmp1(funs._cur._code->GetBufferOffset() - (sizeof(short) * 1), funs._cur._code->GetBufferOffset());
+	//int PosLoopTop = funs._cur._code->GetBufferOffset(); // Loop 의 맨위
+
+
+
 
 	int iTempOffsetKey;
 	int iTempOffsetValue;
@@ -978,7 +989,7 @@ TK_TYPE ParseListDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVar
 			return TK_NONE;
 		}
 
-		funs._cur.Push_List_MASMDP(ar, NOP_LIST_MOV, iResultStack, iTempOffsetKey, iTempOffsetValue);
+		funs._cur.Push_List_MASMDP(ar, NOP_CLT_MOV, iResultStack, iTempOffsetKey, iTempOffsetValue);
 
 		tkType2 = GetToken(ar, tk2);
 		if (tkType2 == TK_R_ARRAY)
@@ -998,6 +1009,8 @@ TK_TYPE ParseListDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVar
 			return TK_NONE;
 		}
 	}
+
+	*((int*)((u8*)funs._cur._code->GetData() + off)) = iCurArrayOffset;
 
 	return tkType1;
 }
@@ -1072,7 +1085,7 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 			return TK_NONE;
 		}
 
-		funs._cur.Push_Table_MASMDP(ar, NOP_TABLE_MOV, iResultStack, iTempOffsetKey, iTempOffsetValue);
+		funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack, iTempOffsetKey, iTempOffsetValue);
 
 		tkType2 = GetToken(ar, tk2);
 		if (tkType2 == TK_R_MIDDLE)
@@ -2176,20 +2189,31 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	if(iKey < 0)
 		return false;
 
+	int iValue = -1;
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_COMMA) // ,
 	{
-		SetCompileError(ar, "Error (%d, %d): foreach 'comma' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
-		return false;
+		if (tkType1 == TK_STRING && tk1 == "in")
+		{
+			iValue = AddLocalVarName(ar, funs, vars, "^_#@_temp_value_", false);
+			ar.PushToken(tkType1, tk1);
+		}
+		else
+		{
+			SetCompileError(ar, "Error (%d, %d): foreach 'comma' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+			return false;
+		}
 	}
-
-	tkType1 = GetToken(ar, tk1);
-	if (tkType1 != TK_STRING) // value
+	else
 	{
-		SetCompileError(ar, "Error (%d, %d): foreach 'value' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
-		return false;
+		tkType1 = GetToken(ar, tk1);
+		if (tkType1 != TK_STRING) // value
+		{
+			SetCompileError(ar, "Error (%d, %d): foreach 'value' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+			return false;
+		}
+		iValue = AddLocalVarName(ar, funs, vars, tk1);
 	}
-	int iValue = AddLocalVarName(ar, funs, vars, tk1);
 	if (iValue < 0)
 		return false;
 
@@ -2200,7 +2224,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 
 	// Iterator를 저장할 임시 자동 생성 변수
-	int iIterator = AddLocalVarName(ar, funs, vars, tk1 + "^_#@_temp_", false);
+	int iIterator = AddLocalVarName(ar, funs, vars, tk1 + "^_#@_temp_it_", false);
 	if (iIterator < 0)
 		return false;
 

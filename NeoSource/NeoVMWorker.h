@@ -24,6 +24,7 @@ typedef u8	ArgFlag;
 enum eNOperation : OpType
 {
 	NOP_MOV,
+	NOP_MOVI,
 
 	NOP_MOV_MINUS,
 	NOP_ADD2,
@@ -85,9 +86,9 @@ enum eNOperation : OpType
 	NOP_FUNEND,
 
 	NOP_TABLE_ALLOC,
-	NOP_TABLE_READ,
+	NOP_CLT_READ,
 	NOP_TABLE_REMOVE,
-	NOP_TABLE_MOV,
+	NOP_CLT_MOV,
 	NOP_TABLE_ADD2,
 	NOP_TABLE_SUB2,
 	NOP_TABLE_MUL2,
@@ -96,7 +97,6 @@ enum eNOperation : OpType
 
 	NOP_LIST_ALLOC,
 	NOP_LIST_REMOVE,
-	NOP_LIST_MOV,
 
 	NOP_VERIFY_TYPE,
 	NOP_YIELD,
@@ -118,7 +118,17 @@ struct SVMOperation
 {
 	eNOperation	  op;
 	u8		argFlag;
-	short	n1, n2, n3;
+	short	n1;
+
+	union
+	{
+		struct
+		{
+			short	n2;
+			short	n3;
+		};
+		int	n23;
+	};
 };
 #pragma pack()
 
@@ -193,9 +203,13 @@ struct TableNode;
 struct ListInfo;
 
 #pragma pack(1)
-struct TableIterator
+struct CollectionIterator
 {
-	TableNode*	_pNode;
+	union
+	{
+		TableNode*	_pTableNode;
+		int			_iListOffset;
+	};
 };
 #pragma pack()
 
@@ -219,7 +233,7 @@ public:
 		int			_int;
 		double		_float;
 		int			_fun_index;
-		TableIterator	_it;
+		CollectionIterator	_it;
 	};
 
 	VarInfo()
@@ -470,6 +484,10 @@ public:
 			v1->_tbl = v2->_tbl;
 			++v1->_tbl->_refCount;
 			break;
+		case VAR_LIST:
+			v1->_lst = v2->_lst;
+			++v1->_lst->_refCount;
+			break;
 		case VAR_COROUTINE:
 			v1->_cor = v2->_cor;
 			++v1->_cor->_refCount;
@@ -480,6 +498,14 @@ public:
 		default:
 			break;
 		}
+	}
+	inline void MoveI(VarInfo* v1, int v)
+	{
+		if (v1->IsAllocType())
+			Var_Release(v1);
+
+		v1->SetType(VAR_INT);
+		v1->_int = v;
 	}
 	void Swap(VarInfo* v1, VarInfo* v2);
 private:
@@ -513,8 +539,8 @@ private:
 	int ToSize(VarInfo* v1);
 	VarInfo* GetType(VarInfo* v1);
 
-	void TableInsert(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);
-	void TableRead(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue);
+	void CltInsert(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
+	void CltRead(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
 	void TableRemove(VarInfo *pTable, VarInfo *pArray);
 	VarInfo* GetTableItem(VarInfo *pTable, VarInfo *pArray);
 	VarInfo* GetTableItemValid(VarInfo *pTable, VarInfo *pArray);
