@@ -1,16 +1,20 @@
 
 export fun main()
 {
-	var tableNumber = [ 5, 3, 1, 4, 7, 2 ];
+	var List1 = [ 5, 3, 1, 4, 7, 2 ];
+	var List2 = [ 3, 9, 6, 7 ];
 
-	for(var i in 0, tableNumber.len(), 1)
-	{
-		print(tostring(tableNumber[i]));
-	}
+	for(var i in 0, List1.len(), 1)
+		print(tostring(List1[i]));
 
-	foreach(var k in tableNumber)
-	{
+	print("\n");
+
+	foreach(var k in List2)
 		print(tostring(k));
-	}
-	return 1;
+
+	var List3 = List1 + List2;
+
+	print("\n");
+	foreach(var k in List3)
+		print(tostring(k));
 }

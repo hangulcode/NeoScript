@@ -377,8 +377,8 @@ void TableInfo::Insert(VarInfo* pKey, VarInfo* pValue)
 		_itemCount++;
 
 		TableNode* pNew = _pVM->m_sPool_TableNode.Receive();
-		_pVM->Move_DestNoRelease(&pNew->key, pKey);
-		_pVM->Move_DestNoRelease(&pNew->value, pValue);
+		CNeoVMWorker::Move_DestNoRelease(&pNew->key, pKey);
+		CNeoVMWorker::Move_DestNoRelease(&pNew->value, pValue);
 		pNew->hash = hash;
 
 		pBucket->Add_NoCheck(pNew);

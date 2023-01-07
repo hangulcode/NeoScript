@@ -93,6 +93,9 @@
     <ClInclude Include="..\..\NeoSource\NeoVMList.h">
       <Filter>NeoScript</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\NeoSource\NeoLibDCall.h">
+      <Filter>NeoScript</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="NeoScript">

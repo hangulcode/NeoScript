@@ -5,6 +5,7 @@
 #include "NeoVM.h"
 #include "NeoVMWorker.h"
 #include "NeoArchive.h"
+#include "NeoLibDCall.h"
 
 void	SetCompileError(const char*	lpszString, ...);
 
@@ -484,6 +485,10 @@ void CNeoVMWorker::Add(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		break;
 	case VAR_TABLE:
 		if(Call_MetaTable(v1, g_meta_Add3, r, v1, v2))
+			return;
+		break;
+	case VAR_LIST:
+		if(neo_DCalllibs::List_Plus(this, r, v1, v2))
 			return;
 		break;
 	}
@@ -1400,17 +1405,17 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 					FunctionPtrNative fun = pVar1->_tbl->_fun;
 					if (fun._func)
 					{
-						CallNative(fun, pVar1, pFunName, n3);
+						CallNative(fun, pVar1, pFunName->_str->_str, n3);
 						break;
 					}
 				}
 
 				if (pVar1->GetType() == VAR_TABLE)
-					CallNative(_pVM->_funTblLib, pVar1, pFunName, n3);
+					CallNative(_pVM->_funTblLib, pVar1, pFunName->_str->_str, n3);
 				else if (pVar1->GetType() == VAR_LIST)
-					CallNative(_pVM->_funLstLib, pVar1, pFunName, n3);
+					CallNative(_pVM->_funLstLib, pVar1, pFunName->_str->_str, n3);
 				else if (pVar1->GetType() == VAR_STRING)
-					CallNative(_pVM->_funStrLib, pVar1, pFunName, n3);
+					CallNative(_pVM->_funStrLib, pVar1, pFunName->_str->_str, n3);
 				else
 					SetError("Ptr Call Error");
 				//SetError("Ptr Call Error");
@@ -1422,7 +1427,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				VarInfo* pFunName = GetVarPtr2(OP);
 				if (pFunName->GetType() == VAR_STRING)
 				{
-					CallNative(_pVM->_funLib, NULL, pFunName, n3);
+					CallNative(_pVM->_funLib, NULL, pFunName->_str->_str, n3);
 //					SetError("Ptr Call Error");
 					break;
 				}
@@ -1758,8 +1763,7 @@ bool CNeoVMWorker::testCall(VarInfo** r, int iFID, VarInfo* args[], int argc)
 	_isSetup = true;
 	return true;
 }
-
-bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFunObj, VarInfo* pFunName, int n3)
+bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFunObj, const std::string& fname, int n3)
 {
 	Neo_NativeFunction func = functionPtrNative._func;
 	if (func == NULL)
@@ -1767,29 +1771,24 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFun
 		SetError("Ptr Call Error");
 		return false;
 	}
-		int iSave = _iSP_Vars;
-		_iSP_Vars = iSP_VarsMax;
-		if (_iSP_Vars_Max2 < iSP_VarsMax + 1 + n3) // ??????? 이렇게 하면 맞나? 흠...
-			_iSP_Vars_Max2 = iSP_VarsMax + 1 + n3;
+	int iSave = _iSP_Vars;
+	_iSP_Vars = iSP_VarsMax;
+	if (_iSP_Vars_Max2 < iSP_VarsMax + 1 + n3) // ??????? 이렇게 하면 맞나? 흠...
+		_iSP_Vars_Max2 = iSP_VarsMax + 1 + n3;
 
-		if ((func)(this, pFunObj, pFunName->_str->_str, n3) == false)
-		{
-			SetError("Ptr Call Error");
-			return false;
-		}
-		if (m_pRegisterActive == NULL)
-			_iSP_Vars = iSave;
-		else
-			StartCoroutione(iSave, n3);
-	//	break;
-	//}
-	//else
-	//{
-	//	SetError("Ptr Call Not Found");
-	//	break;
-	//}	
+	if ((func)(this, pFunObj, fname, n3) == false)
+	{
+		SetError("Ptr Call Error");
+		return false;
+	}
+	if (m_pRegisterActive == NULL)
+		_iSP_Vars = iSave;
+	else
+		StartCoroutione(iSave, n3);
+
 	return true;
 }
+
 bool CNeoVMWorker::VerifyType(VarInfo *p, VAR_TYPE t)
 {
 	if (p->GetType() == t)

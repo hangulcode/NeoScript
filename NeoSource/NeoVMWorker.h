@@ -351,6 +351,7 @@ enum eNeoDefaultString
 	NDF_MAX
 };
 
+struct neo_DCalllibs;
 struct neo_libs;
 class CNeoVM;
 class CNeoVMWorker
@@ -359,6 +360,7 @@ class CNeoVMWorker
 	friend		SVarWrapper;
 	friend		TableInfo;
 	friend		neo_libs;
+	friend		neo_DCalllibs;
 private:
 	u8 *					_pCodeCurrent;
 	u8 *					_pCodeBegin;
@@ -507,6 +509,41 @@ public:
 		v1->SetType(VAR_INT);
 		v1->_int = v;
 	}
+	inline static void Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
+	{
+		v1->SetType(v2->GetType());
+		switch (v2->GetType())
+		{
+		case VAR_NONE:
+			break;
+		case VAR_BOOL:
+			v1->_bl = v2->_bl;
+			break;
+		case VAR_INT:
+			v1->_int = v2->_int;
+			break;
+		case VAR_FLOAT:
+			v1->_float = v2->_float;
+			break;
+		case VAR_STRING:
+			v1->_str = v2->_str;
+			++v1->_str->_refCount;
+			break;
+		case VAR_TABLE:
+			v1->_tbl = v2->_tbl;
+			++v1->_tbl->_refCount;
+			break;
+		case VAR_COROUTINE:
+			v1->_cor = v2->_cor;
+			++v1->_cor->_refCount;
+			break;
+		case VAR_FUN:
+			v1->_fun_index = v2->_fun_index;
+			break;
+		default:
+			break;
+		}
+	}
 	void Swap(VarInfo* v1, VarInfo* v2);
 private:
 	void MoveMinus(VarInfo* v1, VarInfo* v2);
@@ -531,7 +568,8 @@ private:
 	void Call(int n1, int n2, VarInfo* pReturnValue = NULL);
 	bool Call_MetaTable(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, VarInfo* b);
 	bool Call_MetaTable2(VarInfo* pTable, std::string&, VarInfo* a, VarInfo* b);
-	bool CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFunObj, VarInfo* pFunName, int n3);
+
+	bool CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFunObj, const std::string& fname, int n3);
 
 	std::string ToString(VarInfo* v1);
 	int ToInt(VarInfo* v1);

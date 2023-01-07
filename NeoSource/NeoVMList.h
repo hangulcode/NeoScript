@@ -34,6 +34,7 @@ struct ListInfo
 	bool SetValue(int idx, VarInfo* pValue);
 	bool InsertLast(VarInfo* pValue);
 
+	inline VarInfo* GetDataUnsafe() { return _Bucket; }
 private:
 	inline void Var_AddRef(VarInfo *d)
 	{

@@ -4,6 +4,7 @@
 #include "NeoVMMemoryPool.h"
 
 struct neo_libs;
+struct neo_DCalllibs;;
 class CNArchive;
 class CNeoVM
 {
@@ -11,6 +12,7 @@ class CNeoVM
 	friend					TableInfo;
 	friend					ListInfo;
 	friend					neo_libs;
+	friend					neo_DCalllibs;
 private:
 	u8 *					_pCodePtr;
 	int						_iCodeLen;
@@ -67,47 +69,13 @@ private:
 	int	 Coroutine_Resume(int iCID);
 	int	 Coroutine_Destroy(int iCID);
 
-	inline void Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
-	{
-		v1->SetType(v2->GetType());
-		switch (v2->GetType())
-		{
-		case VAR_NONE:
-			break;
-		case VAR_BOOL:
-			v1->_bl = v2->_bl;
-			break;
-		case VAR_INT:
-			v1->_int = v2->_int;
-			break;
-		case VAR_FLOAT:
-			v1->_float = v2->_float;
-			break;
-		case VAR_STRING:
-			v1->_str = v2->_str;
-			++v1->_str->_refCount;
-			break;
-		case VAR_TABLE:
-			v1->_tbl = v2->_tbl;
-			++v1->_tbl->_refCount;
-			break;
-		case VAR_COROUTINE:
-			v1->_cor = v2->_cor;
-			++v1->_cor->_refCount;
-			break;
-		case VAR_FUN:
-			v1->_fun_index = v2->_fun_index;
-			break;
-		default:
-			break;
-		}
-	}
+
 
 	inline void Move(VarInfo* v1, VarInfo* v2)
 	{
 		if (v1->IsAllocType())
 			Var_Release(v1);
-		Move_DestNoRelease(v1, v2);
+		CNeoVMWorker::Move_DestNoRelease(v1, v2);
 	}
 	void Var_ReleaseInternal(VarInfo *d)
 	{
@@ -169,6 +137,7 @@ public:
 	void RegLibrary(VarInfo* pSystem, const char* pLibName);// , SNeoFunLib* pFuns);
 	void RegObjLibrary();
 	void InitLib();
+	void CallStatic(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	bool Init(void* pBuffer, int iSize, int iStackSize);
 	inline void SetError(const char* pErrMsg);
 	inline bool IsLocalErrorMsg() { return _bError; }

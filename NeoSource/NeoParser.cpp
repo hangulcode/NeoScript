@@ -912,20 +912,12 @@ TK_TYPE ParseListDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVar
 	iResultStack = funs._cur.AllocLocalTempVar();
 	funs._cur.Push_ListAlloc(ar, iResultStack);
 
-	//int iStack = funs._cur.AllocLocalTempVar();
 	funs._cur.Push_MOVI(ar, NOP_MOVI, COMPILE_CALLARG_VAR_BEGIN + 1 + 0, 0);
 	int off = funs._cur._code->GetBufferOffset() - (sizeof(short) * 2);
 
-	// PCALL [S.3].[G.6 'resize'] arg:0 ==> resize force call
+	// PCALL [S.??].[G.?? 'resize'] arg:0 ==> resize force call
 	int iStaticString = funs.AddStaticString("resize");
-	// funs.AddStaticInt(); // 이부분은 임시로 Temp 저장 하고 배열 갯수를 아래서 구한후 다시 over write 한다.
 	funs._cur.Push_CallPtr(ar, iResultStack, iStaticString, 1); // list resize
-
-	//funs._cur.Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
-	//SJumpValue jmp1(funs._cur._code->GetBufferOffset() - (sizeof(short) * 1), funs._cur._code->GetBufferOffset());
-	//int PosLoopTop = funs._cur._code->GetBufferOffset(); // Loop 의 맨위
-
-
 
 
 	int iTempOffsetKey;
