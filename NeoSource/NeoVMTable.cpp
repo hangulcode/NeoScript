@@ -159,17 +159,6 @@ void TableInfo::Free()
 	_BucketCapa = _HashBase = 0;
 	_itemCount = 0;
 }
-
-void TableInfo::Insert(std::string& Key, VarInfo* pValue)
-{
-	VarInfo var;
-	var.SetType(VAR_STRING);
-	var._str = _pVM->StringAlloc(Key);
-	VarInfo* pKey = &var;
-
-	Insert(&var, pValue);
-}
-
 bool	TableBucket::Pop_Used(TableNode* pTar)
 {
 	TableNode* pCur = pFirst;
@@ -322,7 +311,7 @@ TableNode* TableBucket::Find(VarInfo* pKey, u32 hash)
 
 
 //int g_MaxList = 0;
-void TableInfo::Insert(VarInfo* pKey, VarInfo* pValue)
+VarInfo* TableInfo::Insert(VarInfo* pKey)
 {
 	if (_itemCount >= _BucketCapa * 4)
 	{
@@ -378,16 +367,54 @@ void TableInfo::Insert(VarInfo* pKey, VarInfo* pValue)
 
 		TableNode* pNew = _pVM->m_sPool_TableNode.Receive();
 		CNeoVMWorker::Move_DestNoRelease(&pNew->key, pKey);
-		CNeoVMWorker::Move_DestNoRelease(&pNew->value, pValue);
+		pNew->value.ClearType();
+		//CNeoVMWorker::Move_DestNoRelease(&pNew->value, pValue);
 		pNew->hash = hash;
 
 		pBucket->Add_NoCheck(pNew);
+		return &pNew->value;
 	}
 	else // Replace
 	{
-		_pVM->Move(&pFindNode->value, pValue);
+		//_pVM->Move(&pFindNode->value, pValue);
+		return &pFindNode->value;
 	}
 }
+void TableInfo::Insert(std::string& Key, VarInfo* pValue)
+{
+	VarInfo var;
+	var.SetType(VAR_STRING);
+	var._str = _pVM->StringAlloc(Key);
+	VarInfo* pKey = &var;
+
+	Insert(&var, pValue);
+}
+void TableInfo::Insert(VarInfo* pKey, VarInfo* pValue)
+{
+	VarInfo* pDest = Insert(pKey);
+	if (pDest == NULL) return;
+	_pVM->Move(pDest, pValue);
+}
+void TableInfo::Insert(VarInfo* pKey, int v)
+{
+	VarInfo* pDest = Insert(pKey);
+	if (pDest == NULL) return;
+	pDest->SetType(VAR_INT);
+	pDest->_int = v;
+}
+void TableInfo::Insert(int Key, int v)
+{
+	VarInfo var;
+	var.SetType(VAR_INT);
+	var._int = Key;
+	VarInfo* pKey = &var;
+
+	VarInfo* pDest = Insert(pKey);
+	if (pDest == NULL) return;
+	pDest->SetType(VAR_INT);
+	pDest->_int = v;
+}
+
 void TableInfo::Remove(VarInfo* pKey)
 {
 	if (_BucketCapa <= 0)

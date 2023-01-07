@@ -110,6 +110,17 @@ bool ListInfo::SetValue(int idx, VarInfo* pValue)
 	_pVM->Move(&_Bucket[idx], pValue);
 	return true;
 }
+bool ListInfo::SetValue(int idx, int v)
+{
+	if (idx < 0 || idx > _itemCount)
+		return false;
+	if (_Bucket[idx].IsAllocType())
+		_pVM->Var_Release(&_Bucket[idx]);
+	_Bucket[idx].SetType(VAR_INT);
+	_Bucket[idx]._int = v;
+	return true;
+}
+
 bool ListInfo::InsertLast(VarInfo* pValue)
 {
 	if (_itemCount + 1 >= _BucketCapa)

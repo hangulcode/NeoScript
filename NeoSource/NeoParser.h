@@ -12,6 +12,7 @@
 #define COMPILE_CALLARG_VAR_BEGIN		(30000) // 256 개 이상 나오지 않는다.
 //#define COMPILE_VAR_NULL				(32766)
 #define STACK_POS_RETURN				(32767)
+#define COMPILE_VAR_MAX					(32768)
 
 bool IsTempVar(int iVar);
 eNOperation	GetOpTypeFromOp(eNOperation op);

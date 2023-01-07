@@ -291,6 +291,17 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 
 			argFlag = GetArgIndexToCode(&v.n1, &v.n2, &v.n3);
 			break;
+		case NOP_CLT_MOVS:
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
+
+			argFlag = GetArgIndexToCode(&v.n1, &v.n2, nullptr);
+			break;
+		case NOP_CLT_MOVSS:
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+
+			argFlag = GetArgIndexToCode(&v.n1, nullptr, nullptr);
+			break;
 		case NOP_TABLE_REMOVE:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
@@ -360,7 +371,7 @@ static std::string ToPtringString(const std::string & str)
 	return r;
 }
 
-std::string GetValueString(VarInfo& vi)
+std::string GetValueString(VarInfo& vi, std::map<int, std::string>* pFunTable = NULL)
 {
 	char ch[64] = { 0, };
 	switch (vi.GetType())
@@ -379,7 +390,16 @@ std::string GetValueString(VarInfo& vi)
 		break;
 	case VAR_FUN:
 		//sprintf_s(ch, _countof(ch), "%s", mapFun[vi._fun_index].c_str());
-		sprintf_s(ch, _countof(ch), "%d", vi._fun_index);
+		if(pFunTable == NULL)
+			sprintf_s(ch, _countof(ch), "%d:fun", vi._fun_index);
+		else
+		{
+			auto it = pFunTable->find(vi._fun_index);
+			if(it != pFunTable->end())
+				sprintf_s(ch, _countof(ch), "'%s'", (*it).second.c_str());
+			else
+				sprintf_s(ch, _countof(ch), "%d:fun", vi._fun_index);
+		}
 		break;
 	default:
 		sprintf_s(ch, _countof(ch), "unknown type (%d)", vi.GetType());
@@ -716,6 +736,14 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("MOV [%s].[%s] = [%s]\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str(), GetLog(funs, v, 3).c_str());
 			break;
+		case NOP_CLT_MOVS:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("MOVS [%s].[%s] = %d\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str(), v.n3);
+			break;
+		case NOP_CLT_MOVSS:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("MOVSS [%s].[%d] = %d\n", GetLog(funs, v, 1).c_str(), v.n3, v.n3);
+			break;
 		case NOP_TABLE_ADD2:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("Table ADD [%s].[%s] += [%s]\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str(), GetLog(funs, v, 3).c_str());
@@ -910,7 +938,7 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 	for (int i = 0; i < header._iStaticVarCount; i++)
 	{
 		VarInfo& vi = funs._staticVars[i];
-		OutAsm("Static [%d] %s\n", i, GetValueString(vi).c_str());
+		OutAsm("Static [%d] %s\n", i, GetValueString(vi, &mapFun).c_str());
 	}
 	// Global º¯¼ö
 	for (auto it = vars._varsFunction.begin(); it != vars._varsFunction.end(); it++)

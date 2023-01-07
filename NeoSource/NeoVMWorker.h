@@ -24,7 +24,7 @@ typedef u8	ArgFlag;
 enum eNOperation : OpType
 {
 	NOP_MOV,
-	NOP_MOVI,
+	NOP_MOVI, // int immediate
 
 	NOP_MOV_MINUS,
 	NOP_ADD2,
@@ -89,6 +89,8 @@ enum eNOperation : OpType
 	NOP_CLT_READ,
 	NOP_TABLE_REMOVE,
 	NOP_CLT_MOV,
+	NOP_CLT_MOVS,	// short immediate
+	NOP_CLT_MOVSS,	// short, short immediate
 	NOP_TABLE_ADD2,
 	NOP_TABLE_SUB2,
 	NOP_TABLE_MUL2,
@@ -578,6 +580,8 @@ private:
 	VarInfo* GetType(VarInfo* v1);
 
 	void CltInsert(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
+	void CltInsert(VarInfo *pClt, VarInfo *pArray, int v);
+	void CltInsert(VarInfo *pClt, int key, int v);
 	void CltRead(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
 	void TableRemove(VarInfo *pTable, VarInfo *pArray);
 	VarInfo* GetTableItem(VarInfo *pTable, VarInfo *pArray);

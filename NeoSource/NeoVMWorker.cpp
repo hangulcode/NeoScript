@@ -195,6 +195,36 @@ void CNeoVMWorker::CltInsert(VarInfo *pClt, VarInfo *pKey, VarInfo *pValue)
 		return;
 	}
 }
+void CNeoVMWorker::CltInsert(VarInfo *pClt, VarInfo *pKey, int v)
+{
+	switch (pClt->GetType())
+	{
+	case VAR_TABLE:
+		pClt->_tbl->Insert(pKey, v);
+		break;
+	case VAR_LIST:
+		pClt->_lst->SetValue(pKey->_int, v);
+		break;
+	default:
+		SetError("Collision Insert Error");
+		return;
+	}
+}
+void CNeoVMWorker::CltInsert(VarInfo *pClt, int key, int v)
+{
+	switch (pClt->GetType())
+	{
+	case VAR_TABLE:
+		pClt->_tbl->Insert(key, v);
+		break;
+	case VAR_LIST:
+		pClt->_lst->SetValue(key, v);
+		break;
+	default:
+		SetError("Collision Insert Error");
+		return;
+	}
+}
 VarInfo* CNeoVMWorker::GetTableItem(VarInfo *pTable, VarInfo *pKey)
 {
 	if (pTable->GetType() != VAR_TABLE)
@@ -1499,6 +1529,12 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				break;
 			case NOP_CLT_MOV:
 				CltInsert(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+				break;
+			case NOP_CLT_MOVS:
+				CltInsert(GetVarPtr1(OP), GetVarPtr2(OP), OP.n3);
+				break;
+			case NOP_CLT_MOVSS:
+				CltInsert(GetVarPtr1(OP), OP.n2, OP.n3);
 				break;
 			case NOP_TABLE_ADD2:
 				TableAdd2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
