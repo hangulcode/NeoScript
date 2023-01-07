@@ -909,6 +909,10 @@ bool ParseNum(int& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArchiveRd
 
 	double num;
 
+	iResultStack = vars.FindVar(tk1);
+	if (iResultStack >= 0)
+		return true;
+
 	if (true == StringToDouble(num, tk1.c_str()))
 	{
 		u16 c = ar.GetData(false);
@@ -1099,7 +1103,7 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 		
 		if (tkType1 == TK_QUOTE2 || tkType1 == TK_QUOTE1 || tkType1 == TK_STRING)
 		{
-			if (false == ParseStringOrNum(iTempOffsetKey, tkType1, tk1, ar, funs, vars, true))
+			if (false == ParseStringOrNum(iTempOffsetKey, tkType1, tk1, ar, funs, vars, false))
 				return TK_NONE;
 		}
 		else if (tkType1 == TK_L_MIDDLE)

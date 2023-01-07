@@ -1,19 +1,19 @@
 
 fun sub1()
 {
-	print("sub1\n");
+	print("sub1");
 }
 
 fun sub2()
 {
-	print("sub2\n");
+	print("sub2");
 }
 
 export fun delegate()
 {
 	var funPointer = sub1;
 
-	var funPointer2 = fun(){ print("anonymous fun\n"); };
+	var funPointer2 = fun(){ print("anonymous fun"); };
 	
 	funPointer();
 	funPointer2();
@@ -27,5 +27,5 @@ export fun delegate()
 	table.funPointer2();
 	
 	table.tablePointer = system;
-	table.tablePointer.print("Table Pointer\n");
+	table.tablePointer.print("Table Pointer");
 }

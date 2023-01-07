@@ -11,6 +11,7 @@ class CNeoVM
 	friend					CNeoVMWorker;
 	friend					TableInfo;
 	friend					ListInfo;
+	friend					SetInfo;
 	friend					neo_libs;
 	friend					neo_DCalllibs;
 private:
@@ -28,10 +29,8 @@ private:
 
 	std::map<u32, ListInfo*> _sLists;
 	std::map<u32, TableInfo*> _sTables;
+	std::map<u32, SetInfo*> _sSets;
 	std::map<u32, StringInfo*> _sStrings;
-	u32 _dwLastIDList = 0;
-	u32 _dwLastIDTable = 0;
-	u32 _dwLastIDString = 0;
 	u32 _dwLastIDVMWorker = 0;
 
 	SNeoVMHeader			_header;
@@ -65,6 +64,9 @@ private:
 	ListInfo* ListAlloc();
 	void FreeList(ListInfo* tbl);
 
+	SetInfo* SetAlloc();
+	void FreeSet(SetInfo* tbl);
+
 	int	 Coroutine_Create(int iFID);
 	int	 Coroutine_Resume(int iCID);
 	int	 Coroutine_Destroy(int iCID);
@@ -91,6 +93,16 @@ private:
 				FreeTable(d->_tbl);
 			d->_tbl = NULL;
 			break;
+		case VAR_LIST:
+			if (--d->_lst->_refCount <= 0)
+				FreeList(d->_lst);
+			d->_lst = NULL;
+			break;
+		case VAR_SET:
+			if (--d->_set->_refCount <= 0)
+				FreeSet(d->_set);
+			d->_set = NULL;
+			break;
 		case VAR_COROUTINE:
 			if (--d->_cor->_refCount <= 0)
 				FreeCoroutine(d);
@@ -114,6 +126,8 @@ private:
 	
 	CNVMAllocPool < TableNode, 10> m_sPool_TableNode;
 	CNVMAllocPool< TableInfo, 10 > m_sPool_TableInfo;
+	CNVMAllocPool < SetNode, 10> m_sPool_SetNode;
+	CNVMAllocPool< SetInfo, 10 > m_sPool_SetInfo;
 	CNVMAllocPool< ListInfo, 10 > m_sPool_ListInfo;
 
 	CNVMInstPool< StringInfo, 10 > m_sPool_String;

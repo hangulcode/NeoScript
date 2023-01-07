@@ -51,7 +51,7 @@ int SAMPLE_slice_run()
 			DWORD t2 = GetTickCount();
 			if (pVM->IsLastErrorMsg())
 			{
-				printf("Error - VM Call : %s (Elapse:%d)\n", pVM->GetLastErrorMsg(), t2 - t1);
+				printf("Error - VM Call : %s\n(Elapse:%d)\n", pVM->GetLastErrorMsg(), t2 - t1);
 				pVM->ClearLastErrorMsg();
 			}
 			else
@@ -59,7 +59,7 @@ int SAMPLE_slice_run()
 				DWORD dwNext = GetTickCount();
 				if (dwNext - dwPre > 500)
 				{
-					printf("Slide Run %d (Elapse:%d)\n", i++, t2 - t1);
+					printf("Slide Run %d\n(Elapse:%d)\n", i++, t2 - t1);
 					dwPre = dwNext;
 				}
 			}

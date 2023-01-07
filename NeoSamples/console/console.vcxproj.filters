@@ -49,6 +49,9 @@
     <ClCompile Include="..\..\NeoSource\NeoVMList.cpp">
       <Filter>NeoScript</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\NeoSource\NeoVMSet.cpp">
+      <Filter>NeoScript</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\NeoSource\Neo.h">
@@ -94,6 +97,9 @@
       <Filter>NeoScript</Filter>
     </ClInclude>
     <ClInclude Include="..\..\NeoSource\NeoLibDCall.h">
+      <Filter>NeoScript</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\NeoSource\NeoVMSet.h">
       <Filter>NeoScript</Filter>
     </ClInclude>
   </ItemGroup>

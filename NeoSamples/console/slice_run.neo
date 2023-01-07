@@ -3,9 +3,9 @@ export fun slice_fun()
 {
 	for (var i in 0, 10, 1)
 	{
-		//print("\nHellow Neo Script1");
+		//print("Hellow Neo Script1");
 		//if(i % 30000 == 0)
-		print("i : "..i.. " <-- This is script\n");
+		print("i : "..i.. " <-- This is script");
 		sleep(1000);
 		//if (i > 100 && i != 10)
 		//	break;

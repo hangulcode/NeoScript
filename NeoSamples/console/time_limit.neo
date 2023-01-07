@@ -4,7 +4,7 @@ export fun TimeTest()
 	var sum = 0.0;
 	for (var i in 0, 1000000, 1)
 	{
-		//print("\nHellow Neo Script1");
+		//print("Hellow Neo Script1");
 		sum += i;
 	}
 

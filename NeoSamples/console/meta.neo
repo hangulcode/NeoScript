@@ -84,8 +84,8 @@ export fun meta()
 		c = a + (b - 2.0);
 		c.x = 10;
 	}
-	print("\n x : " .. c.x);
-	print("\n y : " .. c.y);
-	print("\n z : " .. c.z);
-	print("\nLoop  Time : " .. (clock() - tm) .. "\n\n");
+	print("x : " .. c.x);
+	print("y : " .. c.y);
+	print("z : " .. c.z);
+	print("Loop  Time : " .. (clock() - tm));
 }

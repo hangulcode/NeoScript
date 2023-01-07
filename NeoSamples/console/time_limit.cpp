@@ -33,11 +33,11 @@ int SAMPLE_time_limit()
 			}
 			if (pVM->IsLastErrorMsg())
 			{
-				printf("Error - VM Call : %s (Elapse:%d)\n", pVM->GetLastErrorMsg(), t2 - t1);
+				printf("Error - VM Call : %s\n(Elapse:%d)\n", pVM->GetLastErrorMsg(), t2 - t1);
 				pVM->ClearLastErrorMsg();
 			}
 			else
-				printf("Sum 1 ~ = %lf (Elapse:%d)\n", r, t2 - t1);
+				printf("Sum 1 ~ = %lf\n(Elapse:%d)\n", r, t2 - t1);
 		}
 		CNeoVM::ReleaseVM(pVM);
 	}

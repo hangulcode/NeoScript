@@ -40,11 +40,11 @@ int SAMPLE_callback()
 
 		if (pVM->IsLastErrorMsg())
 		{
-			printf("Error - VM Call : %s (Elapse:%d)\n", pVM->GetLastErrorMsg(), t2 - t1);
+			printf("Error - VM Call : %s\n(Elapse:%d)\n", pVM->GetLastErrorMsg(), t2 - t1);
 			pVM->ClearLastErrorMsg();
 		}
 		else
-			printf("Sum %d + %d = %lf (Elapse:%d)\n", 100, 200, r, t2 - t1);
+			printf("Sum %d + %d = %lf\n(Elapse:%d)\n", 100, 200, r, t2 - t1);
 
 		CNeoVM::ReleaseVM(pVM);
 	}

@@ -139,7 +139,7 @@ private:
 
 public:
 	int m_iBlkSize = 1;
-
+	u32 _dwLastID = 0;
 public:
 	CNVMAllocPool()
 	{
@@ -296,7 +296,7 @@ private:
 
 public:
 	int m_iBlkSize = 1;
-
+	u32 _dwLastID = 0;
 public:
 	CNVMInstPool()
 	{

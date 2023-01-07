@@ -6,59 +6,103 @@
 
 #include "NeoVM.h"
 #include "NeoVMWorker.h"
-#include "NeoVMTable.h"
+#include "NeoVMSet.h"
 
 
-extern u32 GetHashCode(const std::string& str);
-extern u32 GetHashCode(u8 *buffer, int len);
-extern u32 GetHashCode(VarInfo *p);
+u32 GetHashCode(const std::string& str)
+{
+	static std::hash<std::string> hash{};
+	const size_t       hash_value = hash(str);
+	return (u32)hash_value;
+}
 
-CollectionIterator TableInfo::FirstNode()
+u32 GetHashCode(u8 *buffer, int len)
+{
+	u32 h = 0;
+	while (len-- > 0)
+	{
+		h |= buffer[len] << ((len & 0x03) * 8);
+	}
+	return h;
+}
+
+u32 GetHashCode(VarInfo *p)
+{
+	switch (p->GetType())
+	{
+	case VAR_NONE:
+		return 0;
+	case VAR_BOOL:
+		return p->_bl;
+	case VAR_INT:
+		return (u32)p->_int;
+	case VAR_FLOAT:
+		return GetHashCode((u8*)&p->_float, sizeof(p->_float));
+	case VAR_STRING:
+		//return GetHashCode((u8*)p->_str->_str.c_str(), (int)p->_str->_str.length());
+		return GetHashCode(p->_str->_str);
+	case VAR_TABLE:
+		return GetHashCode((u8*)p->_tbl, sizeof(p->_tbl));
+	case VAR_LIST:
+		return GetHashCode((u8*)p->_lst, sizeof(p->_lst));
+	case VAR_SET:
+		return GetHashCode((u8*)p->_set, sizeof(p->_set));
+	case VAR_COROUTINE:
+		//return (u32)p->_cor->_CoroutineID;
+		return GetHashCode((u8*)p->_cor, sizeof(p->_cor));
+	case VAR_FUN:
+		return (u32)p->_fun_index;
+		break;
+	}
+	return 0;
+}
+
+CollectionIterator SetInfo::FirstNode()
 {
 	CollectionIterator r;
 	for (int iBucket = 0; iBucket < _BucketCapa; iBucket++)
 	{
-		TableBucket* pBucket = &_Bucket[iBucket];
+		SetBucket* pBucket = &_Bucket[iBucket];
 
-		TableNode*	pCur = pBucket->pFirst;
+		SetNode*	pCur = pBucket->pFirst;
 		if(pCur)
 		{
-			r._pTableNode = pCur;
+			r._pSetNode = pCur;
 			return r;
 		}
 	}
-	r._pTableNode = NULL;
+	r._pSetNode = NULL;
 	return r;
 }
-bool TableInfo::NextNode(CollectionIterator& r)
+bool SetInfo::NextNode(CollectionIterator& r)
 {
-	if (r._pTableNode == NULL)
+	if (r._pSetNode == NULL)
 		return false;
 
 	{
-		TableNode*	pCur = r._pTableNode->pNext;
+		SetNode*	pCur = r._pSetNode->pNext;
 		if (pCur)
 		{
-			r._pTableNode = pCur;
+			r._pSetNode = pCur;
 			return true;
 		}
 	}
 
-	for (int iBucket = (r._pTableNode->hash & _HashBase) + 1; iBucket < _BucketCapa; iBucket++)
+	for (int iBucket = (r._pSetNode->hash & _HashBase) + 1; iBucket < _BucketCapa; iBucket++)
 	{
-		TableBucket* pBucket = &_Bucket[iBucket];
+		SetBucket* pBucket = &_Bucket[iBucket];
 
 		if(pBucket->pFirst)
 		{
-			r._pTableNode = pBucket->pFirst;
+			r._pSetNode = pBucket->pFirst;
 			return true;
 		}
 	}
-	r._pTableNode = NULL;
+	r._pSetNode = NULL;
 	return false;
 }
 
-void TableInfo::Var_ReleaseInternal(CNeoVM* pVM, VarInfo *d)
+void SetInfo::Var_ReleaseInternal(CNeoVM* pVM, VarInfo *d)
 {
 	switch (d->GetType())
 	{
@@ -77,6 +121,11 @@ void TableInfo::Var_ReleaseInternal(CNeoVM* pVM, VarInfo *d)
 			pVM->FreeList(d->_lst);
 		d->_lst = NULL;
 		break;
+	case VAR_SET:
+		if (--d->_set->_refCount <= 0)
+			pVM->FreeSet(d->_set);
+		d->_set = NULL;
+		break;
 	case VAR_COROUTINE:
 		if (--d->_cor->_refCount <= 0)
 			pVM->FreeCoroutine(d);
@@ -88,28 +137,27 @@ void TableInfo::Var_ReleaseInternal(CNeoVM* pVM, VarInfo *d)
 	d->ClearType();
 }
 
-void TableInfo::Free()
+void SetInfo::Free()
 {
 	if (_BucketCapa <= 0)
 		return;
 
 	for (int iBucket = 0; iBucket < _BucketCapa; iBucket++)
 	{
-		TableBucket* pBucket = &_Bucket[iBucket];
+		SetBucket* pBucket = &_Bucket[iBucket];
 
-		TableNode*	pFirst = pBucket->pFirst;
+		SetNode*	pFirst = pBucket->pFirst;
 		if (pFirst == NULL)
 			continue;
 
-		TableNode*	pCur = pFirst;
+		SetNode*	pCur = pFirst;
 		while (pCur)
 		{
-			TableNode*	pNext = pCur->pNext;
+			SetNode*	pNext = pCur->pNext;
 
 			Var_Release(_pVM, &pCur->key);
-			Var_Release(_pVM, &pCur->value);
 
-			_pVM->m_sPool_TableNode.Confer(pCur);
+			_pVM->m_sPool_SetNode.Confer(pCur);
 
 			pCur = pNext;
 		}
@@ -119,10 +167,10 @@ void TableInfo::Free()
 	_BucketCapa = _HashBase = 0;
 	_itemCount = 0;
 }
-bool	TableBucket::Pop_Used(TableNode* pTar)
+bool	SetBucket::Pop_Used(SetNode* pTar)
 {
-	TableNode* pCur = pFirst;
-	TableNode* pPre = NULL;
+	SetNode* pCur = pFirst;
+	SetNode* pPre = NULL;
 	while (pCur)
 	{
 		if (pCur == pTar)
@@ -142,9 +190,9 @@ bool	TableBucket::Pop_Used(TableNode* pTar)
 	}
 	return false;
 }
-TableNode* TableBucket::Find(VarInfo* pKey, u32 hash)
+SetNode* SetBucket::Find(VarInfo* pKey, u32 hash)
 {
-	TableNode* pCur = pFirst;
+	SetNode* pCur = pFirst;
 	switch (pKey->GetType())
 	{
 	case VAR_NONE:
@@ -222,12 +270,12 @@ TableNode* TableBucket::Find(VarInfo* pKey, u32 hash)
 		break;
 	case VAR_TABLE:
 		{
-			TableInfo* pTableInfo = pKey->_tbl;
+			TableInfo* pInfo = pKey->_tbl;
 			while (pCur)
 			{
 				if (pCur->key.GetType() == VAR_TABLE)
 				{
-					if (pCur->key._tbl == pTableInfo)
+					if (pCur->key._tbl == pInfo)
 						return pCur;
 				}
 				pCur = pCur->pNext;
@@ -299,11 +347,11 @@ TableNode* TableBucket::Find(VarInfo* pKey, u32 hash)
 
 
 //int g_MaxList = 0;
-VarInfo* TableInfo::Insert(VarInfo* pKey)
+bool SetInfo::Insert(VarInfo* pKey)
 {
 	if (_itemCount >= _BucketCapa * 4)
 	{
-		TableBucket* Old_Bucket = _Bucket;
+		SetBucket* Old_Bucket = _Bucket;
 		int Old_BucketCapa = _BucketCapa;
 		int Old_HashBase = _HashBase;
 
@@ -315,23 +363,23 @@ VarInfo* TableInfo::Insert(VarInfo* pKey)
 			if (_BucketCapa > _itemCount)
 				break;
 		}
-		_Bucket = new TableBucket[_BucketCapa];
-		memset(_Bucket, 0, sizeof(TableBucket) * _BucketCapa);
+		_Bucket = new SetBucket[_BucketCapa];
+		memset(_Bucket, 0, sizeof(SetBucket) * _BucketCapa);
 		_HashBase = _BucketCapa - 1;
 
 
 		for (int iBucket = 0; iBucket < Old_BucketCapa; iBucket++)
 		{
-			TableBucket* pBucket = &Old_Bucket[iBucket];
+			SetBucket* pBucket = &Old_Bucket[iBucket];
 
-			TableNode*	pFirst = pBucket->pFirst;
+			SetNode*	pFirst = pBucket->pFirst;
 			if (pFirst == NULL)
 				continue;
 
-			TableNode*	pCur = pFirst;
+			SetNode*	pCur = pFirst;
 			while (pCur)
 			{
-				TableNode*	pNext = pCur->pNext;
+				SetNode*	pNext = pCur->pNext;
 				_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur);
 
 				pCur = pNext;
@@ -343,8 +391,8 @@ VarInfo* TableInfo::Insert(VarInfo* pKey)
 	}
 
 	u32 hash = GetHashCode(pKey);
-	TableBucket* pBucket = &_Bucket[hash & _HashBase];
-	TableNode* pFindNode;
+	SetBucket* pBucket = &_Bucket[hash & _HashBase];
+	SetNode* pFindNode;
 	if (pBucket->pFirst)
 		pFindNode = pBucket->Find(pKey, hash);
 	else
@@ -353,129 +401,111 @@ VarInfo* TableInfo::Insert(VarInfo* pKey)
 	{
 		_itemCount++;
 
-		TableNode* pNew = _pVM->m_sPool_TableNode.Receive();
+		SetNode* pNew = _pVM->m_sPool_SetNode.Receive();
 		CNeoVMWorker::Move_DestNoRelease(&pNew->key, pKey);
-		pNew->value.ClearType();
-		//CNeoVMWorker::Move_DestNoRelease(&pNew->value, pValue);
 		pNew->hash = hash;
 
 		pBucket->Add_NoCheck(pNew);
-		return &pNew->value;
+		return true;
 	}
 	else // Replace
 	{
 		//_pVM->Move(&pFindNode->value, pValue);
-		return &pFindNode->value;
+		return true;
 	}
 }
-void TableInfo::Insert(std::string& Key, VarInfo* pValue)
+void SetInfo::Insert(std::string& Key)
 {
 	VarInfo var;
 	var.SetType(VAR_STRING);
 	var._str = _pVM->StringAlloc(Key);
 	VarInfo* pKey = &var;
 
-	Insert(&var, pValue);
+	Insert(&var);
 }
-void TableInfo::Insert(VarInfo* pKey, VarInfo* pValue)
-{
-	VarInfo* pDest = Insert(pKey);
-	if (pDest == NULL) return;
-	_pVM->Move(pDest, pValue);
-}
-void TableInfo::Insert(VarInfo* pKey, int v)
-{
-	VarInfo* pDest = Insert(pKey);
-	if (pDest == NULL) return;
-	pDest->SetType(VAR_INT);
-	pDest->_int = v;
-}
-void TableInfo::Insert(int Key, int v)
+void SetInfo::Insert(int Key)
 {
 	VarInfo var;
 	var.SetType(VAR_INT);
 	var._int = Key;
 	VarInfo* pKey = &var;
 
-	VarInfo* pDest = Insert(pKey);
-	if (pDest == NULL) return;
-	pDest->SetType(VAR_INT);
-	pDest->_int = v;
+	Insert(pKey);
 }
 
-void TableInfo::Remove(VarInfo* pKey)
+void SetInfo::Remove(VarInfo* pKey)
 {
 	if (_BucketCapa <= 0)
 		return;
 	u32 hash = GetHashCode(pKey);
-	TableBucket* pBucket = &_Bucket[hash & _HashBase];
+	SetBucket* pBucket = &_Bucket[hash & _HashBase];
 
-	TableNode* pCur = pBucket->Find(pKey, hash);
+	SetNode* pCur = pBucket->Find(pKey, hash);
 	if (pCur == NULL)
 		return;
 
 	_pVM->Var_Release(&pCur->key);
-	_pVM->Var_Release(&pCur->value);
+//	_pVM->Var_Release(&pCur->value);
 
 	pBucket->Pop_Used(pCur);
 
-	_pVM->m_sPool_TableNode.Confer(pCur);
+	_pVM->m_sPool_SetNode.Confer(pCur);
 
 	_itemCount--;
 }
+//
+//VarInfo* SetInfo::GetTableItem(VarInfo *pKey)
+//{
+//	if (_BucketCapa <= 0)
+//		return NULL;
+//	u32 hash = GetHashCode(pKey);
+//
+//	SetBucket* Bucket = &_Bucket[hash & _HashBase];
+//
+//
+//	SetNode* pCur = Bucket->Find(pKey, hash);
+//	if (pCur == 0)
+//		return NULL;
+//
+//	return &pCur->value;
+//}
+//VarInfo* SetInfo::GetTableItem(std::string& key)
+//{
+//	if (_BucketCapa <= 0)
+//		return NULL;
+//	u32 hash = GetHashCode(key);
+//
+//	SetBucket* pBucket = &_Bucket[hash & _HashBase];
+//	SetNode* pCur = pBucket->pFirst;
+//	while (pCur)
+//	{
+//		if (pCur->key.GetType() == VAR_STRING)
+//		{
+//			if (pCur->key._str->_str == key)
+//				return &pCur->value;
+//		}
+//		pCur = pCur->pNext;
+//	}
+//	return NULL;
+//}
 
-VarInfo* TableInfo::GetTableItem(VarInfo *pKey)
-{
-	if (_BucketCapa <= 0)
-		return NULL;
-	u32 hash = GetHashCode(pKey);
-
-	TableBucket* Bucket = &_Bucket[hash & _HashBase];
-
-
-	TableNode* pCur = Bucket->Find(pKey, hash);
-	if (pCur == 0)
-		return NULL;
-
-	return &pCur->value;
-}
-VarInfo* TableInfo::GetTableItem(std::string& key)
-{
-	if (_BucketCapa <= 0)
-		return NULL;
-	u32 hash = GetHashCode(key);
-
-	TableBucket* pBucket = &_Bucket[hash & _HashBase];
-	TableNode* pCur = pBucket->pFirst;
-	while (pCur)
-	{
-		if (pCur->key.GetType() == VAR_STRING)
-		{
-			if (pCur->key._str->_str == key)
-				return &pCur->value;
-		}
-		pCur = pCur->pNext;
-	}
-	return NULL;
-}
-
-bool TableInfo::ToList(std::vector<VarInfo*>& lst)
+bool SetInfo::ToList(std::vector<VarInfo*>& lst)
 {
 	lst.resize(_itemCount);
 	int cnt = 0;
 
 	for (int iBucket = 0; iBucket < _BucketCapa; iBucket++)
 	{
-		TableBucket* pBucket = &_Bucket[iBucket];
+		SetBucket* pBucket = &_Bucket[iBucket];
 
-		TableNode*	pFirst = pBucket->pFirst;
+		SetNode*	pFirst = pBucket->pFirst;
 		if (pFirst == NULL)
 			continue;
 
-		TableNode*	pCur = pFirst;
+		SetNode*	pCur = pFirst;
 		while (pCur)
 		{
-			lst[cnt++] = &pCur->value;
+			lst[cnt++] = &pCur->key;
 			pCur = pCur->pNext;
 		}
 	}
@@ -484,30 +514,3 @@ bool TableInfo::ToList(std::vector<VarInfo*>& lst)
 		return false;
 	return true;
 }
-
-struct NeoSortLocal
-{
-	CNeoVMWorker*	m_pN;
-	int				m_compare;
-
-	NeoSortLocal(CNeoVMWorker* pN, int compare) : m_pN(pN), m_compare(compare) {}
-	bool operator () (VarInfo* a, VarInfo* b)
-	{
-		VarInfo* args[2];
-		VarInfo* r;
-		args[0] = a;
-		args[1] = b;
-		m_pN->testCall(&r, m_compare, args, 2);
-		if (r->GetType() == VAR_BOOL)
-		{
-			return r->_bl;
-		}
-		return false;
-	}
-};
-
-void NVM_QuickSort(CNeoVMWorker* pN, int compare, std::vector<VarInfo*>& lst)
-{
-	std::sort(lst.begin(), lst.end(), NeoSortLocal(pN, compare));
-}
-

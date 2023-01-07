@@ -13,6 +13,12 @@ void CNeoVM::Var_AddRef(VarInfo *d)
 	case VAR_TABLE:
 		++d->_tbl->_refCount;
 		break;
+	case VAR_LIST:
+		++d->_lst->_refCount;
+		break;
+	case VAR_SET:
+		++d->_tbl->_refCount;
+		break;
 	case VAR_COROUTINE:
 		++d->_cor->_refCount;
 		break;
@@ -94,21 +100,21 @@ StringInfo* CNeoVM::StringAlloc(const std::string& str)
 	StringInfo* p = m_sPool_String.Receive();// new StringInfo();
 	while (true)
 	{
-		if (++_dwLastIDString == 0)
-			_dwLastIDString = 1;
+		if (++m_sPool_String._dwLastID == 0)
+			m_sPool_String._dwLastID = 1;
 
-		if (_sStrings.end() == _sStrings.find(_dwLastIDString))
+		if (_sStrings.end() == _sStrings.find(m_sPool_String._dwLastID))
 		{
 			break;
 		}
 	}
 
-	p->_StringID = _dwLastIDString;
+	p->_StringID = m_sPool_String._dwLastID;
 	p->_refCount = 0;
 
 	p->_str = str;
 
-	_sStrings[_dwLastIDString] = p;
+	_sStrings[m_sPool_String._dwLastID] = p;
 	return p;
 }
 void CNeoVM::FreeString(VarInfo *d)
@@ -126,16 +132,16 @@ TableInfo* CNeoVM::TableAlloc()
 	TableInfo* pTable = m_sPool_TableInfo.Receive();
 	while (true)
 	{
-		if (++_dwLastIDTable == 0)
-			_dwLastIDTable = 1;
+		if (++m_sPool_TableInfo._dwLastID == 0)
+			m_sPool_TableInfo._dwLastID = 1;
 
-		if (_sTables.end() == _sTables.find(_dwLastIDTable))
+		if (_sTables.end() == _sTables.find(m_sPool_TableInfo._dwLastID))
 		{
 			break;
 		}
 	}
 	pTable->_pVM = this;
-	pTable->_TableID = _dwLastIDTable;
+	pTable->_TableID = m_sPool_TableInfo._dwLastID;
 	pTable->_refCount = 0;
 	pTable->_itemCount = 0;
 	pTable->_HashBase = 0;
@@ -144,7 +150,7 @@ TableInfo* CNeoVM::TableAlloc()
 	pTable->_meta = NULL;
 	pTable->_fun._func = NULL;
 
-	_sTables[_dwLastIDTable] = pTable;
+	_sTables[m_sPool_TableInfo._dwLastID] = pTable;
 	return pTable;
 }
 void CNeoVM::FreeTable(TableInfo* tbl)
@@ -154,14 +160,6 @@ void CNeoVM::FreeTable(TableInfo* tbl)
 		return; // Error
 
 	_sTables.erase(it);
-
-	//for (auto it2 = tbl->_intMap.begin(); it2 != tbl->_intMap.end(); it2++)
-	//{
-	//	VarInfo& v = (*it2).second;
-	//	if(v.IsAllocType())
-	//		Var_Release(&v);
-	//}
-	//tbl->_intMap.clear();
 
 	if (tbl->_meta)
 	{
@@ -183,22 +181,22 @@ ListInfo* CNeoVM::ListAlloc()
 	ListInfo* pList = m_sPool_ListInfo.Receive();
 	while (true)
 	{
-		if (++_dwLastIDList == 0)
-			_dwLastIDList = 1;
+		if (++m_sPool_ListInfo._dwLastID == 0)
+			m_sPool_ListInfo._dwLastID = 1;
 
-		if (_sLists.end() == _sLists.find(_dwLastIDList))
+		if (_sLists.end() == _sLists.find(m_sPool_ListInfo._dwLastID))
 		{
 			break;
 		}
 	}
 	pList->_pVM = this;
-	pList->_ListID = _dwLastIDList;
+	pList->_ListID = m_sPool_ListInfo._dwLastID;
 	pList->_refCount = 0;
 	pList->_itemCount = 0;
 	pList->_BucketCapa = 0;
 	pList->_pUserData = NULL;
 
-	_sLists[_dwLastIDTable] = pList;
+	_sLists[m_sPool_ListInfo._dwLastID] = pList;
 	return pList;
 }
 void CNeoVM::FreeList(ListInfo* lst)
@@ -208,23 +206,59 @@ void CNeoVM::FreeList(ListInfo* lst)
 		return; // Error
 
 	_sLists.erase(it);
-
-	//for (auto it2 = tbl->_intMap.begin(); it2 != tbl->_intMap.end(); it2++)
-	//{
-	//	VarInfo& v = (*it2).second;
-	//	if(v.IsAllocType())
-	//		Var_Release(&v);
-	//}
-	//tbl->_intMap.clear();
-
-//	lst->_fun._func = NULL;
-
 	lst->Free();
 
 	//delete tbl;
 	m_sPool_ListInfo.Confer(lst);
 }
+SetInfo* CNeoVM::SetAlloc()
+{
+	SetInfo* pSet = m_sPool_SetInfo.Receive();
+	while (true)
+	{
+		if (++m_sPool_SetInfo._dwLastID == 0)
+			m_sPool_SetInfo._dwLastID = 1;
 
+		if (_sSets.end() == _sSets.find(m_sPool_SetInfo._dwLastID))
+		{
+			break;
+		}
+	}
+	pSet->_pVM = this;
+	pSet->_SetID = m_sPool_SetInfo._dwLastID;
+	pSet->_refCount = 0;
+	pSet->_itemCount = 0;
+	pSet->_HashBase = 0;
+	pSet->_BucketCapa = 0;
+	pSet->_pUserData = NULL;
+	pSet->_meta = NULL;
+	pSet->_fun._func = NULL;
+
+	_sSets[m_sPool_SetInfo._dwLastID] = pSet;
+	return pSet;
+}
+void CNeoVM::FreeSet(SetInfo* set)
+{
+	auto it = _sSets.find(set->_SetID);
+	if (it == _sSets.end())
+		return; // Error
+
+	_sSets.erase(it);
+	if (set->_meta)
+	{
+		if (--set->_meta->_refCount <= 0)
+		{
+			FreeSet(set->_meta);
+		}
+		set->_meta = NULL;
+	}
+	set->_fun._func = NULL;
+
+	set->Free();
+
+	//delete tbl;
+	m_sPool_SetInfo.Confer(set);
+}
 int	 CNeoVM::Coroutine_Create(int iFID)
 {
 	return 0;
@@ -253,6 +287,8 @@ CNeoVM::CNeoVM()
 		case NDF_FLOAT: Var_SetStringA(&m_sDefaultValue[i], "float"); break;
 		case NDF_STRING: Var_SetStringA(&m_sDefaultValue[i], "string"); break;
 		case NDF_TABLE: Var_SetStringA(&m_sDefaultValue[i], "table"); break;
+		case NDF_LIST: Var_SetStringA(&m_sDefaultValue[i], "list"); break;
+		case NDF_SET: Var_SetStringA(&m_sDefaultValue[i], "set"); break;
 		case NDF_COROUTINE: Var_SetStringA(&m_sDefaultValue[i], "coroutine"); break;
 		case NDF_FUNCTION: Var_SetStringA(&m_sDefaultValue[i], "function"); break;
 		case NDF_TRUE: Var_SetStringA(&m_sDefaultValue[i], "true"); break;

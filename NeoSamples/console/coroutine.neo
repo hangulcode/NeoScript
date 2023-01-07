@@ -5,7 +5,7 @@ fun fa(var param1)
 	var cr2 = cr;
 	for(var i in 0, 5, 1)
 	{
-		print("\n Coroutine " .. i);
+		print("Coroutine " .. i);
 		sleep(1000);
 		yield return;
 	}
@@ -22,7 +22,7 @@ export fun test()
 		{
 			system.coroutine_resume(cr, 2);
 		}
-		print("\n Main " .. state .. i);
+		print("Main " .. state .. i);
 		sleep(1000);
 	}
 }

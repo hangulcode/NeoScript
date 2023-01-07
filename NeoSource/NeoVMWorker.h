@@ -12,6 +12,7 @@ enum VAR_TYPE : u8
 	VAR_STRING,
 	VAR_TABLE,
 	VAR_LIST,
+	VAR_SET,
 	VAR_COROUTINE,
 	VAR_FUN,
 
@@ -203,6 +204,8 @@ struct FunctionPtr
 struct TableInfo;
 struct TableNode;
 struct ListInfo;
+struct SetInfo;
+struct SetNode;
 
 #pragma pack(1)
 struct CollectionIterator
@@ -210,6 +213,7 @@ struct CollectionIterator
 	union
 	{
 		TableNode*	_pTableNode;
+		SetNode*	_pSetNode;
 		int			_iListOffset;
 	};
 };
@@ -232,6 +236,7 @@ public:
 		StringInfo* _str;
 		TableInfo*	_tbl;
 		ListInfo*	_lst;
+		SetInfo*	_set;
 		int			_int;
 		double		_float;
 		int			_fun_index;
@@ -269,6 +274,7 @@ public:
 //};
 
 #include "NeoVMTable.h"
+#include "NeoVMSet.h"
 #include "NeoVMList.h"
 
 
@@ -339,6 +345,8 @@ enum eNeoDefaultString
 	NDF_FLOAT,
 	NDF_STRING,
 	NDF_TABLE,
+	NDF_LIST,
+	NDF_SET,
 	NDF_COROUTINE,
 	NDF_FUNCTION,
 
@@ -457,6 +465,7 @@ private:
 	void Var_SetStringA(VarInfo *d, const std::string& str);
 	void Var_SetTable(VarInfo *d, TableInfo* p);
 	void Var_SetList(VarInfo *d, ListInfo* p);
+	void Var_SetSet(VarInfo *d, SetInfo* p);
 	void Var_SetFun(VarInfo* d, int fun_index);
 
 
@@ -465,43 +474,7 @@ public:
 	{
 		if (v1->IsAllocType())
 			Var_Release(v1);
-
-		v1->SetType(v2->GetType());
-		switch (v2->GetType())
-		{
-		case VAR_NONE:
-			break;
-		case VAR_BOOL:
-			v1->_bl = v2->_bl;
-			break;
-		case VAR_INT:
-			v1->_int = v2->_int;
-			break;
-		case VAR_FLOAT:
-			v1->_float = v2->_float;
-			break;
-		case VAR_STRING:
-			v1->_str = v2->_str;
-			++v1->_str->_refCount;
-			break;
-		case VAR_TABLE:
-			v1->_tbl = v2->_tbl;
-			++v1->_tbl->_refCount;
-			break;
-		case VAR_LIST:
-			v1->_lst = v2->_lst;
-			++v1->_lst->_refCount;
-			break;
-		case VAR_COROUTINE:
-			v1->_cor = v2->_cor;
-			++v1->_cor->_refCount;
-			break;
-		case VAR_FUN:
-			v1->_fun_index = v2->_fun_index;
-			break;
-		default:
-			break;
-		}
+		Move_DestNoRelease(v1, v2);
 	}
 	inline void MoveI(VarInfo* v1, int v)
 	{
@@ -534,6 +507,14 @@ public:
 		case VAR_TABLE:
 			v1->_tbl = v2->_tbl;
 			++v1->_tbl->_refCount;
+			break;
+		case VAR_LIST:
+			v1->_lst = v2->_lst;
+			++v1->_lst->_refCount;
+			break;
+		case VAR_SET:
+			v1->_set = v2->_set;
+			++v1->_set->_refCount;
 			break;
 		case VAR_COROUTINE:
 			v1->_cor = v2->_cor;
@@ -573,7 +554,7 @@ private:
 
 	bool CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFunObj, const std::string& fname, int n3);
 
-	std::string ToString(VarInfo* v1);
+	static std::string ToString(VarInfo* v1);
 	int ToInt(VarInfo* v1);
 	double ToFloat(VarInfo* v1);
 	int ToSize(VarInfo* v1);

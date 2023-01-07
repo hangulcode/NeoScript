@@ -26,7 +26,7 @@ int SAMPLE_9_times()
 			DWORD t2 = GetTickCount();
 			if (pVM->IsLastErrorMsg())
 			{
-				printf("Error - VM Call : %s (Elapse:%d)\n", pVM->GetLastErrorMsg(), t2 - t1);
+				printf("Error - VM Call : %s\n(Elapse:%d)\n", pVM->GetLastErrorMsg(), t2 - t1);
 				pVM->ClearLastErrorMsg();
 			}
 			else

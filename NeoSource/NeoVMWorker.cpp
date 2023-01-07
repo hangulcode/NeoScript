@@ -161,6 +161,15 @@ void CNeoVMWorker::Var_SetList(VarInfo *d, ListInfo* p)
 	d->_lst = p;
 	++p->_refCount;
 }
+void CNeoVMWorker::Var_SetSet(VarInfo *d, SetInfo* p)
+{
+	if (d->IsAllocType())
+		Var_Release(d);
+
+	d->SetType(VAR_SET);
+	d->_set = p;
+	++p->_refCount;
+}
 void CNeoVMWorker::Var_SetFun(VarInfo* d, int fun_index)
 {
 	if (d->IsAllocType())
@@ -783,6 +792,7 @@ bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 	TableInfo* tbl;
 	TableNode* n;
 	ListInfo* lst;
+	SetInfo* set;
 
 	switch (pClt->GetType())
 	{
@@ -833,6 +843,33 @@ bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 		{
 			lst->GetValue(pIterator->_it._iListOffset, pKey);
 			//Move(pValue, &n->value);
+			return true;
+		}
+		else
+		{
+			pIterator->ClearType();
+			return false;
+		}
+		break;
+	case VAR_SET:
+		set = pClt->_set;
+		if (pIterator->GetType() != VAR_ITERATOR)
+		{
+			if (0 < set->GetCount())
+			{
+				pIterator->_it = set->FirstNode();
+				pIterator->SetType(VAR_ITERATOR);
+			}
+			else
+				return false;
+		}
+		else
+			set->NextNode(pIterator->_it);
+
+		n = pIterator->_it._pTableNode;
+		if (n)
+		{
+			Move(pKey, &n->key);
 			return true;
 		}
 		else
@@ -927,6 +964,10 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 		return v1->_str->_str;
 	case VAR_TABLE:
 		return "table";
+	case VAR_LIST:
+		return "list";
+	case VAR_SET:
+		return "set";
 	case VAR_COROUTINE:
 		return "coroutine";
 	default:
@@ -1856,6 +1897,10 @@ std::string GetDataType(VAR_TYPE t)
 		return "string";
 	case VAR_TABLE:
 		return "table";
+	case VAR_LIST:
+		return "list";
+	case VAR_SET:
+		return "set";
 	case VAR_COROUTINE:
 		return "coroutine";
 	case VAR_FUN:

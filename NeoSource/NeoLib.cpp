@@ -70,6 +70,7 @@ struct neo_libs
 		int size = pN->read<int>(1);
 
 		pVar->_lst->Resize(size);
+		pN->ReturnValue();
 		return true;
 	}
 	static bool List_len(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -210,6 +211,7 @@ struct neo_libs
 			return false;
 		int init = pN->read<int>(1);
 		::srand((u32)init);
+		pN->ReturnValue();
 		return true;
 	}
 	static bool	Math_rand(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -244,6 +246,7 @@ struct neo_libs
 		pN->Move(&var, pMeta); // for Referance
 		pTable->_tbl->_meta = pMeta->_tbl;
 
+		pN->ReturnValue();
 		return true;
 	}
 	static bool alg_sort(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -274,20 +277,31 @@ struct neo_libs
 			for (int i = 0; i < lst.size(); i++)
 				*lst[i] = lst3[i];
 		}
+		pN->ReturnValue();
 		return true;
 	}
 
 	static bool io_print(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1)
-			return false;
-		std::string* p = pN->read<std::string*>(1);
-		if (p == NULL)
-			return false;
-
-		std::cout << p->c_str();
-		pN->ReturnValue();
-		return true;
+		if (args == 1)
+		{
+			VarInfo* pArg1 = pN->GetStack(1);
+			std::string str = CNeoVMWorker::ToString(pArg1);
+			std::cout << str.c_str() << '\n';
+			pN->ReturnValue();
+			return true;
+		}
+		else if (args == 2)
+		{
+			VarInfo* pArg1 = pN->GetStack(1);
+			VarInfo* pArg2 = pN->GetStack(2);
+			std::string str1 = CNeoVMWorker::ToString(pArg1);
+			std::string str2 = CNeoVMWorker::ToString(pArg2);
+			std::cout << str1.c_str() << str2.c_str();
+			pN->ReturnValue();
+			return true;
+		}
+		return false;
 	}
 
 	static bool sys_clock(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -363,6 +377,37 @@ struct neo_libs
 
 		return true;
 	}
+
+	static bool set(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1)
+			return false;
+
+		VarInfo* pRet = pN->GetStack(0);
+		VarInfo* pArg1 = pN->GetStack(1);
+		switch(pArg1->GetType())
+		{
+		case VAR_LIST:
+			{
+				SetInfo* pSetR = pN->_pVM->SetAlloc();
+				pN->Var_SetSet(pRet, pSetR);
+
+				ListInfo* pListV1 = pArg1->_lst;
+				int sz = pListV1->GetCount();
+				VarInfo* src = pListV1->GetDataUnsafe();
+				for (int i = 0; i < sz; i++)
+				{
+					pSetR->Insert(&src[i]);
+				}
+				return true;
+			}
+		default:
+			return false;
+		}
+		pN->ReturnValue();
+		return false;
+	}
+
 };
 
 
@@ -438,6 +483,8 @@ static void AddGlobalLibFun()
 	g_sNeoFunLib["meta"] = &neo_libs::util_meta;
 	g_sNeoFunLib["print"] = &neo_libs::io_print;
 	g_sNeoFunLib["clock"] = &neo_libs::sys_clock;
+
+	g_sNeoFunLib["set"] = &neo_libs::set;
 
 	g_sNeoFunLib["coroutine_create"] = &neo_libs::sys_coroutine_create;
 	g_sNeoFunLib["coroutine_resume"] = &neo_libs::sys_coroutine_resume;

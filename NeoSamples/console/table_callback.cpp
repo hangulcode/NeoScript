@@ -81,11 +81,11 @@ int SAMPLE_table_callback()
 
 		if (pVM->IsLastErrorMsg())
 		{
-			printf("Error - VM Call : %s (Elapse:%d)\n", pVM->GetLastErrorMsg(), t2 - t1);
+			printf("Error - VM Call : %s\n(Elapse:%d)\n", pVM->GetLastErrorMsg(), t2 - t1);
 			pVM->ClearLastErrorMsg();
 		}
 		else
-			printf("%lf (Elapse:%d)\n", r, t2 - t1);
+			printf("%lf\n(Elapse:%d)\n", r, t2 - t1);
 
 		CNeoVM::ReleaseVM(pVM);
 	}
