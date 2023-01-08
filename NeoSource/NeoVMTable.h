@@ -64,7 +64,8 @@ struct TableInfo : AllocBase
 	CollectionIterator FirstNode();
 	bool NextNode(CollectionIterator&);
 
-	bool ToList(std::vector<VarInfo*>& lst);
+	bool ToListKeys(std::vector<VarInfo*>& lst);
+	bool ToListValues(std::vector<VarInfo*>& lst);
 	inline int		GetCount() { return _itemCount; }
 
 private:

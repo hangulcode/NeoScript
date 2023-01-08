@@ -459,7 +459,32 @@ VarInfo* TableInfo::Find(std::string& key)
 	return NULL;
 }
 
-bool TableInfo::ToList(std::vector<VarInfo*>& lst)
+bool TableInfo::ToListKeys(std::vector<VarInfo*>& lst)
+{
+	lst.resize(_itemCount);
+	int cnt = 0;
+
+	for (int iBucket = 0; iBucket < _BucketCapa; iBucket++)
+	{
+		TableBucket* pBucket = &_Bucket[iBucket];
+
+		TableNode*	pFirst = pBucket->pFirst;
+		if (pFirst == NULL)
+			continue;
+
+		TableNode*	pCur = pFirst;
+		while (pCur)
+		{
+			lst[cnt++] = &pCur->key;
+			pCur = pCur->pNext;
+		}
+	}
+
+	if (cnt != _itemCount)
+		return false;
+	return true;
+}
+bool TableInfo::ToListValues(std::vector<VarInfo*>& lst)
 {
 	lst.resize(_itemCount);
 	int cnt = 0;

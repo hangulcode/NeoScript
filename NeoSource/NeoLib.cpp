@@ -349,7 +349,7 @@ struct neo_libs
 		pN->ReturnValue();
 		return true;
 	}
-	static bool alg_sort(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	static bool map_sort(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1) return false; // fun
 
@@ -359,7 +359,7 @@ struct neo_libs
 		if (pFun->GetType() != VAR_FUN) return false;
 
 		std::vector<VarInfo*> lst;
-		if (false == pVar->_tbl->ToList(lst)) return false;
+		if (false == pVar->_tbl->ToListValues(lst)) return false;
 
 		if (lst.size() >= 2)
 		{
@@ -377,7 +377,42 @@ struct neo_libs
 		pN->ReturnValue();
 		return true;
 	}
+	static bool map_keys(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 0) return false;
+		if (pVar->GetType() != VAR_TABLE) return false;
 
+		std::vector<VarInfo*> lst;
+		if (false == pVar->_tbl->ToListKeys(lst)) return false;
+		
+		VarInfo* pRet = pN->GetStack(0);
+		ListInfo* pR = pN->_pVM->ListAlloc();
+		pN->Var_SetList(pRet, pR); // return value
+		pR->Resize((int)lst.size());
+
+		VarInfo* dest = pR->GetDataUnsafe();
+		for (int i = 0; i < (int)lst.size(); i++)
+			CNeoVMWorker::Move_DestNoRelease(&dest[i], lst[i]);
+		return true;
+	}
+	static bool map_values(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 0) return false;
+		if (pVar->GetType() != VAR_TABLE) return false;
+
+		std::vector<VarInfo*> lst;
+		if (false == pVar->_tbl->ToListValues(lst)) return false;
+
+		VarInfo* pRet = pN->GetStack(0);
+		ListInfo* pR = pN->_pVM->ListAlloc();
+		pN->Var_SetList(pRet, pR); // return value
+		pR->Resize((int)lst.size());
+
+		VarInfo* dest = pR->GetDataUnsafe();
+		for (int i = 0; i < (int)lst.size(); i++)
+			CNeoVMWorker::Move_DestNoRelease(&dest[i], lst[i]);
+		return true;
+	}
 	static bool io_print(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args == 1)
@@ -615,7 +650,9 @@ void CNeoVM::RegObjLibrary()
 	g_sNeoFunLstLib["append"] = &neo_libs::List_append;
 
 	_funTblLib = CNeoVM::RegisterNative(FunTbl);
-	g_sNeoFunTblLib["sort"] = &neo_libs::alg_sort;
+	g_sNeoFunTblLib["sort"] = &neo_libs::map_sort;
+	g_sNeoFunTblLib["keys"] = &neo_libs::map_keys;
+	g_sNeoFunTblLib["values"] = &neo_libs::map_values;
 }
 
 void CNeoVM::InitLib()
