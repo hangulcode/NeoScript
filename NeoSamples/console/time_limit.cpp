@@ -19,7 +19,7 @@ int SAMPLE_time_limit()
 	if (pVM != NULL)
 	{
 		pVM->SetTimeout(-1, 100, 1000); // -1 is main worker
-		printf("Compile Success. Code : %d bytes !!\n\n", pVM->GetBytesSize());
+		printf("Compile Success. Code : %d bytes !!\n", pVM->GetBytesSize());
 
 		for (int i = 1; i < 10; i++)
 		{

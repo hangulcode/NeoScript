@@ -27,7 +27,7 @@ int SAMPLE_callback()
 	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
 	if (pVM != NULL)
 	{
-		printf("Compile Success. Code : %d bytes !!\n\n", pVM->GetBytesSize());
+		printf("Compile Success. Code : %d bytes !!\n", pVM->GetBytesSize());
 
 		NeoHelper::Register(pVM, "Mul", Mul);
 		NeoHelper::Register(pVM, "Sample1", Sample1);
