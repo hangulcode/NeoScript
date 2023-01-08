@@ -346,6 +346,42 @@ SetNode* SetBucket::Find(VarInfo* pKey, u32 hash)
 }
 
 
+bool SetInfo::Find(VarInfo *pKey)
+{
+	if (_BucketCapa <= 0)
+		return false;
+	u32 hash = GetHashCode(pKey);
+
+	SetBucket* Bucket = &_Bucket[hash & _HashBase];
+
+
+	SetNode* pCur = Bucket->Find(pKey, hash);
+	if (pCur == 0)
+		return false;
+
+	return true;
+}
+bool SetInfo::Find(std::string& key)
+{
+	if (_BucketCapa <= 0)
+		return false;
+	u32 hash = GetHashCode(key);
+
+	SetBucket* pBucket = &_Bucket[hash & _HashBase];
+	SetNode* pCur = pBucket->pFirst;
+	while (pCur)
+	{
+		if (pCur->key.GetType() == VAR_STRING)
+		{
+			if (pCur->key._str->_str == key)
+				return true;
+		}
+		pCur = pCur->pNext;
+	}
+	return false;
+}
+
+
 //int g_MaxList = 0;
 bool SetInfo::Insert(VarInfo* pKey)
 {
@@ -453,41 +489,7 @@ void SetInfo::Remove(VarInfo* pKey)
 
 	_itemCount--;
 }
-//
-//VarInfo* SetInfo::GetTableItem(VarInfo *pKey)
-//{
-//	if (_BucketCapa <= 0)
-//		return NULL;
-//	u32 hash = GetHashCode(pKey);
-//
-//	SetBucket* Bucket = &_Bucket[hash & _HashBase];
-//
-//
-//	SetNode* pCur = Bucket->Find(pKey, hash);
-//	if (pCur == 0)
-//		return NULL;
-//
-//	return &pCur->value;
-//}
-//VarInfo* SetInfo::GetTableItem(std::string& key)
-//{
-//	if (_BucketCapa <= 0)
-//		return NULL;
-//	u32 hash = GetHashCode(key);
-//
-//	SetBucket* pBucket = &_Bucket[hash & _HashBase];
-//	SetNode* pCur = pBucket->pFirst;
-//	while (pCur)
-//	{
-//		if (pCur->key.GetType() == VAR_STRING)
-//		{
-//			if (pCur->key._str->_str == key)
-//				return &pCur->value;
-//		}
-//		pCur = pCur->pNext;
-//	}
-//	return NULL;
-//}
+
 
 bool SetInfo::ToList(std::vector<VarInfo*>& lst)
 {

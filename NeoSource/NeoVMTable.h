@@ -58,8 +58,8 @@ struct TableInfo : AllocBase
 	void Insert(VarInfo* pKey, int v);
 	void Insert(int Key, int v);
 	void Remove(VarInfo* pKey);
-	VarInfo* GetTableItem(VarInfo *pKey);
-	VarInfo* GetTableItem(std::string& key);
+	VarInfo* Find(VarInfo *pKey);
+	VarInfo* Find(std::string& key);
 
 	CollectionIterator FirstNode();
 	bool NextNode(CollectionIterator&);

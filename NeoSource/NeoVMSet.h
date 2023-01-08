@@ -55,8 +55,9 @@ struct SetInfo : AllocBase
 	void Insert(std::string& pKey);
 	void Insert(int Key);
 	void Remove(VarInfo* pKey);
-	//VarInfo* GetTableItem(VarInfo *pKey);
-	//VarInfo* GetTableItem(std::string& key);
+
+	bool Find(VarInfo *pKey);
+	bool Find(std::string& key);
 
 	CollectionIterator FirstNode();
 	bool NextNode(CollectionIterator&);

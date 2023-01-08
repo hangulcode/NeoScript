@@ -243,7 +243,7 @@ VarInfo* CNeoVMWorker::GetTableItem(VarInfo *pTable, VarInfo *pKey)
 		return NULL;
 	}
 
-	return pTable->_tbl->GetTableItem(pKey);
+	return pTable->_tbl->Find(pKey);
 }
 VarInfo* CNeoVMWorker::GetTableItemValid(VarInfo *pTable, VarInfo *pKey)
 {
@@ -528,7 +528,11 @@ void CNeoVMWorker::Add(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			return;
 		break;
 	case VAR_LIST:
-		if(neo_DCalllibs::List_Plus(this, r, v1, v2))
+		if(neo_DCalllibs::List_Add(this, r, v1, v2))
+			return;
+		break;
+	case VAR_SET:
+		if (neo_DCalllibs::Set_Add(this, r, v1, v2))
 			return;
 		break;
 	}
@@ -565,6 +569,11 @@ void CNeoVMWorker::Sub(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		break;
 	case VAR_TABLE:
 		if (Call_MetaTable(v1, g_meta_Sub3, r, v1, v2))
+			return;
+	case VAR_LIST:
+		break;
+	case VAR_SET:
+		if (neo_DCalllibs::Set_Sub(this, r, v1, v2))
 			return;
 		break;
 	}
@@ -790,124 +799,126 @@ bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 	VarInfo* pValue = pKey + 1;
 	VarInfo* pIterator = pKey + 2;
 
-	TableInfo* tbl;
-	TableNode* n;
-	ListInfo* lst;
-	SetInfo* set;
-	std::string* str;
-
 	switch (pClt->GetType())
 	{
 	case VAR_STRING:
-		str = &pClt->_str->_str;
-		if (pIterator->GetType() != VAR_ITERATOR)
 		{
-			if (0 < (int)str->length())
+			std::string* str = &pClt->_str->_str;
+			if (pIterator->GetType() != VAR_ITERATOR)
 			{
-				pIterator->_it._iStringOffset = 0;
-				pIterator->SetType(VAR_ITERATOR);
+				if (0 < (int)str->length())
+				{
+					pIterator->_it._iStringOffset = 0;
+					pIterator->SetType(VAR_ITERATOR);
+				}
+				else
+					return false;
 			}
 			else
-				return false;
-		}
-		else
-			++pIterator->_it._iStringOffset;
+				++pIterator->_it._iStringOffset;
 
-		if (pIterator->_it._iStringOffset < (int)str->length())
-		{
-			//str->GetValue(pIterator->_it._iStringOffset, pKey);
-			const char* p = str->c_str();
-			Var_SetStringA(pKey, std::string(1, p[pIterator->_it._iStringOffset]));
-			return true;
+			if (pIterator->_it._iStringOffset < (int)str->length())
+			{
+				//str->GetValue(pIterator->_it._iStringOffset, pKey);
+				const char* p = str->c_str();
+				Var_SetStringA(pKey, std::string(1, p[pIterator->_it._iStringOffset]));
+				return true;
+			}
+			else
+			{
+				pIterator->ClearType();
+				return false;
+			}
+			break;
 		}
-		else
-		{
-			pIterator->ClearType();
-			return false;
-		}
-		break;
 	case VAR_TABLE:
-		tbl = pClt->_tbl;
-		if (pIterator->GetType() != VAR_ITERATOR)
 		{
-			if (0 < tbl->GetCount())
+			TableInfo* tbl = pClt->_tbl;
+			if (pIterator->GetType() != VAR_ITERATOR)
 			{
-				pIterator->_it = tbl->FirstNode();
-				pIterator->SetType(VAR_ITERATOR);
+				if (0 < tbl->GetCount())
+				{
+					pIterator->_it = tbl->FirstNode();
+					pIterator->SetType(VAR_ITERATOR);
+				}
+				else
+					return false;
 			}
 			else
-				return false;
-		}
-		else
-			tbl->NextNode(pIterator->_it);
+				tbl->NextNode(pIterator->_it);
 
-		n = pIterator->_it._pTableNode;
-		if (n)
-		{
-			Move(pKey, &n->key);
-			Move(pValue, &n->value);
-			return true;
+			TableNode* n = pIterator->_it._pTableNode;
+			if (n)
+			{
+				Move(pKey, &n->key);
+				Move(pValue, &n->value);
+				return true;
+			}
+			else
+			{
+				pIterator->ClearType();
+				return false;
+			}
+			break;
 		}
-		else
-		{
-			pIterator->ClearType();
-			return false;
-		}
-		break;
 	case VAR_LIST:
-		lst = pClt->_lst;
-		if (pIterator->GetType() != VAR_ITERATOR)
 		{
-			if (0 < lst->GetCount())
+			ListInfo* lst = pClt->_lst;
+			if (pIterator->GetType() != VAR_ITERATOR)
 			{
-				pIterator->_it._iListOffset = 0;
-				pIterator->SetType(VAR_ITERATOR);
+				if (0 < lst->GetCount())
+				{
+					pIterator->_it._iListOffset = 0;
+					pIterator->SetType(VAR_ITERATOR);
+				}
+				else
+					return false;
 			}
 			else
-				return false;
-		}
-		else
-			++pIterator->_it._iListOffset;
+				++pIterator->_it._iListOffset;
 
-		if (pIterator->_it._iListOffset < lst->GetCount())
-		{
-			lst->GetValue(pIterator->_it._iListOffset, pKey);
-			//Move(pValue, &n->value);
-			return true;
+			if (pIterator->_it._iListOffset < lst->GetCount())
+			{
+				lst->GetValue(pIterator->_it._iListOffset, pKey);
+				//Move(pValue, &n->value);
+				return true;
+			}
+			else
+			{
+				pIterator->ClearType();
+				return false;
+			}
+			break;
 		}
-		else
-		{
-			pIterator->ClearType();
-			return false;
-		}
-		break;
 	case VAR_SET:
-		set = pClt->_set;
-		if (pIterator->GetType() != VAR_ITERATOR)
 		{
-			if (0 < set->GetCount())
+			SetInfo* set = pClt->_set;
+			if (pIterator->GetType() != VAR_ITERATOR)
 			{
-				pIterator->_it = set->FirstNode();
-				pIterator->SetType(VAR_ITERATOR);
+				if (0 < set->GetCount())
+				{
+					pIterator->_it = set->FirstNode();
+					pIterator->SetType(VAR_ITERATOR);
+				}
+				else
+					return false;
 			}
 			else
-				return false;
-		}
-		else
-			set->NextNode(pIterator->_it);
+				set->NextNode(pIterator->_it);
 
-		n = pIterator->_it._pTableNode;
-		if (n)
-		{
-			Move(pKey, &n->key);
-			return true;
+			SetNode* n = pIterator->_it._pSetNode;
+			if (n)
+			{
+				Move(pKey, &n->key);
+				return true;
+			}
+			else
+			{
+				pIterator->ClearType();
+				return false;
+			}
+			break;
 		}
-		else
-		{
-			pIterator->ClearType();
-			return false;
-		}
-		break;
 	}
 	SetErrorFormat("error : foreach not support '%s'", GetDataType(pClt->GetType()).c_str());
 	return false;
@@ -1141,7 +1152,7 @@ bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo
 {
 	if (pTable->_tbl->_meta == NULL)
 		return false;
-	VarInfo* pVarItem = pTable->_tbl->_meta->GetTableItem(funName);
+	VarInfo* pVarItem = pTable->_tbl->_meta->Find(funName);
 	if (pVarItem == NULL)
 		return false;
 
@@ -1165,7 +1176,7 @@ bool CNeoVMWorker::Call_MetaTable2(VarInfo* pTable, std::string& funName, VarInf
 {
 	if (pTable->_tbl->_meta == NULL)
 		return false;
-	VarInfo* pVarItem = pTable->_tbl->_meta->GetTableItem(funName);
+	VarInfo* pVarItem = pTable->_tbl->_meta->Find(funName);
 	if (pVarItem == NULL)
 		return false;
 
@@ -1506,7 +1517,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				VarInfo* pFunName = GetVarPtr2(OP);
 				if (pVar1->GetType() == VAR_TABLE)
 				{
-					VarInfo* pVarMeta = pVar1->_tbl->GetTableItem(pFunName);
+					VarInfo* pVarMeta = pVar1->_tbl->Find(pFunName);
 					if (pVarMeta != NULL)
 					{
 						if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n3))

@@ -424,7 +424,7 @@ void TableInfo::Remove(VarInfo* pKey)
 	_itemCount--;
 }
 
-VarInfo* TableInfo::GetTableItem(VarInfo *pKey)
+VarInfo* TableInfo::Find(VarInfo *pKey)
 {
 	if (_BucketCapa <= 0)
 		return NULL;
@@ -439,7 +439,7 @@ VarInfo* TableInfo::GetTableItem(VarInfo *pKey)
 
 	return &pCur->value;
 }
-VarInfo* TableInfo::GetTableItem(std::string& key)
+VarInfo* TableInfo::Find(std::string& key)
 {
 	if (_BucketCapa <= 0)
 		return NULL;
