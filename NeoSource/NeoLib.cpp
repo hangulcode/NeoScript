@@ -25,6 +25,9 @@ struct neo_libs
 		int p1 = pN->read<int>(1);
 		int p2 = pN->read<int>(2);
 
+		if (p1 < 0 || p1 >= (int)p->length())
+			return false;
+
 
 		std::string sTempString = p->substr(p1, p2);
 		pN->ReturnValue(sTempString.c_str());

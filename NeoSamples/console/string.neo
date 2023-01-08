@@ -1,9 +1,9 @@
 
 export fun main()
 {
-	var str1 = "abcdefghijklmnopqrstuvwxyz";
+	var str1 = "01234567890ABCDEF";
 
-	print(str1.sub(str1.find("fg"), 4));
+	print(str1.sub(str1.find("23"), 4));
 
 	foreach(var c in str1)
 		print(c);
