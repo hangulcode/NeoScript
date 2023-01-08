@@ -173,8 +173,8 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_LESS_EQ:	// <=
 		case NOP_EQUAL2:	// ==
 		case NOP_NEQUAL:	// !=
-		case NOP_AND:	// &&
-		case NOP_OR:	// ||
+		case NOP_AND2:		// &&
+		case NOP_OR2:		// ||
 		case NOP_STR_ADD: // ..
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
@@ -595,11 +595,11 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("NE [%s] = [%s] != [%s]\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str(), GetLog(funs, v, 3).c_str());
 			break;
-		case NOP_AND:	// &&
+		case NOP_AND2:	// &&
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("AND [%s] = [%s] && [%s]\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str(), GetLog(funs, v, 3).c_str());
+			OutAsm("AND2 [%s] = [%s] && [%s]\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str(), GetLog(funs, v, 3).c_str());
 			break;
-		case NOP_OR:	// ||
+		case NOP_OR2:	// ||
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("NE [%s] = [%s] || [%s]\n", GetLog(funs, v, 1).c_str(), GetLog(funs, v, 2).c_str(), GetLog(funs, v, 3).c_str());
 			break;

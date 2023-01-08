@@ -301,8 +301,8 @@ struct SFunctionInfo
 				case NOP_LESS_EQ:	// <=
 				case NOP_EQUAL2:	// ==
 				case NOP_NEQUAL:	// !=
-				case NOP_AND:	// &&
-				case NOP_OR:		// ||
+				case NOP_AND2:		// &&
+				case NOP_OR2:		// ||
 				{
 					u8 *pre = (u8*)_code->GetData() + sizeof(OpType) + sizeof(ArgFlag) + _iLastOPOffset;
 					short* preDest = (short*)pre;

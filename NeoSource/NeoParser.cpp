@@ -190,9 +190,9 @@ int InitDefaultTokenString()
 	TOKEN_STR3(TK_EQUAL_NOT, "!=", 8, NOP_NEQUAL);
 
 	TOKEN_STR2(TK_AND, "&");
-	TOKEN_STR3(TK_AND2, "&&", 12, NOP_AND);
+	TOKEN_STR3(TK_AND2, "&&", 12, NOP_AND2);
 	TOKEN_STR2(TK_OR, "|");
-	TOKEN_STR3(TK_OR2, "||", 13, NOP_OR);
+	TOKEN_STR3(TK_OR2, "||", 13, NOP_OR2);
 
 	TOKEN_STR2(TK_L_SMALL, "(");
 	TOKEN_STR2(TK_R_SMALL, ")");
@@ -247,8 +247,8 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_LESS_EQ, 3);
 	OP_STR1(NOP_EQUAL2, 3);
 	OP_STR1(NOP_NEQUAL, 3);
-	OP_STR1(NOP_AND, 3);
-	OP_STR1(NOP_OR, 3);
+	OP_STR1(NOP_AND2, 3);
+	OP_STR1(NOP_OR2, 3);
 
 	OP_STR1(NOP_JMP_GREAT, 3);
 	OP_STR1(NOP_JMP_GREAT_EQ, 3);
@@ -1473,6 +1473,8 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		case TK_LESS_EQ:	// <=
 		case TK_EQUAL_EQ:	// ==
 		case TK_EQUAL_NOT:	// !=
+		case TK_AND:		// &
+		case TK_OR:			// |
 		case TK_AND2:		// &&
 		case TK_OR2:		// ||
 		case TK_DOT2:		// ..
@@ -1772,9 +1774,9 @@ eNOperation ConvertCheckOPToOptimize(eNOperation n)
 		return NOP_JMP_EQUAL2;
 	case NOP_NEQUAL:	// !=
 		return NOP_JMP_NEQUAL;
-	case NOP_AND:	// &&
+	case NOP_AND2:	// &&
 		return NOP_JMP_AND;
-	case NOP_OR:	// ||
+	case NOP_OR2:	// ||
 		return NOP_JMP_OR;
 	default:
 		break;
@@ -1797,9 +1799,9 @@ eNOperation ConvertCheckOPToOptimizeInv(eNOperation n)
 		return NOP_JMP_NEQUAL;
 	case NOP_NEQUAL:	// !=
 		return NOP_JMP_EQUAL2;
-	case NOP_AND:	// &&
+	case NOP_AND2:	// &&
 		return NOP_JMP_NAND;
-	case NOP_OR:	// ||
+	case NOP_OR2:	// ||
 		return NOP_JMP_NOR;
 	default:
 		break;

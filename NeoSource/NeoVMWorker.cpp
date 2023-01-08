@@ -1388,10 +1388,10 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			case NOP_NEQUAL:	// !=
 				Var_SetBool(GetVarPtr1(OP), !CompareEQ(GetVarPtr2(OP), GetVarPtr3(OP)));
 				break;
-			case NOP_AND:	// &&
+			case NOP_AND2:	// &&
 				Var_SetBool(GetVarPtr1(OP), GetVarPtr3(OP)->IsTrue() && GetVarPtr2(OP)->IsTrue());
 				break;
-			case NOP_OR:	// ||
+			case NOP_OR2:	// ||
 				Var_SetBool(GetVarPtr1(OP), GetVarPtr2(OP)->IsTrue() || GetVarPtr3(OP)->IsTrue());
 				break;
 

@@ -50,8 +50,8 @@ enum eNOperation : OpType
 	NOP_LESS_EQ,	// <=
 	NOP_EQUAL2,	// ==
 	NOP_NEQUAL,	// !=
-	NOP_AND,	// &&
-	NOP_OR,		// ||
+	NOP_AND2,	// &&
+	NOP_OR2,		// ||
 
 	NOP_JMP,
 	NOP_JMP_FALSE,
