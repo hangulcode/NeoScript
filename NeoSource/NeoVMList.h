@@ -34,6 +34,7 @@ struct ListInfo
 	bool SetValue(int idx, VarInfo* pValue);
 	bool SetValue(int idx, int v);
 	bool InsertLast(VarInfo* pValue);
+	bool InsertLast(const std::string& str);
 
 	inline VarInfo* GetDataUnsafe() { return _Bucket; }
 private:

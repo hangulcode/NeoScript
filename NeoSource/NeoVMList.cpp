@@ -125,9 +125,18 @@ bool ListInfo::InsertLast(VarInfo* pValue)
 {
 	if (_itemCount + 1 >= _BucketCapa)
 	{
-		Reserve(_BucketCapa * 2);
+		Reserve(_BucketCapa == 0 ? 2 : _BucketCapa * 2);
 	}
 	_pVM->Move(&_Bucket[_itemCount++], pValue);
+	return true;
+}
+bool ListInfo::InsertLast(const std::string& str)
+{
+	if (_itemCount + 1 >= _BucketCapa)
+	{
+		Reserve(_BucketCapa == 0 ? 2 : _BucketCapa * 2);
+	}
+	_pVM->Var_SetStringA(&_Bucket[_itemCount++], str);
 	return true;
 }
 

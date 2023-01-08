@@ -1,14 +1,27 @@
 
 export fun main()
 {
-	var str1 = "01234567890ABCDEF";
-
-	print(str1.sub(str1.find("23"), 4));
+	var str1 = "01234567890";
 
 	foreach(var c in str1)
-		print(c);
+		print(c .. "_", "");
+	print("");
 
+	print("find / sub : " .. str1.sub(str1.find("23"), 4));
 
-//	for(var i in 0, List1.len(), 1)
-//		print(tostring(List1[i]));
+	var str2 = "AbCdEfGhIjKlMnOpQrStUvWxYz";
+	print("upper : " .. str2.upper());
+	print("lower : " .. str2.lower());
+
+	var str3 = "  12345    ";
+	print("trim  : {" .. str3.trim() .. "}");
+	print("ltrim : {" .. str3.ltrim() .. "}");
+	print("rtrim : {" .. str3.rtrim() .. "}");
+
+	print("relace : {" .. str3.replace("23", "AB") .. "}");
+
+	var str4 = "this,is,string";
+	var lst1 = str4.split(",");
+	foreach(var v in lst1)
+		print(v);
 }
