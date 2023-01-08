@@ -74,7 +74,7 @@ struct SOperationInfo
 struct STokenValue
 {
 	std::string _str;
-	char		_iPriority;
+	char		_iPriority; // lower value is higher priority
 	eNOperation	_op;
 
 	STokenValue() {}
@@ -169,8 +169,8 @@ int InitDefaultTokenString()
 	TOKEN_STR2(TK_FALSE, "false");
 	TOKEN_STR2(TK_NULL, "null");
 
-	TOKEN_STR3(TK_PLUS2, "++", 20, NOP_INC);
-	TOKEN_STR3(TK_MINUS2, "--", 20, NOP_DEC);
+	TOKEN_STR3(TK_PLUS2, "++", 1, NOP_INC);
+	TOKEN_STR3(TK_MINUS2, "--", 1, NOP_DEC);
 
 	TOKEN_STR3(TK_PLUS, "+", 5, NOP_ADD3);
 	TOKEN_STR3(TK_PLUS_EQ, "+=", 15, NOP_ADD2);
@@ -189,9 +189,9 @@ int InitDefaultTokenString()
 	TOKEN_STR3(TK_EQUAL_EQ, "==", 8, NOP_EQUAL2);
 	TOKEN_STR3(TK_EQUAL_NOT, "!=", 8, NOP_NEQUAL);
 
-	TOKEN_STR2(TK_AND, "&");
+	TOKEN_STR3(TK_AND, "&", 9, NOP_AND);
 	TOKEN_STR3(TK_AND2, "&&", 12, NOP_AND2);
-	TOKEN_STR2(TK_OR, "|");
+	TOKEN_STR3(TK_OR, "|", 11, NOP_OR);
 	TOKEN_STR3(TK_OR2, "||", 13, NOP_OR2);
 
 	TOKEN_STR2(TK_L_SMALL, "(");
@@ -247,6 +247,8 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_LESS_EQ, 3);
 	OP_STR1(NOP_EQUAL2, 3);
 	OP_STR1(NOP_NEQUAL, 3);
+	OP_STR1(NOP_AND, 3);
+	OP_STR1(NOP_OR, 3);
 	OP_STR1(NOP_AND2, 3);
 	OP_STR1(NOP_OR2, 3);
 

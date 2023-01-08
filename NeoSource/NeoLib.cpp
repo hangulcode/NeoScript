@@ -168,6 +168,26 @@ struct neo_libs
 		pN->ReturnValue((int)pVar->_lst->GetCount());
 		return true;
 	}
+	static bool List_append(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_LIST) return false;
+		if (args == 1)
+		{
+			pVar->_lst->InsertLast(pN->GetStack(1));
+			pN->ReturnValue();
+			return true;
+		}
+		else if (args == 2)
+		{
+			VarInfo* pIndex = pN->GetStack(2);
+			if (pIndex->GetType() != VAR_INT) return false;
+			if (false == pVar->_lst->Insert(pIndex->_int, pN->GetStack(1)))
+				return false;
+			pN->ReturnValue();
+			return true;
+		}
+		return true;
+	}
 
 	static bool Math_abs(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
@@ -592,6 +612,7 @@ void CNeoVM::RegObjLibrary()
 	_funLstLib = CNeoVM::RegisterNative(FunLst);
 	g_sNeoFunLstLib["resize"] = &neo_libs::List_resize;
 	g_sNeoFunLstLib["len"] = &neo_libs::List_len;
+	g_sNeoFunLstLib["append"] = &neo_libs::List_append;
 
 	_funTblLib = CNeoVM::RegisterNative(FunTbl);
 	g_sNeoFunTblLib["sort"] = &neo_libs::alg_sort;

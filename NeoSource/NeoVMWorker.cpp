@@ -488,6 +488,92 @@ void CNeoVMWorker::Per2(VarInfo* r, VarInfo* v2)
 	}
 	SetError("%= Error");
 }
+void CNeoVMWorker::And(VarInfo* r, VarInfo* v1, VarInfo* v2)
+{
+	switch (v1->GetType())
+	{
+	case VAR_BOOL:
+		if (v2->GetType() == VAR_INT)
+		{
+			Var_SetInt(r, (int)v1->_bl & v2->_int);
+			return;
+		}
+		else if (v2->GetType() == VAR_BOOL)
+		{
+			Var_SetBool(r, v1->_bl & v2->_bl);
+			return;
+		}
+		break;
+	case VAR_INT:
+		if (v2->GetType() == VAR_INT)
+		{
+			Var_SetInt(r, v1->_int & v2->_int);
+			return;
+		}
+		else if (v2->GetType() == VAR_BOOL)
+		{
+			Var_SetInt(r, v1->_int & (int)v2->_bl);
+			return;
+		}
+		break;
+	case VAR_FLOAT:
+		break;
+	case VAR_STRING:
+		break;
+	case VAR_TABLE:
+		break;
+	case VAR_LIST:
+		break;
+	case VAR_SET:
+		if (neo_DCalllibs::Set_And(this, r, v1, v2))
+			return;
+		break;
+	}
+	SetError("& Error");
+}
+void CNeoVMWorker::Or(VarInfo* r, VarInfo* v1, VarInfo* v2)
+{
+	switch (v1->GetType())
+	{
+	case VAR_BOOL:
+		if (v2->GetType() == VAR_INT)
+		{
+			Var_SetInt(r, (int)v1->_bl | v2->_int);
+			return;
+		}
+		else if (v2->GetType() == VAR_BOOL)
+		{
+			Var_SetBool(r, v1->_bl | v2->_bl);
+			return;
+		}
+		break;
+	case VAR_INT:
+		if (v2->GetType() == VAR_INT)
+		{
+			Var_SetInt(r, v1->_int | v2->_int);
+			return;
+		}
+		else if (v2->GetType() == VAR_BOOL)
+		{
+			Var_SetInt(r, v1->_int | (int)v2->_bl);
+			return;
+		}
+		break;
+	case VAR_FLOAT:
+		break;
+	case VAR_STRING:
+		break;
+	case VAR_TABLE:
+		break;
+	case VAR_LIST:
+		break;
+	case VAR_SET:
+		if (neo_DCalllibs::Set_Or(this, r, v1, v2))
+			return;
+		break;
+	}
+	SetError("| Error");
+}
 void CNeoVMWorker::Add(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
@@ -532,11 +618,10 @@ void CNeoVMWorker::Add(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			return;
 		break;
 	case VAR_SET:
-		if (neo_DCalllibs::Set_Add(this, r, v1, v2))
 			return;
 		break;
 	}
-	SetError("+ Error");
+	SetError("unsupported operand + Error");
 }
 
 void CNeoVMWorker::Sub(VarInfo* r, VarInfo* v1, VarInfo* v2)
@@ -1387,6 +1472,12 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				break;
 			case NOP_NEQUAL:	// !=
 				Var_SetBool(GetVarPtr1(OP), !CompareEQ(GetVarPtr2(OP), GetVarPtr3(OP)));
+				break;
+			case NOP_AND:		// &
+				And(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+				break;
+			case NOP_OR:		// |
+				Or(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
 				break;
 			case NOP_AND2:	// &&
 				Var_SetBool(GetVarPtr1(OP), GetVarPtr3(OP)->IsTrue() && GetVarPtr2(OP)->IsTrue());

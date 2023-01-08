@@ -8,56 +8,6 @@
 #include "NeoVMWorker.h"
 #include "NeoVMList.h"
 
-
-/*
-CollectionIterator ListInfo::FirstNode()
-{
-	CollectionIterator r;
-	for (int iBucket = 0; iBucket < _BucketCapa; iBucket++)
-	{
-		TableBucket* pBucket = &_Bucket[iBucket];
-
-		TableNode*	pCur = pBucket->pFirst;
-		if(pCur)
-		{
-			r._pNode = pCur;
-			return r;
-		}
-	}
-	r._pNode = NULL;
-	return r;
-}
-bool ListInfo::NextNode(CollectionIterator& r)
-{
-	if (r._pNode == NULL)
-		return false;
-
-	{
-		TableNode*	pCur = r._pNode->pNext;
-		if (pCur)
-		{
-			r._pNode = pCur;
-			return true;
-		}
-	}
-
-	for (int iBucket = (r._pNode->hash & _HashBase) + 1; iBucket < _BucketCapa; iBucket++)
-	{
-		TableBucket* pBucket = &_Bucket[iBucket];
-
-		if(pBucket->pFirst)
-		{
-			r._pNode = pBucket->pFirst;
-			return true;
-		}
-	}
-	r._pNode = NULL;
-	return false;
-}
-
-
-*/
-
 void ListInfo::Free()
 {
 	if (_BucketCapa <= 0)
@@ -98,21 +48,21 @@ void ListInfo::Reserve(int capa)
 }
 bool ListInfo::GetValue(int idx, VarInfo* pValue)
 {
-	if (idx < 0 || idx > _itemCount)
+	if (idx < 0 || idx >= _itemCount)
 		return false;
 	_pVM->Move(pValue, &_Bucket[idx]);
 	return true;
 }
 bool ListInfo::SetValue(int idx, VarInfo* pValue)
 {
-	if (idx < 0 || idx > _itemCount)
+	if (idx < 0 || idx >= _itemCount)
 		return false;
 	_pVM->Move(&_Bucket[idx], pValue);
 	return true;
 }
 bool ListInfo::SetValue(int idx, int v)
 {
-	if (idx < 0 || idx > _itemCount)
+	if (idx < 0 || idx >= _itemCount)
 		return false;
 	if (_Bucket[idx].IsAllocType())
 		_pVM->Var_Release(&_Bucket[idx]);
@@ -120,7 +70,19 @@ bool ListInfo::SetValue(int idx, int v)
 	_Bucket[idx]._int = v;
 	return true;
 }
+bool ListInfo::Insert(int idx, VarInfo* pValue)
+{
+	if (idx < 0 || idx > _itemCount)
+		return false;
+	if (idx == _itemCount)
+		return InsertLast(pValue);
 
+	InsertLast(pValue);
+	VarInfo tmp = _Bucket[_itemCount - 1];
+	memmove(&_Bucket[idx + 1], &_Bucket[idx], sizeof(VarInfo) * (_itemCount - idx - 1)); // overlap memory
+	_Bucket[idx] = tmp;
+	return true;
+}
 bool ListInfo::InsertLast(VarInfo* pValue)
 {
 	if (_itemCount + 1 >= _BucketCapa)

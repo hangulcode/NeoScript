@@ -48,9 +48,11 @@ enum eNOperation : OpType
 	NOP_GREAT_EQ,	// >=
 	NOP_LESS,		// <
 	NOP_LESS_EQ,	// <=
-	NOP_EQUAL2,	// ==
-	NOP_NEQUAL,	// !=
-	NOP_AND2,	// &&
+	NOP_EQUAL2,		// ==
+	NOP_NEQUAL,		// !=
+	NOP_AND,		// &
+	NOP_OR,			// |
+	NOP_AND2,		// &&
 	NOP_OR2,		// ||
 
 	NOP_JMP,
@@ -536,6 +538,8 @@ private:
 	void Mul2(VarInfo* r, VarInfo* v2);
 	void Div2(VarInfo* r, VarInfo* v2);
 	void Per2(VarInfo* r, VarInfo* v2);
+	void And(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	void Or(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Add(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Sub(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Mul(VarInfo* r, VarInfo* v1, VarInfo* v2);

@@ -33,6 +33,8 @@ struct ListInfo
 	bool GetValue(int idx, VarInfo* pValue);
 	bool SetValue(int idx, VarInfo* pValue);
 	bool SetValue(int idx, int v);
+
+	bool Insert(int idx, VarInfo* pValue);
 	bool InsertLast(VarInfo* pValue);
 	bool InsertLast(const std::string& str);
 

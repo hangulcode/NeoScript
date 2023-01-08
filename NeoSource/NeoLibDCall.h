@@ -27,7 +27,27 @@ struct neo_DCalllibs
 
 		return true;
 	}
-	static bool Set_Add(CNeoVMWorker* pN, VarInfo* r, VarInfo* v1, VarInfo* v2)
+	static bool Set_And(CNeoVMWorker* pN, VarInfo* r, VarInfo* v1, VarInfo* v2) // 교집합
+	{
+		if (v1->GetType() != VAR_SET) return false;
+		if (v2->GetType() != VAR_SET) return false;
+
+		SetInfo* pR = pN->_pVM->SetAlloc();
+		pN->Var_SetSet(r, pR);
+
+		SetInfo* pV1 = v1->_set;
+		SetInfo* pV2 = v2->_set;
+
+		CollectionIterator it = pV1->FirstNode();
+		while (it._pSetNode)
+		{
+			if (true == pV2->Find(&it._pSetNode->key))
+				pR->Insert(&it._pSetNode->key);
+			pV1->NextNode(it);
+		}
+		return true;
+	}
+	static bool Set_Or(CNeoVMWorker* pN, VarInfo* r, VarInfo* v1, VarInfo* v2) // 합집합
 	{
 		if (v1->GetType() != VAR_SET) return false;
 		if (v2->GetType() != VAR_SET) return false;
@@ -48,13 +68,13 @@ struct neo_DCalllibs
 		it = pV2->FirstNode();
 		while (it._pSetNode)
 		{
-			if (false == pR->Find(&it._pSetNode->key))
+			if (false == pV1->Find(&it._pSetNode->key))
 				pR->Insert(&it._pSetNode->key);
 			pV2->NextNode(it);
 		}
 		return true;
 	}
-	static bool Set_Sub(CNeoVMWorker* pN, VarInfo* r, VarInfo* v1, VarInfo* v2)
+	static bool Set_Sub(CNeoVMWorker* pN, VarInfo* r, VarInfo* v1, VarInfo* v2) // 차집합
 	{
 		if (v1->GetType() != VAR_SET) return false;
 		if (v2->GetType() != VAR_SET) return false;

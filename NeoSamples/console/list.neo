@@ -1,39 +1,56 @@
 
-export fun main()
+fun Fun_List()
 {
-	var Map1 = { 2, 4, 6, 8, 10, 12 };
-
-	foreach(var i, v in Map1)
-		print(v, " ");
-	print("");
-
 	var List1 = [ 2, 4, 5, 8 ];
 	var List2 = [ 1, 4, 5, 7 ];
 
-	var Set1 = set(List1);
 
-//	for(var i in 0, List1.len(), 1)
-//		print(List1[i]);
+	print("List original : ", "");
+	for(var i in 0, List1.len(), 1)
+		print(List1[i] .. " ", "");
+	print("");
 
+	List1.append(99); // last add
+	List1.append(-99, 2); // index add
 
-	print("Set + : ", " ");
-	var Set2 = set(List1) + set(List2);
+	print("List append : ", "");
+	for(var i in 0, List1.len(), 1)
+		print(List1[i] .. " ", "");
+	print("");
+
+	print("List + : ", "");
+	var List3 = List1 + List2;
+	for(var i in 0, List3.len(), 1)
+		print(List3[i] .. " ", "");
+	print("");
+}
+
+fun Fun_Set()
+{
+	var List1 = [ 2, 4, 5, 8 ];
+	var List2 = [ 1, 4, 5, 7 ];
+
+	print("Set | : ", " ");
+	var Set2 = set(List1) | set(List2);
 	foreach(var i,v in Set2)
 		print(i, " ");
 	print("");
 
-	print("Set - : ", " ");
-	var Set3 = set(List1) - set(List2);
+	print("Set & : ", " ");
+	var Set3 = set(List1) & set(List2);
 	foreach(var i,v in Set3)
 		print(i, " ");
 	print("");
-/*
 
-	foreach(var k in List2)
-		print(k);
+	print("Set - : ", " ");
+	var Set4 = set(List1) - set(List2);
+	foreach(var i,v in Set4)
+		print(i, " ");
+	print(""); 
+}
 
-	var List3 = List1 + List2;
-
-	foreach(var k in List3)
-		print(k);*/
+export fun main()
+{
+	Fun_List();
+	Fun_Set();
 }
