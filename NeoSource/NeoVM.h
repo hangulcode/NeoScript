@@ -153,7 +153,7 @@ public:
 	void InitLib();
 	void CallStatic(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	bool Init(void* pBuffer, int iSize, int iStackSize);
-	inline void SetError(const char* pErrMsg);
+	inline void SetError(const std::string& msg);
 	inline bool IsLocalErrorMsg() { return _bError; }
 public:
 	CNeoVM();
@@ -240,7 +240,7 @@ public:
 
 	inline const char* GetLastErrorMsg() { return _sErrorMsgDetail.c_str();  }
 	inline bool IsLastErrorMsg() { return (_sErrorMsgDetail.empty() == false); }
-	void ClearLastErrorMsg() { SetError(NULL); _sErrorMsgDetail.clear(); }
+	void ClearLastErrorMsg() { _bError = false; _sErrorMsgDetail.clear(); }
 
 	static CNeoVM*	LoadVM(void* pBuffer, int iSize, int iStackSize = 50 * 1024);
 	static void		ReleaseVM(CNeoVM* pVM);

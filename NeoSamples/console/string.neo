@@ -1,0 +1,14 @@
+
+export fun main()
+{
+	var str1 = "abcdefghijklmnopqrstuvwxyz";
+
+	print(str1.sub(str1.find("fg"), 4));
+
+	foreach(var c in str1)
+		print(c);
+
+
+//	for(var i in 0, List1.len(), 1)
+//		print(tostring(List1[i]));
+}

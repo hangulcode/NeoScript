@@ -334,11 +334,11 @@ CNeoVM::~CNeoVM()
 	}
 }
 
-void CNeoVM::SetError(const char* pErrMsg)
+void CNeoVM::SetError(const std::string& msg)
 {
-	if (pErrMsg)
+	if (msg.empty() == false)
 	{
-		_pErrorMsg = pErrMsg;
+		_pErrorMsg = msg;
 		_bError = true;
 	}
 	else

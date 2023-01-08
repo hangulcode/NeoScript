@@ -256,6 +256,7 @@
     <None Include="list.neo" />
     <None Include="meta.neo" />
     <None Include="slice_run.neo" />
+    <None Include="string.neo" />
     <None Include="table.neo" />
     <None Include="table_callback.neo" />
     <None Include="time_limit.neo" />

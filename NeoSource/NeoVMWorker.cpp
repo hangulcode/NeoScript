@@ -1,5 +1,6 @@
 #include <math.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <thread>
 #include <chrono>
 #include "NeoVM.h"
@@ -793,9 +794,38 @@ bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 	TableNode* n;
 	ListInfo* lst;
 	SetInfo* set;
+	std::string* str;
 
 	switch (pClt->GetType())
 	{
+	case VAR_STRING:
+		str = &pClt->_str->_str;
+		if (pIterator->GetType() != VAR_ITERATOR)
+		{
+			if (0 < (int)str->length())
+			{
+				pIterator->_it._iStringOffset = 0;
+				pIterator->SetType(VAR_ITERATOR);
+			}
+			else
+				return false;
+		}
+		else
+			++pIterator->_it._iStringOffset;
+
+		if (pIterator->_it._iStringOffset < (int)str->length())
+		{
+			//str->GetValue(pIterator->_it._iStringOffset, pKey);
+			const char* p = str->c_str();
+			Var_SetStringA(pKey, std::string(1, p[pIterator->_it._iStringOffset]));
+			return true;
+		}
+		else
+		{
+			pIterator->ClearType();
+			return false;
+		}
+		break;
 	case VAR_TABLE:
 		tbl = pClt->_tbl;
 		if (pIterator->GetType() != VAR_ITERATOR)
@@ -879,7 +909,7 @@ bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 		}
 		break;
 	}
-	SetError("foreach table Error");
+	SetErrorFormat("error : foreach not support '%s'", GetDataType(pClt->GetType()).c_str());
 	return false;
 
 //	SetError("foreach table key Error");
@@ -1186,8 +1216,23 @@ int CNeoVMWorker::GetDebugLine()
 }
 void CNeoVMWorker::SetError(const char* pErrMsg)
 {
-	_pVM->SetError(pErrMsg);
+	_pVM->SetError(std::string(pErrMsg));
 }
+void CNeoVMWorker::SetErrorFormat(const char* lpszString, ...)
+{
+	char buff[1024];
+	va_list arg_ptr;
+	va_start(arg_ptr, lpszString);
+#ifdef _WIN32
+	vsprintf_s(buff, _countof(buff), lpszString, arg_ptr);
+#else
+	vsnprintf(buff, 8, lpszString, arg_ptr);
+#endif
+	va_end(arg_ptr);
+
+	_pVM->SetError(std::string(buff));
+}
+
 bool	CNeoVMWorker::Start(int iFunctionID, std::vector<VarInfo>& _args)
 {
 	if(false == Setup(iFunctionID, _args))

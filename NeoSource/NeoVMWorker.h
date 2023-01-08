@@ -215,6 +215,7 @@ struct CollectionIterator
 		TableNode*	_pTableNode;
 		SetNode*	_pSetNode;
 		int			_iListOffset;
+		int			_iStringOffset;
 	};
 };
 #pragma pack()
@@ -850,6 +851,7 @@ public:
 
 
 	inline void SetError(const char* pErrMsg);
+	inline void SetErrorFormat(const char* pErrMsg, ...);
 public:
 	CNeoVMWorker(CNeoVM* pVM, u32 id, int iStackSize);
 	virtual ~CNeoVMWorker();

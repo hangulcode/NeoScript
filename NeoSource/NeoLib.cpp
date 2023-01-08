@@ -18,16 +18,15 @@ struct neo_libs
 	{
 		if (pVar->GetType() != VAR_STRING)
 			return false;
-		if (args != 3)
+		if (args != 2)
 			return false;
 
 		std::string* p = &pVar->_str->_str;
 		int p1 = pN->read<int>(1);
 		int p2 = pN->read<int>(2);
-		int p3 = pN->read<int>(3);
 
 
-		std::string sTempString = p->substr(p1, p1 + p2);
+		std::string sTempString = p->substr(p1, p2);
 		pN->ReturnValue(sTempString.c_str());
 		return true;
 	}
