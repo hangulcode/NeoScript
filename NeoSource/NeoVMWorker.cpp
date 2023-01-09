@@ -1314,6 +1314,12 @@ void CNeoVMWorker::SetError(const char* pErrMsg)
 {
 	_pVM->SetError(std::string(pErrMsg));
 }
+void CNeoVMWorker::SetErrorUnsupport(const char* pErrMsg, VarInfo* p)
+{
+	char buff[1024];
+	sprintf_s(buff, _countof(buff), pErrMsg, GetDataType(p->GetType()).c_str());
+	_pVM->SetError(std::string(buff));
+}
 void CNeoVMWorker::SetErrorFormat(const char* lpszString, ...)
 {
 	char buff[1024];
@@ -1788,10 +1794,11 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				_iSP_Vars = 0;
 				if(blDebugInfo)
 					_lineseq = GetDebugLine();
+				int idx = int((_pCodeCurrent - _pCodeBegin) / 8 - 1);
 #ifdef _WIN32
-				sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pVM->_pErrorMsg.c_str(), _lineseq);
+				sprintf_s(chMsg, _countof(chMsg), "%s : Index(%d), Line (%d)", _pVM->_pErrorMsg.c_str(), idx, _lineseq);
 #else
-				sprintf(chMsg, "%s : Line (%d)", _pVM->_pErrorMsg, _lineseq);
+				sprintf(chMsg, "%s : Index(%d), Line (%d)", _pVM->_pErrorMsg, idx, _lineseq);
 #endif
 				_pVM->_sErrorMsgDetail = chMsg;
 				return false;

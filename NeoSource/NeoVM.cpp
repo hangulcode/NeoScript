@@ -336,6 +336,10 @@ CNeoVM::~CNeoVM()
 
 void CNeoVM::SetError(const std::string& msg)
 {
+	if (_bError)
+	{	// already error msg 
+		return;
+	}
 	if (msg.empty() == false)
 	{
 		_pErrorMsg = msg;

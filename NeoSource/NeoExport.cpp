@@ -508,7 +508,7 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 		if (arText._debug)
 		{
 			int off = fi._iCode_Begin - sizeof(SNeoVMHeader) + arRead.GetBufferOffset();
-			OutAsm("%6d : ", debugInfo[off/8]._lineseq);
+			OutAsm("%4d %6d : ", off/8, debugInfo[off/8]._lineseq);
 		}
 
 		arRead >> v;

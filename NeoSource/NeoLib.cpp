@@ -526,6 +526,7 @@ struct neo_libs
 				return true;
 			}
 		default:
+			pN->SetErrorUnsupport("Unsupport set('%s')", pArg1);
 			return false;
 		}
 		pN->ReturnValue();

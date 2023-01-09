@@ -162,6 +162,7 @@ int InitDefaultTokenString()
 	TOKEN_STR2(TK_BREAK, "break");
 	TOKEN_STR2(TK_IF, "if");
 	TOKEN_STR2(TK_ELSE, "else");
+	TOKEN_STR2(TK_ELSEIF, "elif");
 	TOKEN_STR2(TK_FOR, "for");
 	TOKEN_STR2(TK_FOREACH, "foreach");
 	TOKEN_STR2(TK_WHILE, "while");
@@ -1833,6 +1834,26 @@ int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, const std:
 	pCurLayer->AddLocalVar(name, iLocalVar);
 	return iLocalVar;
 }
+int  AddLocalVar(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+{
+	SLayerVar* pCurLayer = vars.GetCurrentLayer();
+
+	char name[256];
+	sprintf_s(name, _countof(name), "^_#@_temp_%d", vars._iTempVarNameIndex++);
+
+	if (pCurLayer->FindVarOnlyCurrentBlock(name) >= 0)
+	{
+		SetCompileError(ar, "Error (%d, %d): Function Local Var Already (%s) %s", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), name);
+		return -1;
+	}
+	int iLocalVar;
+	if (funs._cur._name == GLOBAL_INIT_FUN_NAME)
+		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN + funs._cur._localVarCount++;
+	else
+		iLocalVar = 1 + (int)funs._cur._args.size() + funs._cur._localVarCount++; // 0 번은 리턴 저장용
+	pCurLayer->AddLocalVar(name, iLocalVar);
+	return iLocalVar;
+}
 void ClearTempVars(SFunctions& funs)
 {
 	funs._cur.FreeLocalTempVar();
@@ -2080,16 +2101,16 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 	}*/
 
-	int iIterator1 = AddLocalVarName(ar, funs, vars, tk1 + "^_#@_temp_1", false); // Current Save
+	int iIterator1 = AddLocalVar(ar, funs, vars); // Current Save
 	if (iIterator1 < 0)
 		return false;
-	int i_Begin = AddLocalVarName(ar, funs, vars, tk1 + "^_#@_temp_2", false); // Begin
+	int i_Begin = AddLocalVar(ar, funs, vars); // Begin
 	if (i_Begin < 0)
 		return false;
-	int i_End = AddLocalVarName(ar, funs, vars, tk1 + "^_#@_temp_3", false); // End
+	int i_End = AddLocalVar(ar, funs, vars); // End
 	if (i_End < 0)
 		return false;
-	int i_Step = AddLocalVarName(ar, funs, vars, tk1 + "^_#@_temp_4", false); // Step
+	int i_Step = AddLocalVar(ar, funs, vars); // Step
 	if (i_Step < 0)
 		return false;
 
@@ -2287,7 +2308,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	{
 		if (tkType1 == TK_STRING && tk1 == "in")
 		{
-			iValue = AddLocalVarName(ar, funs, vars, "^_#@_temp_value_", false);
+			iValue = AddLocalVar(ar, funs, vars);
 			ar.PushToken(tkType1, tk1);
 		}
 		else
@@ -2316,7 +2337,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 
 	// Iterator를 저장할 임시 자동 생성 변수
-	int iIterator = AddLocalVarName(ar, funs, vars, tk1 + "^_#@_temp_it_", false);
+	int iIterator = AddLocalVar(ar, funs, vars);
 	if (iIterator < 0)
 		return false;
 
@@ -2332,7 +2353,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		SetCompileError(ar, "Error (%d, %d): foreach 'in' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
 		return false;
 	}
-
+	/*
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_STRING) // Table Name
 	{
@@ -2345,9 +2366,21 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		SetCompileError(ar, "Error (%d, %d): foreach 'talbe' Not Found %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
 		return false;
 	}
+	*/
+	int iTable = -1;
+	SOperand operand;
+	r = ParseJob(true, operand, NULL, ar, funs, vars);
+	if (iTempOffset._iArrayIndex != INVALID_ERROR_PARSEJOB)
+	{
+		iTable = AddLocalVar(ar, funs, vars);
+		funs._cur.Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iTable);
+	}
+	else
+		iTable = operand._iVar;
 
-	tkType1 = GetToken(ar, tk1);
-	if (tkType1 != TK_R_SMALL) // )
+
+	//tkType1 = GetToken(ar, tk1);
+	if (r != TK_R_SMALL) // )
 	{
 		SetCompileError(ar, "Error (%d, %d): foreach ')' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
 		return false;
@@ -2612,7 +2645,21 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	ClearTempVars(funs);
 
 	tkType1 = GetToken(ar, tk1);
-	if (tkType1 == TK_ELSE)
+	if (tkType1 == TK_ELSEIF)
+	{
+		funs._cur.Push_JMP(ar, 0);
+		jmp2.Set(funs._cur._code->GetBufferOffset() - 6, funs._cur._code->GetBufferOffset());
+
+		funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
+
+		if (false == ParseIF(pJumps, ar, funs, vars))
+			return false;
+
+		ClearTempVars(funs);
+		//if(funs._cur.GetLastOP() != NOP_RETURN) // Code Size OPT TODO !!
+		funs._cur.Set_JumpOffet(jmp2, funs._cur._code->GetBufferOffset());
+	}	
+	else if (tkType1 == TK_ELSE)
 	{
 		funs._cur.Push_JMP(ar, 0);
 		jmp2.Set(funs._cur._code->GetBufferOffset() - 6, funs._cur._code->GetBufferOffset());
@@ -2620,12 +2667,12 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 		funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
 
 		tkType1 = GetToken(ar, tk1);
-		if (tkType1 == TK_IF)
+		/*if (tkType1 == TK_IF)
 		{
 			if (false == ParseIF(pJumps, ar, funs, vars))
 				return false;
 		}
-		else if (tkType1 == TK_L_MIDDLE)
+		else*/ if (tkType1 == TK_L_MIDDLE)
 		{
 			AddLocalVar(vars.GetCurrentLayer());
 

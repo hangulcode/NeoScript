@@ -58,6 +58,7 @@
 	- x..y: return the combined string of x and y strings
 
 ### Built-in system function use system.
+	## Basic
 	- abs (x): same as c ++
 	- acos (x): same as c ++
 	- asin (x): same as c ++
@@ -73,15 +74,38 @@
 	- deg (x): radian -> degree
 	- radian (x): degree -> radian
 	- sqrt (x): same as c ++
+	- srand (x): same as c ++
 	- rand (): same as c ++
-
-	- str_sub (x, y, z): convert x string from y offset to z number of strings and return
-	- str_len (x): Return the length of the string x
-	- str_find (x, y): Retrieve y string from x string and return position (same as c ++)
 	- print (x): print string x
+	- clock ():  return time
+	- coroutine_create (): coroutine create and return (suspended mode )
+	- coroutine_resume (x): suspended coroutine active
+	- coroutine_status (x): coroutine state string return
+
+    ## string
+	- len (): Return the length of the string
+	- find (x): Retrieve x string return position (same as c ++)
+	- sub (x, y): convert x string  offset to y number of strings and return
+	- upper () : convert to uppercase and return
+	- lower () : convert to lowercase and return
+	- trim () : trim space erase (left, right)
+	- ltrim () : trim space erase (left)
+	- rtrim () : trim space erase (right)
+	- replace (x, y) : find x and change y
+	- split (x) : string split from x and return list 
+
+	## list
+	- len () : return the length of list item count
+	- resize (x) : list item resize
+	- append (x, [y]) : list item insert (y value is index)
+
+	## table
+	- sort () : sort table value
+
+	## set
+	- len () : return count set item
 
 ### Comment
-	- Works the same as C syntax
 	- // one-line comment
 	- / * * / is a multi-line range comment
 

@@ -854,8 +854,9 @@ public:
 //	inline void	ReturnValue(SNeoMeta* p) { Var_SetMeta(&(*m_pVarStack)[_iSP_Vars], p); }
 
 
-	inline void SetError(const char* pErrMsg);
-	inline void SetErrorFormat(const char* pErrMsg, ...);
+	void SetError(const char* pErrMsg);
+	void SetErrorUnsupport(const char* pErrMsg, VarInfo* p);
+	void SetErrorFormat(const char* pErrMsg, ...);
 public:
 	CNeoVMWorker(CNeoVM* pVM, u32 id, int iStackSize);
 	virtual ~CNeoVMWorker();
