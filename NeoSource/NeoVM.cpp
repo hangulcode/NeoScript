@@ -286,7 +286,7 @@ CNeoVM::CNeoVM()
 		case NDF_INT: Var_SetStringA(&m_sDefaultValue[i], "int"); break;
 		case NDF_FLOAT: Var_SetStringA(&m_sDefaultValue[i], "float"); break;
 		case NDF_STRING: Var_SetStringA(&m_sDefaultValue[i], "string"); break;
-		case NDF_TABLE: Var_SetStringA(&m_sDefaultValue[i], "table"); break;
+		case NDF_TABLE: Var_SetStringA(&m_sDefaultValue[i], "map"); break;
 		case NDF_LIST: Var_SetStringA(&m_sDefaultValue[i], "list"); break;
 		case NDF_SET: Var_SetStringA(&m_sDefaultValue[i], "set"); break;
 		case NDF_COROUTINE: Var_SetStringA(&m_sDefaultValue[i], "coroutine"); break;

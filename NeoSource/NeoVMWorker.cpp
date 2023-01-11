@@ -1089,7 +1089,7 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 	case VAR_STRING:
 		return v1->_str->_str;
 	case VAR_TABLE:
-		return "table";
+		return "map";
 	case VAR_LIST:
 		return "list";
 	case VAR_SET:
@@ -2050,7 +2050,7 @@ std::string GetDataType(VAR_TYPE t)
 	case VAR_STRING:
 		return "string";
 	case VAR_TABLE:
-		return "table";
+		return "map";
 	case VAR_LIST:
 		return "list";
 	case VAR_SET:
