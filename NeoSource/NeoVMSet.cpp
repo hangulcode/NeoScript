@@ -382,6 +382,9 @@ bool SetInfo::Find(std::string& key)
 }
 void SetInfo::Reserve(int sz)
 {
+	if (sz < 0) sz = 0;
+	if (sz <= _BucketCapa) return;
+
 	if (sz >= _BucketCapa)
 	{
 		SetBucket* Old_Bucket = _Bucket;

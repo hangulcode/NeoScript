@@ -25,6 +25,7 @@ void ListInfo::Free()
 
 void ListInfo::Resize(int size)
 {
+	if (size < 0) size = 0;
 	Reserve(size);
 	_itemCount = size;
 }

@@ -299,6 +299,9 @@ TableNode* TableBucket::Find(VarInfo* pKey, u32 hash)
 
 void TableInfo::Reserve(int sz)
 {
+	if (sz < 0) sz = 0;
+	if (sz <= _BucketCapa) return;
+
 	if (sz >= _BucketCapa)
 	{
 		TableBucket* Old_Bucket = _Bucket;
