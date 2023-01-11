@@ -49,8 +49,35 @@ fun Fun_Set()
 	print(""); 
 }
 
+fun Fun_Map()
+{
+	var Map1 = { "a" = 1, "b" = 4, "c" = 5, "d" = 8 };
+	var Map2 = { "a" = 3, "X" = 4, "Y" = 5 };
+
+	print("Map : ", " ");
+	foreach(var i,v in Map1)
+		print(i .. "=" .. v, " ");
+	print("");
+
+	print("Map Keys : ", " ");
+	foreach(var i,v in Map1.keys())
+		print(i, " ");
+	print("");
+
+	print("Map Values : ", " ");
+	foreach(var i,v in Map1.values())
+		print(i, " ");
+	print("");
+
+	print("Map To Set | : ", " ");
+	foreach(var i,v in set(Map1.values()) | set(Map2.values()))
+		print(i, " ");
+	print("");
+}
+
 export fun main()
 {
 	Fun_List();
 	Fun_Set();
+	Fun_Map();
 }
