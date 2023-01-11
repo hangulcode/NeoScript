@@ -38,6 +38,8 @@ struct neo_DCalllibs
 		SetInfo* pV1 = v1->_set;
 		SetInfo* pV2 = v2->_set;
 
+		pR->Reserve(pV1->GetCount() < pV2->GetCount() ? pV1->GetCount() : pV2->GetCount());
+
 		CollectionIterator it = pV1->FirstNode();
 		while (it._pSetNode)
 		{
@@ -57,6 +59,8 @@ struct neo_DCalllibs
 
 		SetInfo* pV1 = v1->_set;
 		SetInfo* pV2 = v2->_set;
+
+		pR->Reserve(pV1->GetCount() + pV2->GetCount());
 
 		CollectionIterator it = pV1->FirstNode();
 		while (it._pSetNode)
@@ -84,6 +88,8 @@ struct neo_DCalllibs
 
 		SetInfo* pV1 = v1->_set;
 		SetInfo* pV2 = v2->_set;
+
+		pR->Reserve(pV1->GetCount());
 
 		CollectionIterator it = pV1->FirstNode();
 		while (it._pSetNode)

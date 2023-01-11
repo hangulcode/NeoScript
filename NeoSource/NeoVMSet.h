@@ -51,6 +51,7 @@ struct SetInfo : AllocBase
 
 	void Free();
 
+	void Reserve(int sz);
 	bool Insert(VarInfo* pKey);
 	void Insert(std::string& pKey);
 	void Insert(int Key);

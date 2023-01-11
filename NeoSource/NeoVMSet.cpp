@@ -380,6 +380,49 @@ bool SetInfo::Find(std::string& key)
 	}
 	return false;
 }
+void SetInfo::Reserve(int sz)
+{
+	if (sz >= _BucketCapa)
+	{
+		SetBucket* Old_Bucket = _Bucket;
+		int Old_BucketCapa = _BucketCapa;
+		int Old_HashBase = _HashBase;
+
+		if (_BucketCapa == 0)
+			_BucketCapa = 1;
+		while (true)
+		{
+			_BucketCapa <<= 1;
+			if (_BucketCapa >= sz)
+				break;
+		}
+		_Bucket = new SetBucket[_BucketCapa];
+		memset(_Bucket, 0, sizeof(SetBucket) * _BucketCapa);
+		_HashBase = _BucketCapa - 1;
+
+
+		for (int iBucket = 0; iBucket < Old_BucketCapa; iBucket++)
+		{
+			SetBucket* pBucket = &Old_Bucket[iBucket];
+
+			SetNode*	pFirst = pBucket->pFirst;
+			if (pFirst == NULL)
+				continue;
+
+			SetNode*	pCur = pFirst;
+			while (pCur)
+			{
+				SetNode*	pNext = pCur->pNext;
+				_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur);
+
+				pCur = pNext;
+			}
+		}
+
+		if (Old_BucketCapa > 0)
+			delete[] Old_Bucket;
+	}
+}
 
 
 //int g_MaxList = 0;
