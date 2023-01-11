@@ -50,7 +50,7 @@ int main()
 	{
 		printf("\n");
 
-		printf("0 test\n");
+		printf("0 hello\n");
 		printf("1 callback\n");
 		printf("2 table_callback\n");
 		printf("3 9_times\n");
