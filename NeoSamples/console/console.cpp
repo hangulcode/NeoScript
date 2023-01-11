@@ -50,18 +50,19 @@ int main()
 	{
 		printf("\n");
 
-		printf("0 callback\n");
-		printf("1 table_callback\n");
-		printf("2 9_times\n");
-		printf("3 string\n");
-		printf("4 table\n");
-		printf("5 list\n");
-		printf("6 slice_run\n");
-		printf("7 time_limit\n");
-		printf("8 divide_by_zero\n");
-		printf("9 delegate\n");
-		printf("10 meta\n");
-		printf("11 coroutine\n");
+		printf("0 test\n");
+		printf("1 callback\n");
+		printf("2 table_callback\n");
+		printf("3 9_times\n");
+		printf("4 string\n");
+		printf("5 table\n");
+		printf("6 list\n");
+		printf("7 slice_run\n");
+		printf("8 time_limit\n");
+		printf("9 divide_by_zero\n");
+		printf("10 delegate\n");
+		printf("11 meta\n");
+		printf("12 coroutine\n");
 
 		printf("only enter to exit\n");
 		printf("\npress the number and enter ...\n");
@@ -69,18 +70,19 @@ int main()
 		std::string key = getKeyString();
 
 		if (key == "") break;
-		else if (key ==  "0") SAMPLE_callback();
-		else if (key ==  "1") SAMPLE_table_callback();
-		else if (key ==  "2") SAMPLE_9_times();
-		else if (key ==  "3") SAMPLE_etc("string.neo", "main");
-		else if (key ==  "4") SAMPLE_etc("table.neo", "main");
-		else if (key ==  "5") SAMPLE_etc("list.neo", "main");
-		else if (key ==  "6") SAMPLE_slice_run();
-		else if (key ==  "7") SAMPLE_time_limit();
-		else if (key ==  "8") SAMPLE_etc("etc.neo", "divide_by_zero");
-		else if (key ==  "9") SAMPLE_etc("delegate.neo", "delegate");
-		else if (key == "10") SAMPLE_etc("meta.neo", "meta");
-		else if (key == "11") SAMPLE_etc("coroutine.neo", "test");
+		else if (key ==  "0") SAMPLE_etc("hello.neo", "main");
+		else if (key ==  "1") SAMPLE_callback();
+		else if (key ==  "2") SAMPLE_table_callback();
+		else if (key ==  "3") SAMPLE_9_times();
+		else if (key ==  "4") SAMPLE_etc("string.neo", "main");
+		else if (key ==  "5") SAMPLE_etc("table.neo", "main");
+		else if (key ==  "6") SAMPLE_etc("list.neo", "main");
+		else if (key ==  "7") SAMPLE_slice_run();
+		else if (key ==  "8") SAMPLE_time_limit();
+		else if (key ==  "9") SAMPLE_etc("etc.neo", "divide_by_zero");
+		else if (key == "10") SAMPLE_etc("delegate.neo", "delegate");
+		else if (key == "11") SAMPLE_etc("meta.neo", "meta");
+		else if (key == "12") SAMPLE_etc("coroutine.neo", "test");
 		
 		system("pause");
 	}

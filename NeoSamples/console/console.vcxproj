@@ -253,6 +253,7 @@
     <None Include="coroutine.neo" />
     <None Include="delegate.neo" />
     <None Include="etc.neo" />
+    <None Include="hello.neo" />
     <None Include="list.neo" />
     <None Include="meta.neo" />
     <None Include="slice_run.neo" />

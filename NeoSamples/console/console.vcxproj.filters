@@ -151,5 +151,8 @@
     <None Include="string.neo">
       <Filter>Samples</Filter>
     </None>
+    <None Include="hello.neo">
+      <Filter>Samples</Filter>
+    </None>
   </ItemGroup>
 </Project>
