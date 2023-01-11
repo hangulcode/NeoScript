@@ -349,6 +349,16 @@ struct neo_libs
 		pN->ReturnValue();
 		return true;
 	}
+	static bool map_reserve(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_TABLE) return false;
+		if (args != 1) return false;
+
+		int size = pN->read<int>(1);
+		pVar->_tbl->Reserve(size);
+		pN->ReturnValue();
+		return true;
+	}
 	static bool map_sort(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1) return false; // fun
@@ -651,6 +661,7 @@ void CNeoVM::RegObjLibrary()
 	g_sNeoFunLstLib["append"] = &neo_libs::List_append;
 
 	_funTblLib = CNeoVM::RegisterNative(FunTbl);
+	g_sNeoFunTblLib["reserve"] = &neo_libs::map_reserve;
 	g_sNeoFunTblLib["sort"] = &neo_libs::map_sort;
 	g_sNeoFunTblLib["keys"] = &neo_libs::map_keys;
 	g_sNeoFunTblLib["values"] = &neo_libs::map_values;

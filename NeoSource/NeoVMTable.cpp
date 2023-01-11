@@ -297,6 +297,49 @@ TableNode* TableBucket::Find(VarInfo* pKey, u32 hash)
 	return NULL;
 }
 
+void TableInfo::Reserve(int sz)
+{
+	if (sz >= _BucketCapa)
+	{
+		TableBucket* Old_Bucket = _Bucket;
+		int Old_BucketCapa = _BucketCapa;
+		int Old_HashBase = _HashBase;
+
+		if (_BucketCapa == 0)
+			_BucketCapa = 1;
+		while (true)
+		{
+			_BucketCapa <<= 1;
+			if (_BucketCapa >= sz)
+				break;
+		}
+		_Bucket = new TableBucket[_BucketCapa];
+		memset(_Bucket, 0, sizeof(TableBucket) * _BucketCapa);
+		_HashBase = _BucketCapa - 1;
+
+
+		for (int iBucket = 0; iBucket < Old_BucketCapa; iBucket++)
+		{
+			TableBucket* pBucket = &Old_Bucket[iBucket];
+
+			TableNode*	pFirst = pBucket->pFirst;
+			if (pFirst == NULL)
+				continue;
+
+			TableNode*	pCur = pFirst;
+			while (pCur)
+			{
+				TableNode*	pNext = pCur->pNext;
+				_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur);
+
+				pCur = pNext;
+			}
+		}
+
+		if (Old_BucketCapa > 0)
+			delete[] Old_Bucket;
+	}
+}
 
 //int g_MaxList = 0;
 VarInfo* TableInfo::Insert(VarInfo* pKey)

@@ -52,6 +52,7 @@ struct TableInfo : AllocBase
 
 	void Free();
 
+	void Reserve(int sz);
 	VarInfo* Insert(VarInfo* pKey);
 	void Insert(std::string& pKey, VarInfo* pValue);
 	void Insert(VarInfo* pKey, VarInfo* pValue);

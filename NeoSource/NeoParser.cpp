@@ -1078,7 +1078,6 @@ TK_TYPE ParseListDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVar
 	}
 
 	*((int*)((u8*)funs._cur._code->GetData() + off)) = iCurArrayOffset;
-
 	return tkType1;
 }
 
@@ -1091,10 +1090,18 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 	iResultStack = funs._cur.AllocLocalTempVar();
 	funs._cur.Push_TableAlloc(ar, iResultStack);
 
+	funs._cur.Push_MOVI(ar, NOP_MOVI, COMPILE_CALLARG_VAR_BEGIN + 1 + 0, 0);
+	int off = funs._cur._code->GetBufferOffset() - (sizeof(short) * 2);
+
+	// PCALL [S.??].[G.?? 'reserve'] arg:0 ==> reserve force call
+	int iStaticString = funs.AddStaticString("reserve");
+	funs._cur.Push_CallPtr(ar, iResultStack, iStaticString, 1); // map reserve
+
 	int iTempOffsetKey;
 	int iTempOffsetValue;
 	std::string str;
 
+	int iItemCount = 0;
 	int iCurArrayOffset = 0;
 	bool bPreviusComa = false;
 
@@ -1153,6 +1160,7 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 		}
 
 		funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack, iTempOffsetKey, iTempOffsetValue);
+		iItemCount++;
 
 		tkType2 = GetToken(ar, tk2);
 		if (tkType2 == TK_R_MIDDLE)
@@ -1172,6 +1180,7 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 			return TK_NONE;
 		}
 	}
+	*((int*)((u8*)funs._cur._code->GetData() + off)) = iItemCount;
 	return tkType1;
 }
 
