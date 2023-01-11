@@ -44,11 +44,11 @@ bool Fun(CNeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
 }
 
 
-int SAMPLE_table_callback()
+int SAMPLE_map_callback()
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == FileLoad("table_callback.neo", pFileBuffer, iFileLen))
+	if (false == FileLoad("map_callback.neo", pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;
@@ -63,7 +63,7 @@ int SAMPLE_table_callback()
 		CA* pClass = new CA();
 
 		VarInfo* g_sData;
-		pVM->Call<VarInfo*>(&g_sData, "GetTable");
+		pVM->Call<VarInfo*>(&g_sData, "GetMap");
 		if (g_sData != NULL && g_sData->GetType() == VAR_TABLE)
 		{
 			TableInfo* pTable = g_sData->_tbl;

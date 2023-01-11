@@ -1,6 +1,6 @@
 
 var g_sData = {};
-export fun GetTable() { return g_sData; }
+export fun GetMap() { return g_sData; }
 
 export fun update(var a, var b)
 {

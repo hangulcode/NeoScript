@@ -1,0 +1,118 @@
+
+fun dumpMap(var o)
+{
+    if( type(o) == "map")
+	{
+        var s = "{ ";
+        foreach(var k, v in o)
+		{
+            // key 가 숫자가 아닌 경우 "key" 
+            if( type(k) != "int" )
+                k = " "..k.. " " ;
+            s = s .. "[".. k .."] = " .. dumpMap(v) .. ",";
+        }
+        return s .. "} ";
+	}
+    else
+        return tostring(o);
+}
+
+fun Fun_General()
+{
+	var map = {};
+	map[5] = 3;
+	map[6] = {};
+	map[6][2] = 999;
+	map[6][3] = 888;
+	map["b2"] = 57;
+	map["c3"] = "Hello Neo Script...";
+	map["c4"] = "system";
+	map["c4"] = null; // Remove
+
+	for(var i in 0, 10, 1)
+	{
+		if (i % 2 == 0)
+			map[i] = {};
+		else
+			map[i] = i;
+	}
+	map[0] = null; // Remove
+
+	foreach(var a, b in map)
+	{
+		print(a ..":"..b);
+		//sleep(200);
+	}
+	print("Map Size : " ..tosize(map));
+}
+
+fun fun_Sort()
+{
+	//var map = { "cc"={"aa" = "bb",100,101,102}, 1, 2, 3, 4, 5, "test", 65 };
+	//var map = { 10, 11, 100=12,"test", 13 };
+	var mapNumber = { 5, 3, 1, 4, 7, 2 };
+
+	print("Before    : " .. dumpMap(mapNumber));
+	mapNumber.sort(fun(var a, var b) { return a < b; });
+	print("Ascending : " .. dumpMap(mapNumber));
+	
+	var mapPeople = {
+		{"nationality" = "Ameraca", "name" = "James"},
+		{"nationality" = "Korea",   "name" = "Alice"},
+		{"nationality" = "Japan",   "name" = "Donard"},
+	};
+
+	print("Before : " .. dumpMap(mapPeople));
+
+	mapPeople.sort(fun(var a, var b){return a.name < b.name;});
+	print("Name   : " .. dumpMap(mapPeople));
+
+	mapPeople.sort(fun(var a, var b){return a["nationality"] < b["nationality"];});
+	print("Nation : " .. dumpMap(mapPeople));
+}
+
+fun Fun_Performanc()
+{
+	var map = {};
+	var tm = clock();
+	
+//	var count = 10000001; // release
+	var count = 10001; // debug
+
+	for (var i in 1, count, 1) // release
+	{
+		map[i] = i;
+	}
+	var sum = 0.0;
+	print("Map Size : " ..tosize(map));
+	//sleep(5000);
+	print("Insert Time : " .. (clock() - tm));
+	
+	tm = clock();
+	map.sort(fun(var a, var b) { return a > b; });
+	print("Sort  Time : " .. (clock() - tm));
+	//print("Sorted   : " .. dumpMap(map));
+
+	tm = clock();
+	foreach(var a, b in map)
+	{
+		sum += b;
+	}
+	print("Map Size : " ..tosize(map));
+	print("Sum " .. sum .. "");
+	print("Foreach Time : " .. (clock() - tm));
+
+	tm = clock();
+	sum = 0.0;
+	for (var i in 1, count, 1)
+	{
+		sum += i;
+	}
+	print("for Time : " .. (clock() - tm));
+}
+export fun main()
+{
+	Fun_General();
+	fun_Sort();
+	Fun_Performanc();
+}

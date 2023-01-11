@@ -1,17 +1,17 @@
-fun Vector3_MetaTable(var r);
+fun Vector3_Meta(var r);
 fun Vector3_New(var x, var y, var z)
 {
 	var r = {};
 	r.x = x;
 	r.y = y;
 	r.z = z;
-	Vector3_MetaTable(r);
+	Vector3_Meta(r);
 	return r;
 }
 fun Vector3_Add3(var a, var b)
 {
 	var r = {};
-	if(type(b) == 'table')
+	if(type(b) == 'map')
 	{
 		r.x = a.x + b.x;
 		r.y = a.y + b.y;
@@ -23,13 +23,13 @@ fun Vector3_Add3(var a, var b)
 		r.y = a.y + b;
 		r.z = a.z + b;
 	}
-	Vector3_MetaTable(r);
+	Vector3_Meta(r);
 	return r;
 }
 fun Vector3_Sub3(var a, var b)
 {
 	var r = {};
-	if(type(b) == 'table')
+	if(type(b) == 'map')
 	{
 		r.x = a.x - b.x;
 		r.y = a.y - b.y;
@@ -41,12 +41,12 @@ fun Vector3_Sub3(var a, var b)
 		r.y = a.y - b;
 		r.z = a.z - b;
 	}
-	Vector3_MetaTable(r);
+	Vector3_Meta(r);
 	return r;
 }
 fun Vector3_Add2(var a, var b)
 {
-	if(type(b) == 'table')
+	if(type(b) == 'map')
 	{
 		a.x += b.x;
 		a.y += b.y;
@@ -60,7 +60,7 @@ fun Vector3_Add2(var a, var b)
 	}
 }
 var staticVector3Meta = null;
-fun Vector3_MetaTable(var r)
+fun Vector3_Meta(var r)
 {	
 	if(staticVector3Meta == null)
 	{

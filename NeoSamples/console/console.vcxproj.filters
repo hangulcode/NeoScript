@@ -19,9 +19,6 @@
     <ClCompile Include="..\..\NeoSource\NeoVMWorker.cpp">
       <Filter>NeoScript</Filter>
     </ClCompile>
-    <ClCompile Include="table_callback.cpp">
-      <Filter>Samples</Filter>
-    </ClCompile>
     <ClCompile Include="callback.cpp">
       <Filter>Samples</Filter>
     </ClCompile>
@@ -51,6 +48,9 @@
     </ClCompile>
     <ClCompile Include="..\..\NeoSource\NeoVMSet.cpp">
       <Filter>NeoScript</Filter>
+    </ClCompile>
+    <ClCompile Include="map_callback.cpp">
+      <Filter>Samples</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -124,13 +124,7 @@
     <None Include="slice_run.neo">
       <Filter>Samples</Filter>
     </None>
-    <None Include="table.neo">
-      <Filter>Samples</Filter>
-    </None>
     <None Include="time_limit.neo">
-      <Filter>Samples</Filter>
-    </None>
-    <None Include="table_callback.neo">
       <Filter>Samples</Filter>
     </None>
     <None Include="etc.neo">
@@ -152,6 +146,12 @@
       <Filter>Samples</Filter>
     </None>
     <None Include="hello.neo">
+      <Filter>Samples</Filter>
+    </None>
+    <None Include="map.neo">
+      <Filter>Samples</Filter>
+    </None>
+    <None Include="map_callback.neo">
       <Filter>Samples</Filter>
     </None>
   </ItemGroup>

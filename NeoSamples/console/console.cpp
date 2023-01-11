@@ -37,7 +37,7 @@ std::string getKeyString()
 }
 
 int SAMPLE_callback();
-int SAMPLE_table_callback();
+int SAMPLE_map_callback();
 int SAMPLE_9_times();
 int SAMPLE_slice_run();
 int SAMPLE_time_limit();
@@ -52,10 +52,10 @@ int main()
 
 		printf("0 hello\n");
 		printf("1 callback\n");
-		printf("2 table_callback\n");
+		printf("2 map_callback\n");
 		printf("3 9_times\n");
 		printf("4 string\n");
-		printf("5 table\n");
+		printf("5 map\n");
 		printf("6 list\n");
 		printf("7 slice_run\n");
 		printf("8 time_limit\n");
@@ -72,10 +72,10 @@ int main()
 		if (key == "") break;
 		else if (key ==  "0") SAMPLE_etc("hello.neo", "main");
 		else if (key ==  "1") SAMPLE_callback();
-		else if (key ==  "2") SAMPLE_table_callback();
+		else if (key ==  "2") SAMPLE_map_callback();
 		else if (key ==  "3") SAMPLE_9_times();
 		else if (key ==  "4") SAMPLE_etc("string.neo", "main");
-		else if (key ==  "5") SAMPLE_etc("table.neo", "main");
+		else if (key ==  "5") SAMPLE_etc("map.neo", "main");
 		else if (key ==  "6") SAMPLE_etc("list.neo", "main");
 		else if (key ==  "7") SAMPLE_slice_run();
 		else if (key ==  "8") SAMPLE_time_limit();
