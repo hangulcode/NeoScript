@@ -101,40 +101,12 @@ bool SetInfo::NextNode(CollectionIterator& r)
 	r._pSetNode = NULL;
 	return false;
 }
-
-void SetInfo::Var_ReleaseInternal(CNeoVM* pVM, VarInfo *d)
+void SetInfo::Var_Release(CNeoVM* pVM, VarInfo *d)
 {
-	switch (d->GetType())
-	{
-	case VAR_STRING:
-		if (--d->_str->_refCount <= 0)
-			pVM->FreeString(d);
-		d->_str = NULL;
-		break;
-	case VAR_TABLE:
-		if (--d->_tbl->_refCount <= 0)
-			pVM->FreeTable(d->_tbl);
-		d->_tbl = NULL;
-		break;
-	case VAR_LIST:
-		if (--d->_lst->_refCount <= 0)
-			pVM->FreeList(d->_lst);
-		d->_lst = NULL;
-		break;
-	case VAR_SET:
-		if (--d->_set->_refCount <= 0)
-			pVM->FreeSet(d->_set);
-		d->_set = NULL;
-		break;
-	case VAR_COROUTINE:
-		if (--d->_cor->_refCount <= 0)
-			pVM->FreeCoroutine(d);
-		d->_cor = NULL;
-		break;
-	default:
-		break;
-	}
-	d->ClearType();
+	if (d->IsAllocType())
+		pVM->Var_ReleaseInternal(d);
+	else
+		d->ClearType();
 }
 
 void SetInfo::Free()

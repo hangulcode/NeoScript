@@ -30,6 +30,38 @@ static std::string g_meta_Div2 = "/=";
 static std::string g_meta_Per2 = "%=";
 
 
+
+CNeoVMWorker::CNeoVMWorker(CNeoVM* pVM, u32 id, int iStackSize)
+{
+	_pVM = pVM;
+	_idWorker = id;
+	//SetCodeData(pVM->_pCodePtr, pVM->_iCodeLen);
+	m_pVarGlobal = &m_sVarGlobal;
+
+	m_pCur = &m_sDefault;
+	m_pCur->_state = COROUTINE_STATE_RUNNING;
+	m_pVarStack = &m_pCur->m_sVarStack;
+	m_pCallStack = &m_pCur->m_sCallStack;
+
+	_iSP_Vars = 0;
+	_iSP_Vars_Max2 = 0;
+	iSP_VarsMax = 0;
+
+	m_pVarStack->resize(iStackSize);
+	m_pCallStack->reserve(1000);
+}
+CNeoVMWorker::~CNeoVMWorker()
+{
+	for (int i = 0; i < (int)m_sVarGlobal.size(); i++)
+		Var_Release(&m_sVarGlobal[i]);
+	m_sVarGlobal.clear();
+
+	if (_pCodeBegin != NULL)
+	{
+		delete[] _pCodeBegin;
+		_pCodeBegin = NULL;
+	}
+}
 void CNeoVMWorker::Var_AddRef(VarInfo *d)
 {
 	switch (d->GetType())
@@ -47,34 +79,12 @@ void CNeoVMWorker::Var_AddRef(VarInfo *d)
 		break;
 	}
 }
-void CNeoVMWorker::Var_ReleaseInternal(VarInfo *d)
+void CNeoVMWorker::Var_Release(VarInfo *d)
 {
-	switch (d->GetType())
-	{
-	case VAR_STRING:
-		if (--d->_str->_refCount <= 0)
-			_pVM->FreeString(d);
-		d->_str = NULL;
-		break;
-	case VAR_TABLE:
-		if (--d->_tbl->_refCount <= 0)
-			_pVM->FreeTable(d->_tbl);
-		d->_tbl = NULL;
-		break;
-	case VAR_LIST:
-		if (--d->_lst->_refCount <= 0)
-			_pVM->FreeList(d->_lst);
-		d->_lst = NULL;
-		break;
-	case VAR_COROUTINE:
-		if (--d->_cor->_refCount <= 0)
-			_pVM->FreeCoroutine(d);
-		d->_cor = NULL;
-		break;
-	default:
-		break;
-	}
-	d->ClearType();
+	if (d->IsAllocType())
+		_pVM->Var_ReleaseInternal(d);
+	else
+		d->ClearType();
 }
 
 void CNeoVMWorker::Var_SetInt(VarInfo *d, int v)
@@ -1279,39 +1289,6 @@ bool CNeoVMWorker::Call_MetaTable2(VarInfo* pTable, std::string& funName, VarInf
 	return true;
 }
 
-
-
-CNeoVMWorker::CNeoVMWorker(CNeoVM* pVM, u32 id, int iStackSize)
-{
-	_pVM = pVM;
-	_idWorker = id;
-	//SetCodeData(pVM->_pCodePtr, pVM->_iCodeLen);
-	m_pVarGlobal = &m_sVarGlobal;
-
-	m_pCur = &m_sDefault;
-	m_pCur->_state = COROUTINE_STATE_RUNNING;
-	m_pVarStack = &m_pCur->m_sVarStack;
-	m_pCallStack = &m_pCur->m_sCallStack;
-
-	_iSP_Vars = 0;
-	_iSP_Vars_Max2 = 0;
-	iSP_VarsMax = 0;
-
-	m_pVarStack->resize(iStackSize);
-	m_pCallStack->reserve(1000);
-}
-CNeoVMWorker::~CNeoVMWorker()
-{
-	for (int i = 0; i < (int)m_sVarGlobal.size(); i++)
-		Var_Release(&m_sVarGlobal[i]);
-	m_sVarGlobal.clear();
-
-	if (_pCodeBegin != NULL)
-	{
-		delete[] _pCodeBegin;
-		_pCodeBegin = NULL;
-	}
-}
 static void ReadString(CNArchive& ar, std::string& str)
 {
 	short nLen;

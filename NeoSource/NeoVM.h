@@ -134,8 +134,8 @@ public:
 
 	static bool IsGlobalLibFun(std::string& FunName);
 	void RegLibrary(VarInfo* pSystem, const char* pLibName);// , SNeoFunLib* pFuns);
-	void RegObjLibrary();
-	void InitLib();
+	static void RegObjLibrary();
+	static void InitLib();
 	inline void SetError(const std::string& msg);
 	inline bool IsLocalErrorMsg() { return _bError; }
 	inline int GetBytesSize() { return _pMainWorker->GetBytesSize(); }

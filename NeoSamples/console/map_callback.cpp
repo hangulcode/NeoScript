@@ -87,6 +87,7 @@ int SAMPLE_map_callback()
 		else
 			printf("%lf\n(Elapse:%d)\n", r, t2 - t1);
 
+		delete pClass;
 		CNeoVM::ReleaseVM(pVM);
 	}
 	else
@@ -94,6 +95,7 @@ int SAMPLE_map_callback()
 		printf(err.c_str());
 	}
 	delete[] pFileBuffer;
+	g_sTablesFun.clear();
 
     return 0;
 }

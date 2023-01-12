@@ -60,13 +60,6 @@ private:
 			break;
 		}
 	}
-	void Var_ReleaseInternal(CNeoVM* pVM, VarInfo *d);
-	inline void Var_Release(CNeoVM* pVM, VarInfo *d)
-	{
-		if (d->IsAllocType())
-			Var_ReleaseInternal(pVM, d);
-		else
-			d->ClearType();
-	}
+	void Var_Release(CNeoVM* pVM, VarInfo *d);
 };
 

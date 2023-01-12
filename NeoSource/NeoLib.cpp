@@ -659,7 +659,8 @@ static void AddGlobalLibFun()
 }
 bool CNeoVM::IsGlobalLibFun(std::string& FunName)
 {
-	AddGlobalLibFun();
+	//AddGlobalLibFun();
+	InitLib();
 	auto it = g_sNeoFunLib.find(FunName);
 	if(it == g_sNeoFunLib.end())
 		return false;

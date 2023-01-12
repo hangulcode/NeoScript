@@ -9,14 +9,15 @@ enum VAR_TYPE : u8
 	VAR_BOOL,
 	VAR_INT,
 	VAR_FLOAT,	// double
-	VAR_STRING,
+	VAR_FUN,
+
+	VAR_ITERATOR,
+
+	VAR_STRING,	// Alloc
 	VAR_TABLE,
 	VAR_LIST,
 	VAR_SET,
 	VAR_COROUTINE,
-	VAR_FUN,
-
-	VAR_ITERATOR,
 };
 
 typedef u8	OpType;
@@ -259,7 +260,7 @@ public:
 	}
 	inline bool IsAllocType()
 	{
-		return ((_type == VAR_STRING) || (_type == VAR_TABLE) || (_type == VAR_LIST) || (_type == VAR_COROUTINE));
+		return ((_type >= VAR_STRING));
 	}
 	inline bool IsTrue()
 	{
@@ -485,14 +486,7 @@ private:
 
 public:
 	void Var_AddRef(VarInfo *d);
-	void Var_ReleaseInternal(VarInfo *d);
-	inline void Var_Release(VarInfo *d)
-	{
-		if (d->IsAllocType())
-			Var_ReleaseInternal(d);
-		else
-			d->ClearType();
-	}
+	void Var_Release(VarInfo *d);
 	void Var_SetNone(VarInfo *d);
 	CNeoVM* GetVM() { return _pVM;  }
 private:

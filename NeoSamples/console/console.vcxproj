@@ -258,6 +258,7 @@
     <None Include="map.neo" />
     <None Include="map_callback.neo" />
     <None Include="meta.neo" />
+    <None Include="module.neo" />
     <None Include="slice_run.neo" />
     <None Include="string.neo" />
     <None Include="time_limit.neo" />

@@ -154,5 +154,8 @@
     <None Include="map_callback.neo">
       <Filter>Samples</Filter>
     </None>
+    <None Include="module.neo">
+      <Filter>Samples</Filter>
+    </None>
   </ItemGroup>
 </Project>
