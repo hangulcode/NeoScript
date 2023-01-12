@@ -275,7 +275,6 @@ int	 CNeoVM::Coroutine_Destroy(int iCID)
 
 CNeoVM::CNeoVM()
 {
-	_pCodePtr = NULL;
 	for (int i = 0; i < NDF_MAX; i++)
 	{
 		m_sDefaultValue[i].ClearType();
@@ -303,13 +302,10 @@ CNeoVM::CNeoVM()
 			break;
 		}
 	}
+	InitLib();
 }
 CNeoVM::~CNeoVM()
 {
-	for (int i = 0; i < (int)m_sVarGlobal.size(); i++)
-		Var_Release(&m_sVarGlobal[i]);
-	m_sVarGlobal.clear();
-
 	for(auto it = _sVMWorkers.begin(); it != _sVMWorkers.end(); it++)
 	{
 		CNeoVMWorker* d = (*it).second;
@@ -327,11 +323,6 @@ CNeoVM::~CNeoVM()
 	_sStrings.clear();
 
 
-	if (_pCodePtr != NULL)
-	{
-		delete [] _pCodePtr;
-		_pCodePtr = NULL;
-	}
 }
 
 void CNeoVM::SetError(const std::string& msg)
@@ -354,140 +345,37 @@ void CNeoVM::SetError(const std::string& msg)
 
 
 
-static void ReadString(CNArchive& ar, std::string& str)
+CNeoVM* 	CNeoVM::CreateVM()
 {
-	short nLen;
-	ar >> nLen;
-	str.resize(nLen);
-
-	ar.Read((char*)str.data(), nLen);
+	return new CNeoVM();
 }
-
 void		CNeoVM::ReleaseVM(CNeoVM* pVM)
 {
 	delete pVM;
 }
-bool CNeoVM::Init(void* pBuffer, int iSize, int iStackSize)
+
+bool CNeoVM::LoadVM(void* pBuffer, int iSize, int iStackSize)
 {
-	_BytesSize = iSize;
-	CNArchive ar(pBuffer, iSize);
-	SNeoVMHeader header;
-	memset(&header, 0, sizeof(header));
-	ar >> header;
-	_header = header;
-
-	if (header._dwFileType != FILE_NEOS)
-	{
+	if (_pMainWorker)
 		return false;
-	}
-	if (header._dwNeoVersion != NEO_VER)
-	{
-		return false;
-	}
-
-
-	u8* pCode = new u8[header._iCodeSize];
-	SetCodeData(pCode, header._iCodeSize);
-	ar.Read(pCode, header._iCodeSize);
-
-	m_sFunctionPtr.resize(header._iFunctionCount);
-
-	int iID;
-	SFunctionTable fun;
-	std::string funName;
-	for (int i = 0; i < header._iFunctionCount; i++)
-	{
-		memset(&fun, 0, sizeof(SFunctionTable));
-
-		ar >> iID >> fun._codePtr >> fun._argsCount >> fun._localTempMax >> fun._localVarCount >> fun._funType;
-		if (fun._funType != FUNT_NORMAL && fun._funType != FUNT_ANONYMOUS)
-		{
-			ReadString(ar, funName);
-			m_sImExportTable[funName] = iID;
-		}
-
-		fun._localAddCount = 1 + fun._argsCount + fun._localVarCount + fun._localTempMax;
-		m_sFunctionPtr[iID] = fun;
-	}
-
-	std::string tempStr;
-	int iMaxVar = header._iStaticVarCount + header._iGlobalVarCount;
-	m_sVarGlobal.resize(iMaxVar);
-	for (int i = 0; i < header._iStaticVarCount; i++)
-	{
-		VarInfo& vi = m_sVarGlobal[i];
-		Var_Release(&vi);
-
-		VAR_TYPE type;
-		ar >> type;
-		vi.SetType(type);
-		switch (type)
-		{
-		case VAR_INT:
-			ar >> vi._int;
-			break;
-		case VAR_FLOAT:
-			ar >> vi._float;
-			break;
-		case VAR_BOOL:
-			ar >> vi._bl;
-			break;
-		case VAR_STRING:
-			ReadString(ar, tempStr);
-			vi._str = StringAlloc(tempStr);
-			vi._str->_refCount = 1;
-			break;
-		case VAR_FUN:
-			ar >> vi._fun_index;
-			break;
-		default:
-			SetError("Error Invalid VAR Type");
-			return false;
-		}
-	}
-	for (int i = header._iStaticVarCount; i < iMaxVar; i++)
-	{
-		m_sVarGlobal[i].ClearType();
-	}
-
-	if (header.m_iDebugCount > 0)
-	{
-		_DebugData.resize(header.m_iDebugCount);
-		ar.Read(&_DebugData[0], sizeof(debug_info) * header.m_iDebugCount);
-	}
-
 
 	_pMainWorker = WorkerAlloc(iStackSize);
-
-	InitLib();
-	std::vector<VarInfo> _args;
-	_pMainWorker->Start(0, _args);
+	if (false == _pMainWorker->Init(pBuffer, iSize, iStackSize))
+	{
+		FreeWorker(_pMainWorker);
+		return false;
+	}
 	return true;
 }
-CNeoVM* CNeoVM::LoadVM(void* pBuffer, int iSize, int iStackSize)
-{
-	CNeoVM* pVM = new CNeoVM();
-	if (false == pVM->Init(pBuffer, iSize, iStackSize))
-	{
-		delete pVM;
-		return NULL;
-	}
-
-	return pVM;
-}
-
-
 
 bool CNeoVM::RunFunction(const std::string& funName)
 {
-	auto it = m_sImExportTable.find(funName);
-	if (it == m_sImExportTable.end())
+	int iFID = _pMainWorker->FindFunction(funName);
+	if (iFID == -1)
 		return false;
 
 	std::vector<VarInfo> _args;
-	int iID = (*it).second;
-	_pMainWorker->Start(iID, _args);
-
+	_pMainWorker->Start(iFID, _args);
 	return true;
 }
 u32 CNeoVM::CreateWorker(int iStackSize)
@@ -510,17 +398,17 @@ bool CNeoVM::ReleaseWorker(u32 id)
 }
 bool CNeoVM::BindWorkerFunction(u32 id, const std::string& funName)
 {
-	auto it = m_sImExportTable.find(funName);
-	if (it == m_sImExportTable.end())
+	int iFID = _pMainWorker->FindFunction(funName);
+	if (iFID == -1)
 		return false;
 
-	auto it2 = _sVMWorkers.find(id);
-	if (it2 == _sVMWorkers.end())
+	auto it = _sVMWorkers.find(id);
+	if (it == _sVMWorkers.end())
 		return false;
 
 	std::vector<VarInfo> _args;
-	auto pWorker = (*it2).second;
-	return pWorker->Setup((*it).second, _args);
+	auto pWorker = (*it).second;
+	return pWorker->Setup(iFID, _args);
 }
 bool CNeoVM::SetTimeout(u32 id, int iTimeout, int iCheckOpCount)
 {

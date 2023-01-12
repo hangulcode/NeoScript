@@ -15,17 +15,7 @@ class CNeoVM
 	friend					neo_libs;
 	friend					neo_DCalllibs;
 private:
-	u8 *					_pCodePtr;
-	int						_iCodeLen;
 
-	void	SetCodeData(u8* p, int sz)
-	{
-		_pCodePtr = p;
-		_iCodeLen = sz;
-	}
-
-	std::vector<VarInfo>	m_sVarGlobal;
-	std::vector<SFunctionTable> m_sFunctionPtr;
 
 	std::map<u32, ListInfo*> _sLists;
 	std::map<u32, TableInfo*> _sTables;
@@ -33,15 +23,10 @@ private:
 	std::map<u32, StringInfo*> _sStrings;
 	u32 _dwLastIDVMWorker = 0;
 
-	SNeoVMHeader			_header;
-	std::map<std::string, int> m_sImExportTable;
-	std::vector<debug_info>	_DebugData;
 
-	CNeoVMWorker*			_pMainWorker;
+	CNeoVMWorker*			_pMainWorker = NULL;
 	std::map<u32, CNeoVMWorker*> _sVMWorkers;
-	int	_BytesSize;
 
-	inline bool IsDebugInfo() { return (_header._dwFlag & NEO_HEADER_FLAG_DEBUG) != 0; }
 
 	void Var_AddRef(VarInfo *d);
 	void Var_SetString(VarInfo *d, const char* str);
@@ -133,14 +118,14 @@ private:
 	CNVMInstPool< StringInfo, 10 > m_sPool_String;
 	CNVMInstPool< CoroutineInfo, 10 > m_sPool_Coroutine;
 
-	FunctionPtrNative _funLib;
-	FunctionPtrNative _funLstLib;
-	FunctionPtrNative _funStrLib;
-	FunctionPtrNative _funTblLib;
+	static bool _funInitLib;
+	static FunctionPtrNative _funDefaultLib;
+	static FunctionPtrNative _funLstLib;
+	static FunctionPtrNative _funStrLib;
+	static FunctionPtrNative _funTblLib;
 public:
 
 	bool RunFunction(const std::string& funName);
-	inline int GetBytesSize() { return _BytesSize; }
 
 
 	std::string _sErrorMsgDetail;
@@ -151,30 +136,32 @@ public:
 	void RegLibrary(VarInfo* pSystem, const char* pLibName);// , SNeoFunLib* pFuns);
 	void RegObjLibrary();
 	void InitLib();
-	void CallStatic(VarInfo* r, VarInfo* v1, VarInfo* v2);
-	bool Init(void* pBuffer, int iSize, int iStackSize);
 	inline void SetError(const std::string& msg);
 	inline bool IsLocalErrorMsg() { return _bError; }
+	inline int GetBytesSize() { return _pMainWorker->GetBytesSize(); }
+	int FindFunction(const std::string& name) { return _pMainWorker->FindFunction(name); }
+	bool SetFunction(int iFID, FunctionPtr& fun, int argCount) { return _pMainWorker->SetFunction(iFID, fun, argCount); }
+	int GetMainWorkerID() { return _pMainWorker == NULL ? 0 : _pMainWorker->GetWorkerID(); }
 public:
 	CNeoVM();
 	virtual ~CNeoVM();
 
-	int FindFunction(const std::string& name)
-	{
-		auto it = m_sImExportTable.find(name);
-		if (it == m_sImExportTable.end())
-			return -1;
-		return (*it).second;
-	}
-	bool SetFunction(int iFID, FunctionPtr& fun, int argCount)
-	{
-		fun._argCount = argCount;
-		if (m_sFunctionPtr[iFID]._argsCount != argCount)
-			return false;
+	//int FindFunction(const std::string& name)
+	//{
+	//	auto it = m_sImExportTable.find(name);
+	//	if (it == m_sImExportTable.end())
+	//		return -1;
+	//	return (*it).second;
+	//}
+	//bool SetFunction(int iFID, FunctionPtr& fun, int argCount)
+	//{
+	//	fun._argCount = argCount;
+	//	if (m_sFunctionPtr[iFID]._argsCount != argCount)
+	//		return false;
 
-		m_sFunctionPtr[iFID]._fun = fun;
-		return true;
-	}
+	//	m_sFunctionPtr[iFID]._fun = fun;
+	//	return true;
+	//}
 
 	static FunctionPtrNative RegisterNative(Neo_NativeFunction func)
 	{
@@ -207,12 +194,9 @@ public:
 	template<typename RVal, typename ... Types>
 	bool Call_TL(RVal* r, const std::string& funName, Types ... args) // Time Limit
 	{
-		int iFID = -1;
-		auto it = m_sImExportTable.find(funName);
-		if (it == m_sImExportTable.end())
+		int iFID = _pMainWorker->FindFunction(funName);
+		if (iFID == -1)
 			return false;
-
-		iFID = (*it).second;
 
 		return _pMainWorker->Call_TL<RVal>(r, iFID, args...);
 	}
@@ -220,12 +204,9 @@ public:
 	template<typename ... Types>
 	bool CallN_TL(const std::string& funName, Types ... args) // Time Limit
 	{
-		int iFID = -1;
-		auto it = m_sImExportTable.find(funName);
-		if (it == m_sImExportTable.end())
+		int iFID = _pMainWorker->FindFunction(funName);
+		if (iFID == -1)
 			return false;
-
-		iFID = (*it).second;
 
 		return _pMainWorker->CallN_TL(iFID, args...);
 	}
@@ -242,10 +223,12 @@ public:
 	inline bool IsLastErrorMsg() { return (_sErrorMsgDetail.empty() == false); }
 	void ClearLastErrorMsg() { _bError = false; _sErrorMsgDetail.clear(); }
 
-	static CNeoVM*	LoadVM(void* pBuffer, int iSize, int iStackSize = 50 * 1024);
-	static void		ReleaseVM(CNeoVM* pVM);
-	static bool		Compile(void* pBufferSrc, int iLenSrc, CNArchive& arw, std::string& err, bool putASM = false, bool debug = false, bool allowGlobalInitLogic = true);
+	bool	LoadVM(void* pBuffer, int iSize, int iStackSize = 50 * 1024);
 
-	static CNeoVM*	CompileAndLoadVM(void* pBufferSrc, int iLenSrc, std::string& err, bool putASM = false, bool debug = false, bool allowGlobalInitLogic = true, int iStackSize = 50 * 1024);
+	static CNeoVM* 	CreateVM();
+	static void		ReleaseVM(CNeoVM* pVM);
+	static bool		Compile(const void* pBufferSrc, int iLenSrc, CNArchive& arw, std::string& err, bool putASM = false, bool debug = false, bool allowGlobalInitLogic = true);
+
+	static CNeoVM*	CompileAndLoadVM(const void* pBufferSrc, int iLenSrc, std::string& err, bool putASM = false, bool debug = false, bool allowGlobalInitLogic = true, int iStackSize = 50 * 1024);
 };
 

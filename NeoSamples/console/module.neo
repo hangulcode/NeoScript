@@ -1,0 +1,9 @@
+
+export fun main()
+{
+	print('module');
+	
+	var m = load("print('ok');", "chunk");
+
+	print("");
+}

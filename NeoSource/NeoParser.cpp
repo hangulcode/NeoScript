@@ -3108,7 +3108,7 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	return r;
 }
 
-bool CNeoVM::Compile(void* pBufferSrc, int iLenSrc, CNArchive& arw, std::string& err, bool putASM, bool debug, bool allowGlobalInitLogic)
+bool CNeoVM::Compile(const void* pBufferSrc, int iLenSrc, CNArchive& arw, std::string& err, bool putASM, bool debug, bool allowGlobalInitLogic)
 {
 	CArchiveRdWC ar2;
 	ToArchiveRdWC((const char*)pBufferSrc, iLenSrc, ar2);
@@ -3124,7 +3124,7 @@ bool CNeoVM::Compile(void* pBufferSrc, int iLenSrc, CNArchive& arw, std::string&
 
 	return b;
 }
-CNeoVM*	CNeoVM::CompileAndLoadVM(void* pBufferSrc, int iLenSrc, std::string& err, bool putASM, bool debug, bool allowGlobalInitLogic, int iStackSize)
+CNeoVM*	CNeoVM::CompileAndLoadVM(const void* pBufferSrc, int iLenSrc, std::string& err, bool putASM, bool debug, bool allowGlobalInitLogic, int iStackSize)
 {
 	CNArchive arCode;
 
@@ -3136,7 +3136,12 @@ CNeoVM*	CNeoVM::CompileAndLoadVM(void* pBufferSrc, int iLenSrc, std::string& err
 	//if(putASM)
 	//	SetCompileError(ar, "Comile Success. Code : %d bytes !!\n\n", arCode.GetBufferOffset());
 
-	CNeoVM* pVM = CNeoVM::LoadVM(arCode.GetData(), arCode.GetBufferOffset(), iStackSize);
+	CNeoVM* pVM = CNeoVM::CreateVM();
+	if (pVM->LoadVM(arCode.GetData(), arCode.GetBufferOffset(), iStackSize) == false)
+	{
+		CNeoVM::ReleaseVM(pVM);
+		return NULL;
+	}
 
 	return pVM;
 }

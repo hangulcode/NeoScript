@@ -21,10 +21,10 @@ int SAMPLE_slice_run()
 		printf("Compile Success. Code : %d bytes !!\n", pVM->GetBytesSize());
 
 		// Alloc Worker Stack
-		u32 id = pVM->CreateWorker();
+		u32 id = pVM->GetMainWorkerID();
 		if (id == 0)
 		{
-			printf("Error - CeateWorker %s", "slice_fun\n");
+			printf("Error - GetMainWorkerID %s", "slice_fun\n");
 			return - 1;
 		}
 

@@ -406,6 +406,42 @@ private:
 	inline void SetCodePtr(int off) { _pCodeCurrent = _pCodeBegin + off; }
 	inline void SetCodeIncPtr(int off) { _pCodeCurrent += off; }
 
+	SNeoVMHeader			_header;
+//	u8 *					_pCodePtr = NULL;
+//	int						_iCodeLen;
+
+	std::map<std::string, int> m_sImExportTable;
+	std::vector<debug_info>	_DebugData;
+
+	//void	SetCodeData(u8* p, int sz)
+	//{
+	//	_pCodePtr = p;
+	//	_iCodeLen = sz;
+	//}
+
+	std::vector<VarInfo>	m_sVarGlobal;
+	std::vector<SFunctionTable> m_sFunctionPtr;
+	int	_BytesSize;
+
+	inline bool IsDebugInfo() { return (_header._dwFlag & NEO_HEADER_FLAG_DEBUG) != 0; }
+	inline int GetBytesSize() { return _BytesSize; }
+
+	int FindFunction(const std::string& name)
+	{
+		auto it = m_sImExportTable.find(name);
+		if (it == m_sImExportTable.end())
+			return -1;
+		return (*it).second;
+	}
+	bool SetFunction(int iFID, FunctionPtr& fun, int argCount)
+	{
+		fun._argCount = argCount;
+		if (m_sFunctionPtr[iFID]._argsCount != argCount)
+			return false;
+
+		m_sFunctionPtr[iFID]._fun = fun;
+		return true;
+	}
 
 	int						_iSP_Vars;
 	int						_iSP_Vars_Max2;
@@ -861,6 +897,7 @@ public:
 	CNeoVMWorker(CNeoVM* pVM, u32 id, int iStackSize);
 	virtual ~CNeoVMWorker();
 
+	bool Init(void* pBuffer, int iSize, int iStackSize);
 	inline u32 GetWorkerID() { return _idWorker; }
 };
 extern std::string GetDataType(VAR_TYPE t);

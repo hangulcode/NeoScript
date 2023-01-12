@@ -69,7 +69,7 @@ fun Vector3_Meta(var r)
 		staticVector3Meta["-"] = Vector3_Sub3;
 		staticVector3Meta["+="] = Vector3_Add2;
 	}
-	system.meta(r, staticVector3Meta);
+	sys_meta(r, staticVector3Meta);
 }
 
 export fun meta()

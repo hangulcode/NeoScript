@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "NeoVM.h"
+#include "NeoArchive.h"
 
 #define MATH_PI				3.14159265358979323846f // Pi
 
@@ -453,6 +454,30 @@ struct neo_libs
 		pN->ReturnValue(double((double)clock() / (double)CLOCKS_PER_SEC));
 		return true;
 	}
+	static bool sys_load(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+
+		VarInfo* pArg1 = pN->GetStack(1);
+		VarInfo* pArg2 = pN->GetStack(2);
+
+		if (pArg1->GetType() != VAR_STRING) return false;
+		if (pArg2->GetType() != VAR_STRING) return false;
+
+		CNArchive arCode;
+		std::string err;
+		if (false == CNeoVM::Compile(pArg1->_str->_str.c_str(), (int)pArg1->_str->_str.length(), arCode, err, false, false))
+		{
+			return NULL;
+		}
+
+	
+		//CNeoVM* pVM = CNeoVM::LoadVM(arCode.GetData(), arCode.GetBufferOffset(), iStackSize);
+
+		//pN->ReturnValue(double((double)clock() / (double)CLOCKS_PER_SEC));
+		return true;
+	}
+
 	static bool sys_coroutine_create(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1) return false;
@@ -554,6 +579,12 @@ static std::map<std::string, TYPE_NeoLib> g_sNeoFunLstLib;
 static std::map<std::string, TYPE_NeoLib> g_sNeoFunStrLib;
 static std::map<std::string, TYPE_NeoLib> g_sNeoFunTblLib;
 
+bool CNeoVM::_funInitLib = false;
+FunctionPtrNative CNeoVM::_funDefaultLib;
+FunctionPtrNative CNeoVM::_funLstLib;
+FunctionPtrNative CNeoVM::_funStrLib;
+FunctionPtrNative CNeoVM::_funTblLib;
+
 
 static bool Fun(CNeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
 {
@@ -614,9 +645,11 @@ static void AddGlobalLibFun()
 	g_sNeoFunLib["srand"] = &neo_libs::Math_srand;
 	g_sNeoFunLib["rand"] = &neo_libs::Math_rand;
 
-	g_sNeoFunLib["meta"] = &neo_libs::util_meta;
+	g_sNeoFunLib["sys_meta"] = &neo_libs::util_meta;
 	g_sNeoFunLib["print"] = &neo_libs::io_print;
 	g_sNeoFunLib["clock"] = &neo_libs::sys_clock;
+
+	g_sNeoFunLib["load"] = &neo_libs::sys_load;
 
 	g_sNeoFunLib["set"] = &neo_libs::set;
 
@@ -636,13 +669,19 @@ void CNeoVM::RegLibrary(VarInfo* pSystem, const char* pLibName)
 {
 	TableInfo* pTable = pSystem->_tbl;
 	pTable->_fun = CNeoVM::RegisterNative(Fun);
-	AddGlobalLibFun();
+	//AddGlobalLibFun();
 
-	_funLib = CNeoVM::RegisterNative(Fun);
+	//_funDefaultLib = CNeoVM::RegisterNative(Fun);
 }
 
 void CNeoVM::RegObjLibrary()
 {
+	if (_funInitLib) return;
+	_funInitLib = true;
+
+	AddGlobalLibFun();
+	_funDefaultLib = CNeoVM::RegisterNative(Fun);
+
 	_funStrLib = CNeoVM::RegisterNative(FunStr);
 	g_sNeoFunStrLib["sub"] = &neo_libs::Str_sub;
 	g_sNeoFunStrLib["len"] = &neo_libs::Str_len;
@@ -669,13 +708,10 @@ void CNeoVM::RegObjLibrary()
 
 void CNeoVM::InitLib()
 {
-	//VarInfo* pSystem = GetVarPtr(-1);
-	VarInfo* pSystem = &m_sVarGlobal[0];
+/*	VarInfo* pSystem = &m_sVarGlobal[0];
 	Var_SetTable(pSystem, TableAlloc());
 
-	//SetTable(, TableAlloc());
-
-	RegLibrary(pSystem, "sys");
+	RegLibrary(pSystem, "sys");*/
 	RegObjLibrary();
 }
 

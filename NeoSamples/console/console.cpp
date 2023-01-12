@@ -63,6 +63,7 @@ int main()
 		printf("10 delegate\n");
 		printf("11 meta\n");
 		printf("12 coroutine\n");
+		printf("13 module\n");
 
 		printf("only enter to exit\n");
 		printf("\npress the number and enter ...\n");
@@ -83,6 +84,7 @@ int main()
 		else if (key == "10") SAMPLE_etc("delegate.neo", "delegate");
 		else if (key == "11") SAMPLE_etc("meta.neo", "meta");
 		else if (key == "12") SAMPLE_etc("coroutine.neo", "test");
+		else if (key == "13") SAMPLE_etc("module.neo", "main");
 		
 		system("pause");
 	}

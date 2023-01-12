@@ -13,14 +13,14 @@ fun fa(var param1)
 
 export fun test()
 {
-	cr = system.coroutine_create(fa);
+	cr = coroutine_create(fa);
 
 	for(var i in 0, 10, 1)
 	{
-		var state = system.coroutine_status(cr);
+		var state = coroutine_status(cr);
 		if(state == "suspended")
 		{
-			system.coroutine_resume(cr, 2);
+			coroutine_resume(cr, 2);
 		}
 		print("Main " .. state .. i);
 		sleep(1000);
