@@ -36,6 +36,7 @@ private:
 
 	CNeoVMWorker* WorkerAlloc(int iStackSize);
 	void FreeWorker(CNeoVMWorker *d);
+	CNeoVMWorker* FindWorker(int iModule);
 
 	CoroutineInfo* CoroutineAlloc();
 	void FreeCoroutine(VarInfo *d);
@@ -92,6 +93,11 @@ private:
 			if (--d->_cor->_refCount <= 0)
 				FreeCoroutine(d);
 			d->_cor = NULL;
+			break;
+		case VAR_MODULE:
+			if (--d->_module->_refCount <= 0)
+				FreeWorker(d->_module);
+			d->_module = NULL;
 			break;
 		default:
 			break;
@@ -223,7 +229,7 @@ public:
 	inline bool IsLastErrorMsg() { return (_sErrorMsgDetail.empty() == false); }
 	void ClearLastErrorMsg() { _bError = false; _sErrorMsgDetail.clear(); }
 
-	int	LoadVM(void* pBuffer, int iSize, int iStackSize = 50 * 1024); // 0 is error
+	CNeoVMWorker*	LoadVM(void* pBuffer, int iSize, int iStackSize = 50 * 1024); // 0 is error
 	bool PCall(int iModule);
 
 	static CNeoVM* 	CreateVM();

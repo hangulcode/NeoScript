@@ -471,17 +471,15 @@ struct neo_libs
 			return false;
 		}
 
-		int iModule = pN->_pVM->LoadVM(arCode.GetData(), arCode.GetBufferOffset());
-		if (iModule == 0)
+		CNeoVMWorker* pModule = pN->_pVM->LoadVM(arCode.GetData(), arCode.GetBufferOffset());
+		if (pModule == NULL)
 		{
 			pN->ReturnValue();
 			return false; // ?
 		}
 
 		VarInfo* pRet = pN->GetStack(0);
-		pN->Var_Release(pRet);
-		pRet->SetType(VAR_MODULE);
-		pRet->_module = iModule;
+		pN->Var_SetModule(pRet, pModule);
 		return true;
 	}
 	static bool sys_pcall(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -491,7 +489,7 @@ struct neo_libs
 		VarInfo* pArg1 = pN->GetStack(1);
 		if (pArg1->GetType() != VAR_MODULE) return false;
 
-		pN->_pVM->PCall(pArg1->_module);
+		pN->_pVM->PCall(pArg1->_module->GetWorkerID());
 
 		pN->ReturnValue();
 		return true;

@@ -67,7 +67,7 @@ CNeoVMWorker* CNeoVM::WorkerAlloc(int iStackSize)
 	}
 
 	CNeoVMWorker* p = new CNeoVMWorker(this, _dwLastIDVMWorker, iStackSize);
-//	p->_refCount = 0;
+	p->_refCount = 0;
 
 	_sVMWorkers[_dwLastIDVMWorker] = p;
 	return p;
@@ -81,6 +81,15 @@ void CNeoVM::FreeWorker(CNeoVMWorker *d)
 	_sVMWorkers.erase(it);
 	delete d;
 }
+CNeoVMWorker* CNeoVM::FindWorker(int iModule)
+{
+	auto it = _sVMWorkers.find(iModule);
+	if (it == _sVMWorkers.end())
+		return NULL;
+
+	return (*it).second;
+}
+
 CoroutineInfo* CNeoVM::CoroutineAlloc()
 {
 	CoroutineInfo* p = m_sPool_Coroutine.Receive();
@@ -354,17 +363,17 @@ void		CNeoVM::ReleaseVM(CNeoVM* pVM)
 	delete pVM;
 }
 
-int CNeoVM::LoadVM(void* pBuffer, int iSize, int iStackSize)
+CNeoVMWorker* CNeoVM::LoadVM(void* pBuffer, int iSize, int iStackSize)
 {
 	CNeoVMWorker*pWorker = WorkerAlloc(iStackSize);
 	if (false == pWorker->Init(pBuffer, iSize, iStackSize))
 	{
 		FreeWorker(pWorker);
-		return 0;
+		return NULL;
 	}
 	if (NULL == _pMainWorker)
 		_pMainWorker = pWorker;
-	return pWorker->GetWorkerID();
+	return pWorker;
 }
 bool CNeoVM::PCall(int iModule)
 {

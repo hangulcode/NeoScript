@@ -132,6 +132,14 @@ void CNeoVMWorker::Var_SetBool(VarInfo *d, bool v)
 	}
 	d->_bl = v;
 }
+void CNeoVMWorker::Var_SetFun(VarInfo* d, int fun_index)
+{
+	if (d->IsAllocType())
+		Var_Release(d);
+
+	d->SetType(VAR_FUN);
+	d->_fun_index = fun_index;
+}
 void CNeoVMWorker::Var_SetCoroutine(VarInfo *d, CoroutineInfo* p)
 {
 	if (d->IsAllocType())
@@ -181,13 +189,14 @@ void CNeoVMWorker::Var_SetSet(VarInfo *d, SetInfo* p)
 	d->_set = p;
 	++p->_refCount;
 }
-void CNeoVMWorker::Var_SetFun(VarInfo* d, int fun_index)
+void CNeoVMWorker::Var_SetModule(VarInfo *d, CNeoVMWorker* p)
 {
 	if (d->IsAllocType())
 		Var_Release(d);
 
-	d->SetType(VAR_FUN);
-	d->_fun_index = fun_index;
+	d->SetType(VAR_MODULE);
+	d->_module = p;
+	++p->_refCount;
 }
 
 void CNeoVMWorker::CltInsert(VarInfo *pClt, VarInfo *pKey, VarInfo *pValue)

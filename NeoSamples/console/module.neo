@@ -1,11 +1,15 @@
+fun test()
+{
+	var m = load("print('ok');", "chunk");
+	pcall(m);
+	pcall(m);
+}
 
 export fun main()
 {
 	print('module');
 	
-	var m = load("print('ok');", "chunk");
-	pcall(m);
-	pcall(m);
+	test();
 
 	print("...");
 }

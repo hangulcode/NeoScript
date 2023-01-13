@@ -3139,7 +3139,7 @@ CNeoVM*	CNeoVM::CompileAndLoadVM(const void* pBufferSrc, int iLenSrc, std::strin
 	//	SetCompileError(ar, "Comile Success. Code : %d bytes !!\n\n", arCode.GetBufferOffset());
 
 	CNeoVM* pVM = CNeoVM::CreateVM();
-	if (pVM->LoadVM(arCode.GetData(), arCode.GetBufferOffset(), iStackSize) == 0)
+	if (pVM->LoadVM(arCode.GetData(), arCode.GetBufferOffset(), iStackSize) == NULL)
 	{
 		CNeoVM::ReleaseVM(pVM);
 		return NULL;

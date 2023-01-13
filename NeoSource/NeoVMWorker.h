@@ -12,13 +12,13 @@ enum VAR_TYPE : u8
 	VAR_FUN,
 
 	VAR_ITERATOR,
-	VAR_MODULE,
 
 	VAR_STRING,	// Alloc
 	VAR_TABLE,
 	VAR_LIST,
 	VAR_SET,
 	VAR_COROUTINE,
+	VAR_MODULE,
 };
 
 typedef u8	OpType;
@@ -245,7 +245,7 @@ public:
 		int			_int;
 		double		_float;
 		int			_fun_index;
-		int			_module;
+		CNeoVMWorker*	_module;
 		CollectionIterator	_it;
 	};
 
@@ -370,7 +370,7 @@ enum eNeoDefaultString
 struct neo_DCalllibs;
 struct neo_libs;
 class CNeoVM;
-class CNeoVMWorker
+class CNeoVMWorker : AllocBase
 {
 	friend		CNeoVM;
 	friend		SVarWrapper;
@@ -502,6 +502,7 @@ private:
 	void Var_SetList(VarInfo *d, ListInfo* p);
 	void Var_SetSet(VarInfo *d, SetInfo* p);
 	void Var_SetFun(VarInfo* d, int fun_index);
+	void Var_SetModule(VarInfo *d, CNeoVMWorker* p);
 
 
 public:
@@ -538,9 +539,6 @@ public:
 		case VAR_FUN:
 			v1->_fun_index = v2->_fun_index;
 			break;
-		case VAR_MODULE:
-			v1->_module = v2->_module;
-			break;
 		case VAR_STRING:
 			v1->_str = v2->_str;
 			++v1->_str->_refCount;
@@ -560,6 +558,10 @@ public:
 		case VAR_COROUTINE:
 			v1->_cor = v2->_cor;
 			++v1->_cor->_refCount;
+			break;
+		case VAR_MODULE:
+			v1->_module = v2->_module;
+			++v1->_module->_refCount;
 			break;
 		default:
 			break;
