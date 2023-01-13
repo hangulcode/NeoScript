@@ -901,6 +901,7 @@ bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 			std::string* str = &pClt->_str->_str;
 			if (pIterator->GetType() != VAR_ITERATOR)
 			{
+				Var_Release(pIterator);
 				if (0 < (int)str->length())
 				{
 					pIterator->_it._iStringOffset = 0;
@@ -931,6 +932,7 @@ bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 			TableInfo* tbl = pClt->_tbl;
 			if (pIterator->GetType() != VAR_ITERATOR)
 			{
+				Var_Release(pIterator);
 				if (0 < tbl->GetCount())
 				{
 					pIterator->_it = tbl->FirstNode();
@@ -961,6 +963,7 @@ bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 			ListInfo* lst = pClt->_lst;
 			if (pIterator->GetType() != VAR_ITERATOR)
 			{
+				Var_Release(pIterator);
 				if (0 < lst->GetCount())
 				{
 					pIterator->_it._iListOffset = 0;
@@ -990,6 +993,7 @@ bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 			SetInfo* set = pClt->_set;
 			if (pIterator->GetType() != VAR_ITERATOR)
 			{
+				Var_Release(pIterator);
 				if (0 < set->GetCount())
 				{
 					pIterator->_it = set->FirstNode();
