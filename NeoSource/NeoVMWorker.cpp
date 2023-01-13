@@ -1389,9 +1389,6 @@ bool CNeoVMWorker::Init(void* pBuffer, int iSize, int iStackSize)
 		_DebugData.resize(header.m_iDebugCount);
 		ar.Read(&_DebugData[0], sizeof(debug_info) * header.m_iDebugCount);
 	}
-
-	std::vector<VarInfo> _args;
-	Start(0, _args);
 	return true;
 }
 int CNeoVMWorker::GetDebugLine()

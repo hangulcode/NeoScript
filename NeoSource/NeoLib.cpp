@@ -468,15 +468,20 @@ struct neo_libs
 		std::string err;
 		if (false == CNeoVM::Compile(pArg1->_str->_str.c_str(), (int)pArg1->_str->_str.length(), arCode, err, false, false))
 		{
-			return NULL;
+			return false;
 		}
 
-		pN->_pVM->LoadVM(arCode.GetData(), arCode.GetBufferOffset());
+		int iModule = pN->_pVM->LoadVM(arCode.GetData(), arCode.GetBufferOffset());
+		if (iModule == 0)
+		{
+			pN->ReturnValue();
+			return false; // ?
+		}
 
-	
-		//CNeoVM* pVM = CNeoVM::LoadVM(arCode.GetData(), arCode.GetBufferOffset(), iStackSize);
-
-		//pN->ReturnValue(double((double)clock() / (double)CLOCKS_PER_SEC));
+		VarInfo* pRet = pN->GetStack(0);
+		pN->Var_Release(pRet);
+		pRet->SetType(VAR_MODULE);
+		pRet->_module = iModule;
 		return true;
 	}
 	static bool sys_pcall(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -484,15 +489,12 @@ struct neo_libs
 		if (args != 1) return false;
 
 		VarInfo* pArg1 = pN->GetStack(1);
+		if (pArg1->GetType() != VAR_MODULE) return false;
 
-		if (pArg1->GetType() != VAR_STRING) return false;
+		pN->_pVM->PCall(pArg1->_module);
 
-
-
-		//CNeoVM* pVM = CNeoVM::LoadVM(arCode.GetData(), arCode.GetBufferOffset(), iStackSize);
-
-		//pN->ReturnValue(double((double)clock() / (double)CLOCKS_PER_SEC));
-		return false;
+		pN->ReturnValue();
+		return true;
 	}
 	static bool sys_coroutine_create(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{

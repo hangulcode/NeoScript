@@ -3139,13 +3139,15 @@ CNeoVM*	CNeoVM::CompileAndLoadVM(const void* pBufferSrc, int iLenSrc, std::strin
 	//	SetCompileError(ar, "Comile Success. Code : %d bytes !!\n\n", arCode.GetBufferOffset());
 
 	CNeoVM* pVM = CNeoVM::CreateVM();
-	if (pVM->LoadVM(arCode.GetData(), arCode.GetBufferOffset(), iStackSize) == false)
+	if (pVM->LoadVM(arCode.GetData(), arCode.GetBufferOffset(), iStackSize) == 0)
 	{
 		CNeoVM::ReleaseVM(pVM);
 		return NULL;
 	}
 
 	printf(ANSI_COLOR_GREEN "Compile Success. Code : %d bytes !!" ANSI_RESET_ALL "\n", pVM->GetBytesSize());
+
+	pVM->PCall(pVM->GetMainWorkerID());
 
 	return pVM;
 }

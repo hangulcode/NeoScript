@@ -5,6 +5,7 @@ export fun main()
 	
 	var m = load("print('ok');", "chunk");
 	pcall(m);
+	pcall(m);
 
-	print("");
+	print("...");
 }

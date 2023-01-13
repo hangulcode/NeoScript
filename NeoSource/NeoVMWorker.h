@@ -245,6 +245,7 @@ public:
 		int			_int;
 		double		_float;
 		int			_fun_index;
+		int			_module;
 		CollectionIterator	_it;
 	};
 
@@ -536,6 +537,9 @@ public:
 			break;
 		case VAR_FUN:
 			v1->_fun_index = v2->_fun_index;
+			break;
+		case VAR_MODULE:
+			v1->_module = v2->_module;
 			break;
 		case VAR_STRING:
 			v1->_str = v2->_str;

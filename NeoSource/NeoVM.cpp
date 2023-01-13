@@ -354,16 +354,27 @@ void		CNeoVM::ReleaseVM(CNeoVM* pVM)
 	delete pVM;
 }
 
-bool CNeoVM::LoadVM(void* pBuffer, int iSize, int iStackSize)
+int CNeoVM::LoadVM(void* pBuffer, int iSize, int iStackSize)
 {
 	CNeoVMWorker*pWorker = WorkerAlloc(iStackSize);
 	if (false == pWorker->Init(pBuffer, iSize, iStackSize))
 	{
 		FreeWorker(pWorker);
-		return false;
+		return 0;
 	}
 	if (NULL == _pMainWorker)
 		_pMainWorker = pWorker;
+	return pWorker->GetWorkerID();
+}
+bool CNeoVM::PCall(int iModule)
+{
+	auto it = _sVMWorkers.find(iModule);
+	if (it == _sVMWorkers.end())
+		return false;
+
+	auto pWorker = (*it).second;
+	std::vector<VarInfo> _args;
+	pWorker->Start(0, _args);
 	return true;
 }
 
