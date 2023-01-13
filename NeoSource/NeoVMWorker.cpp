@@ -2139,6 +2139,10 @@ std::string GetDataType(VAR_TYPE t)
 		return "int";
 	case VAR_FLOAT:
 		return "float";
+	case VAR_FUN:
+		return "fun";
+	case VAR_ITERATOR:
+		return "iterator";
 	case VAR_STRING:
 		return "string";
 	case VAR_TABLE:
@@ -2149,10 +2153,6 @@ std::string GetDataType(VAR_TYPE t)
 		return "set";
 	case VAR_COROUTINE:
 		return "coroutine";
-	case VAR_FUN:
-		return "fun";
-	case VAR_ITERATOR:
-		return "iterator";
 	default:
 		break;
 	}

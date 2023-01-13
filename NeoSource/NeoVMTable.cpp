@@ -180,6 +180,20 @@ TableNode* TableBucket::Find(VarInfo* pKey, u32 hash)
 			}
 		}
 		break;
+	case VAR_FUN:
+		{
+			int iFunKey = pKey->_fun_index;
+			while (pCur)
+			{
+				if (pCur->key.GetType() == VAR_FUN)
+				{
+					if (pCur->key._fun_index == iFunKey)
+						return pCur;
+				}
+				pCur = pCur->pNext;
+			}
+		}
+		break;
 	case VAR_STRING:
 		{
 			std::string& str = pKey->_str->_str;
@@ -251,20 +265,6 @@ TableNode* TableBucket::Find(VarInfo* pKey, u32 hash)
 						if (pCur->key._cor == cor)
 							return pCur;
 					}
-				}
-				pCur = pCur->pNext;
-			}
-		}
-		break;
-	case VAR_FUN:
-		{
-			int iFunKey = pKey->_fun_index;
-			while (pCur)
-			{
-				if (pCur->key.GetType() == VAR_FUN)
-				{
-					if (pCur->key._fun_index == iFunKey)
-						return pCur;
 				}
 				pCur = pCur->pNext;
 			}

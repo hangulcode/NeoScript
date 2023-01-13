@@ -2,11 +2,11 @@
 export fun main()
 {
 	print("hello");
-	
+	/*
 	var Map1 = { 1 = 1, "b" = 4, "c" = 5, "d" = 8 };
 
 	print("Map : ", " ");
 	foreach(var i,v in Map1)
 		print(i .. "=" .. v, " ");
-	print("");
+	print("");*/
 }

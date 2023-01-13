@@ -533,6 +533,9 @@ public:
 		case VAR_FLOAT:
 			v1->_float = v2->_float;
 			break;
+		case VAR_FUN:
+			v1->_fun_index = v2->_fun_index;
+			break;
 		case VAR_STRING:
 			v1->_str = v2->_str;
 			++v1->_str->_refCount;
@@ -552,9 +555,6 @@ public:
 		case VAR_COROUTINE:
 			v1->_cor = v2->_cor;
 			++v1->_cor->_refCount;
-			break;
-		case VAR_FUN:
-			v1->_fun_index = v2->_fun_index;
 			break;
 		default:
 			break;

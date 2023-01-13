@@ -477,7 +477,21 @@ struct neo_libs
 		//pN->ReturnValue(double((double)clock() / (double)CLOCKS_PER_SEC));
 		return true;
 	}
+	static bool sys_pcall(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1) return false;
 
+		VarInfo* pArg1 = pN->GetStack(1);
+
+		if (pArg1->GetType() != VAR_STRING) return false;
+
+
+
+		//CNeoVM* pVM = CNeoVM::LoadVM(arCode.GetData(), arCode.GetBufferOffset(), iStackSize);
+
+		//pN->ReturnValue(double((double)clock() / (double)CLOCKS_PER_SEC));
+		return false;
+	}
 	static bool sys_coroutine_create(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1) return false;
@@ -650,6 +664,7 @@ static void AddGlobalLibFun()
 	g_sNeoFunLib["clock"] = &neo_libs::sys_clock;
 
 	g_sNeoFunLib["load"] = &neo_libs::sys_load;
+	g_sNeoFunLib["pcall"] = &neo_libs::sys_pcall;
 
 	g_sNeoFunLib["set"] = &neo_libs::set;
 

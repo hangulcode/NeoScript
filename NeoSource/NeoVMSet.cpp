@@ -38,6 +38,9 @@ u32 GetHashCode(VarInfo *p)
 		return (u32)p->_int;
 	case VAR_FLOAT:
 		return GetHashCode((u8*)&p->_float, sizeof(p->_float));
+	case VAR_FUN:
+		return (u32)p->_fun_index;
+		break;
 	case VAR_STRING:
 		//return GetHashCode((u8*)p->_str->_str.c_str(), (int)p->_str->_str.length());
 		return GetHashCode(p->_str->_str);
@@ -50,9 +53,6 @@ u32 GetHashCode(VarInfo *p)
 	case VAR_COROUTINE:
 		//return (u32)p->_cor->_CoroutineID;
 		return GetHashCode((u8*)p->_cor, sizeof(p->_cor));
-	case VAR_FUN:
-		return (u32)p->_fun_index;
-		break;
 	}
 	return 0;
 }
@@ -223,6 +223,20 @@ SetNode* SetBucket::Find(VarInfo* pKey, u32 hash)
 			}
 		}
 		break;
+	case VAR_FUN:
+		{
+			int iFunKey = pKey->_fun_index;
+			while (pCur)
+			{
+				if (pCur->key.GetType() == VAR_FUN)
+				{
+					if (pCur->key._fun_index == iFunKey)
+						return pCur;
+				}
+				pCur = pCur->pNext;
+			}
+		}
+		break;
 	case VAR_STRING:
 		{
 			std::string& str = pKey->_str->_str;
@@ -294,20 +308,6 @@ SetNode* SetBucket::Find(VarInfo* pKey, u32 hash)
 						if (pCur->key._cor == cor)
 							return pCur;
 					}
-				}
-				pCur = pCur->pNext;
-			}
-		}
-		break;
-	case VAR_FUN:
-		{
-			int iFunKey = pKey->_fun_index;
-			while (pCur)
-			{
-				if (pCur->key.GetType() == VAR_FUN)
-				{
-					if (pCur->key._fun_index == iFunKey)
-						return pCur;
 				}
 				pCur = pCur->pNext;
 			}
