@@ -356,15 +356,14 @@ void		CNeoVM::ReleaseVM(CNeoVM* pVM)
 
 bool CNeoVM::LoadVM(void* pBuffer, int iSize, int iStackSize)
 {
-	if (_pMainWorker)
-		return false;
-
-	_pMainWorker = WorkerAlloc(iStackSize);
-	if (false == _pMainWorker->Init(pBuffer, iSize, iStackSize))
+	CNeoVMWorker*pWorker = WorkerAlloc(iStackSize);
+	if (false == pWorker->Init(pBuffer, iSize, iStackSize))
 	{
-		FreeWorker(_pMainWorker);
+		FreeWorker(pWorker);
 		return false;
 	}
+	if (NULL == _pMainWorker)
+		_pMainWorker = pWorker;
 	return true;
 }
 

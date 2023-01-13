@@ -1,4 +1,4 @@
-
+#include <stdio.h>
 #include <math.h>
 #include "NeoParser.h"
 #include "NeoTextLoader.h"
@@ -443,6 +443,7 @@ std::string JumpMark(std::map<int, int>& sJumpMark, int off)
 	return r;
 }
 
+
 void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFunctionInfo& fi, SVars& vars, std::vector< debug_info>& debugInfo)
 {
 	int staticCount = (int)funs._staticVars.size();
@@ -451,7 +452,7 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 	int curFunStatkSize = 1 + (int)fi._args.size() + localCount + fi._localTempMax;
 
 	OutAsm("\n");
-	OutAsm("Fun - %s [T:%d ID:%d] arg:%d var:%d varTemp:%d\n", fi._name.c_str(), fi._funType, fi._funID, (int)fi._args.size(), fi._localVarCount, fi._localTempMax);
+	OutAsm(ANSI_COLOR_YELLOW "Fun - %s [T:%d ID:%d] arg:%d var:%d varTemp:%d" ANSI_RESET_ALL "\n", fi._name.c_str(), fi._funType, fi._funID, (int)fi._args.size(), fi._localVarCount, fi._localTempMax);
 
 	if (fi._funType == FUNT_IMPORT)
 		return;

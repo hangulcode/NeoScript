@@ -17,8 +17,6 @@ int SAMPLE_9_times()
 	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
 	if (pVM != NULL)
 	{
-		printf("Compile Success. Code : %d bytes !!\n", pVM->GetBytesSize());
-
 		for (int i = 1; i < 10; i++)
 		{
 			DWORD t1 = GetTickCount();
@@ -34,10 +32,6 @@ int SAMPLE_9_times()
 		}
 		CNeoVM::ReleaseVM(pVM);
 	}
-	else
-	{
-		printf(err.c_str());
-	}	
 	delete[] pFileBuffer;
 
     return 0;

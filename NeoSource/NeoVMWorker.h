@@ -12,6 +12,7 @@ enum VAR_TYPE : u8
 	VAR_FUN,
 
 	VAR_ITERATOR,
+	VAR_MODULE,
 
 	VAR_STRING,	// Alloc
 	VAR_TABLE,

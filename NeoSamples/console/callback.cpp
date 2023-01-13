@@ -27,8 +27,6 @@ int SAMPLE_callback()
 	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
 	if (pVM != NULL)
 	{
-		printf("Compile Success. Code : %d bytes !!\n", pVM->GetBytesSize());
-
 		NeoHelper::Register(pVM, "Mul", Mul);
 		NeoHelper::Register(pVM, "Sample1", Sample1);
 			
@@ -47,10 +45,6 @@ int SAMPLE_callback()
 			printf("Sum %d + %d = %lf\n(Elapse:%d)\n", 100, 200, r, t2 - t1);
 
 		CNeoVM::ReleaseVM(pVM);
-	}
-	else
-	{
-		printf(err.c_str());
 	}
 	delete[] pFileBuffer;
 

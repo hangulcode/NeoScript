@@ -58,8 +58,6 @@ int SAMPLE_map_callback()
 	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
 	if (pVM != NULL)
 	{
-		printf("Compile Success. Code : %d bytes !!\n", pVM->GetBytesSize());
-
 		CA* pClass = new CA();
 
 		VarInfo* g_sData;
@@ -89,10 +87,6 @@ int SAMPLE_map_callback()
 
 		delete pClass;
 		CNeoVM::ReleaseVM(pVM);
-	}
-	else
-	{
-		printf(err.c_str());
 	}
 	delete[] pFileBuffer;
 	g_sTablesFun.clear();

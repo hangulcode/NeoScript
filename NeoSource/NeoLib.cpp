@@ -471,6 +471,8 @@ struct neo_libs
 			return NULL;
 		}
 
+		pN->_pVM->LoadVM(arCode.GetData(), arCode.GetBufferOffset());
+
 	
 		//CNeoVM* pVM = CNeoVM::LoadVM(arCode.GetData(), arCode.GetBufferOffset(), iStackSize);
 

@@ -1390,8 +1390,6 @@ bool CNeoVMWorker::Init(void* pBuffer, int iSize, int iStackSize)
 		ar.Read(&_DebugData[0], sizeof(debug_info) * header.m_iDebugCount);
 	}
 
-//	_pMainWorker = WorkerAlloc(iStackSize);
-
 	std::vector<VarInfo> _args;
 	Start(0, _args);
 	return true;

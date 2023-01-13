@@ -3130,6 +3130,8 @@ CNeoVM*	CNeoVM::CompileAndLoadVM(const void* pBufferSrc, int iLenSrc, std::strin
 
 	if (false == Compile(pBufferSrc, iLenSrc, arCode, err, putASM, debug, allowGlobalInitLogic))
 	{
+		if(putASM)
+			printf((ANSI_COLOR_RED + err + ANSI_RESET_ALL).c_str());
 		return NULL;
 	}
 
@@ -3142,6 +3144,8 @@ CNeoVM*	CNeoVM::CompileAndLoadVM(const void* pBufferSrc, int iLenSrc, std::strin
 		CNeoVM::ReleaseVM(pVM);
 		return NULL;
 	}
+
+	printf(ANSI_COLOR_GREEN "Compile Success. Code : %d bytes !!" ANSI_RESET_ALL "\n", pVM->GetBytesSize());
 
 	return pVM;
 }

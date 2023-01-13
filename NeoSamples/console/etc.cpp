@@ -17,8 +17,6 @@ int SAMPLE_etc(const char*pFileName, const char* pFunctionName)
 	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
 	if (pVM != NULL)
 	{
-		printf("Compile Success. Code : %d bytes !!\n", pVM->GetBytesSize());
-
 		DWORD t1 = GetTickCount();
 		pVM->CallN(pFunctionName);
 		DWORD t2 = GetTickCount();
@@ -32,10 +30,6 @@ int SAMPLE_etc(const char*pFileName, const char* pFunctionName)
 
 		CNeoVM::ReleaseVM(pVM);
 	}
-	else
-	{
-		printf(err.c_str());
-	}	
 	delete[] pFileBuffer;
 
     return 0;
