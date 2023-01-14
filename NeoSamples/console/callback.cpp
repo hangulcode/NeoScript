@@ -9,10 +9,10 @@ float Mul(float a, float b)
 
 float Sample1(NeoFunction fun, float a, float b)
 {
-//	fun.Call();
 	float r;
-	fun._pWorker->iCall<float>(r, fun._fun_index, a, b);
-	return r;
+	if(NeoHelper::Call<float>(&r, fun, a, b))
+		return r;
+	return 0;
 }
 
 

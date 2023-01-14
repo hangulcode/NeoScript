@@ -233,18 +233,6 @@ struct NeoFunction
 {
 	CNeoVMWorker* _pWorker;
 	int			_fun_index;
-	/*
-	template<typename RVal, typename ... Types>
-	bool Call(RVal* r, const std::string& funName, Types ... args)
-	{
-		return _pWorker->iCall<RVal>(*r, _fun_index, args...);
-	}
-
-	template<typename ... Types>
-	bool CallN(const std::string& funName, Types ... args)
-	{
-		return _pWorker->iCallN(_fun_index, args...);
-	}*/
 };
 struct VarInfo
 {

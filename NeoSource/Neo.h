@@ -186,5 +186,17 @@ namespace NeoHelper
 		int iArgCnt = push_functor(&fun, func);
 		return VM->SetFunction(iFID, fun, iArgCnt);
 	}
+
+	template<typename RVal, typename ... Types>
+	bool Call(RVal* r, NeoFunction f, Types ... args)
+	{
+		return f._pWorker->iCall<RVal>(*r, f._fun_index, args...);
+	}
+
+	template<typename ... Types>
+	bool CallN(NeoFunction f, Types ... args)
+	{
+		return f._pWorker->iCallN(f._fun_index, args...);
+	}
 };
 
