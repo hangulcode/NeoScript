@@ -1927,7 +1927,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 	return true;
 }
 
-bool CNeoVMWorker::RunFunction(const std::string& funName, std::vector<VarInfo> _args)
+bool CNeoVMWorker::RunFunction(const std::string& funName, std::vector<VarInfo>& _args)
 {
 	auto it = m_sImExportTable.find(funName);
 	if (it == m_sImExportTable.end())
@@ -2045,14 +2045,14 @@ bool CNeoVMWorker::StartCoroutione(int sp, int n3)
 }
 
 
-bool CNeoVMWorker::testCall(VarInfo** r, int iFID, VarInfo* args[], int argc)
+VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 {
 	if (_isSetup == false)
-		return false;
+		return NULL;
 
 	SFunctionTable& fun = m_sFunctionPtr[iFID];
 	if (argc != fun._argsCount)
-		return false;
+		return NULL;
 
 	int save_Code = GetCodeptr();
 	int save_iSP_Vars = _iSP_Vars;
@@ -2073,13 +2073,14 @@ bool CNeoVMWorker::testCall(VarInfo** r, int iFID, VarInfo* args[], int argc)
 
 	int iCur;
 	for (iCur = 0; iCur < argc; iCur++)
-		Move(&(*m_pVarStack)[1 + _iSP_Vars + iCur], args[iCur]);
+		Move(&(*m_pVarStack)[1 + _iSP_Vars + iCur], &args[iCur]);
 	for (; iCur < fun._argsCount; iCur++)
 		Var_Release(&(*m_pVarStack)[1 + _iSP_Vars + iCur]);
 
 	Run((int)m_pCallStack->size());
 
-	_read(&(*m_pVarStack)[_iSP_Vars], *r);
+//	_read(&(*m_pVarStack)[_iSP_Vars], *r);
+	VarInfo* r = &(*m_pVarStack)[_iSP_Vars];
 
 	SetCodePtr(save_Code);
 	_iSP_Vars = save_iSP_Vars;
@@ -2088,7 +2089,7 @@ bool CNeoVMWorker::testCall(VarInfo** r, int iFID, VarInfo* args[], int argc)
 	//GC();
 	
 	_isSetup = true;
-	return true;
+	return r;
 }
 bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFunObj, const std::string& fname, int n3)
 {

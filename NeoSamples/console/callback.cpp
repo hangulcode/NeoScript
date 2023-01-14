@@ -7,9 +7,12 @@ float Mul(float a, float b)
 }
 
 
-void Sample1()
+float Sample1(NeoFunction fun, float a, float b)
 {
-	int a = 10;
+//	fun.Call();
+	float r;
+	fun._pWorker->iCall<float>(r, fun._fun_index, a, b);
+	return r;
 }
 
 

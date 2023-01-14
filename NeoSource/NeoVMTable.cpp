@@ -541,12 +541,11 @@ struct NeoSortLocal
 	NeoSortLocal(CNeoVMWorker* pN, int compare) : m_pN(pN), m_compare(compare) {}
 	bool operator () (VarInfo* a, VarInfo* b)
 	{
-		VarInfo* args[2];
-		VarInfo* r;
-		args[0] = a;
-		args[1] = b;
-		m_pN->testCall(&r, m_compare, args, 2);
-		if (r->GetType() == VAR_BOOL)
+		VarInfo args[2];
+		args[0] = *a;
+		args[1] = *b;
+		VarInfo* r = m_pN->testCall(m_compare, args, 2);
+		if (r && r->GetType() == VAR_BOOL)
 		{
 			return r->_bl;
 		}

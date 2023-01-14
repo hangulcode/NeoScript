@@ -229,6 +229,23 @@ struct FunctionPtrNative
 {
 	Neo_NativeFunction			_func;
 };
+struct NeoFunction
+{
+	CNeoVMWorker* _pWorker;
+	int			_fun_index;
+	/*
+	template<typename RVal, typename ... Types>
+	bool Call(RVal* r, const std::string& funName, Types ... args)
+	{
+		return _pWorker->iCall<RVal>(*r, _fun_index, args...);
+	}
+
+	template<typename ... Types>
+	bool CallN(const std::string& funName, Types ... args)
+	{
+		return _pWorker->iCallN(_fun_index, args...);
+	}*/
+};
 struct VarInfo
 {
 private:
@@ -460,7 +477,14 @@ private:
 	CoroutineInfo* m_pCur = NULL;
 	CoroutineInfo* m_pRegisterActive = NULL;
 
-	bool RunFunction(const std::string& funName, std::vector<VarInfo> _args);
+	bool RunFunction(int iFID, std::vector<VarInfo>& _args)
+	{
+		//Start(iFID, _args);
+		VarInfo r;
+		testCall(iFID, _args.empty() ? NULL : &_args[0], (int)_args.size());
+		return true;
+	}
+	bool RunFunction(const std::string& funName, std::vector<VarInfo>& _args);
 
 	bool	IsMainCoroutine() { return (&m_sDefault == m_pCur); }
 	bool	Setup(int iFunctionID, std::vector<VarInfo>& _args);
@@ -713,6 +737,21 @@ private:
 
 		return false;
 	}
+	NeoFunction PopNeoFunction(VarInfo* V)
+	{
+		NeoFunction r;
+		if (V->GetType() == VAR_FUN)
+		{
+			r._pWorker = this;
+			r._fun_index = V->_fun_index;
+		}
+		else
+		{
+			r._pWorker = NULL;
+			r._fun_index = -1;
+		}
+		return r;
+	}
 public:
 	VarInfo* GetReturnVar() { return &(*m_pVarStack)[_iSP_Vars]; }
 
@@ -764,6 +803,7 @@ public:
 	inline void		_read(VarInfo *V, long long& r) { r = (long long)PopInt(V); }
 	inline void		_read(VarInfo *V, unsigned long long& r) { r = (unsigned long long)PopInt(V); }
 	inline void		_read(VarInfo *V, VarInfo*& r) { r = V; }
+	inline void		_read(VarInfo *V, NeoFunction& r) { r = PopNeoFunction(V); }
 
 	inline void PushArgs() { }
 	template<typename  T, typename ... Types>
@@ -771,6 +811,34 @@ public:
 	{
 		push(arg1);
 		PushArgs(args...);
+	}
+
+	template<typename RVal, typename ... Types>
+	bool iCall(RVal& r, int iFID, Types ... args)
+	{
+		std::vector<VarInfo> args_;
+		_args = &args_;
+		PushArgs(args...);
+		_args = NULL;
+
+		RunFunction(iFID, args_);
+		GC();
+		_read(&(*m_pVarStack)[_iSP_Vars], r);
+		return true;
+	}
+
+	template<typename ... Types>
+	bool iCallN(int iFID, Types ... args)
+	{
+		std::vector<VarInfo> args_;
+		_args = &args_;
+		PushArgs(args...);
+		_args = NULL;
+
+		RunFunction(iFID, args_);
+		GC();
+		ReturnValue();
+		return true;
 	}
 
 	template<typename RVal, typename ... Types>
@@ -849,7 +917,7 @@ public:
 		return true;
 	}
 
-	bool testCall(VarInfo** r, int iFID, VarInfo* args[], int argc);
+	VarInfo* testCall(int iFID, VarInfo* args, int argc);
 	bool StartCoroutione(int sp, int n3);
 
 

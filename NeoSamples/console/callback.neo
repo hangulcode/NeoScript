@@ -1,7 +1,7 @@
 
 
 import fun Mul(var a, var b);
-import fun Sample1();
+import fun Sample1(var f,var a, var b);
 
 
 
@@ -13,13 +13,15 @@ fun Sum1(var a, var b)
 
 export fun Sum(var a, var b)
 {
-	Sample1();
-
-	var sum_1 = Sum1(a, b);
+	//Sample1("This is Script" .. "HaHa !!");
+	var sum_1 = Sample1(Sum1, 3, 5);
 	print(sum_1);
+
+	var sum_2 = Sum1(a, b);
+	print(sum_2);
 
 	var mul_1 = Mul(a, b);
 	print(mul_1);
 
-	return sum_1 + mul_1;
+	return sum_2 + mul_1;
 }
