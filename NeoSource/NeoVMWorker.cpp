@@ -1206,6 +1206,7 @@ VarInfo* CNeoVMWorker::GetType(VarInfo* v1)
 	case VAR_COROUTINE:
 		return &_pVM->m_sDefaultValue[NDF_COROUTINE];
 	case VAR_FUN:
+	case VAR_FUN_NATIVE:
 		return &_pVM->m_sDefaultValue[NDF_FUNCTION];
 	default:
 		break;
@@ -1213,47 +1214,44 @@ VarInfo* CNeoVMWorker::GetType(VarInfo* v1)
 	return &_pVM->m_sDefaultValue[NDF_NULL];
 }
 
+void CNeoVMWorker::Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue)
+{
+	if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n2))
+		_iSP_Vars_Max2 = iSP_VarsMax + (1 + n2);
+
+	if (fun->_func == NULL)
+	{	// Error
+		SetError("Ptr Call is null");
+		return;
+	}
+
+	int iSave = _iSP_Vars;
+	_iSP_Vars = iSP_VarsMax;
+
+	if ((*fun->_fn)(this, fun, n2) < 0)
+	{
+		SetError("Ptr Call Argument Count Error");
+		return;
+	}
+	_iSP_Vars = iSave;
+}
 
 void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 {
 	SFunctionTable& fun = m_sFunctionPtr[n1];
-	if (fun._funType != FUNT_IMPORT)
-	{	// n2 is Arg Count not use
-		SCallStack callStack;
-		callStack._iReturnOffset = GetCodeptr();
-		callStack._iSP_Vars = _iSP_Vars;
-		callStack._iSP_VarsMax = iSP_VarsMax;
-		callStack._pReturnValue = pReturnValue;
-		m_pCallStack->push_back(callStack);
+	// n2 is Arg Count not use
+	SCallStack callStack;
+	callStack._iReturnOffset = GetCodeptr();
+	callStack._iSP_Vars = _iSP_Vars;
+	callStack._iSP_VarsMax = iSP_VarsMax;
+	callStack._pReturnValue = pReturnValue;
+	m_pCallStack->push_back(callStack);
 
-		SetCodePtr(fun._codePtr);
-		_iSP_Vars = iSP_VarsMax;
-		iSP_VarsMax = _iSP_Vars + fun._localAddCount;
-		if (_iSP_Vars_Max2 < iSP_VarsMax)
-			_iSP_Vars_Max2 = iSP_VarsMax;
-	}
-	else
-	{
-		if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n2))
-			_iSP_Vars_Max2 = iSP_VarsMax + (1 + n2);
-
-		fun = m_sFunctionPtr[n1];
-		if (fun._fun._func == NULL)
-		{	// Error
-			SetError("Ptr Call is null");
-			return;
-		}
-
-		int iSave = _iSP_Vars;
-		_iSP_Vars = iSP_VarsMax;
-
-		if ((*fun._fun._fn)(this, &fun._fun, n2) < 0)
-		{
-			SetError("Ptr Call Argument Count Error");
-			return;
-		}
-		_iSP_Vars = iSave;
-	}
+	SetCodePtr(fun._codePtr);
+	_iSP_Vars = iSP_VarsMax;
+	iSP_VarsMax = _iSP_Vars + fun._localAddCount;
+	if (_iSP_Vars_Max2 < iSP_VarsMax)
+		_iSP_Vars_Max2 = iSP_VarsMax;
 }
 
 bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo* r, VarInfo* a, VarInfo* b)
@@ -1698,12 +1696,12 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				//if (-1 == OP.n2)
 				if ((OP.argFlag & 0x02) == 0 && 0 == OP.n2)
 				{
-					if (pVar1->GetType() != VAR_FUN)
-					{
+					if (pVar1->GetType() == VAR_FUN)
+						Call(pVar1->_fun_index, OP.n3);
+					else if (pVar1->GetType() == VAR_FUN_NATIVE)
+						Call(pVar1->_funPtr, OP.n3);
+					else
 						SetError("Call Function Type Error");
-						break;
-					}
-					Call(pVar1->_fun_index, OP.n3);
 					break;
 				}
 				short n3 = OP.n3;
@@ -1945,7 +1943,6 @@ bool CNeoVMWorker::RunFunction(const std::string& funName, std::vector<VarInfo>&
 
 	return true;
 }
-
 void CNeoVMWorker::PushString(const char* p)
 {
 	std::string s(p);
@@ -1954,6 +1951,24 @@ void CNeoVMWorker::PushString(const char* p)
 	d._str = _pVM->StringAlloc(s);
 	_args->push_back(d);
 }
+void CNeoVMWorker::PushNeoFunction(NeoFunction v)
+{
+	VarInfo d;
+	if (v._fun_index >= 0 && v._pWorker == this)
+	{
+		d.SetType(VAR_FUN);
+		d._fun_index = v._fun_index;
+	}
+	else if (v._fun._func)
+	{
+		d.SetType(VAR_FUN_NATIVE);
+		d._funPtr = _pVM->FunctionPtrAlloc(&v._fun);
+	}
+	else
+		d.ClearType();
+	_args->push_back(d);
+}
+
 bool CNeoVMWorker::StopCoroutine()
 {
 	if (m_pCur->_state == COROUTINE_STATE_DEAD)
@@ -2016,7 +2031,7 @@ bool CNeoVMWorker::StartCoroutione(int sp, int n3)
 		{
 			int iResumeParamCount = n3 - 1;
 			SFunctionTable& fun = m_sFunctionPtr[m_pCur->_fun_index];
-			if (fun._funType != FUNT_IMPORT)
+			//if (fun._funType != FUNT_IMPORT)
 			{
 				for (int i = 0; i < fun._argsCount; i++)
 				{
@@ -2148,6 +2163,8 @@ std::string GetDataType(VAR_TYPE t)
 		return "fun";
 	case VAR_ITERATOR:
 		return "iterator";
+	case VAR_FUN_NATIVE:
+		return "fun";
 	case VAR_STRING:
 		return "string";
 	case VAR_TABLE:

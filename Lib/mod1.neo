@@ -1,0 +1,9 @@
+fun add(var a, var b)
+{
+	return a + b;
+}
+
+fun sub(var a, var b)
+{
+	return a - b;
+}

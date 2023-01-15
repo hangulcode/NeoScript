@@ -1,15 +1,16 @@
-
-
-import fun Mul(var a, var b);
-import fun Sample1(var f,var a, var b);
-
-
+var Mul;
+var Sample1;
 
 fun Sum1(var a, var b)
 {
 	return a + b;
 }
 
+export fun Set(var mul, var sam)
+{
+	Mul = mul;
+	Sample1 = sam;
+}
 
 export fun Sum(var a, var b)
 {

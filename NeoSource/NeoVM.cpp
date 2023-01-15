@@ -268,6 +268,19 @@ void CNeoVM::FreeSet(SetInfo* set)
 	//delete tbl;
 	m_sPool_SetInfo.Confer(set);
 }
+FunctionPtr* CNeoVM::FunctionPtrAlloc(FunctionPtr* pOld)
+{
+	auto it = m_sCache_FunPtr.find(pOld->_func);
+	if (it != m_sCache_FunPtr.end())
+		return (*it).second;
+
+	FunctionPtr* pNew = new FunctionPtr();
+	*pNew = *pOld;
+	m_sCache_FunPtr[pNew->_func] = pNew;
+	return pNew;
+}
+
+
 int	 CNeoVM::Coroutine_Create(int iFID)
 {
 	return 0;
@@ -331,7 +344,9 @@ CNeoVM::~CNeoVM()
 
 	_sStrings.clear();
 
-
+	for (auto it = m_sCache_FunPtr.begin(); it != m_sCache_FunPtr.end(); it++)
+		delete (*it).second;
+	m_sCache_FunPtr.clear();
 }
 
 void CNeoVM::SetError(const std::string& msg)

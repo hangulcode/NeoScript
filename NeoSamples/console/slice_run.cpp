@@ -36,7 +36,7 @@ int SAMPLE_slice_run()
 			}
 		}
 
-		pVM->SetTimeout(id, 1000, 1000);
+		pVM->SetTimeout(id, 200, 1000);
 
 		DWORD dwPre = GetTickCount();
 

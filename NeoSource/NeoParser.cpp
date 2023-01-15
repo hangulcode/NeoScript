@@ -658,7 +658,10 @@ TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk)
 	}
 	return (tk.size() != 0) ? TK_STRING : TK_NONE;
 }
-
+bool ParseImport(CArchiveRdWC& ar, SFunctions& funs)
+{
+	return false;
+}
 bool ParseFunctionArg(CArchiveRdWC& ar, SFunctions& funs, SLayerVar* pCurLayer)
 {
 	std::string tk1, tk2;
@@ -2857,7 +2860,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			pJumps->push_back(SJumpValue(funs._cur._code->GetBufferOffset() - 2, funs._cur._code->GetBufferOffset()));
 			break;
 		case TK_IMPORT:
-			funType = FUNT_IMPORT;
+			ParseImport(ar, funs);
 			break;
 		case TK_EXPORT:
 			funType = FUNT_EXPORT;

@@ -1,3 +1,5 @@
+import mod1;
+
 fun test()
 {
 	var m = load("print('ok');", "chunk");
@@ -8,6 +10,8 @@ fun test()
 export fun main()
 {
 	print('module');
+
+	print(mod1.add(11, 22));
 	
 	test();
 

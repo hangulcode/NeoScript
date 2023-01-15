@@ -12,6 +12,7 @@ enum VAR_TYPE : u8
 	VAR_FUN,
 
 	VAR_ITERATOR,
+	VAR_FUN_NATIVE,
 
 	VAR_STRING,	// Alloc
 	VAR_TABLE,
@@ -146,6 +147,14 @@ struct FunctionPtr;
 typedef int(*Neo_CFunction) (CNeoVMWorker *N, FunctionPtr* pFun, short args);
 typedef bool(*Neo_NativeFunction) (CNeoVMWorker *N, void* pUserData, const std::string& fun, short args);
 
+struct FunctionPtr
+{
+	u8							_argCount;
+	Neo_CFunction				_fn;
+	void*						_func;
+};
+
+
 struct SCallStack
 {
 	int		_iSP_Vars;
@@ -197,12 +206,6 @@ struct StringInfo : AllocBase
 
 
 
-struct FunctionPtr
-{
-	u8							_argCount;
-	Neo_CFunction				_fn;
-	void*						_func;
-};
 
 
 struct TableInfo;
@@ -231,8 +234,12 @@ struct FunctionPtrNative
 };
 struct NeoFunction
 {
+	// Script Function
 	CNeoVMWorker* _pWorker;
 	int			_fun_index;
+
+	// C Function
+	FunctionPtr _fun;
 };
 struct VarInfo
 {
@@ -247,6 +254,7 @@ public:
 		TableInfo*	_tbl;
 		ListInfo*	_lst;
 		SetInfo*	_set;
+		FunctionPtr* _funPtr; // C Native
 		int			_int;
 		double		_float;
 		int			_fun_index;
@@ -311,7 +319,6 @@ struct SNeoVMHeader
 enum FUNCTION_TYPE : u8
 {
 	FUNT_NORMAL = 0,
-	FUNT_IMPORT,
 	FUNT_EXPORT,
 	FUNT_ANONYMOUS,
 };
@@ -551,6 +558,9 @@ public:
 		case VAR_FUN:
 			v1->_fun_index = v2->_fun_index;
 			break;
+		case VAR_FUN_NATIVE:
+			v1->_funPtr = v2->_funPtr;
+			break;
 		case VAR_STRING:
 			v1->_str = v2->_str;
 			++v1->_str->_refCount;
@@ -602,6 +612,7 @@ private:
 	bool For(VarInfo* v1);
 	bool ForEach(VarInfo* v1, VarInfo* v2);
 	int Sleep(int iTimeout, VarInfo* v1);
+	void Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue = NULL);
 	void Call(int n1, int n2, VarInfo* pReturnValue = NULL);
 	bool Call_MetaTable(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, VarInfo* b);
 	bool Call_MetaTable2(VarInfo* pTable, std::string&, VarInfo* a, VarInfo* b);
@@ -677,6 +688,7 @@ private:
 		d._bl = b;
 		_args->push_back(d);
 	}
+	void PushNeoFunction(NeoFunction v);
 
 	int PopInt(VarInfo *V)
 	{
@@ -772,6 +784,7 @@ public:
 	inline void push(bool ret) { PushBool(ret); }
 	inline void push(long long ret) { PushInt((int)ret); }
 	inline void push(unsigned long long ret) { PushInt((int)ret); }
+	inline void push(NeoFunction ret) { PushNeoFunction(ret); }
 
 	inline void		_read(VarInfo *V, std::string*& r) { r = (std::string*)PopStlString(V); }
 	inline void		_read(VarInfo *V, char*& r) { r = (char*)PopString(V); }

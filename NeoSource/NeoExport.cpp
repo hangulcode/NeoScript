@@ -89,8 +89,8 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 
 	funPos[fi._funID] = fun;
 
-	if (fi._funType == FUNT_IMPORT)
-		return;
+	//if (fi._funType == FUNT_IMPORT)
+	//	return;
 
 
 	int staticCount = (int)funs._staticVars.size();
@@ -454,8 +454,8 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 	OutAsm("\n");
 	OutAsm(ANSI_COLOR_YELLOW "Fun - %s [T:%d ID:%d] arg:%d var:%d varTemp:%d" ANSI_RESET_ALL "\n", fi._name.c_str(), fi._funType, fi._funID, (int)fi._args.size(), fi._localVarCount, fi._localTempMax);
 
-	if (fi._funType == FUNT_IMPORT)
-		return;
+	//if (fi._funType == FUNT_IMPORT)
+	//	return;
 
 	//CNArchive arRead((u8*)fi._code->GetData() + fi._iCode_Begin, fi._iCode_Size);
 	CNArchive arRead((u8*)arw.GetData() + fi._iCode_Begin, fi._iCode_Size);
@@ -841,13 +841,12 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	header._iGlobalVarCount = funs._cur._localVarCount;
 	//WriteFun(arText, ar, funs, funs._cur, vars, funPos, debugInfo);
 	// Sub 함수 코드 저장
-	for (auto it = funs._funs.begin(); it != funs._funs.end(); it++)
-	{
-		//auto it2 = funs._funs.find((*it));
-		SFunctionInfo& fi = (*it).second;
-		if (fi._funType == FUNT_IMPORT)
-			WriteFun(arText, ar, funs, fi, vars, funPos, debugInfo);
-	}
+	//for (auto it = funs._funs.begin(); it != funs._funs.end(); it++)
+	//{
+	//	SFunctionInfo& fi = (*it).second;
+	//	if (fi._funType == FUNT_IMPORT)
+	//		WriteFun(arText, ar, funs, fi, vars, funPos, debugInfo);
+	//}
 	for (auto it = funs._funSequence.begin(); it != funs._funSequence.end(); it++)
 	{
 		auto it2 = funs._funs.find((*it));

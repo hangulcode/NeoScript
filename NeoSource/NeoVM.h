@@ -53,6 +53,8 @@ private:
 	SetInfo* SetAlloc();
 	void FreeSet(SetInfo* tbl);
 
+	FunctionPtr* FunctionPtrAlloc(FunctionPtr* pOld);
+
 	int	 Coroutine_Create(int iFID);
 	int	 Coroutine_Resume(int iCID);
 	int	 Coroutine_Destroy(int iCID);
@@ -123,6 +125,8 @@ private:
 
 	CNVMInstPool< StringInfo, 10 > m_sPool_String;
 	CNVMInstPool< CoroutineInfo, 10 > m_sPool_Coroutine;
+
+	std::map<void*, FunctionPtr*> m_sCache_FunPtr;
 
 	static bool _funInitLib;
 	static FunctionPtrNative _funDefaultLib;

@@ -30,8 +30,10 @@ int SAMPLE_callback()
 	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
 	if (pVM != NULL)
 	{
-		NeoHelper::Register(pVM, "Mul", Mul);
-		NeoHelper::Register(pVM, "Sample1", Sample1);
+		//NeoHelper::Register(pVM, "Mul", Mul);
+		//NeoHelper::Register(pVM, "Sample1", Sample1);
+
+		pVM->CallN("Set", NeoHelper::Fun(Mul), NeoHelper::Fun(Sample1));
 			
 
 		DWORD t1 = GetTickCount();
