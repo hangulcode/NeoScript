@@ -2980,9 +2980,9 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		{
 			funs._cur._funID = (int)funs._funs.size() + 1;
 
-			funs._funs[funs._cur._name] = funs._cur; // 이름 먼저 등록
 			funs._funIDs[funs._cur._funID] = funs._cur._name;
 			funs._cur._staticIndex = funs.AddStaticFunction(funs._cur._funID);
+			funs._funs[funs._cur._name] = funs._cur; // 이름 먼저 등록
 		}
 	}
 	else
@@ -2991,9 +2991,9 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		char ch[128];
 		sprintf_s(ch, _countof(ch), "#@_%d", funs._cur._funID);
 		funs._cur._name = ch;
-		funs._funs[funs._cur._name] = funs._cur; // 이름 먼저 등록
 		funs._funIDs[funs._cur._funID] = funs._cur._name;
 		funs._cur._staticIndex = funs.AddStaticFunction(funs._cur._funID);
+		funs._funs[funs._cur._name] = funs._cur; // 이름 먼저 등록
 	}
 
 
