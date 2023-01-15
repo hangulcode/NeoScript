@@ -3,7 +3,7 @@
 #include "../../NeoSource/Neo.h"
 #include <conio.h>
 
-BOOL        FileLoad(const char* pFileName, void*& pBuffer, int& iLen)
+bool        FileLoad(const char* pFileName, void*& pBuffer, int& iLen)
 {
 	FILE* fp = NULL;
 	int error_t = fopen_s(&fp, pFileName, "rb");

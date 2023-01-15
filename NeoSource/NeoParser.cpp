@@ -5,6 +5,7 @@
 //#define CSTYLE_FOR
 
 void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
+bool    FileLoad(const char* pFileName, void*& pBuffer, int& iLen);
 
 template<class T>
 static void RemoveAt(std::vector<T>& array, int index)
@@ -537,9 +538,6 @@ bool AbleName(const std::string& str)
 	return true;
 }
 
-
-
-
 TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk)
 {
 	if (false == ar.m_sTokenQueue.empty())
@@ -658,9 +656,110 @@ TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk)
 	}
 	return (tk.size() != 0) ? TK_STRING : TK_NONE;
 }
-bool ParseImport(CArchiveRdWC& ar, SFunctions& funs)
+int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, const std::string& name, bool checkName = true)
 {
-	return false;
+	if (checkName && false == AbleName(name))
+	{
+		SetCompileError(ar, "Error (%d, %d): Function Local Var Unable (%s) %s", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), name.c_str());
+		return -1;
+	}
+	SLayerVar* pCurLayer = vars.GetCurrentLayer();
+
+	if (pCurLayer->FindVarOnlyCurrentBlock(name) >= 0)
+	{
+		SetCompileError(ar, "Error (%d, %d): Function Local Var Already (%s) %s", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), name.c_str());
+		return -1;
+	}
+	int iLocalVar;
+	if (funs._cur._name == GLOBAL_INIT_FUN_NAME)
+		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN + funs._cur._localVarCount++;
+	else
+		iLocalVar = 1 + (int)funs._cur._args.size() + funs._cur._localVarCount++; // 0 번은 리턴 저장용
+	pCurLayer->AddLocalVar(name, iLocalVar);
+	return iLocalVar;
+}
+int  AddLocalVar(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+{
+	SLayerVar* pCurLayer = vars.GetCurrentLayer();
+
+	char name[256];
+	sprintf_s(name, _countof(name), "^_#@_temp_%d", vars._iTempVarNameIndex++);
+
+	if (pCurLayer->FindVarOnlyCurrentBlock(name) >= 0)
+	{
+		SetCompileError(ar, "Error (%d, %d): Function Local Var Already (%s) %s", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), name);
+		return -1;
+	}
+	int iLocalVar;
+	if (funs._cur._name == GLOBAL_INIT_FUN_NAME)
+		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN + funs._cur._localVarCount++;
+	else
+		iLocalVar = 1 + (int)funs._cur._args.size() + funs._cur._localVarCount++; // 0 번은 리턴 저장용
+	pCurLayer->AddLocalVar(name, iLocalVar);
+	return iLocalVar;
+}
+void ClearTempVars(SFunctions& funs)
+{
+	funs._cur.FreeLocalTempVar();
+	eNOperation opLast = funs._cur.GetLastOP();
+	if (opLast == NOP_MOV || opLast == NOP_MOV_MINUS)
+	{
+		int iVar = funs._cur.GetN(funs._cur._iLastOPOffset, 0);
+		if (IsTempVar(iVar))
+		{
+			//funs._cur._code->SetPointer(funs._cur._iLastOPOffset - (ar._debug ? sizeof(debug_info) : 0), SEEK_SET);
+			funs._cur._code->SetPointer(funs._cur._iLastOPOffset, SEEK_SET);
+			funs._cur.ClearLastOP();
+		}
+	}
+}
+bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+{
+	std::string tk1, tk2;
+	TK_TYPE tkType1, tkType2;
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_STRING)
+	{
+		SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+	tkType2 = GetToken(ar, tk2);
+	if (tkType2 != TK_SEMICOLON)
+	{
+		SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), tk2.c_str());
+		return false;
+	}
+
+	std::string fullFileName;
+	fullFileName = "../../Lib/";
+	fullFileName += tk1 + ".neo";
+
+
+	void* pFileBuffer = NULL;
+	int iFileLen = 0;
+	if (false == FileLoad(fullFileName.c_str(), pFileBuffer, iFileLen))
+	{
+		//printf("file read error");
+		return false;
+	}
+
+	CNArchive arCode;
+	std::string err;
+	bool putASM = true;
+	bool debug = false;
+	bool allowGlobalInitLogic = false;
+	if (false == CNeoVM::Compile(pFileBuffer, iFileLen, arCode, err, putASM, debug, allowGlobalInitLogic))
+	{
+		if (putASM)
+			printf((ANSI_COLOR_RED + err + ANSI_RESET_ALL).c_str());
+		return NULL;
+	}
+	delete[] pFileBuffer;
+
+	if (AddLocalVarName(ar, funs, vars, tk1) < 0)
+		return false;
+	return true;
 }
 bool ParseFunctionArg(CArchiveRdWC& ar, SFunctions& funs, SLayerVar* pCurLayer)
 {
@@ -1225,9 +1324,9 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 	}
 
 	int iArrayIndex = INVALID_ERROR_PARSEJOB;
-	if (tk1 == "system")
-		iTempOffset._iVar = COMPILE_STATIC_VAR_BEGIN;
-	else
+	//if (tk1 == "system")
+	//	iTempOffset._iVar = COMPILE_STATIC_VAR_BEGIN;
+	//else
 		iTempOffset._iVar = vars.FindVar(tk1);
 
 	if (iTempOffset._iVar >= 0)
@@ -1824,63 +1923,7 @@ eNOperation ConvertCheckOPToOptimizeInv(eNOperation n)
 	return NOP_NONE;
 }
 
-int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, const std::string& name, bool checkName = true)
-{
-	if (checkName && false == AbleName(name))
-	{
-		SetCompileError(ar, "Error (%d, %d): Function Local Var Unable (%s) %s", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), name.c_str());
-		return -1;
-	}
-	SLayerVar* pCurLayer = vars.GetCurrentLayer();
 
-	if (pCurLayer->FindVarOnlyCurrentBlock(name) >= 0)
-	{
-		SetCompileError(ar, "Error (%d, %d): Function Local Var Already (%s) %s", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), name.c_str());
-		return -1;
-	}
-	int iLocalVar;
-	if (funs._cur._name == GLOBAL_INIT_FUN_NAME)
-		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN + funs._cur._localVarCount++;
-	else
-		iLocalVar = 1 + (int)funs._cur._args.size() + funs._cur._localVarCount++; // 0 번은 리턴 저장용
-	pCurLayer->AddLocalVar(name, iLocalVar);
-	return iLocalVar;
-}
-int  AddLocalVar(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
-{
-	SLayerVar* pCurLayer = vars.GetCurrentLayer();
-
-	char name[256];
-	sprintf_s(name, _countof(name), "^_#@_temp_%d", vars._iTempVarNameIndex++);
-
-	if (pCurLayer->FindVarOnlyCurrentBlock(name) >= 0)
-	{
-		SetCompileError(ar, "Error (%d, %d): Function Local Var Already (%s) %s", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), name);
-		return -1;
-	}
-	int iLocalVar;
-	if (funs._cur._name == GLOBAL_INIT_FUN_NAME)
-		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN + funs._cur._localVarCount++;
-	else
-		iLocalVar = 1 + (int)funs._cur._args.size() + funs._cur._localVarCount++; // 0 번은 리턴 저장용
-	pCurLayer->AddLocalVar(name, iLocalVar);
-	return iLocalVar;
-}
-void ClearTempVars(SFunctions& funs)
-{
-	funs._cur.FreeLocalTempVar();
-	eNOperation opLast = funs._cur.GetLastOP();
-	if (opLast == NOP_MOV || opLast == NOP_MOV_MINUS)
-	{
-		int iVar = funs._cur.GetN(funs._cur._iLastOPOffset, 0);
-		if (IsTempVar(iVar))
-		{
-			//funs._cur._code->SetPointer(funs._cur._iLastOPOffset - (ar._debug ? sizeof(debug_info) : 0), SEEK_SET);
-			funs._cur._code->SetPointer(funs._cur._iLastOPOffset, SEEK_SET);
-			funs._cur.ClearLastOP();
-		}
-	}
-}
 
 #ifdef CSTYLE_FOR
 //	for Init
@@ -2860,7 +2903,8 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			pJumps->push_back(SJumpValue(funs._cur._code->GetBufferOffset() - 2, funs._cur._code->GetBufferOffset()));
 			break;
 		case TK_IMPORT:
-			ParseImport(ar, funs);
+			if (ParseImport(ar, funs, vars) == false)
+				return false;
 			break;
 		case TK_EXPORT:
 			funType = FUNT_EXPORT;
@@ -3083,7 +3127,7 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 
 	SLayerVar* pCurLayer = AddVarsFunction(vars);
 
-	funs.AddStaticString("system");
+//	funs.AddStaticString("system");
 
 	bool r = ParseFunctionBody(ar, funs, vars);
 	if (true == r)
