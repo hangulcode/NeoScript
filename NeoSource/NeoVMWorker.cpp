@@ -1693,20 +1693,22 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			case NOP_PTRCALL:
 			{
 				VarInfo* pVar1 = GetVarPtr1(OP);
-				//if (-1 == OP.n2)
-				if ((OP.argFlag & 0x02) == 0 && 0 == OP.n2)
-				{
-					if (pVar1->GetType() == VAR_FUN)
-						Call(pVar1->_fun_index, OP.n3);
-					else if (pVar1->GetType() == VAR_FUN_NATIVE)
-						Call(pVar1->_funPtr, OP.n3);
-					else
-						SetError("Call Function Type Error");
-					break;
-				}
 				short n3 = OP.n3;
 				VarInfo* pFunName = GetVarPtr2(OP);
-				if (pVar1->GetType() == VAR_TABLE)
+				switch (pVar1->GetType())
+				{
+				case VAR_FUN:
+					if ((OP.argFlag & 0x02) == 0 && 0 == OP.n2)
+						Call(pVar1->_fun_index, OP.n3);
+					break;
+				case VAR_FUN_NATIVE:
+					if ((OP.argFlag & 0x02) == 0 && 0 == OP.n2)
+						Call(pVar1->_funPtr, OP.n3);
+					break;
+				case VAR_STRING:
+					CallNative(_pVM->_funStrLib, pVar1, pFunName->_str->_str, n3);
+					break;
+				case VAR_TABLE:
 				{
 					VarInfo* pVarMeta = pVar1->_tbl->Find(pFunName);
 					if (pVarMeta != NULL)
@@ -1726,8 +1728,27 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 						CallNative(fun, pVar1, pFunName->_str->_str, n3);
 						break;
 					}
+					CallNative(_pVM->_funTblLib, pVar1, pFunName->_str->_str, n3);
+					break;
 				}
-
+				case VAR_LIST:
+					CallNative(_pVM->_funLstLib, pVar1, pFunName->_str->_str, n3);
+					break;
+				case VAR_SET:
+					break;
+				}
+				/*
+				if ((OP.argFlag & 0x02) == 0 && 0 == OP.n2)
+				{
+					if (pVar1->GetType() == VAR_FUN)
+						Call(pVar1->_fun_index, OP.n3);
+					else if (pVar1->GetType() == VAR_FUN_NATIVE)
+						Call(pVar1->_funPtr, OP.n3);
+					else
+						SetError("Call Function Type Error");
+					break;
+				}
+				if (pVar1->GetType() == VAR_TABLE)
 				if (pVar1->GetType() == VAR_TABLE)
 					CallNative(_pVM->_funTblLib, pVar1, pFunName->_str->_str, n3);
 				else if (pVar1->GetType() == VAR_LIST)
@@ -1736,7 +1757,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 					CallNative(_pVM->_funStrLib, pVar1, pFunName->_str->_str, n3);
 				else
 					SetError("Ptr Call Error");
-				//SetError("Ptr Call Error");
+				//SetError("Ptr Call Error");*/
 				break;
 			}
 			case NOP_PTRCALL2:
@@ -1894,7 +1915,8 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 #else
 				sprintf(chMsg, "%s : Index(%d), Line (%d)", _pVM->_pErrorMsg, idx, _lineseq);
 #endif
-				_pVM->_sErrorMsgDetail = chMsg;
+				if(_pVM->_sErrorMsgDetail.empty())
+					_pVM->_sErrorMsgDetail = chMsg;
 				return false;
 			}
 			if (isTimeout)

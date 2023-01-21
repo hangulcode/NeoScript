@@ -155,8 +155,8 @@ void SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...)
 #endif
 	va_end(arg_ptr);
 
-
-	ar.m_sErrorString = buff;
+	if(ar.m_sErrorString.empty())
+		ar.m_sErrorString = buff;
 //#ifdef _WIN32	
 //	printf(buff);
 //#endif

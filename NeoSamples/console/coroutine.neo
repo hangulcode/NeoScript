@@ -6,7 +6,7 @@ fun fa(var param1)
 	for(var i in 0, 5, 1)
 	{
 		print("Coroutine " .. i);
-		sleep(1000);
+		sleep(200);
 		yield return;
 	}
 }
@@ -23,6 +23,6 @@ export fun test()
 			coroutine_resume(cr, 2);
 		}
 		print("Main " .. state .. i);
-		sleep(1000);
+		sleep(200);
 	}
 }

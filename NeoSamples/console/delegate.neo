@@ -25,7 +25,4 @@ export fun delegate()
 	
 	table.funPointer2 = sub1;
 	table.funPointer2();
-	
-	table.tablePointer = system;
-	table.tablePointer.print("Table Pointer");
 }

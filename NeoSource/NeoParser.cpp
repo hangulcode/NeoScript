@@ -746,7 +746,7 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	int iFileLen = 0;
 	if (false == FileLoad(fullFileName.c_str(), pFileBuffer, iFileLen))
 	{
-		//printf("file read error");
+		SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), tk2.c_str());
 		return false;
 	}
 
@@ -893,11 +893,60 @@ bool IsTempVar(int iVar)
 
 	return false;
 }
+// This Function No Error Because Try Only
+// return TK_NONE : error
+TK_TYPE Try_ParseIntNum(int& iResultInt, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bShortRet, TK_TYPE tkTypeEnd1 = TK_UNUSED, TK_TYPE tkTypeEnd2 = TK_UNUSED, TK_TYPE tkTypeEnd3 = TK_UNUSED)
+{
+	std::string tk1, tk2;
+	TK_TYPE tkType1, tkType2, tkTypePre = TK_PLUS;
+
+	double num;
+
+	tkType1 = GetToken(ar, tk1);
+
+	if (true == StringToDouble(num, tk1.c_str()))
+	{
+		u16 c = ar.GetData(false);
+		if (c == '.')
+		{
+			ar.PushToken(tkType1, tk1);
+			return TK_NONE; // float or double is not int
+		}
+		else
+		{
+			if (tkTypePre == TK_MINUS)
+				num = -num;
+			int inum = (int)num;
+			if (bShortRet)
+			{
+				if (-32768 <= inum && inum <= 32767)
+				{
+					iResultInt = inum;
+					tkType2 = GetToken(ar, tk2);
+					if (tkType2 == tkTypeEnd1 || tkType2 == tkTypeEnd2 || tkType2 == tkTypeEnd3)
+						return tkType2;
+					ar.PushToken(tkType2, tk2);
+					ar.PushToken(tkType1, tk1);
+					return tkType2;
+				}
+			}
+			iResultInt = inum;
+			tkType2 = GetToken(ar, tk2);
+			if (tkType2 == tkTypeEnd1 || tkType2 == tkTypeEnd2 || tkType2 == tkTypeEnd3)
+				return tkType2;
+			ar.PushToken(tkType2, tk2);
+			ar.PushToken(tkType1, tk1);
+			return TK_NONE;
+		}
+	}
+	ar.PushToken(tkType1, tk1);
+	return TK_NONE;
+}
 
 bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	std::string tk1, tk2;
-	TK_TYPE tkType1, tkType2;
+	TK_TYPE tkType1, tkType2, tkType3;
 
 
 	SOperand iTempVar;
@@ -914,26 +963,35 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 
 			ar.PushToken(tkType2, tk2);
 
-			iTempVar.Reset();
-			TK_TYPE r2 = ParseJob(true, iTempVar, NULL, ar, funs, vars);
-			if(iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
-				funs._cur.Push_MOV(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTempVar._iVar);
+			int iTryValue = -1;
+			tkType3 = Try_ParseIntNum(iTryValue, ar, funs, vars, false, TK_COMMA, TK_R_SMALL);
+			if (tkType3 != TK_NONE)
+			{
+				funs._cur.Push_MOVI(ar, NOP_MOVI, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTryValue);
+			}
 			else
-				funs._cur.Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount);
+			{
+				iTempVar.Reset();
+				tkType3 = ParseJob(true, iTempVar, NULL, ar, funs, vars);
+				if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
+					funs._cur.Push_MOV(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTempVar._iVar);
+				else
+					funs._cur.Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount);
+				if (iTempVar._iVar == INVALID_ERROR_PARSEJOB)
+				{
+					SetCompileError(ar, "Error (%d, %d): Call Param\n", ar.CurLine(), ar.CurCol());
+					return false;
+				}
+			}
 			iParamCount++;
 
-			if (iTempVar._iVar == INVALID_ERROR_PARSEJOB)
-			{
-				SetCompileError(ar, "Error (%d, %d): Call Param\n", ar.CurLine(), ar.CurCol());
-				return false;
-			}
 
-			if (r2 != TK_R_SMALL && r2 != TK_COMMA)
+			if (tkType3 != TK_R_SMALL && tkType3 != TK_COMMA)
 			{
 				SetCompileError(ar, "Error (%d, %d): Call Param\n", ar.CurLine(), ar.CurCol());
 				return false;
 			}
-			if (r2 == TK_R_SMALL)
+			if (tkType3 == TK_R_SMALL)
 				break;
 		}
 		if (pFun != NULL)
@@ -966,67 +1024,6 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 	return true;
 }
 
-// This Function No Error Because Try Only
-bool Try_ParseIntNum(int& iResultInt, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bShortRet, TK_TYPE tkTypeEnd1 = TK_UNUSED, TK_TYPE tkTypeEnd2 = TK_UNUSED, TK_TYPE tkTypeEnd3 = TK_UNUSED)
-{
-	std::string tk1, tk2;
-	TK_TYPE tkType1, tkType2, tkTypePre = TK_PLUS;
-
-	double num;
-
-	tkType1 = GetToken(ar, tk1);
-
-	if (true == StringToDouble(num, tk1.c_str()))
-	{
-		u16 c = ar.GetData(false);
-		if (c == '.')
-		{
-			return false; // float or double is not int
-/*			ar.GetData(true);
-
-			tkType2 = GetToken(ar, tk2);
-			double num2 = 0;
-			if (true == StringToDoubleLow(num2, tk2.c_str()))
-			{
-				num += num2;
-			}
-			else
-			{
-				return false;
-			}
-			if (tkTypePre == TK_MINUS)
-				num = -num;
-			iResultInt = (int)num;*/
-		}
-		else
-		{
-			if (tkTypePre == TK_MINUS)
-				num = -num;
-			int inum = (int)num;
-			if (bShortRet)
-			{
-				if (-32768 <= inum && inum <= 32767)
-				{
-					iResultInt = inum;
-					tkType2 = GetToken(ar, tk2);
-					if (tkType2 == tkTypeEnd1 || tkType2 == tkTypeEnd2 || tkType2 == tkTypeEnd3)
-						return true;
-					ar.PushToken(tkType2, tk2);
-					ar.PushToken(tkType1, tk1);
-					return true;
-				}
-			}
-			iResultInt = inum;
-			tkType2 = GetToken(ar, tk2);
-			if (tkType2 == tkTypeEnd1 || tkType2 == tkTypeEnd2 || tkType2 == tkTypeEnd3)
-				return true;
-			ar.PushToken(tkType2, tk2);
-			ar.PushToken(tkType1, tk1);
-		}
-	}
-	ar.PushToken(tkType1, tk1);
-	return false;
-}
 
 
 bool ParseNum(int& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bShortRet = false)
@@ -2219,7 +2216,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 
 	int iTryValue = -1;
-	if (Try_ParseIntNum(iTryValue, ar, funs, vars, false, TK_COMMA))
+	if (Try_ParseIntNum(iTryValue, ar, funs, vars, false, TK_COMMA) != TK_NONE)
 	{
 		funs._cur.Push_MOVI(ar, NOP_MOVI, i_Begin, iTryValue);
 	}
@@ -2240,7 +2237,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 
 	iTryValue = -1;
-	if (Try_ParseIntNum(iTryValue, ar, funs, vars, false, TK_COMMA, TK_R_SMALL))
+	if (Try_ParseIntNum(iTryValue, ar, funs, vars, false, TK_COMMA, TK_R_SMALL) != TK_NONE)
 	{
 		funs._cur.Push_MOVI(ar, NOP_MOVI, i_End, iTryValue);
 	}
@@ -2261,7 +2258,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 
 	iTryValue = -1;
-	if (Try_ParseIntNum(iTryValue, ar, funs, vars, false, TK_COMMA, TK_R_SMALL))
+	if (Try_ParseIntNum(iTryValue, ar, funs, vars, false, TK_COMMA, TK_R_SMALL) != TK_NONE)
 	{
 		funs._cur.Push_MOVI(ar, NOP_MOVI, i_Step, iTryValue);
 	}
