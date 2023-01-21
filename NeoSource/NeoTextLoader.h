@@ -111,6 +111,7 @@ public:
 
 	std::list<SToken> m_sTokenQueue;
 	std::string m_sErrorString;
+	std::set<std::string> m_sImports;
 
 	CArchiveRdWC()
 	{

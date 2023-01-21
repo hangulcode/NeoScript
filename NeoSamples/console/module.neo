@@ -10,6 +10,7 @@ fun test()
 */
 export fun main()
 {
+	//var vv = mod1.add(11, 22);
 	print(mod1.add(11, 22));
 
 /*	print('module');

@@ -7,6 +7,7 @@
 void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 bool    FileLoad(const char* pFileName, void*& pBuffer, int& iLen);
 
+
 template<class T>
 static void RemoveAt(std::vector<T>& array, int index)
 {
@@ -94,6 +95,11 @@ std::map<std::string, TK_TYPE> g_sStringToToken;
 #define TOKEN_STR1(key, str) g_sTokenToString[key] = STokenValue(str, 20, NOP_NONE)
 #define TOKEN_STR2(key, str) g_sTokenToString[key] = STokenValue(str, 20, NOP_NONE); g_sStringToToken[str] = key
 #define TOKEN_STR3(key, str, pri, op) g_sTokenToString[key] = STokenValue(str, pri, op); g_sStringToToken[str] = key
+
+TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef = false);
+bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars);
+bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars);
+bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool addOPFunEnd = true);
 
 eNOperation GetOpTypeFromOp(eNOperation op)
 {
@@ -744,22 +750,41 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 	}
 
-	CNArchive arCode;
-	std::string err;
-	bool putASM = true;
-	bool debug = false;
-	bool allowGlobalInitLogic = false;
-	if (false == CNeoVM::Compile(pFileBuffer, iFileLen, arCode, err, putASM, debug, allowGlobalInitLogic))
-	{
-		if (putASM)
-			printf((ANSI_COLOR_RED + err + ANSI_RESET_ALL).c_str());
-		return NULL;
-	}
-	delete[] pFileBuffer;
+	//CNArchive arCode;
+	//std::string err;
+	//bool putASM = true;
+	//bool debug = false;
+	//bool allowGlobalInitLogic = false;
+	//if (false == CNeoVM::Compile(pFileBuffer, iFileLen, arCode, err, putASM, debug, allowGlobalInitLogic))
+	//{
+	//	if (putASM)
+	//		printf((ANSI_COLOR_RED + err + ANSI_RESET_ALL).c_str());
+	//	return NULL;
+	//}
+	//delete[] pFileBuffer;
 
-	if (AddLocalVarName(ar, funs, vars, tk1) < 0)
-		return false;
-	return true;
+//	if (AddLocalVarName(ar, funs, vars, tk1) < 0)
+//		return false;
+
+	CArchiveRdWC ar2;
+	ToArchiveRdWC((const char*)pFileBuffer, iFileLen, ar2);
+	ar2._allowGlobalInitLogic = ar._allowGlobalInitLogic;
+	ar2._debug = ar._debug;
+
+	std::string prefix = funs._prefix;
+	funs._prefix = tk1 + ".";
+	bool r = ParseFunctionBody(ar2, funs, vars, false);
+	funs._prefix = prefix;
+
+	u16* pBuffer = ar2.GetBuffer();
+	if (pBuffer) delete[] pBuffer;
+
+	auto it = ar.m_sImports.find(tk1);
+	if (it == ar.m_sImports.end())
+		ar.m_sImports.insert(tk1);
+
+	ar.m_sErrorString = ar2.m_sErrorString;
+	return r;
 }
 bool ParseFunctionArg(CArchiveRdWC& ar, SFunctions& funs, SLayerVar* pCurLayer)
 {
@@ -861,9 +886,6 @@ SLayerVar* DelVarsFunction(SVars& vars)
 	return NULL;
 }
 
-TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef = false);
-bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars);
-bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars);
 bool IsTempVar(int iVar)
 {
 	if (COMPILE_LOCALTMP_VAR_BEGIN <= iVar && iVar < COMPILE_STATIC_VAR_BEGIN)
@@ -1321,6 +1343,19 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 	{
 		SetCompileError(ar, "Error (%d, %d): %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
 		return false;
+	}
+
+	auto it = ar.m_sImports.find(tk1);
+	if (it != ar.m_sImports.end())
+	{
+		tkType2 = GetToken(ar, tk2);
+		if(tkType2 != TK_DOT)
+		{
+			SetCompileError(ar, "Error (%d, %d): %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+			return false;
+		}
+		tkType2 = GetToken(ar, tk2);
+		tk1 = tk1 + "." + tk2;
 	}
 
 	int iArrayIndex = INVALID_ERROR_PARSEJOB;
@@ -2916,6 +2951,8 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				SetCompileError(ar, "Error (%d, %d): Unable Fun Name %s\n", ar.CurLine(), ar.CurCol(), tk2.c_str());
 				return false;
 			}
+			if (funs._prefix.empty() == false)
+				tk2 = funs._prefix + tk2;
 			if (tkType2 == TK_STRING)
 			{
 				if (-1 == ParseFunctionBase(ar, funs, vars, tk2, funType))
@@ -2996,12 +3033,13 @@ void FinalizeFuction(SFunctions& funs)
 	funs._funSequence.push_back(funs._cur._name);
 }
 
-bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool addOPFunEnd)
 {
 	if (false == ParseMiddleArea(NULL, ar, funs, vars))
 		return false;
 
-	funs._cur.Push_FUNEND(ar);
+	if(addOPFunEnd)
+		funs._cur.Push_FUNEND(ar);
 
 	return true;
 }

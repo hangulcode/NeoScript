@@ -588,6 +588,8 @@ struct SFunctions
 	CNArchive		_codeFinal;
 	CNArchive		_codeTemp;
 
+	std::string		_prefix;
+
 	std::vector<debug_info> m_sDebugFinal;
 	std::vector<debug_info> m_sDebugTemp;
 
