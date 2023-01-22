@@ -1111,16 +1111,19 @@ TK_TYPE ParseListDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVar
 	TK_TYPE tkType1, tkType2;
 	TK_TYPE r = TK_NONE;
 
+	// // List alloc
 	iResultStack = funs._cur.AllocLocalTempVar();
 	funs._cur.Push_ListAlloc(ar, iResultStack);
 
+	int off_resize = funs._cur._code->GetBufferOffset();
+
+	// resize (1.param set cnt, 2.call resize)
 	funs._cur.Push_MOVI(ar, NOP_MOVI, COMPILE_CALLARG_VAR_BEGIN + 1 + 0, 0);
-	int off = funs._cur._code->GetBufferOffset() - (sizeof(short) * 2);
+	int off_cnt = funs._cur._code->GetBufferOffset() - (sizeof(short) * 2);
 
-	// PCALL [S.??].[G.?? 'resize'] arg:0 ==> resize force call
-	int iStaticString = funs.AddStaticString("resize");
+	int iStaticString = -1;// funs.AddStaticString("resize");
 	funs._cur.Push_CallPtr(ar, iResultStack, iStaticString, 1); // list resize
-
+	int off_resize_str = funs._cur._code->GetBufferOffset() - (sizeof(short) * 2);
 
 	int iTempOffsetKey;
 	int iTempOffsetValue;
@@ -1147,7 +1150,7 @@ TK_TYPE ParseListDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVar
 				return TK_NONE;
 			}
 		}
-		else if (tkType1 == TK_R_MIDDLE)
+		else if (tkType1 == TK_R_ARRAY)
 			break;
 
 		tkType2 = GetToken(ar, tk2);
@@ -1197,8 +1200,17 @@ TK_TYPE ParseListDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVar
 			return TK_NONE;
 		}
 	}
-
-	*((int*)((u8*)funs._cur._code->GetData() + off)) = iCurArrayOffset;
+	if (iCurArrayOffset > 0)
+	{
+		iStaticString = funs.AddStaticString("resize");
+		*((int*)((u8*)funs._cur._code->GetData() + off_cnt)) = iCurArrayOffset;
+		*((short*)((u8*)funs._cur._code->GetData() + off_resize_str)) = iStaticString;
+	}
+	else
+	{
+		funs._cur._code->SetBufferOffset(off_resize);
+		funs._cur.ClearLastOP();
+	}
 	return tkType1;
 }
 
@@ -1208,15 +1220,19 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 	TK_TYPE tkType1, tkType2;
 	TK_TYPE r = TK_NONE;
 
+	// Table alloc
 	iResultStack = funs._cur.AllocLocalTempVar();
 	funs._cur.Push_TableAlloc(ar, iResultStack);
 
-	funs._cur.Push_MOVI(ar, NOP_MOVI, COMPILE_CALLARG_VAR_BEGIN + 1 + 0, 0);
-	int off = funs._cur._code->GetBufferOffset() - (sizeof(short) * 2);
+	int off_reserve = funs._cur._code->GetBufferOffset();
 
-	// PCALL [S.??].[G.?? 'reserve'] arg:0 ==> reserve force call
-	int iStaticString = funs.AddStaticString("reserve");
+	// reserve (1.param set cnt, 2.call reserve)
+	funs._cur.Push_MOVI(ar, NOP_MOVI, COMPILE_CALLARG_VAR_BEGIN + 1 + 0, 0);
+	int off_cnt = funs._cur._code->GetBufferOffset() - (sizeof(short) * 2);
+
+	int iStaticString = -1;// funs.AddStaticString("reserve");
 	funs._cur.Push_CallPtr(ar, iResultStack, iStaticString, 1); // map reserve
+	int off_reserve_str = funs._cur._code->GetBufferOffset() - (sizeof(short) * 2);
 
 	int iTempOffsetKey;
 	int iTempOffsetValue;
@@ -1301,7 +1317,17 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 			return TK_NONE;
 		}
 	}
-	*((int*)((u8*)funs._cur._code->GetData() + off)) = iItemCount;
+	if (iItemCount > 0)
+	{
+		iStaticString = funs.AddStaticString("reserve");
+		*((int*)((u8*)funs._cur._code->GetData() + off_cnt)) = iItemCount;
+		*((short*)((u8*)funs._cur._code->GetData() + off_reserve_str)) = iStaticString;
+	}
+	else
+	{
+		funs._cur._code->SetBufferOffset(off_reserve);
+		funs._cur.ClearLastOP();
+	}
 	return tkType1;
 }
 
