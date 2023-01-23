@@ -6,6 +6,7 @@
 
 void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 bool    FileLoad(const char* pFileName, void*& pBuffer, int& iLen);
+inline bool	IsShort(int v) { return (-32768 <= v && v <= 32767) ? true : false; }
 
 
 template<class T>
@@ -919,7 +920,7 @@ TK_TYPE Try_ParseIntNum(int& iResultInt, CArchiveRdWC& ar, SFunctions& funs, SVa
 			int inum = (int)num;
 			if (bShortRet)
 			{
-				if (-32768 <= inum && inum <= 32767)
+				if (IsShort(inum))
 				{
 					iResultInt = inum;
 					tkType2 = GetToken(ar, tk2);
@@ -929,6 +930,8 @@ TK_TYPE Try_ParseIntNum(int& iResultInt, CArchiveRdWC& ar, SFunctions& funs, SVa
 					ar.PushToken(tkType1, tk1);
 					return tkType2;
 				}
+				ar.PushToken(tkType1, tk1);
+				return TK_NONE;
 			}
 			iResultInt = inum;
 			tkType2 = GetToken(ar, tk2);
@@ -1066,7 +1069,7 @@ bool ParseNum(int& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArchiveRd
 			int inum = (int)num;
 			if (bShortRet)
 			{
-				if (-32768 <= inum && inum <= 32767)
+				if (IsShort(inum))
 				{
 					iResultStack = (u16)inum + COMPILE_VAR_MAX;
 					return true;
@@ -1172,7 +1175,7 @@ TK_TYPE ParseListDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVar
 		else
 		{
 			short value = (short)(iTempOffsetKey - COMPILE_VAR_MAX);
-			if (iCurArrayOffset <= 32767)
+			if (IsShort(iCurArrayOffset))
 				funs._cur.Push_List_MASMDP(ar, NOP_CLT_MOVSS, iResultStack, iCurArrayOffset, value);
 			else
 			{
@@ -3027,7 +3030,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			break;
 		}
 
-		if (tkType1 != TK_IMPORT && tkType1 != TK_EXPORT)
+		if (tkType1 != TK_EXPORT)
 			funType = FUNT_NORMAL;
 	}
 	return true;
