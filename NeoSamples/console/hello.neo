@@ -1,12 +1,40 @@
 
 export fun main()
 {
-	print("hello");
-	/*
-	var Map1 = { 1 = 1, "b" = 4, "c" = 5, "d" = 8 };
+	//print("hello");
+	
+	//var Map1 = { 1 = 1, 2 = "b", "c" = 5, "d" = 8 };
+	var Map1 = { 1 = 2, 5 };
 
 	print("Map : ", " ");
 	foreach(var i,v in Map1)
 		print(i .. "=" .. v, " ");
-	print("");*/
+	print("");
 }
+/*
+	var map = {};
+	map[5] = 3;
+	map[6] = {};
+	map[6][2] = 999;
+	map[6][3] = 888;
+	map["b2"] = 57;
+	map["c3"] = "Hello Neo Script...";
+	map["c4"] = "system";
+	map["c4"] = null; // Remove
+
+	for(var i in 0, 10, 1)
+	{
+		if (i % 2 == 0)
+			map[i] = {};
+		else
+			map[i] = i;
+	}
+	map[0] = null; // Remove
+
+	foreach(var a, b in map)
+	{
+		print(a ..":"..b);
+		//sleep(200);
+	}
+	print("Map Size : " ..tosize(map));
+*/

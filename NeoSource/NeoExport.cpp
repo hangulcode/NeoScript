@@ -759,7 +759,7 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			break;
 		case NOP_CLT_MOVSS:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("MOVSS [%s].[%d] = %d\n", GetLog(td, v, 1).c_str(), v.n3, v.n3);
+			OutAsm("MOVSS [%s].[%d] = %d\n", GetLog(td, v, 1).c_str(), v.n2, v.n3);
 			break;
 		case NOP_TABLE_ADD2:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
