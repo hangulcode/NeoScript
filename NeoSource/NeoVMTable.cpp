@@ -413,6 +413,16 @@ void TableInfo::Insert(VarInfo* pKey, int v)
 	pDest->SetType(VAR_INT);
 	pDest->_int = v;
 }
+void TableInfo::Insert(int Key, VarInfo* pValue)
+{
+	VarInfo var;
+	var.SetType(VAR_INT);
+	var._int = Key;
+	VarInfo* pKey = &var;
+
+	Insert(pKey, pValue);
+}
+
 void TableInfo::Insert(int Key, int v)
 {
 	VarInfo var;

@@ -94,9 +94,10 @@ enum eNOperation : OpType
 	NOP_TABLE_ALLOC,
 	NOP_CLT_READ,
 	NOP_TABLE_REMOVE,
-	NOP_CLT_MOV,
-	NOP_CLT_MOVS,	// short immediate
-	NOP_CLT_MOVSS,	// short, short immediate
+	NOP_CLT_MOV,	// [ref] = ref
+	NOP_CLT_MOVRS,	// [ref] =  short
+	NOP_CLT_MOVSR,	// [short] =  ref
+	NOP_CLT_MOVSS,	// [short] = short
 	NOP_TABLE_ADD2,
 	NOP_TABLE_SUB2,
 	NOP_TABLE_MUL2,
@@ -626,6 +627,7 @@ private:
 	VarInfo* GetType(VarInfo* v1);
 
 	void CltInsert(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
+	void CltInsert(VarInfo *pClt, int array, VarInfo *v);
 	void CltInsert(VarInfo *pClt, VarInfo *pArray, int v);
 	void CltInsert(VarInfo *pClt, int key, int v);
 	void CltRead(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);

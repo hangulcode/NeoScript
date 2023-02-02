@@ -297,7 +297,8 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_CLT_READ, 3);
 	OP_STR1(NOP_TABLE_REMOVE, 2);
 	OP_STR1(NOP_CLT_MOV, 3);
-	OP_STR1(NOP_CLT_MOVS, 3);
+	OP_STR1(NOP_CLT_MOVRS, 3);
+	OP_STR1(NOP_CLT_MOVSR, 3);
 	OP_STR1(NOP_CLT_MOVSS, 3);
 	OP_STR1(NOP_TABLE_ADD2, 3);
 	OP_STR1(NOP_TABLE_SUB2, 3);
@@ -1243,7 +1244,7 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 	std::string str;
 
 	int iItemCount = 0;
-	int iCurArrayOffset = 0;
+	int iCurArrayOffset = -1;
 	bool bPreviusComa = false;
 
 	bool blEnd = false;
@@ -1253,20 +1254,23 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 
 		int iTryValue1 = -1;
 		tkType2 = Try_ParseIntNum(iTryValue1, ar, funs, vars, false, TK_COMMA, TK_EQUAL, TK_R_MIDDLE);
-		if (tkType2 != TK_NONE)
+		bool blKeyInt = (tkType2 != TK_NONE);
+		bool blKeyShort = false;
+		if (blKeyInt)
 		{
 			//funs._cur.Push_MOVI(ar, NOP_MOVI, i_Begin, iTryValue);
-			if (tkType2 == TK_R_MIDDLE)
+			if (tkType2 == TK_EQUAL)
 			{
-				iCurArrayOffset++;
-				if(IsShort(iCurArrayOffset))
-					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVSS, iResultStack, iCurArrayOffset, iTryValue1);
+				iCurArrayOffset = iTryValue1;
+				if (IsShort(iTryValue1))
+					blKeyShort = true;
 				else
-				{
-					iTempOffsetKey = funs.AddStaticInt(iCurArrayOffset);
-					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVS, iResultStack, iTempOffsetKey, iTryValue1);
-				}
-				break;
+					iTempOffsetKey = funs.AddStaticInt(iTryValue1);
+			}
+			else
+			{
+				SetCompileError(ar, "Error (%d, %d): Table ; \n", ar.CurLine(), ar.CurCol());
+				return TK_NONE;
 			}
 		}
 		else
@@ -1293,15 +1297,75 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 			tkType2 = GetToken(ar, tk2);
 		}
 
+		if (tkType2 == TK_R_MIDDLE || tkType2 == TK_COMMA)
+		{
+			iCurArrayOffset++;
+			iTempOffsetValue = iTempOffsetKey;
+			if (IsShort(iCurArrayOffset))
+			{
+				if(blKeyShort)
+					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVSS, iResultStack, iCurArrayOffset, iTryValue1);
+				else
+					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVSR, iResultStack, iCurArrayOffset, iTempOffsetValue);
+			}
+			else
+			{
+				iTempOffsetKey = funs.AddStaticInt(iCurArrayOffset);
+				if (blKeyShort)
+					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVRS, iResultStack, iTempOffsetKey, iTryValue1);
+				else
+					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack, iTempOffsetKey, iTempOffsetValue);
+			}
+			if (tkType2 == TK_COMMA)
+				continue;
+			iItemCount++;
+			break;
+		}
+
 		int iTryValue2 = -1;
-		tkType2 = Try_ParseIntNum(iTryValue2, ar, funs, vars, false, TK_COMMA, TK_EQUAL, TK_R_MIDDLE);
-		if (tkType2 != TK_NONE)
+		tkType2 = Try_ParseIntNum(iTryValue2, ar, funs, vars, true, TK_COMMA, TK_EQUAL, TK_R_MIDDLE);
+		bool blValueShort = (tkType2 != TK_NONE);
+		if (blValueShort)
 		{
 			//funs._cur.Push_MOVI(ar, NOP_MOVI, i_Begin, iTryValue);
-			iCurArrayOffset = iTryValue1;
-			funs._cur.Push_List_MASMDP(ar, NOP_CLT_MOVSS, iResultStack, iTryValue1, iTryValue2);
-			iItemCount++;
+			if (blKeyShort)
+				funs._cur.Push_List_MASMDP(ar, NOP_CLT_MOVSS, iResultStack, iTryValue1, iTryValue2);
+			else
+				funs._cur.Push_List_MASMDP(ar, NOP_CLT_MOVRS, iResultStack, iTempOffsetKey, iTryValue2);
 		}
+		else
+		{
+			tkType1 = GetToken(ar, tk1);
+
+			if (tkType1 == TK_QUOTE2 || tkType1 == TK_QUOTE1)
+			{
+				if (false == ParseStringOrNum(iTempOffsetValue, tkType1, tk1, ar, funs, vars))
+					return TK_NONE;
+			}
+			else if (tkType1 == TK_L_MIDDLE)
+			{
+				if (TK_NONE == ParseTableDef(iTempOffsetValue, ar, funs, vars, iTableDeep + 1))
+				{
+					return TK_NONE;
+				}
+			}
+			else if (tkType1 == TK_STRING)
+			{
+			}
+			else if (tkType1 == TK_R_MIDDLE)
+				break;
+			tkType2 = GetToken(ar, tk2);
+			////
+
+			if (blKeyShort)
+				funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVSR, iResultStack, iTryValue1, iTempOffsetValue);
+			else
+			{
+				iTempOffsetKey = funs.AddStaticInt(iCurArrayOffset);
+				funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVRS, iResultStack, iTempOffsetKey, iTempOffsetValue);
+			}
+		}
+		iItemCount++;
 
 		if (tkType2 == TK_R_MIDDLE)
 			break;

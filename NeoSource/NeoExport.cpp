@@ -299,11 +299,17 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 
 			argFlag = GetArgIndexToCode(&v.n1, &v.n2, &v.n3);
 			break;
-		case NOP_CLT_MOVS:
+		case NOP_CLT_MOVRS:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 
 			argFlag = GetArgIndexToCode(&v.n1, &v.n2, nullptr);
+			break;
+		case NOP_CLT_MOVSR:
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
+
+			argFlag = GetArgIndexToCode(&v.n1, nullptr, &v.n3);
 			break;
 		case NOP_CLT_MOVSS:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
@@ -753,9 +759,13 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("MOV [%s].[%s] = [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
-		case NOP_CLT_MOVS:
+		case NOP_CLT_MOVRS:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("MOVS [%s].[%s] = %d\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), v.n3);
+			break;
+		case NOP_CLT_MOVSR:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("MOVS [%s].[%d] = %s\n", GetLog(td, v, 1).c_str(), v.n2, GetLog(td, v, 3).c_str());
 			break;
 		case NOP_CLT_MOVSS:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
