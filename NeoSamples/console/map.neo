@@ -48,8 +48,8 @@ fun Fun_General()
 
 fun fun_Sort()
 {
-	//var map = { "cc"={"aa" = "bb",100,101,102}, 1, 2, 3, 4, 5, "test", 65 };
-	//var map = { 10, 11, 100=12,"test", 13 };
+	//var map = { "cc":{"aa" : "bb",100,101,102}, 1, 2, 3, 4, 5, "test", 65 };
+	//var map = { 10, 11, 100:12,"test", 13 };
 	var mapNumber = { 5, 3, 1, 4, 7, 2 };
 
 	print("Before    : " .. dumpMap(mapNumber));
@@ -57,9 +57,9 @@ fun fun_Sort()
 	print("Ascending : " .. dumpMap(mapNumber));
 	
 	var mapPeople = {
-		{"nationality" = "Ameraca", "name" = "James"},
-		{"nationality" = "Korea",   "name" = "Alice"},
-		{"nationality" = "Japan",   "name" = "Donard"},
+		{"nationality" : "Ameraca", "name" : "James"},
+		{"nationality" : "Korea",   "name" : "Alice"},
+		{"nationality" : "Japan",   "name" : "Donard"},
 	};
 
 	print("Before : " .. dumpMap(mapPeople));

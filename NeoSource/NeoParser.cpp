@@ -1253,25 +1253,25 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 		iTempOffsetKey = iTempOffsetValue = INVALID_ERROR_PARSEJOB;
 
 		int iTryValue1 = -1;
-		tkType2 = Try_ParseIntNum(iTryValue1, ar, funs, vars, false, TK_COMMA, TK_EQUAL, TK_R_MIDDLE);
+		tkType2 = Try_ParseIntNum(iTryValue1, ar, funs, vars, false, TK_COMMA, TK_COLON, TK_R_MIDDLE);
 		bool blKeyInt = (tkType2 != TK_NONE);
 		bool blKeyShort = false;
+		bool blValueShort = false;
 		if (blKeyInt)
 		{
 			//funs._cur.Push_MOVI(ar, NOP_MOVI, i_Begin, iTryValue);
-			if (tkType2 == TK_EQUAL)
-			{
-				iCurArrayOffset = iTryValue1;
-				if (IsShort(iTryValue1))
-					blKeyShort = true;
-				else
-					iTempOffsetKey = funs.AddStaticInt(iTryValue1);
-			}
+			if (IsShort(iTryValue1))
+				blKeyShort = true;
 			else
-			{
-				SetCompileError(ar, "Error (%d, %d): Table ; \n", ar.CurLine(), ar.CurCol());
-				return TK_NONE;
-			}
+				iTempOffsetKey = funs.AddStaticInt(iTryValue1);
+
+			if (tkType2 == TK_COLON)
+				iCurArrayOffset = iTryValue1;
+			//else
+			//{
+			//	SetCompileError(ar, "Error (%d, %d): Table ; \n", ar.CurLine(), ar.CurCol());
+			//	return TK_NONE;
+			//}
 		}
 		else
 		{
@@ -1297,13 +1297,17 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 			tkType2 = GetToken(ar, tk2);
 		}
 
-		if (tkType2 == TK_R_MIDDLE || tkType2 == TK_COMMA)
+		if (tkType2 == TK_COLON)
+		{
+		}
+		else if (tkType2 == TK_R_MIDDLE || tkType2 == TK_COMMA)
 		{
 			iCurArrayOffset++;
 			iTempOffsetValue = iTempOffsetKey;
+			blValueShort = blKeyShort;
 			if (IsShort(iCurArrayOffset))
 			{
-				if(blKeyShort)
+				if(blValueShort)
 					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVSS, iResultStack, iCurArrayOffset, iTryValue1);
 				else
 					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVSR, iResultStack, iCurArrayOffset, iTempOffsetValue);
@@ -1311,7 +1315,7 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 			else
 			{
 				iTempOffsetKey = funs.AddStaticInt(iCurArrayOffset);
-				if (blKeyShort)
+				if (blValueShort)
 					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVRS, iResultStack, iTempOffsetKey, iTryValue1);
 				else
 					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack, iTempOffsetKey, iTempOffsetValue);
@@ -1321,10 +1325,15 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 			iItemCount++;
 			break;
 		}
+		else
+		{
+			SetCompileError(ar, "Error (%d, %d): Table ; \n", ar.CurLine(), ar.CurCol());
+			return TK_NONE;
+		}
 
 		int iTryValue2 = -1;
-		tkType2 = Try_ParseIntNum(iTryValue2, ar, funs, vars, true, TK_COMMA, TK_EQUAL, TK_R_MIDDLE);
-		bool blValueShort = (tkType2 != TK_NONE);
+		tkType2 = Try_ParseIntNum(iTryValue2, ar, funs, vars, true, TK_COMMA, TK_R_MIDDLE);
+		blValueShort = (tkType2 != TK_NONE);
 		if (blValueShort)
 		{
 			//funs._cur.Push_MOVI(ar, NOP_MOVI, i_Begin, iTryValue);

@@ -51,8 +51,8 @@ fun Fun_Set()
 
 fun Fun_Map()
 {
-	var Map1 = { "a" = 1, "b" = 4, "c" = 5, "d" = 8 };
-	var Map2 = { "a" = 3, "X" = 4, "Y" = 5 };
+	var Map1 = { "a" : 1, "b" : 4, "c" : 5, "d" : 8 };
+	var Map2 = { "a" : 3, "X" : 4, "Y" : 5 };
 
 	print("Map : ", " ");
 	foreach(var i,v in Map1)
