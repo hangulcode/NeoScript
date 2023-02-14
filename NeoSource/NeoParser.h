@@ -259,7 +259,7 @@ struct SFunctionInfo
 		//_code->Write(&args, sizeof(args));
 		Push_Arg(table, index, args);
 	}
-	void	Push_CallPtr2(CArchiveRdWC& ar, short table, short index, short args)
+	void	Push_CallPtr2(CArchiveRdWC& ar, short index, short args)
 	{
 		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
@@ -269,7 +269,7 @@ struct SFunctionInfo
 		//_code->Write(&table, sizeof(table));
 		//_code->Write(&index, sizeof(index));
 		//_code->Write(&args, sizeof(args));
-		Push_Arg(table, index, args);
+		Push_Arg(index, args);
 	}
 	void	Push_MOV(CArchiveRdWC& ar, eNOperation op, short r, short s)
 	{

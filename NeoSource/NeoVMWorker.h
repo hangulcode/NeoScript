@@ -31,11 +31,17 @@ enum eNOperation : OpType
 	NOP_MOVI, // int immediate
 
 	NOP_MOV_MINUS,
+	NOP_MOVI_MINUS,
 	NOP_ADD2,
+	NOP_ADDI2,
 	NOP_SUB2,
+	NOP_SUBI2,
 	NOP_MUL2,
+	NOP_MULI2,
 	NOP_DIV2,
+	NOP_DIVI2,
 	NOP_PERSENT2,
+	NOP_PERSENTI2,
 
 	NOP_VAR_CLEAR,
 	NOP_INC,
@@ -86,8 +92,8 @@ enum eNOperation : OpType
 
 
 	NOP_CALL,
-	NOP_PTRCALL,
-	NOP_PTRCALL2,
+	NOP_PTRCALL,	// Multiple Call
+	NOP_PTRCALL2,	// Native Call
 	NOP_RETURN,
 	NOP_FUNEND,
 
@@ -598,6 +604,14 @@ private:
 	void Mul2(VarInfo* r, VarInfo* v2);
 	void Div2(VarInfo* r, VarInfo* v2);
 	void Per2(VarInfo* r, VarInfo* v2);
+
+	void MoveMinusI(VarInfo* v1, int);
+	void AddI2(VarInfo* r, int);
+	void SubI2(VarInfo* r, int);
+	void MulI2(VarInfo* r, int);
+	void DivI2(VarInfo* r, int);
+	void PerI2(VarInfo* r, int);
+
 	void And(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Or(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Add(VarInfo* r, VarInfo* v1, VarInfo* v2);
@@ -617,6 +631,7 @@ private:
 	void Call(int n1, int n2, VarInfo* pReturnValue = NULL);
 	bool Call_MetaTable(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, VarInfo* b);
 	bool Call_MetaTable2(VarInfo* pTable, std::string&, VarInfo* a, VarInfo* b);
+	bool Call_MetaTableI(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, int b);
 
 	bool CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFunObj, const std::string& fname, int n3);
 

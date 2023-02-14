@@ -23,9 +23,13 @@ static void RemoveAt(std::vector<T>& array, int index)
 	}
 }
 
-enum IncrementOperator
+enum OperandType
 {
-	Increment_None,
+	Data_None,
+	Data_NR,	// None + [ref]
+	Data_NI,	// None + Int
+	Data_TR,	// Table + [ref]
+	Data_TS,	// Table + Short
 	Increment_Prefix,
 	Increment_Postfix,
 };
@@ -34,25 +38,31 @@ struct SOperand
 {
 	int _iVar;
 	int _iArrayIndex;
-	IncrementOperator _incementType;
+	OperandType _operandType;
 
 	SOperand()
 	{
 		Reset();
 	}
-	SOperand(int iVar, int iArrayIndex = INVALID_ERROR_PARSEJOB)
+	SOperand(int iVar, int iArrayIndex = INVALID_ERROR_PARSEJOB, OperandType operandType = Data_NR)
 	{
 		_iVar = iVar;
 		_iArrayIndex = iArrayIndex;
-		_incementType = Increment_None;
+		if(iVar == INVALID_ERROR_PARSEJOB && iArrayIndex == INVALID_ERROR_PARSEJOB)
+			_operandType = Data_None;
+		else
+			_operandType = operandType;
 	}
 	void Reset()
 	{
 		_iVar = _iArrayIndex = INVALID_ERROR_PARSEJOB;
-		_incementType = Increment_None;
+		_operandType = Data_NR;
 	}
 
 	inline bool IsArray() { return _iArrayIndex  != INVALID_ERROR_PARSEJOB; }
+	inline bool IsInt() { return _operandType == Data_NI; }
+	inline bool IsConst() { return _operandType == Data_NI; }
+	inline bool IsNone() { return _operandType == Data_None; }
 };
 
 struct SOperationInfo
@@ -97,7 +107,7 @@ std::map<std::string, TK_TYPE> g_sStringToToken;
 #define TOKEN_STR2(key, str) g_sTokenToString[key] = STokenValue(str, 20, NOP_NONE); g_sStringToToken[str] = key
 #define TOKEN_STR3(key, str, pri, op) g_sTokenToString[key] = STokenValue(str, pri, op); g_sStringToToken[str] = key
 
-TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef = false);
+TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef = false, TK_TYPE tkEnd1 = TK_SEMICOLON, TK_TYPE tkEnd2 = TK_COMMA, TK_TYPE tkEnd3 = TK_R_SMALL, TK_TYPE tkEnd4 = TK_R_ARRAY);
 bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars);
 bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars);
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool addOPFunEnd = true);
@@ -232,13 +242,20 @@ int InitDefaultTokenString()
 
 	OP_STR1(NOP_NONE, 0);
 	OP_STR1(NOP_MOV, 2);
-	OP_STR1(NOP_MOVI, 3);
+	OP_STR1(NOP_MOVI, 3);		//  int(v2,3) 4byre
 	OP_STR1(NOP_MOV_MINUS, 2);
 	OP_STR1(NOP_ADD2, 2);
 	OP_STR1(NOP_SUB2, 2);
 	OP_STR1(NOP_MUL2, 2);
 	OP_STR1(NOP_DIV2, 2);
 	OP_STR1(NOP_PERSENT2, 2);
+
+	OP_STR1(NOP_MOVI_MINUS, 3); //  int(v2,3) 4byre
+	OP_STR1(NOP_ADDI2, 3);
+	OP_STR1(NOP_SUBI2, 3);
+	OP_STR1(NOP_MULI2, 3);
+	OP_STR1(NOP_DIVI2, 3);
+	OP_STR1(NOP_PERSENTI2, 3);
 
 	OP_STR1(NOP_VAR_CLEAR, 1);
 	OP_STR1(NOP_INC, 1);
@@ -289,7 +306,7 @@ int InitDefaultTokenString()
 
 	OP_STR1(NOP_CALL, 2);
 	OP_STR1(NOP_PTRCALL, 3);
-	OP_STR1(NOP_PTRCALL2, 3);
+	OP_STR1(NOP_PTRCALL2, 2);
 	OP_STR1(NOP_RETURN, 1);
 	OP_STR1(NOP_FUNEND, 0);
 
@@ -1011,7 +1028,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 		else if(iResultStack._iVar >= 0)
 			funs._cur.Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
 		else
-			funs._cur.Push_CallPtr2(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
+			funs._cur.Push_CallPtr2(ar, iResultStack._iArrayIndex, iParamCount);
 		iResultStack = funs._cur.AllocLocalTempVar();
 		funs._cur.Push_MOV(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN);
 	}
@@ -1030,7 +1047,65 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 
 
 
-bool ParseNum(int& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+bool ParseNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+{
+	std::string tk2;
+	TK_TYPE tkType2;
+
+	double num;
+
+	iResultStack = vars.FindVar(tk1);
+	if (iResultStack._iVar >= 0)
+		return true;
+
+	if (true == StringToDouble(num, tk1.c_str()))
+	{
+		u16 c = ar.GetData(false);
+		if (c == '.')
+		{
+			ar.GetData(true);
+
+			tkType2 = GetToken(ar, tk2);
+			double num2 = 0;
+			if (true == StringToDoubleLow(num2, tk2.c_str()))
+			{
+				num += num2;
+			}
+			else
+			{
+				SetCompileError(ar, "Error (%d, %d): num data invalid\n", ar.CurLine(), ar.CurCol());
+				return TK_NONE;
+			}
+			if (tkTypePre == TK_MINUS)
+				num = -num;
+			iResultStack = funs.AddStaticNum(num);
+		}
+		else
+		{
+			if (tkTypePre == TK_MINUS)
+				num = -num;
+			int inum = (int)num;
+			//if (bShortRet)
+			//{
+			//	if (IsShort(inum))
+			//	{
+			//		iResultStack = (u16)inum + COMPILE_VAR_MAX;
+			//		return true;
+			//	}
+			//}
+			iResultStack = inum;// funs.AddStaticInt(inum);
+			iResultStack._operandType = Data_NI;
+		}
+	}
+	else
+	{
+		SetCompileError(ar, "Error (%d, %d): Unknown String (%s)\n", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		return false;
+	}
+	return true;
+}
+
+bool ParseNum2(int& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	std::string tk2;
 	TK_TYPE tkType2;
@@ -1087,7 +1162,7 @@ bool ParseNum(int& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArchiveRd
 	return true;
 }
 
-bool ParseStringOrNum(int& iResultStack, TK_TYPE tkTypePre, std::string& tkPre, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+bool ParseStringOrNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tkPre, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	if (tkTypePre == TK_QUOTE2 || tkTypePre == TK_QUOTE1)
 	{
@@ -1109,7 +1184,7 @@ bool ParseStringOrNum(int& iResultStack, TK_TYPE tkTypePre, std::string& tkPre, 
 	return false;
 }
 
-TK_TYPE ParseListDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, int iTableDeep = 0)
+TK_TYPE ParseListDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, int iTableDeep = 0)
 {
 	std::string tk1, tk2;
 	TK_TYPE tkType1, tkType2;
@@ -1117,7 +1192,7 @@ TK_TYPE ParseListDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVar
 
 	// // List alloc
 	iResultStack = funs._cur.AllocLocalTempVar();
-	funs._cur.Push_ListAlloc(ar, iResultStack);
+	funs._cur.Push_ListAlloc(ar, iResultStack._iVar);
 
 	int off_resize = funs._cur._code->GetBufferOffset();
 
@@ -1126,11 +1201,11 @@ TK_TYPE ParseListDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVar
 	int off_cnt = funs._cur._code->GetBufferOffset() - (sizeof(short) * 2);
 
 	int iStaticString = -1;// funs.AddStaticString("resize");
-	funs._cur.Push_CallPtr(ar, iResultStack, iStaticString, 1); // list resize
+	funs._cur.Push_CallPtr(ar, iResultStack._iVar, iStaticString, 1); // list resize
 	int off_resize_str = funs._cur._code->GetBufferOffset() - (sizeof(short) * 2);
 
-	int iTempOffsetKey;
-	int iTempOffsetValue;
+	SOperand iTempOffsetKey;
+	SOperand iTempOffsetValue;
 	std::string str;
 
 	int iCurArrayOffset = 0;
@@ -1167,11 +1242,11 @@ TK_TYPE ParseListDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVar
 			SetCompileError(ar, "Error (%d, %d): List Init Error %s\n", ar.CurLine(), ar.CurCol(), tk2.c_str());
 			return TK_NONE;
 		}
-		if (iTempOffsetKey < COMPILE_VAR_MAX)
+		if (iTempOffsetKey._iVar < COMPILE_VAR_MAX)
 		{
-			iTempOffsetValue = iTempOffsetKey;
+			iTempOffsetValue = iTempOffsetKey._iVar;
 			iTempOffsetKey = funs.AddStaticInt(iCurArrayOffset);
-			funs._cur.Push_List_MASMDP(ar, NOP_CLT_MOV, iResultStack, iTempOffsetKey, iTempOffsetValue);
+			funs._cur.Push_List_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey._iVar, iTempOffsetValue._iVar);
 		}
 		else
 		{
@@ -1219,7 +1294,7 @@ TK_TYPE ParseListDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVar
 	return tkType1;
 }
 
-TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, int iTableDeep = 0)
+TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, int iTableDeep = 0)
 {
 	std::string tk1, tk2;
 	TK_TYPE tkType1, tkType2;
@@ -1227,7 +1302,7 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 
 	// Table alloc
 	iResultStack = funs._cur.AllocLocalTempVar();
-	funs._cur.Push_TableAlloc(ar, iResultStack);
+	funs._cur.Push_TableAlloc(ar, iResultStack._iVar);
 
 	int off_reserve = funs._cur._code->GetBufferOffset();
 
@@ -1236,11 +1311,11 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 	int off_cnt = funs._cur._code->GetBufferOffset() - (sizeof(short) * 2);
 
 	int iStaticString = -1;// funs.AddStaticString("reserve");
-	funs._cur.Push_CallPtr(ar, iResultStack, iStaticString, 1); // map reserve
+	funs._cur.Push_CallPtr(ar, iResultStack._iVar, iStaticString, 1); // map reserve
 	int off_reserve_str = funs._cur._code->GetBufferOffset() - (sizeof(short) * 2);
 
-	int iTempOffsetKey;
-	int iTempOffsetValue;
+	SOperand iTempOffsetKey;
+	SOperand iTempOffsetValue;
 	std::string str;
 
 	int iItemCount = 0;
@@ -1281,6 +1356,7 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 			{
 				if (false == ParseStringOrNum(iTempOffsetKey, tkType1, tk1, ar, funs, vars))
 					return TK_NONE;
+				tkType2 = GetToken(ar, tk2);
 			}
 			else if (tkType1 == TK_L_MIDDLE)
 			{
@@ -1288,13 +1364,26 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 				{
 					return TK_NONE;
 				}
+				tkType2 = GetToken(ar, tk2);
 			}
 			else if (tkType1 == TK_STRING)
 			{
+				//case TK_SEMICOLON:	// ;
+				//case TK_COMMA:		// ,
+				//case TK_R_SMALL:	// )
+				//case TK_R_ARRAY:	// ]
+				ar.PushToken(tkType1, tk1);
+				SOperand iTempOffset = INVALID_ERROR_PARSEJOB;
+				tkType2 = ParseJob(false, iTempOffset, NULL, ar, funs, vars, false, TK_COLON, TK_COMMA, TK_R_MIDDLE, TK_NONE);
+				if (TK_NONE == tkType2)
+				{
+					//SetCompileError(ar, "Error (%d, %d): ", ar.CurLine(), ar.CurCol());
+					return TK_NONE;
+				}
+				iTempOffsetKey = iTempOffset._iVar;
 			}
 			else if (tkType1 == TK_R_MIDDLE)
 				break;
-			tkType2 = GetToken(ar, tk2);
 		}
 
 		if (tkType2 == TK_COLON)
@@ -1308,17 +1397,17 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 			if (IsShort(iCurArrayOffset))
 			{
 				if(blValueShort)
-					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVSS, iResultStack, iCurArrayOffset, iTryValue1);
+					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVSS, iResultStack._iVar, iCurArrayOffset, iTryValue1);
 				else
-					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVSR, iResultStack, iCurArrayOffset, iTempOffsetValue);
+					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVSR, iResultStack._iVar, iCurArrayOffset, iTempOffsetValue._iVar);
 			}
 			else
 			{
 				iTempOffsetKey = funs.AddStaticInt(iCurArrayOffset);
 				if (blValueShort)
-					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVRS, iResultStack, iTempOffsetKey, iTryValue1);
+					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVRS, iResultStack._iVar, iTempOffsetKey._iVar, iTryValue1);
 				else
-					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack, iTempOffsetKey, iTempOffsetValue);
+					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey._iVar, iTempOffsetValue._iVar);
 			}
 			if (tkType2 == TK_COMMA)
 				continue;
@@ -1338,9 +1427,9 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 		{
 			//funs._cur.Push_MOVI(ar, NOP_MOVI, i_Begin, iTryValue);
 			if (blKeyShort)
-				funs._cur.Push_List_MASMDP(ar, NOP_CLT_MOVSS, iResultStack, iTryValue1, iTryValue2);
+				funs._cur.Push_List_MASMDP(ar, NOP_CLT_MOVSS, iResultStack._iVar, iTryValue1, iTryValue2);
 			else
-				funs._cur.Push_List_MASMDP(ar, NOP_CLT_MOVRS, iResultStack, iTempOffsetKey, iTryValue2);
+				funs._cur.Push_List_MASMDP(ar, NOP_CLT_MOVRS, iResultStack._iVar, iTempOffsetKey._iVar, iTryValue2);
 		}
 		else
 		{
@@ -1367,11 +1456,11 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 			////
 
 			if (blKeyShort)
-				funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVSR, iResultStack, iTryValue1, iTempOffsetValue);
+				funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVSR, iResultStack._iVar, iTryValue1, iTempOffsetValue._iVar);
 			else
 			{
 				iTempOffsetKey = funs.AddStaticInt(iCurArrayOffset);
-				funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVRS, iResultStack, iTempOffsetKey, iTempOffsetValue);
+				funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOVRS, iResultStack._iVar, iTempOffsetKey._iVar, iTempOffsetValue._iVar);
 			}
 		}
 		iItemCount++;
@@ -1447,25 +1536,25 @@ TK_TYPE ParseTableDef(int& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVa
 	return tkType1;
 }
 
-TK_TYPE ParseTable(int& iArrayOffset, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+TK_TYPE ParseTable(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	TK_TYPE r = TK_NONE;
 
-	SOperand operand;
-	r = ParseJob(true, operand, NULL, ar, funs, vars);
+	SOperand op;
+	r = ParseJob(true, op, NULL, ar, funs, vars);
 	if (r != TK_R_ARRAY)
 	{
 		SetCompileError(ar, "Error (%d, %d): Table ] \n", ar.CurLine(), ar.CurCol());
 		return TK_NONE;
 	}
 
-	if (operand._iArrayIndex == INVALID_ERROR_PARSEJOB)
-		iArrayOffset = operand._iVar;
-	else
+	/*if (op.IsArray())
 	{
-		iArrayOffset = funs._cur.AllocLocalTempVar();
-		funs._cur.Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iArrayOffset);
+		operand = funs._cur.AllocLocalTempVar();
+		funs._cur.Push_TableRead(ar, op._iVar, op._iArrayIndex, operand._iVar);
 	}
+	else*/
+		operand = op;
 	return r;
 }
 
@@ -1475,7 +1564,6 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 	TK_TYPE tkType1, tkType2;
 	TK_TYPE r = TK_NONE;
 
-	SOperand iTempOffset;
 
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_STRING)
@@ -1497,11 +1585,10 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 		tk1 = tk1 + "." + tk2;
 	}
 
-	int iArrayIndex = INVALID_ERROR_PARSEJOB;
-	//if (tk1 == "system")
-	//	iTempOffset._iVar = COMPILE_STATIC_VAR_BEGIN;
-	//else
-		iTempOffset._iVar = vars.FindVar(tk1);
+	SOperand iTempOffset;
+	SOperand iTempOffset2;
+	//SOperand iArrayIndex = INVALID_ERROR_PARSEJOB;
+	iTempOffset._iVar = vars.FindVar(tk1);
 
 	if (iTempOffset._iVar >= 0)
 	{
@@ -1515,8 +1602,8 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 			{
 				ar.PushToken(tkType2, tk2);
 
-				iTempOffset._iArrayIndex = iArrayIndex;
-				iArrayIndex = INVALID_ERROR_PARSEJOB;
+				//iTempOffset._iArrayIndex = iArrayIndex._iVar;
+				//iArrayIndex = INVALID_ERROR_PARSEJOB;
 
 				if (false == ParseFunCall(iTempOffset, tkTypePre, NULL, ar, funs, vars))
 					return false;
@@ -1527,16 +1614,12 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 				ar.PushToken(tkType2, tk2);
 				break;
 			}
-			if (iArrayIndex != INVALID_ERROR_PARSEJOB)
-			{
-				int iTempOffset2 = funs._cur.AllocLocalTempVar();
-				funs._cur.Push_TableRead(ar, iTempOffset._iVar, iArrayIndex, iTempOffset2);
-				iTempOffset = iTempOffset2;
-			}
 
-			iArrayIndex = INVALID_ERROR_PARSEJOB;
+			iTempOffset2 = INVALID_ERROR_PARSEJOB;
 			if (tkType2 == TK_L_ARRAY)
-				r = ParseTable(iArrayIndex, ar, funs, vars);
+			{
+				r = ParseTable(iTempOffset2, ar, funs, vars);
+			}
 			else
 			{
 				std::string str;
@@ -1545,18 +1628,53 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 					SetCompileError(ar, "Error (%d, %d): . string", ar.CurLine(), ar.CurCol());
 					return false;
 				}
-				iArrayIndex = funs.AddStaticString(str);
+				iTempOffset2 = funs.AddStaticString(str);
 			}
+
+			if (iTempOffset2.IsArray())
+			{
+				SetCompileError(ar, "Error (%d, %d): . string", ar.CurLine(), ar.CurCol());
+				return false;
+				//int iTempOffset2 = funs._cur.AllocLocalTempVar();
+				//funs._cur.Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iTempOffset2);
+				//iTempOffset = iTempOffset2;
+			}
+			else
+			{
+				if (iTempOffset._iArrayIndex == INVALID_ERROR_PARSEJOB)
+				{
+					iTempOffset._iArrayIndex = iTempOffset2._iVar;
+					if (iTempOffset2._operandType == Data_NI)
+					{
+						if (IsShort(iTempOffset2._iVar))
+						{
+							iTempOffset._iArrayIndex = iTempOffset2._iVar;
+							iTempOffset._operandType = Data_TS;
+						}
+						else
+						{
+							iTempOffset._iArrayIndex = funs.AddStaticInt(iTempOffset2._iVar);
+							iTempOffset._operandType = Data_TR;
+						}
+					}
+				}
+				else
+				{
+					SetCompileError(ar, "Error (%d, %d): . string", ar.CurLine(), ar.CurCol());
+					return false;
+				}
+			}
+
 		}
 		if (tkTypePre == TK_MINUS)
 		{
-			if (iArrayIndex != INVALID_ERROR_PARSEJOB)
+			if (iTempOffset.IsArray())
 			{
 				int iTempOffset2 = funs._cur.AllocLocalTempVar();
-				funs._cur.Push_TableRead(ar, iTempOffset._iVar, iArrayIndex, iTempOffset2);
+				funs._cur.Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iTempOffset2);
 				iTempOffset = iTempOffset2;
 
-				iArrayIndex = INVALID_ERROR_PARSEJOB;
+				//iTempOffset._iArrayIndex = INVALID_ERROR_PARSEJOB;
 			}
 
 			int iTempOffset3 = funs._cur.AllocLocalTempVar();
@@ -1606,11 +1724,11 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 		}
 		else
 		{
-			if (false == ParseNum(iTempOffset._iVar, tkTypePre, tk1, ar, funs, vars))
+			if (false == ParseNum(iTempOffset, tkTypePre, tk1, ar, funs, vars))
 				return false;
 		}
 	}
-	operand = SOperand(iTempOffset._iVar, iArrayIndex);
+	operand = iTempOffset;// SOperand(iTempOffset._iVar, iArrayIndex, iTempOffset._operandType);
 	return true;
 }
 
@@ -1651,7 +1769,12 @@ bool ParseToType(int& iResultStack, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 	return true;
 }
 
-TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef)
+//case TK_SEMICOLON:	// ;
+//case TK_COMMA:		// ,
+//case TK_R_SMALL:	// )
+//case TK_R_ARRAY:	// ]
+TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef,
+	TK_TYPE tkEnd1, TK_TYPE tkEnd2, TK_TYPE tkEnd3, TK_TYPE tkEnd4)
 {
 	std::string tk1, tk2;
 	TK_TYPE tkType1, tkType2;
@@ -1672,6 +1795,12 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		iArrayIndex = INVALID_ERROR_PARSEJOB;
 
 		tkType1 = GetToken(ar, tk1);
+		if (tkType1 == tkEnd1 || tkType1 == tkEnd2 || tkType1 == tkEnd3 || tkType1 == tkEnd4)
+		{
+			r = tkType1;
+			blEnd = true;
+			break;
+		}
 		switch (tkType1)
 		{
 		case TK_NONE:
@@ -1691,13 +1820,6 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				return TK_NONE;
 			}
 			funs._cur.Push_RETURN(ar, iTempOffset._iVar);
-			blEnd = true;
-			break;
-		case TK_SEMICOLON:	// ;
-		case TK_COMMA:		// ,
-		case TK_R_SMALL:	// )
-		case TK_R_ARRAY:	// ]
-			r = tkType1;
 			blEnd = true;
 			break;
 		case TK_L_SMALL:
@@ -1823,14 +1945,14 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			break;
 		case TK_L_MIDDLE:
 			iTempOffset.Reset();
-			r = ParseTableDef(iTempOffset._iVar, ar, funs, vars);
+			r = ParseTableDef(iTempOffset, ar, funs, vars);
 			operands.push_back(iTempOffset);
 			blApperOperator = true;
 			blEnd = true;
 			break;
 		case TK_L_ARRAY:
 			iTempOffset.Reset();
-			r = ParseListDef(iTempOffset._iVar, ar, funs, vars);
+			r = ParseListDef(iTempOffset, ar, funs, vars);
 			operands.push_back(iTempOffset);
 			blApperOperator = true;
 			blEnd = true;
@@ -1869,7 +1991,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				{
 					return TK_NONE;
 				}
-				a._incementType = Increment_Prefix;
+				a._operandType = Increment_Prefix;
 				funs._cur.Push_OP1(ar, tkType1 == TK_PLUS2 ? NOP_INC : NOP_DEC, a._iVar);
 
 				operands.push_back(a);
@@ -1888,7 +2010,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 					SetCompileError(ar, "Error (%d, %d): Table Var not Support (%s)\n", ar.CurLine(), ar.CurCol(), tk1.c_str());
 					return TK_NONE;
 				}
-				if (a._incementType != Increment_None)
+				if (a.IsConst())
 				{
 					SetCompileError(ar, "Error (%d, %d): ++/-- invalid (%s)\n", ar.CurLine(), ar.CurCol(), tk1.c_str());
 					return TK_NONE;
@@ -1991,7 +2113,10 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			{
 				if (a.IsArray() == false)
 				{
-					funs._cur.Push_MOV(ar, op, a._iVar, b._iVar);
+					if(b.IsInt() == true)
+						funs._cur.Push_MOVI(ar, NOP_MOVI, a._iVar, b._iVar);
+					else
+						funs._cur.Push_MOV(ar, op, a._iVar, b._iVar);
 					//else
 					//{
 					//	if(op == NOP_MOV)
@@ -2004,7 +2129,12 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 					//}
 				}
 				else
-					funs._cur.Push_Table_MASMDP(ar, op, a._iVar, a._iArrayIndex, b._iVar);
+				{
+					if (b.IsInt() == true)
+						funs._cur.Push_Table_MASMDP(ar, eNOperation((int)op + 1), a._iVar, a._iArrayIndex, b._iVar);
+					else
+						funs._cur.Push_Table_MASMDP(ar, op, a._iVar, a._iArrayIndex, b._iVar);
+				}
 			}
 			else
 			{
@@ -2028,12 +2158,16 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				funs._cur.Push_TableRead(ar, a._iVar, a._iArrayIndex, iTempOffset2);
 				a._iVar = iTempOffset2;
 			}
+			else if(a.IsInt())
+				a = funs.AddStaticInt(a._iVar);
 			if (b.IsArray() == true)
 			{
 				iTempOffset2 = funs._cur.AllocLocalTempVar();
 				funs._cur.Push_TableRead(ar, b._iVar, b._iArrayIndex, iTempOffset2);
 				b._iVar = iTempOffset2;
 			}
+			else if (b.IsInt())
+				b = funs.AddStaticInt(b._iVar);
 
 			iTempOffset2 = funs._cur.AllocLocalTempVar();
 			funs._cur.Push_OP(ar, op, iTempOffset2, a._iVar, b._iVar);

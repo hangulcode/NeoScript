@@ -350,7 +350,6 @@ void CNeoVMWorker::MoveMinus(VarInfo* v1, VarInfo* v2)
 	}
 	SetError("Minus Error");
 }
-
 void CNeoVMWorker::Add2(VarInfo* r, VarInfo* v2)
 {
 	switch (r->GetType())
@@ -388,7 +387,7 @@ void CNeoVMWorker::Add2(VarInfo* r, VarInfo* v2)
 		}
 		break;
 	case VAR_TABLE:
-		if (Call_MetaTable2(r, g_meta_Add2, r, v2))
+		if (Call_MetaTable(r, g_meta_Add2, r, r, v2))
 			return;
 		break;
 	}
@@ -523,6 +522,99 @@ void CNeoVMWorker::Per2(VarInfo* r, VarInfo* v2)
 	}
 	SetError("%= Error");
 }
+
+void CNeoVMWorker::MoveMinusI(VarInfo* v1, int v)
+{
+	Var_SetInt(v1, -v);
+}
+void CNeoVMWorker::AddI2(VarInfo* r, int v)
+{
+	switch (r->GetType())
+	{
+	case VAR_INT:
+		r->_int += v;
+		return;
+	case VAR_FLOAT:
+		r->_float += v;
+		return;
+	case VAR_STRING:
+		break;
+	case VAR_TABLE:
+		if (Call_MetaTableI(r, g_meta_Add2, r, r, v))
+			return;
+		break;
+	}
+	SetError("+= Error");
+}
+
+void CNeoVMWorker::SubI2(VarInfo* r, int v)
+{
+	switch (r->GetType())
+	{
+	case VAR_INT:
+		r->_int -= v;
+		return;
+	case VAR_FLOAT:
+		r->_float -= v;
+		return;
+	case VAR_TABLE:
+		if (Call_MetaTableI(r, g_meta_Sub2, r, r, v))
+			return;
+		break;
+	}
+	SetError("-= Error");
+}
+
+void CNeoVMWorker::MulI2(VarInfo* r, int v)
+{
+	switch (r->GetType())
+	{
+	case VAR_INT:
+		r->_int *= v;
+		return;
+	case VAR_FLOAT:
+		r->_float *= v;
+		return;
+	case VAR_TABLE:
+		if (Call_MetaTableI(r, g_meta_Mul2, r, r, v))
+			return;
+		break;
+	}
+	SetError("*= Error");
+}
+
+void CNeoVMWorker::DivI2(VarInfo* r, int v)
+{
+	switch (r->GetType())
+	{
+	case VAR_INT:
+		r->_int /= v;
+		return;
+	case VAR_FLOAT:
+		r->_float /= v;
+		return;
+	case VAR_TABLE:
+		if (Call_MetaTableI(r, g_meta_Div2, r, r, v))
+			return;
+		break;
+	}
+	SetError("/= Error");
+}
+void CNeoVMWorker::PerI2(VarInfo* r, int v)
+{
+	switch (r->GetType())
+	{
+	case VAR_INT:
+		r->_int %= v;
+		return;
+	case VAR_TABLE:
+		if (Call_MetaTableI(r, g_meta_Per2, r, r, v))
+			return;
+		break;
+	}
+	SetError("%= Error");
+}
+
 void CNeoVMWorker::And(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
@@ -1315,6 +1407,33 @@ bool CNeoVMWorker::Call_MetaTable2(VarInfo* pTable, std::string& funName, VarInf
 
 	return true;
 }
+bool CNeoVMWorker::Call_MetaTableI(VarInfo* pTable, std::string& funName, VarInfo* r, VarInfo* a, int b)
+{
+	if (pTable->_tbl->_meta == NULL)
+		return false;
+	VarInfo* pVarItem = pTable->_tbl->_meta->Find(funName);
+	if (pVarItem == NULL)
+		return false;
+
+	int n3 = 2;
+
+	VarInfo tmp;
+	tmp.SetType(VAR_INT);
+	tmp._int = b;
+
+	Move(&(*m_pVarStack)[iSP_VarsMax + 1], a);
+	Move(&(*m_pVarStack)[iSP_VarsMax + 2], &tmp);
+
+	if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n3))
+		_iSP_Vars_Max2 = iSP_VarsMax + (1 + n3);
+
+	if (pVarItem->GetType() == VAR_FUN)
+		Call(pVarItem->_fun_index, n3, r);
+
+	//Move(r, &(*m_pVarStack)[iSP_VarsMax]); ???
+	return true;
+}
+
 
 static void ReadString(CNArchive& ar, std::string& str)
 {
@@ -1529,20 +1648,38 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			case NOP_MOV_MINUS:
 				MoveMinus(GetVarPtr1(OP), GetVarPtr2(OP));
 				break;
+			case NOP_MOVI_MINUS:
+				MoveMinusI(GetVarPtr1(OP), OP.n23);
+				break;
 			case NOP_ADD2:
 				Add2(GetVarPtr1(OP), GetVarPtr2(OP));
+				break;
+			case NOP_ADDI2:
+				AddI2(GetVarPtr1(OP), OP.n23);
 				break;
 			case NOP_SUB2:
 				Sub2(GetVarPtr1(OP), GetVarPtr2(OP));
 				break;
+			case NOP_SUBI2:
+				SubI2(GetVarPtr1(OP), OP.n23);
+				break;
 			case NOP_MUL2:
 				Mul2(GetVarPtr1(OP), GetVarPtr2(OP));
+				break;
+			case NOP_MULI2:
+				MulI2(GetVarPtr1(OP), OP.n23);
 				break;
 			case NOP_DIV2:
 				Div2(GetVarPtr1(OP), GetVarPtr2(OP));
 				break;
+			case NOP_DIVI2:
+				DivI2(GetVarPtr1(OP), OP.n23);
+				break;
 			case NOP_PERSENT2:
 				Per2(GetVarPtr1(OP), GetVarPtr2(OP));
+				break;
+			case NOP_PERSENTI2:
+				PerI2(GetVarPtr1(OP), OP.n23);
 				break;
 
 			case NOP_VAR_CLEAR:
@@ -1778,17 +1915,17 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			}
 			case NOP_PTRCALL2:
 			{
-				short n3 = OP.n3;
-				VarInfo* pFunName = GetVarPtr2(OP);
+				short n2 = OP.n2;
+				VarInfo* pFunName = GetVarPtr1(OP);
 				if (pFunName->GetType() == VAR_STRING)
 				{
-					CallNative(_pVM->_funDefaultLib, NULL, pFunName->_str->_str, n3);
+					CallNative(_pVM->_funDefaultLib, NULL, pFunName->_str->_str, n2);
 //					SetError("Ptr Call Error");
 					break;
 				}
 
-				if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n3))
-					_iSP_Vars_Max2 = iSP_VarsMax + (1 + n3);
+				if (_iSP_Vars_Max2 < iSP_VarsMax + (1 + n2))
+					_iSP_Vars_Max2 = iSP_VarsMax + (1 + n2);
 				break;
 			}			
 			case NOP_RETURN:
