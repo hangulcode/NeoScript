@@ -154,15 +154,6 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			argFlag = GetArgIndexToCode(&v.n1, &v.n2, nullptr);
 			break;
 
-		case NOP_ADDI2:
-		case NOP_SUBI2:
-		case NOP_MULI2:
-		case NOP_DIVI2:
-		case NOP_PERSENTI2:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-
-			argFlag = GetArgIndexToCode(&v.n1, nullptr, nullptr);
-			break;
 		case NOP_ADD3:
 		case NOP_SUB3:
 		case NOP_MUL3:
@@ -260,12 +251,6 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 			argFlag = GetArgIndexToCode(&v.n1, &v.n2, nullptr);
 			break;
-		case NOP_MOVI:
-		case NOP_MOVI_MINUS:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			argFlag = GetArgIndexToCode(&v.n1, nullptr, nullptr);
-			break;
-
 		case NOP_PTRCALL:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
@@ -299,29 +284,16 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_TABLE_MUL2:
 		case NOP_TABLE_DIV2:
 		case NOP_TABLE_PERSENT2:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
+			if ((argFlag & (1 << 5)) == 0)
+				ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
+			if ((argFlag & (1 << 4)) == 0)
+				ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
+			if ((argFlag & (1 << 3)) == 0)
+				ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
 
-			argFlag = GetArgIndexToCode(&v.n1, &v.n2, &v.n3);
+			argFlag |= GetArgIndexToCode((argFlag & (1 << 5)) == 0 ? &v.n1 : nullptr, (argFlag & (1 << 4)) == 0  ? &v.n2 : nullptr, (argFlag & (1 << 3)) == 0  ? &v.n3 : nullptr);
 			break;
-		case NOP_CLT_MOVRS:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
 
-			argFlag = GetArgIndexToCode(&v.n1, &v.n2, nullptr);
-			break;
-		case NOP_CLT_MOVSR:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n3);
-
-			argFlag = GetArgIndexToCode(&v.n1, nullptr, &v.n3);
-			break;
-		case NOP_CLT_MOVSS:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-
-			argFlag = GetArgIndexToCode(&v.n1, nullptr, nullptr);
-			break;
 		case NOP_TABLE_REMOVE:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
@@ -558,27 +530,6 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutAsm("PER [%s] %%= [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 
-		case NOP_ADDI2:
-			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("ADDI [%s] += %d\n", GetLog(td, v, 1).c_str(), v.n23);
-			break;
-		case NOP_SUBI2:
-			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("SUBI [%s] -= %d\n", GetLog(td, v, 1).c_str(), v.n23);
-			break;
-		case NOP_MULI2:
-			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("MULI [%s] *= %d\n", GetLog(td, v, 1).c_str(), v.n23);
-			break;
-		case NOP_DIVI2:
-			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("DIVI [%s] /= %d\n", GetLog(td, v, 1).c_str(), v.n23);
-			break;
-		case NOP_PERSENTI2:
-			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("PERI [%s] %%= %d\n", GetLog(td, v, 1).c_str(), v.n23);
-			break;
-
 		case NOP_ADD3:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("ADD [%s] = [%s] + [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
@@ -750,17 +701,9 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("MOV [%s] = [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
-		case NOP_MOVI:
-			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("MOVI [%s] = %d\n", GetLog(td, v, 1).c_str(), v.n23);
-			break;
 		case NOP_MOV_MINUS:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("MOV [%s] = -[%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
-			break;
-		case NOP_MOVI_MINUS:
-			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("MOV [%s] = %d\n", GetLog(td, v, 1).c_str(), -v.n23);
 			break;
 
 		case NOP_PTRCALL:
@@ -790,18 +733,7 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("MOV [%s].[%s] = [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
-		case NOP_CLT_MOVRS:
-			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("MOVS [%s].[%s] = %d\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), v.n3);
-			break;
-		case NOP_CLT_MOVSR:
-			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("MOVS [%s].[%d] = %s\n", GetLog(td, v, 1).c_str(), v.n2, GetLog(td, v, 3).c_str());
-			break;
-		case NOP_CLT_MOVSS:
-			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("MOVSS [%s].[%d] = %d\n", GetLog(td, v, 1).c_str(), v.n2, v.n3);
-			break;
+
 		case NOP_TABLE_ADD2:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("Table ADD [%s].[%s] += [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());

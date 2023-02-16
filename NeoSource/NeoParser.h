@@ -208,13 +208,13 @@ struct SFunctionInfo
 		_code->Write(&a2, sizeof(a2));
 		_code->Write(&a3, sizeof(a3));
 	}
-	void    Push_Arg(short a1, int a23)
-	{
-		ArgFlag arg = 0;//
-		_code->Write(&arg, sizeof(arg));
-		_code->Write(&a1, sizeof(a1));
-		_code->Write(&a23, sizeof(a23));
-	}
+	//void    Push_Arg(short a1, int a23)
+	//{
+	//	ArgFlag arg = 0;//
+	//	_code->Write(&arg, sizeof(arg));
+	//	_code->Write(&a1, sizeof(a1));
+	//	_code->Write(&a23, sizeof(a23));
+	//}
 	void	AddDebugData(CArchiveRdWC& ar)
 	{
 		if (ar._debug == false) return;
@@ -269,9 +269,9 @@ struct SFunctionInfo
 		//_code->Write(&table, sizeof(table));
 		//_code->Write(&index, sizeof(index));
 		//_code->Write(&args, sizeof(args));
-		Push_Arg(index, args);
+		Push_Arg(index, args, 0);
 	}
-	void	Push_MOV(CArchiveRdWC& ar, eNOperation op, short r, short s)
+	void	Push_MOV(CArchiveRdWC& ar, eNOperation op, short r, short s, bool b2)
 	{
 		if (op == NOP_MOV)
 		{
@@ -328,17 +328,6 @@ struct SFunctionInfo
 		//_code->Write(&r, sizeof(r));
 		//_code->Write(&s, sizeof(s));
 		Push_Arg(r, s, 0);
-	}
-	void	Push_MOVI(CArchiveRdWC& ar, eNOperation op, short r, int v)
-	{
-		AddDebugData(ar);
-		_iLastOPOffset = _code->GetBufferOffset();
-
-		OpType optype = GetOpTypeFromOp(op);
-		_code->Write(&optype, sizeof(optype));
-		//_code->Write(&r, sizeof(r));
-		//_code->Write(&s, sizeof(s));
-		Push_Arg(r, v);
 	}
 	void	Push_OP1(CArchiveRdWC& ar, eNOperation op, short r)
 	{
@@ -462,7 +451,7 @@ struct SFunctionInfo
 		//_code->Write(&r, sizeof(r));
 		Push_Arg(r, 0, 0);
 	}
-	void	Push_Table_MASMDP(CArchiveRdWC& ar, eNOperation op, short nTable, short nArray, short nValue)
+	void	Push_Table_MASMDP(CArchiveRdWC& ar, eNOperation op, short nTable, short nArray, short nValue, bool b1, bool b2, bool b3)
 	{
 		if (IsTempVar(nValue))
 		{
@@ -494,7 +483,7 @@ struct SFunctionInfo
 		//_code->Write(&nValue, sizeof(nValue));
 		Push_Arg(nTable, nArray, nValue);
 	}
-	void	Push_List_MASMDP(CArchiveRdWC& ar, eNOperation op, short nTable, short nArray, short nValue)
+	void	Push_List_MASMDP(CArchiveRdWC& ar, eNOperation op, short nTable, short nArray, short nValue, bool b1, bool b2, bool b3)
 	{
 		if (IsTempVar(nValue))
 		{

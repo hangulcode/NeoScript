@@ -1641,45 +1641,27 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			case NOP_MOV:
 				Move(GetVarPtr1(OP), GetVarPtr2(OP));
 				break;
-			case NOP_MOVI:
-				MoveI(GetVarPtr1(OP), OP.n23);
-				break;
+			//case NOP_MOVI:
+			//	MoveI(GetVarPtr1(OP), OP.n2);
+			//	break;
 
 			case NOP_MOV_MINUS:
 				MoveMinus(GetVarPtr1(OP), GetVarPtr2(OP));
 				break;
-			case NOP_MOVI_MINUS:
-				MoveMinusI(GetVarPtr1(OP), OP.n23);
-				break;
 			case NOP_ADD2:
 				Add2(GetVarPtr1(OP), GetVarPtr2(OP));
-				break;
-			case NOP_ADDI2:
-				AddI2(GetVarPtr1(OP), OP.n23);
 				break;
 			case NOP_SUB2:
 				Sub2(GetVarPtr1(OP), GetVarPtr2(OP));
 				break;
-			case NOP_SUBI2:
-				SubI2(GetVarPtr1(OP), OP.n23);
-				break;
 			case NOP_MUL2:
 				Mul2(GetVarPtr1(OP), GetVarPtr2(OP));
-				break;
-			case NOP_MULI2:
-				MulI2(GetVarPtr1(OP), OP.n23);
 				break;
 			case NOP_DIV2:
 				Div2(GetVarPtr1(OP), GetVarPtr2(OP));
 				break;
-			case NOP_DIVI2:
-				DivI2(GetVarPtr1(OP), OP.n23);
-				break;
 			case NOP_PERSENT2:
 				Per2(GetVarPtr1(OP), GetVarPtr2(OP));
-				break;
-			case NOP_PERSENTI2:
-				PerI2(GetVarPtr1(OP), OP.n23);
 				break;
 
 			case NOP_VAR_CLEAR:
@@ -1991,15 +1973,6 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				break;
 			case NOP_CLT_MOV:
 				CltInsert(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
-				break;
-			case NOP_CLT_MOVRS:
-				CltInsert(GetVarPtr1(OP), GetVarPtr2(OP), OP.n3);
-				break;
-			case NOP_CLT_MOVSR:
-				CltInsert(GetVarPtr1(OP), OP.n2, GetVarPtr3(OP));
-				break;
-			case NOP_CLT_MOVSS:
-				CltInsert(GetVarPtr1(OP), OP.n2, OP.n3);
 				break;
 			case NOP_TABLE_ADD2:
 				TableAdd2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));

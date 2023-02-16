@@ -28,20 +28,13 @@ typedef u8	ArgFlag;
 enum eNOperation : OpType
 {
 	NOP_MOV,
-	NOP_MOVI, // int immediate
 
 	NOP_MOV_MINUS,
-	NOP_MOVI_MINUS,
 	NOP_ADD2,
-	NOP_ADDI2,
 	NOP_SUB2,
-	NOP_SUBI2,
 	NOP_MUL2,
-	NOP_MULI2,
 	NOP_DIV2,
-	NOP_DIVI2,
 	NOP_PERSENT2,
-	NOP_PERSENTI2,
 
 	NOP_VAR_CLEAR,
 	NOP_INC,
@@ -100,10 +93,8 @@ enum eNOperation : OpType
 	NOP_TABLE_ALLOC,
 	NOP_CLT_READ,
 	NOP_TABLE_REMOVE,
-	NOP_CLT_MOV,	// [ref] = ref
-	NOP_CLT_MOVRS,	// [ref] =  short
-	NOP_CLT_MOVSR,	// [short] =  ref
-	NOP_CLT_MOVSS,	// [short] = short
+	NOP_CLT_MOV,	
+
 	NOP_TABLE_ADD2,
 	NOP_TABLE_SUB2,
 	NOP_TABLE_MUL2,
@@ -655,25 +646,50 @@ private:
 		VarInfo* p = GetTableItemValid(pTable, pArray);
 		if (p) Add2(p, pValue);
 	}
+	void TableAddI2(VarInfo *pTable, VarInfo *pArray, int v)
+	{
+		VarInfo* p = GetTableItemValid(pTable, pArray);
+		if (p) AddI2(p, v);
+	}
 	void TableSub2(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
 	{
 		VarInfo* p = GetTableItemValid(pTable, pArray);
 		if (p) Sub2(p, pValue);
+	}
+	void TableSubI2(VarInfo *pTable, VarInfo *pArray, int v)
+	{
+		VarInfo* p = GetTableItemValid(pTable, pArray);
+		if (p) SubI2(p, v);
 	}
 	void TableMul2(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
 	{
 		VarInfo* p = GetTableItemValid(pTable, pArray);
 		if (p) Mul2(p, pValue);
 	}
+	void TableMulI2(VarInfo *pTable, VarInfo *pArray, int v)
+	{
+		VarInfo* p = GetTableItemValid(pTable, pArray);
+		if (p) MulI2(p, v);
+	}
 	void TableDiv2(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
 	{
 		VarInfo* p = GetTableItemValid(pTable, pArray);
 		if (p) Div2(p, pValue);
 	}
+	void TableDivI2(VarInfo *pTable, VarInfo *pArray, int v)
+	{
+		VarInfo* p = GetTableItemValid(pTable, pArray);
+		if (p) DivI2(p, v);
+	}
 	void TablePer2(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
 	{
 		VarInfo* p = GetTableItemValid(pTable, pArray);
 		if (p) Per2(p, pValue);
+	}
+	void TablePerI2(VarInfo *pTable, VarInfo *pArray, int v)
+	{
+		VarInfo* p = GetTableItemValid(pTable, pArray);
+		if (p) PerI2(p, v);
 	}
 
 	bool VerifyType(VarInfo *p, VAR_TYPE t);
