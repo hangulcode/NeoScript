@@ -25,6 +25,15 @@ enum VAR_TYPE : u8
 typedef u8	OpType;
 typedef u8	ArgFlag;
 
+enum eNOperationSub : u8
+{
+	eOP_ADD,
+	eOP_SUB,
+	eOP_MUL,
+	eOP_DIV,
+	eOP_PER,
+};
+
 enum eNOperation : OpType
 {
 	NOP_MOV,
@@ -260,10 +269,9 @@ public:
 		CollectionIterator	_it;
 	};
 
-	VarInfo()
-	{
-		_type = VAR_NONE;
-	}
+	inline VarInfo() { _type = VAR_NONE; }
+	inline VarInfo(VAR_TYPE t) { _type = t; }
+	inline VarInfo(int v) { _type = VAR_INT; _int = v; }
 
 	inline VAR_TYPE GetType() { return _type; }
 	inline void SetType(VAR_TYPE t) { _type = t; }
@@ -485,19 +493,23 @@ private:
 	bool	Run(int iBreakingCallStack = 0);
 	bool	StopCoroutine();
 
+	VarInfo _intA1, _intA2, _intA3;
 	inline VarInfo* GetVarPtr1(SVMOperation& OP)
 	{
-		if (OP.argFlag & 0x4) return &(*m_pVarStack)[_iSP_Vars + OP.n1];
+		//if (OP.argFlag & (1 << 5)) { _intA1 = OP.n1; return &_intA1; }
+		if (OP.argFlag & (1 << 2)) return &(*m_pVarStack)[_iSP_Vars + OP.n1];
 		else return &(*m_pVarGlobal)[OP.n1];
 	}
 	inline VarInfo* GetVarPtr2(SVMOperation& OP)
 	{
-		if (OP.argFlag & 0x2) return &(*m_pVarStack)[_iSP_Vars + OP.n2];
+		if (OP.argFlag & (1 << 4)) { _intA2 = OP.n2; return &_intA2; }
+		if (OP.argFlag & (1 << 1)) return &(*m_pVarStack)[_iSP_Vars + OP.n2];
 		else return &(*m_pVarGlobal)[OP.n2];
 	}
 	inline VarInfo* GetVarPtr3(SVMOperation& OP)
 	{
-		if (OP.argFlag & 0x1) return &(*m_pVarStack)[_iSP_Vars + OP.n3];
+		if (OP.argFlag & (1 << 3)) { _intA3 = OP.n3; return &_intA3; }
+		if (OP.argFlag & (1 << 0)) return &(*m_pVarStack)[_iSP_Vars + OP.n3];
 		else return &(*m_pVarGlobal)[OP.n3];
 	}
 	inline VarInfo* GetVarPtr_L(short n) { return &(*m_pVarStack)[_iSP_Vars + n]; }
@@ -542,74 +554,37 @@ public:
 		v1->SetType(v2->GetType());
 		switch (v2->GetType())
 		{
-		case VAR_NONE:
-			break;
-		case VAR_BOOL:
-			v1->_bl = v2->_bl;
-			break;
-		case VAR_INT:
-			v1->_int = v2->_int;
-			break;
-		case VAR_FLOAT:
-			v1->_float = v2->_float;
-			break;
-		case VAR_FUN:
-			v1->_fun_index = v2->_fun_index;
-			break;
-		case VAR_FUN_NATIVE:
-			v1->_funPtr = v2->_funPtr;
-			break;
-		case VAR_STRING:
-			v1->_str = v2->_str;
-			++v1->_str->_refCount;
-			break;
-		case VAR_TABLE:
-			v1->_tbl = v2->_tbl;
-			++v1->_tbl->_refCount;
-			break;
-		case VAR_LIST:
-			v1->_lst = v2->_lst;
-			++v1->_lst->_refCount;
-			break;
-		case VAR_SET:
-			v1->_set = v2->_set;
-			++v1->_set->_refCount;
-			break;
-		case VAR_COROUTINE:
-			v1->_cor = v2->_cor;
-			++v1->_cor->_refCount;
-			break;
-		case VAR_MODULE:
-			v1->_module = v2->_module;
-			++v1->_module->_refCount;
-			break;
-		default:
-			break;
+		case VAR_NONE: break;
+		case VAR_BOOL: v1->_bl = v2->_bl; break;
+		case VAR_INT: v1->_int = v2->_int; break;
+		case VAR_FLOAT: v1->_float = v2->_float; break;
+		case VAR_FUN: v1->_fun_index = v2->_fun_index; break;
+		case VAR_FUN_NATIVE: v1->_funPtr = v2->_funPtr; break;
+		case VAR_STRING: v1->_str = v2->_str; ++v1->_str->_refCount; break;
+		case VAR_TABLE: v1->_tbl = v2->_tbl; ++v1->_tbl->_refCount; break;
+		case VAR_LIST: v1->_lst = v2->_lst; ++v1->_lst->_refCount; break;
+		case VAR_SET: v1->_set = v2->_set; ++v1->_set->_refCount; break;
+		case VAR_COROUTINE: v1->_cor = v2->_cor; ++v1->_cor->_refCount; break;
+		case VAR_MODULE: v1->_module = v2->_module; ++v1->_module->_refCount; break;
+		default: break;
 		}
 	}
 	void Swap(VarInfo* v1, VarInfo* v2);
 private:
 	void MoveMinus(VarInfo* v1, VarInfo* v2);
-	void Add2(VarInfo* r, VarInfo* v2);
-	void Sub2(VarInfo* r, VarInfo* v2);
-	void Mul2(VarInfo* r, VarInfo* v2);
-	void Div2(VarInfo* r, VarInfo* v2);
-	void Per2(VarInfo* r, VarInfo* v2);
+	void Add2(eNOperationSub op, VarInfo* r, VarInfo* v2);
+	void Add2(eNOperationSub op, VarInfo* r, int v2);
 
 	void MoveMinusI(VarInfo* v1, int);
-	void AddI2(VarInfo* r, int);
-	void SubI2(VarInfo* r, int);
-	void MulI2(VarInfo* r, int);
-	void DivI2(VarInfo* r, int);
-	void PerI2(VarInfo* r, int);
 
 	void And(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Or(VarInfo* r, VarInfo* v1, VarInfo* v2);
-	void Add(VarInfo* r, VarInfo* v1, VarInfo* v2);
-	void Sub(VarInfo* r, VarInfo* v1, VarInfo* v2);
-	void Mul(VarInfo* r, VarInfo* v1, VarInfo* v2);
-	void Div(VarInfo* r, VarInfo* v1, VarInfo* v2);
-	void Per(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	
+	void Add(eNOperationSub op, VarInfo* r, VarInfo* v1, VarInfo* v2);
+	void Add(eNOperationSub op, VarInfo* r, VarInfo* v1, int v2);
+	void Add(eNOperationSub op, VarInfo* r, int v1, VarInfo* v2);
+	void Add(eNOperationSub op, VarInfo* r, int v1, int v2);
+
 	void Inc(VarInfo* v1);
 	void Dec(VarInfo* v1);
 	bool CompareEQ(VarInfo* v1, VarInfo* v2);
@@ -640,57 +615,29 @@ private:
 	void TableRemove(VarInfo *pTable, VarInfo *pArray);
 	VarInfo* GetTableItem(VarInfo *pTable, VarInfo *pArray);
 	VarInfo* GetTableItemValid(VarInfo *pTable, VarInfo *pArray);
+	VarInfo* GetTableItemValid(VarInfo *pTable, int Array);
 
-	void TableAdd2(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
+	void TableAdd2(eNOperationSub op, VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
 	{
 		VarInfo* p = GetTableItemValid(pTable, pArray);
-		if (p) Add2(p, pValue);
+		if (p) Add2(op, p, pValue);
 	}
-	void TableAddI2(VarInfo *pTable, VarInfo *pArray, int v)
+	void TableAdd2(eNOperationSub op, VarInfo *pTable, VarInfo *pArray, int v)
 	{
 		VarInfo* p = GetTableItemValid(pTable, pArray);
-		if (p) AddI2(p, v);
+		if (p) Add2(op, p, v);
 	}
-	void TableSub2(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
+	void TableAdd2(eNOperationSub op, VarInfo *pTable, int Array, VarInfo *pValue)
 	{
-		VarInfo* p = GetTableItemValid(pTable, pArray);
-		if (p) Sub2(p, pValue);
+		VarInfo* p = GetTableItemValid(pTable, Array);
+		if (p) Add2(op, p, pValue);
 	}
-	void TableSubI2(VarInfo *pTable, VarInfo *pArray, int v)
+	void TableAdd2(eNOperationSub op, VarInfo *pTable, int Array, int v)
 	{
-		VarInfo* p = GetTableItemValid(pTable, pArray);
-		if (p) SubI2(p, v);
+		VarInfo* p = GetTableItemValid(pTable, Array);
+		if (p) Add2(op, p, v);
 	}
-	void TableMul2(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
-	{
-		VarInfo* p = GetTableItemValid(pTable, pArray);
-		if (p) Mul2(p, pValue);
-	}
-	void TableMulI2(VarInfo *pTable, VarInfo *pArray, int v)
-	{
-		VarInfo* p = GetTableItemValid(pTable, pArray);
-		if (p) MulI2(p, v);
-	}
-	void TableDiv2(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
-	{
-		VarInfo* p = GetTableItemValid(pTable, pArray);
-		if (p) Div2(p, pValue);
-	}
-	void TableDivI2(VarInfo *pTable, VarInfo *pArray, int v)
-	{
-		VarInfo* p = GetTableItemValid(pTable, pArray);
-		if (p) DivI2(p, v);
-	}
-	void TablePer2(VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
-	{
-		VarInfo* p = GetTableItemValid(pTable, pArray);
-		if (p) Per2(p, pValue);
-	}
-	void TablePerI2(VarInfo *pTable, VarInfo *pArray, int v)
-	{
-		VarInfo* p = GetTableItemValid(pTable, pArray);
-		if (p) PerI2(p, v);
-	}
+
 
 	bool VerifyType(VarInfo *p, VAR_TYPE t);
 

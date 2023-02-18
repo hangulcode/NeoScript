@@ -248,8 +248,9 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_MOV:
 		case NOP_MOV_MINUS:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
-			argFlag = GetArgIndexToCode(&v.n1, &v.n2, nullptr);
+			if ((argFlag & (1 << 4)) == 0)
+				ChangeIndex(staticCount, localCount, curFunStatkSize, v.n2);
+			argFlag |= GetArgIndexToCode(&v.n1, (argFlag & (1 << 4)) == 0 ? &v.n2 : nullptr, nullptr);
 			break;
 		case NOP_PTRCALL:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v.n1);
@@ -404,20 +405,34 @@ std::string GetLog(STempDebug& td, SVMOperation& op, int argIndex)
 {
 	char ch[64] = {0,};
 	int v = 0;
-	char c = 'N';
-	if (argIndex == 1) { v = op.n1; c = (op.argFlag & 0x04) ? 'S' : 'G'; }
-	if (argIndex == 2) { v = op.n2; c = (op.argFlag & 0x02) ? 'S' : 'G'; }
-	if (argIndex == 3) { v = op.n3; c = (op.argFlag & 0x01) ? 'S' : 'G'; }
+	const char* c = ""; // N.
+	bool isNum = false;
 
-	if (c == 'G')
+	if (argIndex == 1) { v = op.n1; isNum = (op.argFlag & (1 << 5)); }
+	if (argIndex == 2) { v = op.n2; isNum = (op.argFlag & (1 << 4)); }
+	if (argIndex == 3) { v = op.n3; isNum = (op.argFlag & (1 << 3)); }
+
+	if (false == isNum)
+	{
+		if (argIndex == 1) { c = (op.argFlag & (1 << 2)) ? "S." : "G."; }
+		if (argIndex == 2) { c = (op.argFlag & (1 << 1)) ? "S." : "G."; }
+		if (argIndex == 3) { c = (op.argFlag & (1 << 0)) ? "S." : "G."; }
+	}
+
+	if (c[0] == 'G')
 	{
 		if(v < (int)td._staticVars.size())
-			sprintf_s(ch, _countof(ch), "%c.%d %s", c, v, GetValueString(td._staticVars[v]).c_str());
+			sprintf_s(ch, _countof(ch), "[%s%d %s]", c, v, GetValueString(td._staticVars[v]).c_str());
 		else
-			sprintf_s(ch, _countof(ch), "%c.%d %s", c, v, td._globalVars[v - (int)td._staticVars.size()].c_str());
+			sprintf_s(ch, _countof(ch), "[%s%d %s]", c, v, td._globalVars[v - (int)td._staticVars.size()].c_str());
 	}
 	else
-		sprintf_s(ch, _countof(ch), "%c.%d", c, v);
+	{
+		if(isNum)
+			sprintf_s(ch, _countof(ch), "%d", v);
+		else
+			sprintf_s(ch, _countof(ch), "[%s%d]", c, v);
+	}
 	return ch;
 }
 
@@ -511,103 +526,103 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 		{
 		case NOP_ADD2:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("ADD [%s] += [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			OutAsm("ADD %s += %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 		case NOP_SUB2:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("SUB [%s] -= [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			OutAsm("SUB %s -= %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 		case NOP_MUL2:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("MUL [%s] *= [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			OutAsm("MUL %s *= %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 		case NOP_DIV2:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("DIV [%s] /= [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			OutAsm("DIV %s /= %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 		case NOP_PERSENT2:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("PER [%s] %%= [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			OutAsm("PER %s %%= %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 
 		case NOP_ADD3:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("ADD [%s] = [%s] + [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("ADD %s = %s + %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_SUB3:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("SUB [%s] = [%s] - [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("SUB %s = %s - %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_MUL3:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("MUL [%s] = [%s] * [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("MUL %s = %s * %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_DIV3:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("DIV [%s] = [%s] / [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("DIV %s = %s / %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_PERSENT3:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("PER [%s] = [%s] %% [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("PER %s = %s %% %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 
 		case NOP_VAR_CLEAR:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
-			OutAsm("CLR [%s]\n", GetLog(td, v, 1).c_str());
+			OutAsm("CLR %s\n", GetLog(td, v, 1).c_str());
 			break;
 		case NOP_INC:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
-			OutAsm("INC [%s]\n", GetLog(td, v, 1).c_str());
+			OutAsm("INC %s\n", GetLog(td, v, 1).c_str());
 			break;
 		case NOP_DEC:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
-			OutAsm("DEC [%s]\n", GetLog(td, v, 1).c_str());
+			OutAsm("DEC %s\n", GetLog(td, v, 1).c_str());
 			break;
 
 		case NOP_GREAT:		// >
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("GR [%s] = [%s] > [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("GR %s = %s > %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_GREAT_EQ:	// >=
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("GE [%s] = [%s] >= [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("GE %s = %s >= %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_LESS:		// <
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("LS [%s] = [%s] < [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("LS %s = %s < %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_LESS_EQ:	// <=
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("LE [%s] = [%s] <= [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("LE %s = %s <= %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_EQUAL2:	// ==
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("EQ [%s] = [%s] == [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("EQ %s = %s == %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_NEQUAL:	// !=
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("NE [%s] = [%s] != [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("NE %s = %s != %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_AND:	// &
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("AND [%s] = [%s] & [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("AND %s = %s & %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_OR:	// |
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("OR [%s] = [%s] | [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("OR %s = %s | %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_AND2:	// &&
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("AND2 [%s] = [%s] && [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("AND2 %s = %s && %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_OR2:	// ||
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("NE [%s] = [%s] || [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("NE %s = %s || %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 
 		case NOP_STR_ADD:	// ..
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("STR_ADD Str[%s] = ToStr[%s] + ToStr[%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("STR_ADD Str%s = ToStr%s + ToStr%s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 
 		case NOP_JMP:
@@ -616,52 +631,52 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			break;
 		case NOP_JMP_FALSE:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("JMP %d%s [%s] is False\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str());
+			OutAsm("JMP %d%s %s is False\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 		case NOP_JMP_TRUE:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("JMP %d%s [%s] is True\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str());
+			OutAsm("JMP %d%s %s is True\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 
 		case NOP_JMP_GREAT:		// >
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JGR %d%s,  [%s] > [%s]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JGR %d%s,  %s > %s\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_GREAT_EQ:	// >=
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JGE %d%s,  [%s] >= [%s]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JGE %d%s,  %s >= %s\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_LESS:		// <
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JLS %d%s,  [%s] < [%s]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JLS %d%s,  %s < %s\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_LESS_EQ:	// <=
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JLE %d%s,  [%s] <= [%s]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JLE %d%s,  %s <= %s\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_EQUAL2:	// ==
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JEQ %d%s,  [%s] == [%s]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JEQ %d%s,  %s == %s\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_NEQUAL:	// !=
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JNE %d%s,  [%s] != [%s]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JNE %d%s,  %s != %s\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_AND:	// &&
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JAND %d%s,  [%s] && [%s]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JAND %d%s,  %s && %s\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_OR:		// ||
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JOR %d%s,  [%s] || [%s]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JOR %d%s,  %s || %s\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_NAND:	// !(&&)
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JNAND %d%s,  !([%s] && [%s])\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JNAND %d%s,  !(%s && %s)\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_NOR:	// !(||)
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JNOR %d%s,  !([%s] || [%s])\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JNOR %d%s,  !(%s || %s)\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_FOR:	// for
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
@@ -669,50 +684,50 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			break;
 		case NOP_JMP_FOREACH:	// foreach
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JFRE %d%s,  T[%s], K[S.%d], V[S.%d]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), v.n3, v.n3+1);
+			OutAsm("JFRE %d%s,  T%s, K[S.%d], V[S.%d]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), v.n3, v.n3+1);
 			break;
 
 		case NOP_TOSTRING:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("ToString [%s] = [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			OutAsm("ToString %s = %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 		case NOP_TOINT:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("ToInt [%s] = [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			OutAsm("ToInt %s = %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 		case NOP_TOFLOAT:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("ToFloat [%s] = [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			OutAsm("ToFloat %s = %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 		case NOP_TOSIZE:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("ToSize [%s] = [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			OutAsm("ToSize %s = %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 		case NOP_GETTYPE:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("GetType [%s] = [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			OutAsm("GetType %s = %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 		case NOP_SLEEP:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
-			OutAsm("Sleep [%s]\n", GetLog(td, v, 1).c_str());
+			OutAsm("Sleep %s\n", GetLog(td, v, 1).c_str());
 			break;
 
 		case NOP_MOV:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("MOV [%s] = [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			OutAsm("MOV %s = %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 		case NOP_MOV_MINUS:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("MOV [%s] = -[%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			OutAsm("MOV %s = -%s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 
 		case NOP_PTRCALL:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("PCALL [%s].[%s] arg:%d\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), v.n3);
+			OutAsm("PCALL %s.%s arg:%d\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), v.n3);
 			break;
 		case NOP_PTRCALL2:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("PCALL2 [%s] arg:%d\n", GetLog(td, v, 1).c_str(), v.n2);
+			OutAsm("PCALL2 %s arg:%d\n", GetLog(td, v, 1).c_str(), v.n2);
 			break;
 		case NOP_CALL:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
@@ -720,62 +735,62 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			break;
 		case NOP_RETURN:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
-			OutAsm("RET [%s]\n", GetLog(td, v, 1).c_str());
+			OutAsm("RET %s\n", GetLog(td, v, 1).c_str());
 			break;
 		case NOP_FUNEND:
 			OutAsm("- End -\n");
 			break;
 		case NOP_TABLE_ALLOC:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
-			OutAsm("Table Alloc [%s]\n", GetLog(td, v, 1).c_str());
+			OutAsm("Table Alloc %s\n", GetLog(td, v, 1).c_str());
 			break;
 		case NOP_CLT_MOV:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("MOV [%s].[%s] = [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("MOV %s.%s = %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 
 		case NOP_TABLE_ADD2:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("Table ADD [%s].[%s] += [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("Table ADD %s.%s += %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_TABLE_SUB2:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("Table SUB [%s].[%s] -= [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("Table SUB %s.%s -= %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_TABLE_MUL2:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("Table MUL [%s].[%s] *= [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("Table MUL %s.%s *= %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_TABLE_DIV2:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("Table DIV [%s].[%s] /= [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("Table DIV %s.%s /= %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_TABLE_PERSENT2:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("Table PER [%s].[%s] %= [%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("Table PER %s.%s %= %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 
 		case NOP_CLT_READ:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("Read [%s] = [%s].[%s]\n", GetLog(td, v, 3).c_str(), GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			OutAsm("Read %s = %s.%s\n", GetLog(td, v, 3).c_str(), GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 		case NOP_TABLE_REMOVE:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("Table Remove [%s].[%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			OutAsm("Table Remove %s.%s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 
 		case NOP_LIST_ALLOC:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
-			OutAsm("List Alloc [%s]\n", GetLog(td, v, 1).c_str());
+			OutAsm("List Alloc %s\n", GetLog(td, v, 1).c_str());
 			break;
 		case NOP_LIST_REMOVE:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("List Remove [%s].[%s]\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			OutAsm("List Remove %s.%s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 
 		case NOP_VERIFY_TYPE:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("Verify [%s] %s\n", GetLog(td, v, 1).c_str(), GetDataType((VAR_TYPE)v.n2).c_str());
+			OutAsm("Verify %s %s\n", GetLog(td, v, 1).c_str(), GetDataType((VAR_TYPE)v.n2).c_str());
 			break;
 		case NOP_YIELD:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);

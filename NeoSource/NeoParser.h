@@ -208,6 +208,13 @@ struct SFunctionInfo
 		_code->Write(&a2, sizeof(a2));
 		_code->Write(&a3, sizeof(a3));
 	}
+	void    Push_FlagArg(ArgFlag arg, short a1, short a2, short a3)
+	{
+		_code->Write(&arg, sizeof(arg));
+		_code->Write(&a1, sizeof(a1));
+		_code->Write(&a2, sizeof(a2));
+		_code->Write(&a3, sizeof(a3));
+	}
 	//void    Push_Arg(short a1, int a23)
 	//{
 	//	ArgFlag arg = 0;//
@@ -275,7 +282,7 @@ struct SFunctionInfo
 	{
 		if (op == NOP_MOV)
 		{
-			if (IsTempVar(s))
+			if (b2 == false && IsTempVar(s))
 			{
 				eNOperation preOP = GetLastOP();
 				switch (preOP)
@@ -327,7 +334,13 @@ struct SFunctionInfo
 		_code->Write(&optype, sizeof(optype));
 		//_code->Write(&r, sizeof(r));
 		//_code->Write(&s, sizeof(s));
-		Push_Arg(r, s, 0);
+
+		ArgFlag flg = 0;
+		if (b2) flg |= (1 << 4);
+		//_code->Write(&nTable, sizeof(nTable));
+		//_code->Write(&nArray, sizeof(nArray));
+		//_code->Write(&nValue, sizeof(nValue));
+		Push_FlagArg(flg, r, s, 0);
 	}
 	void	Push_OP1(CArchiveRdWC& ar, eNOperation op, short r)
 	{
@@ -453,7 +466,7 @@ struct SFunctionInfo
 	}
 	void	Push_Table_MASMDP(CArchiveRdWC& ar, eNOperation op, short nTable, short nArray, short nValue, bool b1, bool b2, bool b3)
 	{
-		if (IsTempVar(nValue))
+		if (b3 == false && IsTempVar(nValue))
 		{
 			eNOperation preOP = GetLastOP();
 			u8 *pre = (u8*)_code->GetData() + sizeof(OpType) + _iLastOPOffset;
@@ -478,14 +491,18 @@ struct SFunctionInfo
 
 		eNOperation optype = GetTableOpTypeFromOp(op);
 		_code->Write(&optype, sizeof(optype));
+		ArgFlag flg = 0;
+		if (b1) flg |= (1 << 5);
+		if (b2) flg |= (1 << 4);
+		if (b3) flg |= (1 << 3);
 		//_code->Write(&nTable, sizeof(nTable));
 		//_code->Write(&nArray, sizeof(nArray));
 		//_code->Write(&nValue, sizeof(nValue));
-		Push_Arg(nTable, nArray, nValue);
+		Push_FlagArg(flg, nTable, nArray, nValue);
 	}
 	void	Push_List_MASMDP(CArchiveRdWC& ar, eNOperation op, short nTable, short nArray, short nValue, bool b1, bool b2, bool b3)
 	{
-		if (IsTempVar(nValue))
+		if (b3 == false && IsTempVar(nValue))
 		{
 			eNOperation preOP = GetLastOP();
 			u8 *pre = (u8*)_code->GetData() + sizeof(OpType) + _iLastOPOffset;
@@ -515,17 +532,19 @@ struct SFunctionInfo
 		//_code->Write(&nValue, sizeof(nValue));
 		Push_Arg(nTable, nArray, nValue);
 	}
-	void	Push_TableRead(CArchiveRdWC& ar, short nTable, short nArray, short nValue)
+	void	Push_TableRead(CArchiveRdWC& ar, short nTable, short nArray, short nValue, bool b2) // value = table[nArray]
 	{
 		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(NOP_CLT_READ);
 		_code->Write(&optype, sizeof(optype));
-		//_code->Write(&nTable, sizeof(nTable));
-		//_code->Write(&nArray, sizeof(nArray));
-		//_code->Write(&nValue, sizeof(nValue));
-		Push_Arg(nTable, nArray, nValue);
+
+		ArgFlag flg = 0;
+		//if (b1) flg |= (1 << 5);
+		if (b2) flg |= (1 << 4);
+		//if (b3) flg |= (1 << 3);
+		Push_FlagArg(flg, nTable, nArray, nValue);
 	}
 	void	Push_TableRemove(CArchiveRdWC& ar, short nTable, short nArray)
 	{
