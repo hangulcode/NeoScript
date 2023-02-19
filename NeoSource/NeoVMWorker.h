@@ -90,7 +90,7 @@ enum eNOperation : OpType
 	NOP_TOFLOAT,
 	NOP_TOSIZE,
 	NOP_GETTYPE,
-	NOP_SLEEP,
+	NOP_SLEEP, // arg1 unuse
 
 
 	NOP_CALL,

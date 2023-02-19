@@ -251,8 +251,8 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, nullptr);
 			break;
 		case NOP_SLEEP:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
-			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+			argFlag |= GetArgIndexToCode(argFlag, nullptr, &v.n2, nullptr);
 			break;
 
 		case NOP_MOV:
@@ -718,8 +718,8 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutAsm("GetType %s = %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 		case NOP_SLEEP:
-			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
-			OutAsm("Sleep %s\n", GetLog(td, v, 1).c_str());
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
+			OutAsm("Sleep %s\n", GetLog(td, v, 2).c_str());
 			break;
 
 		case NOP_MOV:

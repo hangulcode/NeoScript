@@ -366,6 +366,22 @@ struct SFunctionInfo
 		//_code->Write(&r, sizeof(r));
 		Push_Arg(r, 0, 0);
 	}
+	void	Push_OP2(CArchiveRdWC& ar, eNOperation op, short r, short s, bool b2)
+	{
+		AddDebugData(ar);
+		_iLastOPOffset = _code->GetBufferOffset();
+
+		OpType optype = GetOpTypeFromOp(op);
+		_code->Write(&optype, sizeof(optype));
+		//_code->Write(&r, sizeof(r));
+
+		ArgFlag flg = 0;
+		if (b2) flg |= (1 << 4);
+		//_code->Write(&nTable, sizeof(nTable));
+		//_code->Write(&nArray, sizeof(nArray));
+		//_code->Write(&nValue, sizeof(nValue));
+		Push_FlagArg(flg, r, s, 0);
+	}
 	void	Push_RETURN(CArchiveRdWC& ar, short r)
 	{
 		AddDebugData(ar);

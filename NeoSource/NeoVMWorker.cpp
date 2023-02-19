@@ -1743,7 +1743,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				break;
 			case NOP_SLEEP:
 				{
-					int r = Sleep(m_iTimeout, GetVarPtr1(OP));
+					int r = Sleep(m_iTimeout, GetVarPtr2(OP));
 					if (r == 0)
 					{
 						_preClock = clock();
