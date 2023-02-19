@@ -2971,11 +2971,13 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 
 	SLayerVar* pCurLayer = vars.GetCurrentLayer();
 
+	bool bGlobalLocal;
 	bool blEnd = false;
 	while (blEnd == false)
 	{
 		ClearTempVars(funs);
 
+		bGlobalLocal = false;
 		tkType1 = GetToken(ar, tk1);
 		switch (tkType1)
 		{
@@ -2996,7 +2998,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			DelLocalVar(vars.GetCurrentLayer());			
 			break;
 		case TK_R_MIDDLE:
-			if (funs._cur._name == GLOBAL_INIT_FUN_NAME)
+			if (ar._allowGlobalInitLogic == false && funs._cur._name == GLOBAL_INIT_FUN_NAME)
 			{
 				SetCompileError(ar, "Error (%d, %d): Global Init (%s) %d", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), tk1.c_str());
 				return false;
@@ -3073,20 +3075,32 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			}
 			break;
 		case TK_IF:
+			bGlobalLocal = funs._cur._name == GLOBAL_INIT_FUN_NAME;
+			if(bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME "IF";
 			if (false == ParseIF(pJumps, ar, funs, vars))
 				return false;
+			if (bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME;
 			break;
 		case TK_FOR:
+			bGlobalLocal = funs._cur._name == GLOBAL_INIT_FUN_NAME;
+			if (bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME "FOR";
 			if (false == ParseFor(ar, funs, vars))
 				return false;
+			if (bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME;
 			break;
 		case TK_FOREACH:
+			bGlobalLocal = funs._cur._name == GLOBAL_INIT_FUN_NAME;
+			if (bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME "FOREACH";
 			if (false == ParseForEach(ar, funs, vars))
 				return false;
+			if (bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME;
 			break;
 		case TK_WHILE:
+			bGlobalLocal = funs._cur._name == GLOBAL_INIT_FUN_NAME;
+			if (bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME "WHILE";
 			if (false == ParseWhile(ar, funs, vars))
 				return false;
+			if (bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME;
 			break;
 		default:
 			SetCompileError(ar, "Error (%d, %d): Function Name (%s) '%s'\n", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), tk1.c_str());

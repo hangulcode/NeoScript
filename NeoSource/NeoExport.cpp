@@ -434,7 +434,12 @@ std::string GetLog(STempDebug& td, SVMOperation& op, int argIndex)
 		if(v < (int)td._staticVars.size())
 			sprintf_s(ch, _countof(ch), "[%s%d %s]", c, v, GetValueString(td._staticVars[v]).c_str());
 		else
-			sprintf_s(ch, _countof(ch), "[%s%d %s]", c, v, td._globalVars[v - (int)td._staticVars.size()].c_str());
+		{
+			if(v - (int)td._staticVars.size() < (int)td._globalVars.size())
+				sprintf_s(ch, _countof(ch), "[%s%d %s]", c, v, td._globalVars[v - (int)td._staticVars.size()].c_str());
+			else
+				sprintf_s(ch, _countof(ch), "[%s%d ???]", c, v);
+		}
 	}
 	else
 	{
