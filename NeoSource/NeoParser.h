@@ -243,6 +243,20 @@ struct SFunctionInfo
 		//_code->Write(&a2, sizeof(a2));
 		Push_Arg(r, a1, a2);
 	}
+	void	Push_OP(CArchiveRdWC& ar, eNOperation op, short r, short a1, short a2, bool b2, bool b3)
+	{
+		AddDebugData(ar);
+		_iLastOPOffset = _code->GetBufferOffset();
+
+		OpType optype = GetOpTypeFromOp(op);
+		_code->Write(&optype, sizeof(optype));
+
+		ArgFlag flg = 0;
+		//if (b1) flg |= (1 << 5);
+		if (b2) flg |= (1 << 4);
+		if (b3) flg |= (1 << 3);
+		Push_FlagArg(flg, r, a1, a2);
+	}
 	void	Push_Call(CArchiveRdWC& ar, eNOperation op, short fun, short args)
 	{
 		AddDebugData(ar);

@@ -27,9 +27,15 @@ std::string getKeyString()
 	std::string str;
 	while (true)
 	{
-		int r = getchar();
-		if (r == '\n') // Enter
-			return str;
+		int r = _getche();
+		if (r == '\r' || r == '\n') // Enter
+		{
+			if(str.empty() == false)
+				return str;
+			continue;
+		}
+		if (r == 27) // Escape
+			return "";
 
 		str += (char)r;
 	}

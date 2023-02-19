@@ -2096,19 +2096,19 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				funs._cur.Push_TableRead(ar, a._iVar, a._iArrayIndex, iTempOffset2, a.IsHaveShort());
 				a._iVar = iTempOffset2;
 			}
-			else if(a.IsShort())
-				a = funs.AddStaticInt(a._iVar);
+			//else if(a.IsShort())
+			//	a = funs.AddStaticInt(a._iVar);
 			if (b.IsArray() == true)
 			{
 				iTempOffset2 = funs._cur.AllocLocalTempVar();
 				funs._cur.Push_TableRead(ar, b._iVar, b._iArrayIndex, iTempOffset2, b.IsHaveShort());
 				b._iVar = iTempOffset2;
 			}
-			else if (b.IsShort())
-				b = funs.AddStaticInt(b._iVar);
+			//else if (b.IsShort())
+			//	b = funs.AddStaticInt(b._iVar);
 
 			iTempOffset2 = funs._cur.AllocLocalTempVar();
-			funs._cur.Push_OP(ar, op, iTempOffset2, a._iVar, b._iVar);
+			funs._cur.Push_OP(ar, op, iTempOffset2, a._iVar, b._iVar, a.IsShort(), b.IsShort());
 			operands[iFindOffset] = iTempOffset2;
 		}
 		RemoveAt<SOperand>(operands, iFindOffset + 1);
