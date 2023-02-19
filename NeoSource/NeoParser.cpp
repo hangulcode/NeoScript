@@ -1321,155 +1321,57 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 	{
 		iTempOffsetKey = iTempOffsetValue = INVALID_ERROR_PARSEJOB;
 
-		int iTryValue1 = -1;
-		tkType2 = Try_ParseIntNum(iTryValue1, ar, funs, vars, TK_COMMA, TK_COLON, TK_R_MIDDLE);
-		bool blKeyInt = (tkType2 != TK_NONE);
-		bool blKeyShort = false;
-		bool blValueShort = false;
-		if (blKeyInt)
-		{
-			//funs._cur.Push_MOVI(ar, NOP_MOVI, i_Begin, iTryValue);
-			if (IsShort(iTryValue1))
-				blKeyShort = true;
-			else
-				iTempOffsetKey = funs.AddStaticInt(iTryValue1);
+		tkType1 = ParseJob(false, iTempOffsetKey, NULL, ar, funs, vars, false, TK_COLON, TK_COMMA, TK_R_MIDDLE, TK_NONE);
 
-			if (tkType2 == TK_COLON)
-				iCurArrayOffset = iTryValue1;
-			//else
-			//{
-			//	SetCompileError(ar, "Error (%d, %d): Table ; \n", ar.CurLine(), ar.CurCol());
-			//	return TK_NONE;
-			//}
-		}
-		else
+		if (iTempOffsetKey.IsNone() == true)
 		{
-			tkType1 = GetToken(ar, tk1);
-
-			if (tkType1 == TK_QUOTE2 || tkType1 == TK_QUOTE1)
-			{
-				if (false == ParseStringOrNum(iTempOffsetKey, tkType1, tk1, ar, funs, vars))
-					return TK_NONE;
-				tkType2 = GetToken(ar, tk2);
-			}
-			else if (tkType1 == TK_L_MIDDLE)
-			{
-				if (TK_NONE == ParseTableDef(iTempOffsetKey, ar, funs, vars, iTableDeep + 1))
-				{
-					return TK_NONE;
-				}
-				tkType2 = GetToken(ar, tk2);
-			}
-			else if (tkType1 == TK_STRING)
-			{
-				//case TK_SEMICOLON:	// ;
-				//case TK_COMMA:		// ,
-				//case TK_R_SMALL:	// )
-				//case TK_R_ARRAY:	// ]
-				ar.PushToken(tkType1, tk1);
-				SOperand iTempOffset = INVALID_ERROR_PARSEJOB;
-				tkType2 = ParseJob(false, iTempOffset, NULL, ar, funs, vars, false, TK_COLON, TK_COMMA, TK_R_MIDDLE, TK_NONE);
-				if (TK_NONE == tkType2)
-				{
-					//SetCompileError(ar, "Error (%d, %d): ", ar.CurLine(), ar.CurCol());
-					return TK_NONE;
-				}
-				iTempOffsetKey = iTempOffset._iVar;
-			}
-			else if (tkType1 == TK_R_MIDDLE)
-				break;
-		}
-
-		if (tkType2 == TK_COLON)
-		{
-		}
-		else if (tkType2 == TK_R_MIDDLE || tkType2 == TK_COMMA)
-		{
-			iCurArrayOffset++;
-			iTempOffsetValue = iTempOffsetKey;
-			blValueShort = blKeyShort;
-			if (IsShort(iCurArrayOffset))
-			{
-				if(blValueShort)
-					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iCurArrayOffset, iTryValue1, false, true, true);
-				else
-					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iCurArrayOffset, iTempOffsetValue._iVar, false, true, false);
-			}
-			else
-			{
-				iTempOffsetKey = funs.AddStaticInt(iCurArrayOffset);
-				if (blValueShort)
-					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey._iVar, iTryValue1, false, false, true);
-				else
-					funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey._iVar, iTempOffsetValue._iVar, false, false, false);
-			}
-			if (tkType2 == TK_COMMA)
-				continue;
-			iItemCount++;
 			break;
 		}
-		else
-		{
-			SetCompileError(ar, "Error (%d, %d): Table ; \n", ar.CurLine(), ar.CurCol());
-			return TK_NONE;
-		}
 
-		int iTryValue2 = -1;
-		tkType2 = Try_ParseIntNum(iTryValue2, ar, funs, vars, TK_COMMA, TK_R_MIDDLE);
-		blValueShort = (tkType2 != TK_NONE);
-		if (blValueShort)
+		if (tkType1 == TK_COLON)
 		{
-			//funs._cur.Push_MOVI(ar, NOP_MOVI, i_Begin, iTryValue);
-			if (blKeyShort)
-				funs._cur.Push_List_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTryValue1, iTryValue2, false, true, true);
-			else
-				funs._cur.Push_List_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey._iVar, iTryValue2, false, false, true);
+			tkType2 = ParseJob(false, iTempOffsetValue, NULL, ar, funs, vars, false, TK_COMMA, TK_R_MIDDLE, TK_NONE, TK_NONE);
+			if (tkType2 == TK_NONE)
+			{
+				return TK_NONE;
+			}
+			funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey._iVar, iTempOffsetValue._iVar, false, iTempOffsetKey.IsShort(), iTempOffsetValue.IsShort());
+			tkType1 = tkType2;
+			iItemCount++;
 		}
 		else
 		{
-			tkType1 = GetToken(ar, tk1);
-
-			if (tkType1 == TK_QUOTE2 || tkType1 == TK_QUOTE1)
-			{
-				if (false == ParseStringOrNum(iTempOffsetValue, tkType1, tk1, ar, funs, vars))
-					return TK_NONE;
-			}
-			else if (tkType1 == TK_L_MIDDLE)
-			{
-				if (TK_NONE == ParseTableDef(iTempOffsetValue, ar, funs, vars, iTableDeep + 1))
-				{
-					return TK_NONE;
-				}
-			}
-			else if (tkType1 == TK_STRING)
-			{
-			}
-			else if (tkType1 == TK_R_MIDDLE)
-				break;
-			tkType2 = GetToken(ar, tk2);
-			////
-
-			if (blKeyShort)
-				funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTryValue1, iTempOffsetValue._iVar, false, true, false);
+			iTempOffsetValue = iTempOffsetKey;
+			if(IsShort(++iCurArrayOffset))
+				funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iCurArrayOffset, iTempOffsetValue._iVar, false, true, iTempOffsetValue.IsShort());
 			else
 			{
 				iTempOffsetKey = funs.AddStaticInt(iCurArrayOffset);
-				funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey._iVar, iTempOffsetValue._iVar, false, false, true);
+				funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey._iVar, iTempOffsetValue._iVar, false, false, iTempOffsetValue.IsShort());
 			}
+			iItemCount++;
 		}
-		iItemCount++;
 
-		if (tkType2 == TK_R_MIDDLE)
+		if (iTempOffsetKey.IsNone() == false)
+		{
+		}
+
+		if (tkType1 == TK_R_MIDDLE)
 			break;
 	}
-	if (iTableDeep == 0)
+	tkType1 = GetToken(ar, tk1);
+	if (ar._iTableDeep == 1)
 	{
-		tkType1 = GetToken(ar, tk1);
 		if (tkType1 != TK_SEMICOLON)
 		{
 			SetCompileError(ar, "Error (%d, %d): Table ; \n", ar.CurLine(), ar.CurCol());
 			return TK_NONE;
 		}
+	}
+	else
+	{
+		if(tkType1 != TK_COMMA)
+			ar.PushToken(tkType1, tk1);
 	}
 	if (iItemCount > 0)
 	{
@@ -1899,7 +1801,9 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			break;
 		case TK_L_MIDDLE:
 			iTempOffset.Reset();
+			ar._iTableDeep++;
 			r = ParseTableDef(iTempOffset, ar, funs, vars);
+			ar._iTableDeep--;
 			operands.push_back(iTempOffset);
 			blApperOperator = true;
 			blEnd = true;
@@ -3247,6 +3151,9 @@ void FinalizeFuction(SFunctions& funs)
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool addOPFunEnd)
 {
 	if (false == ParseMiddleArea(NULL, ar, funs, vars))
+		return false;
+
+	if (ar.m_sErrorString.empty() == false)
 		return false;
 
 	if(addOPFunEnd)

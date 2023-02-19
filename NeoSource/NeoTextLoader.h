@@ -109,6 +109,8 @@ public:
 	bool	_allowGlobalInitLogic = true;
 	bool	_debug = false;
 
+	int		_iTableDeep = 0;
+
 	std::list<SToken> m_sTokenQueue;
 	std::string m_sErrorString;
 	std::set<std::string> m_sImports;
