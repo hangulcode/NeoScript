@@ -98,7 +98,7 @@ int main()
 		std::string key = getKeyString();
 
 		if (key == "") break;
-		else if (key ==  "0") SAMPLE_etc("hello.neo", "main");
+		else if (key ==  "0") SAMPLE_etc("hello.neo", nullptr);
 		else if (key ==  "1") SAMPLE_callback();
 		else if (key ==  "2") SAMPLE_map_callback();
 		else if (key ==  "3") SAMPLE_9_times();

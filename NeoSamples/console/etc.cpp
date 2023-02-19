@@ -15,7 +15,7 @@ int SAMPLE_etc(const char*pFileName, const char* pFunctionName)
 
 	std::string err;
 	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
-	if (pVM != NULL)
+	if (pVM != NULL && pFunctionName != NULL)
 	{
 		DWORD t1 = GetTickCount();
 		pVM->CallN(pFunctionName);
