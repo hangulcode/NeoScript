@@ -850,51 +850,33 @@ public:
 		return true;
 	}
 
-	template<typename RVal, typename ... Types>
-	bool Call_TL(RVal* r, int iFID, Types ... args)
+	template<typename ... Types>
+	bool Setup_TL(int iFID, Types ... args)
 	{
 		std::vector<VarInfo> args_;
 		_args = &args_;
 		PushArgs(args...);
 		_args = NULL;
 
-		//RunFunction(funName, );
 		if (false == Setup(iFID, args_))
 			return false;
-
-		Run();
-		if (_isSetup == true)
-		{	// yet ... not completed
-			GC();
-			return false;
-		}
-
-		GC();
-		_read(&(*m_pVarStack)[_iSP_Vars], *r);
 		return true;
 	}
 
-	template<typename ... Types>
-	bool CallN_TL(int iFID, Types ... args)
+	bool CallN_TL()
 	{
-		std::vector<VarInfo> args_;
-		_args = &args_;
-		PushArgs(args...);
-		_args = NULL;
-
-		//RunFunction(funName, );
-		if (false == Setup(iFID, args_))
-			return false;
+		if (_isSetup == false)
+			return true;
 
 		Run();
 		if (_isSetup == true)
 		{	// yet ... not completed
-			GC();
+			//GC();
 			return false;
 		}
 
-		GC();
-		ReturnValue();
+		//GC();
+		//ReturnValue();
 		return true;
 	}
 

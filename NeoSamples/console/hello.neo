@@ -1,16 +1,5 @@
 
 export fun main()
 {
-	//print("hello");
-
-	var map = {};
-	map[5] = 3;
-	//map[6] = {};
-
-/*	var a = 100;
-	var map = { a + 1 };
-	foreach(var a, b in map)
-	{
-		print(a .. " : " .. b);
-	}*/
+	print("hello");
 }

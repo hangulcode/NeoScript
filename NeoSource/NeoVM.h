@@ -201,24 +201,19 @@ public:
 		return _pMainWorker->CallN(funName, args...);
 	}
 
-	template<typename RVal, typename ... Types>
-	bool Call_TL(RVal* r, const std::string& funName, Types ... args) // Time Limit
+	template<typename ... Types>
+	bool Setup_TL(const std::string& funName, Types ... args) // Setup Time Limit
 	{
 		int iFID = _pMainWorker->FindFunction(funName);
 		if (iFID == -1)
 			return false;
 
-		return _pMainWorker->Call_TL<RVal>(r, iFID, args...);
+		return _pMainWorker->Setup_TL(iFID, args...);
 	}
 
-	template<typename ... Types>
-	bool CallN_TL(const std::string& funName, Types ... args) // Time Limit
+	bool Call_TL() // Time Limit
 	{
-		int iFID = _pMainWorker->FindFunction(funName);
-		if (iFID == -1)
-			return false;
-
-		return _pMainWorker->CallN_TL(iFID, args...);
+		return _pMainWorker->CallN_TL();
 	}
 
 	u32 CreateWorker(int iStackSize = 50 * 1024);

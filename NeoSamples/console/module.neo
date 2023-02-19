@@ -1,24 +1,16 @@
 import mod1;
 import mod2;
 
-/*
+
 fun test()
 {
 	var m = load("print('ok');", "chunk");
-	pcall(m);
-	pcall(m);
+	pcall(m); // ok
+	pcall(m); // ok
 }
-*/
+
 export fun main()
 {
-	//var vv = mod1.add(11, 22);
-	print(mod1.add(11, 22));
-
-/*	print('module');
-
-	print(mod1.add(11, 22));
-	
+	print(mod1.add(11, 22)); // 33
 	test();
-
-	print("...");*/
 }

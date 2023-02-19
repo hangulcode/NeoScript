@@ -1943,7 +1943,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			{
 				if (a.IsArray() == false)
 				{
-					funs._cur.Push_MOV(ar, NOP_MOV, a._iVar, b._iVar, b.IsShort());
+					funs._cur.Push_MOV(ar, op, a._iVar, b._iVar, b.IsShort());
 				}
 				else
 				{

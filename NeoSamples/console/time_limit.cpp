@@ -19,23 +19,24 @@ int SAMPLE_time_limit()
 	if (pVM != NULL)
 	{
 		pVM->SetTimeout(-1, 100, 1000); // -1 is main worker
-		for (int i = 1; i < 10; i++)
+		pVM->Setup_TL("TimeTest");
+		for (int i = 1; i < 20; i++)
 		{
 			DWORD t1 = GetTickCount();
-			double r = 0;
-			bool bCompleted = pVM->Call_TL<double>(&r, "TimeTest");
+			bool bCompleted = pVM->Call_TL();
 			DWORD t2 = GetTickCount();
-			if (false == bCompleted)
-			{
-				printf("Job Not Completed\n");
-			}
 			if (pVM->IsLastErrorMsg())
 			{
 				printf("Error - VM Call : %s\n(Elapse:%d)\n", pVM->GetLastErrorMsg(), t2 - t1);
 				pVM->ClearLastErrorMsg();
+				break;
+			}
+			if (false == bCompleted)
+			{
+				printf("Job Not Completed (Elapse:%d)\n", t2 - t1);
 			}
 			else
-				printf("Sum 1 ~ = %lf\n(Elapse:%d)\n", r, t2 - t1);
+				printf("(Elapse:%d)\n", t2 - t1);
 		}
 		CNeoVM::ReleaseVM(pVM);
 	}

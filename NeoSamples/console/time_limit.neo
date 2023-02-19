@@ -2,11 +2,13 @@
 export fun TimeTest()
 {
 	var sum = 0.0;
-	for (var i in 0, 1000000, 1)
+	for (var i in 0, 5, 1)
 	{
 		//print("Hellow Neo Script1");
 		sum += i;
+		sleep(1);
 	}
 
+	print("sum : " .. sum);
 	return sum;
 }
