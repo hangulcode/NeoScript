@@ -47,6 +47,10 @@ CNeoVMWorker::CNeoVMWorker(CNeoVM* pVM, u32 id, int iStackSize)
 	_iSP_Vars_Max2 = 0;
 	iSP_VarsMax = 0;
 
+	_intA2.SetType(VAR_INT);
+	_intA3.SetType(VAR_INT);
+	_funA3.SetType(VAR_FUN);
+
 	m_pVarStack->resize(iStackSize);
 	m_pCallStack->reserve(1000);
 }
@@ -1450,9 +1454,9 @@ bool CNeoVMWorker::Init(void* pBuffer, int iSize, int iStackSize)
 			vi._str = _pVM->StringAlloc(tempStr);
 			vi._str->_refCount = 1;
 			break;
-		case VAR_FUN:
-			ar >> vi._fun_index;
-			break;
+		//case VAR_FUN:
+		//	ar >> vi._fun_index;
+		//	break;
 		default:
 			SetError("Error Invalid VAR Type");
 			return false;
@@ -1756,6 +1760,14 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				}
 				break;
 
+			case NOP_FMOV1:
+				Var_SetFun(GetVarPtr1(OP), OP.n2);
+				break;
+			case NOP_FMOV2:
+				//Var_SetFun(&_funA3, OP.n3);
+				_funA3._fun_index = OP.n3;
+				CltInsert(GetVarPtr1(OP), GetVarPtr2(OP), &_funA3);
+				break;
 
 			case NOP_CALL:
 				Call(OP.n1, OP.n2);

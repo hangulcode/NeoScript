@@ -262,6 +262,18 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 				ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, nullptr);
 			break;
+
+		case NOP_FMOV1:
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
+			break;
+		case NOP_FMOV2:
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			if ((argFlag & (1 << 4)) == 0)
+				ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, nullptr);
+			break;
+
 		case NOP_PTRCALL:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
@@ -399,7 +411,7 @@ std::string GetValueString(VarInfo& vi, std::map<int, std::string>* pFunTable = 
 		{
 			auto it = pFunTable->find(vi._fun_index);
 			if(it != pFunTable->end())
-				sprintf_s(ch, _countof(ch), "'%s'", (*it).second.c_str());
+				sprintf_s(ch, _countof(ch), "%d:'%s'", vi._fun_index, (*it).second.c_str());
 			else
 				sprintf_s(ch, _countof(ch), "%d:fun", vi._fun_index);
 		}
@@ -736,6 +748,15 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutAsm("MOV %s = -%s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 
+		case NOP_FMOV1:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
+			OutAsm("FMOV %s = %d\n", GetLog(td, v, 1).c_str(), v.n2);
+			break;
+		case NOP_FMOV2:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("MOV %s.%s = %d\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), v.n3);
+			break;
+
 		case NOP_PTRCALL:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("PCALL %s.%s arg:%d\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), v.n3);
@@ -746,7 +767,7 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			break;
 		case NOP_CALL:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("CALL %s\n", GetFunctionName(funs, v.n1).c_str());
+			OutAsm("CALL %s arg:%d\n", GetFunctionName(funs, v.n1).c_str(), v.n2);
 			break;
 		case NOP_RETURN:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
@@ -907,9 +928,9 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 		case VAR_STRING:
 			WriteString(ar, vi._str->_str);
 			break;
-		case VAR_FUN:
-			ar << vi._fun_index;
-			break;
+		//case VAR_FUN:
+		//	ar << vi._fun_index;
+		//	break;
 		default:
 			SetCompileError(arText, "Error VAR Type Error (%d)", vi.GetType());
 			return false;
@@ -950,8 +971,14 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 		//auto it2 = funs._funs.find((*it));
 		SFunctionInfo& fi = (*it).second;
 		mapFun[fi._funID] = fi._name;
+
+		//OutAsm("Fun [%d] %s\n", fi._funID, fi._name.c_str());
 	}
 
+	for (auto it = mapFun.begin(); it != mapFun.end(); it++)
+	{
+		OutAsm("Fun [%d] %s\n", (*it).first, (*it).second.c_str());
+	}
 
 	STempDebug td;
 	td._staticVars = funs._staticVars;

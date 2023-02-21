@@ -92,6 +92,8 @@ enum eNOperation : OpType
 	NOP_GETTYPE,
 	NOP_SLEEP, // arg1 unuse
 
+	NOP_FMOV1, // Function Info Load
+	NOP_FMOV2, // Function Info Load
 
 	NOP_CALL,
 	NOP_PTRCALL,	// Multiple Call
@@ -493,7 +495,9 @@ private:
 	bool	Run(int iBreakingCallStack = 0);
 	bool	StopCoroutine();
 
-	VarInfo _intA1, _intA2, _intA3;
+	//VarInfo _intA1;
+	VarInfo _intA2, _intA3;
+	VarInfo _funA3;
 	inline VarInfo* GetVarPtr1(SVMOperation& OP)
 	{
 		//if (OP.argFlag & (1 << 5)) { _intA1 = OP.n1; return &_intA1; }
@@ -502,13 +506,13 @@ private:
 	}
 	inline VarInfo* GetVarPtr2(SVMOperation& OP)
 	{
-		if (OP.argFlag & (1 << 4)) { _intA2 = OP.n2; return &_intA2; }
+		if (OP.argFlag & (1 << 4)) { _intA2._int = OP.n2; return &_intA2; }
 		if (OP.argFlag & (1 << 1)) return &(*m_pVarStack)[_iSP_Vars + OP.n2];
 		else return &(*m_pVarGlobal)[OP.n2];
 	}
 	inline VarInfo* GetVarPtr3(SVMOperation& OP)
 	{
-		if (OP.argFlag & (1 << 3)) { _intA3 = OP.n3; return &_intA3; }
+		if (OP.argFlag & (1 << 3)) { _intA3._int = OP.n3; return &_intA3; }
 		if (OP.argFlag & (1 << 0)) return &(*m_pVarStack)[_iSP_Vars + OP.n3];
 		else return &(*m_pVarGlobal)[OP.n3];
 	}

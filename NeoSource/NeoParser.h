@@ -140,7 +140,7 @@ struct SFunctionTableForWriter
 struct SFunctionInfo
 {
 	int							_funID; // Function Index
-	int							_staticIndex;
+//	int							_staticIndex;
 	std::string					_name;
 	std::set<std::string>		_args;
 	FUNCTION_TYPE				_funType = FUNT_NORMAL;
@@ -722,7 +722,7 @@ struct SFunctions
 	}
 	int	AddStaticString(const std::string& str)
 	{
-		for (int i = (int)_staticVars.size() - 1; i >= 1; i--) // 0 is System
+		for (int i = (int)_staticVars.size() - 1; i >= 0; i--)
 		{
 			VarInfo& v2 = _staticVars[i];
 			if (VAR_STRING == v2.GetType())
