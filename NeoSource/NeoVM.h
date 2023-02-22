@@ -216,6 +216,11 @@ public:
 		return _pMainWorker->CallN_TL();
 	}
 
+	VarInfo* GetVar(const std::string& name)
+	{
+		return _pMainWorker->GetVar(name);
+	}
+
 	u32 CreateWorker(int iStackSize = 50 * 1024);
 	bool ReleaseWorker(u32 id);
 	bool BindWorkerFunction(u32 id, const std::string& funName);

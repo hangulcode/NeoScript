@@ -111,7 +111,7 @@ std::map<std::string, TK_TYPE> g_sStringToToken;
 #define TOKEN_STR3(key, str, pri, op) g_sTokenToString[key] = STokenValue(str, pri, op); g_sStringToToken[str] = key
 
 TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef = false, TK_TYPE tkEnd1 = TK_SEMICOLON, TK_TYPE tkEnd2 = TK_COMMA, TK_TYPE tkEnd3 = TK_R_SMALL, TK_TYPE tkEnd4 = TK_R_ARRAY);
-bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars);
+bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport);
 bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars);
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool addOPFunEnd = true);
 
@@ -677,7 +677,7 @@ TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk)
 	}
 	return (tk.size() != 0) ? TK_STRING : TK_NONE;
 }
-int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, const std::string& name, bool checkName = true)
+int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport, const std::string& name, bool checkName = true)
 {
 	if (checkName && false == AbleName(name))
 	{
@@ -697,6 +697,16 @@ int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, const std:
 	else
 		iLocalVar = 1 + (int)funs._cur._args.size() + funs._cur._localVarCount++; // 0 번은 리턴 저장용
 	pCurLayer->AddLocalVar(name, iLocalVar);
+	if (blExport)
+	{
+		if(vars._varsFunction.size() == 1)
+			vars._varsExport.push_back(name);
+		else
+		{
+			SetCompileError(ar, "Error (%d, %d): Export Invalid (%s) %s", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), name.c_str());
+			return -1;
+		}
+	}
 	return iLocalVar;
 }
 int  AddLocalVar(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
@@ -1760,7 +1770,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		case TK_VAR:
 			if (bAllowVarDef)
 			{
-				if (false == ParseVarDef(ar, funs, vars))
+				if (false == ParseVarDef(ar, funs, vars, false))
 					return TK_NONE;
 				return TK_SEMICOLON; // ㅡㅡ;
 			}
@@ -2279,7 +2289,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		SetCompileError(ar, "Error (%d, %d): for 'key' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
 		return false;
 	}
-	int iKey = AddLocalVarName(ar, funs, vars, tk1);
+	int iKey = AddLocalVarName(ar, funs, vars, false, tk1);
 	if (iKey < 0)
 		return false;
 
@@ -2503,7 +2513,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		SetCompileError(ar, "Error (%d, %d): foreach 'key' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
 		return false;
 	}
-	int iKey = AddLocalVarName(ar, funs, vars, tk1);
+	int iKey = AddLocalVarName(ar, funs, vars, false, tk1);
 	if(iKey < 0)
 		return false;
 
@@ -2530,7 +2540,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			SetCompileError(ar, "Error (%d, %d): foreach 'value' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
 			return false;
 		}
-		iValue = AddLocalVarName(ar, funs, vars, tk1);
+		iValue = AddLocalVarName(ar, funs, vars, false, tk1);
 	}
 	if (iValue < 0)
 		return false;
@@ -2911,7 +2921,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	return true;
 }
 
-bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport)
 {
 	std::string tk1;
 	TK_TYPE tkType1;
@@ -2922,7 +2932,7 @@ bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 == TK_STRING)
 	{
-		int iLocalVar = AddLocalVarName(ar, funs, vars, tk1);
+		int iLocalVar = AddLocalVarName(ar, funs, vars, blExport, tk1);
 		if (iLocalVar < 0)
 			return false;
 
@@ -3045,7 +3055,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			}
 			break;
 		case TK_VAR:
-			if (false == ParseVarDef(ar, funs, vars))
+			if (false == ParseVarDef(ar, funs, vars, funType == FUNT_EXPORT))
 				return false;
 			break;
 		case TK_BREAK:

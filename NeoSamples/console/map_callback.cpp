@@ -61,7 +61,7 @@ int SAMPLE_map_callback()
 		CA* pClass = new CA();
 
 		VarInfo* g_sData;
-		pVM->Call<VarInfo*>(&g_sData, "GetMap");
+		g_sData = pVM->GetVar("g_sData");
 		if (g_sData != NULL && g_sData->GetType() == VAR_TABLE)
 		{
 			TableInfo* pTable = g_sData->_tbl;

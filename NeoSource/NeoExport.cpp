@@ -907,8 +907,23 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 		}
 	}
 
-	// Static 변수 저장
 	header._iStaticVarCount = (int)funs._staticVars.size();
+
+	if (vars._varsFunction.size() != 1) return false;
+	SLayerVar* pLayerVar = vars._varsFunction[0];
+	if (pLayerVar->_varsLayer.size() != 1) return false;
+	SLocalVar* pLocalLayer = pLayerVar->_varsLayer[0];
+	header._iExportVarCount = (int)vars._varsExport.size();
+	for(int i = 0; i < header._iExportVarCount; i++)
+	{
+		auto it = pLocalLayer->_localVars.find(vars._varsExport[i]);
+		int idx = (*it).second - COMPILE_GLOBAL_VAR_BEGIN + header._iStaticVarCount;
+		ar << idx;
+		WriteString(ar, (*it).first);
+	}
+
+
+	// Static 변수 저장
 
 	for (int i = 0; i < header._iStaticVarCount; i++)
 	{
@@ -982,26 +997,32 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 
 	STempDebug td;
 	td._staticVars = funs._staticVars;
-	// Static 변수 저장
+	// Static 변수
 	for (int i = 0; i < header._iStaticVarCount; i++)
 	{
 		VarInfo& vi = funs._staticVars[i];
-		OutAsm("Static [%d] %s\n", i, GetValueString(vi, &mapFun).c_str());
+		OutAsm("Static   [%d] %s\n", i, GetValueString(vi, &mapFun).c_str());
 	}
-	// Global 변수
-	for (auto it = vars._varsFunction.begin(); it != vars._varsFunction.end(); it++)
+
+	std::set<std::string> tempExportVars;
+	for (int i = 0; i < header._iExportVarCount; i++)
 	{
-		SLayerVar* pLayerVar = (*it);
-		for (auto it1 = pLayerVar->_varsLayer.begin(); it1 != pLayerVar->_varsLayer.end(); it1++)
-		{
-			SLocalVar* pLocalLayer = (*it1);
-			for (auto it2 = pLocalLayer->_localVars.begin(); it2 != pLocalLayer->_localVars.end(); it2++)
-			{
-				int idx = (*it2).second - COMPILE_GLOBAL_VAR_BEGIN + header._iStaticVarCount;
-				OutAsm("Global [%d] %s\n", idx, (*it2).first.c_str());
-				td._globalVars.push_back((*it2).first);
-			}
-		}
+		tempExportVars.insert(vars._varsExport[i]);
+	}
+
+	// Global 변수
+	if (vars._varsFunction.size() != 1) return false;
+	SLayerVar* pLayerVar = vars._varsFunction[0];
+	if (pLayerVar->_varsLayer.size() != 1) return false;
+	SLocalVar* pLocalLayer = pLayerVar->_varsLayer[0];
+	for (auto it2 = pLocalLayer->_localVars.begin(); it2 != pLocalLayer->_localVars.end(); it2++)
+	{
+		int idx = (*it2).second - COMPILE_GLOBAL_VAR_BEGIN + header._iStaticVarCount;
+		if (tempExportVars.end() == tempExportVars.find((*it2).first))
+			OutAsm("Global   [%d] %s\n", idx, (*it2).first.c_str());
+		else
+			OutAsm("Global E [%d] %s\n", idx, (*it2).first.c_str());
+		td._globalVars.push_back((*it2).first);
 	}
 
 	if (header.m_iDebugCount > 0 && header.m_iDebugOffset > 0)

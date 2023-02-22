@@ -1411,7 +1411,7 @@ bool CNeoVMWorker::Init(void* pBuffer, int iSize, int iStackSize)
 
 	int iID;
 	SFunctionTable fun;
-	std::string funName;
+	std::string Name;
 	for (int i = 0; i < header._iFunctionCount; i++)
 	{
 		memset(&fun, 0, sizeof(SFunctionTable));
@@ -1419,12 +1419,20 @@ bool CNeoVMWorker::Init(void* pBuffer, int iSize, int iStackSize)
 		ar >> iID >> fun._codePtr >> fun._argsCount >> fun._localTempMax >> fun._localVarCount >> fun._funType;
 		if (fun._funType != FUNT_NORMAL && fun._funType != FUNT_ANONYMOUS)
 		{
-			ReadString(ar, funName);
-			m_sImExportTable[funName] = iID;
+			ReadString(ar, Name);
+			m_sImExportTable[Name] = iID;
 		}
 
 		fun._localAddCount = 1 + fun._argsCount + fun._localVarCount + fun._localTempMax;
 		m_sFunctionPtr[iID] = fun;
+	}
+
+	for (int i = 0; i < header._iExportVarCount; i++)
+	{
+		int idx;
+		ar >> idx;
+		ReadString(ar, Name);
+		m_sImportVars[Name] = idx;
 	}
 
 	std::string tempStr;
@@ -1778,7 +1786,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			{
 				VarInfo* pVar1 = GetVarPtr1(OP);
 				short n3 = OP.n3;
-				VarInfo* pFunName = GetVarPtr2(OP);
+				VarInfo* pFunName = nullptr;
 				switch (pVar1->GetType())
 				{
 				case VAR_FUN:
@@ -1790,10 +1798,12 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 						Call(pVar1->_funPtr, OP.n3);
 					break;
 				case VAR_STRING:
+					pFunName = GetVarPtr2(OP);
 					CallNative(_pVM->_funStrLib, pVar1, pFunName->_str->_str, n3);
 					break;
 				case VAR_TABLE:
 				{
+					pFunName = GetVarPtr2(OP);
 					VarInfo* pVarMeta = pVar1->_tbl->Find(pFunName);
 					if (pVarMeta != NULL)
 					{
@@ -1816,9 +1826,13 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 					break;
 				}
 				case VAR_LIST:
+					pFunName = GetVarPtr2(OP);
 					CallNative(_pVM->_funLstLib, pVar1, pFunName->_str->_str, n3);
 					break;
 				case VAR_SET:
+					break;
+				default:
+					SetError("Ptr Call Error");
 					break;
 				}
 				break;

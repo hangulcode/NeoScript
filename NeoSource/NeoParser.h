@@ -102,6 +102,8 @@ struct SLayerVar
 struct SVars
 {
 	std::vector<SLayerVar*>	_varsFunction;
+	std::vector<std::string> _varsExport;
+
 	~SVars()
 	{
 		for (int i = (int)_varsFunction.size() - 1; i >= 0; i--)

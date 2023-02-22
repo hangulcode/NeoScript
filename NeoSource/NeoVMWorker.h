@@ -313,6 +313,8 @@ struct SNeoVMHeader
 	int		_iFunctionCount;
 	int		_iStaticVarCount;
 	int		_iGlobalVarCount;
+	int		_iExportVarCount;
+
 	int		_iMainFunctionOffset;
 	int		_iCodeSize;
 	int		m_iDebugCount;
@@ -434,6 +436,7 @@ private:
 //	int						_iCodeLen;
 
 	std::map<std::string, int> m_sImExportTable;
+	std::map<std::string, int> m_sImportVars;
 	std::vector<debug_info>	_DebugData;
 
 	//void	SetCodeData(u8* p, int sz)
@@ -882,6 +885,14 @@ public:
 		//GC();
 		//ReturnValue();
 		return true;
+	}
+
+	VarInfo* GetVar(const std::string& name)
+	{
+		auto it = m_sImportVars.find(name);
+		if (it == m_sImportVars.end())
+			return NULL;
+		return &m_sVarGlobal[(*it).second];
 	}
 
 	VarInfo* testCall(int iFID, VarInfo* args, int argc);
