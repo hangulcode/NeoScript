@@ -44,10 +44,10 @@ private:
 	StringInfo* StringAlloc(const std::string& str);
 	void FreeString(VarInfo *d);
 
-	TableInfo* TableAlloc();
+	TableInfo* TableAlloc(int cnt = 0);
 	void FreeTable(TableInfo* tbl);
 
-	ListInfo* ListAlloc();
+	ListInfo* ListAlloc(int cnt = 0);
 	void FreeList(ListInfo* tbl);
 
 	SetInfo* SetAlloc();

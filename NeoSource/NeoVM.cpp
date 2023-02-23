@@ -136,7 +136,7 @@ void CNeoVM::FreeString(VarInfo *d)
 	//delete d->_str;
 	m_sPool_String.Confer(d->_str);
 }
-TableInfo* CNeoVM::TableAlloc()
+TableInfo* CNeoVM::TableAlloc(int cnt)
 {
 	TableInfo* pTable = m_sPool_TableInfo.Receive();
 	while (true)
@@ -160,6 +160,7 @@ TableInfo* CNeoVM::TableAlloc()
 	pTable->_fun._func = NULL;
 
 	_sTables[m_sPool_TableInfo._dwLastID] = pTable;
+	if (cnt > 0) pTable->Reserve(cnt);
 	return pTable;
 }
 void CNeoVM::FreeTable(TableInfo* tbl)
@@ -185,7 +186,7 @@ void CNeoVM::FreeTable(TableInfo* tbl)
 	//delete tbl;
 	m_sPool_TableInfo.Confer(tbl);
 }
-ListInfo* CNeoVM::ListAlloc()
+ListInfo* CNeoVM::ListAlloc(int cnt)
 {
 	ListInfo* pList = m_sPool_ListInfo.Receive();
 	while (true)
@@ -206,6 +207,7 @@ ListInfo* CNeoVM::ListAlloc()
 	pList->_pUserData = NULL;
 
 	_sLists[m_sPool_ListInfo._dwLastID] = pList;
+	if (cnt > 0) pList->Resize(cnt);
 	return pList;
 }
 void CNeoVM::FreeList(ListInfo* lst)

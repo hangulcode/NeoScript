@@ -777,8 +777,8 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutAsm("- End -\n");
 			break;
 		case NOP_TABLE_ALLOC:
-			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
-			OutAsm("Table Alloc %s\n", GetLog(td, v, 1).c_str());
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("Table Alloc %s, %d\n", GetLog(td, v, 1).c_str(), v.n23);
 			break;
 		case NOP_CLT_MOV:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
@@ -816,8 +816,8 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			break;
 
 		case NOP_LIST_ALLOC:
-			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
-			OutAsm("List Alloc %s\n", GetLog(td, v, 1).c_str());
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("List Alloc %s, %d\n", GetLog(td, v, 1).c_str(), v.n23);
 			break;
 		case NOP_LIST_REMOVE:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
