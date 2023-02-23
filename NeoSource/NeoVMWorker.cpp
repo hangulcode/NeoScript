@@ -1905,7 +1905,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				iSP_VarsMax = callStack._iSP_VarsMax;
 				break;
 			case NOP_TABLE_ALLOC:
-				Var_SetTable(GetVarPtr1(OP), _pVM->TableAlloc());
+				Var_SetTable(GetVarPtr1(OP), _pVM->TableAlloc(OP.n23));
 				break;
 			case NOP_CLT_READ:
 				CltRead(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
@@ -1939,7 +1939,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				//break;
 
 			case NOP_LIST_ALLOC:
-				Var_SetList(GetVarPtr1(OP), _pVM->ListAlloc());
+				Var_SetList(GetVarPtr1(OP), _pVM->ListAlloc(OP.n23));
 				break;
 /*			case NOP_LIST_READ:
 				TableRead(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));

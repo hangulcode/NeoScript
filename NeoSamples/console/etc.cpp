@@ -15,18 +15,22 @@ int SAMPLE_etc(const char*pFileName, const char* pFunctionName)
 
 	std::string err;
 	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
-	if (pVM != NULL && pFunctionName != NULL)
+	if (pVM != NULL)
 	{
-		DWORD t1 = GetTickCount();
-		pVM->CallN(pFunctionName);
-		DWORD t2 = GetTickCount();
+		DWORD dwCallTime = 0;
+		if (pFunctionName != NULL)
+		{
+			DWORD t1 = GetTickCount();
+			pVM->CallN(pFunctionName);
+			dwCallTime = GetTickCount() - t1;
+		}
 		if (pVM->IsLastErrorMsg())
 		{
-			printf("Error - VM Call : %s\n(Elapse:%d)\n", pVM->GetLastErrorMsg(), t2 - t1);
+			printf("Error - VM Call : %s\n(Elapse:%d)\n", pVM->GetLastErrorMsg(), dwCallTime);
 			pVM->ClearLastErrorMsg();
 		}
 		else
-			printf("(Elapse:%d)\n", t2 - t1);
+			printf("(Elapse:%d)\n", dwCallTime);
 
 		CNeoVM::ReleaseVM(pVM);
 	}
