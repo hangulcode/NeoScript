@@ -14,11 +14,11 @@ export fun main()
 	print("lower : " .. str2.lower());
 
 	var str3 = "  12345    ";
-	print("trim  : {" .. str3.trim() .. "}");
-	print("ltrim : {" .. str3.ltrim() .. "}");
-	print("rtrim : {" .. str3.rtrim() .. "}");
+	print("trim    : {" .. str3.trim() .. "}");
+	print("ltrim   : {" .. str3.ltrim() .. "}");
+	print("rtrim   : {" .. str3.rtrim() .. "}");
 
-	print("relace : {" .. str3.replace("23", "AB") .. "}");
+	print("replace : {" .. str3.replace("23", "AB") .. "}");
 
 	var str4 = "this,is,string";
 	var lst1 = str4.split(",");
