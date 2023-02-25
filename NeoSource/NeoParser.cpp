@@ -809,22 +809,6 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 	}
 
-	//CNArchive arCode;
-	//std::string err;
-	//bool putASM = true;
-	//bool debug = false;
-	//bool allowGlobalInitLogic = false;
-	//if (false == CNeoVM::Compile(pFileBuffer, iFileLen, arCode, err, putASM, debug, allowGlobalInitLogic))
-	//{
-	//	if (putASM)
-	//		printf((ANSI_COLOR_RED + err + ANSI_RESET_ALL).c_str());
-	//	return NULL;
-	//}
-	//delete[] pFileBuffer;
-
-//	if (AddLocalVarName(ar, funs, vars, tk1) < 0)
-//		return false;
-
 	CArchiveRdWC ar2;
 	ToArchiveRdWC((const char*)pFileBuffer, iFileLen, ar2);
 	ar2._allowGlobalInitLogic = ar._allowGlobalInitLogic;
