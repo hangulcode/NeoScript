@@ -233,7 +233,7 @@ public:
 	inline bool IsLastErrorMsg() { return (_sErrorMsgDetail.empty() == false); }
 	void ClearLastErrorMsg() { _bError = false; _sErrorMsgDetail.clear(); }
 
-	CNeoVMWorker*	LoadVM(void* pBuffer, int iSize, int iStackSize = 50 * 1024); // 0 is error
+	CNeoVMWorker*	LoadVM(void* pBuffer, int iSize, bool blMainWorker = true, int iStackSize = 50 * 1024); // 0 is error
 	bool PCall(int iModule);
 
 	static CNeoVM* 	CreateVM();

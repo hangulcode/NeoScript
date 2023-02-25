@@ -380,7 +380,7 @@ void		CNeoVM::ReleaseVM(CNeoVM* pVM)
 	delete pVM;
 }
 
-CNeoVMWorker* CNeoVM::LoadVM(void* pBuffer, int iSize, int iStackSize)
+CNeoVMWorker* CNeoVM::LoadVM(void* pBuffer, int iSize, bool blMainWorker, int iStackSize)
 {
 	CNeoVMWorker*pWorker = WorkerAlloc(iStackSize);
 	if (false == pWorker->Init(pBuffer, iSize, iStackSize))
@@ -388,7 +388,7 @@ CNeoVMWorker* CNeoVM::LoadVM(void* pBuffer, int iSize, int iStackSize)
 		FreeWorker(pWorker);
 		return NULL;
 	}
-	if (NULL == _pMainWorker)
+	if (blMainWorker && NULL == _pMainWorker)
 		_pMainWorker = pWorker;
 	return pWorker;
 }
@@ -434,17 +434,12 @@ bool CNeoVM::ReleaseWorker(u32 id)
 }
 bool CNeoVM::BindWorkerFunction(u32 id, const std::string& funName)
 {
-	int iFID = _pMainWorker->FindFunction(funName);
-	if (iFID == -1)
-		return false;
-
 	auto it = _sVMWorkers.find(id);
 	if (it == _sVMWorkers.end())
 		return false;
 
-	std::vector<VarInfo> _args;
-	auto pWorker = (*it).second;
-	return pWorker->Setup(iFID, _args);
+	CNeoVMWorker* pWorker = (*it).second;
+	return pWorker->BindWorkerFunction(funName);
 }
 bool CNeoVM::SetTimeout(u32 id, int iTimeout, int iCheckOpCount)
 {
@@ -460,8 +455,7 @@ bool CNeoVM::SetTimeout(u32 id, int iTimeout, int iCheckOpCount)
 			return false;
 		pWorker = (*it).second;
 	}
-	pWorker->m_iTimeout = iTimeout;
-	pWorker->m_iCheckOpCount = iCheckOpCount;
+	pWorker->SetTimeout(iTimeout, iCheckOpCount);
 	return true;
 }
 

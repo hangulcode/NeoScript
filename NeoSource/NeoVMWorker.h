@@ -513,7 +513,6 @@ private:
 	bool	IsMainCoroutine() { return (&m_sDefault == m_pCur); }
 	bool	Setup(int iFunctionID, std::vector<VarInfo>& _args);
 	bool	Start(int iFunctionID, std::vector<VarInfo>& _args);
-	bool	Run(int iBreakingCallStack = 0);
 	bool	StopCoroutine();
 
 	//VarInfo _intA1;
@@ -545,6 +544,13 @@ public:
 	void Var_Release(VarInfo *d);
 	void Var_SetNone(VarInfo *d);
 	CNeoVM* GetVM() { return _pVM;  }
+	inline void SetTimeout(int iTimeout = -1, int iCheckOpCount = 1000) {
+		m_iTimeout = iTimeout;
+		m_iCheckOpCount = iCheckOpCount;
+	}
+	bool BindWorkerFunction(const std::string& funName);
+	inline bool IsWorking() { return _isSetup; }
+	bool	Run(int iBreakingCallStack = 0);
 private:
 	void Var_SetInt(VarInfo *d, int v);
 	void Var_SetFloat(VarInfo *d, double v);
