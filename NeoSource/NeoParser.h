@@ -308,6 +308,9 @@ struct SFunctionInfo
 				case NOP_SUB3:
 				case NOP_MUL3:
 				case NOP_DIV3:
+				case NOP_PERSENT3:
+				case NOP_LSHIFT3:
+				case NOP_RSHIFT3:
 				case NOP_TOSTRING:
 				case NOP_TOINT:
 				case NOP_TOFLOAT:
@@ -325,8 +328,8 @@ struct SFunctionInfo
 				case NOP_LESS_EQ:	// <=
 				case NOP_EQUAL2:	// ==
 				case NOP_NEQUAL:	// !=
-				case NOP_AND2:		// &&
-				case NOP_OR2:		// ||
+				case NOP_LOG_AND:		// &&
+				case NOP_LOG_OR:		// ||
 				{
 					u8 *pre = (u8*)_code->GetData() + sizeof(OpType) + sizeof(ArgFlag) + _iLastOPOffset;
 					short* preDest = (short*)pre;

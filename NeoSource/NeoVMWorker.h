@@ -32,6 +32,11 @@ enum eNOperationSub : u8
 	eOP_MUL,
 	eOP_DIV,
 	eOP_PER,
+	eOP_LSH,
+	eOP_RSH,
+	eOP_AND,
+	eOP__OR,
+	eOP_XOR,
 };
 
 enum eNOperation : OpType
@@ -39,11 +44,18 @@ enum eNOperation : OpType
 	NOP_MOV,
 
 	NOP_MOV_MINUS,
-	NOP_ADD2,
-	NOP_SUB2,
-	NOP_MUL2,
-	NOP_DIV2,
-	NOP_PERSENT2,
+	NOP_ADD2,		// +
+	NOP_SUB2,		// -
+	NOP_MUL2,		// *
+	NOP_DIV2,		// /
+	NOP_PERSENT2,	// %
+	NOP_LSHIFT2,	// <<
+	NOP_RSHIFT2,	// >>
+	NOP_AND2,		// &
+	NOP_OR2,		// |
+	NOP_XOR2,		// ^
+	//NOP_NOT2,		// ~
+	//NOP_LOG_NOT2,	// ! not support ( a != 0x01; if(a != b) ... bit / logic )
 
 	NOP_VAR_CLEAR,
 	NOP_INC,
@@ -54,6 +66,12 @@ enum eNOperation : OpType
 	NOP_MUL3,
 	NOP_DIV3,
 	NOP_PERSENT3,
+	NOP_LSHIFT3,
+	NOP_RSHIFT3,
+	NOP_AND3,
+	NOP_OR3,
+	NOP_XOR3,
+	//NOP_NOT3,
 
 	NOP_GREAT,		// >
 	NOP_GREAT_EQ,	// >=
@@ -63,8 +81,8 @@ enum eNOperation : OpType
 	NOP_NEQUAL,		// !=
 	NOP_AND,		// &
 	NOP_OR,			// |
-	NOP_AND2,		// &&
-	NOP_OR2,		// ||
+	NOP_LOG_AND,	// &&
+	NOP_LOG_OR,	// ||
 
 	NOP_JMP,
 	NOP_JMP_FALSE,

@@ -206,16 +206,24 @@ int InitDefaultTokenString()
 	TOKEN_STR3(TK_PERCENT, "%", 4, NOP_PERSENT3);
 	TOKEN_STR3(TK_PERCENT_EQ, "%=", 15, NOP_PERSENT2);
 
-	TOKEN_STR2(TK_TILDE, "~");
-	TOKEN_STR2(TK_CIRCUMFLEX, "^");
+	TOKEN_STR3(TK_LSHIFT, "<<", 6, NOP_LSHIFT3);
+	TOKEN_STR3(TK_LSHIFT_EQ, "<<=", 15, NOP_LSHIFT2);
+	TOKEN_STR3(TK_RSHIFT, ">>", 6, NOP_RSHIFT3);
+	TOKEN_STR3(TK_RSHIFT_EQ, ">>=", 15, NOP_RSHIFT2);
+
+	TOKEN_STR2(TK_NOT, "~");
+	TOKEN_STR3(TK_XOR, "^", 9, NOP_XOR3);
+	TOKEN_STR3(TK_XOR_EQ, "^=", 15, NOP_XOR2);
 	TOKEN_STR3(TK_EQUAL, "=", 15, NOP_MOV);
 	TOKEN_STR3(TK_EQUAL_EQ, "==", 8, NOP_EQUAL2);
 	TOKEN_STR3(TK_EQUAL_NOT, "!=", 8, NOP_NEQUAL);
 
 	TOKEN_STR3(TK_AND, "&", 9, NOP_AND);
-	TOKEN_STR3(TK_AND2, "&&", 12, NOP_AND2);
+	TOKEN_STR3(TK_AND_EQ, "&=", 15, NOP_AND2);
+	TOKEN_STR3(TK_AND2, "&&", 12, NOP_LOG_AND);
 	TOKEN_STR3(TK_OR, "|", 11, NOP_OR);
-	TOKEN_STR3(TK_OR2, "||", 13, NOP_OR2);
+	TOKEN_STR3(TK_OR_EQ, "|=", 15, NOP_OR2);
+	TOKEN_STR3(TK_OR2, "||", 13, NOP_LOG_OR);
 
 	TOKEN_STR2(TK_L_SMALL, "(");
 	TOKEN_STR2(TK_R_SMALL, ")");
@@ -238,7 +246,7 @@ int InitDefaultTokenString()
 	TOKEN_STR2(TK_QUOTE2, "\"");
 	TOKEN_STR2(TK_QUOTE1, "'");
 	TOKEN_STR2(TK_QUESTION, "?");
-	TOKEN_STR2(TK_NOT, "!");
+	TOKEN_STR2(TK_LOGIC_NOT, "!");
 
 	TOKEN_STR2(TK_YIELD, "yield");
 
@@ -252,6 +260,15 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_MUL2, 2);
 	OP_STR1(NOP_DIV2, 2);
 	OP_STR1(NOP_PERSENT2, 2);
+	OP_STR1(NOP_LSHIFT2, 2);
+	OP_STR1(NOP_RSHIFT2, 2);
+	OP_STR1(NOP_AND2, 2);
+	OP_STR1(NOP_OR2, 2);
+	OP_STR1(NOP_XOR2, 2);
+
+	OP_STR1(NOP_LSHIFT3, 3);
+	OP_STR1(NOP_RSHIFT3, 3);
+	
 
 	OP_STR1(NOP_VAR_CLEAR, 1);
 	OP_STR1(NOP_INC, 1);
@@ -262,6 +279,11 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_MUL3, 3);
 	OP_STR1(NOP_DIV3, 3);
 	OP_STR1(NOP_PERSENT3, 3);
+	OP_STR1(NOP_PERSENT3, 3);
+	OP_STR1(NOP_LSHIFT3, 3);
+	OP_STR1(NOP_AND2, 3);
+	OP_STR1(NOP_OR2, 3);
+	OP_STR1(NOP_XOR3, 3);
 
 	OP_STR1(NOP_GREAT, 3);
 	OP_STR1(NOP_GREAT_EQ, 3);
@@ -271,8 +293,8 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_NEQUAL, 3);
 	OP_STR1(NOP_AND, 3);
 	OP_STR1(NOP_OR, 3);
-	OP_STR1(NOP_AND2, 3);
-	OP_STR1(NOP_OR2, 3);
+	OP_STR1(NOP_LOG_AND, 3);
+	OP_STR1(NOP_LOG_OR, 3);
 
 	OP_STR1(NOP_JMP_GREAT, 3);
 	OP_STR1(NOP_JMP_GREAT_EQ, 3);
@@ -426,6 +448,18 @@ TK_TYPE CalcToken(TK_TYPE tkTypeOnySingleChar, CArchiveRdWC& ar, std::string& tk
 	if (tkTemp != TK_STRING && tkTemp != TK_NONE)
 	{
 		ar.GetData(true);
+		u16 c3 = ar.GetData(false);
+
+		// check 3 char token
+		s1 += (u8)c3;
+		TK_TYPE tkTemp2 = CalcStringToken(s1);
+		if (tkTemp2 != TK_STRING && tkTemp2 != TK_NONE)
+		{
+			ar.GetData(true);
+			tk = GetTokenString(tkTemp2);
+			return tkTemp2;
+		}
+
 		tk = GetTokenString(tkTemp);
 		return tkTemp;
 	}
@@ -606,9 +640,9 @@ TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk)
 		case '%':
 			return CalcToken(TK_PERCENT, ar, tk);
 		case '~':
-			return CalcToken(TK_TILDE, ar, tk);
+			return CalcToken(TK_NOT, ar, tk);
 		case '^':
-			return CalcToken(TK_CIRCUMFLEX, ar, tk);
+			return CalcToken(TK_XOR, ar, tk);
 		case '=':
 			return CalcToken(TK_EQUAL, ar, tk);
 		case '&':
@@ -650,7 +684,7 @@ TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk)
 		case '?':
 			return CalcToken(TK_QUESTION, ar, tk);
 		case '!':
-			return CalcToken(TK_NOT, ar, tk);
+			return CalcToken(TK_LOGIC_NOT, ar, tk);
 
 		case '/':
 		{
@@ -1727,6 +1761,8 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		case TK_MUL:		// *
 		case TK_DIV:		// /
 		case TK_PERCENT:	// %
+		case TK_LSHIFT:		// <<
+		case TK_RSHIFT:		// >>
 		case TK_GREAT:		// >
 		case TK_GREAT_EQ:	// >=
 		case TK_LESS:		// <
@@ -1754,6 +1790,11 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		case TK_MUL_EQ:		// *=
 		case TK_DIV_EQ:		// /=
 		case TK_PERCENT_EQ:	// %=
+		case TK_LSHIFT_EQ:	// <<=
+		case TK_RSHIFT_EQ:	// >>=
+		case TK_AND_EQ:		// &=
+		case TK_OR_EQ:		// |=
+		case TK_XOR_EQ:		// ^=
 		{
 			SOperand iTempVar;
 			r = ParseJob(true, iTempVar, NULL, ar, funs, vars);
@@ -1971,7 +2012,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				return TK_NONE;
 			}
 		}
-		else if (op <= NOP_PERSENT2)
+		else if (op < NOP_VAR_CLEAR)
 		{
 			if (a.IsArray() == false)
 			{
@@ -2052,9 +2093,9 @@ eNOperation ConvertCheckOPToOptimize(eNOperation n)
 		return NOP_JMP_EQUAL2;
 	case NOP_NEQUAL:	// !=
 		return NOP_JMP_NEQUAL;
-	case NOP_AND2:	// &&
+	case NOP_LOG_AND:	// &&
 		return NOP_JMP_AND;
-	case NOP_OR2:	// ||
+	case NOP_LOG_OR:	// ||
 		return NOP_JMP_OR;
 	default:
 		break;
@@ -2077,9 +2118,9 @@ eNOperation ConvertCheckOPToOptimizeInv(eNOperation n)
 		return NOP_JMP_NEQUAL;
 	case NOP_NEQUAL:	// !=
 		return NOP_JMP_EQUAL2;
-	case NOP_AND2:	// &&
+	case NOP_LOG_AND:	// &&
 		return NOP_JMP_NAND;
-	case NOP_OR2:	// ||
+	case NOP_LOG_OR:	// ||
 		return NOP_JMP_NOR;
 	default:
 		break;

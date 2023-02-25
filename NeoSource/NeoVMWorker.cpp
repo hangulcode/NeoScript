@@ -378,6 +378,12 @@ void CNeoVMWorker::Add2(eNOperationSub op, VarInfo* r, VarInfo* v2)
 			case eOP_MUL: r->_int *= v2->_int; break;
 			case eOP_DIV: r->_int /= v2->_int; break;
 			case eOP_PER: r->_int %= v2->_int; break;
+			case eOP_LSH: r->_int <<= v2->_int; break;
+			case eOP_RSH: r->_int >>= v2->_int; break;
+			case eOP_AND: r->_int &= v2->_int; break;
+			case eOP__OR: r->_int |= v2->_int; break;
+			case eOP_XOR: r->_int ^= v2->_int; break;
+			default: SetError("operator Error"); break;
 			}
 			return;
 		}
@@ -390,7 +396,7 @@ void CNeoVMWorker::Add2(eNOperationSub op, VarInfo* r, VarInfo* v2)
 			case eOP_SUB: r->_float = (double)r->_int - v2->_float; break;
 			case eOP_MUL: r->_float = (double)r->_int * v2->_float; break;
 			case eOP_DIV: r->_float = (double)r->_int / v2->_float; break;
-			case eOP_PER: SetError("%= Error"); break;
+			default: SetError("operator Error"); break;
 			}
 			return;
 		}
@@ -404,8 +410,8 @@ void CNeoVMWorker::Add2(eNOperationSub op, VarInfo* r, VarInfo* v2)
 			case eOP_SUB: r->_float -= v2->_int; break;
 			case eOP_MUL: r->_float *= v2->_int; break;
 			case eOP_DIV: r->_float /= v2->_int; break;
-			case eOP_PER: SetError("%= Error"); break;
-			}			
+			default: SetError("operator Error"); break;
+			}
 			return;
 		}
 		else if (v2->GetType() == VAR_FLOAT)
@@ -416,7 +422,7 @@ void CNeoVMWorker::Add2(eNOperationSub op, VarInfo* r, VarInfo* v2)
 			case eOP_SUB: r->_float -= v2->_float; break;
 			case eOP_MUL: r->_float *= v2->_float; break;
 			case eOP_DIV: r->_float /= v2->_float; break;
-			case eOP_PER: SetError("%= Error"); break;
+			default: SetError("operator Error"); break;
 			}
 			return;
 		}
@@ -427,10 +433,7 @@ void CNeoVMWorker::Add2(eNOperationSub op, VarInfo* r, VarInfo* v2)
 			switch (op)
 			{
 			case eOP_ADD: Var_SetStringA(r, r->_str->_str + v2->_str->_str); break;
-			case eOP_SUB: SetError("-= Error"); break;
-			case eOP_MUL: SetError("*= Error"); break;
-			case eOP_DIV: SetError("/= Error"); break;
-			case eOP_PER: SetError("%= Error"); break;
+			default: SetError("operator Error"); break;
 			}
 			return;
 		}
@@ -442,7 +445,7 @@ void CNeoVMWorker::Add2(eNOperationSub op, VarInfo* r, VarInfo* v2)
 		case eOP_SUB: if (Call_MetaTable(r, g_meta_Sub2, r, r, v2)) return; break;
 		case eOP_MUL: if (Call_MetaTable(r, g_meta_Div2, r, r, v2)) return; break;
 		case eOP_DIV: if (Call_MetaTable(r, g_meta_Per2, r, r, v2)) return; break;
-		case eOP_PER: SetError("%= Error"); break;
+		default: SetError("operator Error"); break;
 		}
 		break;
 	}
@@ -465,6 +468,12 @@ void CNeoVMWorker::Add2(eNOperationSub op, VarInfo* r, int v2)
 		case eOP_MUL: r->_int *= v2; break;
 		case eOP_DIV: r->_int /= v2; break;
 		case eOP_PER: r->_int %= v2; break;
+		case eOP_LSH: r->_int <<= v2; break;
+		case eOP_RSH: r->_int >>= v2; break;
+		case eOP_AND: r->_int &= v2; break;
+		case eOP__OR: r->_int |= v2; break;
+		case eOP_XOR: r->_int ^= v2; break;
+		default: SetError("operator Error"); break;
 		}
 		return;
 	case VAR_FLOAT:
@@ -474,7 +483,7 @@ void CNeoVMWorker::Add2(eNOperationSub op, VarInfo* r, int v2)
 		case eOP_SUB: r->_float -= v2; break;
 		case eOP_MUL: r->_float *= v2; break;
 		case eOP_DIV: r->_float /= v2; break;
-		case eOP_PER: SetError("%= Error"); break;
+		default: SetError("operator Error"); break;
 		}
 		return;
 	case VAR_STRING:
@@ -487,6 +496,7 @@ void CNeoVMWorker::Add2(eNOperationSub op, VarInfo* r, int v2)
 		case eOP_MUL: if (Call_MetaTableI(r, g_meta_Mul2, r, r, v2)) return; break;
 		case eOP_DIV: if (Call_MetaTableI(r, g_meta_Div2, r, r, v2)) return; break;
 		case eOP_PER: if (Call_MetaTableI(r, g_meta_Per2, r, r, v2)) return; break;
+		default: SetError("operator Error"); break;
 		}
 		break;
 	}
@@ -594,6 +604,12 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, VarInfo* v2)
 			case eOP_MUL: Var_SetInt(r, v1->_int * v2->_int); break;
 			case eOP_DIV: Var_SetInt(r, v1->_int / v2->_int); break;
 			case eOP_PER: Var_SetInt(r, v1->_int % v2->_int); break;
+			case eOP_LSH: Var_SetInt(r, v1->_int << v2->_int); break;
+			case eOP_RSH: Var_SetInt(r, v1->_int >> v2->_int); break;
+			case eOP_AND: Var_SetInt(r, v1->_int & v2->_int); break;
+			case eOP__OR: Var_SetInt(r, v1->_int | v2->_int); break;
+			case eOP_XOR: Var_SetInt(r, v1->_int ^ v2->_int); break;
+			default: SetError("operator Error"); break;
 			}
 			return;
 		}
@@ -606,6 +622,8 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, VarInfo* v2)
 			case eOP_MUL: Var_SetFloat(r, v1->_int * v2->_float); break;
 			case eOP_DIV: Var_SetFloat(r, v1->_int / v2->_float); break;
 			case eOP_PER: SetError("unsupported operand % Error"); break;
+			case eOP_LSH: SetError("unsupported operand << Error"); break;
+			case eOP_RSH: SetError("unsupported operand >> Error"); break;
 			}
 			return;
 		}
@@ -620,6 +638,8 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, VarInfo* v2)
 			case eOP_MUL: Var_SetFloat(r, v1->_float * v2->_int); break;
 			case eOP_DIV: Var_SetFloat(r, v1->_float / v2->_int); break;
 			case eOP_PER: SetError("unsupported operand % Error"); break;
+			case eOP_LSH: SetError("unsupported operand << Error"); break;
+			case eOP_RSH: SetError("unsupported operand >> Error"); break;
 			}
 			return;
 		}
@@ -632,6 +652,8 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, VarInfo* v2)
 			case eOP_MUL: Var_SetFloat(r, v1->_float * v2->_float); break;
 			case eOP_DIV: Var_SetFloat(r, v1->_float / v2->_float); break;
 			case eOP_PER: SetError("unsupported operand % Error"); break;
+			case eOP_LSH: SetError("unsupported operand << Error"); break;
+			case eOP_RSH: SetError("unsupported operand >> Error"); break;
 			}
 			return;
 		}
@@ -646,6 +668,8 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, VarInfo* v2)
 			case eOP_MUL: SetError("unsupported operand * Error"); break;
 			case eOP_DIV: SetError("unsupported operand / Error"); break;
 			case eOP_PER: SetError("unsupported operand % Error"); break;
+			case eOP_LSH: SetError("unsupported operand << Error"); break;
+			case eOP_RSH: SetError("unsupported operand >> Error"); break;
 			}
 			return;
 		}
@@ -668,6 +692,8 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, VarInfo* v2)
 		case eOP_PER: 
 			if (Call_MetaTable(v1, g_meta_Per3, r, v1, v2)) return;
 			SetError("unsupported operand % Error"); break;
+		case eOP_LSH: SetError("unsupported operand << Error"); break;
+		case eOP_RSH: SetError("unsupported operand >> Error"); break;
 		}
 		break;
 	case VAR_LIST:
@@ -680,6 +706,8 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, VarInfo* v2)
 		case eOP_MUL: SetError("unsupported operand * Error"); break;
 		case eOP_DIV: SetError("unsupported operand / Error"); break;
 		case eOP_PER: SetError("unsupported operand % Error"); break;
+		case eOP_LSH: SetError("unsupported operand << Error"); break;
+		case eOP_RSH: SetError("unsupported operand >> Error"); break;
 		}
 		break;
 	case VAR_SET:
@@ -693,6 +721,8 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, VarInfo* v2)
 		case eOP_MUL: SetError("unsupported operand * Error"); break;
 		case eOP_DIV: SetError("unsupported operand / Error"); break;
 		case eOP_PER: SetError("unsupported operand % Error"); break;
+		case eOP_LSH: SetError("unsupported operand << Error"); break;
+		case eOP_RSH: SetError("unsupported operand >> Error"); break;
 		}
 		return;
 		break;
@@ -711,6 +741,8 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, int v2)
 		case eOP_MUL: Var_SetInt(r, v1->_int * v2); break;
 		case eOP_DIV: Var_SetInt(r, v1->_int / v2); break;
 		case eOP_PER: Var_SetInt(r, v1->_int % v2); break;
+		case eOP_LSH: Var_SetInt(r, v1->_int << v2); break;
+		case eOP_RSH: Var_SetInt(r, v1->_int >> v2); break;
 		}
 		return;
 	case VAR_FLOAT:
@@ -721,6 +753,8 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, int v2)
 		case eOP_MUL: Var_SetFloat(r, v1->_float * v2); break;
 		case eOP_DIV: Var_SetFloat(r, v1->_float / v2); break;
 		case eOP_PER: SetError("unsupported operand % Error"); break;
+		case eOP_LSH: SetError("unsupported operand << Error"); break;
+		case eOP_RSH: SetError("unsupported operand >> Error"); break;
 		}
 		return;
 	case VAR_STRING:
@@ -745,6 +779,8 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, int v2)
 		case eOP_PER:
 			if (Call_MetaTable(v1, g_meta_Per3, r, v1, &vv2)) return;
 			SetError("unsupported operand % Error"); break;
+		case eOP_LSH: SetError("unsupported operand << Error"); break;
+		case eOP_RSH: SetError("unsupported operand >> Error"); break;
 		}
 		break;
 	}
@@ -760,6 +796,8 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, int v2)
 		case eOP_MUL: SetError("unsupported operand * Error"); break;
 		case eOP_DIV: SetError("unsupported operand / Error"); break;
 		case eOP_PER: SetError("unsupported operand % Error"); break;
+		case eOP_LSH: SetError("unsupported operand << Error"); break;
+		case eOP_RSH: SetError("unsupported operand >> Error"); break;
 		}
 		break;
 	}
@@ -776,6 +814,8 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, int v2)
 		case eOP_MUL: SetError("unsupported operand * Error"); break;
 		case eOP_DIV: SetError("unsupported operand / Error"); break;
 		case eOP_PER: SetError("unsupported operand % Error"); break;
+		case eOP_LSH: SetError("unsupported operand << Error"); break;
+		case eOP_RSH: SetError("unsupported operand >> Error"); break;
 		}
 		return;
 	}
@@ -793,6 +833,8 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, int v1, VarInfo* v2)
 		case eOP_MUL: Var_SetInt(r, v1 * v2->_int); break;
 		case eOP_DIV: Var_SetInt(r, v1 / v2->_int); break;
 		case eOP_PER: Var_SetInt(r, v1 % v2->_int); break;
+		case eOP_LSH: Var_SetInt(r, v1 << v2->_int); break;
+		case eOP_RSH: Var_SetInt(r, v1 >> v2->_int); break;
 		}
 		return;
 	}
@@ -805,6 +847,8 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, int v1, VarInfo* v2)
 		case eOP_MUL: Var_SetFloat(r, v1 * v2->_float); break;
 		case eOP_DIV: Var_SetFloat(r, v1 / v2->_float); break;
 		case eOP_PER: SetError("unsupported operand % Error"); break;
+		case eOP_LSH: SetError("unsupported operand << Error"); break;
+		case eOP_RSH: SetError("unsupported operand >> Error"); break;
 		}
 		return;
 	}
@@ -819,6 +863,8 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, int v1, int v2)
 	case eOP_MUL: Var_SetInt(r, v1 * v2); return;
 	case eOP_DIV: Var_SetInt(r, v1 / v2); return;
 	case eOP_PER: Var_SetInt(r, v1 % v2); return;
+	case eOP_LSH: Var_SetInt(r, v1 << v2); return;
+	case eOP_RSH: Var_SetInt(r, v1 >> v2); return;
 	}
 	SetError("unsupported operand Error");
 }
@@ -1613,6 +1659,11 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			case NOP_MUL2:
 			case NOP_DIV2:
 			case NOP_PERSENT2:
+			case NOP_LSHIFT2:
+			case NOP_RSHIFT2:
+			case NOP_AND2:
+			case NOP_OR2:
+			case NOP_XOR2:
 				Add2((eNOperationSub)(OP.op - NOP_ADD2), GetVarPtr1(OP), GetVarPtr2(OP)); break;
 				//switch ((OP.argFlag >> 3) & 0x2)
 				//{
@@ -1636,7 +1687,12 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			case NOP_MUL3:
 			case NOP_DIV3:
 			case NOP_PERSENT3:
-				Add((eNOperationSub)(OP.op - NOP_ADD3), GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+			case NOP_LSHIFT3:
+			case NOP_RSHIFT3:
+			case NOP_AND3:
+			case NOP_OR3:
+			case NOP_XOR3:
+					Add((eNOperationSub)(OP.op - NOP_ADD3), GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
 				break;
 
 			case NOP_GREAT:		// >
@@ -1663,10 +1719,10 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			case NOP_OR:		// |
 				Or(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
 				break;
-			case NOP_AND2:	// &&
+			case NOP_LOG_AND:	// &&
 				Var_SetBool(GetVarPtr1(OP), GetVarPtr3(OP)->IsTrue() && GetVarPtr2(OP)->IsTrue());
 				break;
-			case NOP_OR2:	// ||
+			case NOP_LOG_OR:	// ||
 				Var_SetBool(GetVarPtr1(OP), GetVarPtr2(OP)->IsTrue() || GetVarPtr3(OP)->IsTrue());
 				break;
 

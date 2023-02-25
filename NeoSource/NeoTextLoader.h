@@ -51,16 +51,24 @@ enum TK_TYPE
 	TK_DIV_EQ, // /=
 	TK_PERCENT, // %
 	TK_PERCENT_EQ, // %=
-	TK_TILDE, // ~
-	TK_CIRCUMFLEX, // ^
+	TK_NOT,		// ~ TILDE
+	TK_XOR,		// ^ CIRCUMFLEX
+	TK_XOR_EQ,	// ^=
 	TK_EQUAL, // =
 	TK_EQUAL_EQ, // ==
 	TK_EQUAL_NOT, // !=
 
-	TK_AND, // &
-	TK_AND2, // &&
-	TK_OR, // |
-	TK_OR2, // ||
+	TK_LSHIFT, // <<
+	TK_LSHIFT_EQ, // <<=
+	TK_RSHIFT, // >>
+	TK_RSHIFT_EQ, // >>=
+
+	TK_AND,		// &
+	TK_AND_EQ,	// &=
+	TK_AND2,	// &&
+	TK_OR,		// |
+	TK_OR_EQ,	// |=
+	TK_OR2,		// ||
 
 	TK_L_SMALL, // (
 	TK_R_SMALL, // )
@@ -83,7 +91,7 @@ enum TK_TYPE
 	TK_QUOTE2, // "
 	TK_QUOTE1, // '
 	TK_QUESTION, // ?
-	TK_NOT, // !
+	TK_LOGIC_NOT, // !
 
 	TK_YIELD,
 

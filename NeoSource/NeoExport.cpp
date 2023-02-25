@@ -158,6 +158,11 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_MUL2:
 		case NOP_DIV2:
 		case NOP_PERSENT2:
+		case NOP_LSHIFT2:
+		case NOP_RSHIFT2:
+		case NOP_AND2:
+		case NOP_OR2:
+		case NOP_XOR2:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
 
@@ -169,6 +174,11 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_MUL3:
 		case NOP_DIV3:
 		case NOP_PERSENT3:
+		case NOP_LSHIFT3:
+		case NOP_RSHIFT3:
+		case NOP_AND3:
+		case NOP_OR3:
+		case NOP_XOR3:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
@@ -192,8 +202,8 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_NEQUAL:	// !=
 		case NOP_AND:		// &
 		case NOP_OR:		// |
-		case NOP_AND2:		// &&
-		case NOP_OR2:		// ||
+		case NOP_LOG_AND:		// &&
+		case NOP_LOG_OR:		// ||
 		case NOP_STR_ADD: // ..
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
@@ -571,6 +581,26 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("PER %s %%%%= %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
+		case NOP_LSHIFT2:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
+			OutAsm("LSH %s <<= %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			break;
+		case NOP_RSHIFT2:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
+			OutAsm("RSH %s >>= %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			break;
+		case NOP_AND2:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
+			OutAsm("AND %s &= %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			break;
+		case NOP_OR2:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
+			OutAsm("OR %s |= %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			break;
+		case NOP_XOR2:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
+			OutAsm("XOR %s ^= %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			break;
 
 		case NOP_ADD3:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
@@ -591,6 +621,26 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 		case NOP_PERSENT3:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("PER %s = %s %%%% %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			break;
+		case NOP_LSHIFT3:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("LSHF %s = %s << %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			break;
+		case NOP_RSHIFT3:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("RSHF %s = %s >> %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			break;
+		case NOP_AND3:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("AND %s = %s & %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			break;
+		case NOP_OR3:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("OR %s = %s | %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			break;
+		case NOP_XOR3:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("XOR %s = %s ^ %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 
 		case NOP_VAR_CLEAR:
@@ -638,11 +688,11 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("OR %s = %s | %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
-		case NOP_AND2:	// &&
+		case NOP_LOG_AND:	// &&
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("AND2 %s = %s && %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
-		case NOP_OR2:	// ||
+		case NOP_LOG_OR:	// ||
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("NE %s = %s || %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
