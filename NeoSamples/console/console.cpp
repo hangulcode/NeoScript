@@ -92,10 +92,12 @@ int main()
 		printf("12 coroutine\n");
 		printf("13 module\n");
 
-		printf("only enter to exit\n");
-		printf("\npress the number and enter ...\n");
+		printf("ESC press to exit\n");
+		printf("press the number and enter ...\n");
 
 		std::string key = getKeyString();
+
+		printf((key + "\n\n").c_str());
 
 		if (key == "") break;
 		else if (key ==  "0") SAMPLE_etc("hello.neo", nullptr);
