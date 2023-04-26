@@ -29,7 +29,7 @@ bool		ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar)
 			utf_string::UTF8_UNICODE(pBuffer + 3, iBufferSize - 3, str);
 			size_toUni = (int)str.length();
 			pWBuffer = new u16[str.length() + 1];
-			memcpy(pWBuffer, (u16*)(pBuffer + 2), size_toUni * 2);
+			memcpy(pWBuffer, (u16*)(str.c_str()), size_toUni * 2);
 			pWBuffer[size_toUni] = NULL;
 			ar.SetData(pWBuffer, (int)str.length());
 		}
