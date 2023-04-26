@@ -14,6 +14,8 @@ enum VAR_TYPE : u8
 	VAR_ITERATOR,
 	VAR_FUN_NATIVE,
 
+	VAR_CHAR,
+
 	VAR_STRING,	// Alloc
 	VAR_TABLE,
 	VAR_LIST,
@@ -223,6 +225,7 @@ struct StringInfo : AllocBase
 {
 	std::string _str;
 	int	_StringID;
+	int _StringLen;
 };
 
 //struct SNeoMeta

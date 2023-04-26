@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include "NeoVM.h"
 #include "NeoArchive.h"
+#include "UTFString.h"
 
 void CNeoVM::Var_AddRef(VarInfo *d)
 {
@@ -122,6 +123,7 @@ StringInfo* CNeoVM::StringAlloc(const std::string& str)
 	p->_refCount = 0;
 
 	p->_str = str;
+	p->_StringLen = utf_string::UTF8_LENGTH(str);
 
 	_sStrings[m_sPool_String._dwLastID] = p;
 	return p;

@@ -1,5 +1,7 @@
 #include <stdarg.h>
 #include <stdio.h>
+#include <locale>
+#include <codecvt>
 
 #include "UTFString.h"
 #include "NeoTextLoader.h"
@@ -36,11 +38,16 @@ bool		ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar)
 			std::string ansi_str;
 			ansi_str.resize(iBufferSize);
 			memcpy((void*)ansi_str.c_str(), pBuffer, iBufferSize);
-
+#if 0
 			std::wstring wstr = std::wstring(ansi_str.begin(), ansi_str.end());
+#else
+			//std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+			std::wstring_convert<std::codecvt<wchar_t, char, std::mbstate_t>> converter;
+			std::wstring wstr = converter.from_bytes(ansi_str);
+#endif
 			size_toUni = (int)wstr.length();
 			pWBuffer = new u16[size_toUni + 1];
-			memcpy(pWBuffer, wstr.c_str(), sizeof(u16)*(size_toUni));
+			memcpy(pWBuffer, wstr.c_str(), sizeof(u16) * (size_toUni));
 
 			//int size_toUni = ::MultiByteToWideChar(CP_ACP, 0, pBuffer, iBufferSize, NULL, 0);
 			//pWBuffer = new u16[size_toUni + 1];

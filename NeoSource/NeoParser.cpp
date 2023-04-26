@@ -1,6 +1,7 @@
 #include "NeoParser.h"
 #include "NeoVM.h"
 #include "NeoExport.h"
+#include "UTFString.h"
 
 //#define CSTYLE_FOR
 
@@ -515,7 +516,8 @@ bool GetQuotationString(CArchiveRdWC& ar, std::string& str, u16 quote)
 			}
 		}
 
-		str.push_back((char)c1);
+		//str.push_back((char)c1);
+		utf_string::UNICODE_UTF8_ONE(c1, str);
 	}
 	return true;
 }

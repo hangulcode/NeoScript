@@ -7,6 +7,7 @@
 #include "NeoVMWorker.h"
 #include "NeoArchive.h"
 #include "NeoLibDCall.h"
+#include "UTFString.h"
 
 void	SetCompileError(const char*	lpszString, ...);
 
@@ -992,14 +993,11 @@ bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 				else
 					return false;
 			}
-			else
-				++pIterator->_it._iStringOffset;
 
 			if (pIterator->_it._iStringOffset < (int)str->length())
 			{
-				//str->GetValue(pIterator->_it._iStringOffset, pKey);
-				const char* p = str->c_str();
-				Var_SetStringA(pKey, std::string(1, p[pIterator->_it._iStringOffset]));
+				std::string s = utf_string::UTF8_ONE(*str, pIterator->_it._iStringOffset);
+				Var_SetStringA(pKey, s);
 				return true;
 			}
 			else

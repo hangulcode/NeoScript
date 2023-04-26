@@ -36,8 +36,7 @@ struct neo_libs
 		if (pVar->GetType() != VAR_STRING) return false;
 		if (args != 0) return false;
 
-		std::string* p = &pVar->_str->_str;
-		pN->ReturnValue((int)p->length());
+		pN->ReturnValue(pVar->_str->_StringLen);
 		return true;
 	}
 	static bool Str_find(CNeoVMWorker* pN, VarInfo* pVar, short args)
