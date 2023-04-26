@@ -63,6 +63,8 @@ void activateVirtualTerminal()
 	consoleMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
 	consoleMode |= DISABLE_NEWLINE_AUTO_RETURN;
 	SetConsoleMode(handleOut, consoleMode);
+
+	SetConsoleOutputCP(CP_UTF8);
 }
 #endif
 

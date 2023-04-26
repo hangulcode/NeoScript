@@ -13,11 +13,27 @@ bool		ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar)
 
 	u16* pWBuffer;
 	int size_toUni;
-	if ((*(u16*)pBuffer) == FILE_UNICODE_HEADER)
+	if ((*(u16*)pBuffer) == FILE_UNICODE_HEADER_LE) // Little Endian
 	{
 		size_toUni = iBufferSize / 2 - 1;
 		pWBuffer = new u16[size_toUni + 1];
 		memcpy(pWBuffer, (u16*)(pBuffer + 2), size_toUni * 2);
+		pWBuffer[size_toUni] = NULL;
+		ar.SetData(pWBuffer, size_toUni);
+	}
+	else if ((*(u16*)pBuffer) == FILE_UNICODE_HEADER_BE) // Big Endian
+	{
+		size_toUni = iBufferSize / 2 - 1;
+		pWBuffer = new u16[size_toUni + 1];
+
+		u8* pSrc = (u8*)(pBuffer + 2);
+		u8* pDest = (u8*)pWBuffer;
+		for (int i = 0; i < size_toUni; i++)
+		{
+			*pDest++ = pSrc[1];
+			*pDest++ = pSrc[0];
+			pSrc += 2;
+		}
 		pWBuffer[size_toUni] = NULL;
 		ar.SetData(pWBuffer, size_toUni);
 	}
