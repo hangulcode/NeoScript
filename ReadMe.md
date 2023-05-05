@@ -1,6 +1,6 @@
 # Neo Script Documentation
 	- The grammar uses a C-like syntax, but it is somewhat similar to Lua script.
-	- It was developed in Visual Studio Pro 2017 C++.
+	- It was developed in Visual Studio Pro 2022 C++.
 	- After some more features are added, port to C#
 
 ### License
@@ -9,28 +9,30 @@
 	The only requirement is that if you do use NeoScript, then you should give us credit by including the copyright notice somewhere in your product or its documentation.
 
 ### Sample
+	- console / hello: print hello.
 	- console / callback: Function calls between C ++ and Neo scripts.
-	- console / table_callback: maps the function to the Neo script table and finds and calls the function at runtime.
-	- console / 9_times: This is a sample of a simple game.
-	- console / table: Sample table usage.
+	- console / map_callback: maps the function to the Neo script table and finds and calls the function at runtime.
+	- console / 9_times: This is a sample of a Multiplication table.
+	- console / string: this is an example of string.
+	- console / map: Sample Dictionary usage.
+	- console / list: Sample List usage.
 	- console / slice_run: Executes every part of the script that is produced by the script in sequential order of a certain time or command.
 	- console / time_limit: Processes a script function call to exit after a certain period of time.
 		Unlike console / slice_run, console / time_limit does not execute after the next frame.
 	- console / divide_by_zero: Exception handling.
 	- console / delegate: Function pointer support.
+	- console / meta: this is an example of using meta
+	- console / coroutine: an example of using coroutines.
+	- console / mudule: this is an example of using module.
 
 ### var data structure
 	- null: the variable has no value (if the variable is not initialized or "var a;" or "var a = null;")
-	- bool: store true / false values
+	- bool: store true / false value
 	- int: Save 4-byte signed integer value
 	- double: 8-byte floating point storage
-	- string: store string
-	- table: save table (usage is similar to Lua)
-
-	- string / table: managed as a reference for memory savings and performance
-	- int / double: "a = 1;" If it is "a = 1.0", double value is stored.
-	- If a double operation is performed on an int and a double, it becomes a double value.
-
+	- string
+	- list
+	- map : Dictionary
 
 
 ### Neo Scrit reserved words
@@ -78,6 +80,9 @@
 	- rand (): same as c ++
 	- print (x): print string x
 	- clock ():  return time
+	- load ():  load module scipt
+	- pcall (x) : run mdule script
+	- sys_meta(x,y) : bind the y function of var x.
 	- coroutine_create (): coroutine create and return (suspended mode )
 	- coroutine_resume (x): suspended coroutine active
 	- coroutine_status (x): coroutine state string return
@@ -99,8 +104,11 @@
 	- resize (x) : list item resize
 	- append (x, [y]) : list item insert (y value is index)
 
-	## table
+	## map
+	- reserve (x) : allocate x number of buffers.
 	- sort () : sort table value
+	- keys() : put the keys into a set data structure and return it.
+	- values() : put the values into a set data structure and return it.
 
 	## set
 	- len () : return count set item

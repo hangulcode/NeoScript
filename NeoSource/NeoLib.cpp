@@ -699,6 +699,7 @@ void CNeoVM::RegObjLibrary()
 	AddGlobalLibFun();
 	_funDefaultLib = CNeoVM::RegisterNative(Fun);
 
+	// String Lib
 	_funStrLib = CNeoVM::RegisterNative(FunStr);
 	g_sNeoFunStrLib["sub"] = &neo_libs::Str_sub;
 	g_sNeoFunStrLib["len"] = &neo_libs::Str_len;
@@ -711,11 +712,13 @@ void CNeoVM::RegObjLibrary()
 	g_sNeoFunStrLib["replace"] = &neo_libs::Str_replace;
 	g_sNeoFunStrLib["split"] = &neo_libs::Str_split;
 
+	// List Lib
 	_funLstLib = CNeoVM::RegisterNative(FunLst);
 	g_sNeoFunLstLib["resize"] = &neo_libs::List_resize;
 	g_sNeoFunLstLib["len"] = &neo_libs::List_len;
 	g_sNeoFunLstLib["append"] = &neo_libs::List_append;
 
+	// Map Lib
 	_funTblLib = CNeoVM::RegisterNative(FunTbl);
 	g_sNeoFunTblLib["reserve"] = &neo_libs::map_reserve;
 	g_sNeoFunTblLib["sort"] = &neo_libs::map_sort;
