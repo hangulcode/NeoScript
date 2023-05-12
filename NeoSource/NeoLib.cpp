@@ -517,9 +517,11 @@ struct neo_libs
 		VarInfo* v = pN->GetStack(1);
 		if (v->GetType() != VAR_COROUTINE) return false;
 
-		if (v->_cor->_state != COROUTINE_STATE_SUSPENDED) return false;
+		CoroutineInfo* pCI = v->_cor;
+		if (pCI->_state != COROUTINE_STATE_SUSPENDED) return false;
 
-		pN->m_pRegisterActive = v->_cor;
+		pN->m_pRegisterActive = pCI;
+		pCI->_sub_state = COROUTINE_SUB_START;
 		pN->ReturnValue();
 		return true;
 	}
@@ -550,6 +552,31 @@ struct neo_libs
 			return false;
 		}
 
+		return true;
+	}
+	static bool sys_coroutine_close(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args >= 2) return false;
+
+		CoroutineInfo* pCI;
+		if(args == 1)
+		{
+			VarInfo* v = pN->GetStack(1);
+			if (v->GetType() != VAR_COROUTINE)
+				return false;
+			pCI = v->_cor;
+			if(pCI->_state == COROUTINE_STATE_DEAD) return false;
+		}
+		else
+		{
+			pCI = pN->m_pCur;
+		}
+
+
+		pN->m_pRegisterActive = pCI;
+		pCI->_sub_state = COROUTINE_SUB_CLOSE;
+
+		pN->ReturnValue(pCI);
 		return true;
 	}
 
@@ -672,6 +699,7 @@ static void AddGlobalLibFun()
 	g_sNeoFunLib["coroutine_create"] = &neo_libs::sys_coroutine_create;
 	g_sNeoFunLib["coroutine_resume"] = &neo_libs::sys_coroutine_resume;
 	g_sNeoFunLib["coroutine_status"] = &neo_libs::sys_coroutine_status;
+	g_sNeoFunLib["coroutine_close"] = &neo_libs::sys_coroutine_close;
 }
 bool CNeoVM::IsGlobalLibFun(std::string& FunName)
 {

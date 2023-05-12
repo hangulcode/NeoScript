@@ -199,10 +199,30 @@ enum COROUTINE_STATE
 	COROUTINE_STATE_DEAD,
 	COROUTINE_STATE_NORMAL,
 };
+enum COROUTINE_SUB_STATE
+{
+	COROUTINE_SUB_NORMAL,
+	COROUTINE_SUB_START,
+	COROUTINE_SUB_CLOSE,
+};
 
 struct AllocBase
 {
 	int _refCount;
+};
+
+struct CoroutineBase
+{
+	int			_iSP_Vars;
+	int			_iSP_Vars_Max2;
+	int			_iSP_VarsMax;
+	u8*			_pCodeCurrent;
+	void ClearSP()
+	{
+		_iSP_Vars = 0;
+		_iSP_Vars_Max2 = 0;
+		_iSP_VarsMax = 0;
+	}
 };
 
 struct CoroutineInfo : AllocBase
@@ -210,15 +230,12 @@ struct CoroutineInfo : AllocBase
 //	int	_CoroutineID;
 	int	_fun_index;
 	COROUTINE_STATE _state;
+	COROUTINE_SUB_STATE _sub_state;
 
+	CoroutineBase _info;
 
-	int						_iSP_Vars;
-	int						_iSP_Vars_Max2;
-	int						iSP_VarsMax;
 	std::vector<VarInfo>	m_sVarStack;
 	std::vector<SCallStack>	m_sCallStack;
-
-	u8 *					_pCodeCurrent;
 };
 
 struct StringInfo : AllocBase
@@ -413,7 +430,7 @@ enum eNeoDefaultString
 struct neo_DCalllibs;
 struct neo_libs;
 class CNeoVM;
-class CNeoVMWorker : AllocBase
+class CNeoVMWorker : AllocBase, CoroutineBase
 {
 	friend		CNeoVM;
 	friend		SVarWrapper;
@@ -421,7 +438,6 @@ class CNeoVMWorker : AllocBase
 	friend		neo_libs;
 	friend		neo_DCalllibs;
 private:
-	u8 *					_pCodeCurrent;
 	u8 *					_pCodeBegin;
 	int						_iCodeLen;
 
@@ -490,9 +506,6 @@ private:
 		return true;
 	}
 
-	int						_iSP_Vars;
-	int						_iSP_Vars_Max2;
-	int						iSP_VarsMax;
 	std::vector<VarInfo>*	m_pVarStack;
 	std::vector<SCallStack>* m_pCallStack;
 

@@ -1929,12 +1929,12 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			}
 			blEnd = true;
 
-			tkType2 = GetToken(ar, tk2);
-			if (tkType2 != TK_RETURN)
-			{
-				SetCompileError(ar, "Error (%d, %d): Invalid Operator", ar.CurLine(), ar.CurCol(), tk1.c_str());
-				return TK_NONE;
-			}
+			//tkType2 = GetToken(ar, tk2);
+			//if (tkType2 != TK_RETURN)
+			//{
+			//	SetCompileError(ar, "Error (%d, %d): Invalid Operator", ar.CurLine(), ar.CurCol(), tk1.c_str());
+			//	return TK_NONE;
+			//}
 
 			tkType2 = GetToken(ar, tk2);
 			if (tkType2 != TK_SEMICOLON)
