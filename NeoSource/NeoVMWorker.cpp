@@ -2147,7 +2147,7 @@ bool CNeoVMWorker::StopCoroutine(bool doDead)
 	return true;
 }
 
-bool CNeoVMWorker::StartCoroutione(int n3)
+bool CNeoVMWorker::StartCoroutione(int argSP_Vars, int n3)
 {
 	CoroutineBase* pThis = (CoroutineBase*)this;
 	if (m_pCur)
@@ -2172,7 +2172,7 @@ bool CNeoVMWorker::StartCoroutione(int n3)
 			for (int i = 0; i < fun._argsCount; i++)
 			{
 				if (i < iResumeParamCount)
-					Move(&m_pCur->m_sVarStack[i + 1], &pPre->m_sVarStack[i + _iSP_Vars + 2]);
+					Move(&m_pCur->m_sVarStack[i + 1], &pPre->m_sVarStack[i + argSP_Vars + 2]);
 				else
 					Var_Release(&m_pCur->m_sVarStack[i + 1]); // Zero index return value
 			}
@@ -2256,13 +2256,14 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFun
 		SetError("Ptr Call Error");
 		return false;
 	}
+	int argSP_Vars = _iSP_Vars;
 	_iSP_Vars = iSave;
 	if (m_pRegisterActive != NULL)
 	{
 		switch(m_pRegisterActive->_sub_state)
 		{ 
 			case COROUTINE_SUB_START:
-				StartCoroutione(n3);
+				StartCoroutione(argSP_Vars, n3);
 				break;
 			case COROUTINE_SUB_CLOSE:
 				switch (m_pRegisterActive->_state)

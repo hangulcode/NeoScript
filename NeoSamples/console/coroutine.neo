@@ -2,7 +2,7 @@ var cr;
 fun sub(var param1)
 {
 	var cr2 = cr;
-	for(var i in 0, 5, 1)
+	for(var i in param1, 5, 1)
 	{
 		print("Coroutine " .. i);
 		sleep(200);

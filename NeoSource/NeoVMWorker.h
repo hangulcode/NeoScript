@@ -937,7 +937,7 @@ public:
 	}
 
 	VarInfo* testCall(int iFID, VarInfo* args, int argc);
-	bool StartCoroutione(int n3);
+	bool StartCoroutione(int argSP_Vars, int n3);
 
 
 	static void neo_pushcclosureNative(FunctionPtrNative* pOut, Neo_NativeFunction pFun)
