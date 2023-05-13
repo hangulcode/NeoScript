@@ -1,19 +1,18 @@
-
 var cr;
-fun fa(var param1)
+fun sub(var param1)
 {
 	var cr2 = cr;
 	for(var i in 0, 5, 1)
 	{
 		print("Coroutine " .. i);
 		sleep(200);
-		yield return;
+		yield;
 	}
 }
 
-export fun test()
+fun test_multi()
 {
-	cr = coroutine_create(fa);
+	cr = coroutine_create(sub);
 
 	for(var i in 0, 10, 1)
 	{
@@ -25,4 +24,10 @@ export fun test()
 		print("Main " .. state .. i);
 		sleep(200);
 	}
+}
+
+
+export fun test()
+{
+	test_multi();
 }

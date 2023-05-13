@@ -1901,10 +1901,9 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				//if (m_sCallStack.empty())
 				if(iBreakingCallStack == (int)m_pCallStack->size())
 				{
-					if (iBreakingCallStack == 0 && IsMainCoroutine() == false)
+					if (iBreakingCallStack == 0 && IsMainCoroutine(m_pCur) == false)
 					{
-						m_pCur->_state = COROUTINE_STATE_DEAD;
-						if(StopCoroutine() == true) // Other Coroutine Active (No Stop)
+						if(StopCoroutine(true) == true) // Other Coroutine Active (No Stop)
 							break;
 					}
 					_isSetup = false;
@@ -1925,10 +1924,9 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 /*				Var_Release(&(*m_pVarStack)[_iSP_Vars]); // Clear
 				if (iBreakingCallStack == (int)m_pCallStack->size())
 				{
-					if (iBreakingCallStack == 0 && IsMainCoroutine() == false)
+					if (iBreakingCallStack == 0 && IsMainCoroutine(m_pCur) == false)
 					{
-						m_pCur->_state = COROUTINE_STATE_DEAD;
-						if (StopCoroutine() == true) // Other Coroutine Active (No Stop)
+						if (StopCoroutine(true) == true) // Other Coroutine Active (No Stop)
 							break;
 					}
 					_isSetup = false;
@@ -2011,8 +2009,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				VerifyType(GetVarPtr1(OP), (VAR_TYPE)OP.n2);
 				break;
 			case NOP_YIELD:
-				m_pCur->_state = COROUTINE_STATE_SUSPENDED;
-				if (StopCoroutine() == false)
+				if (StopCoroutine(false) == false)
 					return true;
 				break;
 			case NOP_NONE:
@@ -2108,22 +2105,24 @@ void CNeoVMWorker::PushNeoFunction(NeoFunction v)
 		d.ClearType();
 	_args->push_back(d);
 }
-
-bool CNeoVMWorker::StopCoroutine()
+void	CNeoVMWorker::DeadCoroutine(CoroutineInfo* pCI)
 {
-	if (m_pCur->_state == COROUTINE_STATE_DEAD)
-	{
-		for (int i = 0; i < _iSP_Vars_Max2; i++)
-			Var_Release(&(*m_pVarStack)[i]);
+	pCI->_state = COROUTINE_STATE_DEAD;
+	int iSP_Vars_Max2 = pCI->_info._iSP_Vars_Max2;
+	std::vector<VarInfo>& sVarStack = pCI->m_sVarStack;
+	for (int i = 0; i < iSP_Vars_Max2; i++)
+		Var_Release(&(sVarStack)[i]);
 
-		m_pCur->_info._iSP_Vars = 0;
-		m_pCur->_info._iSP_VarsMax = 0;
-		m_pCur->_info._iSP_Vars_Max2 = 0;
-	}
+	pCI->_info.ClearSP();
+}
+bool CNeoVMWorker::StopCoroutine(bool doDead)
+{
+	m_pCur->_info = *((CoroutineBase*)this);
+	if (doDead)
+		DeadCoroutine(m_pCur);
 	else
-	{
-		m_pCur->_info = (*this);
-	}
+		m_pCur->_state = COROUTINE_STATE_SUSPENDED;
+
 	if (m_sCoroutines.empty() == true)
 	{
 		return false;
@@ -2133,7 +2132,11 @@ bool CNeoVMWorker::StopCoroutine()
 		auto it = m_sCoroutines.begin();
 		m_pCur = (*it);
 		m_sCoroutines.erase(it);
-
+		if(m_pCur->_state != COROUTINE_STATE_NORMAL)
+		{
+			SetError("Coroutine State Error");
+			return false;
+		}
 		m_pCur->_state = COROUTINE_STATE_RUNNING;
 		m_pVarStack = &m_pCur->m_sVarStack;
 		m_pCallStack = &m_pCur->m_sCallStack;
@@ -2143,13 +2146,13 @@ bool CNeoVMWorker::StopCoroutine()
 	return true;
 }
 
-bool CNeoVMWorker::StartCoroutione(int sp, int n3)
+bool CNeoVMWorker::StartCoroutione(int n3)
 {
 	if (m_pCur)
 	{
 		// Back up
 		m_pCur->_info = *((CoroutineBase*)this);
-		m_pCur->_info._iSP_Vars = sp;// _iSP_Vars;
+		//m_pCur->_info._iSP_Vars = sp;// _iSP_Vars;
 		m_pCur->_state = COROUTINE_STATE_NORMAL;
 		m_sCoroutines.push_front(m_pCur);
 		CoroutineInfo* pPre = m_pCur;
@@ -2164,21 +2167,18 @@ bool CNeoVMWorker::StartCoroutione(int sp, int n3)
 		{
 			int iResumeParamCount = n3 - 1;
 			SFunctionTable& fun = m_sFunctionPtr[m_pCur->_fun_index];
-			//if (fun._funType != FUNT_IMPORT)
+			for (int i = 0; i < fun._argsCount; i++)
 			{
-				for (int i = 0; i < fun._argsCount; i++)
-				{
-					if (i < iResumeParamCount)
-						Move(&m_pCur->m_sVarStack[i + 1], &pPre->m_sVarStack[i + _iSP_Vars + 2]);
-					else
-						Var_Release(&m_pCur->m_sVarStack[i + 1]); // Zero index return value
-				}
-				SetCodePtr(fun._codePtr);
-				_iSP_Vars = 0;// iSP_VarsMax;
-				_iSP_VarsMax = _iSP_Vars + fun._localAddCount;
-				_iSP_Vars_Max2 = _iSP_VarsMax;
-				m_pCur->_info._pCodeCurrent = _pCodeCurrent;
+				if (i < iResumeParamCount)
+					Move(&m_pCur->m_sVarStack[i + 1], &pPre->m_sVarStack[i + _iSP_Vars + 2]);
+				else
+					Var_Release(&m_pCur->m_sVarStack[i + 1]); // Zero index return value
 			}
+			SetCodePtr(fun._codePtr);
+			_iSP_Vars = 0;// iSP_VarsMax;
+			_iSP_VarsMax = _iSP_Vars + fun._localAddCount;
+			_iSP_Vars_Max2 = _iSP_VarsMax;
+			m_pCur->_info._pCodeCurrent = _pCodeCurrent;
 		}
 		else
 		{
@@ -2254,32 +2254,38 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFun
 		SetError("Ptr Call Error");
 		return false;
 	}
-	if (m_pRegisterActive == NULL)
-		_iSP_Vars = iSave;
-	else
+	_iSP_Vars = iSave;
+	if (m_pRegisterActive != NULL)
 	{
 		switch(m_pRegisterActive->_sub_state)
 		{ 
 			case COROUTINE_SUB_START:
-				StartCoroutione(iSave, n3);
+				StartCoroutione(n3);
 				break;
 			case COROUTINE_SUB_CLOSE:
 				switch (m_pRegisterActive->_state)
 				{
 					case COROUTINE_STATE_SUSPENDED:
+						DeadCoroutine(m_pRegisterActive);
 						break;
 					case COROUTINE_STATE_RUNNING:
+						if (m_pCur != m_pRegisterActive)SetError("Coroutine Error 1");
+						else							StopCoroutine(true);
 						break;
 					case COROUTINE_STATE_DEAD:
 						break;
 					case COROUTINE_STATE_NORMAL:
+						DeadCoroutine(m_pRegisterActive);
+						for(auto it = m_sCoroutines.begin(); it != m_sCoroutines.end(); it++)
+						{
+							if((*it) == m_pRegisterActive)
+							{
+								m_sCoroutines.erase(it);
+								break;
+							}
+						}
 						break;
 				}
-				//if(m_pCur == m_pRegisterActive)
-				//	StopCoroutine();
-				//else
-				//{
-				//}
 				m_pRegisterActive = NULL;
 				break;
 			default:

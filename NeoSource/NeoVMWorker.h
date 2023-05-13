@@ -526,10 +526,11 @@ private:
 	}
 	bool RunFunction(const std::string& funName, std::vector<VarInfo>& _args);
 
-	bool	IsMainCoroutine() { return (&m_sDefault == m_pCur); }
+	bool	IsMainCoroutine(CoroutineInfo* p) { return (&m_sDefault == p); }
 	bool	Setup(int iFunctionID, std::vector<VarInfo>& _args);
 	bool	Start(int iFunctionID, std::vector<VarInfo>& _args);
-	bool	StopCoroutine();
+	bool	StopCoroutine(bool doDead = true);
+	void	DeadCoroutine(CoroutineInfo* pCI);
 
 	//VarInfo _intA1;
 	VarInfo _intA2, _intA3;
@@ -936,7 +937,7 @@ public:
 	}
 
 	VarInfo* testCall(int iFID, VarInfo* args, int argc);
-	bool StartCoroutione(int sp, int n3);
+	bool StartCoroutione(int n3);
 
 
 	static void neo_pushcclosureNative(FunctionPtrNative* pOut, Neo_NativeFunction pFun)

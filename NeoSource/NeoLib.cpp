@@ -565,7 +565,8 @@ struct neo_libs
 			if (v->GetType() != VAR_COROUTINE)
 				return false;
 			pCI = v->_cor;
-			if(pCI->_state == COROUTINE_STATE_DEAD) return false;
+			if(pCI->_state == COROUTINE_STATE_DEAD) 
+				return true; // Already Dead State (For convenience, return true.)
 		}
 		else
 		{
