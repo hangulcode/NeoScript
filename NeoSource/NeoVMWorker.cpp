@@ -2117,7 +2117,8 @@ void	CNeoVMWorker::DeadCoroutine(CoroutineInfo* pCI)
 }
 bool CNeoVMWorker::StopCoroutine(bool doDead)
 {
-	m_pCur->_info = *((CoroutineBase*)this);
+	CoroutineBase* pThis = (CoroutineBase*)this;
+	m_pCur->_info = *pThis;
 	if (doDead)
 		DeadCoroutine(m_pCur);
 	else
@@ -2141,17 +2142,18 @@ bool CNeoVMWorker::StopCoroutine(bool doDead)
 		m_pVarStack = &m_pCur->m_sVarStack;
 		m_pCallStack = &m_pCur->m_sCallStack;
 
-		*((CoroutineBase*)this) = m_pCur->_info;
+		*pThis = m_pCur->_info;
 	}
 	return true;
 }
 
 bool CNeoVMWorker::StartCoroutione(int n3)
 {
+	CoroutineBase* pThis = (CoroutineBase*)this;
 	if (m_pCur)
 	{
 		// Back up
-		m_pCur->_info = *((CoroutineBase*)this);
+		m_pCur->_info = *pThis;
 		//m_pCur->_info._iSP_Vars = sp;// _iSP_Vars;
 		m_pCur->_state = COROUTINE_STATE_NORMAL;
 		m_sCoroutines.push_front(m_pCur);
@@ -2182,7 +2184,7 @@ bool CNeoVMWorker::StartCoroutione(int n3)
 		}
 		else
 		{
-			*((CoroutineBase*)this) = m_pCur->_info;
+			*pThis = m_pCur->_info;
 		}
 	}
 	m_pRegisterActive = NULL;
