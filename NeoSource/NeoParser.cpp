@@ -802,6 +802,14 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	fullFileName = "../../Lib/";
 	fullFileName += tk1 + ".neo";
 
+	auto it2 = ar.m_sImports.find(tk1);
+	if (it2 == ar.m_sImports.end())
+		ar.m_sImports.insert(tk1);
+
+	auto it = vars.m_sImports.find(tk1);
+	if (it != vars.m_sImports.end())
+		return true;
+
 
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
@@ -824,9 +832,7 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	u16* pBuffer = ar2.GetBuffer();
 	if (pBuffer) delete[] pBuffer;
 
-	auto it = ar.m_sImports.find(tk1);
-	if (it == ar.m_sImports.end())
-		ar.m_sImports.insert(tk1);
+	vars.m_sImports.insert(tk1);
 
 	ar.m_sErrorString = ar2.m_sErrorString;
 	return r;

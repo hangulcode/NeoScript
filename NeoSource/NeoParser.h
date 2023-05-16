@@ -103,6 +103,7 @@ struct SVars
 {
 	std::vector<SLayerVar*>	_varsFunction;
 	std::vector<std::string> _varsExport;
+	std::set<std::string> m_sImports; // Only Once Load
 
 	~SVars()
 	{
