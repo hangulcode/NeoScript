@@ -532,9 +532,15 @@ private:
 	bool	StopCoroutine(bool doDead = true);
 	void	DeadCoroutine(CoroutineInfo* pCI);
 
-	//VarInfo _intA1;
+	VarInfo _intA1;
 	VarInfo _intA2, _intA3;
 	VarInfo _funA3;
+	inline VarInfo* GetVarPtr1Safe(SVMOperation& OP)
+	{
+		if (OP.argFlag & (1 << 5)) { _intA1 = OP.n1; return &_intA1; }
+		if (OP.argFlag & (1 << 2)) return &(*m_pVarStack)[_iSP_Vars + OP.n1];
+		else return &(*m_pVarGlobal)[OP.n1];
+	}
 	inline VarInfo* GetVarPtr1(SVMOperation& OP)
 	{
 		//if (OP.argFlag & (1 << 5)) { _intA1 = OP.n1; return &_intA1; }

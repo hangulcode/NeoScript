@@ -390,10 +390,34 @@ struct SFunctionInfo
 	}
 	void	Push_RETURN(CArchiveRdWC& ar, short r)
 	{
+		OpType optype = GetOpTypeFromOp(NOP_RETURN);
+		eNOperation preOP = GetLastOP();
+		switch (preOP)
+		{
+		case NOP_MOV:
+		{
+			ArgFlag* preArgFlag = (ArgFlag*)((u8*)_code->GetData() + sizeof(OpType) + _iLastOPOffset);
+			short* preDest = (short*)((u8*)_code->GetData() + sizeof(OpType) + sizeof(ArgFlag) + _iLastOPOffset);
+			short* preSrc = preDest + 1;
+			if (*preDest == r)
+			{
+				*(OpType*)((u8*)_code->GetData() + _iLastOPOffset) = optype;
+				*preDest = *preSrc;
+				*preSrc = 0;
+				if(*preArgFlag & (1 << 4)) // const short  value ?
+					*preArgFlag = (1 << 5);
+				else
+					*preArgFlag = 0;
+				return;
+			}
+			break;
+		}
+		default:
+			break;
+		}
 		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		OpType optype = GetOpTypeFromOp(NOP_RETURN);
 		_code->Write(&optype, sizeof(optype));
 		//_code->Write(&r, sizeof(r));
 		Push_Arg(r, 0, 0);
