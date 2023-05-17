@@ -330,6 +330,73 @@ static int UTF8_LENGTH(const std::string& utf8)
 	}
 	return cnt;
 }
+// index : byte index
+// offset : word index
+static int UTF8_INDEX2OFFSET(const std::string& utf8, int iFindIndex)
+{
+	if(iFindIndex < 0) return iFindIndex;
+
+	int cnt = 0;
+	int iIndex = 0;
+	u8 byHeader;
+
+	const u8* pUtf8Str = (const u8*)utf8.c_str();
+	int iLength = (int)utf8.length();
+
+	while (iIndex < iLength)
+	{
+		byHeader = pUtf8Str[iIndex];
+		if ((0xE0 == (byHeader & 0xE0)))
+		{
+			iIndex += 3;
+		}
+		else if (0xC0 == (byHeader & 0xC0))
+		{
+			iIndex += 2;
+		}
+		else
+		{
+			iIndex++;
+		}
+		++cnt;
+		if (iIndex >= iFindIndex)
+			return cnt;
+	}
+	return cnt;
+}
+
+static int UTF8_OFFSET(const std::string& utf8, int iIndex, int wordcnt)
+{
+	int cnt = 0;
+	u8 byHeader;
+
+	const u8* pUtf8Str = (const u8*)utf8.c_str();
+	int iLength = (int)utf8.length();
+	if(iIndex >= iLength)
+		return iLength;
+	if(wordcnt <= 0)
+		return iIndex;
+
+	while (iIndex < iLength)
+	{
+		byHeader = pUtf8Str[iIndex];
+		if ((0xE0 == (byHeader & 0xE0)))
+		{
+			iIndex += 3;
+		}
+		else if (0xC0 == (byHeader & 0xC0))
+		{
+			iIndex += 2;
+		}
+		else
+		{
+			iIndex++;
+		}
+		if(++cnt >= wordcnt)
+			return iIndex;
+	}
+	return iIndex;
+}
 
 static SUtf8One UTF8_ONE(std::string& Utf8Str, int& iIndex)
 {

@@ -5,6 +5,7 @@
 
 #include "NeoVM.h"
 #include "NeoArchive.h"
+#include "UTFString.h"
 
 #define MATH_PI				3.14159265358979323846f // Pi
 
@@ -13,7 +14,24 @@
 
 void NVM_QuickSort(CNeoVMWorker* pN, int compare, std::vector<VarInfo*>& lst);
 
-
+/*
+		int len;
+		std::string* p;
+		std::string tempStr;
+		if (pVar->GetType() == VAR_STRING)
+		{
+			len = pVar->_str->_StringLen;
+			p = &pVar->_str->_str;
+		}
+		else if (pVar->GetType() == VAR_CHAR)
+		{
+			len = pVar->_c.c[0] == 0 ? 0 : 1;
+			tempStr = pVar->_c.c;
+			p = &tempStr;
+		}
+		else
+			return false;
+*/
 struct neo_libs
 {
 	static bool Str_sub(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -21,11 +39,15 @@ struct neo_libs
 		if (pVar->GetType() != VAR_STRING) return false;
 		if (args != 2) return false;
 
+		int len = pVar->_str->_StringLen;
 		std::string* p = &pVar->_str->_str;
 		int p1 = pN->read<int>(1);
 		int p2 = pN->read<int>(2);
 
-		if (p1 < 0 || p1 >= (int)p->length()) return false;
+		if (p1 < 0 || p1 >= len) return false;
+
+		p1 = utf_string::UTF8_OFFSET(*p, 0, p1);
+		p2 = utf_string::UTF8_OFFSET(*p, p1, p2) - p1;
 
 		std::string sTempString = p->substr(p1, p2);
 		pN->ReturnValue(sTempString.c_str());
@@ -49,6 +71,7 @@ struct neo_libs
 		if (p2 == NULL) return false;
 
 		int iFind = (int)p->find(*p2);
+		iFind = utf_string::UTF8_INDEX2OFFSET(*p, iFind);
 		pN->ReturnValue((int)iFind);
 		return true;
 	}

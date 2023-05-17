@@ -1964,6 +1964,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 						Call(pVar1->_funPtr, OP.n3);
 					break;
 				case VAR_CHAR:
+					Var_SetString(pVar1, pVar1->_c.c); // char -> string
 				case VAR_STRING:
 					pFunName = GetVarPtr2(OP);
 					CallNative(_pVM->_funStrLib, pVar1, pFunName->_str->_str, n3);
