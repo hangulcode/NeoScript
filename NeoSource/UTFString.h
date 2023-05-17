@@ -330,7 +330,46 @@ static int UTF8_LENGTH(const std::string& utf8)
 	}
 	return cnt;
 }
-static std::string UTF8_ONE(std::string& Utf8Str, int& iIndex)
+
+static SUtf8One UTF8_ONE(std::string& Utf8Str, int& iIndex)
+{
+	u8 byHeader;
+
+	const u8* pUtf8Str = (const u8*)Utf8Str.c_str();
+
+	SUtf8One r;
+	if (iIndex >= (int)Utf8Str.length())
+	{
+		r.c[0] = 0;
+		return r;
+	}
+	byHeader = pUtf8Str[iIndex];
+	if ((0xE0 == (byHeader & 0xE0)))
+	{
+		r.c[0] = (pUtf8Str[iIndex]);
+		r.c[1] = (pUtf8Str[iIndex + 1]);
+		r.c[2] = (pUtf8Str[iIndex + 2]);
+		r.c[3] = 0;
+		iIndex += 3;
+	}
+	else if (0xC0 == (byHeader & 0xC0))
+	{
+		r.c[0] = (pUtf8Str[iIndex]);
+		r.c[1] = (pUtf8Str[iIndex + 1]);
+		r.c[2] = 0;
+
+		iIndex += 2;
+	}
+	else
+	{
+		r.c[0] = (pUtf8Str[iIndex]);
+		r.c[1] = 0;
+
+		iIndex++;
+	}
+	return r;
+}
+static std::string UTF8_ONE_STR(std::string& Utf8Str, int& iIndex)
 {
 	u8 byHeader;
 

@@ -31,6 +31,10 @@ struct debug_info
 		_lineseq = line;
 	}
 };
+struct SUtf8One
+{
+	char c[4];
+};
 #pragma pack()
 
 

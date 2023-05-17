@@ -14,7 +14,7 @@ enum VAR_TYPE : u8
 	VAR_ITERATOR,
 	VAR_FUN_NATIVE,
 
-//	VAR_CHAR,
+	VAR_CHAR,
 
 	VAR_STRING,	// Alloc
 	VAR_TABLE,
@@ -298,6 +298,7 @@ public:
 		bool		_bl;
 		CoroutineInfo* _cor;
 		StringInfo* _str;
+		SUtf8One	_c;
 		TableInfo*	_tbl;
 		ListInfo*	_lst;
 		SetInfo*	_set;
@@ -580,6 +581,7 @@ private:
 	void Var_SetBool(VarInfo *d, bool v);
 	void Var_SetCoroutine(VarInfo *d, CoroutineInfo* p);
 	void Var_SetString(VarInfo *d, const char* str);
+	void Var_SetString(VarInfo* d, SUtf8One c);
 	void Var_SetStringA(VarInfo *d, const std::string& str);
 	void Var_SetTable(VarInfo *d, TableInfo* p);
 	void Var_SetList(VarInfo *d, ListInfo* p);
@@ -614,6 +616,7 @@ public:
 		case VAR_FLOAT: v1->_float = v2->_float; break;
 		case VAR_FUN: v1->_fun_index = v2->_fun_index; break;
 		case VAR_FUN_NATIVE: v1->_funPtr = v2->_funPtr; break;
+		case VAR_CHAR: v1->_c = v2->_c; break;
 		case VAR_STRING: v1->_str = v2->_str; ++v1->_str->_refCount; break;
 		case VAR_TABLE: v1->_tbl = v2->_tbl; ++v1->_tbl->_refCount; break;
 		case VAR_LIST: v1->_lst = v2->_lst; ++v1->_lst->_refCount; break;
@@ -754,6 +757,8 @@ private:
 	{
 		if (V->GetType() == VAR_STRING)
 			return V->_str->_str.c_str();
+		else if (V->GetType() == VAR_CHAR)
+			return V->_c.c;
 
 		return NULL;
 	}

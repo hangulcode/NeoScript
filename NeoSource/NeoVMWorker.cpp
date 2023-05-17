@@ -157,6 +157,15 @@ void CNeoVMWorker::Var_SetString(VarInfo *d, const char* str)
 {
 	Var_SetStringA(d, str);
 }
+void CNeoVMWorker::Var_SetString(VarInfo* d, SUtf8One c)
+{
+	if (d->IsAllocType())
+		Var_Release(d);
+
+	d->SetType(VAR_CHAR);
+	d->_c = c;
+}
+
 void CNeoVMWorker::Var_SetStringA(VarInfo *d, const std::string& str)
 {
 	if (d->IsAllocType())
@@ -427,8 +436,37 @@ void CNeoVMWorker::Add2(eNOperationSub op, VarInfo* r, VarInfo* v2)
 			return;
 		}
 		break;
+	case VAR_CHAR:
+		if (v2->GetType() == VAR_CHAR)
+		{
+			switch (op)
+			{
+			case eOP_ADD: Var_SetStringA(r, std::string(r->_c.c) + std::string(v2->_c.c)); break;
+			default: SetError("operator Error"); break;
+			}
+			return;
+		}
+		else if (v2->GetType() == VAR_STRING)
+		{
+			switch (op)
+			{
+			case eOP_ADD: Var_SetStringA(r, std::string(r->_c.c) + v2->_str->_str); break;
+			default: SetError("operator Error"); break;
+			}
+			return;
+		}
+		break;
 	case VAR_STRING:
-		if (v2->GetType() == VAR_STRING)
+		if (v2->GetType() == VAR_CHAR)
+		{
+			switch (op)
+			{
+			case eOP_ADD: Var_SetStringA(r, r->_str->_str + v2->_c.c); break;
+			default: SetError("operator Error"); break;
+			}
+			return;
+		}
+		else if (v2->GetType() == VAR_STRING)
 		{
 			switch (op)
 			{
@@ -652,8 +690,37 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, VarInfo* v2)
 			return;
 		}
 		break;
+	case VAR_CHAR:
+		if (v2->GetType() == VAR_CHAR)
+		{
+			switch (op)
+			{
+			case eOP_ADD: Var_SetStringA(r, std::string(r->_c.c) + v2->_c.c); break;
+			default: SetError("operator Error"); break;
+			}
+			return;
+		}
+		else if (v2->GetType() == VAR_STRING)
+		{
+			switch (op)
+			{
+			case eOP_ADD: Var_SetStringA(r, std::string(r->_c.c) + v2->_str->_str); break;
+			default: SetError("operator Error"); break;
+			}
+			return;
+		}
+		break;
 	case VAR_STRING:
-		if (v2->GetType() == VAR_STRING)
+		if (v2->GetType() == VAR_CHAR)
+		{
+			switch (op)
+			{
+			case eOP_ADD: Var_SetStringA(r, r->_str->_str + v2->_c.c); break;
+			default: SetError("operator Error"); break;
+			}
+			return;
+		}
+		else if (v2->GetType() == VAR_STRING)
 		{
 			switch (op)
 			{
@@ -901,8 +968,16 @@ bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float == v2->_float;
 		break;
+	case VAR_CHAR:
+		if (v2->GetType() == VAR_CHAR)
+			return 0 == strcmp(v1->_c.c, v2->_c.c);
+		else if (v2->GetType() == VAR_STRING)
+			return 0 == strcmp(v1->_c.c, v2->_str->_str.c_str());
+		break;
 	case VAR_STRING:
-		if (v2->GetType() == VAR_STRING)
+		if (v2->GetType() == VAR_CHAR)
+			return 0 == strcmp(v1->_str->_str.c_str(), v2->_c.c);
+		else if (v2->GetType() == VAR_STRING)
 			return v1->_str->_str == v2->_str->_str;
 		break;
 	}
@@ -924,8 +999,16 @@ bool CNeoVMWorker::CompareGR(VarInfo* v1, VarInfo* v2)
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float > v2->_float;
 		break;
+	case VAR_CHAR:
+		if (v2->GetType() == VAR_CHAR)
+			return std::string(v1->_c.c) > std::string(v2->_c.c);
+		else if (v2->GetType() == VAR_STRING)
+			return std::string(v1->_c.c) > v2->_str->_str;
+		break;
 	case VAR_STRING:
-		if (v2->GetType() == VAR_STRING)
+		if (v2->GetType() == VAR_CHAR)
+			return v1->_str->_str > std::string(v2->_c.c);
+		else if (v2->GetType() == VAR_STRING)
 			return v1->_str->_str > v2->_str->_str;
 		break;
 	}
@@ -948,8 +1031,16 @@ bool CNeoVMWorker::CompareGE(VarInfo* v1, VarInfo* v2)
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float >= v2->_float;
 		break;
+	case VAR_CHAR:
+		if (v2->GetType() == VAR_CHAR)
+			return std::string(v1->_c.c) >= std::string(v2->_c.c);
+		else if (v2->GetType() == VAR_STRING)
+			return std::string(v1->_c.c) >= v2->_str->_str;
+		break;
 	case VAR_STRING:
-		if (v2->GetType() == VAR_STRING)
+		if (v2->GetType() == VAR_CHAR)
+			return v1->_str->_str >= std::string(v2->_c.c);
+		else if (v2->GetType() == VAR_STRING)
 			return v1->_str->_str >= v2->_str->_str;
 		break;
 	}
@@ -978,6 +1069,32 @@ bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 
 	switch (pClt->GetType())
 	{
+		case VAR_CHAR:
+		{
+			int str_len = (pClt->_c.c[0] == 0) ? 0 : 1;
+			if (pIterator->GetType() != VAR_ITERATOR)
+			{
+				Var_Release(pIterator);
+				if (0 < str_len)
+				{
+					pIterator->_it._iStringOffset = 0;
+					pIterator->SetType(VAR_ITERATOR);
+				}
+				else
+					return false;
+			}
+			if (pIterator->_it._iStringOffset < str_len)
+			{
+				Var_SetString(pKey, pClt->_c);
+				return true;
+			}
+			else
+			{
+				pIterator->ClearType();
+				return false;
+			}
+			break;
+		}	
 	case VAR_STRING:
 		{
 			std::string* str = &pClt->_str->_str;
@@ -995,8 +1112,8 @@ bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 
 			if (pIterator->_it._iStringOffset < (int)str->length())
 			{
-				std::string s = utf_string::UTF8_ONE(*str, pIterator->_it._iStringOffset);
-				Var_SetStringA(pKey, s);
+				SUtf8One s = utf_string::UTF8_ONE(*str, pIterator->_it._iStringOffset);
+				Var_SetString(pKey, s);
 				return true;
 			}
 			else
@@ -1179,6 +1296,8 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 		sprintf(ch, "%lf", v1->_float);
 #endif
 		return ch;
+	case VAR_CHAR:
+		return std::string(v1->_c.c);
 	case VAR_STRING:
 		return v1->_str->_str;
 	case VAR_TABLE:
@@ -1206,6 +1325,8 @@ int CNeoVMWorker::ToInt(VarInfo* v1)
 		return v1->_int;
 	case VAR_FLOAT:
 		return (int)v1->_float;
+	case VAR_CHAR:
+		return ::atoi(v1->_c.c);
 	case VAR_STRING:
 		return ::atoi(v1->_str->_str.c_str());
 	case VAR_TABLE:
@@ -1227,6 +1348,8 @@ double CNeoVMWorker::ToFloat(VarInfo* v1)
 		return v1->_int;
 	case VAR_FLOAT:
 		return v1->_float;
+	case VAR_CHAR:
+		return atof(v1->_c.c);
 	case VAR_STRING:
 		return atof(v1->_str->_str.c_str());
 	case VAR_TABLE:
@@ -1248,6 +1371,8 @@ int CNeoVMWorker::ToSize(VarInfo* v1)
 		return 0;
 	case VAR_FLOAT:
 		return 0;
+	case VAR_CHAR:
+		return (v1->_c.c[0] == 0) ? 0 : 1;
 	case VAR_STRING:
 		return (int)v1->_str->_str.length();
 	case VAR_TABLE:
@@ -1269,6 +1394,7 @@ VarInfo* CNeoVMWorker::GetType(VarInfo* v1)
 		return &_pVM->m_sDefaultValue[NDF_INT];
 	case VAR_FLOAT:
 		return &_pVM->m_sDefaultValue[NDF_FLOAT];
+	case VAR_CHAR:
 	case VAR_STRING:
 		return &_pVM->m_sDefaultValue[NDF_STRING];
 	case VAR_TABLE:
@@ -1837,6 +1963,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 					if ((OP.argFlag & 0x02) == 0 && 0 == OP.n2)
 						Call(pVar1->_funPtr, OP.n3);
 					break;
+				case VAR_CHAR:
 				case VAR_STRING:
 					pFunName = GetVarPtr2(OP);
 					CallNative(_pVM->_funStrLib, pVar1, pFunName->_str->_str, n3);
@@ -1881,7 +2008,13 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			{
 				short n2 = OP.n2;
 				VarInfo* pFunName = GetVarPtr1(OP);
-				if (pFunName->GetType() == VAR_STRING)
+				if (pFunName->GetType() == VAR_CHAR)
+				{
+					CallNative(_pVM->_funDefaultLib, NULL, pFunName->_c.c, n2);
+					//					SetError("Ptr Call Error");
+					break;
+				}				
+				else if (pFunName->GetType() == VAR_STRING)
 				{
 					CallNative(_pVM->_funDefaultLib, NULL, pFunName->_str->_str, n2);
 //					SetError("Ptr Call Error");
@@ -2334,6 +2467,7 @@ std::string GetDataType(VAR_TYPE t)
 		return "iterator";
 	case VAR_FUN_NATIVE:
 		return "fun";
+	case VAR_CHAR:
 	case VAR_STRING:
 		return "string";
 	case VAR_TABLE:
