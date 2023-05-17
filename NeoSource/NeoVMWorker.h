@@ -764,8 +764,8 @@ private:
 	}
 	const std::string* PopStlString(VarInfo *V)
 	{
-		if (V->GetType() == VAR_STRING)
-			return &V->_str->_str;
+//		if (V->GetType() == VAR_STRING)
+//			return &V->_str->_str;
 
 		return NULL;
 	}

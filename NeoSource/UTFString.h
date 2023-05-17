@@ -345,6 +345,9 @@ static int UTF8_INDEX2OFFSET(const std::string& utf8, int iFindIndex)
 
 	while (iIndex < iLength)
 	{
+		if (iIndex >= iFindIndex)
+			return cnt;
+
 		byHeader = pUtf8Str[iIndex];
 		if ((0xE0 == (byHeader & 0xE0)))
 		{
@@ -359,8 +362,6 @@ static int UTF8_INDEX2OFFSET(const std::string& utf8, int iFindIndex)
 			iIndex++;
 		}
 		++cnt;
-		if (iIndex >= iFindIndex)
-			return cnt;
 	}
 	return cnt;
 }

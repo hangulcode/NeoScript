@@ -67,7 +67,8 @@ struct neo_libs
 		if (args != 1) return false;
 
 		std::string* p = &pVar->_str->_str;
-		std::string* p2 = pN->read<std::string*>(1);
+		//std::string* p2 = pN->read<std::string*>(1);
+		char* p2 = pN->read<char*>(1);
 		if (p2 == NULL) return false;
 
 		int iFind = (int)p->find(*p2);
