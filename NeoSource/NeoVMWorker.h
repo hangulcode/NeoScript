@@ -119,7 +119,7 @@ enum eNOperation : OpType
 	NOP_PTRCALL,	// Multiple Call
 	NOP_PTRCALL2,	// Native Call
 	NOP_RETURN,
-	NOP_FUNEND,
+//	NOP_FUNEND,
 
 	NOP_TABLE_ALLOC,
 	NOP_CLT_READ,

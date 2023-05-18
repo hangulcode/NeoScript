@@ -113,7 +113,7 @@ std::map<std::string, TK_TYPE> g_sStringToToken;
 
 TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef = false, TK_TYPE tkEnd1 = TK_SEMICOLON, TK_TYPE tkEnd2 = TK_COMMA, TK_TYPE tkEnd3 = TK_R_SMALL, TK_TYPE tkEnd4 = TK_R_ARRAY);
 bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport);
-bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars);
+bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn = NULL);
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool addOPFunEnd = true);
 
 eNOperation GetOpTypeFromOp(eNOperation op)
@@ -330,7 +330,7 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_PTRCALL, 3);
 	OP_STR1(NOP_PTRCALL2, 2);
 	OP_STR1(NOP_RETURN, 1);
-	OP_STR1(NOP_FUNEND, 0);
+//	OP_STR1(NOP_FUNEND, 0);
 
 	OP_STR1(NOP_TABLE_ALLOC, 3);
 	OP_STR1(NOP_CLT_READ, 3);
@@ -2810,13 +2810,14 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	return true;
 }
-bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn)
 {
 	if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
 		SetCompileError(ar, "Error (%d, %d): \"if\" is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
 		return false;
 	}
+	if(lastOPReturn) *lastOPReturn = false;
 
 	std::string tk1;
 	TK_TYPE tkType1;
@@ -2842,6 +2843,8 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 
 	SJumpValue jmp1;
 	SJumpValue jmp2;
+	bool blJmp1 = true;
+	bool blJmp2 = true;
 
 	eNOperation opCheck = funs._cur.GetLastOP();
 	bool isCheckOPOpt = false;
@@ -2903,23 +2906,32 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 == TK_ELSEIF)
 	{
-		funs._cur.Push_JMP(ar, 0);
-		jmp2.Set(funs._cur._code->GetBufferOffset() - 6, funs._cur._code->GetBufferOffset());
+		if (funs._cur.GetLastOP() == NOP_RETURN) // Code Size OPT TODO !!
+			blJmp2 = false;
+		if (blJmp2)
+		{
+			funs._cur.Push_JMP(ar, 0);
+			jmp2.Set(funs._cur._code->GetBufferOffset() - 6, funs._cur._code->GetBufferOffset());
+		}
 
 		funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
 
-		if (false == ParseIF(pJumps, ar, funs, vars))
+		if (false == ParseIF(pJumps, ar, funs, vars, lastOPReturn))
 			return false;
 
 		ClearTempVars(funs);
-		//if(funs._cur.GetLastOP() != NOP_RETURN) // Code Size OPT TODO !!
-		funs._cur.Set_JumpOffet(jmp2, funs._cur._code->GetBufferOffset());
+		if (blJmp2) // Code Size OPT TODO !!
+			funs._cur.Set_JumpOffet(jmp2, funs._cur._code->GetBufferOffset());
 	}	
 	else if (tkType1 == TK_ELSE)
 	{
-		funs._cur.Push_JMP(ar, 0);
-		jmp2.Set(funs._cur._code->GetBufferOffset() - 6, funs._cur._code->GetBufferOffset());
-
+		if (funs._cur.GetLastOP() == NOP_RETURN) // Code Size OPT TODO !!
+			blJmp2 = false;
+		if(blJmp2)
+		{
+			funs._cur.Push_JMP(ar, 0);
+			jmp2.Set(funs._cur._code->GetBufferOffset() - 6, funs._cur._code->GetBufferOffset());
+		}
 		funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
 
 		tkType1 = GetToken(ar, tk1);
@@ -2950,8 +2962,12 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 			}
 		}
 		ClearTempVars(funs);
-		//if(funs._cur.GetLastOP() != NOP_RETURN) // Code Size OPT TODO !!
+		if(blJmp2) // Code Size OPT TODO !!
 			funs._cur.Set_JumpOffet(jmp2, funs._cur._code->GetBufferOffset());
+		else if (funs._cur.GetLastOP() == NOP_RETURN)
+		{
+			if (lastOPReturn) *lastOPReturn = true;
+		}
 	}
 	else
 	{
@@ -3039,7 +3055,7 @@ bool ParseSleep(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 
 
-bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn)
 {
 	std::string tk1, tk2;
 	TK_TYPE tkType1, tkType2;
@@ -3074,7 +3090,8 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			if (false == ParseMiddleArea(pJumps, ar, funs, vars))
 				return false;
 
-			DelLocalVar(vars.GetCurrentLayer());			
+			DelLocalVar(vars.GetCurrentLayer());
+			if(lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_R_MIDDLE:
 			if (ar._allowGlobalInitLogic == false && funs._cur._name == GLOBAL_INIT_FUN_NAME)
@@ -3094,10 +3111,12 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				SetCompileError(ar, "Error (%d, %d): return end is ;", ar.CurLine(), ar.CurCol());
 				return false;
 			}
+			if (lastOPReturn) *lastOPReturn = true;
 			break;
 		case TK_VAR:
 			if (false == ParseVarDef(ar, funs, vars, funType == FUNT_EXPORT))
 				return false;
+			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_BREAK:
 			if (pJumps == NULL)
@@ -3107,10 +3126,12 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			}
 			funs._cur.Push_JMP(ar, 0);
 			pJumps->push_back(SJumpValue(funs._cur._code->GetBufferOffset() - 2, funs._cur._code->GetBufferOffset()));
+			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_IMPORT:
 			if (ParseImport(ar, funs, vars) == false)
 				return false;
+			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_EXPORT:
 			funType = FUNT_EXPORT;
@@ -3134,11 +3155,12 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				SetCompileError(ar, "Error (%d, %d): Function Name (%d) '%s'\n", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), tk2.c_str());
 				return false;
 			}
+			if (lastOPReturn) *lastOPReturn = false;
 			break;
-
 		case TK_SLEEP:
 			if (false == ParseSleep(ar, funs, vars))
 				return false;
+			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_STRING:
 		case TK_MINUS2:
@@ -3152,11 +3174,12 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				//SetCompileError(ar, "Error (%d, %d): ", ar.CurLine(), ar.CurCol());
 				return false;
 			}
+			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_IF:
 			bGlobalLocal = funs._cur._name == GLOBAL_INIT_FUN_NAME;
 			if(bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME "IF";
-			if (false == ParseIF(pJumps, ar, funs, vars))
+			if (false == ParseIF(pJumps, ar, funs, vars, lastOPReturn))
 				return false;
 			if (bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME;
 			break;
@@ -3166,6 +3189,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			if (false == ParseFor(ar, funs, vars))
 				return false;
 			if (bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME;
+			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_FOREACH:
 			bGlobalLocal = funs._cur._name == GLOBAL_INIT_FUN_NAME;
@@ -3173,6 +3197,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			if (false == ParseForEach(ar, funs, vars))
 				return false;
 			if (bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME;
+			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_WHILE:
 			bGlobalLocal = funs._cur._name == GLOBAL_INIT_FUN_NAME;
@@ -3180,6 +3205,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			if (false == ParseWhile(ar, funs, vars))
 				return false;
 			if (bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME;
+			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		default:
 			SetCompileError(ar, "Error (%d, %d): Function Name (%s) '%s'\n", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), tk1.c_str());
@@ -3218,14 +3244,16 @@ void FinalizeFuction(SFunctions& funs)
 
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool addOPFunEnd)
 {
-	if (false == ParseMiddleArea(NULL, ar, funs, vars))
+	bool LastOPReturn = false;
+	if (false == ParseMiddleArea(NULL, ar, funs, vars, &LastOPReturn))
 		return false;
 
 	if (ar.m_sErrorString.empty() == false)
 		return false;
 
-	if(addOPFunEnd)
-		funs._cur.Push_FUNEND(ar);
+	if(addOPFunEnd && LastOPReturn == false)
+		//funs._cur.Push_FUNEND(ar);
+		funs._cur.Push_RETURN(ar, 0, false);
 
 	return true;
 }

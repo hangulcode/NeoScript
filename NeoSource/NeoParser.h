@@ -428,15 +428,15 @@ struct SFunctionInfo
 		if (b1) flg |= (1 << 5);
 		Push_FlagArg(flg, r, 0, 0);
 	}
-	void	Push_FUNEND(CArchiveRdWC& ar)
-	{
-		AddDebugData(ar);
-		_iLastOPOffset = _code->GetBufferOffset();
+	//void	Push_FUNEND(CArchiveRdWC& ar)
+	//{
+	//	AddDebugData(ar);
+	//	_iLastOPOffset = _code->GetBufferOffset();
 
-		OpType optype = GetOpTypeFromOp(NOP_FUNEND);
-		_code->Write(&optype, sizeof(optype));
-		Push_Arg(0, 0, 0);
-	}
+	//	OpType optype = GetOpTypeFromOp(NOP_FUNEND);
+	//	_code->Write(&optype, sizeof(optype));
+	//	Push_Arg(0, 0, 0);
+	//}
 
 
 	void	Push_JMP(CArchiveRdWC& ar, int destOffset)

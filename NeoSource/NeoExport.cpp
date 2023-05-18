@@ -301,10 +301,10 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
 			break;
-		case NOP_FUNEND:
-			//ar << optype;
-			argFlag |= GetArgIndexToCode(argFlag, nullptr, nullptr, nullptr);
-			break;
+		//case NOP_FUNEND:
+		//	//ar << optype;
+		//	argFlag |= GetArgIndexToCode(argFlag, nullptr, nullptr, nullptr);
+		//	break;
 		case NOP_TABLE_ALLOC:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			//ar << optype << v.n1;
@@ -821,11 +821,12 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			break;
 		case NOP_RETURN:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
-			OutAsm("RET %s\n", GetLog(td, v, 1).c_str());
+			if(v.n1 == 0 && v.argFlag == 7) OutAsm("RET\n");
+			else							OutAsm("RET %s\n", GetLog(td, v, 1).c_str());
 			break;
-		case NOP_FUNEND:
-			OutAsm("- End -\n");
-			break;
+		//case NOP_FUNEND:
+		//	OutAsm("- End -\n");
+		//	break;
 		case NOP_TABLE_ALLOC:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("Table Alloc %s, %d\n", GetLog(td, v, 1).c_str(), v.n23);
