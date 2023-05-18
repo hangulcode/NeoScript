@@ -388,39 +388,45 @@ struct SFunctionInfo
 		//_code->Write(&nValue, sizeof(nValue));
 		Push_FlagArg(flg, r, s, 0);
 	}
-	void	Push_RETURN(CArchiveRdWC& ar, short r)
+	void	Push_RETURN(CArchiveRdWC& ar, short r, bool b1)
 	{
 		OpType optype = GetOpTypeFromOp(NOP_RETURN);
-		eNOperation preOP = GetLastOP();
-		switch (preOP)
+		if(b1 == false)
 		{
-		case NOP_MOV:
-		{
-			ArgFlag* preArgFlag = (ArgFlag*)((u8*)_code->GetData() + sizeof(OpType) + _iLastOPOffset);
-			short* preDest = (short*)((u8*)_code->GetData() + sizeof(OpType) + sizeof(ArgFlag) + _iLastOPOffset);
-			short* preSrc = preDest + 1;
-			if (*preDest == r)
+			eNOperation preOP = GetLastOP();
+			switch (preOP)
 			{
-				*(OpType*)((u8*)_code->GetData() + _iLastOPOffset) = optype;
-				*preDest = *preSrc;
-				*preSrc = 0;
-				if(*preArgFlag & (1 << 4)) // const short  value ?
-					*preArgFlag = (1 << 5);
-				else
-					*preArgFlag = 0;
-				return;
+			case NOP_MOV:
+			{
+				ArgFlag* preArgFlag = (ArgFlag*)((u8*)_code->GetData() + sizeof(OpType) + _iLastOPOffset);
+				short* preDest = (short*)((u8*)_code->GetData() + sizeof(OpType) + sizeof(ArgFlag) + _iLastOPOffset);
+				short* preSrc = preDest + 1;
+				if (*preDest == r)
+				{
+					*(OpType*)((u8*)_code->GetData() + _iLastOPOffset) = optype;
+					*preDest = *preSrc;
+					*preSrc = 0;
+					if(*preArgFlag & (1 << 4)) // const short  value ?
+						*preArgFlag = (1 << 5);
+					else
+						*preArgFlag = 0;
+					return;
+				}
+				break;
 			}
-			break;
-		}
-		default:
-			break;
+			default:
+				break;
+			}
 		}
 		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		_code->Write(&optype, sizeof(optype));
 		//_code->Write(&r, sizeof(r));
-		Push_Arg(r, 0, 0);
+
+		ArgFlag flg = 0;
+		if (b1) flg |= (1 << 5);
+		Push_FlagArg(flg, r, 0, 0);
 	}
 	void	Push_FUNEND(CArchiveRdWC& ar)
 	{

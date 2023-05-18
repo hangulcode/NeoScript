@@ -1695,7 +1695,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				SetCompileError(ar, "Error (%d, %d): return", ar.CurLine(), ar.CurCol());
 				return TK_NONE;
 			}
-			funs._cur.Push_RETURN(ar, iTempOffset._iVar);
+			funs._cur.Push_RETURN(ar, iTempOffset._iVar, iTempOffset.IsShort());
 			blEnd = true;
 			break;
 		case TK_L_SMALL:

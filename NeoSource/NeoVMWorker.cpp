@@ -2028,7 +2028,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			}			
 			case NOP_RETURN:
 			case NOP_FUNEND:
-				if (OP.n1 == 0)
+				if (OP.n1 == 0 && (OP.argFlag & (1 << 5)) == 0)
 					Var_Release(&(*m_pVarStack)[_iSP_Vars]); // Clear
 				else
 					Move(&(*m_pVarStack)[_iSP_Vars], GetVarPtr1Safe(OP));
