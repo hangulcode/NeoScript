@@ -1,184 +1,406 @@
 #pragma once
 
-#include "NeoVMWorker.h"
-#include "NeoVMMemoryPool.h"
+//#include "NeoVMWorker.h"
+#include "NeoConfig.h"
 
 struct neo_libs;
 struct neo_DCalllibs;;
 class CNArchive;
-class CNeoVM
+
+struct INeoVMWorker;
+struct FunctionPtr;
+
+typedef int(*Neo_CFunction) (INeoVMWorker* N, FunctionPtr* pFun, short args);
+typedef bool(*Neo_NativeFunction) (INeoVMWorker* N, void* pUserData, const std::string& fun, short args);
+
+struct FunctionPtr
 {
-	friend					CNeoVMWorker;
-	friend					TableInfo;
-	friend					ListInfo;
-	friend					SetInfo;
-	friend					neo_libs;
-	friend					neo_DCalllibs;
+	u8							_argCount;
+	Neo_CFunction				_fn;
+	void* _func;
+};
+
+#pragma pack(1)
+struct FunctionPtrNative
+{
+	Neo_NativeFunction			_func;
+};
+struct NeoFunction
+{
+	// Script Function
+	INeoVMWorker* _pWorker;
+	int			_fun_index;
+
+	// C Function
+	FunctionPtr _fun;
+};
+enum VAR_TYPE : u8
+{
+	VAR_NONE,
+	VAR_BOOL,
+	VAR_INT,
+	VAR_FLOAT,	// double
+	VAR_FUN,
+
+	VAR_ITERATOR,
+	VAR_FUN_NATIVE,
+
+	VAR_CHAR,
+
+	VAR_STRING,	// Alloc
+	VAR_TABLE,
+	VAR_LIST,
+	VAR_SET,
+	VAR_COROUTINE,
+	VAR_MODULE,
+};
+struct CoroutineInfo;
+struct StringInfo;
+struct TableInfo;
+struct ListInfo;
+struct SetInfo;
+struct TableNode;
+struct SetNode;
+struct INeoVM;
+
+#pragma pack(1)
+struct CollectionIterator
+{
+	union
+	{
+		TableNode* _pTableNode;
+		SetNode* _pSetNode;
+		int			_iListOffset;
+		int			_iStringOffset;
+	};
+};
+#pragma pack()
+
+struct VarInfo
+{
 private:
-
-
-	std::map<u32, ListInfo*> _sLists;
-	std::map<u32, TableInfo*> _sTables;
-	std::map<u32, SetInfo*> _sSets;
-	std::map<u32, StringInfo*> _sStrings;
-	u32 _dwLastIDVMWorker = 0;
-
-
-	CNeoVMWorker*			_pMainWorker = NULL;
-	std::map<u32, CNeoVMWorker*> _sVMWorkers;
-
-
-	void Var_AddRef(VarInfo *d);
-	void Var_SetString(VarInfo *d, const char* str);
-	void Var_SetStringA(VarInfo *d, const std::string& str);
-	void Var_SetTable(VarInfo *d, TableInfo* p);
-
-
-	CNeoVMWorker* WorkerAlloc(int iStackSize);
-	void FreeWorker(CNeoVMWorker *d);
-	CNeoVMWorker* FindWorker(int iModule);
-
-	CoroutineInfo* CoroutineAlloc();
-	void FreeCoroutine(VarInfo *d);
-
-	StringInfo* StringAlloc(const std::string& str);
-	void FreeString(VarInfo *d);
-
-	TableInfo* TableAlloc(int cnt = 0);
-	void FreeTable(TableInfo* tbl);
-
-	ListInfo* ListAlloc(int cnt = 0);
-	void FreeList(ListInfo* tbl);
-
-	SetInfo* SetAlloc();
-	void FreeSet(SetInfo* tbl);
-
-	FunctionPtr* FunctionPtrAlloc(FunctionPtr* pOld);
-
-	int	 Coroutine_Create(int iFID);
-	int	 Coroutine_Resume(int iCID);
-	int	 Coroutine_Destroy(int iCID);
-
-
-
-	inline void Move(VarInfo* v1, VarInfo* v2)
+	VAR_TYPE	_type;
+public:
+	union
 	{
-		if (v1->IsAllocType())
-			Var_Release(v1);
-		CNeoVMWorker::Move_DestNoRelease(v1, v2);
+		bool		_bl;
+		CoroutineInfo* _cor;
+		StringInfo* _str;
+		SUtf8One	_c;
+		TableInfo* _tbl;
+		ListInfo* _lst;
+		SetInfo* _set;
+		FunctionPtr* _funPtr; // C Native
+		int			_int;
+		double		_float;
+		int			_fun_index;
+		INeoVMWorker* _module;
+		CollectionIterator	_it;
+	};
+
+	inline VarInfo() { _type = VAR_NONE; }
+	inline VarInfo(VAR_TYPE t) { _type = t; }
+	inline VarInfo(int v) { _type = VAR_INT; _int = v; }
+
+	inline VAR_TYPE GetType() { return _type; }
+	inline void SetType(VAR_TYPE t) { _type = t; }
+	inline void ClearType()
+	{
+		_type = VAR_NONE;
 	}
-	void Var_ReleaseInternal(VarInfo *d)
+	inline bool IsAllocType()
 	{
-		switch (d->GetType())
+		return ((_type >= VAR_STRING));
+	}
+	inline bool IsTrue()
+	{
+		if (VAR_BOOL == _type)
+			return _bl;
+		return false;
+	}
+};
+#pragma pack()
+
+struct INeoVMWorker
+{
+protected:
+	std::vector<VarInfo>* _args = NULL;
+	INeoVM* _pVM;
+
+	u32						_idWorker;
+	int	_BytesSize = 0;
+public:
+	inline u32 GetWorkerID() { return _idWorker; }
+	inline int GetBytesSize() { return _BytesSize; }
+
+	virtual bool RunFunction(int iFID, std::vector<VarInfo>& _args) =0;
+	virtual bool RunFunction(const std::string& funName, std::vector<VarInfo>& _args) =0;
+	virtual void GC() =0;
+	virtual VarInfo* GetReturnVar() =0;
+	virtual VarInfo* GetStackVar(int idx) =0;
+
+	static void neo_pushcclosureNative(FunctionPtrNative* pOut, Neo_NativeFunction pFun)
+	{
+		pOut->_func = pFun;
+	}
+	static void neo_pushcclosure(FunctionPtr* pOut, Neo_CFunction fn, void* pFun)
+	{
+		pOut->_fn = fn;
+		pOut->_func = pFun;
+	}
+	void Var_Release(VarInfo* d);
+	void Var_SetNone(VarInfo* d);
+
+	virtual void Var_Move(VarInfo* v1, VarInfo* v2) =0;
+
+
+	void PushInt(int v)
+	{
+		VarInfo d;
+		d.SetType(VAR_INT);
+		d._int = v;
+		_args->push_back(d);
+	}
+	void PushFloat(double v)
+	{
+		VarInfo d;
+		d.SetType(VAR_FLOAT);
+		d._float = v;
+		_args->push_back(d);
+	}
+	void PushString(const char* p);
+	void PushBool(bool b)
+	{
+		VarInfo d;
+		d.SetType(VAR_BOOL);
+		d._bl = b;
+		_args->push_back(d);
+	}
+	void PushNeoFunction(NeoFunction v);
+
+	int PopInt(VarInfo* V)
+	{
+		switch (V->GetType())
 		{
-		case VAR_STRING:
-			if (--d->_str->_refCount <= 0)
-				FreeString(d);
-			d->_str = NULL;
-			break;
-		case VAR_TABLE:
-			if (--d->_tbl->_refCount <= 0)
-				FreeTable(d->_tbl);
-			d->_tbl = NULL;
-			break;
-		case VAR_LIST:
-			if (--d->_lst->_refCount <= 0)
-				FreeList(d->_lst);
-			d->_lst = NULL;
-			break;
-		case VAR_SET:
-			if (--d->_set->_refCount <= 0)
-				FreeSet(d->_set);
-			d->_set = NULL;
-			break;
-		case VAR_COROUTINE:
-			if (--d->_cor->_refCount <= 0)
-				FreeCoroutine(d);
-			d->_cor = NULL;
-			break;
-		case VAR_MODULE:
-			if (--d->_module->_refCount <= 0)
-				FreeWorker(d->_module);
-			d->_module = NULL;
-			break;
+		case VAR_INT:
+			return V->_int;
+		case VAR_FLOAT:
+			return (int)V->_float;
 		default:
 			break;
 		}
-		d->ClearType();
+		return -1;
 	}
-
-	inline void Var_Release(VarInfo *d)
+	double PopFloat(VarInfo* V)
 	{
-		if (d->IsAllocType())
-			Var_ReleaseInternal(d);
+		switch (V->GetType())
+		{
+		case VAR_INT:
+			return V->_int;
+		case VAR_FLOAT:
+			return V->_float;
+		default:
+			break;
+		}
+		return -1;
+	}
+	const char* PopString(VarInfo* V);
+	const std::string* PopStlString(VarInfo* V);
+	bool PopBool(VarInfo* V)
+	{
+		if (V->GetType() == VAR_BOOL)
+			return V->_bl;
+
+		return false;
+	}
+	NeoFunction PopNeoFunction(VarInfo* V)
+	{
+		NeoFunction r;
+		if (V->GetType() == VAR_FUN)
+		{
+			r._pWorker = this;
+			r._fun_index = V->_fun_index;
+		}
 		else
-			d->ClearType();
+		{
+			r._pWorker = NULL;
+			r._fun_index = -1;
+		}
+		return r;
 	}
 
-	VarInfo m_sDefaultValue[NDF_MAX];
-	
-	CNVMAllocPool < TableNode, 10> m_sPool_TableNode;
-	CNVMAllocPool< TableInfo, 10 > m_sPool_TableInfo;
-	CNVMAllocPool < SetNode, 10> m_sPool_SetNode;
-	CNVMAllocPool< SetInfo, 10 > m_sPool_SetInfo;
-	CNVMAllocPool< ListInfo, 10 > m_sPool_ListInfo;
+	bool GetArg_StlString(int idx, std::string &r);
+	bool GetArg_Int(int idx, int& r);
+	bool GetArg_Double(int idx, double& r);
+	bool GetArg_Float(int idx, float& r);
+	bool GetArg_Bool(int idx, bool &r);
 
-	CNVMInstPool< StringInfo, 10 > m_sPool_String;
-	CNVMInstPool< CoroutineInfo, 10 > m_sPool_Coroutine;
+	inline void push(char ret) { PushInt(ret); }
+	inline void push(unsigned char ret) { PushInt(ret); }
+	inline void push(short ret) { PushInt(ret); }
+	inline void push(unsigned short ret) { PushInt(ret); }
+	inline void push(long ret) { PushInt(ret); }
+	inline void push(unsigned long ret) { PushInt(ret); }
+	inline void push(int ret) { PushInt(ret); }
+	inline void push(unsigned int ret) { PushInt(ret); }
+	inline void push(float ret) { PushFloat(ret); }
+	inline void push(double ret) { PushFloat((double)ret); }
+	inline void push(char* ret) { PushString(ret); }
+	inline void push(const char* ret) { PushString(ret); }
+	inline void push(bool ret) { PushBool(ret); }
+	inline void push(long long ret) { PushInt((int)ret); }
+	inline void push(unsigned long long ret) { PushInt((int)ret); }
+	inline void push(NeoFunction ret) { PushNeoFunction(ret); }
 
-	std::map<void*, FunctionPtr*> m_sCache_FunPtr;
+	inline void		_read(VarInfo* V, std::string*& r) { r = (std::string*)PopStlString(V); }
+	inline void		_read(VarInfo* V, char*& r) { r = (char*)PopString(V); }
+	inline void		_read(VarInfo* V, const char*& r) { r = PopString(V); }
+	inline void		_read(VarInfo* V, char& r) { r = (char)PopInt(V); }
+	inline void		_read(VarInfo* V, unsigned char& r) { r = (unsigned char)PopInt(V); }
+	inline void		_read(VarInfo* V, short& r) { r = (short)PopInt(V); }
+	inline void		_read(VarInfo* V, unsigned short& r) { r = (unsigned short)PopInt(V); }
+	inline void		_read(VarInfo* V, long& r) { r = (long)PopInt(V); }
+	inline void		_read(VarInfo* V, unsigned long& r) { r = (unsigned long)PopInt(V); }
+	inline void		_read(VarInfo* V, int& r) { r = (int)PopInt(V); }
+	inline void		_read(VarInfo* V, unsigned int& r) { r = (unsigned int)PopInt(V); }
+	inline void		_read(VarInfo* V, float& r) { r = (float)PopFloat(V); }
+	inline void		_read(VarInfo* V, double& r) { r = (double)PopFloat(V); }
+	inline void		_read(VarInfo* V, bool& r) { r = PopBool(V); }
+	inline void		_read(VarInfo* V) {}
+	inline void		_read(VarInfo* V, long long& r) { r = (long long)PopInt(V); }
+	inline void		_read(VarInfo* V, unsigned long long& r) { r = (unsigned long long)PopInt(V); }
+	inline void		_read(VarInfo* V, VarInfo*& r) { r = V; }
+	inline void		_read(VarInfo* V, NeoFunction& r) { r = PopNeoFunction(V); }
 
-	static bool _funInitLib;
-	static FunctionPtrNative _funDefaultLib;
-	static FunctionPtrNative _funLstLib;
-	static FunctionPtrNative _funStrLib;
-	static FunctionPtrNative _funTblLib;
-public:
+	void Var_SetInt(VarInfo* d, int v);
+	void Var_SetFloat(VarInfo* d, double v);
+	void Var_SetBool(VarInfo* d, bool v);
+	void Var_SetCoroutine(VarInfo* d, CoroutineInfo* p);
+	void Var_SetString(VarInfo* d, const char* str);
+	void Var_SetString(VarInfo* d, SUtf8One c);
+	void Var_SetStringA(VarInfo* d, const std::string& str);
+	void Var_SetTable(VarInfo* d, TableInfo* p);
+	void Var_SetList(VarInfo* d, ListInfo* p);
+	void Var_SetSet(VarInfo* d, SetInfo* p);
+	void Var_SetFun(VarInfo* d, int fun_index);
+	void Var_SetModule(VarInfo* d, INeoVMWorker* p);
 
-	bool RunFunction(const std::string& funName);
+	inline void	ReturnValue() { Var_Release(GetReturnVar()); }
+	inline void	ReturnValue(VarInfo* p) { Var_Move(GetReturnVar(), p); }
+	inline void	ReturnValue(char* p) { Var_SetString(GetReturnVar(), p); }
+	inline void	ReturnValue(const char* p) { Var_SetString(GetReturnVar(), p); }
+	inline void	ReturnValue(char p) { Var_SetInt(GetReturnVar(), p); }
+	inline void	ReturnValue(unsigned char p) { Var_SetInt(GetReturnVar(), p); }
+	inline void	ReturnValue(short p) { Var_SetInt(GetReturnVar(), p); }
+	inline void	ReturnValue(unsigned short p) { Var_SetInt(GetReturnVar(), p); }
+	inline void	ReturnValue(long p) { Var_SetInt(GetReturnVar(), p); }
+	inline void	ReturnValue(unsigned long p) { Var_SetInt(GetReturnVar(), p); }
+	inline void	ReturnValue(int p) { Var_SetInt(GetReturnVar(), p); }
+	inline void	ReturnValue(unsigned int p) { Var_SetInt(GetReturnVar(), p); }
+	inline void	ReturnValue(float p) { Var_SetFloat(GetReturnVar(), p); }
+	inline void	ReturnValue(double p) { Var_SetFloat(GetReturnVar(), p); }
+	inline void	ReturnValue(bool p) { Var_SetBool(GetReturnVar(), p); }
+	inline void	ReturnValue(long long p) { Var_SetInt(GetReturnVar(), (int)p); }
+	inline void	ReturnValue(unsigned long long p) { Var_SetInt(GetReturnVar(), (int)p); }
+	inline void	ReturnValue(CoroutineInfo* p) { Var_SetCoroutine(GetReturnVar(), p); }
 
-
-	std::string _sErrorMsgDetail;
-	std::string _pErrorMsg;
-	bool _bError = false;
-
-	static bool IsGlobalLibFun(std::string& FunName);
-	void RegLibrary(VarInfo* pSystem, const char* pLibName);// , SNeoFunLib* pFuns);
-	static void RegObjLibrary();
-	static void InitLib();
-	inline void SetError(const std::string& msg);
-	inline bool IsLocalErrorMsg() { return _bError; }
-	inline int GetBytesSize() { return _pMainWorker->GetBytesSize(); }
-	int FindFunction(const std::string& name) { return _pMainWorker->FindFunction(name); }
-	bool SetFunction(int iFID, FunctionPtr& fun, int argCount) { return _pMainWorker->SetFunction(iFID, fun, argCount); }
-	int GetMainWorkerID() { return _pMainWorker == NULL ? 0 : _pMainWorker->GetWorkerID(); }
-public:
-	CNeoVM();
-	virtual ~CNeoVM();
-
-	//int FindFunction(const std::string& name)
-	//{
-	//	auto it = m_sImExportTable.find(name);
-	//	if (it == m_sImExportTable.end())
-	//		return -1;
-	//	return (*it).second;
-	//}
-	//bool SetFunction(int iFID, FunctionPtr& fun, int argCount)
-	//{
-	//	fun._argCount = argCount;
-	//	if (m_sFunctionPtr[iFID]._argsCount != argCount)
-	//		return false;
-
-	//	m_sFunctionPtr[iFID]._fun = fun;
-	//	return true;
-	//}
-
-	static FunctionPtrNative RegisterNative(Neo_NativeFunction func)
+	inline void PushArgs() { }
+	template<typename  T, typename ... Types>
+	inline void PushArgs(T arg1, Types ... args)
 	{
-		FunctionPtrNative fun;
-		CNeoVMWorker::neo_pushcclosureNative(&fun, func);
-		return fun;
+		push(arg1);
+		PushArgs(args...);
 	}
+
+	template<typename RVal, typename ... Types>
+	bool iCall(RVal& r, int iFID, Types ... args)
+	{
+		std::vector<VarInfo> args_;
+		_args = &args_;
+		PushArgs(args...);
+		_args = NULL;
+
+		RunFunction(iFID, args_);
+		GC();
+		_read(GetReturnVar(), r);
+		return true;
+	}
+
+	template<typename ... Types>
+	bool iCallN(int iFID, Types ... args)
+	{
+		std::vector<VarInfo> args_;
+		_args = &args_;
+		PushArgs(args...);
+		_args = NULL;
+
+		RunFunction(iFID, args_);
+		GC();
+		ReturnValue();
+		return true;
+	}
+
+	template<typename RVal, typename ... Types>
+	bool Call(RVal& r, const std::string& funName, Types ... args)
+	{
+		std::vector<VarInfo> args_;
+		_args = &args_;
+		PushArgs(args...);
+		_args = NULL;
+
+		RunFunction(funName, args_);
+		GC();
+		_read(GetReturnVar(), r);
+		return true;
+	}
+
+	template<typename ... Types>
+	bool CallN(const std::string& funName, Types ... args)
+	{
+		std::vector<VarInfo> args_;
+		_args = &args_;
+		PushArgs(args...);
+		_args = NULL;
+
+		RunFunction(funName, args_);
+		GC();
+		ReturnValue();
+		return true;
+	}
+
+	template<typename ... Types>
+	bool Setup_TL(int iFID, Types ... args)
+	{
+		std::vector<VarInfo> args_;
+		_args = &args_;
+		PushArgs(args...);
+		_args = NULL;
+
+		if (false == Setup(iFID, args_))
+			return false;
+		return true;
+	}
+
+	virtual int FindFunction(const std::string& name) = 0;
+	virtual bool	Setup(int iFunctionID, std::vector<VarInfo>& _args) = 0;
+	virtual bool	Start(int iFunctionID, std::vector<VarInfo>& _args) = 0;
+
+};
+
+struct INeoVM
+{
+protected:
+	INeoVMWorker* _pMainWorker = NULL;
+	bool _bError = false;
+public:
+	inline bool IsLocalErrorMsg() { return _bError; }
+	static FunctionPtrNative RegisterNative(Neo_NativeFunction func);
+	virtual int FindFunction(const std::string& name) =0;
+	virtual bool SetFunction(int iFID, FunctionPtr& fun, int argCount) =0;
+
+	void Var_AddRef(VarInfo* d);
+	static void Move_DestNoRelease(VarInfo* v1, VarInfo* v2);
+	void Var_ReleaseInternal(VarInfo* d);
 
 	template<typename F>
 	static FunctionPtr Register(F func)
@@ -211,35 +433,31 @@ public:
 		return _pMainWorker->Setup_TL(iFID, args...);
 	}
 
-	bool Call_TL() // Time Limit
-	{
-		return _pMainWorker->CallN_TL();
-	}
+	bool Call_TL(); // Time Limit
+	VarInfo* GetVar(const std::string& name);
+	bool	RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFunction func);
 
-	VarInfo* GetVar(const std::string& name)
-	{
-		return _pMainWorker->GetVar(name);
-	}
+	virtual u32 CreateWorker(int iStackSize = 50 * 1024) =0;
+	virtual bool ReleaseWorker(u32 id) = 0;
+	virtual bool BindWorkerFunction(u32 id, const std::string& funName) = 0;
+	virtual bool SetTimeout(u32 id, int iTimeout = -1, int iCheckOpCount = 1000) = 0;
+	virtual bool IsWorking(u32 id) = 0;
+	virtual bool UpdateWorker(u32 id) = 0;
 
-	u32 CreateWorker(int iStackSize = 50 * 1024);
-	bool ReleaseWorker(u32 id);
-	bool BindWorkerFunction(u32 id, const std::string& funName);
-	bool SetTimeout(u32 id, int iTimeout = -1, int iCheckOpCount = 1000);
-	bool IsWorking(u32 id);
-	bool UpdateWorker(u32 id);
+	int GetMainWorkerID() { return _pMainWorker == NULL ? 0 : _pMainWorker->GetWorkerID(); }
+	inline int GetBytesSize() { return _pMainWorker->GetBytesSize(); }
 
+	virtual  const char* GetLastErrorMsg() = 0;
+	virtual  bool IsLastErrorMsg() = 0;
+	virtual  void ClearLastErrorMsg() = 0;
 
-	inline const char* GetLastErrorMsg() { return _sErrorMsgDetail.c_str();  }
-	inline bool IsLastErrorMsg() { return (_sErrorMsgDetail.empty() == false); }
-	void ClearLastErrorMsg() { _bError = false; _sErrorMsgDetail.clear(); }
+	virtual  INeoVMWorker*	LoadVM(void* pBuffer, int iSize, bool blMainWorker = true, int iStackSize = 50 * 1024) =0; // 0 is error
+	virtual  bool PCall(int iModule) = 0;
 
-	CNeoVMWorker*	LoadVM(void* pBuffer, int iSize, bool blMainWorker = true, int iStackSize = 50 * 1024); // 0 is error
-	bool PCall(int iModule);
-
-	static CNeoVM* 	CreateVM();
-	static void		ReleaseVM(CNeoVM* pVM);
+	static INeoVM* 	CreateVM();
+	static void		ReleaseVM(INeoVM* pVM);
 	static bool		Compile(const void* pBufferSrc, int iLenSrc, CNArchive& arw, std::string& err, bool putASM = false, bool debug = false, bool allowGlobalInitLogic = true);
 
-	static CNeoVM*	CompileAndLoadVM(const void* pBufferSrc, int iLenSrc, std::string& err, bool putASM = false, bool debug = false, bool allowGlobalInitLogic = true, int iStackSize = 50 * 1024);
+	static INeoVM*	CompileAndLoadVM(const void* pBufferSrc, int iLenSrc, std::string& err, bool putASM = false, bool debug = false, bool allowGlobalInitLogic = true, int iStackSize = 50 * 1024);
 };
 

@@ -14,7 +14,7 @@ int SAMPLE_etc(const char*pFileName, const char* pFunctionName)
 	}
 
 	std::string err;
-	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
+	INeoVM* pVM = INeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
 	if (pVM != NULL)
 	{
 		DWORD dwCallTime = 0;
@@ -32,7 +32,7 @@ int SAMPLE_etc(const char*pFileName, const char* pFunctionName)
 		else
 			printf("(Elapse:%d)\n", dwCallTime);
 
-		CNeoVM::ReleaseVM(pVM);
+		INeoVM::ReleaseVM(pVM);
 	}
 	delete[] pFileBuffer;
 

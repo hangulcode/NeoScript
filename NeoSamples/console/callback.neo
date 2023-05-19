@@ -6,6 +6,22 @@ fun Sum1(var a, var b)
 	return a + b;
 }
 
+fun Sum2(var a, var b)
+{
+	if(true)
+		return 1;
+	else
+		return 0;
+}
+
+fun Sum3(var a, var b)
+{
+	if(true)
+		;
+	else
+		return 0;
+}
+
 export fun Set(var mul, var sam)
 {
 	Mul = mul;

@@ -52,6 +52,9 @@
     <ClCompile Include="map_callback.cpp">
       <Filter>Samples</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\NeoSource\NeoVMImpl.cpp">
+      <Filter>NeoScript</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\NeoSource\Neo.h">
@@ -100,6 +103,9 @@
       <Filter>NeoScript</Filter>
     </ClInclude>
     <ClInclude Include="..\..\NeoSource\NeoVMSet.h">
+      <Filter>NeoScript</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\NeoSource\NeoVMImpl.h">
       <Filter>NeoScript</Filter>
     </ClInclude>
   </ItemGroup>

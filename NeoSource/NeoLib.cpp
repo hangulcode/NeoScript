@@ -3,7 +3,7 @@
 #include <iostream>
 #include <algorithm>
 
-#include "NeoVM.h"
+#include "NeoVMImpl.h"
 #include "NeoArchive.h"
 #include "UTFString.h"
 
@@ -156,7 +156,7 @@ struct neo_libs
 		std::string str = pVar->_str->_str;
 
 		VarInfo* pRet = pN->GetStack(0);
-		ListInfo* pListR = pN->_pVM->ListAlloc();
+		ListInfo* pListR = pN->GetVM()->ListAlloc();
 		pN->Var_SetList(pRet, pListR); // Set Return Value
 
 		size_t previous = 0, current;
@@ -420,13 +420,13 @@ struct neo_libs
 		if (false == pVar->_tbl->ToListKeys(lst)) return false;
 		
 		VarInfo* pRet = pN->GetStack(0);
-		ListInfo* pR = pN->_pVM->ListAlloc();
+		ListInfo* pR = pN->GetVM()->ListAlloc();
 		pN->Var_SetList(pRet, pR); // return value
 		pR->Resize((int)lst.size());
 
 		VarInfo* dest = pR->GetDataUnsafe();
 		for (int i = 0; i < (int)lst.size(); i++)
-			CNeoVMWorker::Move_DestNoRelease(&dest[i], lst[i]);
+			INeoVM::Move_DestNoRelease(&dest[i], lst[i]);
 		return true;
 	}
 	static bool map_values(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -438,13 +438,13 @@ struct neo_libs
 		if (false == pVar->_tbl->ToListValues(lst)) return false;
 
 		VarInfo* pRet = pN->GetStack(0);
-		ListInfo* pR = pN->_pVM->ListAlloc();
+		ListInfo* pR = pN->GetVM()->ListAlloc();
 		pN->Var_SetList(pRet, pR); // return value
 		pR->Resize((int)lst.size());
 
 		VarInfo* dest = pR->GetDataUnsafe();
 		for (int i = 0; i < (int)lst.size(); i++)
-			CNeoVMWorker::Move_DestNoRelease(&dest[i], lst[i]);
+			INeoVM::Move_DestNoRelease(&dest[i], lst[i]);
 		return true;
 	}
 	static bool io_print(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -489,12 +489,12 @@ struct neo_libs
 
 		CNArchive arCode;
 		std::string err;
-		if (false == CNeoVM::Compile(pArg1->_str->_str.c_str(), (int)pArg1->_str->_str.length(), arCode, err, false, false))
+		if (false == INeoVM::Compile(pArg1->_str->_str.c_str(), (int)pArg1->_str->_str.length(), arCode, err, false, false))
 		{
 			return false;
 		}
 
-		CNeoVMWorker* pModule = pN->_pVM->LoadVM(arCode.GetData(), arCode.GetBufferOffset());
+		INeoVMWorker* pModule = pN->_pVM->LoadVM(arCode.GetData(), arCode.GetBufferOffset());
 		if (pModule == NULL)
 		{
 			pN->ReturnValue();
@@ -525,7 +525,7 @@ struct neo_libs
 		if (v->GetType() != VAR_FUN)
 			return false;
 
-		CNeoVM* pVM = pN->GetVM();
+		CNeoVMImpl* pVM = pN->GetVM();
 		CoroutineInfo* pCI = pVM->CoroutineAlloc();
 		pCI->_refCount = 0;
 		pCI->_fun_index = v->_fun_index;
@@ -556,7 +556,7 @@ struct neo_libs
 		VarInfo* v = pN->GetStack(1);
 		if (v->GetType() != VAR_COROUTINE) return false;
 
-		CNeoVM* pVM = pN->GetVM();
+		CNeoVMImpl* pVM = pN->GetVM();
 		switch (v->_cor->_state)
 		{
 		case COROUTINE_STATE_SUSPENDED:
@@ -615,7 +615,7 @@ struct neo_libs
 		{
 		case VAR_LIST:
 			{
-				SetInfo* pSetR = pN->_pVM->SetAlloc();
+				SetInfo* pSetR = pN->GetVM()->SetAlloc();
 				pN->Var_SetSet(pRet, pSetR);
 
 				ListInfo* pListV1 = pArg1->_lst;
@@ -646,48 +646,48 @@ static std::map<std::string, TYPE_NeoLib> g_sNeoFunLstLib;
 static std::map<std::string, TYPE_NeoLib> g_sNeoFunStrLib;
 static std::map<std::string, TYPE_NeoLib> g_sNeoFunTblLib;
 
-bool CNeoVM::_funInitLib = false;
-FunctionPtrNative CNeoVM::_funDefaultLib;
-FunctionPtrNative CNeoVM::_funLstLib;
-FunctionPtrNative CNeoVM::_funStrLib;
-FunctionPtrNative CNeoVM::_funTblLib;
+bool CNeoVMImpl::_funInitLib = false;
+FunctionPtrNative CNeoVMImpl::_funDefaultLib;
+FunctionPtrNative CNeoVMImpl::_funLstLib;
+FunctionPtrNative CNeoVMImpl::_funStrLib;
+FunctionPtrNative CNeoVMImpl::_funTblLib;
 
 
-static bool Fun(CNeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
+static bool Fun(INeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
 {
 	auto it = g_sNeoFunLib.find(fun);
 	if (it == g_sNeoFunLib.end())
 		return false;
 
 	TYPE_NeoLib f = (*it).second;
-	return (*f)(pN, (VarInfo*)pUserData, args);
+	return (*f)((CNeoVMWorker*)pN, (VarInfo*)pUserData, args);
 }
-static bool FunStr(CNeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
+static bool FunStr(INeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
 {
 	auto it = g_sNeoFunStrLib.find(fun);
 	if (it == g_sNeoFunStrLib.end())
 		return false;
 
 	TYPE_NeoLib f = (*it).second;
-	return (*f)(pN, (VarInfo*)pUserData, args);
+	return (*f)((CNeoVMWorker*)pN, (VarInfo*)pUserData, args);
 }
-static bool FunLst(CNeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
+static bool FunLst(INeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
 {
 	auto it = g_sNeoFunLstLib.find(fun);
 	if (it == g_sNeoFunLstLib.end())
 		return false;
 
 	TYPE_NeoLib f = (*it).second;
-	return (*f)(pN, (VarInfo*)pUserData, args);
+	return (*f)((CNeoVMWorker*)pN, (VarInfo*)pUserData, args);
 }
-static bool FunTbl(CNeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
+static bool FunTbl(INeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
 {
 	auto it = g_sNeoFunTblLib.find(fun);
 	if (it == g_sNeoFunTblLib.end())
 		return false;
 
 	TYPE_NeoLib f = (*it).second;
-	return (*f)(pN, (VarInfo*)pUserData, args);
+	return (*f)((CNeoVMWorker*)pN, (VarInfo*)pUserData, args);
 }
 static void AddGlobalLibFun()
 {
@@ -726,7 +726,7 @@ static void AddGlobalLibFun()
 	g_sNeoFunLib["coroutine_status"] = &neo_libs::sys_coroutine_status;
 	g_sNeoFunLib["coroutine_close"] = &neo_libs::sys_coroutine_close;
 }
-bool CNeoVM::IsGlobalLibFun(std::string& FunName)
+bool CNeoVMImpl::IsGlobalLibFun(std::string& FunName)
 {
 	//AddGlobalLibFun();
 	InitLib();
@@ -735,25 +735,25 @@ bool CNeoVM::IsGlobalLibFun(std::string& FunName)
 		return false;
 	return true;
 }
-void CNeoVM::RegLibrary(VarInfo* pSystem, const char* pLibName)
+void CNeoVMImpl::RegLibrary(VarInfo* pSystem, const char* pLibName)
 {
 	TableInfo* pTable = pSystem->_tbl;
-	pTable->_fun = CNeoVM::RegisterNative(Fun);
+	pTable->_fun = CNeoVMImpl::RegisterNative(Fun);
 	//AddGlobalLibFun();
 
 	//_funDefaultLib = CNeoVM::RegisterNative(Fun);
 }
 
-void CNeoVM::RegObjLibrary()
+void CNeoVMImpl::RegObjLibrary()
 {
 	if (_funInitLib) return;
 	_funInitLib = true;
 
 	AddGlobalLibFun();
-	_funDefaultLib = CNeoVM::RegisterNative(Fun);
+	_funDefaultLib = CNeoVMImpl::RegisterNative(Fun);
 
 	// String Lib
-	_funStrLib = CNeoVM::RegisterNative(FunStr);
+	_funStrLib = CNeoVMImpl::RegisterNative(FunStr);
 	g_sNeoFunStrLib["sub"] = &neo_libs::Str_sub;
 	g_sNeoFunStrLib["len"] = &neo_libs::Str_len;
 	g_sNeoFunStrLib["find"] = &neo_libs::Str_find;
@@ -766,20 +766,20 @@ void CNeoVM::RegObjLibrary()
 	g_sNeoFunStrLib["split"] = &neo_libs::Str_split;
 
 	// List Lib
-	_funLstLib = CNeoVM::RegisterNative(FunLst);
+	_funLstLib = CNeoVMImpl::RegisterNative(FunLst);
 	g_sNeoFunLstLib["resize"] = &neo_libs::List_resize;
 	g_sNeoFunLstLib["len"] = &neo_libs::List_len;
 	g_sNeoFunLstLib["append"] = &neo_libs::List_append;
 
 	// Map Lib
-	_funTblLib = CNeoVM::RegisterNative(FunTbl);
+	_funTblLib = CNeoVMImpl::RegisterNative(FunTbl);
 	g_sNeoFunTblLib["reserve"] = &neo_libs::map_reserve;
 	g_sNeoFunTblLib["sort"] = &neo_libs::map_sort;
 	g_sNeoFunTblLib["keys"] = &neo_libs::map_keys;
 	g_sNeoFunTblLib["values"] = &neo_libs::map_values;
 }
 
-void CNeoVM::InitLib()
+void CNeoVMImpl::InitLib()
 {
 /*	VarInfo* pSystem = &m_sVarGlobal[0];
 	Var_SetTable(pSystem, TableAlloc());

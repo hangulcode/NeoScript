@@ -1,7 +1,7 @@
 #pragma once
 
 #include "NeoArchive.h"
-#include "NeoVM.h"
+#include "NeoVMImpl.h"
 #include "NeoTextLoader.h"
 
 #define INVALID_ERROR_PARSEJOB			(-1)

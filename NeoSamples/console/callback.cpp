@@ -27,7 +27,7 @@ int SAMPLE_callback()
 	}
 
 	std::string err;
-	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
+	INeoVM* pVM = INeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
 	if (pVM != NULL)
 	{
 		//NeoHelper::Register(pVM, "Mul", Mul);
@@ -49,7 +49,7 @@ int SAMPLE_callback()
 		else
 			printf("Sum %d + %d = %lf\n(Elapse:%d)\n", 100, 200, r, t2 - t1);
 
-		CNeoVM::ReleaseVM(pVM);
+		INeoVM::ReleaseVM(pVM);
 	}
 	delete[] pFileBuffer;
 

@@ -4,7 +4,7 @@
 #include <chrono>
 #include <algorithm>
 
-#include "NeoVM.h"
+#include "NeoVMImpl.h"
 #include "NeoVMWorker.h"
 #include "NeoVMList.h"
 
@@ -15,7 +15,7 @@ void ListInfo::Free()
 
 	for (int i = 0; i < _itemCount; i++)
 	{
-		Var_Release(_pVM, &_Bucket[i]);
+		_pVM->Var_Release(&_Bucket[i]);
 	}
 
 	delete[] _Bucket;
@@ -101,12 +101,4 @@ bool ListInfo::InsertLast(const std::string& str)
 	}
 	_pVM->Var_SetStringA(&_Bucket[_itemCount++], str);
 	return true;
-}
-
-void ListInfo::Var_Release(CNeoVM* pVM, VarInfo *d)
-{
-	if (d->IsAllocType())
-		pVM->Var_ReleaseInternal(d);
-	else
-		d->ClearType();
 }

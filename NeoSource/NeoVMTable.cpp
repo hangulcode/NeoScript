@@ -4,7 +4,7 @@
 #include <chrono>
 #include <algorithm>
 
-#include "NeoVM.h"
+#include "NeoVMImpl.h"
 #include "NeoVMWorker.h"
 #include "NeoVMTable.h"
 
@@ -57,7 +57,7 @@ bool TableInfo::NextNode(CollectionIterator& r)
 	r._pTableNode = NULL;
 	return false;
 }
-void TableInfo::Var_Release(CNeoVM* pVM, VarInfo *d)
+void TableInfo::Var_Release(CNeoVMImpl* pVM, VarInfo *d)
 {
 	if (d->IsAllocType())
 		pVM->Var_ReleaseInternal(d);
@@ -377,9 +377,9 @@ VarInfo* TableInfo::Insert(VarInfo* pKey)
 		_itemCount++;
 
 		TableNode* pNew = _pVM->m_sPool_TableNode.Receive();
-		CNeoVMWorker::Move_DestNoRelease(&pNew->key, pKey);
+		INeoVM::Move_DestNoRelease(&pNew->key, pKey);
 		pNew->value.ClearType();
-		//CNeoVMWorker::Move_DestNoRelease(&pNew->value, pValue);
+		//INeoVM::Move_DestNoRelease(&pNew->value, pValue);
 		pNew->hash = hash;
 
 		pBucket->Add_NoCheck(pNew);

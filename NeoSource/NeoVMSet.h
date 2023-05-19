@@ -31,13 +31,13 @@ struct SetBucket
 	}
 };
 
-class CNeoVM;
+class CNeoVMImpl;
 class CNeoVMWorker;
 struct SetInfo : AllocBase
 {
 	SetBucket*	_Bucket;
 
-	CNeoVM*	_pVM;
+	CNeoVMImpl*	_pVM;
 
 	int	_HashBase;
 	int _BucketCapa;
@@ -67,6 +67,6 @@ struct SetInfo : AllocBase
 	inline int		GetCount() { return _itemCount; }
 
 private:
-	void Var_Release(CNeoVM* pVM, VarInfo *d);
+	void Var_Release(CNeoVMImpl* pVM, VarInfo *d);
 };
 

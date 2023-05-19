@@ -5,7 +5,7 @@ struct neo_DCalllibs
 		if (v1->GetType() != VAR_LIST) return false;
 		if (v2->GetType() != VAR_LIST) return false;
 
-		ListInfo* pR = pN->_pVM->ListAlloc();
+		ListInfo* pR = pN->GetVM()->ListAlloc();
 		pN->Var_SetList(r, pR);
 
 		ListInfo* pV1 = v1->_lst;
@@ -21,9 +21,9 @@ struct neo_DCalllibs
 		VarInfo* src2 = pV2->GetDataUnsafe();
 
 		for (int i = 0; i < s1; i++)
-			CNeoVMWorker::Move_DestNoRelease(&dest[i], &src1[i]);
+			INeoVM::Move_DestNoRelease(&dest[i], &src1[i]);
 		for (int i = 0; i < s2; i++)
-			CNeoVMWorker::Move_DestNoRelease(&dest[i + s1], &src2[i]);
+			INeoVM::Move_DestNoRelease(&dest[i + s1], &src2[i]);
 
 		return true;
 	}
@@ -32,7 +32,7 @@ struct neo_DCalllibs
 		if (v1->GetType() != VAR_SET) return false;
 		if (v2->GetType() != VAR_SET) return false;
 
-		SetInfo* pR = pN->_pVM->SetAlloc();
+		SetInfo* pR = pN->GetVM()->SetAlloc();
 		pN->Var_SetSet(r, pR);
 
 		SetInfo* pV1 = v1->_set;
@@ -54,7 +54,7 @@ struct neo_DCalllibs
 		if (v1->GetType() != VAR_SET) return false;
 		if (v2->GetType() != VAR_SET) return false;
 
-		SetInfo* pR = pN->_pVM->SetAlloc();
+		SetInfo* pR = pN->GetVM()->SetAlloc();
 		pN->Var_SetSet(r, pR);
 
 		SetInfo* pV1 = v1->_set;
@@ -83,7 +83,7 @@ struct neo_DCalllibs
 		if (v1->GetType() != VAR_SET) return false;
 		if (v2->GetType() != VAR_SET) return false;
 
-		SetInfo* pR = pN->_pVM->SetAlloc();
+		SetInfo* pR = pN->GetVM()->SetAlloc();
 		pN->Var_SetSet(r, pR);
 
 		SetInfo* pV1 = v1->_set;

@@ -1582,7 +1582,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 				iTempOffset._operandType = Data_Fun;
 			}
 		}
-		else if (CNeoVM::IsGlobalLibFun(tk1))
+		else if (CNeoVMImpl::IsGlobalLibFun(tk1))
 		{
 			tkType2 = GetToken(ar, tk2);
 			if (tkType2 == TK_L_SMALL)
@@ -3407,7 +3407,7 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	return r;
 }
 
-bool CNeoVM::Compile(const void* pBufferSrc, int iLenSrc, CNArchive& arw, std::string& err, bool putASM, bool debug, bool allowGlobalInitLogic)
+bool INeoVM::Compile(const void* pBufferSrc, int iLenSrc, CNArchive& arw, std::string& err, bool putASM, bool debug, bool allowGlobalInitLogic)
 {
 	CArchiveRdWC ar2;
 	ToArchiveRdWC((const char*)pBufferSrc, iLenSrc, ar2);
@@ -3423,7 +3423,7 @@ bool CNeoVM::Compile(const void* pBufferSrc, int iLenSrc, CNArchive& arw, std::s
 
 	return b;
 }
-CNeoVM*	CNeoVM::CompileAndLoadVM(const void* pBufferSrc, int iLenSrc, std::string& err, bool putASM, bool debug, bool allowGlobalInitLogic, int iStackSize)
+INeoVM* INeoVM::CompileAndLoadVM(const void* pBufferSrc, int iLenSrc, std::string& err, bool putASM, bool debug, bool allowGlobalInitLogic, int iStackSize)
 {
 	CNArchive arCode;
 
@@ -3437,10 +3437,10 @@ CNeoVM*	CNeoVM::CompileAndLoadVM(const void* pBufferSrc, int iLenSrc, std::strin
 	//if(putASM)
 	//	SetCompileError(ar, "Comile Success. Code : %d bytes !!\n\n", arCode.GetBufferOffset());
 
-	CNeoVM* pVM = CNeoVM::CreateVM();
+	INeoVM* pVM = INeoVM::CreateVM();
 	if (pVM->LoadVM(arCode.GetData(), arCode.GetBufferOffset(), iStackSize) == NULL)
 	{
-		CNeoVM::ReleaseVM(pVM);
+		INeoVM::ReleaseVM(pVM);
 		return NULL;
 	}
 

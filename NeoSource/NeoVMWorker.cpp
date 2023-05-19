@@ -3,7 +3,7 @@
 #include <stdarg.h>
 #include <thread>
 #include <chrono>
-#include "NeoVM.h"
+#include "NeoVMImpl.h"
 #include "NeoVMWorker.h"
 #include "NeoArchive.h"
 #include "NeoLibDCall.h"
@@ -32,7 +32,7 @@ static std::string g_meta_Per2 = "%=";
 
 
 
-CNeoVMWorker::CNeoVMWorker(CNeoVM* pVM, u32 id, int iStackSize)
+CNeoVMWorker::CNeoVMWorker(INeoVM* pVM, u32 id, int iStackSize)
 {
 	_pVM = pVM;
 	_idWorker = id;
@@ -66,151 +66,8 @@ CNeoVMWorker::~CNeoVMWorker()
 		_pCodeBegin = NULL;
 	}
 }
-void CNeoVMWorker::Var_AddRef(VarInfo *d)
-{
-	switch (d->GetType())
-	{
-	case VAR_STRING:
-		++d->_str->_refCount;
-		break;
-	case VAR_TABLE:
-		++d->_tbl->_refCount;
-		break;
-	case VAR_COROUTINE:
-		++d->_cor->_refCount;
-		break;
-	default:
-		break;
-	}
-}
-void CNeoVMWorker::Var_Release(VarInfo *d)
-{
-	if (d->IsAllocType())
-		_pVM->Var_ReleaseInternal(d);
-	else
-		d->ClearType();
-}
 
-void CNeoVMWorker::Var_SetInt(VarInfo *d, int v)
-{
-	if (d->GetType() != VAR_INT)
-	{
-		if (d->IsAllocType())
-			Var_Release(d);
 
-		d->SetType(VAR_INT);
-	}
-	d->_int = v;
-}
-
-void CNeoVMWorker::Var_SetFloat(VarInfo *d, double v)
-{
-	if (d->GetType() != VAR_FLOAT)
-	{
-		if (d->IsAllocType())
-			Var_Release(d);
-
-		d->SetType(VAR_FLOAT);
-	}
-	d->_float = v;
-}
-void CNeoVMWorker::Var_SetNone(VarInfo *d)
-{
-	if (d->GetType() != VAR_NONE)
-	{
-		if (d->IsAllocType())
-			Var_Release(d);
-
-		d->ClearType();
-	}
-}
-
-void CNeoVMWorker::Var_SetBool(VarInfo *d, bool v)
-{
-	if (d->GetType() != VAR_BOOL)
-	{
-		if (d->IsAllocType())
-			Var_Release(d);
-
-		d->SetType(VAR_BOOL);
-	}
-	d->_bl = v;
-}
-void CNeoVMWorker::Var_SetFun(VarInfo* d, int fun_index)
-{
-	if (d->IsAllocType())
-		Var_Release(d);
-
-	d->SetType(VAR_FUN);
-	d->_fun_index = fun_index;
-}
-void CNeoVMWorker::Var_SetCoroutine(VarInfo *d, CoroutineInfo* p)
-{
-	if (d->IsAllocType())
-		Var_Release(d);
-
-	d->SetType(VAR_COROUTINE);
-	d->_cor = p;
-	++d->_cor->_refCount;
-}
-void CNeoVMWorker::Var_SetString(VarInfo *d, const char* str)
-{
-	Var_SetStringA(d, str);
-}
-void CNeoVMWorker::Var_SetString(VarInfo* d, SUtf8One c)
-{
-	if (d->IsAllocType())
-		Var_Release(d);
-
-	d->SetType(VAR_CHAR);
-	d->_c = c;
-}
-
-void CNeoVMWorker::Var_SetStringA(VarInfo *d, const std::string& str)
-{
-	if (d->IsAllocType())
-		Var_Release(d);
-
-	d->SetType(VAR_STRING);
-	d->_str = _pVM->StringAlloc(str);
-	++d->_str->_refCount;
-}
-void CNeoVMWorker::Var_SetTable(VarInfo *d, TableInfo* p)
-{
-	if (d->IsAllocType())
-		Var_Release(d);
-
-	d->SetType(VAR_TABLE);
-	d->_tbl = p;
-	++p->_refCount;
-}
-void CNeoVMWorker::Var_SetList(VarInfo *d, ListInfo* p)
-{
-	if (d->IsAllocType())
-		Var_Release(d);
-
-	d->SetType(VAR_LIST);
-	d->_lst = p;
-	++p->_refCount;
-}
-void CNeoVMWorker::Var_SetSet(VarInfo *d, SetInfo* p)
-{
-	if (d->IsAllocType())
-		Var_Release(d);
-
-	d->SetType(VAR_SET);
-	d->_set = p;
-	++p->_refCount;
-}
-void CNeoVMWorker::Var_SetModule(VarInfo *d, CNeoVMWorker* p)
-{
-	if (d->IsAllocType())
-		Var_Release(d);
-
-	d->SetType(VAR_MODULE);
-	d->_module = p;
-	++p->_refCount;
-}
 
 void CNeoVMWorker::CltInsert(VarInfo *pClt, VarInfo *pKey, VarInfo *pValue)
 {
@@ -1387,27 +1244,27 @@ VarInfo* CNeoVMWorker::GetType(VarInfo* v1)
 	switch (v1->GetType())
 	{
 	case VAR_NONE:
-		return &_pVM->m_sDefaultValue[NDF_NULL];
+		return &GetVM()->m_sDefaultValue[NDF_NULL];
 	case VAR_BOOL:
-		return &_pVM->m_sDefaultValue[NDF_BOOL];
+		return &GetVM()->m_sDefaultValue[NDF_BOOL];
 	case VAR_INT:
-		return &_pVM->m_sDefaultValue[NDF_INT];
+		return &GetVM()->m_sDefaultValue[NDF_INT];
 	case VAR_FLOAT:
-		return &_pVM->m_sDefaultValue[NDF_FLOAT];
+		return &GetVM()->m_sDefaultValue[NDF_FLOAT];
 	case VAR_CHAR:
 	case VAR_STRING:
-		return &_pVM->m_sDefaultValue[NDF_STRING];
+		return &GetVM()->m_sDefaultValue[NDF_STRING];
 	case VAR_TABLE:
-		return &_pVM->m_sDefaultValue[NDF_TABLE];
+		return &GetVM()->m_sDefaultValue[NDF_TABLE];
 	case VAR_COROUTINE:
-		return &_pVM->m_sDefaultValue[NDF_COROUTINE];
+		return &GetVM()->m_sDefaultValue[NDF_COROUTINE];
 	case VAR_FUN:
 	case VAR_FUN_NATIVE:
-		return &_pVM->m_sDefaultValue[NDF_FUNCTION];
+		return &GetVM()->m_sDefaultValue[NDF_FUNCTION];
 	default:
 		break;
 	}
-	return &_pVM->m_sDefaultValue[NDF_NULL];
+	return &GetVM()->m_sDefaultValue[NDF_NULL];
 }
 
 void CNeoVMWorker::Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue)
@@ -1606,7 +1463,7 @@ bool CNeoVMWorker::Init(void* pBuffer, int iSize, int iStackSize)
 			break;
 		case VAR_STRING:
 			ReadString(ar, tempStr);
-			vi._str = _pVM->StringAlloc(tempStr);
+			vi._str = GetVM()->StringAlloc(tempStr);
 			vi._str->_refCount = 1;
 			break;
 		//case VAR_FUN:
@@ -1637,13 +1494,13 @@ int CNeoVMWorker::GetDebugLine()
 }
 void CNeoVMWorker::SetError(const char* pErrMsg)
 {
-	_pVM->SetError(std::string(pErrMsg));
+	GetVM()->SetError(std::string(pErrMsg));
 }
 void CNeoVMWorker::SetErrorUnsupport(const char* pErrMsg, VarInfo* p)
 {
 	char buff[1024];
 	sprintf_s(buff, _countof(buff), pErrMsg, GetDataType(p->GetType()).c_str());
-	_pVM->SetError(std::string(buff));
+	GetVM()->SetError(std::string(buff));
 }
 void CNeoVMWorker::SetErrorFormat(const char* lpszString, ...)
 {
@@ -1657,7 +1514,7 @@ void CNeoVMWorker::SetErrorFormat(const char* lpszString, ...)
 #endif
 	va_end(arg_ptr);
 
-	_pVM->SetError(std::string(buff));
+	GetVM()->SetError(std::string(buff));
 }
 
 bool	CNeoVMWorker::Start(int iFunctionID, std::vector<VarInfo>& _args)
@@ -1945,7 +1802,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 
 			case NOP_CALL:
 				Call(OP.n1, OP.n2);
-				if(_pVM->IsLocalErrorMsg())
+				if(GetVM()->IsLocalErrorMsg())
 					break;
 				break;
 			case NOP_PTRCALL:
@@ -1967,7 +1824,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 					Var_SetString(pVar1, pVar1->_c.c); // char -> string
 				case VAR_STRING:
 					pFunName = GetVarPtr2(OP);
-					CallNative(_pVM->_funStrLib, pVar1, pFunName->_str->_str, n3);
+					CallNative(GetVM()->_funStrLib, pVar1, pFunName->_str->_str, n3);
 					break;
 				case VAR_TABLE:
 				{
@@ -1990,12 +1847,12 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 						CallNative(fun, pVar1, pFunName->_str->_str, n3);
 						break;
 					}
-					CallNative(_pVM->_funTblLib, pVar1, pFunName->_str->_str, n3);
+					CallNative(GetVM()->_funTblLib, pVar1, pFunName->_str->_str, n3);
 					break;
 				}
 				case VAR_LIST:
 					pFunName = GetVarPtr2(OP);
-					CallNative(_pVM->_funLstLib, pVar1, pFunName->_str->_str, n3);
+					CallNative(GetVM()->_funLstLib, pVar1, pFunName->_str->_str, n3);
 					break;
 				case VAR_SET:
 					break;
@@ -2011,13 +1868,13 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				VarInfo* pFunName = GetVarPtr1(OP);
 				if (pFunName->GetType() == VAR_CHAR)
 				{
-					CallNative(_pVM->_funDefaultLib, NULL, pFunName->_c.c, n2);
+					CallNative(GetVM()->_funDefaultLib, NULL, pFunName->_c.c, n2);
 					//					SetError("Ptr Call Error");
 					break;
 				}				
 				else if (pFunName->GetType() == VAR_STRING)
 				{
-					CallNative(_pVM->_funDefaultLib, NULL, pFunName->_str->_str, n2);
+					CallNative(GetVM()->_funDefaultLib, NULL, pFunName->_str->_str, n2);
 //					SetError("Ptr Call Error");
 					break;
 				}
@@ -2079,7 +1936,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				iSP_VarsMax = callStack._iSP_VarsMax;
 				break;*/
 			case NOP_TABLE_ALLOC:
-				Var_SetTable(GetVarPtr1(OP), _pVM->TableAlloc(OP.n23));
+				Var_SetTable(GetVarPtr1(OP), GetVM()->TableAlloc(OP.n23));
 				break;
 			case NOP_CLT_READ:
 				CltRead(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
@@ -2113,7 +1970,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				//break;
 
 			case NOP_LIST_ALLOC:
-				Var_SetList(GetVarPtr1(OP), _pVM->ListAlloc(OP.n23));
+				Var_SetList(GetVarPtr1(OP), GetVM()->ListAlloc(OP.n23));
 				break;
 /*			case NOP_LIST_READ:
 				TableRead(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
@@ -2153,7 +2010,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				SetError("Unknown OP");
 				break;
 			}
-			if (_pVM->_bError)
+			if (_pVM->IsLocalErrorMsg())
 			{
 				m_pCallStack->clear();
 				_iSP_Vars = 0;
@@ -2161,12 +2018,12 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 					_lineseq = GetDebugLine();
 				int idx = int((_pCodeCurrent - _pCodeBegin) / 8 - 1);
 #ifdef _WIN32
-				sprintf_s(chMsg, _countof(chMsg), "%s : Index(%d), Line (%d)", _pVM->_pErrorMsg.c_str(), idx, _lineseq);
+				sprintf_s(chMsg, _countof(chMsg), "%s : Index(%d), Line (%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
 #else
 				sprintf(chMsg, "%s : Index(%d), Line (%d)", _pVM->_pErrorMsg, idx, _lineseq);
 #endif
-				if(_pVM->_sErrorMsgDetail.empty())
-					_pVM->_sErrorMsgDetail = chMsg;
+				if(GetVM()->_sErrorMsgDetail.empty())
+					GetVM()->_sErrorMsgDetail = chMsg;
 				return false;
 			}
 			if (isTimeout)
@@ -2187,11 +2044,11 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 		if(blDebugInfo)
 			_lineseq = GetDebugLine();
 #ifdef _WIN32
-		sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", _pVM->_pErrorMsg.c_str(), _lineseq);
+		sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", GetVM()->_pErrorMsg.c_str(), _lineseq);
 #else
 		sprintf(chMsg, "%s : Line (%d)", _pVM->_pErrorMsg, _lineseq);
 #endif
-		_pVM->_sErrorMsgDetail = chMsg;
+		GetVM()->_sErrorMsgDetail = chMsg;
 		return false;
 	}
 	return true;
@@ -2203,10 +2060,10 @@ bool CNeoVMWorker::RunFunction(const std::string& funName, std::vector<VarInfo>&
 	if (it == m_sImExportTable.end())
 	{
 		SetError("Function Not Found");
-		_pVM->_sErrorMsgDetail = _pVM->_pErrorMsg;
-		_pVM->_sErrorMsgDetail += "(";
-		_pVM->_sErrorMsgDetail += funName;
-		_pVM->_sErrorMsgDetail += ")";
+		GetVM()->_sErrorMsgDetail = GetVM()->_pErrorMsg;
+		GetVM()->_sErrorMsgDetail += "(";
+		GetVM()->_sErrorMsgDetail += funName;
+		GetVM()->_sErrorMsgDetail += ")";
 		return false;
 	}
 
@@ -2215,31 +2072,7 @@ bool CNeoVMWorker::RunFunction(const std::string& funName, std::vector<VarInfo>&
 
 	return true;
 }
-void CNeoVMWorker::PushString(const char* p)
-{
-	std::string s(p);
-	VarInfo d;
-	d.SetType(VAR_STRING);
-	d._str = _pVM->StringAlloc(s);
-	_args->push_back(d);
-}
-void CNeoVMWorker::PushNeoFunction(NeoFunction v)
-{
-	VarInfo d;
-	if (v._fun_index >= 0 && v._pWorker == this)
-	{
-		d.SetType(VAR_FUN);
-		d._fun_index = v._fun_index;
-	}
-	else if (v._fun._func)
-	{
-		d.SetType(VAR_FUN_NATIVE);
-		d._funPtr = _pVM->FunctionPtrAlloc(&v._fun);
-	}
-	else
-		d.ClearType();
-	_args->push_back(d);
-}
+
 void	CNeoVMWorker::DeadCoroutine(CoroutineInfo* pCI)
 {
 	pCI->_state = COROUTINE_STATE_DEAD;

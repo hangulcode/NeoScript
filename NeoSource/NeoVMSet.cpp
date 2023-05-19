@@ -4,7 +4,7 @@
 #include <chrono>
 #include <algorithm>
 
-#include "NeoVM.h"
+#include "NeoVMImpl.h"
 #include "NeoVMWorker.h"
 #include "NeoVMSet.h"
 
@@ -104,7 +104,7 @@ bool SetInfo::NextNode(CollectionIterator& r)
 	r._pSetNode = NULL;
 	return false;
 }
-void SetInfo::Var_Release(CNeoVM* pVM, VarInfo *d)
+void SetInfo::Var_Release(CNeoVMImpl* pVM, VarInfo *d)
 {
 	if (d->IsAllocType())
 		pVM->Var_ReleaseInternal(d);
@@ -459,7 +459,7 @@ bool SetInfo::Insert(VarInfo* pKey)
 		_itemCount++;
 
 		SetNode* pNew = _pVM->m_sPool_SetNode.Receive();
-		CNeoVMWorker::Move_DestNoRelease(&pNew->key, pKey);
+		INeoVM::Move_DestNoRelease(&pNew->key, pKey);
 		pNew->hash = hash;
 
 		pBucket->Add_NoCheck(pNew);

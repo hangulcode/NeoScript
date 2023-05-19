@@ -15,7 +15,7 @@ int SAMPLE_slice_run()
 
 
 	std::string err;
-	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
+	INeoVM* pVM = INeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
 	if (pVM != NULL)
 	{
 		// Alloc Worker Stack
@@ -64,7 +64,7 @@ int SAMPLE_slice_run()
 			Sleep(10);
 		}
 		pVM->ReleaseWorker(id);
-		CNeoVM::ReleaseVM(pVM);
+		INeoVM::ReleaseVM(pVM);
 	}
 	delete[] pFileBuffer;
 

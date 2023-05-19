@@ -1,10 +1,47 @@
 #include <math.h>
 #include <stdlib.h>
-#include "NeoVM.h"
+#include "NeoVMImpl.h"
+#include "NeoVMWorker.h"
 #include "NeoArchive.h"
 #include "UTFString.h"
 
-void CNeoVM::Var_AddRef(VarInfo *d)
+
+INeoVM* 	INeoVM::CreateVM()
+{
+	CNeoVMImpl* p = new CNeoVMImpl();
+	return (INeoVM*)p;
+}
+void		INeoVM::ReleaseVM(INeoVM* pVM)
+{
+	delete (CNeoVMImpl*)pVM;
+}
+
+FunctionPtrNative INeoVM::RegisterNative(Neo_NativeFunction func)
+{
+	FunctionPtrNative fun;
+	CNeoVMWorker::neo_pushcclosureNative(&fun, func);
+	return fun;
+}
+bool INeoVM::Call_TL() // Time Limit
+{
+	return ((CNeoVMWorker*)_pMainWorker)->CallN_TL();
+}
+
+VarInfo* INeoVM::GetVar(const std::string& name)
+{
+	return ((CNeoVMWorker*)_pMainWorker)->GetVar(name);
+}
+bool	INeoVM::RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFunction func)
+{
+	if (p == nullptr || p->GetType() != VAR_TABLE) return false;
+
+	TableInfo* pTable = p->_tbl;
+	pTable->_pUserData = pUserData;
+	pTable->_fun = INeoVM::RegisterNative(func);
+	return true;
+}
+
+void INeoVM::Var_AddRef(VarInfo* d)
 {
 	switch (d->GetType())
 	{
@@ -18,466 +55,324 @@ void CNeoVM::Var_AddRef(VarInfo *d)
 		++d->_lst->_refCount;
 		break;
 	case VAR_SET:
-		++d->_tbl->_refCount;
+		++d->_set->_refCount;
 		break;
 	case VAR_COROUTINE:
 		++d->_cor->_refCount;
+		break;
+	case VAR_MODULE:
+		++((CNeoVMWorker*)(d->_module))->_refCount;
 		break;
 	default:
 		break;
 	}
 }
 
-
-void CNeoVM::Var_SetString(VarInfo *d, const char* str)
+void INeoVM::Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
 {
-	std::string s(str);
-	Var_SetStringA(d, s);
+	v1->SetType(v2->GetType());
+	switch (v2->GetType())
+	{
+	case VAR_NONE: break;
+	case VAR_BOOL: v1->_bl = v2->_bl; break;
+	case VAR_INT: v1->_int = v2->_int; break;
+	case VAR_FLOAT: v1->_float = v2->_float; break;
+	case VAR_FUN: v1->_fun_index = v2->_fun_index; break;
+	case VAR_FUN_NATIVE: v1->_funPtr = v2->_funPtr; break;
+	case VAR_CHAR: v1->_c = v2->_c; break;
+
+	case VAR_STRING: v1->_str = v2->_str; ++v1->_str->_refCount; break;
+	case VAR_TABLE: v1->_tbl = v2->_tbl; ++v1->_tbl->_refCount; break;
+	case VAR_LIST: v1->_lst = v2->_lst; ++v1->_lst->_refCount; break;
+	case VAR_SET: v1->_set = v2->_set; ++v1->_set->_refCount; break;
+	case VAR_COROUTINE: v1->_cor = v2->_cor; ++v1->_cor->_refCount; break;
+	case VAR_MODULE: v1->_module = v2->_module; ++((CNeoVMWorker*)(v1->_module))->_refCount; break;
+	default: break;
+	}
 }
-void CNeoVM::Var_SetStringA(VarInfo *d, const std::string& str)
+void INeoVM::Var_ReleaseInternal(VarInfo* d)
+{
+	switch (d->GetType())
+	{
+	case VAR_STRING:
+		if (--d->_str->_refCount <= 0)
+			((CNeoVMImpl*)this)->FreeString(d);
+		d->_str = NULL;
+		break;
+	case VAR_TABLE:
+		if (--d->_tbl->_refCount <= 0)
+			((CNeoVMImpl*)this)->FreeTable(d->_tbl);
+		d->_tbl = NULL;
+		break;
+	case VAR_LIST:
+		if (--d->_lst->_refCount <= 0)
+			((CNeoVMImpl*)this)->FreeList(d->_lst);
+		d->_lst = NULL;
+		break;
+	case VAR_SET:
+		if (--d->_set->_refCount <= 0)
+			((CNeoVMImpl*)this)->FreeSet(d->_set);
+		d->_set = NULL;
+		break;
+	case VAR_COROUTINE:
+		if (--d->_cor->_refCount <= 0)
+			((CNeoVMImpl*)this)->FreeCoroutine(d);
+		d->_cor = NULL;
+		break;
+	case VAR_MODULE:
+		if (--((CNeoVMWorker*)(d->_module))->_refCount <= 0)
+			((CNeoVMImpl*)this)->FreeWorker((CNeoVMWorker*)d->_module);
+		d->_module = NULL;
+		break;
+	default:
+		break;
+	}
+	d->ClearType();
+}
+/// <summary>
+/// INeoVMWorker 
+/// </summary>
+/// <param name="d"></param>
+
+
+void INeoVMWorker::PushString(const char* p)
+{
+	std::string s(p);
+	VarInfo d;
+	d.SetType(VAR_STRING);
+	d._str = ((CNeoVMImpl*)_pVM)->StringAlloc(s);
+	_args->push_back(d);
+}
+void INeoVMWorker::PushNeoFunction(NeoFunction v)
+{
+	VarInfo d;
+	if (v._fun_index >= 0 && v._pWorker == this)
+	{
+		d.SetType(VAR_FUN);
+		d._fun_index = v._fun_index;
+	}
+	else if (v._fun._func)
+	{
+		d.SetType(VAR_FUN_NATIVE);
+		d._funPtr = ((CNeoVMImpl*)_pVM)->FunctionPtrAlloc(&v._fun);
+	}
+	else
+		d.ClearType();
+	_args->push_back(d);
+}
+const char* INeoVMWorker::PopString(VarInfo* V)
+{
+	if (V->GetType() == VAR_STRING)
+		return V->_str->_str.c_str();
+	else if (V->GetType() == VAR_CHAR)
+		return V->_c.c;
+
+	return NULL;
+}
+const std::string* INeoVMWorker::PopStlString(VarInfo* V)
+{
+	//		if (V->GetType() == VAR_STRING)
+	//			return &V->_str->_str;
+
+	return NULL;
+}
+
+void INeoVMWorker::Var_Release(VarInfo* d)
+{
+	if (d->IsAllocType())
+		_pVM->Var_ReleaseInternal(d);
+	else
+		d->ClearType();
+}
+void INeoVMWorker::Var_SetInt(VarInfo* d, int v)
+{
+	if (d->GetType() != VAR_INT)
+	{
+		if (d->IsAllocType())
+			Var_Release(d);
+
+		d->SetType(VAR_INT);
+	}
+	d->_int = v;
+}
+
+void INeoVMWorker::Var_SetFloat(VarInfo* d, double v)
+{
+	if (d->GetType() != VAR_FLOAT)
+	{
+		if (d->IsAllocType())
+			Var_Release(d);
+
+		d->SetType(VAR_FLOAT);
+	}
+	d->_float = v;
+}
+void INeoVMWorker::Var_SetNone(VarInfo* d)
+{
+	if (d->GetType() != VAR_NONE)
+	{
+		if (d->IsAllocType())
+			Var_Release(d);
+
+		d->ClearType();
+	}
+}
+
+void INeoVMWorker::Var_SetBool(VarInfo* d, bool v)
+{
+	if (d->GetType() != VAR_BOOL)
+	{
+		if (d->IsAllocType())
+			Var_Release(d);
+
+		d->SetType(VAR_BOOL);
+	}
+	d->_bl = v;
+}
+void INeoVMWorker::Var_SetFun(VarInfo* d, int fun_index)
+{
+	if (d->IsAllocType())
+		Var_Release(d);
+
+	d->SetType(VAR_FUN);
+	d->_fun_index = fun_index;
+}
+void INeoVMWorker::Var_SetCoroutine(VarInfo* d, CoroutineInfo* p)
+{
+	if (d->IsAllocType())
+		Var_Release(d);
+
+	d->SetType(VAR_COROUTINE);
+	d->_cor = p;
+	++d->_cor->_refCount;
+}
+void INeoVMWorker::Var_SetString(VarInfo* d, const char* str)
+{
+	Var_SetStringA(d, str);
+}
+void INeoVMWorker::Var_SetString(VarInfo* d, SUtf8One c)
+{
+	if (d->IsAllocType())
+		Var_Release(d);
+
+	d->SetType(VAR_CHAR);
+	d->_c = c;
+}
+
+void INeoVMWorker::Var_SetStringA(VarInfo* d, const std::string& str)
 {
 	if (d->IsAllocType())
 		Var_Release(d);
 
 	d->SetType(VAR_STRING);
-	d->_str = StringAlloc(str);
+	d->_str = ((CNeoVMImpl*)_pVM)->StringAlloc(str);
 	++d->_str->_refCount;
 }
-void CNeoVM::Var_SetTable(VarInfo *d, TableInfo* p)
+void INeoVMWorker::Var_SetTable(VarInfo* d, TableInfo* p)
 {
 	if (d->IsAllocType())
 		Var_Release(d);
 
 	d->SetType(VAR_TABLE);
 	d->_tbl = p;
-	++d->_tbl->_refCount;
+	++p->_refCount;
 }
-
-
-CNeoVMWorker* CNeoVM::WorkerAlloc(int iStackSize)
+void INeoVMWorker::Var_SetList(VarInfo* d, ListInfo* p)
 {
-	while (true)
+	if (d->IsAllocType())
+		Var_Release(d);
+
+	d->SetType(VAR_LIST);
+	d->_lst = p;
+	++p->_refCount;
+}
+void INeoVMWorker::Var_SetSet(VarInfo* d, SetInfo* p)
+{
+	if (d->IsAllocType())
+		Var_Release(d);
+
+	d->SetType(VAR_SET);
+	d->_set = p;
+	++p->_refCount;
+}
+void INeoVMWorker::Var_SetModule(VarInfo* d, INeoVMWorker* p)
+{
+	if (d->IsAllocType())
+		Var_Release(d);
+
+	d->SetType(VAR_MODULE);
+	d->_module = p;
+	++((CNeoVMWorker*)p)->_refCount;
+}
+bool INeoVMWorker::GetArg_StlString(int idx, std::string& r) 
+{
+	VarInfo* p = GetStackVar(idx);
+	if(p == nullptr) return false;
+	switch (p->GetType())
 	{
-		if (++_dwLastIDVMWorker == 0)
-			_dwLastIDVMWorker = 1;
-
-		if (_sVMWorkers.end() == _sVMWorkers.find(_dwLastIDVMWorker))
-		{
-			break;
-		}
+		case VAR_CHAR:
+			r = p->_c.c;
+			return true;
+		case VAR_STRING:
+			r = p->_str->_str;
+			return true;
 	}
-
-	CNeoVMWorker* p = new CNeoVMWorker(this, _dwLastIDVMWorker, iStackSize);
-	p->_refCount = 0;
-
-	_sVMWorkers[_dwLastIDVMWorker] = p;
-	return p;
+	return false;
 }
-void CNeoVM::FreeWorker(CNeoVMWorker *d)
+bool INeoVMWorker::GetArg_Int(int idx, int& r)
 {
-	auto it = _sVMWorkers.find(d->GetWorkerID());
-	if (it == _sVMWorkers.end())
-		return;
-
-	_sVMWorkers.erase(it);
-	delete d;
-}
-CNeoVMWorker* CNeoVM::FindWorker(int iModule)
-{
-	auto it = _sVMWorkers.find(iModule);
-	if (it == _sVMWorkers.end())
-		return NULL;
-
-	return (*it).second;
-}
-
-CoroutineInfo* CNeoVM::CoroutineAlloc()
-{
-	CoroutineInfo* p = m_sPool_Coroutine.Receive();
-	p->_info._pCodeCurrent = NULL;
-	p->m_sCallStack.reserve(1000);
-	p->m_sVarStack.resize(10000);
-	return p;
-}
-void CNeoVM::FreeCoroutine(VarInfo *d)
-{
-	CoroutineInfo* p = d->_cor;
-	m_sPool_Coroutine.Confer(p);
-}
-
-StringInfo* CNeoVM::StringAlloc(const std::string& str)
-{
-	StringInfo* p = m_sPool_String.Receive();// new StringInfo();
-	while (true)
+	VarInfo* p = GetStackVar(idx);
+	if (p == nullptr) return false;
+	switch (p->GetType())
 	{
-		if (++m_sPool_String._dwLastID == 0)
-			m_sPool_String._dwLastID = 1;
-
-		if (_sStrings.end() == _sStrings.find(m_sPool_String._dwLastID))
-		{
-			break;
-		}
+	case VAR_INT:
+		r = p->_int;
+		return true;
+	case VAR_FLOAT:
+		r = (int)p->_float;
+		return true;
 	}
-
-	p->_StringID = m_sPool_String._dwLastID;
-	p->_refCount = 0;
-
-	p->_str = str;
-	p->_StringLen = utf_string::UTF8_LENGTH(str);
-
-	_sStrings[m_sPool_String._dwLastID] = p;
-	return p;
+	return false;
 }
-void CNeoVM::FreeString(VarInfo *d)
+bool INeoVMWorker::GetArg_Double(int idx, double& r)
 {
-	auto it = _sStrings.find(d->_str->_StringID);
-	if (it == _sStrings.end())
-		return; // Error
-
-	_sStrings.erase(it);
-	//delete d->_str;
-	m_sPool_String.Confer(d->_str);
-}
-TableInfo* CNeoVM::TableAlloc(int cnt)
-{
-	TableInfo* pTable = m_sPool_TableInfo.Receive();
-	while (true)
+	VarInfo* p = GetStackVar(idx);
+	if (p == nullptr) return false;
+	switch (p->GetType())
 	{
-		if (++m_sPool_TableInfo._dwLastID == 0)
-			m_sPool_TableInfo._dwLastID = 1;
-
-		if (_sTables.end() == _sTables.find(m_sPool_TableInfo._dwLastID))
-		{
-			break;
-		}
+	case VAR_INT:
+		r = (double)p->_int;
+		return true;
+	case VAR_FLOAT:
+		r = p->_float;
+		return true;
 	}
-	pTable->_pVM = this;
-	pTable->_TableID = m_sPool_TableInfo._dwLastID;
-	pTable->_refCount = 0;
-	pTable->_itemCount = 0;
-	pTable->_HashBase = 0;
-	pTable->_BucketCapa = 0;
-	pTable->_pUserData = NULL;
-	pTable->_meta = NULL;
-	pTable->_fun._func = NULL;
-
-	_sTables[m_sPool_TableInfo._dwLastID] = pTable;
-	if (cnt > 0) pTable->Reserve(cnt);
-	return pTable;
+	return false;
 }
-void CNeoVM::FreeTable(TableInfo* tbl)
+bool INeoVMWorker::GetArg_Float(int idx, float& r)
 {
-	auto it = _sTables.find(tbl->_TableID);
-	if (it == _sTables.end())
-		return; // Error
-
-	_sTables.erase(it);
-
-	if (tbl->_meta)
+	VarInfo* p = GetStackVar(idx);
+	if (p == nullptr) return false;
+	switch (p->GetType())
 	{
-		if (--tbl->_meta->_refCount <= 0)
-		{
-			FreeTable(tbl->_meta);
-		}
-		tbl->_meta = NULL;
+	case VAR_INT:
+		r = (float)p->_int;
+		return true;
+	case VAR_FLOAT:
+		r = (float)p->_float;
+		return true;
 	}
-	tbl->_fun._func = NULL;
-
-	tbl->Free();
-
-	//delete tbl;
-	m_sPool_TableInfo.Confer(tbl);
+	return false;
 }
-ListInfo* CNeoVM::ListAlloc(int cnt)
+bool INeoVMWorker::GetArg_Bool(int idx, bool& r)
 {
-	ListInfo* pList = m_sPool_ListInfo.Receive();
-	while (true)
+	VarInfo* p = GetStackVar(idx);
+	if (p == nullptr) return false;
+	if(p->GetType() == VAR_BOOL)
 	{
-		if (++m_sPool_ListInfo._dwLastID == 0)
-			m_sPool_ListInfo._dwLastID = 1;
-
-		if (_sLists.end() == _sLists.find(m_sPool_ListInfo._dwLastID))
-		{
-			break;
-		}
+		r = p->_bl;
+		return true;
 	}
-	pList->_pVM = this;
-	pList->_ListID = m_sPool_ListInfo._dwLastID;
-	pList->_refCount = 0;
-	pList->_itemCount = 0;
-	pList->_BucketCapa = 0;
-	pList->_pUserData = NULL;
-
-	_sLists[m_sPool_ListInfo._dwLastID] = pList;
-	if (cnt > 0) pList->Resize(cnt);
-	return pList;
-}
-void CNeoVM::FreeList(ListInfo* lst)
-{
-	auto it = _sLists.find(lst->_ListID);
-	if (it == _sLists.end())
-		return; // Error
-
-	_sLists.erase(it);
-	lst->Free();
-
-	//delete tbl;
-	m_sPool_ListInfo.Confer(lst);
-}
-SetInfo* CNeoVM::SetAlloc()
-{
-	SetInfo* pSet = m_sPool_SetInfo.Receive();
-	while (true)
-	{
-		if (++m_sPool_SetInfo._dwLastID == 0)
-			m_sPool_SetInfo._dwLastID = 1;
-
-		if (_sSets.end() == _sSets.find(m_sPool_SetInfo._dwLastID))
-		{
-			break;
-		}
-	}
-	pSet->_pVM = this;
-	pSet->_SetID = m_sPool_SetInfo._dwLastID;
-	pSet->_refCount = 0;
-	pSet->_itemCount = 0;
-	pSet->_HashBase = 0;
-	pSet->_BucketCapa = 0;
-	pSet->_pUserData = NULL;
-	pSet->_meta = NULL;
-	pSet->_fun._func = NULL;
-
-	_sSets[m_sPool_SetInfo._dwLastID] = pSet;
-	return pSet;
-}
-void CNeoVM::FreeSet(SetInfo* set)
-{
-	auto it = _sSets.find(set->_SetID);
-	if (it == _sSets.end())
-		return; // Error
-
-	_sSets.erase(it);
-	if (set->_meta)
-	{
-		if (--set->_meta->_refCount <= 0)
-		{
-			FreeSet(set->_meta);
-		}
-		set->_meta = NULL;
-	}
-	set->_fun._func = NULL;
-
-	set->Free();
-
-	//delete tbl;
-	m_sPool_SetInfo.Confer(set);
-}
-FunctionPtr* CNeoVM::FunctionPtrAlloc(FunctionPtr* pOld)
-{
-	auto it = m_sCache_FunPtr.find(pOld->_func);
-	if (it != m_sCache_FunPtr.end())
-		return (*it).second;
-
-	FunctionPtr* pNew = new FunctionPtr();
-	*pNew = *pOld;
-	m_sCache_FunPtr[pNew->_func] = pNew;
-	return pNew;
+	return false;
 }
 
-
-int	 CNeoVM::Coroutine_Create(int iFID)
-{
-	return 0;
-}
-int	 CNeoVM::Coroutine_Resume(int iCID)
-{
-	return 0;
-}
-int	 CNeoVM::Coroutine_Destroy(int iCID)
-{
-	return 0;
-}
-
-
-CNeoVM::CNeoVM()
-{
-	for (int i = 0; i < NDF_MAX; i++)
-	{
-		m_sDefaultValue[i].ClearType();
-		switch (i)
-		{
-		case NDF_NULL: Var_SetStringA(&m_sDefaultValue[i], "null"); break;
-		case NDF_BOOL: Var_SetStringA(&m_sDefaultValue[i], "bool"); break;
-		case NDF_INT: Var_SetStringA(&m_sDefaultValue[i], "int"); break;
-		case NDF_FLOAT: Var_SetStringA(&m_sDefaultValue[i], "float"); break;
-		case NDF_STRING: Var_SetStringA(&m_sDefaultValue[i], "string"); break;
-		case NDF_TABLE: Var_SetStringA(&m_sDefaultValue[i], "map"); break;
-		case NDF_LIST: Var_SetStringA(&m_sDefaultValue[i], "list"); break;
-		case NDF_SET: Var_SetStringA(&m_sDefaultValue[i], "set"); break;
-		case NDF_COROUTINE: Var_SetStringA(&m_sDefaultValue[i], "coroutine"); break;
-		case NDF_FUNCTION: Var_SetStringA(&m_sDefaultValue[i], "function"); break;
-		case NDF_TRUE: Var_SetStringA(&m_sDefaultValue[i], "true"); break;
-		case NDF_FALSE: Var_SetStringA(&m_sDefaultValue[i], "false"); break;
-
-		case NDF_SUSPENDED: Var_SetStringA(&m_sDefaultValue[i], "suspended"); break;
-		case NDF_RUNNING: Var_SetStringA(&m_sDefaultValue[i], "running"); break;
-		case NDF_DEAD: Var_SetStringA(&m_sDefaultValue[i], "dead"); break;
-		case NDF_NORMAL: Var_SetStringA(&m_sDefaultValue[i], "normal"); break;
-		default:
-			SetError("unknown Default Value");
-			break;
-		}
-	}
-	InitLib();
-}
-CNeoVM::~CNeoVM()
-{
-	for(auto it = _sVMWorkers.begin(); it != _sVMWorkers.end(); it++)
-	{
-		CNeoVMWorker* d = (*it).second;
-		delete d;
-	}
-	_sVMWorkers.clear();
-
-	for (auto it = _sTables.begin(); it != _sTables.end(); it++)
-	{
-		TableInfo* p = (*it).second;
-		p->Free();
-	}
-	_sTables.clear();
-
-	_sStrings.clear();
-
-	for (auto it = m_sCache_FunPtr.begin(); it != m_sCache_FunPtr.end(); it++)
-		delete (*it).second;
-	m_sCache_FunPtr.clear();
-}
-
-void CNeoVM::SetError(const std::string& msg)
-{
-	if (_bError)
-	{	// already error msg 
-		return;
-	}
-	if (msg.empty() == false)
-	{
-		_pErrorMsg = msg;
-		_bError = true;
-	}
-	else
-	{
-		_pErrorMsg.clear();
-		_bError = false;
-	}
-}
-
-
-
-CNeoVM* 	CNeoVM::CreateVM()
-{
-	return new CNeoVM();
-}
-void		CNeoVM::ReleaseVM(CNeoVM* pVM)
-{
-	delete pVM;
-}
-
-CNeoVMWorker* CNeoVM::LoadVM(void* pBuffer, int iSize, bool blMainWorker, int iStackSize)
-{
-	CNeoVMWorker*pWorker = WorkerAlloc(iStackSize);
-	if (false == pWorker->Init(pBuffer, iSize, iStackSize))
-	{
-		FreeWorker(pWorker);
-		return NULL;
-	}
-	if (blMainWorker && NULL == _pMainWorker)
-		_pMainWorker = pWorker;
-	return pWorker;
-}
-bool CNeoVM::PCall(int iModule)
-{
-	auto it = _sVMWorkers.find(iModule);
-	if (it == _sVMWorkers.end())
-		return false;
-
-	auto pWorker = (*it).second;
-	std::vector<VarInfo> _args;
-	pWorker->Start(0, _args);
-	return true;
-}
-
-bool CNeoVM::RunFunction(const std::string& funName)
-{
-	int iFID = _pMainWorker->FindFunction(funName);
-	if (iFID == -1)
-		return false;
-
-	std::vector<VarInfo> _args;
-	_pMainWorker->Start(iFID, _args);
-	return true;
-}
-u32 CNeoVM::CreateWorker(int iStackSize)
-{
-	auto pWorker = WorkerAlloc(iStackSize);
-	return pWorker->GetWorkerID();
-}
-bool CNeoVM::ReleaseWorker(u32 id)
-{
-	auto it = _sVMWorkers.find(id);
-	if (it == _sVMWorkers.end())
-		return false;
-
-	auto pWorker = (*it).second;
-	FreeWorker(pWorker);
-
-	if (pWorker == _pMainWorker)
-		_pMainWorker = NULL;
-	return true;
-}
-bool CNeoVM::BindWorkerFunction(u32 id, const std::string& funName)
-{
-	auto it = _sVMWorkers.find(id);
-	if (it == _sVMWorkers.end())
-		return false;
-
-	CNeoVMWorker* pWorker = (*it).second;
-	return pWorker->BindWorkerFunction(funName);
-}
-bool CNeoVM::SetTimeout(u32 id, int iTimeout, int iCheckOpCount)
-{
-	CNeoVMWorker* pWorker;
-	if (id == -1)
-	{
-		pWorker = _pMainWorker;
-	}
-	else
-	{
-		auto it = _sVMWorkers.find(id);
-		if (it == _sVMWorkers.end())
-			return false;
-		pWorker = (*it).second;
-	}
-	pWorker->SetTimeout(iTimeout, iCheckOpCount);
-	return true;
-}
-
-bool CNeoVM::IsWorking(u32 id)
-{
-	auto it = _sVMWorkers.find(id);
-	if (it == _sVMWorkers.end())
-		return false;
-	auto pWorker = (*it).second;
-	return pWorker->_isSetup;
-}
-
-bool CNeoVM::UpdateWorker(u32 id)
-{
-	if (_pErrorMsg.empty() == false)
-		return false;
-
-	auto it = _sVMWorkers.find(id);
-	if (it == _sVMWorkers.end())
-		return false;
-	auto pWorker = (*it).second;
-	return pWorker->Run();// iTimeout >= 0, iTimeout, iCheckOpCount);
-}

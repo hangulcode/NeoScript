@@ -15,7 +15,7 @@ int SAMPLE_time_limit()
 	}
 
 	std::string err;
-	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
+	INeoVM* pVM = INeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
 	if (pVM != NULL)
 	{
 		pVM->SetTimeout(-1, 100, 1000); // -1 is main worker
@@ -38,7 +38,7 @@ int SAMPLE_time_limit()
 			else
 				printf("(Elapse:%d)\n", t2 - t1);
 		}
-		CNeoVM::ReleaseVM(pVM);
+		INeoVM::ReleaseVM(pVM);
 	}
 	delete[] pFileBuffer;
 

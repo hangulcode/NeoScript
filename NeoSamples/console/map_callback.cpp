@@ -4,25 +4,27 @@
 class CA
 {
 public:
-	bool FunSum(CNeoVMWorker* pN, short args)
+	bool FunSum(INeoVMWorker* pN, short args)
 	{
 		if (args != 2)
 			return false;
 
-		double v1 = pN->GetArg_Double(1);
-		double v2 = pN->GetArg_Double(2);
+		double v1, v2;
+		if (pN->GetArg_Double(1, v1) == false) return false;
+		if (pN->GetArg_Double(2, v2) == false) return false;
 
 		pN->ReturnValue(v1 + v2);
 
 		return true;
 	}
-	bool FunMul(CNeoVMWorker* pN, short args)
+	bool FunMul(INeoVMWorker* pN, short args)
 	{
 		if (args != 2)
 			return false;
 
-		double v1 = pN->GetArg_Double(1);
-		double v2 = pN->GetArg_Double(2);
+		double v1, v2;
+		if (pN->GetArg_Double(1, v1) == false) return false;
+		if (pN->GetArg_Double(2, v2) == false) return false;
 
 		pN->ReturnValue(v1 * v2);
 
@@ -30,10 +32,10 @@ public:
 	}
 };
 
-typedef bool (CA::*TYPE_FUN)(CNeoVMWorker* pN, short args);
+typedef bool (CA::*TYPE_FUN)(INeoVMWorker* pN, short args);
 std::map<std::string, TYPE_FUN> g_sTablesFun;
 
-bool Fun(CNeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
+bool Fun(INeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
 {
 	auto it = g_sTablesFun.find(fun);
 	if (it == g_sTablesFun.end())
@@ -55,7 +57,7 @@ int SAMPLE_map_callback()
 	}
 
 	std::string err;
-	CNeoVM* pVM = CNeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
+	INeoVM* pVM = INeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
 	if (pVM != NULL)
 	{
 		CA* pClass = new CA();
@@ -64,12 +66,11 @@ int SAMPLE_map_callback()
 		g_sData = pVM->GetVar("g_sData");
 		if (g_sData != NULL && g_sData->GetType() == VAR_TABLE)
 		{
-			TableInfo* pTable = g_sData->_tbl;
-			pTable->_pUserData = pClass; // <-------------------
-			pTable->_fun = CNeoVM::RegisterNative(Fun);
-
-			g_sTablesFun["sum"] = &CA::FunSum;
-			g_sTablesFun["mul"] = &CA::FunMul;
+			if(pVM->RegisterTableCallBack(g_sData, pClass, Fun))
+			{
+				g_sTablesFun["sum"] = &CA::FunSum;
+				g_sTablesFun["mul"] = &CA::FunMul;
+			}
 		}
 
 		DWORD t1 = GetTickCount();
@@ -86,7 +87,7 @@ int SAMPLE_map_callback()
 			printf("%lf\n(Elapse:%d)\n", r, t2 - t1);
 
 		delete pClass;
-		CNeoVM::ReleaseVM(pVM);
+		INeoVM::ReleaseVM(pVM);
 	}
 	delete[] pFileBuffer;
 	g_sTablesFun.clear();

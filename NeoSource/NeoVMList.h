@@ -5,13 +5,13 @@
 
 
 
-class CNeoVM;
+class CNeoVMImpl;
 class CNeoVMWorker;
 struct ListInfo
 {
 	VarInfo*	_Bucket;
 
-	CNeoVM*	_pVM;
+	CNeoVMImpl*	_pVM;
 
 
 	int	_ListID;
@@ -40,26 +40,5 @@ struct ListInfo
 
 	inline VarInfo* GetDataUnsafe() { return _Bucket; }
 private:
-	inline void Var_AddRef(VarInfo *d)
-	{
-		switch (d->GetType())
-		{
-		case VAR_STRING:
-			++d->_str->_refCount;
-			break;
-		case VAR_TABLE:
-			++d->_tbl->_refCount;
-			break;
-		case VAR_LIST:
-			++d->_lst->_refCount;
-			break;
-		case VAR_COROUTINE:
-			++d->_cor->_refCount;
-			break;
-		default:
-			break;
-		}
-	}
-	void Var_Release(CNeoVM* pVM, VarInfo *d);
 };
 
