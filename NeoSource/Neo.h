@@ -20,7 +20,7 @@ namespace NeoHelper
 	static T read(INeoVMWorker* N, int idx) { T r; N->_read(N->GetStackVar(idx), r); return r; }
 
 
-	// 리턴값이 있는 Call
+	// Call with a return value
 	template<typename RVal, typename T1 = void, typename T2 = void, typename T3 = void, typename T4 = void, typename T5 = void>
 	struct functor
 	{
@@ -94,7 +94,7 @@ namespace NeoHelper
 		}
 	};
 
-	// 리턴값이 없는 Call
+	// Call with no return value
 	template<typename T1, typename T2, typename T3, typename T4, typename T5>
 	struct functor<void, T1, T2, T3, T4, T5>
 	{

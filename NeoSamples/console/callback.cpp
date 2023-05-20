@@ -30,9 +30,6 @@ int SAMPLE_callback()
 	INeoVM* pVM = INeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
 	if (pVM != NULL)
 	{
-		//NeoHelper::Register(pVM, "Mul", Mul);
-		//NeoHelper::Register(pVM, "Sample1", Sample1);
-
 		pVM->CallN("Set", NeoHelper::Fun(Mul), NeoHelper::Fun(Sample1));
 			
 
