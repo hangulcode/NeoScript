@@ -1,10 +1,7 @@
 #pragma once
 
-//#include "NeoVMWorker.h"
 #include "NeoConfig.h"
 
-struct neo_libs;
-struct neo_DCalllibs;;
 class CNArchive;
 
 struct INeoVMWorker;

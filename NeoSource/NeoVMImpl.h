@@ -7,7 +7,7 @@
 struct neo_libs;
 struct neo_DCalllibs;;
 class CNArchive;
-class CNeoVMImpl : INeoVM
+class CNeoVMImpl : public INeoVM
 {
 	friend					CNeoVMWorker;
 	friend					TableInfo;
@@ -126,7 +126,7 @@ public:
 	virtual bool IsLastErrorMsg() { return (_sErrorMsgDetail.empty() == false); }
 	virtual void ClearLastErrorMsg() { _bError = false; _sErrorMsgDetail.clear(); }
 
-	virtual INeoVMWorker*	LoadVM(void* pBuffer, int iSize, bool blMainWorker = true, int iStackSize = 50 * 1024); // 0 is error
+	virtual INeoVMWorker*	LoadVM(void* pBuffer, int iSize, bool blMainWorker, int iStackSize); // 0 is error
 	virtual bool PCall(int iModule);
 };
 

@@ -5,11 +5,10 @@
 #include "NeoArchive.h"
 #include "UTFString.h"
 
-
 INeoVM* 	INeoVM::CreateVM()
 {
 	CNeoVMImpl* p = new CNeoVMImpl();
-	return (INeoVM*)p;
+	return p;
 }
 void		INeoVM::ReleaseVM(INeoVM* pVM)
 {
