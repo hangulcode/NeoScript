@@ -1,5 +1,5 @@
 #include "stdafx.h"
-#include "../../NeoSource/NeoVM.h"
+#include "../../NeoSource/Neo.h"
 
 
 
