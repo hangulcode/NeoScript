@@ -6,6 +6,7 @@
 #include "NeoVMImpl.h"
 #include "NeoArchive.h"
 #include "UTFString.h"
+#include "HttpRequest.h"
 
 #define MATH_PI				3.14159265358979323846f // Pi
 
