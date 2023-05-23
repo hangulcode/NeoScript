@@ -1,1 +1,18 @@
-﻿print("hello");
+﻿//https://github.com/elnormous/HTTPRequest
+print("hello");
+
+/*
+fun Result(var ok, var result)
+{
+	print(result);
+}
+
+var xxx = request_get("http://example.com/", 1000, Result);
+
+for(var i in 1, 1000, 1)
+{
+	sleep(1);
+}
+
+print("################## end ##################");
+*/

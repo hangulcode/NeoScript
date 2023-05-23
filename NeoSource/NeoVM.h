@@ -10,6 +10,8 @@ struct FunctionPtr;
 typedef int(*Neo_CFunction) (INeoVMWorker* N, FunctionPtr* pFun, short args);
 typedef bool(*Neo_NativeFunction) (INeoVMWorker* N, void* pUserData, const std::string& fun, short args);
 
+#define NEO_DEFAULT_CHECKOP		(1000)
+
 struct FunctionPtr
 {
 	u8							_argCount;
@@ -50,12 +52,14 @@ enum VAR_TYPE : u8
 	VAR_SET,
 	VAR_COROUTINE,
 	VAR_MODULE,
+	VAR_ASYNC,
 };
 struct CoroutineInfo;
 struct StringInfo;
 struct TableInfo;
 struct ListInfo;
 struct SetInfo;
+struct AsyncInfo;
 struct TableNode;
 struct SetNode;
 struct INeoVM;
@@ -92,6 +96,7 @@ public:
 		double		_float;
 		int			_fun_index;
 		INeoVMWorker* _module;
+		AsyncInfo*	_async;
 		CollectionIterator	_it;
 	};
 
@@ -281,6 +286,7 @@ public:
 	void Var_SetSet(VarInfo* d, SetInfo* p);
 	void Var_SetFun(VarInfo* d, int fun_index);
 	void Var_SetModule(VarInfo* d, INeoVMWorker* p);
+	void Var_SetAsync(VarInfo* d, AsyncInfo* p);
 
 	inline void	ReturnValue() { Var_Release(GetReturnVar()); }
 	inline void	ReturnValue(VarInfo* p) { Var_Move(GetReturnVar(), p); }
@@ -437,7 +443,7 @@ public:
 	virtual u32 CreateWorker(int iStackSize = 50 * 1024) =0;
 	virtual bool ReleaseWorker(u32 id) = 0;
 	virtual bool BindWorkerFunction(u32 id, const std::string& funName) = 0;
-	virtual bool SetTimeout(u32 id, int iTimeout = -1, int iCheckOpCount = 1000) = 0;
+	virtual bool SetTimeout(u32 id, int iTimeout = -1, int iCheckOpCount = NEO_DEFAULT_CHECKOP) = 0;
 	virtual bool IsWorking(u32 id) = 0;
 	virtual bool UpdateWorker(u32 id) = 0;
 

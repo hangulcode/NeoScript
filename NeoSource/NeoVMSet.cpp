@@ -104,13 +104,6 @@ bool SetInfo::NextNode(CollectionIterator& r)
 	r._pSetNode = NULL;
 	return false;
 }
-void SetInfo::Var_Release(CNeoVMImpl* pVM, VarInfo *d)
-{
-	if (d->IsAllocType())
-		pVM->Var_ReleaseInternal(d);
-	else
-		d->ClearType();
-}
 
 void SetInfo::Free()
 {
@@ -130,7 +123,7 @@ void SetInfo::Free()
 		{
 			SetNode*	pNext = pCur->pNext;
 
-			Var_Release(_pVM, &pCur->key);
+			_pVM->Var_Release(&pCur->key);
 
 			_pVM->m_sPool_SetNode.Confer(pCur);
 

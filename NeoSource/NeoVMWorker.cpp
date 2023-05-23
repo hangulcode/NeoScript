@@ -1165,6 +1165,10 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 		return "set";
 	case VAR_COROUTINE:
 		return "coroutine";
+	case VAR_MODULE:
+		return "module";
+	case VAR_ASYNC:
+		return "async";
 	default:
 		break;
 	}
@@ -2026,14 +2030,21 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 					GetVM()->_sErrorMsgDetail = chMsg;
 				return false;
 			}
-			if (isTimeout)
+			if (++op_process >= m_iCheckOpCount)
 			{
-				if (++op_process >= m_iCheckOpCount)
+				op_process = 0;
+				if (isTimeout)
 				{
-					op_process = 0;
 					t2 = clock() - _preClock;
 					if (t2 >= m_iTimeout || t2 < 0)
 						break;
+				}
+				while (true)
+				{
+					AsyncInfo* p = GetVM()->Pop_AsyncInfo();
+					if(p == nullptr) break;
+					//Call(p->_fun_index, 2); // no no no !!
+					GetVM()->Var_Release(&p->_LockReferance);
 				}
 			}
 		}

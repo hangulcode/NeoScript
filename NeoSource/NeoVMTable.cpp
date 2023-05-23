@@ -57,13 +57,6 @@ bool TableInfo::NextNode(CollectionIterator& r)
 	r._pTableNode = NULL;
 	return false;
 }
-void TableInfo::Var_Release(CNeoVMImpl* pVM, VarInfo *d)
-{
-	if (d->IsAllocType())
-		pVM->Var_ReleaseInternal(d);
-	else
-		d->ClearType();
-}
 
 void TableInfo::Free()
 {
@@ -83,8 +76,8 @@ void TableInfo::Free()
 		{
 			TableNode*	pNext = pCur->pNext;
 
-			Var_Release(_pVM, &pCur->key);
-			Var_Release(_pVM, &pCur->value);
+			_pVM->Var_Release(&pCur->key);
+			_pVM->Var_Release(&pCur->value);
 
 			_pVM->m_sPool_TableNode.Confer(pCur);
 

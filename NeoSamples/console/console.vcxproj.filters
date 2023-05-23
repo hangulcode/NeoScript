@@ -108,6 +108,12 @@
     <ClInclude Include="..\..\NeoSource\NeoVMImpl.h">
       <Filter>NeoScript</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\NeoSource\HttpRequest.h">
+      <Filter>NeoScript</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\NeoSource\NeoQueue.h">
+      <Filter>NeoScript</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="NeoScript">

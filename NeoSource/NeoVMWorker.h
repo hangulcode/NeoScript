@@ -217,6 +217,18 @@ struct StringInfo : AllocBase
 	int _StringLen;
 };
 
+struct AsyncInfo : AllocBase
+{
+	std::string _cmd;
+	int			_fun_index;
+	int			_timeout;
+
+	std::string _result;
+
+	VarInfo		_LockReferance;
+};
+
+
 struct TableInfo;
 struct TableNode;
 struct ListInfo;
@@ -335,7 +347,7 @@ private:
 	clock_t					_preClock;
 
 	int m_iTimeout = -1;
-	int m_iCheckOpCount = 1000;
+	int m_iCheckOpCount = NEO_DEFAULT_CHECKOP;
 
 	void	SetCodeData(u8* p, int sz)
 	{
@@ -448,7 +460,7 @@ private:
 
 public:
 	inline CNeoVMImpl* GetVM() { return (CNeoVMImpl*)_pVM;  }
-	inline void SetTimeout(int iTimeout = -1, int iCheckOpCount = 1000) {
+	inline void SetTimeout(int iTimeout, int iCheckOpCount) {
 		m_iTimeout = iTimeout;
 		m_iCheckOpCount = iCheckOpCount;
 	}

@@ -62,6 +62,9 @@ void INeoVM::Var_AddRef(VarInfo* d)
 	case VAR_MODULE:
 		++((CNeoVMWorker*)(d->_module))->_refCount;
 		break;
+	case VAR_ASYNC:
+		++d->_async->_refCount;
+		break;
 	default:
 		break;
 	}
@@ -86,6 +89,7 @@ void INeoVM::Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
 	case VAR_SET: v1->_set = v2->_set; ++v1->_set->_refCount; break;
 	case VAR_COROUTINE: v1->_cor = v2->_cor; ++v1->_cor->_refCount; break;
 	case VAR_MODULE: v1->_module = v2->_module; ++((CNeoVMWorker*)(v1->_module))->_refCount; break;
+	case VAR_ASYNC: v1->_async = v2->_async; ++v1->_async->_refCount; break;
 	default: break;
 	}
 }
@@ -122,6 +126,11 @@ void INeoVM::Var_ReleaseInternal(VarInfo* d)
 		if (--((CNeoVMWorker*)(d->_module))->_refCount <= 0)
 			((CNeoVMImpl*)this)->FreeWorker((CNeoVMWorker*)d->_module);
 		d->_module = NULL;
+		break;
+	case VAR_ASYNC:
+		if (--d->_async->_refCount <= 0)
+			((CNeoVMImpl*)this)->FreeAsync(d);
+		d->_async = NULL;
 		break;
 	default:
 		break;
@@ -303,6 +312,16 @@ void INeoVMWorker::Var_SetModule(VarInfo* d, INeoVMWorker* p)
 	d->_module = p;
 	++((CNeoVMWorker*)p)->_refCount;
 }
+void INeoVMWorker::Var_SetAsync(VarInfo* d, AsyncInfo* p)
+{
+	if (d->IsAllocType())
+		Var_Release(d);
+
+	d->SetType(VAR_ASYNC);
+	d->_async = p;
+	++p->_refCount;
+}
+
 bool INeoVMWorker::GetArg_StlString(int idx, std::string& r) 
 {
 	VarInfo* p = GetStackVar(idx);

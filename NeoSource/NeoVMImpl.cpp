@@ -4,6 +4,8 @@
 #include "NeoArchive.h"
 #include "UTFString.h"
 
+#include "HttpRequest.h"
+#pragma comment(lib, "ws2_32.lib")
 
 
 void CNeoVMImpl::Var_SetString(VarInfo *d, const char* str)
@@ -249,6 +251,18 @@ void CNeoVMImpl::FreeSet(SetInfo* set)
 	//delete tbl;
 	m_sPool_SetInfo.Confer(set);
 }
+AsyncInfo* CNeoVMImpl::AsyncAlloc()
+{
+	AsyncInfo* p = m_sPool_Async.Receive();
+	p->_refCount = 0;
+	return p;
+}
+void CNeoVMImpl::FreeAsync(VarInfo* d)
+{
+	m_sPool_Async.Confer(d->_async);
+}
+
+
 FunctionPtr* CNeoVMImpl::FunctionPtrAlloc(FunctionPtr* pOld)
 {
 	auto it = m_sCache_FunPtr.find(pOld->_func);
@@ -273,6 +287,54 @@ int	 CNeoVMImpl::Coroutine_Resume(int iCID)
 int	 CNeoVMImpl::Coroutine_Destroy(int iCID)
 {
 	return 0;
+}
+
+static void threadFunction(CNeoVMImpl* p) 
+{
+//	std::cout << "스레드 실행, 전달된 값: " << value << std::endl;
+	p->ThreadFunction();
+}
+void CNeoVMImpl::ThreadFunction()
+{
+	AsyncInfo* p;
+	while(false == _job_end)
+	{
+		if(false == _job_queue.TryPop(p))
+			continue;
+
+		try
+		{
+			// you can pass http::InternetProtocol::V6 to Request to make an IPv6 request
+			http::Request request{p->_cmd};
+
+			// send a get request
+			const auto response = request.send("GET");
+			//std::cout << std::string{response.body.begin(), response.body.end()} << '\n'; // print the result
+
+			p->_result = std::string{ response.body.begin(), response.body.end() };
+			_job_completed.Push(p);
+		}
+		catch (const std::exception& e)
+		{
+			//std::cerr << "Request failed, error: " << e.what() << '\n';
+		}
+	}
+}
+
+void CNeoVMImpl::AddHttp_Get(AsyncInfo* p)
+{
+	if(nullptr == _job)
+		_job = new std::thread(threadFunction, this);
+
+	_job_queue.Push(p);
+}
+
+AsyncInfo* CNeoVMImpl::Pop_AsyncInfo()
+{
+	AsyncInfo* p = nullptr;
+	if(_job_completed.TryPop(p))
+		return p;
+	return nullptr;
 }
 
 
@@ -309,6 +371,13 @@ CNeoVMImpl::CNeoVMImpl()
 }
 CNeoVMImpl::~CNeoVMImpl()
 {
+	_job_end = true;
+	if(nullptr != _job)
+	{
+		_job->join();
+		delete _job;
+		_job = nullptr;
+	}
 	for(auto it = _sVMWorkers.begin(); it != _sVMWorkers.end(); it++)
 	{
 		CNeoVMWorker* d = (*it).second;

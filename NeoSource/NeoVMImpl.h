@@ -1,8 +1,11 @@
 #pragma once
 
+#include <thread>
+
 #include "NeoVM.h"
 #include "NeoVMWorker.h"
 #include "NeoVMMemoryPool.h"
+#include "NeoQueue.h"
 
 struct neo_libs;
 struct neo_DCalllibs;;
@@ -26,7 +29,10 @@ private:
 
 
 	std::map<u32, CNeoVMWorker*> _sVMWorkers;
-
+	std::thread*	_job = nullptr;
+	NeoThreadSafeQueue<AsyncInfo*> _job_queue;
+	bool						_job_end = false;
+	NeoThreadSafeQueue<AsyncInfo*> _job_completed;
 public:
 	void Var_SetString(VarInfo *d, const char* str);
 	void Var_SetStringA(VarInfo *d, const std::string& str);
@@ -52,11 +58,19 @@ public:
 	SetInfo* SetAlloc();
 	void FreeSet(SetInfo* tbl);
 
+	AsyncInfo* AsyncAlloc();
+	void FreeAsync(VarInfo* d);
+
 	FunctionPtr* FunctionPtrAlloc(FunctionPtr* pOld);
 
 	int	 Coroutine_Create(int iFID);
 	int	 Coroutine_Resume(int iCID);
 	int	 Coroutine_Destroy(int iCID);
+
+
+	void ThreadFunction();
+	void AddHttp_Get(AsyncInfo* p);
+	AsyncInfo* Pop_AsyncInfo();
 
 
 
@@ -84,6 +98,7 @@ public:
 	CNVMAllocPool< SetInfo, 10 > m_sPool_SetInfo;
 	CNVMAllocPool< ListInfo, 10 > m_sPool_ListInfo;
 
+	CNVMInstPool< AsyncInfo, 10 > m_sPool_Async;
 	CNVMInstPool< StringInfo, 10 > m_sPool_String;
 	CNVMInstPool< CoroutineInfo, 10 > m_sPool_Coroutine;
 

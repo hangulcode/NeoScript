@@ -6,7 +6,6 @@
 #include "NeoVMImpl.h"
 #include "NeoArchive.h"
 #include "UTFString.h"
-#include "HttpRequest.h"
 
 #define MATH_PI				3.14159265358979323846f // Pi
 
@@ -606,6 +605,35 @@ struct neo_libs
 		return true;
 	}
 
+	static bool request_get(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 3) return false;
+
+		VarInfo* v1 = pN->GetStack(1);
+		if (v1->GetType() != VAR_STRING) // VAR_CHAR is error 
+			return false;
+
+		VarInfo* v2 = pN->GetStack(2);
+		if (v2->GetType() != VAR_INT) // 
+			return false;
+
+		VarInfo* v3 = pN->GetStack(3);
+		if (v3->GetType() != VAR_FUN) // 
+			return false;
+
+		AsyncInfo* p = pN->GetVM()->AsyncAlloc();
+		p->_cmd = v1->_str->_str;
+		p->_timeout = v2->_int;
+		p->_fun_index = v3->_fun_index;
+		pN->Var_SetAsync(&p->_LockReferance, p);
+
+		pN->GetVM()->AddHttp_Get(p);
+
+		//pN->ReturnValue(pCI);
+		pN->ReturnValue();
+		return true;
+	}	
+
 	static bool set(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1) return false;
@@ -726,6 +754,8 @@ static void AddGlobalLibFun()
 	g_sNeoFunLib["coroutine_resume"] = &neo_libs::sys_coroutine_resume;
 	g_sNeoFunLib["coroutine_status"] = &neo_libs::sys_coroutine_status;
 	g_sNeoFunLib["coroutine_close"] = &neo_libs::sys_coroutine_close;
+
+	g_sNeoFunLib["request_get"] = &neo_libs::request_get;
 }
 bool CNeoVMImpl::IsGlobalLibFun(std::string& FunName)
 {

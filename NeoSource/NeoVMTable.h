@@ -71,6 +71,5 @@ struct TableInfo : AllocBase
 	inline int		GetCount() { return _itemCount; }
 
 private:
-	void Var_Release(CNeoVMImpl* pVM, VarInfo *d);
 };
 
