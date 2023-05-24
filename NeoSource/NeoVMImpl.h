@@ -105,10 +105,11 @@ public:
 	std::map<void*, FunctionPtr*> m_sCache_FunPtr;
 
 	static bool _funInitLib;
-	static FunctionPtrNative _funDefaultLib;
-	static FunctionPtrNative _funLstLib;
-	static FunctionPtrNative _funStrLib;
-	static FunctionPtrNative _funTblLib;
+	static FunctionPtrNative _funLib_Default;
+	static FunctionPtrNative _funLib_List;
+	static FunctionPtrNative _funLib_String;
+	static FunctionPtrNative _funLib_Map;
+	static FunctionPtrNative _funLib_Async;
 public:
 	inline CNeoVMWorker* GetMainWorker() { return (CNeoVMWorker*)_pMainWorker; }
 

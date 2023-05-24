@@ -9,9 +9,18 @@ fun Result(var ok, var result)
 	print(result);
 }
 
-var xxx = request_get("http://example.com/", 1000, Result);
+var async = request_get("http://example.com/", 1000, Result);
+print(type(async));
+async.wait();
+async.close();
 
-print(type(xxx));
+
+var async = aysnc_create();
+async.get("http://example.com/", 1000, Result);
+print(type(async));
+async.wait();
+async.close();
+
 
 sleep(500);
 

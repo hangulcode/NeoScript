@@ -1840,7 +1840,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 					Var_SetString(pVar1, pVar1->_c.c); // char -> string
 				case VAR_STRING:
 					pFunName = GetVarPtr2(OP);
-					CallNative(GetVM()->_funStrLib, pVar1, pFunName->_str->_str, n3);
+					CallNative(GetVM()->_funLib_String, pVar1, pFunName->_str->_str, n3);
 					break;
 				case VAR_TABLE:
 				{
@@ -1863,12 +1863,12 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 						CallNative(fun, pVar1, pFunName->_str->_str, n3);
 						break;
 					}
-					CallNative(GetVM()->_funTblLib, pVar1, pFunName->_str->_str, n3);
+					CallNative(GetVM()->_funLib_Map, pVar1, pFunName->_str->_str, n3);
 					break;
 				}
 				case VAR_LIST:
 					pFunName = GetVarPtr2(OP);
-					CallNative(GetVM()->_funLstLib, pVar1, pFunName->_str->_str, n3);
+					CallNative(GetVM()->_funLib_List, pVar1, pFunName->_str->_str, n3);
 					break;
 				case VAR_SET:
 					break;
@@ -1884,13 +1884,13 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				VarInfo* pFunName = GetVarPtr1(OP);
 				if (pFunName->GetType() == VAR_CHAR)
 				{
-					CallNative(GetVM()->_funDefaultLib, NULL, pFunName->_c.c, n2);
+					CallNative(GetVM()->_funLib_Default, NULL, pFunName->_c.c, n2);
 					//					SetError("Ptr Call Error");
 					break;
 				}				
 				else if (pFunName->GetType() == VAR_STRING)
 				{
-					CallNative(GetVM()->_funDefaultLib, NULL, pFunName->_str->_str, n2);
+					CallNative(GetVM()->_funLib_Default, NULL, pFunName->_str->_str, n2);
 //					SetError("Ptr Call Error");
 					break;
 				}
