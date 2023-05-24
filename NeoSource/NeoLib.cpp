@@ -629,8 +629,7 @@ struct neo_libs
 
 		pN->GetVM()->AddHttp_Get(p);
 
-		//pN->ReturnValue(pCI);
-		pN->ReturnValue();
+		pN->ReturnValue(&p->_LockReferance);
 		return true;
 	}	
 

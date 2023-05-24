@@ -223,7 +223,8 @@ struct AsyncInfo : AllocBase
 	int			_fun_index;
 	int			_timeout;
 
-	std::string _result;
+	std::string _resultCode;
+	std::string _resultValue;
 
 	VarInfo		_LockReferance;
 };
@@ -315,6 +316,8 @@ enum eNeoDefaultString
 	NDF_SET,
 	NDF_COROUTINE,
 	NDF_FUNCTION,
+	NDF_MODULE,
+	NDF_ASYNC,
 
 	NDF_TRUE,
 	NDF_FALSE,
@@ -581,6 +584,7 @@ public:
 	}
 
 	inline VarInfo *GetStack(int idx) { return &(*m_pVarStack)[_iSP_Vars + idx]; }
+	inline VarInfo* GetStackFormBottom(int idx) { return &(*m_pVarStack)[idx]; }
 
 	template<typename T>
 	T read(int idx) { T r; _read(&(*m_pVarStack)[_iSP_Vars + idx], r); return r; }

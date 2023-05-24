@@ -10,7 +10,7 @@ struct FunctionPtr;
 typedef int(*Neo_CFunction) (INeoVMWorker* N, FunctionPtr* pFun, short args);
 typedef bool(*Neo_NativeFunction) (INeoVMWorker* N, void* pUserData, const std::string& fun, short args);
 
-#define NEO_DEFAULT_CHECKOP		(1000)
+#define NEO_DEFAULT_CHECKOP		(200)
 
 struct FunctionPtr
 {

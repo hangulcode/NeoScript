@@ -1255,16 +1255,28 @@ VarInfo* CNeoVMWorker::GetType(VarInfo* v1)
 		return &GetVM()->m_sDefaultValue[NDF_INT];
 	case VAR_FLOAT:
 		return &GetVM()->m_sDefaultValue[NDF_FLOAT];
+	case VAR_FUN:
+		return &GetVM()->m_sDefaultValue[NDF_FUNCTION];
+	case VAR_ITERATOR:
+		break;
+	case VAR_FUN_NATIVE:
+		return &GetVM()->m_sDefaultValue[NDF_FUNCTION];
 	case VAR_CHAR:
+		return &GetVM()->m_sDefaultValue[NDF_STRING];
 	case VAR_STRING:
 		return &GetVM()->m_sDefaultValue[NDF_STRING];
 	case VAR_TABLE:
 		return &GetVM()->m_sDefaultValue[NDF_TABLE];
+	case VAR_LIST:
+		return &GetVM()->m_sDefaultValue[NDF_LIST];
+	case VAR_SET:
+		return &GetVM()->m_sDefaultValue[NDF_SET];
 	case VAR_COROUTINE:
 		return &GetVM()->m_sDefaultValue[NDF_COROUTINE];
-	case VAR_FUN:
-	case VAR_FUN_NATIVE:
-		return &GetVM()->m_sDefaultValue[NDF_FUNCTION];
+	case VAR_MODULE:
+		return &GetVM()->m_sDefaultValue[NDF_MODULE];
+	case VAR_ASYNC:
+		return &GetVM()->m_sDefaultValue[NDF_ASYNC];
 	default:
 		break;
 	}
@@ -2043,7 +2055,9 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				{
 					AsyncInfo* p = GetVM()->Pop_AsyncInfo();
 					if(p == nullptr) break;
-					//Call(p->_fun_index, 2); // no no no !!
+					Var_SetStringA(GetStackFormBottom(_iSP_VarsMax + 1), p->_resultCode);
+					Var_SetStringA(GetStackFormBottom(_iSP_VarsMax + 2), p->_resultValue);
+					Call(p->_fun_index, 2); // no no no !!
 					GetVM()->Var_Release(&p->_LockReferance);
 				}
 			}

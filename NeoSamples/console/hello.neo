@@ -1,18 +1,26 @@
 ﻿//https://github.com/elnormous/HTTPRequest
 print("hello");
-
 /*
+var tm = clock();
+
 fun Result(var ok, var result)
 {
+	print("Res Time : " .. (clock() - tm));
 	print(result);
 }
 
 var xxx = request_get("http://example.com/", 1000, Result);
 
-for(var i in 1, 1000, 1)
+print(type(xxx));
+
+sleep(500);
+
+for(var i in 1, 100, 1)
 {
-	sleep(1);
+	var k = i + 1;
 }
+
+print("End Time : " .. (clock() - tm));
 
 print("################## end ##################");
 */

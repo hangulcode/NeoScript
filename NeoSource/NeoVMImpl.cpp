@@ -311,7 +311,7 @@ void CNeoVMImpl::ThreadFunction()
 			const auto response = request.send("GET");
 			//std::cout << std::string{response.body.begin(), response.body.end()} << '\n'; // print the result
 
-			p->_result = std::string{ response.body.begin(), response.body.end() };
+			p->_resultValue = std::string{ response.body.begin(), response.body.end() };
 			_job_completed.Push(p);
 		}
 		catch (const std::exception& e)
@@ -355,6 +355,9 @@ CNeoVMImpl::CNeoVMImpl()
 		case NDF_SET: Var_SetStringA(&m_sDefaultValue[i], "set"); break;
 		case NDF_COROUTINE: Var_SetStringA(&m_sDefaultValue[i], "coroutine"); break;
 		case NDF_FUNCTION: Var_SetStringA(&m_sDefaultValue[i], "function"); break;
+		case NDF_MODULE: Var_SetStringA(&m_sDefaultValue[i], "module"); break;
+		case NDF_ASYNC: Var_SetStringA(&m_sDefaultValue[i], "asynchronous"); break;
+
 		case NDF_TRUE: Var_SetStringA(&m_sDefaultValue[i], "true"); break;
 		case NDF_FALSE: Var_SetStringA(&m_sDefaultValue[i], "false"); break;
 
