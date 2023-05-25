@@ -1,5 +1,4 @@
-﻿//https://github.com/elnormous/HTTPRequest
-print("hello");
+﻿print("http request ... http://example.com/");
 
 var tm = clock();
 
