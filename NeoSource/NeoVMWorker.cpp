@@ -1601,7 +1601,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 	char chMsg[256];
 	SVMOperation OP;
 
-	int op_process = 0;
+	m_op_process = 0;
 	bool isTimeout = (m_iTimeout >= 0);
 	if(isTimeout)
 		_preClock = clock();
@@ -1801,9 +1801,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 						return true;
 					}
 					else if (r == 2)
-					{
-						op_process = m_iCheckOpCount;
-					}
+						SetCheckTime();
 				}
 				break;
 
@@ -1871,6 +1869,10 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 					CallNative(GetVM()->_funLib_List, pVar1, pFunName->_str->_str, n3);
 					break;
 				case VAR_SET:
+					break;
+				case VAR_ASYNC:
+					pFunName = GetVarPtr2(OP);
+					CallNative(GetVM()->_funLib_Async, pVar1, pFunName->_str->_str, n3);
 					break;
 				default:
 					SetError("Ptr Call Error");
@@ -2042,9 +2044,9 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 					GetVM()->_sErrorMsgDetail = chMsg;
 				return false;
 			}
-			if (++op_process >= m_iCheckOpCount)
+			if (++m_op_process >= m_iCheckOpCount)
 			{
-				op_process = 0;
+				m_op_process = 0;
 				if (isTimeout)
 				{
 					t2 = clock() - _preClock;
@@ -2055,7 +2057,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				{
 					AsyncInfo* p = GetVM()->Pop_AsyncInfo();
 					if(p == nullptr) break;
-					Var_SetStringA(GetStackFormBottom(_iSP_VarsMax + 1), p->_resultCode);
+					Var_SetBool(GetStackFormBottom(_iSP_VarsMax + 1), p->_success);
 					Var_SetStringA(GetStackFormBottom(_iSP_VarsMax + 2), p->_resultValue);
 					Call(p->_fun_index, 2); // no no no !!
 					GetVM()->Var_Release(&p->_LockReferance);

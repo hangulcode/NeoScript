@@ -306,6 +306,7 @@ public:
 	inline void	ReturnValue(long long p) { Var_SetInt(GetReturnVar(), (int)p); }
 	inline void	ReturnValue(unsigned long long p) { Var_SetInt(GetReturnVar(), (int)p); }
 	inline void	ReturnValue(CoroutineInfo* p) { Var_SetCoroutine(GetReturnVar(), p); }
+	inline void	ReturnValue(AsyncInfo* p) { Var_SetAsync(GetReturnVar(), p); }
 
 	inline void PushArgs() { }
 	template<typename  T, typename ... Types>

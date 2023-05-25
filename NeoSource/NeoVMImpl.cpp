@@ -255,6 +255,7 @@ AsyncInfo* CNeoVMImpl::AsyncAlloc()
 {
 	AsyncInfo* p = m_sPool_Async.Receive();
 	p->_refCount = 0;
+	p->_state = ASYNC_READY;
 	return p;
 }
 void CNeoVMImpl::FreeAsync(VarInfo* d)
@@ -311,13 +312,17 @@ void CNeoVMImpl::ThreadFunction()
 			const auto response = request.send("GET");
 			//std::cout << std::string{response.body.begin(), response.body.end()} << '\n'; // print the result
 
+			p->_success = true;
 			p->_resultValue = std::string{ response.body.begin(), response.body.end() };
-			_job_completed.Push(p);
 		}
 		catch (const std::exception& e)
 		{
-			//std::cerr << "Request failed, error: " << e.what() << '\n';
+			p->_success = false;
+			p->_resultValue = e.what();
 		}
+		p->_state = ASYNC_COMPLETED;
+		_job_completed.Push(p);
+		p->_event.set();
 	}
 }
 

@@ -450,23 +450,54 @@ struct neo_libs
 
 	static bool async_get(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 0) return false;
-		if (pVar->GetType() != VAR_TABLE) return false;
+		if (args != 2) return false;
+		if (pVar->GetType() != VAR_ASYNC) return false;
+		AsyncInfo* pAsync = pVar->_async;
+		if(pAsync->_state != ASYNC_READY) return false;
 
+		VarInfo* v1 = pN->GetStack(1);
+		if (v1->GetType() != VAR_STRING) // VAR_CHAR is error 
+			return false;
+
+		VarInfo* v2 = pN->GetStack(2);
+		if (v2->GetType() != VAR_FUN) // 
+			return false;
+
+		pAsync->_cmd = v1->_str->_str;
+		pAsync->_fun_index = v2->_fun_index;
+
+		pAsync->_state = ASYNC_PENDING;
+		pN->Move(&pAsync->_LockReferance, pVar);
+		pN->GetVM()->AddHttp_Get(pAsync);
+		pN->ReturnValue();
 		return true;
 	}
 	static bool async_wait(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 0) return false;
-		if (pVar->GetType() != VAR_TABLE) return false;
+		if (args >= 2) return false;
+		if (pVar->GetType() != VAR_ASYNC) return false;
+		AsyncInfo* pAsync = pVar->_async;
+		if (pAsync->_state != ASYNC_PENDING) return true;
 
+		int iTimeout = 0x7fffffff; // int max
+		if(args == 1)
+		{
+			VarInfo* v1 = pN->GetStack(1);
+			if (v1->GetType() != VAR_INT)
+				return false;
+			iTimeout = v1->_int;
+		}
+		bool ok = pAsync->_event.wait(iTimeout);
+		pN->SetCheckTime();
+		pN->ReturnValue(ok);
 		return true;
 	}
 	static bool async_close(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 0) return false;
-		if (pVar->GetType() != VAR_TABLE) return false;
-
+		if (pVar->GetType() != VAR_ASYNC) return false;
+		AsyncInfo* pAsync = pVar->_async;
+		pN->ReturnValue();
 		return true;
 	}
 
@@ -628,31 +659,12 @@ struct neo_libs
 		return true;
 	}
 
-	static bool request_get(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	static bool aysnc_create(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 3) return false;
-
-		VarInfo* v1 = pN->GetStack(1);
-		if (v1->GetType() != VAR_STRING) // VAR_CHAR is error 
-			return false;
-
-		VarInfo* v2 = pN->GetStack(2);
-		if (v2->GetType() != VAR_INT) // 
-			return false;
-
-		VarInfo* v3 = pN->GetStack(3);
-		if (v3->GetType() != VAR_FUN) // 
-			return false;
+		if (args != 0) return false;
 
 		AsyncInfo* p = pN->GetVM()->AsyncAlloc();
-		p->_cmd = v1->_str->_str;
-		p->_timeout = v2->_int;
-		p->_fun_index = v3->_fun_index;
-		pN->Var_SetAsync(&p->_LockReferance, p);
-
-		pN->GetVM()->AddHttp_Get(p);
-
-		pN->ReturnValue(&p->_LockReferance);
+		pN->ReturnValue(p);
 		return true;
 	}	
 
@@ -788,7 +800,7 @@ static void AddGlobalLibFun()
 	g_sNeoFunLib_Default["coroutine_status"] = &neo_libs::sys_coroutine_status;
 	g_sNeoFunLib_Default["coroutine_close"] = &neo_libs::sys_coroutine_close;
 
-	g_sNeoFunLib_Default["request_get"] = &neo_libs::request_get;
+	g_sNeoFunLib_Default["aysnc_create"] = &neo_libs::aysnc_create;
 }
 bool CNeoVMImpl::IsGlobalLibFun(std::string& FunName)
 {

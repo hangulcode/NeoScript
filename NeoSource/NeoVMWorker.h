@@ -2,7 +2,7 @@
 
 #include <time.h>
 #include "NeoConfig.h"
-
+#include "NeoQueue.h"
 
 typedef u8	OpType;
 typedef u8	ArgFlag;
@@ -178,6 +178,15 @@ enum COROUTINE_SUB_STATE
 	COROUTINE_SUB_CLOSE,
 };
 
+enum ASYNC_STATE
+{
+	ASYNC_READY,
+	ASYNC_PENDING,
+	ASYNC_COMPLETED,
+};
+
+
+
 struct AllocBase
 {
 	int _refCount;
@@ -223,10 +232,12 @@ struct AsyncInfo : AllocBase
 	int			_fun_index;
 	int			_timeout;
 
-	std::string _resultCode;
+	ASYNC_STATE _state;
+	bool		_success;
 	std::string _resultValue;
 
 	VarInfo		_LockReferance;
+	NeoEvent	_event;
 };
 
 
@@ -351,6 +362,9 @@ private:
 
 	int m_iTimeout = -1;
 	int m_iCheckOpCount = NEO_DEFAULT_CHECKOP;
+	int m_op_process = 0;
+
+	inline void SetCheckTime() { m_op_process = m_iCheckOpCount; }
 
 	void	SetCodeData(u8* p, int sz)
 	{

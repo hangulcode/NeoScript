@@ -1,0 +1,20 @@
+﻿//https://github.com/elnormous/HTTPRequest
+print("hello");
+
+var tm = clock();
+
+fun Result(var ok, var result)
+{
+	if(ok == true)
+		print("Success Time : " .. (clock() - tm));
+	else
+		print("Fail Time : " .. (clock() - tm));
+
+	print(result);
+}
+
+var async = aysnc_create();
+async.get("http://example.com/", Result);
+if(false == async.wait(5000))
+	print("Time Out : " .. (clock() - tm));
+async.close();
