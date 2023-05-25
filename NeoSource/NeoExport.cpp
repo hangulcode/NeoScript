@@ -1066,16 +1066,21 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 	SLayerVar* pLayerVar = vars._varsFunction[0];
 	if (pLayerVar->_varsLayer.size() != 1) return false;
 	SLocalVar* pLocalLayer = pLayerVar->_varsLayer[0];
+	std::map<int, std::string> global;
 	for (auto it2 = pLocalLayer->_localVars.begin(); it2 != pLocalLayer->_localVars.end(); it2++)
 	{
 		int idx = (*it2).second - COMPILE_GLOBAL_VAR_BEGIN + header._iStaticVarCount;
-		if (tempExportVars.end() == tempExportVars.find((*it2).first))
-			OutAsm("Global   [%d] %s\n", idx, (*it2).first.c_str());
-		else
-			OutAsm("Global E [%d] %s\n", idx, (*it2).first.c_str());
-		td._globalVars.push_back((*it2).first);
+		global[idx] = (*it2).first;
 	}
-
+	for (auto it2 = global.begin(); it2 != global.end(); it2++)
+	{
+		int idx = (*it2).first;
+		if (tempExportVars.end() == tempExportVars.find((*it2).second))
+			OutAsm("Global   [%d] %s\n", idx, (*it2).second.c_str());
+		else
+			OutAsm("Global E [%d] %s\n", idx, (*it2).second.c_str());
+		td._globalVars.push_back((*it2).second);
+	}
 	if (header.m_iDebugCount > 0 && header.m_iDebugOffset > 0)
 	{
 		td.debugInfo.resize(header.m_iDebugCount);
