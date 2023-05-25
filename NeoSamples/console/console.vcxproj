@@ -263,6 +263,7 @@
     <None Include="delegate.neo" />
     <None Include="etc.neo" />
     <None Include="hello.neo" />
+    <None Include="http.neo" />
     <None Include="list.neo" />
     <None Include="map.neo" />
     <None Include="map_callback.neo" />

@@ -169,5 +169,8 @@
     <None Include="module.neo">
       <Filter>Samples</Filter>
     </None>
+    <None Include="http.neo">
+      <Filter>Samples</Filter>
+    </None>
   </ItemGroup>
 </Project>
