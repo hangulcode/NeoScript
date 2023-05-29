@@ -699,7 +699,7 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 
 		case NOP_STR_ADD:	// ..
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("STR_ADD Str%s = ToStr%s + ToStr%s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("STR_ADD %s = ToStr%s + ToStr%s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 
 		case NOP_JMP:

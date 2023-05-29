@@ -450,44 +450,100 @@ struct neo_libs
 
 	static bool async_get(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 2) return false;
+		if (args != 3) return false;
 		if (pVar->GetType() != VAR_ASYNC) return false;
 		AsyncInfo* pAsync = pVar->_async;
 		if(pAsync->_state != ASYNC_READY) return false;
+
+		VarInfo* v1 = pN->GetStack(1);
+		if (v1->GetType() != VAR_INT)
+			return false;
+
+		VarInfo* v2 = pN->GetStack(2);
+		if (v2->GetType() != VAR_STRING) // VAR_CHAR is error 
+			return false;
+
+		VarInfo* v3 = pN->GetStack(3);
+		if (v3->GetType() != VAR_FUN) // 
+			return false;
+
+		pAsync->_type = ASYNC_GET;
+		pAsync->_timeout = v1->_int;
+		pAsync->_request = v2->_str->_str;
+		pAsync->_fun_index = v3->_fun_index;
+		if (pAsync->_timeout == -1) pAsync->_timeout = 0x7fffffff;
+
+		pAsync->_state = ASYNC_PENDING;
+		pN->Move(&pAsync->_LockReferance, pVar);
+		pN->GetVM()->AddHttp_Request(pAsync);
+		pN->ReturnValue();
+		return true;
+	}
+	static bool async_post(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 4) return false;
+		if (pVar->GetType() != VAR_ASYNC) return false;
+		AsyncInfo* pAsync = pVar->_async;
+		if (pAsync->_state != ASYNC_READY) return false;
+
+		VarInfo* v1 = pN->GetStack(1);
+		if (v1->GetType() != VAR_INT)
+			return false;
+
+		VarInfo* v2 = pN->GetStack(2);
+		if (v2->GetType() != VAR_STRING) // VAR_CHAR is error 
+			return false;
+
+		VarInfo* v3 = pN->GetStack(3);
+		if (v3->GetType() != VAR_STRING) // 
+			return false;
+
+		VarInfo* v4 = pN->GetStack(4);
+		if (v4->GetType() != VAR_FUN) // 
+			return false;
+
+		pAsync->_type = ASYNC_POST;
+		pAsync->_timeout = v1->_int;
+		pAsync->_request = v2->_str->_str;
+		pAsync->_body = v3->_str->_str;
+		pAsync->_fun_index = v4->_fun_index;
+		if (pAsync->_timeout == -1) pAsync->_timeout = 0x7fffffff;
+
+		pAsync->_state = ASYNC_PENDING;
+		pN->Move(&pAsync->_LockReferance, pVar);
+		pN->GetVM()->AddHttp_Request(pAsync);
+		pN->ReturnValue();
+		return true;
+	}
+
+	static bool async_add_header(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+		if (pVar->GetType() != VAR_ASYNC) return false;
+		AsyncInfo* pAsync = pVar->_async;
+		if (pAsync->_state != ASYNC_READY) return false;
 
 		VarInfo* v1 = pN->GetStack(1);
 		if (v1->GetType() != VAR_STRING) // VAR_CHAR is error 
 			return false;
 
 		VarInfo* v2 = pN->GetStack(2);
-		if (v2->GetType() != VAR_FUN) // 
+		if (v2->GetType() != VAR_STRING) // VAR_CHAR is error 
 			return false;
 
-		pAsync->_cmd = v1->_str->_str;
-		pAsync->_fun_index = v2->_fun_index;
-
-		pAsync->_state = ASYNC_PENDING;
-		pN->Move(&pAsync->_LockReferance, pVar);
-		pN->GetVM()->AddHttp_Get(pAsync);
+		std::pair<std::string, std::string> header = { v1->_str->_str, v2->_str->_str };
+		pAsync->_headers.push_back(header);
 		pN->ReturnValue();
 		return true;
 	}
 	static bool async_wait(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args >= 2) return false;
+		if (args != 0) return false;
 		if (pVar->GetType() != VAR_ASYNC) return false;
 		AsyncInfo* pAsync = pVar->_async;
 		if (pAsync->_state != ASYNC_PENDING) return true;
 
-		int iTimeout = 0x7fffffff; // int max
-		if(args == 1)
-		{
-			VarInfo* v1 = pN->GetStack(1);
-			if (v1->GetType() != VAR_INT)
-				return false;
-			iTimeout = v1->_int;
-		}
-		bool ok = pAsync->_event.wait(iTimeout);
+		bool ok = pAsync->_event.wait(pAsync->_timeout);
 		pN->SetCheckTime();
 		pN->ReturnValue(ok);
 		return true;
@@ -857,6 +913,8 @@ void CNeoVMImpl::RegObjLibrary()
 	// Async Lib
 	_funLib_Async = CNeoVMImpl::RegisterNative(Fun_Async);
 	g_sNeoFunLib_Async["get"] = &neo_libs::async_get;
+	g_sNeoFunLib_Async["post"] = &neo_libs::async_post;
+	g_sNeoFunLib_Async["add_header"] = &neo_libs::async_add_header;
 	g_sNeoFunLib_Async["wait"] = &neo_libs::async_wait;
 	g_sNeoFunLib_Async["close"] = &neo_libs::async_close;
 }

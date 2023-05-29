@@ -63,13 +63,8 @@ public:
 
 	FunctionPtr* FunctionPtrAlloc(FunctionPtr* pOld);
 
-	int	 Coroutine_Create(int iFID);
-	int	 Coroutine_Resume(int iCID);
-	int	 Coroutine_Destroy(int iCID);
-
-
 	void ThreadFunction();
-	void AddHttp_Get(AsyncInfo* p);
+	void AddHttp_Request(AsyncInfo* p);
 	AsyncInfo* Pop_AsyncInfo();
 
 

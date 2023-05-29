@@ -4,6 +4,7 @@
 #include "NeoArchive.h"
 #include "UTFString.h"
 
+//https://github.com/elnormous/HTTPRequest
 #include "HttpRequest.h"
 #pragma comment(lib, "ws2_32.lib")
 
@@ -277,22 +278,8 @@ FunctionPtr* CNeoVMImpl::FunctionPtrAlloc(FunctionPtr* pOld)
 }
 
 
-int	 CNeoVMImpl::Coroutine_Create(int iFID)
-{
-	return 0;
-}
-int	 CNeoVMImpl::Coroutine_Resume(int iCID)
-{
-	return 0;
-}
-int	 CNeoVMImpl::Coroutine_Destroy(int iCID)
-{
-	return 0;
-}
-
 static void threadFunction(CNeoVMImpl* p) 
 {
-//	std::cout << "스레드 실행, 전달된 값: " << value << std::endl;
 	p->ThreadFunction();
 }
 void CNeoVMImpl::ThreadFunction()
@@ -303,22 +290,58 @@ void CNeoVMImpl::ThreadFunction()
 		if(false == _job_queue.TryPop(p))
 			continue;
 
-		try
+		switch(p->_type)
 		{
-			// you can pass http::InternetProtocol::V6 to Request to make an IPv6 request
-			http::Request request{p->_cmd};
+		case ASYNC_GET:
+			try
+			{
+				http::Request request{p->_request};
 
-			// send a get request
-			const auto response = request.send("GET");
-			//std::cout << std::string{response.body.begin(), response.body.end()} << '\n'; // print the result
+				//const auto response = request.send("GET");
+				const auto response = request.send("GET", "", p->_headers, std::chrono::milliseconds{ p->_timeout });
 
-			p->_success = true;
-			p->_resultValue = std::string{ response.body.begin(), response.body.end() };
-		}
-		catch (const std::exception& e)
-		{
-			p->_success = false;
-			p->_resultValue = e.what();
+				p->_success = true;
+				p->_resultValue = std::string{ response.body.begin(), response.body.end() };
+			}
+			catch (const std::exception& e)
+			{
+				p->_success = false;
+				p->_resultValue = e.what();
+			}
+			break;
+		case ASYNC_POST: // POST request with form data
+			try
+			{
+				http::Request request{p->_request};
+
+				//const auto response = request.send("POST", p->_body, {{"Content-Type", "application/x-www-form-urlencoded"}});
+				const auto response = request.send("POST", p->_body, p->_headers, std::chrono::milliseconds{ p->_timeout });
+
+				p->_success = true;
+				p->_resultValue = std::string{ response.body.begin(), response.body.end() };
+			}
+			catch (const std::exception& e)
+			{
+				p->_success = false;
+				p->_resultValue = e.what();
+			}
+			break;
+		case ASYNC_POST_JSON: // POST request with a JSON body
+			try
+			{
+				http::Request request{p->_request};
+
+				const auto response = request.send("POST", p->_body, { {"Content-Type", "application/json"} });
+
+				p->_success = true;
+				p->_resultValue = std::string{ response.body.begin(), response.body.end() };
+			}
+			catch (const std::exception& e)
+			{
+				p->_success = false;
+				p->_resultValue = e.what();
+			}
+			break;
 		}
 		p->_state = ASYNC_COMPLETED;
 		_job_completed.Push(p);
@@ -326,10 +349,21 @@ void CNeoVMImpl::ThreadFunction()
 	}
 }
 
-void CNeoVMImpl::AddHttp_Get(AsyncInfo* p)
+void CNeoVMImpl::AddHttp_Request(AsyncInfo* p)
 {
 	if(nullptr == _job)
+	{
+#ifdef _WIN32
+		WSAData wsaData;
+		int code = WSAStartup(MAKEWORD(2, 2), &wsaData);
+		if (code != 0)
+		{
+			fprintf(stderr, "shite. %d\n", code);
+			return;
+		}
+#endif //_WIN32
 		_job = new std::thread(threadFunction, this);
+	}
 
 	_job_queue.Push(p);
 }

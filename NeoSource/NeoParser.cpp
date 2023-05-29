@@ -61,7 +61,9 @@ struct SOperand
 		_operandType = Data_NR;
 	}
 
-	inline bool IsArray() { return _iArrayIndex  != INVALID_ERROR_PARSEJOB; }
+	inline bool IsInvalidValue() { return (false == IsHaveShort()) && (_iVar == INVALID_ERROR_PARSEJOB); }
+
+	inline bool IsArray() { return _iArrayIndex != INVALID_ERROR_PARSEJOB; }
 	inline bool IsShort() { return _operandType == Data_NS; }
 	inline bool IsConst() { return _operandType == Data_NS; }
 	inline bool IsNone() { return _operandType == Data_None; }
@@ -1030,7 +1032,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 					funs._cur.Push_MOV(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTempVar._iVar, iTempVar.IsShort());
 				else
 					funs._cur.Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTempVar.IsHaveShort());
-				if (iTempVar._iVar == INVALID_ERROR_PARSEJOB)
+				if (iTempVar.IsInvalidValue())
 				{
 					SetCompileError(ar, "Error (%d, %d): Call Param\n", ar.CurLine(), ar.CurCol());
 					return false;

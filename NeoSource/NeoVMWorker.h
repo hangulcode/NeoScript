@@ -185,6 +185,12 @@ enum ASYNC_STATE
 	ASYNC_COMPLETED,
 };
 
+enum ASYNC_COMMAND
+{
+	ASYNC_GET,
+	ASYNC_POST,
+	ASYNC_POST_JSON,
+};
 
 
 struct AllocBase
@@ -226,13 +232,18 @@ struct StringInfo : AllocBase
 	int _StringLen;
 };
 
+
 struct AsyncInfo : AllocBase
 {
-	std::string _cmd;
+	std::string _request;
+	std::string _body;
+	std::vector< std::pair<std::string, std::string> > _headers;
+
 	int			_fun_index;
 	int			_timeout;
 
 	ASYNC_STATE _state;
+	ASYNC_COMMAND _type;
 	bool		_success;
 	std::string _resultValue;
 

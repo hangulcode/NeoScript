@@ -1,4 +1,4 @@
-﻿print("http request ... http://example.com/");
+﻿print("http request Start ...");
 
 var tm = clock();
 
@@ -12,8 +12,26 @@ fun Result(var ok, var result)
 	print(result);
 }
 
-var async = aysnc_create();
-async.get("http://example.com/", Result);
-if(false == async.wait(5000))
+var async;
+
+// Get url1
+async = aysnc_create();
+async.get(5000, "http://example.com/", Result);
+if(false == async.wait())
+	print("Time Out : " .. (clock() - tm));
+async.close();
+
+// Get url2
+async = aysnc_create();
+async.get(5000, "http://jsonplaceholder.typicode.com/users", Result);
+if(false == async.wait())
+	print("Time Out : " .. (clock() - tm));
+async.close();
+
+// Post
+async = aysnc_create();
+async.add_header("Content-Type", "application/x-www-form-urlencoded");
+async.post(5000, "http://www.microsoft.com",  "sl=foo&s2=bar", Result);
+if(false == async.wait())
 	print("Time Out : " .. (clock() - tm));
 async.close();
