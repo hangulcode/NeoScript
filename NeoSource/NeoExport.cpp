@@ -273,6 +273,10 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, nullptr);
 			break;
 
+		case NOP_MOVI:
+			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
+			break;
+
 		case NOP_FMOV1:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
@@ -792,6 +796,10 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 		case NOP_MOV:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("MOV %s = %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			break;
+		case NOP_MOVI:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+			OutAsm("MOVI %s = %d\n", GetLog(td, v, 1).c_str(), v.n23);
 			break;
 		case NOP_MOV_MINUS:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);

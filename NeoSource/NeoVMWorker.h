@@ -24,6 +24,7 @@ enum eNOperationSub : u8
 enum eNOperation : OpType
 {
 	NOP_MOV,
+	NOP_MOVI,
 
 	NOP_MOV_MINUS,
 	NOP_ADD2,		// +

@@ -218,13 +218,12 @@ struct SFunctionInfo
 		_code->Write(&a2, sizeof(a2));
 		_code->Write(&a3, sizeof(a3));
 	}
-	//void    Push_Arg(short a1, int a23)
-	//{
-	//	ArgFlag arg = 0;//
-	//	_code->Write(&arg, sizeof(arg));
-	//	_code->Write(&a1, sizeof(a1));
-	//	_code->Write(&a23, sizeof(a23));
-	//}
+	void    Push_FlagArg(ArgFlag arg, short a1, int a23)
+	{
+		_code->Write(&arg, sizeof(arg));
+		_code->Write(&a1, sizeof(a1));
+		_code->Write(&a23, sizeof(a23));
+	}
 	void	AddDebugData(CArchiveRdWC& ar)
 	{
 		if (ar._debug == false) return;
@@ -361,6 +360,26 @@ struct SFunctionInfo
 		//_code->Write(&nArray, sizeof(nArray));
 		//_code->Write(&nValue, sizeof(nValue));
 		Push_FlagArg(flg, r, s, 0);
+	}
+	void	Push_MOVI(CArchiveRdWC& ar, short r, int v)
+	{
+		AddDebugData(ar);
+		_iLastOPOffset = _code->GetBufferOffset();
+
+		OpType optype = GetOpTypeFromOp(NOP_MOVI);
+		_code->Write(&optype, sizeof(optype));
+		//_code->Write(&r, sizeof(r));
+		//_code->Write(&s, sizeof(s));
+
+		bool b2 = true;
+		bool b3 = true;
+		ArgFlag flg = 0;
+		if (b2) flg |= (1 << 4);
+		if (b3) flg |= (1 << 3);
+		//_code->Write(&nTable, sizeof(nTable));
+		//_code->Write(&nArray, sizeof(nArray));
+		//_code->Write(&nValue, sizeof(nValue));
+		Push_FlagArg(flg, r, v);
 	}
 	void	Push_OP1(CArchiveRdWC& ar, eNOperation op, short r)
 	{

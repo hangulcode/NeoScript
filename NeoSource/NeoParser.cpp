@@ -257,6 +257,7 @@ int InitDefaultTokenString()
 
 	OP_STR1(NOP_NONE, 0);
 	OP_STR1(NOP_MOV, 2);
+	OP_STR1(NOP_MOVI, 3);
 	OP_STR1(NOP_MOV_MINUS, 2);
 	OP_STR1(NOP_ADD2, 2);
 	OP_STR1(NOP_SUB2, 2);
@@ -2386,7 +2387,10 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	int iTryValue = -1;
 	if (Try_ParseIntNum(iTryValue, ar, funs, vars, TK_COMMA) != TK_NONE)
 	{
-		funs._cur.Push_MOV(ar, NOP_MOV, i_Begin, iTryValue, true);
+		if (IsShort(iTryValue))
+			funs._cur.Push_MOV(ar, NOP_MOV, i_Begin, iTryValue, true);
+		else
+			funs._cur.Push_MOVI(ar, i_Begin, iTryValue);
 	}
 	else
 	{
@@ -2407,7 +2411,10 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	iTryValue = -1;
 	if (Try_ParseIntNum(iTryValue, ar, funs, vars, TK_COMMA, TK_R_SMALL) != TK_NONE)
 	{
-		funs._cur.Push_MOV(ar, NOP_MOV, i_End, iTryValue, true);
+		if(IsShort(iTryValue))
+			funs._cur.Push_MOV(ar, NOP_MOV, i_End, iTryValue, true);
+		else
+			funs._cur.Push_MOVI(ar, i_End, iTryValue);
 	}
 	else
 	{
@@ -2428,7 +2435,10 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	iTryValue = -1;
 	if (Try_ParseIntNum(iTryValue, ar, funs, vars, TK_COMMA, TK_R_SMALL) != TK_NONE)
 	{
-		funs._cur.Push_MOV(ar, NOP_MOV, i_Step, iTryValue, true);
+		if (IsShort(iTryValue))
+			funs._cur.Push_MOV(ar, NOP_MOV, i_Step, iTryValue, true);
+		else
+			funs._cur.Push_MOVI(ar, i_Step, iTryValue);
 	}
 	else
 	{
