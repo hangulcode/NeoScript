@@ -477,6 +477,18 @@ std::string GetLog(STempDebug& td, SVMOperation& op, int argIndex)
 	return ch;
 }
 
+std::string GetFunName(SFunctions& funs, int id)
+{
+	SFunctionInfo* pFun = funs.FindFun(id);
+	if(pFun == NULL)
+	{
+		char ch[128];
+		sprintf_s(ch, _countof(ch), "fun(%d)'", id);
+		return ch;
+	}
+	return pFun->_name;
+}
+
 std::string JumpMark(std::map<int, int>& sJumpMark, int off)
 {
 	std::string r;
@@ -808,11 +820,11 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 
 		case NOP_FMOV1:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("FMOV %s = %d\n", GetLog(td, v, 1).c_str(), v.n2);
+			OutAsm("MOV %s = &%s\n", GetLog(td, v, 1).c_str(), GetFunName(funs, v.n2).c_str());
 			break;
 		case NOP_FMOV2:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("MOV %s.%s = %d\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), v.n3);
+			OutAsm("MOV %s.%s = &%s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), GetFunName(funs, v.n3).c_str());
 			break;
 
 		case NOP_PTRCALL:
