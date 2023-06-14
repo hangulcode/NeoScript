@@ -1567,6 +1567,11 @@ bool	CNeoVMWorker::Setup(int iFunctionID, std::vector<VarInfo>& _args)
 	_isSetup = true;
 	return true;
 }
+bool CNeoVMWorker::IsWorking()
+{
+	return _isSetup;
+}
+
 bool CNeoVMWorker::BindWorkerFunction(const std::string& funName)
 {
 	int iFID = FindFunction(funName);

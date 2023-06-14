@@ -454,6 +454,9 @@ private:
 	bool	IsMainCoroutine(CoroutineInfo* p) { return (&m_sDefault == p); }
 	virtual bool	Setup(int iFunctionID, std::vector<VarInfo>& _args);
 	virtual bool	Start(int iFunctionID, std::vector<VarInfo>& _args);
+	virtual bool IsWorking();
+	virtual bool	Run(int iBreakingCallStack = 0);
+
 	bool	StopCoroutine(bool doDead = true);
 	void	DeadCoroutine(CoroutineInfo* pCI);
 
@@ -489,13 +492,11 @@ private:
 
 public:
 	inline CNeoVMImpl* GetVM() { return (CNeoVMImpl*)_pVM;  }
-	inline void SetTimeout(int iTimeout, int iCheckOpCount) {
+	virtual void SetTimeout(int iTimeout, int iCheckOpCount) {
 		m_iTimeout = iTimeout;
 		m_iCheckOpCount = iCheckOpCount;
 	}
-	bool BindWorkerFunction(const std::string& funName);
-	inline bool IsWorking() { return _isSetup; }
-	bool	Run(int iBreakingCallStack = 0);
+	virtual bool BindWorkerFunction(const std::string& funName);
 private:
 
 
@@ -637,7 +638,7 @@ public:
 		return true;
 	}
 
-	VarInfo* GetVar(const std::string& name)
+	virtual VarInfo* GetVar(const std::string& name)
 	{
 		auto it = m_sImportVars.find(name);
 		if (it == m_sImportVars.end())
@@ -656,5 +657,6 @@ public:
 	virtual ~CNeoVMWorker();
 
 	bool Init(void* pBuffer, int iSize, int iStackSize);
+	
 };
 extern std::string GetDataType(VAR_TYPE t);

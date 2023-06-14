@@ -544,7 +544,7 @@ bool CNeoVMImpl::IsWorking(u32 id)
 	if (it == _sVMWorkers.end())
 		return false;
 	auto pWorker = (*it).second;
-	return pWorker->_isSetup;
+	return pWorker->IsWorking();
 }
 
 bool CNeoVMImpl::UpdateWorker(u32 id)

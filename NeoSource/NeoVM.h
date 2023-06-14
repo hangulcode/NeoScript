@@ -388,7 +388,11 @@ public:
 	virtual int FindFunction(const std::string& name) = 0;
 	virtual bool	Setup(int iFunctionID, std::vector<VarInfo>& _args) = 0;
 	virtual bool	Start(int iFunctionID, std::vector<VarInfo>& _args) = 0;
-
+	virtual bool IsWorking() = 0;
+	virtual bool	Run(int iBreakingCallStack = 0) =0;
+	virtual void SetTimeout(int iTimeout, int iCheckOpCount) = 0;
+	virtual VarInfo* GetVar(const std::string& name) = 0;
+	virtual bool BindWorkerFunction(const std::string& funName) = 0;
 };
 
 struct INeoVM
@@ -439,7 +443,8 @@ public:
 
 	bool Call_TL(); // Time Limit
 	VarInfo* GetVar(const std::string& name);
-	bool	RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFunction func);
+
+	static bool	RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFunction func);
 
 	virtual u32 CreateWorker(int iStackSize = 50 * 1024) =0;
 	virtual bool ReleaseWorker(u32 id) = 0;

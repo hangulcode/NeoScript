@@ -66,7 +66,7 @@ int SAMPLE_map_callback()
 		g_sData = pVM->GetVar("g_sData");
 		if (g_sData != NULL && g_sData->GetType() == VAR_TABLE)
 		{
-			if(pVM->RegisterTableCallBack(g_sData, pClass, Fun))
+			if(INeoVM::RegisterTableCallBack(g_sData, pClass, Fun))
 			{
 				g_sTablesFun["sum"] = &CA::FunSum;
 				g_sTablesFun["mul"] = &CA::FunMul;
