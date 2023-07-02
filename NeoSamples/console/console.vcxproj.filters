@@ -40,7 +40,7 @@
     <ClCompile Include="etc.cpp">
       <Filter>Samples</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\NeoSource\NeoVMTable.cpp">
+    <ClCompile Include="..\..\NeoSource\NeoVMMap.cpp">
       <Filter>NeoScript</Filter>
     </ClCompile>
     <ClCompile Include="..\..\NeoSource\NeoVMList.cpp">
@@ -90,7 +90,7 @@
     <ClInclude Include="console.h">
       <Filter>main</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoVMTable.h">
+    <ClInclude Include="..\..\NeoSource\NeoVMMap.h">
       <Filter>NeoScript</Filter>
     </ClInclude>
     <ClInclude Include="..\..\NeoSource\NeoVMMemoryPool.h">

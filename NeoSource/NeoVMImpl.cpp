@@ -23,12 +23,12 @@ void CNeoVMImpl::Var_SetStringA(VarInfo *d, const std::string& str)
 	d->_str = StringAlloc(str);
 	++d->_str->_refCount;
 }
-void CNeoVMImpl::Var_SetTable(VarInfo *d, TableInfo* p)
+void CNeoVMImpl::Var_SetTable(VarInfo *d, MapInfo* p)
 {
 	if (d->IsAllocType())
 		Var_Release(d);
 
-	d->SetType(VAR_TABLE);
+	d->SetType(VAR_MAP);
 	d->_tbl = p;
 	++d->_tbl->_refCount;
 }
@@ -118,9 +118,9 @@ void CNeoVMImpl::FreeString(VarInfo *d)
 	//delete d->_str;
 	m_sPool_String.Confer(d->_str);
 }
-TableInfo* CNeoVMImpl::TableAlloc(int cnt)
+MapInfo* CNeoVMImpl::TableAlloc(int cnt)
 {
-	TableInfo* pTable = m_sPool_TableInfo.Receive();
+	MapInfo* pTable = m_sPool_TableInfo.Receive();
 	while (true)
 	{
 		if (++m_sPool_TableInfo._dwLastID == 0)
@@ -145,7 +145,7 @@ TableInfo* CNeoVMImpl::TableAlloc(int cnt)
 	if (cnt > 0) pTable->Reserve(cnt);
 	return pTable;
 }
-void CNeoVMImpl::FreeTable(TableInfo* tbl)
+void CNeoVMImpl::FreeTable(MapInfo* tbl)
 {
 	auto it = _sTables.find(tbl->_TableID);
 	if (it == _sTables.end())
@@ -429,7 +429,7 @@ CNeoVMImpl::~CNeoVMImpl()
 
 	for (auto it = _sTables.begin(); it != _sTables.end(); it++)
 	{
-		TableInfo* p = (*it).second;
+		MapInfo* p = (*it).second;
 		p->Free();
 	}
 	_sTables.clear();

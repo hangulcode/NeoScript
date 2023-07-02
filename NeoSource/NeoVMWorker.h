@@ -253,8 +253,8 @@ struct AsyncInfo : AllocBase
 };
 
 
-struct TableInfo;
-struct TableNode;
+struct MapInfo;
+struct MapNode;
 struct ListInfo;
 struct SetInfo;
 struct SetNode;
@@ -262,7 +262,7 @@ struct SetNode;
 
 
 #include "NeoVM.h"
-#include "NeoVMTable.h"
+#include "NeoVMMap.h"
 #include "NeoVMSet.h"
 #include "NeoVMList.h"
 
@@ -360,7 +360,7 @@ class CNeoVMWorker : public INeoVMWorker, public AllocBase, public CoroutineBase
 {
 	friend		CNeoVMImpl;
 	friend		SVarWrapper;
-	friend		TableInfo;
+	friend		MapInfo;
 	friend		neo_libs;
 	friend		neo_DCalllibs;
 private:

@@ -32,9 +32,9 @@ VarInfo* INeoVM::GetVar(const std::string& name)
 }
 bool	INeoVM::RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFunction func)
 {
-	if (p == nullptr || p->GetType() != VAR_TABLE) return false;
+	if (p == nullptr || p->GetType() != VAR_MAP) return false;
 
-	TableInfo* pTable = p->_tbl;
+	MapInfo* pTable = p->_tbl;
 	pTable->_pUserData = pUserData;
 	pTable->_fun = INeoVM::RegisterNative(func);
 	return true;
@@ -47,7 +47,7 @@ void INeoVM::Var_AddRef(VarInfo* d)
 	case VAR_STRING:
 		++d->_str->_refCount;
 		break;
-	case VAR_TABLE:
+	case VAR_MAP:
 		++d->_tbl->_refCount;
 		break;
 	case VAR_LIST:
@@ -84,7 +84,7 @@ void INeoVM::Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
 	case VAR_CHAR: v1->_c = v2->_c; break;
 
 	case VAR_STRING: v1->_str = v2->_str; ++v1->_str->_refCount; break;
-	case VAR_TABLE: v1->_tbl = v2->_tbl; ++v1->_tbl->_refCount; break;
+	case VAR_MAP: v1->_tbl = v2->_tbl; ++v1->_tbl->_refCount; break;
 	case VAR_LIST: v1->_lst = v2->_lst; ++v1->_lst->_refCount; break;
 	case VAR_SET: v1->_set = v2->_set; ++v1->_set->_refCount; break;
 	case VAR_COROUTINE: v1->_cor = v2->_cor; ++v1->_cor->_refCount; break;
@@ -102,7 +102,7 @@ void INeoVM::Var_ReleaseInternal(VarInfo* d)
 			((CNeoVMImpl*)this)->FreeString(d);
 		d->_str = NULL;
 		break;
-	case VAR_TABLE:
+	case VAR_MAP:
 		if (--d->_tbl->_refCount <= 0)
 			((CNeoVMImpl*)this)->FreeTable(d->_tbl);
 		d->_tbl = NULL;
@@ -276,12 +276,12 @@ void INeoVMWorker::Var_SetStringA(VarInfo* d, const std::string& str)
 	d->_str = ((CNeoVMImpl*)_pVM)->StringAlloc(str);
 	++d->_str->_refCount;
 }
-void INeoVMWorker::Var_SetTable(VarInfo* d, TableInfo* p)
+void INeoVMWorker::Var_SetTable(VarInfo* d, MapInfo* p)
 {
 	if (d->IsAllocType())
 		Var_Release(d);
 
-	d->SetType(VAR_TABLE);
+	d->SetType(VAR_MAP);
 	d->_tbl = p;
 	++p->_refCount;
 }

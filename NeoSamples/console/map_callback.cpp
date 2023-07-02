@@ -64,7 +64,7 @@ int SAMPLE_map_callback()
 
 		VarInfo* g_sData;
 		g_sData = pVM->GetVar("g_sData");
-		if (g_sData != NULL && g_sData->GetType() == VAR_TABLE)
+		if (g_sData != NULL && g_sData->GetType() == VAR_MAP)
 		{
 			if(INeoVM::RegisterTableCallBack(g_sData, pClass, Fun))
 			{

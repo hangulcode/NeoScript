@@ -13,7 +13,7 @@ class CNArchive;
 class CNeoVMImpl : public INeoVM
 {
 	friend					CNeoVMWorker;
-	friend					TableInfo;
+	friend					MapInfo;
 	friend					ListInfo;
 	friend					SetInfo;
 	friend					neo_libs;
@@ -22,7 +22,7 @@ private:
 
 
 	std::map<u32, ListInfo*> _sLists;
-	std::map<u32, TableInfo*> _sTables;
+	std::map<u32, MapInfo*> _sTables;
 	std::map<u32, SetInfo*> _sSets;
 	std::map<u32, StringInfo*> _sStrings;
 	u32 _dwLastIDVMWorker = 0;
@@ -36,7 +36,7 @@ private:
 public:
 	void Var_SetString(VarInfo *d, const char* str);
 	void Var_SetStringA(VarInfo *d, const std::string& str);
-	void Var_SetTable(VarInfo *d, TableInfo* p);
+	void Var_SetTable(VarInfo *d, MapInfo* p);
 
 
 	CNeoVMWorker* WorkerAlloc(int iStackSize);
@@ -49,8 +49,8 @@ public:
 	StringInfo* StringAlloc(const std::string& str);
 	void FreeString(VarInfo *d);
 
-	TableInfo* TableAlloc(int cnt = 0);
-	void FreeTable(TableInfo* tbl);
+	MapInfo* TableAlloc(int cnt = 0);
+	void FreeTable(MapInfo* tbl);
 
 	ListInfo* ListAlloc(int cnt = 0);
 	void FreeList(ListInfo* tbl);
@@ -87,8 +87,8 @@ public:
 
 	VarInfo m_sDefaultValue[NDF_MAX];
 	
-	CNVMAllocPool < TableNode, 10> m_sPool_TableNode;
-	CNVMAllocPool< TableInfo, 10 > m_sPool_TableInfo;
+	CNVMAllocPool < MapNode, 10> m_sPool_TableNode;
+	CNVMAllocPool< MapInfo, 10 > m_sPool_TableInfo;
 	CNVMAllocPool < SetNode, 10> m_sPool_SetNode;
 	CNVMAllocPool< SetInfo, 10 > m_sPool_SetInfo;
 	CNVMAllocPool< ListInfo, 10 > m_sPool_ListInfo;

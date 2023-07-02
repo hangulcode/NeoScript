@@ -73,7 +73,7 @@ void CNeoVMWorker::CltInsert(VarInfo *pClt, VarInfo *pKey, VarInfo *pValue)
 {
 	switch (pClt->GetType())
 	{
-	case VAR_TABLE:
+	case VAR_MAP:
 		if (pValue->GetType() == VAR_NONE)
 		{
 			TableRemove(pClt, pKey);
@@ -98,7 +98,7 @@ void CNeoVMWorker::CltInsert(VarInfo *pClt, int key, VarInfo *v)
 {
 	switch (pClt->GetType())
 	{
-	case VAR_TABLE:
+	case VAR_MAP:
 		pClt->_tbl->Insert(key, v);
 		break;
 	case VAR_LIST:
@@ -114,7 +114,7 @@ void CNeoVMWorker::CltInsert(VarInfo *pClt, VarInfo *pKey, int v)
 {
 	switch (pClt->GetType())
 	{
-	case VAR_TABLE:
+	case VAR_MAP:
 		pClt->_tbl->Insert(pKey, v);
 		break;
 	case VAR_LIST:
@@ -129,7 +129,7 @@ void CNeoVMWorker::CltInsert(VarInfo *pClt, int key, int v)
 {
 	switch (pClt->GetType())
 	{
-	case VAR_TABLE:
+	case VAR_MAP:
 		pClt->_tbl->Insert(key, v);
 		break;
 	case VAR_LIST:
@@ -142,7 +142,7 @@ void CNeoVMWorker::CltInsert(VarInfo *pClt, int key, int v)
 }
 VarInfo* CNeoVMWorker::GetTableItem(VarInfo *pTable, VarInfo *pKey)
 {
-	if (pTable->GetType() != VAR_TABLE)
+	if (pTable->GetType() != VAR_MAP)
 	{
 		SetError("TableRead Error");
 		return NULL;
@@ -173,7 +173,7 @@ void CNeoVMWorker::CltRead(VarInfo *pClt, VarInfo *pKey, VarInfo *pValue)
 	VarInfo *pFind;
 	switch (pClt->GetType())
 	{
-	case VAR_TABLE:
+	case VAR_MAP:
 		pFind = GetTableItem(pClt, pKey);
 		if (pFind)
 			Move(pValue, pFind);
@@ -197,7 +197,7 @@ void CNeoVMWorker::CltRead(VarInfo *pClt, VarInfo *pKey, VarInfo *pValue)
 
 void CNeoVMWorker::TableRemove(VarInfo *pTable, VarInfo *pKey)
 {
-	if (pTable->GetType() != VAR_TABLE)
+	if (pTable->GetType() != VAR_MAP)
 	{
 		SetError("TableRead Error");
 		return;
@@ -333,7 +333,7 @@ void CNeoVMWorker::Add2(eNOperationSub op, VarInfo* r, VarInfo* v2)
 			return;
 		}
 		break;
-	case VAR_TABLE:
+	case VAR_MAP:
 		switch (op)
 		{
 		case eOP_ADD: if (Call_MetaTable(r, g_meta_Add2, r, r, v2)) return; break;
@@ -383,7 +383,7 @@ void CNeoVMWorker::Add2(eNOperationSub op, VarInfo* r, int v2)
 		return;
 	case VAR_STRING:
 		break;
-	case VAR_TABLE:
+	case VAR_MAP:
 		switch (op)
 		{
 		case eOP_ADD: if (Call_MetaTableI(r, g_meta_Add2, r, r, v2)) return; break;
@@ -431,7 +431,7 @@ void CNeoVMWorker::And(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		break;
 	case VAR_STRING:
 		break;
-	case VAR_TABLE:
+	case VAR_MAP:
 		break;
 	case VAR_LIST:
 		break;
@@ -474,7 +474,7 @@ void CNeoVMWorker::Or(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		break;
 	case VAR_STRING:
 		break;
-	case VAR_TABLE:
+	case VAR_MAP:
 		break;
 	case VAR_LIST:
 		break;
@@ -587,7 +587,7 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, VarInfo* v2)
 			return;
 		}
 		break;
-	case VAR_TABLE:
+	case VAR_MAP:
 		switch (op)
 		{
 		case eOP_ADD: 
@@ -665,7 +665,7 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, int v2)
 		return;
 	case VAR_STRING:
 		break;
-	case VAR_TABLE:
+	case VAR_MAP:
 	{
 		VarInfo vv2 = v2;
 		switch (op)
@@ -980,9 +980,9 @@ bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 			}
 			break;
 		}
-	case VAR_TABLE:
+	case VAR_MAP:
 		{
-			TableInfo* tbl = pClt->_tbl;
+			MapInfo* tbl = pClt->_tbl;
 			if (pIterator->GetType() != VAR_ITERATOR)
 			{
 				Var_Release(pIterator);
@@ -997,7 +997,7 @@ bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 			else
 				tbl->NextNode(pIterator->_it);
 
-			TableNode* n = pIterator->_it._pTableNode;
+			MapNode* n = pIterator->_it._pTableNode;
 			if (n)
 			{
 				Move(pKey, &n->key);
@@ -1157,7 +1157,7 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 		return std::string(v1->_c.c);
 	case VAR_STRING:
 		return v1->_str->_str;
-	case VAR_TABLE:
+	case VAR_MAP:
 		return "map";
 	case VAR_LIST:
 		return "list";
@@ -1190,7 +1190,7 @@ int CNeoVMWorker::ToInt(VarInfo* v1)
 		return ::atoi(v1->_c.c);
 	case VAR_STRING:
 		return ::atoi(v1->_str->_str.c_str());
-	case VAR_TABLE:
+	case VAR_MAP:
 		return -1;
 	default:
 		break;
@@ -1213,7 +1213,7 @@ double CNeoVMWorker::ToFloat(VarInfo* v1)
 		return atof(v1->_c.c);
 	case VAR_STRING:
 		return atof(v1->_str->_str.c_str());
-	case VAR_TABLE:
+	case VAR_MAP:
 		return -1;
 	default:
 		break;
@@ -1236,7 +1236,7 @@ int CNeoVMWorker::ToSize(VarInfo* v1)
 		return (v1->_c.c[0] == 0) ? 0 : 1;
 	case VAR_STRING:
 		return (int)v1->_str->_str.length();
-	case VAR_TABLE:
+	case VAR_MAP:
 		return (int)v1->_tbl->_itemCount;
 	default:
 		break;
@@ -1265,7 +1265,7 @@ VarInfo* CNeoVMWorker::GetType(VarInfo* v1)
 		return &GetVM()->m_sDefaultValue[NDF_STRING];
 	case VAR_STRING:
 		return &GetVM()->m_sDefaultValue[NDF_STRING];
-	case VAR_TABLE:
+	case VAR_MAP:
 		return &GetVM()->m_sDefaultValue[NDF_TABLE];
 	case VAR_LIST:
 		return &GetVM()->m_sDefaultValue[NDF_LIST];
@@ -1832,7 +1832,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 					pFunName = GetVarPtr2(OP);
 					CallNative(GetVM()->_funLib_String, pVar1, pFunName->_str->_str, n3);
 					break;
-				case VAR_TABLE:
+				case VAR_MAP:
 				{
 					pFunName = GetVarPtr2(OP);
 					VarInfo* pVarMeta = pVar1->_tbl->Find(pFunName);
@@ -2323,7 +2323,7 @@ std::string GetDataType(VAR_TYPE t)
 	case VAR_CHAR:
 	case VAR_STRING:
 		return "string";
-	case VAR_TABLE:
+	case VAR_MAP:
 		return "map";
 	case VAR_LIST:
 		return "list";

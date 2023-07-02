@@ -6,21 +6,21 @@
 
 #include "NeoVMImpl.h"
 #include "NeoVMWorker.h"
-#include "NeoVMTable.h"
+#include "NeoVMMap.h"
 
 
 extern u32 GetHashCode(const std::string& str);
 extern u32 GetHashCode(u8 *buffer, int len);
 extern u32 GetHashCode(VarInfo *p);
 
-CollectionIterator TableInfo::FirstNode()
+CollectionIterator MapInfo::FirstNode()
 {
 	CollectionIterator r;
 	for (int iBucket = 0; iBucket < _BucketCapa; iBucket++)
 	{
-		TableBucket* pBucket = &_Bucket[iBucket];
+		MapBucket* pBucket = &_Bucket[iBucket];
 
-		TableNode*	pCur = pBucket->pFirst;
+		MapNode*	pCur = pBucket->pFirst;
 		if(pCur)
 		{
 			r._pTableNode = pCur;
@@ -30,13 +30,13 @@ CollectionIterator TableInfo::FirstNode()
 	r._pTableNode = NULL;
 	return r;
 }
-bool TableInfo::NextNode(CollectionIterator& r)
+bool MapInfo::NextNode(CollectionIterator& r)
 {
 	if (r._pTableNode == NULL)
 		return false;
 
 	{
-		TableNode*	pCur = r._pTableNode->pNext;
+		MapNode*	pCur = r._pTableNode->pNext;
 		if (pCur)
 		{
 			r._pTableNode = pCur;
@@ -46,7 +46,7 @@ bool TableInfo::NextNode(CollectionIterator& r)
 
 	for (int iBucket = (r._pTableNode->hash & _HashBase) + 1; iBucket < _BucketCapa; iBucket++)
 	{
-		TableBucket* pBucket = &_Bucket[iBucket];
+		MapBucket* pBucket = &_Bucket[iBucket];
 
 		if(pBucket->pFirst)
 		{
@@ -58,23 +58,23 @@ bool TableInfo::NextNode(CollectionIterator& r)
 	return false;
 }
 
-void TableInfo::Free()
+void MapInfo::Free()
 {
 	if (_BucketCapa <= 0)
 		return;
 
 	for (int iBucket = 0; iBucket < _BucketCapa; iBucket++)
 	{
-		TableBucket* pBucket = &_Bucket[iBucket];
+		MapBucket* pBucket = &_Bucket[iBucket];
 
-		TableNode*	pFirst = pBucket->pFirst;
+		MapNode*	pFirst = pBucket->pFirst;
 		if (pFirst == NULL)
 			continue;
 
-		TableNode*	pCur = pFirst;
+		MapNode*	pCur = pFirst;
 		while (pCur)
 		{
-			TableNode*	pNext = pCur->pNext;
+			MapNode*	pNext = pCur->pNext;
 
 			_pVM->Var_Release(&pCur->key);
 			_pVM->Var_Release(&pCur->value);
@@ -89,10 +89,10 @@ void TableInfo::Free()
 	_BucketCapa = _HashBase = 0;
 	_itemCount = 0;
 }
-bool	TableBucket::Pop_Used(TableNode* pTar)
+bool	MapBucket::Pop_Used(MapNode* pTar)
 {
-	TableNode* pCur = pFirst;
-	TableNode* pPre = NULL;
+	MapNode* pCur = pFirst;
+	MapNode* pPre = NULL;
 	while (pCur)
 	{
 		if (pCur == pTar)
@@ -112,9 +112,9 @@ bool	TableBucket::Pop_Used(TableNode* pTar)
 	}
 	return false;
 }
-TableNode* TableBucket::Find(VarInfo* pKey, u32 hash)
+MapNode* MapBucket::Find(VarInfo* pKey, u32 hash)
 {
-	TableNode* pCur = pFirst;
+	MapNode* pCur = pFirst;
 	switch (pKey->GetType())
 	{
 	case VAR_NONE:
@@ -204,12 +204,12 @@ TableNode* TableBucket::Find(VarInfo* pKey, u32 hash)
 			}
 		}
 		break;
-	case VAR_TABLE:
+	case VAR_MAP:
 		{
-			TableInfo* pTableInfo = pKey->_tbl;
+			MapInfo* pTableInfo = pKey->_tbl;
 			while (pCur)
 			{
-				if (pCur->key.GetType() == VAR_TABLE)
+				if (pCur->key.GetType() == VAR_MAP)
 				{
 					if (pCur->key._tbl == pTableInfo)
 						return pCur;
@@ -267,14 +267,14 @@ TableNode* TableBucket::Find(VarInfo* pKey, u32 hash)
 	return NULL;
 }
 
-void TableInfo::Reserve(int sz)
+void MapInfo::Reserve(int sz)
 {
 	if (sz < 0) sz = 0;
 	if (sz <= _BucketCapa) return;
 
 	if (sz >= _BucketCapa)
 	{
-		TableBucket* Old_Bucket = _Bucket;
+		MapBucket* Old_Bucket = _Bucket;
 		int Old_BucketCapa = _BucketCapa;
 		int Old_HashBase = _HashBase;
 
@@ -286,23 +286,23 @@ void TableInfo::Reserve(int sz)
 			if (_BucketCapa >= sz)
 				break;
 		}
-		_Bucket = new TableBucket[_BucketCapa];
-		memset(_Bucket, 0, sizeof(TableBucket) * _BucketCapa);
+		_Bucket = new MapBucket[_BucketCapa];
+		memset(_Bucket, 0, sizeof(MapBucket) * _BucketCapa);
 		_HashBase = _BucketCapa - 1;
 
 
 		for (int iBucket = 0; iBucket < Old_BucketCapa; iBucket++)
 		{
-			TableBucket* pBucket = &Old_Bucket[iBucket];
+			MapBucket* pBucket = &Old_Bucket[iBucket];
 
-			TableNode*	pFirst = pBucket->pFirst;
+			MapNode*	pFirst = pBucket->pFirst;
 			if (pFirst == NULL)
 				continue;
 
-			TableNode*	pCur = pFirst;
+			MapNode*	pCur = pFirst;
 			while (pCur)
 			{
-				TableNode*	pNext = pCur->pNext;
+				MapNode*	pNext = pCur->pNext;
 				_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur);
 
 				pCur = pNext;
@@ -315,11 +315,11 @@ void TableInfo::Reserve(int sz)
 }
 
 //int g_MaxList = 0;
-VarInfo* TableInfo::Insert(VarInfo* pKey)
+VarInfo* MapInfo::Insert(VarInfo* pKey)
 {
 	if (_itemCount >= _BucketCapa * 4)
 	{
-		TableBucket* Old_Bucket = _Bucket;
+		MapBucket* Old_Bucket = _Bucket;
 		int Old_BucketCapa = _BucketCapa;
 		int Old_HashBase = _HashBase;
 
@@ -331,23 +331,23 @@ VarInfo* TableInfo::Insert(VarInfo* pKey)
 			if (_BucketCapa > _itemCount)
 				break;
 		}
-		_Bucket = new TableBucket[_BucketCapa];
-		memset(_Bucket, 0, sizeof(TableBucket) * _BucketCapa);
+		_Bucket = new MapBucket[_BucketCapa];
+		memset(_Bucket, 0, sizeof(MapBucket) * _BucketCapa);
 		_HashBase = _BucketCapa - 1;
 
 
 		for (int iBucket = 0; iBucket < Old_BucketCapa; iBucket++)
 		{
-			TableBucket* pBucket = &Old_Bucket[iBucket];
+			MapBucket* pBucket = &Old_Bucket[iBucket];
 
-			TableNode*	pFirst = pBucket->pFirst;
+			MapNode*	pFirst = pBucket->pFirst;
 			if (pFirst == NULL)
 				continue;
 
-			TableNode*	pCur = pFirst;
+			MapNode*	pCur = pFirst;
 			while (pCur)
 			{
-				TableNode*	pNext = pCur->pNext;
+				MapNode*	pNext = pCur->pNext;
 				_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur);
 
 				pCur = pNext;
@@ -359,8 +359,8 @@ VarInfo* TableInfo::Insert(VarInfo* pKey)
 	}
 
 	u32 hash = GetHashCode(pKey);
-	TableBucket* pBucket = &_Bucket[hash & _HashBase];
-	TableNode* pFindNode;
+	MapBucket* pBucket = &_Bucket[hash & _HashBase];
+	MapNode* pFindNode;
 	if (pBucket->pFirst)
 		pFindNode = pBucket->Find(pKey, hash);
 	else
@@ -369,7 +369,7 @@ VarInfo* TableInfo::Insert(VarInfo* pKey)
 	{
 		_itemCount++;
 
-		TableNode* pNew = _pVM->m_sPool_TableNode.Receive();
+		MapNode* pNew = _pVM->m_sPool_TableNode.Receive();
 		INeoVM::Move_DestNoRelease(&pNew->key, pKey);
 		pNew->value.ClearType();
 		//INeoVM::Move_DestNoRelease(&pNew->value, pValue);
@@ -384,7 +384,7 @@ VarInfo* TableInfo::Insert(VarInfo* pKey)
 		return &pFindNode->value;
 	}
 }
-void TableInfo::Insert(std::string& Key, VarInfo* pValue)
+void MapInfo::Insert(std::string& Key, VarInfo* pValue)
 {
 	VarInfo var;
 	var.SetType(VAR_STRING);
@@ -393,20 +393,20 @@ void TableInfo::Insert(std::string& Key, VarInfo* pValue)
 
 	Insert(&var, pValue);
 }
-void TableInfo::Insert(VarInfo* pKey, VarInfo* pValue)
+void MapInfo::Insert(VarInfo* pKey, VarInfo* pValue)
 {
 	VarInfo* pDest = Insert(pKey);
 	if (pDest == NULL) return;
 	_pVM->Move(pDest, pValue);
 }
-void TableInfo::Insert(VarInfo* pKey, int v)
+void MapInfo::Insert(VarInfo* pKey, int v)
 {
 	VarInfo* pDest = Insert(pKey);
 	if (pDest == NULL) return;
 	pDest->SetType(VAR_INT);
 	pDest->_int = v;
 }
-void TableInfo::Insert(int Key, VarInfo* pValue)
+void MapInfo::Insert(int Key, VarInfo* pValue)
 {
 	VarInfo var;
 	var.SetType(VAR_INT);
@@ -416,7 +416,7 @@ void TableInfo::Insert(int Key, VarInfo* pValue)
 	Insert(pKey, pValue);
 }
 
-void TableInfo::Insert(int Key, int v)
+void MapInfo::Insert(int Key, int v)
 {
 	VarInfo var;
 	var.SetType(VAR_INT);
@@ -429,14 +429,14 @@ void TableInfo::Insert(int Key, int v)
 	pDest->_int = v;
 }
 
-void TableInfo::Remove(VarInfo* pKey)
+void MapInfo::Remove(VarInfo* pKey)
 {
 	if (_BucketCapa <= 0)
 		return;
 	u32 hash = GetHashCode(pKey);
-	TableBucket* pBucket = &_Bucket[hash & _HashBase];
+	MapBucket* pBucket = &_Bucket[hash & _HashBase];
 
-	TableNode* pCur = pBucket->Find(pKey, hash);
+	MapNode* pCur = pBucket->Find(pKey, hash);
 	if (pCur == NULL)
 		return;
 
@@ -450,29 +450,29 @@ void TableInfo::Remove(VarInfo* pKey)
 	_itemCount--;
 }
 
-VarInfo* TableInfo::Find(VarInfo *pKey)
+VarInfo* MapInfo::Find(VarInfo *pKey)
 {
 	if (_BucketCapa <= 0)
 		return NULL;
 	u32 hash = GetHashCode(pKey);
 
-	TableBucket* Bucket = &_Bucket[hash & _HashBase];
+	MapBucket* Bucket = &_Bucket[hash & _HashBase];
 
 
-	TableNode* pCur = Bucket->Find(pKey, hash);
+	MapNode* pCur = Bucket->Find(pKey, hash);
 	if (pCur == 0)
 		return NULL;
 
 	return &pCur->value;
 }
-VarInfo* TableInfo::Find(std::string& key)
+VarInfo* MapInfo::Find(std::string& key)
 {
 	if (_BucketCapa <= 0)
 		return NULL;
 	u32 hash = GetHashCode(key);
 
-	TableBucket* pBucket = &_Bucket[hash & _HashBase];
-	TableNode* pCur = pBucket->pFirst;
+	MapBucket* pBucket = &_Bucket[hash & _HashBase];
+	MapNode* pCur = pBucket->pFirst;
 	while (pCur)
 	{
 		if (pCur->key.GetType() == VAR_STRING)
@@ -485,20 +485,20 @@ VarInfo* TableInfo::Find(std::string& key)
 	return NULL;
 }
 
-bool TableInfo::ToListKeys(std::vector<VarInfo*>& lst)
+bool MapInfo::ToListKeys(std::vector<VarInfo*>& lst)
 {
 	lst.resize(_itemCount);
 	int cnt = 0;
 
 	for (int iBucket = 0; iBucket < _BucketCapa; iBucket++)
 	{
-		TableBucket* pBucket = &_Bucket[iBucket];
+		MapBucket* pBucket = &_Bucket[iBucket];
 
-		TableNode*	pFirst = pBucket->pFirst;
+		MapNode*	pFirst = pBucket->pFirst;
 		if (pFirst == NULL)
 			continue;
 
-		TableNode*	pCur = pFirst;
+		MapNode*	pCur = pFirst;
 		while (pCur)
 		{
 			lst[cnt++] = &pCur->key;
@@ -510,20 +510,20 @@ bool TableInfo::ToListKeys(std::vector<VarInfo*>& lst)
 		return false;
 	return true;
 }
-bool TableInfo::ToListValues(std::vector<VarInfo*>& lst)
+bool MapInfo::ToListValues(std::vector<VarInfo*>& lst)
 {
 	lst.resize(_itemCount);
 	int cnt = 0;
 
 	for (int iBucket = 0; iBucket < _BucketCapa; iBucket++)
 	{
-		TableBucket* pBucket = &_Bucket[iBucket];
+		MapBucket* pBucket = &_Bucket[iBucket];
 
-		TableNode*	pFirst = pBucket->pFirst;
+		MapNode*	pFirst = pBucket->pFirst;
 		if (pFirst == NULL)
 			continue;
 
-		TableNode*	pCur = pFirst;
+		MapNode*	pCur = pFirst;
 		while (pCur)
 		{
 			lst[cnt++] = &pCur->value;

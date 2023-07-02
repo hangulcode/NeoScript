@@ -1,18 +1,18 @@
 #pragma once
 
 #pragma pack(1)
-struct TableNode
+struct MapNode
 {
 	VarInfo	key;
 	VarInfo	value;
 
 	u32		hash;
 
-	TableNode* pNext; // List In Bucket
+	MapNode* pNext; // List In Bucket
 };
 #pragma pack()
 
-struct TableSortInfo
+struct MapSortInfo
 {
 	CNeoVMWorker*	_pN;
 	int				_compareFunction;
@@ -20,12 +20,12 @@ struct TableSortInfo
 
 
 
-struct TableBucket
+struct MapBucket
 {
-	TableNode*	pFirst;
-	bool	Pop_Used(TableNode* pTar);
-	TableNode* Find(VarInfo* pKey, u32 hash);
-	inline void Add_NoCheck(TableNode* p)
+	MapNode*	pFirst;
+	bool	Pop_Used(MapNode* pTar);
+	MapNode* Find(VarInfo* pKey, u32 hash);
+	inline void Add_NoCheck(MapNode* p)
 	{
 		p->pNext = pFirst;
 		pFirst = p;
@@ -34,9 +34,9 @@ struct TableBucket
 
 class CNeoVMImpl;
 class CNeoVMWorker;
-struct TableInfo : AllocBase
+struct MapInfo : AllocBase
 {
-	TableBucket*	_Bucket;
+	MapBucket*	_Bucket;
 
 	CNeoVMImpl*	_pVM;
 
@@ -48,7 +48,7 @@ struct TableInfo : AllocBase
 	void* _pUserData;
 
 	FunctionPtrNative _fun;
-	TableInfo*		_meta;
+	MapInfo*		_meta;
 
 	void Free();
 

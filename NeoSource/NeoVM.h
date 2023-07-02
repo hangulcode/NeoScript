@@ -47,7 +47,7 @@ enum VAR_TYPE : u8
 	VAR_CHAR,
 
 	VAR_STRING,	// Alloc
-	VAR_TABLE,
+	VAR_MAP,
 	VAR_LIST,
 	VAR_SET,
 	VAR_COROUTINE,
@@ -56,11 +56,11 @@ enum VAR_TYPE : u8
 };
 struct CoroutineInfo;
 struct StringInfo;
-struct TableInfo;
+struct MapInfo;
 struct ListInfo;
 struct SetInfo;
 struct AsyncInfo;
-struct TableNode;
+struct MapNode;
 struct SetNode;
 struct INeoVM;
 
@@ -69,7 +69,7 @@ struct CollectionIterator
 {
 	union
 	{
-		TableNode* _pTableNode;
+		MapNode* _pTableNode;
 		SetNode* _pSetNode;
 		int			_iListOffset;
 		int			_iStringOffset;
@@ -88,7 +88,7 @@ public:
 		CoroutineInfo* _cor;
 		StringInfo* _str;
 		SUtf8One	_c;
-		TableInfo* _tbl;
+		MapInfo* _tbl;
 		ListInfo* _lst;
 		SetInfo* _set;
 		FunctionPtr* _funPtr; // C Native
@@ -281,7 +281,7 @@ public:
 	void Var_SetString(VarInfo* d, const char* str);
 	void Var_SetString(VarInfo* d, SUtf8One c);
 	void Var_SetStringA(VarInfo* d, const std::string& str);
-	void Var_SetTable(VarInfo* d, TableInfo* p);
+	void Var_SetTable(VarInfo* d, MapInfo* p);
 	void Var_SetList(VarInfo* d, ListInfo* p);
 	void Var_SetSet(VarInfo* d, SetInfo* p);
 	void Var_SetFun(VarInfo* d, int fun_index);

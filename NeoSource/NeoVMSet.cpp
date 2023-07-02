@@ -47,7 +47,7 @@ u32 GetHashCode(VarInfo *p)
 	case VAR_STRING:
 		//return GetHashCode((u8*)p->_str->_str.c_str(), (int)p->_str->_str.length());
 		return GetHashCode(p->_str->_str);
-	case VAR_TABLE:
+	case VAR_MAP:
 		return GetHashCode((u8*)p->_tbl, sizeof(p->_tbl));
 	case VAR_LIST:
 		return GetHashCode((u8*)p->_lst, sizeof(p->_lst));
@@ -250,12 +250,12 @@ SetNode* SetBucket::Find(VarInfo* pKey, u32 hash)
 			}
 		}
 		break;
-	case VAR_TABLE:
+	case VAR_MAP:
 		{
-			TableInfo* pInfo = pKey->_tbl;
+			MapInfo* pInfo = pKey->_tbl;
 			while (pCur)
 			{
-				if (pCur->key.GetType() == VAR_TABLE)
+				if (pCur->key.GetType() == VAR_MAP)
 				{
 					if (pCur->key._tbl == pInfo)
 						return pCur;

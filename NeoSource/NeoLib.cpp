@@ -357,14 +357,14 @@ struct neo_libs
 
 		VarInfo *pTable = pN->GetStack(1);
 		VarInfo *pMeta = pN->GetStack(2);
-		if (pTable->GetType() != VAR_TABLE) return false;
-		if (pMeta->GetType() != VAR_TABLE) return false;
+		if (pTable->GetType() != VAR_MAP) return false;
+		if (pMeta->GetType() != VAR_MAP) return false;
 
 		VarInfo var;
 		var.ClearType();
 		if (pTable->_tbl->_meta)
 		{
-			var.SetType(VAR_TABLE);
+			var.SetType(VAR_MAP);
 			var._tbl = pTable->_tbl->_meta;
 		}
 
@@ -375,7 +375,7 @@ struct neo_libs
 	}
 	static bool map_reserve(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (pVar->GetType() != VAR_TABLE) return false;
+		if (pVar->GetType() != VAR_MAP) return false;
 		if (args != 1) return false;
 
 		int size = pN->read<int>(1);
@@ -388,7 +388,7 @@ struct neo_libs
 		if (args != 1) return false; // fun
 
 		VarInfo *pFun = pN->GetStack(1);
-		if (pVar->GetType() != VAR_TABLE) return false;
+		if (pVar->GetType() != VAR_MAP) return false;
 
 		if (pFun->GetType() != VAR_FUN) return false;
 
@@ -414,7 +414,7 @@ struct neo_libs
 	static bool map_keys(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 0) return false;
-		if (pVar->GetType() != VAR_TABLE) return false;
+		if (pVar->GetType() != VAR_MAP) return false;
 
 		std::vector<VarInfo*> lst;
 		if (false == pVar->_tbl->ToListKeys(lst)) return false;
@@ -432,7 +432,7 @@ struct neo_libs
 	static bool map_values(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 0) return false;
-		if (pVar->GetType() != VAR_TABLE) return false;
+		if (pVar->GetType() != VAR_MAP) return false;
 
 		std::vector<VarInfo*> lst;
 		if (false == pVar->_tbl->ToListValues(lst)) return false;
@@ -869,7 +869,7 @@ bool CNeoVMImpl::IsGlobalLibFun(std::string& FunName)
 }
 void CNeoVMImpl::RegLibrary(VarInfo* pSystem, const char* pLibName)
 {
-	TableInfo* pTable = pSystem->_tbl;
+	MapInfo* pTable = pSystem->_tbl;
 	pTable->_fun = CNeoVMImpl::RegisterNative(Fun_Default);
 	//AddGlobalLibFun();
 
