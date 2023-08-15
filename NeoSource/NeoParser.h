@@ -667,13 +667,16 @@ struct SFunctionInfo
 };
 
 
-
+struct SFunctionLayer
+{
+	std::map<std::string, SFunctionInfo*>	_funs;
+};
 
 struct SFunctions
 {
-	std::map<std::string, SFunctionInfo>_funs;
-	std::map<int, std::string>			_funIDs;
-	std::list<std::string>				_funSequence;
+	std::vector<SFunctionLayer*>			_funLayers;
+	std::map<int, SFunctionInfo*>			_funIDs;
+	std::list<SFunctionInfo*>				_funSequence;
 
 	SFunctionInfo						_cur;
 	std::vector<VarInfo>				_staticVars;
@@ -682,12 +685,25 @@ struct SFunctions
 	CNArchive		_codeTemp;
 
 	std::string		_prefix;
+	int				_curModuleIndex = -1;
 
 	std::vector<debug_info> m_sDebugFinal;
 	std::vector<debug_info> m_sDebugTemp;
 
 	~SFunctions()
 	{
+		for(int i = (int)_funLayers.size() - 1; i >= 0; i--)
+		{
+			SFunctionLayer* pFLayer = _funLayers[i];
+			for(auto it = pFLayer->_funs.begin(); it != pFLayer->_funs.end(); it++)
+			{
+				SFunctionInfo* f = (*it).second;
+				delete f;
+			}
+			pFLayer->_funs.clear();
+			delete pFLayer;
+		}
+		_funLayers.clear();
 		for (int i = (int)_staticVars.size() - 1; i >= 0; i--)
 		{
 			VarInfo& v2 = _staticVars[i];
@@ -695,24 +711,54 @@ struct SFunctions
 			{
 				delete v2._str;
 			}
-
 		}
 		_staticVars.clear();
 	}
 
+	int GetFunCountAll()
+	{
+		int cnt = 0;
+		for (int i = (int)_funLayers.size() - 1; i >= 0; i--)
+		{
+			SFunctionLayer* pFLayer = _funLayers[i];
+			cnt += (int)pFLayer->_funs.size();
+		}
+		return cnt;
+	}
+
+	void NewLayer()
+	{
+		SFunctionLayer* pFLayer = new SFunctionLayer();
+		++_curModuleIndex;
+		_funLayers.push_back(pFLayer);
+	}
+
+	SFunctionInfo* NewFun(const std::string& name)
+	{
+		SFunctionInfo* p = FindFun(name);
+		if(p != nullptr)
+			return p;
+		p = new SFunctionInfo();
+		p->Clear();
+		p->_name = name;
+		_funLayers[_curModuleIndex]->_funs[name] = p;
+		return p;
+	}
+
 	SFunctionInfo*	FindFun(const std::string& name)
 	{
-		auto it = _funs.find(name);
-		if (it == _funs.end())
+		auto it = _funLayers[_curModuleIndex]->_funs.find(name);
+		if (it == _funLayers[_curModuleIndex]->_funs.end())
 			return NULL;
-		return &(*it).second;
+		return (*it).second;
 	}
 	SFunctionInfo*	FindFun(int ifun)
 	{
 		auto it = _funIDs.find(ifun);
 		if (it == _funIDs.end())
 			return NULL;
-		return FindFun((*it).second);
+		return (*it).second;
+		//return FindFun((*it).second);
 	}
 
 	int	AddStaticInt(int num)

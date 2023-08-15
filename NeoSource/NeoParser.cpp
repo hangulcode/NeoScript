@@ -794,12 +794,32 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), tk1.c_str());
 		return false;
 	}
+	std::string name = tk1; // default equal
 	tkType2 = GetToken(ar, tk2);
+	if (tkType2 == TK_STRING && tk2 == "as")
+	{
+		tkType2 = GetToken(ar, tk2);
+		if (tkType2 == TK_STRING)
+		{
+			name = tk2;
+			tkType2 = GetToken(ar, tk2);
+		}
+	}
+
 	if (tkType2 != TK_SEMICOLON)
 	{
 		SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), tk2.c_str());
 		return false;
 	}
+
+	if(AbleName(name) == false)
+	{
+		SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), tk2.c_str());
+		return false;
+	}
+
+	// TODO ???
+	//동일한 모듈 파일은 as로 다르게 import 하면 ...
 
 	std::string fullFileName;
 	fullFileName = "../../Lib/";
@@ -827,10 +847,10 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	ar2._allowGlobalInitLogic = ar._allowGlobalInitLogic;
 	ar2._debug = ar._debug;
 
-	std::string prefix = funs._prefix;
+	std::string prefixBackup = funs._prefix;
 	funs._prefix = tk1 + ".";
 	bool r = ParseFunctionBody(ar2, funs, vars, false);
-	funs._prefix = prefix;
+	funs._prefix = prefixBackup;
 
 	u16* pBuffer = ar2.GetBuffer();
 	if (pBuffer) delete[] pBuffer;
@@ -3251,7 +3271,7 @@ void FinalizeFuction(SFunctions& funs)
 		funs._cur._pDebugData->resize(iSrcBeginDebugOff);
 	}
 	
-	funs._funSequence.push_back(funs._cur._name);
+	funs._funSequence.push_back(funs.FindFun(funs._cur._name));
 }
 
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool addOPFunEnd)
@@ -3282,29 +3302,31 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	if (funs._cur._funType != FUNT_ANONYMOUS)
 	{
-		auto itF = funs._funs.find(funs._cur._name);
-		if (itF != funs._funs.end())
+		SFunctionInfo* pF = funs.FindFun(funs._cur._name);
+		if (pF != nullptr)
 		{
-			funs._cur = (*itF).second;
+			if (funs._cur._args.size() != pF->_args.size())
+				return false;
+			funs._cur = *pF;
 		}
 		else
 		{
-			funs._cur._funID = (int)funs._funs.size() + 1;
+			funs._cur._funID = funs.GetFunCountAll();// + 1;
+			pF = funs.NewFun(funs._cur._name);
 
-			funs._funIDs[funs._cur._funID] = funs._cur._name;
-			//funs._cur._staticIndex = funs.AddStaticFunction(funs._cur._funID);
-			funs._funs[funs._cur._name] = funs._cur; // 이름 먼저 등록
+			funs._funIDs[funs._cur._funID] = pF;
+			*pF = funs._cur;
 		}
 	}
 	else
 	{
-		funs._cur._funID = (int)funs._funs.size() + 1;
+		funs._cur._funID = funs.GetFunCountAll();// + 1;
 		char ch[128];
 		sprintf_s(ch, _countof(ch), "#@_%d", funs._cur._funID);
 		funs._cur._name = ch;
-		funs._funIDs[funs._cur._funID] = funs._cur._name;
-		//funs._cur._staticIndex = funs.AddStaticFunction(funs._cur._funID);
-		funs._funs[funs._cur._name] = funs._cur; // 이름 먼저 등록
+		SFunctionInfo* pF = funs.NewFun(funs._cur._name);
+		funs._funIDs[funs._cur._funID] = pF;
+		*pF = funs._cur;
 	}
 
 
@@ -3320,8 +3342,8 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		{
 			DelVarsFunction(vars);
 
-			auto it = funs._funs.find(funs._cur._name);
-			(*it).second = funs._cur;
+			SFunctionInfo* pF = funs.FindFun(funs._cur._name);
+			*pF = funs._cur;
 			return true;
 		}
 		SetCompileError(ar, "Error (%d, %d): Function Start (%s) %d\n", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), tk1.c_str());
@@ -3338,9 +3360,8 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		FinalizeFuction(funs);
 	}
 
-	auto it = funs._funs.find(funs._cur._name);
-	(*it).second = funs._cur;
-
+	SFunctionInfo* pF = funs.FindFun(funs._cur._name);
+	*pF = funs._cur;
 
 	DelVarsFunction(vars);
 
@@ -3380,6 +3401,10 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 
 	SVars	vars;
 	SFunctions funs;
+
+	funs.NewLayer();
+
+	funs.NewFun(GLOBAL_INIT_FUN_NAME);
 	funs._cur._funID = 0;
 	funs._cur._name = GLOBAL_INIT_FUN_NAME;
 	funs._cur._code = &funs._codeTemp;
@@ -3399,7 +3424,8 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 		funs._cur._iCode_Size = funs._cur._code->GetBufferOffset();
 
 		FinalizeFuction(funs);
-		funs._funs[funs._cur._name] = funs._cur;
+		SFunctionInfo* pF = funs.FindFun(funs._cur._name);
+		*pF = funs._cur;
 
 		if(false == Write(ar, arw, funs, vars))
 			return false;

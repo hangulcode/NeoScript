@@ -83,8 +83,9 @@ std::string GetFunctionName(SFunctions& funs, short nID)
 	if(it == funs._funIDs.end())
 		return "Error";
 
-	auto it2 = funs._funs.find((*it).second);
-	return (*it2).second._name;
+	//auto it2 = funs._funs.find((*it).second);
+	//return (*it2).second._name;
+	return (*it).second->_name;
 }
 
 void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, std::map<int, SFunctionTableForWriter>& funPos, std::vector< debug_info>& debugInfo)
@@ -930,7 +931,7 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 
 	header._dwFileType = FILE_NEOS;
 	header._dwNeoVersion = NEO_VER;
-	header._iFunctionCount = (int)(funs._funs.size());
+	header._iFunctionCount = (int)(funs.GetFunCountAll());
 	header._dwFlag = arText._debug ? NEO_HEADER_FLAG_DEBUG : 0;
 	
 	std::map<int, SFunctionTableForWriter> funPos;
@@ -950,9 +951,8 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	//}
 	for (auto it = funs._funSequence.begin(); it != funs._funSequence.end(); it++)
 	{
-		auto it2 = funs._funs.find((*it));
-		SFunctionInfo& fi = (*it2).second;
-		WriteFun(arText, ar, funs, fi, vars, funPos, debugInfo);
+		SFunctionInfo* fi = (*it);
+		WriteFun(arText, ar, funs, *fi, vars, funPos, debugInfo);
 	}
 
 
@@ -1052,10 +1052,10 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 
 
 	std::map<int, std::string> mapFun;
-	for (auto it = funs._funs.begin(); it != funs._funs.end(); it++)
+	for (auto it = funs._funIDs.begin(); it != funs._funIDs.end(); it++)
 	{
 		//auto it2 = funs._funs.find((*it));
-		SFunctionInfo& fi = (*it).second;
+		SFunctionInfo& fi = *(*it).second;
 		mapFun[fi._funID] = fi._name;
 
 		//OutAsm("Fun [%d] %s\n", fi._funID, fi._name.c_str());
@@ -1116,8 +1116,7 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 	// Sub 함수 코드 저장
 	for (auto it = funs._funSequence.begin(); it != funs._funSequence.end(); it++)
 	{
-		auto it2 = funs._funs.find((*it));
-		SFunctionInfo& fi = (*it2).second;
+		SFunctionInfo& fi = *(*it);
 		WriteFunLog(arText, arw, funs, fi, vars, td);
 	}
 
