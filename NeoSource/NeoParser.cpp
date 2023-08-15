@@ -720,21 +720,21 @@ int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExp
 {
 	if (checkName && false == AbleName(name))
 	{
-		SetCompileError(ar, "Error (%d, %d): Function Local Var Unable (%s) %s", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), name.c_str());
+		SetCompileError(ar, "Error (%d, %d): Function Local Var Unable (%s) %s", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), name.c_str());
 		return -1;
 	}
 	SLayerVar* pCurLayer = vars.GetCurrentLayer();
 
 	if (pCurLayer->FindVarOnlyCurrentBlock(name) >= 0)
 	{
-		SetCompileError(ar, "Error (%d, %d): Function Local Var Already (%s) %s", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), name.c_str());
+		SetCompileError(ar, "Error (%d, %d): Function Local Var Already (%s) %s", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), name.c_str());
 		return -1;
 	}
 	int iLocalVar;
-	if (funs._cur._name == GLOBAL_INIT_FUN_NAME)
-		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN + funs._cur._localVarCount++;
+	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME)
+		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN + funs._cur->_localVarCount++;
 	else
-		iLocalVar = 1 + (int)funs._cur._args.size() + funs._cur._localVarCount++; // 0 번은 리턴 저장용
+		iLocalVar = 1 + (int)funs._cur->_args.size() + funs._cur->_localVarCount++; // 0 번은 리턴 저장용
 	pCurLayer->AddLocalVar(name, iLocalVar);
 	if (blExport)
 	{
@@ -742,7 +742,7 @@ int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExp
 			vars._varsExport.push_back(name);
 		else
 		{
-			SetCompileError(ar, "Error (%d, %d): Export Invalid (%s) %s", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), name.c_str());
+			SetCompileError(ar, "Error (%d, %d): Export Invalid (%s) %s", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), name.c_str());
 			return -1;
 		}
 	}
@@ -757,29 +757,29 @@ int  AddLocalVar(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	if (pCurLayer->FindVarOnlyCurrentBlock(name) >= 0)
 	{
-		SetCompileError(ar, "Error (%d, %d): Function Local Var Already (%s) %s", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), name);
+		SetCompileError(ar, "Error (%d, %d): Function Local Var Already (%s) %s", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), name);
 		return -1;
 	}
 	int iLocalVar;
-	if (funs._cur._name == GLOBAL_INIT_FUN_NAME)
-		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN + funs._cur._localVarCount++;
+	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME)
+		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN + funs._cur->_localVarCount++;
 	else
-		iLocalVar = 1 + (int)funs._cur._args.size() + funs._cur._localVarCount++; // 0 번은 리턴 저장용
+		iLocalVar = 1 + (int)funs._cur->_args.size() + funs._cur->_localVarCount++; // 0 번은 리턴 저장용
 	pCurLayer->AddLocalVar(name, iLocalVar);
 	return iLocalVar;
 }
 void ClearTempVars(SFunctions& funs)
 {
-	funs._cur.FreeLocalTempVar();
-	eNOperation opLast = funs._cur.GetLastOP();
+	funs._cur->FreeLocalTempVar();
+	eNOperation opLast = funs._cur->GetLastOP();
 	if (opLast == NOP_MOV || opLast == NOP_MOV_MINUS)
 	{
-		int iVar = funs._cur.GetN(funs._cur._iLastOPOffset, 0);
+		int iVar = funs._cur->GetN(funs._cur->_iLastOPOffset, 0);
 		if (IsTempVar(iVar))
 		{
-			//funs._cur._code->SetPointer(funs._cur._iLastOPOffset - (ar._debug ? sizeof(debug_info) : 0), SEEK_SET);
-			funs._cur._code->SetPointer(funs._cur._iLastOPOffset, SEEK_SET);
-			funs._cur.ClearLastOP();
+			//funs._cur->_code->SetPointer(funs._cur->_iLastOPOffset - (ar._debug ? sizeof(debug_info) : 0), SEEK_SET);
+			funs._cur->_code->SetPointer(funs._cur->_iLastOPOffset, SEEK_SET);
+			funs._cur->ClearLastOP();
 		}
 	}
 }
@@ -847,10 +847,11 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	ar2._allowGlobalInitLogic = ar._allowGlobalInitLogic;
 	ar2._debug = ar._debug;
 
+	funs.NewLayer();
 	std::string prefixBackup = funs._prefix;
-	funs._prefix = tk1 + ".";
+	//funs._prefix = tk1 + ".";
 	bool r = ParseFunctionBody(ar2, funs, vars, false);
-	funs._prefix = prefixBackup;
+	//funs._prefix = prefixBackup;
 
 	u16* pBuffer = ar2.GetBuffer();
 	if (pBuffer) delete[] pBuffer;
@@ -876,14 +877,14 @@ bool ParseFunctionArg(CArchiveRdWC& ar, SFunctions& funs, SLayerVar* pCurLayer)
 			tkType2 = GetToken(ar, tk2);
 			if (tkType2 == TK_STRING)
 			{
-				auto it = funs._cur._args.find(tk2);
-				if (it != funs._cur._args.end())
+				auto it = funs._cur->_args.find(tk2);
+				if (it != funs._cur->_args.end())
 				{
 					SetCompileError(ar, "Error (%d, %d): Already Function Arg (%s)", ar.CurLine(), ar.CurCol(), tk2.c_str());
 					return false;
 				}
-				pCurLayer->AddLocalVar(tk2, 1 + (int)funs._cur._args.size());
-				funs._cur._args.insert(tk2);
+				pCurLayer->AddLocalVar(tk2, 1 + (int)funs._cur->_args.size());
+				funs._cur->_args.insert(tk2);
 				bPreviusComa = false;
 			}
 			else
@@ -901,7 +902,7 @@ bool ParseFunctionArg(CArchiveRdWC& ar, SFunctions& funs, SLayerVar* pCurLayer)
 			blEnd = true;
 			break;
 		case TK_COMMA:
-			if (funs._cur._args.size() == 0 || bPreviusComa)
+			if (funs._cur->_args.size() == 0 || bPreviusComa)
 			{
 				SetCompileError(ar, "Error (%d, %d): Function Arg (Coma)", ar.CurLine(), ar.CurCol());
 				return false;
@@ -1041,18 +1042,18 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 			//tkType3 = Try_ParseIntNum(iTryValue, ar, funs, vars, TK_COMMA, TK_R_SMALL);
 			//if (tkType3 != TK_NONE)
 			//{
-			//	funs._cur.Push_MOV(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTryValue, true);
+			//	funs._cur->Push_MOV(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTryValue, true);
 			//}
 			//else
 			{
 				iTempVar.Reset();
 				tkType3 = ParseJob(true, iTempVar, NULL, ar, funs, vars);
 				if(iTempVar.IsFun())
-					funs._cur.Push_MOV(ar, NOP_FMOV1, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTempVar._iVar, false);
+					funs._cur->Push_MOV(ar, NOP_FMOV1, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTempVar._iVar, false);
 				else if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
-					funs._cur.Push_MOV(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTempVar._iVar, iTempVar.IsShort());
+					funs._cur->Push_MOV(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTempVar._iVar, iTempVar.IsShort());
 				else
-					funs._cur.Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTempVar.IsHaveShort());
+					funs._cur->Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTempVar.IsHaveShort());
 				if (iTempVar.IsInvalidValue())
 				{
 					SetCompileError(ar, "Error (%d, %d): Call Param\n", ar.CurLine(), ar.CurCol());
@@ -1077,15 +1078,15 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 				SetCompileError(ar, "Error (%d, %d): Arg Count Invalid (%d != %d)", ar.CurLine(), ar.CurCol(), (int)pFun->_args.size(), iParamCount);
 				return false;
 			}
-			//funs._cur.Push_Call(ar, pFun->_funType == FUNT_IMPORT ? NOP_FARCALL : NOP_CALL, pFun->_funID, iParamCount);
-			funs._cur.Push_Call(ar, NOP_CALL, pFun->_funID, iParamCount);
+			//funs._cur->Push_Call(ar, pFun->_funType == FUNT_IMPORT ? NOP_FARCALL : NOP_CALL, pFun->_funID, iParamCount);
+			funs._cur->Push_Call(ar, NOP_CALL, pFun->_funID, iParamCount);
 		}
 		else if(iResultStack._iVar >= 0)
-			funs._cur.Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
+			funs._cur->Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
 		else
-			funs._cur.Push_CallPtr2(ar, iResultStack._iArrayIndex, iParamCount);
-		iResultStack = funs._cur.AllocLocalTempVar();
-		funs._cur.Push_MOV(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
+			funs._cur->Push_CallPtr2(ar, iResultStack._iArrayIndex, iParamCount);
+		iResultStack = funs._cur->AllocLocalTempVar();
+		funs._cur->Push_MOV(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
 	}
 	else if (tkType1 == TK_SEMICOLON)
 	{
@@ -1252,20 +1253,20 @@ TK_TYPE ParseListDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs,
 	TK_TYPE r = TK_NONE;
 
 	// // List alloc
-	iResultStack = funs._cur.AllocLocalTempVar();
-	funs._cur.Push_ListAlloc(ar, iResultStack._iVar);
+	iResultStack = funs._cur->AllocLocalTempVar();
+	funs._cur->Push_ListAlloc(ar, iResultStack._iVar);
 
-	int off_cnt = funs._cur._code->GetBufferOffset() - sizeof(int);
+	int off_cnt = funs._cur->_code->GetBufferOffset() - sizeof(int);
 
-/*	int off_resize = funs._cur._code->GetBufferOffset();
+/*	int off_resize = funs._cur->_code->GetBufferOffset();
 
 	// resize (1.param set cnt, 2.call resize)
-	funs._cur.Push_MOV(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + 0, 0, true);
-	int off_cnt = funs._cur._code->GetBufferOffset() - (sizeof(short) * 2);
+	funs._cur->Push_MOV(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + 0, 0, true);
+	int off_cnt = funs._cur->_code->GetBufferOffset() - (sizeof(short) * 2);
 
 	int iStaticString = -1;// funs.AddStaticString("resize");
-	funs._cur.Push_CallPtr(ar, iResultStack._iVar, iStaticString, 1); // list resize
-	int off_resize_str = funs._cur._code->GetBufferOffset() - (sizeof(short) * 2);
+	funs._cur->Push_CallPtr(ar, iResultStack._iVar, iStaticString, 1); // list resize
+	int off_resize_str = funs._cur->_code->GetBufferOffset() - (sizeof(short) * 2);
 	*/
 	SOperand iTempOffsetValue;
 	std::string str;
@@ -1285,11 +1286,11 @@ TK_TYPE ParseListDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs,
 		}
 
 		if (IsShort(iItemCount))
-			funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iItemCount, iTempOffsetValue._iVar, false, true, iTempOffsetValue.IsShort());
+			funs._cur->Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iItemCount, iTempOffsetValue._iVar, false, true, iTempOffsetValue.IsShort());
 		else
 		{
 			int iTempOffsetKey = funs.AddStaticInt(iItemCount);
-			funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey, iTempOffsetValue._iVar, false, false, iTempOffsetValue.IsShort());
+			funs._cur->Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey, iTempOffsetValue._iVar, false, false, iTempOffsetValue.IsShort());
 		}
 		iItemCount++;
 
@@ -1317,13 +1318,13 @@ TK_TYPE ParseListDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs,
 	if (iItemCount > 0)
 	{
 	//	iStaticString = funs.AddStaticString("resize");
-		*((int*)((u8*)funs._cur._code->GetData() + off_cnt)) = iItemCount;
-	//	*((short*)((u8*)funs._cur._code->GetData() + off_resize_str)) = iStaticString;
+		*((int*)((u8*)funs._cur->_code->GetData() + off_cnt)) = iItemCount;
+	//	*((short*)((u8*)funs._cur->_code->GetData() + off_resize_str)) = iStaticString;
 	}
 	else
 	{
-//		funs._cur._code->SetBufferOffset(off_resize);
-//		funs._cur.ClearLastOP();
+//		funs._cur->_code->SetBufferOffset(off_resize);
+//		funs._cur->ClearLastOP();
 	}
 	return tkType1;
 }
@@ -1335,20 +1336,20 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 	TK_TYPE r = TK_NONE;
 
 	// Table alloc
-	iResultStack = funs._cur.AllocLocalTempVar();
-	funs._cur.Push_TableAlloc(ar, iResultStack._iVar);
+	iResultStack = funs._cur->AllocLocalTempVar();
+	funs._cur->Push_TableAlloc(ar, iResultStack._iVar);
 
-	int off_cnt = funs._cur._code->GetBufferOffset() - sizeof(int);
+	int off_cnt = funs._cur->_code->GetBufferOffset() - sizeof(int);
 
-	/*	int off_reserve = funs._cur._code->GetBufferOffset();
+	/*	int off_reserve = funs._cur->_code->GetBufferOffset();
 
 	// reserve (1.param set cnt, 2.call reserve)
-	funs._cur.Push_MOV(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + 0, 0, true);
-	int off_cnt = funs._cur._code->GetBufferOffset() - (sizeof(short) * 2);
+	funs._cur->Push_MOV(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + 0, 0, true);
+	int off_cnt = funs._cur->_code->GetBufferOffset() - (sizeof(short) * 2);
 
 	int iStaticString = -1;// funs.AddStaticString("reserve");
-	funs._cur.Push_CallPtr(ar, iResultStack._iVar, iStaticString, 1); // map reserve
-	int off_reserve_str = funs._cur._code->GetBufferOffset() - (sizeof(short) * 2);
+	funs._cur->Push_CallPtr(ar, iResultStack._iVar, iStaticString, 1); // map reserve
+	int off_reserve_str = funs._cur->_code->GetBufferOffset() - (sizeof(short) * 2);
 	*/
 	SOperand iTempOffsetKey;
 	SOperand iTempOffsetValue;
@@ -1376,7 +1377,7 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 			{
 				return TK_NONE;
 			}
-			funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey._iVar, iTempOffsetValue._iVar, false, iTempOffsetKey.IsShort(), iTempOffsetValue.IsShort());
+			funs._cur->Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey._iVar, iTempOffsetValue._iVar, false, iTempOffsetKey.IsShort(), iTempOffsetValue.IsShort());
 			tkType1 = tkType2;
 			iItemCount++;
 		}
@@ -1384,11 +1385,11 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 		{
 			iTempOffsetValue = iTempOffsetKey;
 			if(IsShort(++iCurArrayOffset))
-				funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iCurArrayOffset, iTempOffsetValue._iVar, false, true, iTempOffsetValue.IsShort());
+				funs._cur->Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iCurArrayOffset, iTempOffsetValue._iVar, false, true, iTempOffsetValue.IsShort());
 			else
 			{
 				iTempOffsetKey = funs.AddStaticInt(iCurArrayOffset);
-				funs._cur.Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey._iVar, iTempOffsetValue._iVar, false, false, iTempOffsetValue.IsShort());
+				funs._cur->Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey._iVar, iTempOffsetValue._iVar, false, false, iTempOffsetValue.IsShort());
 			}
 			iItemCount++;
 		}
@@ -1417,13 +1418,13 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 	if (iItemCount > 0)
 	{
 		//iStaticString = funs.AddStaticString("reserve");
-		*((int*)((u8*)funs._cur._code->GetData() + off_cnt)) = iItemCount;
-		//*((short*)((u8*)funs._cur._code->GetData() + off_reserve_str)) = iStaticString;
+		*((int*)((u8*)funs._cur->_code->GetData() + off_cnt)) = iItemCount;
+		//*((short*)((u8*)funs._cur->_code->GetData() + off_reserve_str)) = iStaticString;
 	}
 	else
 	{
-		//funs._cur._code->SetBufferOffset(off_reserve);
-		//funs._cur.ClearLastOP();
+		//funs._cur->_code->SetBufferOffset(off_reserve);
+		//funs._cur->ClearLastOP();
 	}
 	return tkType1;
 }
@@ -1442,8 +1443,8 @@ TK_TYPE ParseTable(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs, SVars&
 
 	/*if (op.IsArray())
 	{
-		operand = funs._cur.AllocLocalTempVar();
-		funs._cur.Push_TableRead(ar, op._iVar, op._iArrayIndex, operand._iVar);
+		operand = funs._cur->AllocLocalTempVar();
+		funs._cur->Push_TableRead(ar, op._iVar, op._iArrayIndex, operand._iVar);
 	}
 	else*/
 		operand = op;
@@ -1527,8 +1528,8 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 			{
 				SetCompileError(ar, "Error (%d, %d): . string", ar.CurLine(), ar.CurCol());
 				return false;
-				//int iTempOffset2 = funs._cur.AllocLocalTempVar();
-				//funs._cur.Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iTempOffset2);
+				//int iTempOffset2 = funs._cur->AllocLocalTempVar();
+				//funs._cur->Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iTempOffset2);
 				//iTempOffset = iTempOffset2;
 			}
 			else
@@ -1548,8 +1549,8 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 				{
 					if (iTempOffset2._iArrayIndex == INVALID_ERROR_PARSEJOB)
 					{
-						int iTempOffset3 = funs._cur.AllocLocalTempVar();
-						funs._cur.Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iTempOffset3, iTempOffset.IsHaveShort());
+						int iTempOffset3 = funs._cur->AllocLocalTempVar();
+						funs._cur->Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iTempOffset3, iTempOffset.IsHaveShort());
 						iTempOffset._iVar = iTempOffset3;
 						iTempOffset._iArrayIndex = iTempOffset2._iVar;
 						iTempOffset._operandType = iTempOffset2.IsShort() ? Data_TS : Data_TR;
@@ -1567,15 +1568,15 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 		{
 			if (iTempOffset.IsArray())
 			{
-				int iTempOffset2 = funs._cur.AllocLocalTempVar();
-				funs._cur.Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iTempOffset2, iTempOffset.IsHaveShort());
+				int iTempOffset2 = funs._cur->AllocLocalTempVar();
+				funs._cur->Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iTempOffset2, iTempOffset.IsHaveShort());
 				iTempOffset = iTempOffset2;
 
 				//iTempOffset._iArrayIndex = INVALID_ERROR_PARSEJOB;
 			}
 
-			int iTempOffset3 = funs._cur.AllocLocalTempVar();
-			funs._cur.Push_MOV(ar, NOP_MOV_MINUS, iTempOffset3, iTempOffset._iVar, false);
+			int iTempOffset3 = funs._cur->AllocLocalTempVar();
+			funs._cur->Push_MOV(ar, NOP_MOV_MINUS, iTempOffset3, iTempOffset._iVar, false);
 			iTempOffset = iTempOffset3;
 		}
 	}
@@ -1584,7 +1585,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 		SFunctionInfo* pFun = funs.FindFun(tk1);
 		if (pFun != NULL)
 		{
-			if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
+			if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 			{
 				SetCompileError(ar, "Error (%d, %d): Call is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
 				return false;
@@ -1655,15 +1656,15 @@ bool ParseToType(int& iResultStack, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 	int iTempOffset2;
 	if (operand._iArrayIndex != INVALID_ERROR_PARSEJOB)
 	{
-		iTempOffset2 = funs._cur.AllocLocalTempVar();
-		funs._cur.Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iTempOffset2, operand.IsHaveShort());
+		iTempOffset2 = funs._cur->AllocLocalTempVar();
+		funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iTempOffset2, operand.IsHaveShort());
 	}
 	else
 		iTempOffset2 = operand._iVar;
 
-	int iTempOffset3 = funs._cur.AllocLocalTempVar();
+	int iTempOffset3 = funs._cur->AllocLocalTempVar();
 	int iPriority = 0;
-	funs._cur.Push_ToType(ar, TokenToOP(tkTypePre, iPriority), iTempOffset3, iTempOffset2);
+	funs._cur->Push_ToType(ar, TokenToOP(tkTypePre, iPriority), iTempOffset3, iTempOffset2);
 	iResultStack = iTempOffset3;
 	return true;
 }
@@ -1703,12 +1704,12 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		switch (tkType1)
 		{
 		case TK_NONE:
-			SetCompileError(ar, "Error (%d, %d): Function End (%s)\n", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str());
+			SetCompileError(ar, "Error (%d, %d): Function End (%s)\n", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str());
 			return TK_NONE;
 		case TK_RETURN:
-			if (funs._cur._name == GLOBAL_INIT_FUN_NAME)
+			if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME)
 			{
-				SetCompileError(ar, "Error (%d, %d): Global Init (%s) %d", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), tk1.c_str());
+				SetCompileError(ar, "Error (%d, %d): Global Init (%s) %d", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), tk1.c_str());
 				return TK_NONE;
 			}
 			iTempOffset.Reset();
@@ -1718,7 +1719,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				SetCompileError(ar, "Error (%d, %d): return", ar.CurLine(), ar.CurCol());
 				return TK_NONE;
 			}
-			funs._cur.Push_RETURN(ar, iTempOffset._iVar, iTempOffset.IsShort());
+			funs._cur->Push_RETURN(ar, iTempOffset._iVar, iTempOffset.IsShort());
 			blEnd = true;
 			break;
 		case TK_L_SMALL:
@@ -1846,8 +1847,8 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				SetCompileError(ar, "Error (%d, %d): break error\n", ar.CurLine(), ar.CurCol());
 				return TK_NONE;
 			}
-			funs._cur.Push_JMP(ar, 0);
-			pJumps->push_back(SJumpValue(funs._cur._code->GetBufferOffset() - 2, funs._cur._code->GetBufferOffset()));
+			funs._cur->Push_JMP(ar, 0);
+			pJumps->push_back(SJumpValue(funs._cur->_code->GetBufferOffset() - 2, funs._cur->_code->GetBufferOffset()));
 			break;
 		case TK_L_MIDDLE:
 			iTempOffset.Reset();
@@ -1870,8 +1871,8 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 
 		case TK_NULL:
 			//iTempOffset._iVar = COMPILE_VAR_NULL;
-			iTempOffset._iVar = funs._cur.AllocLocalTempVar();
-			funs._cur.Push_OP1(ar, NOP_VAR_CLEAR, iTempOffset._iVar);
+			iTempOffset._iVar = funs._cur->AllocLocalTempVar();
+			funs._cur->Push_OP1(ar, NOP_VAR_CLEAR, iTempOffset._iVar);
 			operands.push_back(SOperand(iTempOffset._iVar));
 			blApperOperator = true;
 			break;
@@ -1902,7 +1903,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 					return TK_NONE;
 				}
 				a._operandType = Increment_Prefix;
-				funs._cur.Push_OP1(ar, tkType1 == TK_PLUS2 ? NOP_INC : NOP_DEC, a._iVar);
+				funs._cur->Push_OP1(ar, tkType1 == TK_PLUS2 ? NOP_INC : NOP_DEC, a._iVar);
 
 				operands.push_back(a);
 				blApperOperator = true;
@@ -1928,10 +1929,10 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				int iTempOffset2;
 				if (bReqReturn)
 				{
-					iTempOffset2 = funs._cur.AllocLocalTempVar();
-					funs._cur.Push_MOV(ar, NOP_MOV, iTempOffset2, a._iVar, false);
+					iTempOffset2 = funs._cur->AllocLocalTempVar();
+					funs._cur->Push_MOV(ar, NOP_MOV, iTempOffset2, a._iVar, false);
 				}
-				funs._cur.Push_OP1(ar, tkType1 == TK_PLUS2 ? NOP_INC : NOP_DEC, a._iVar);
+				funs._cur->Push_OP1(ar, tkType1 == TK_PLUS2 ? NOP_INC : NOP_DEC, a._iVar);
 
 				if (bReqReturn)
 					a = SOperand(iTempOffset2);
@@ -1972,7 +1973,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				return TK_NONE;
 			}
 
-			funs._cur.Push_OP(ar, NOP_YIELD, YILED_RETURN, 0, 0);
+			funs._cur->Push_OP(ar, NOP_YIELD, YILED_RETURN, 0, 0);
 			r = TK_SEMICOLON;
 			break;
 		}
@@ -2014,11 +2015,11 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			{
 				if (a.IsArray() == false)
 				{
-					funs._cur.Push_MOV(ar, NOP_FMOV1, a._iVar, b._iVar, false);
+					funs._cur->Push_MOV(ar, NOP_FMOV1, a._iVar, b._iVar, false);
 				}
 				else
 				{
-					funs._cur.Push_Table_MASMDP(ar, NOP_FMOV2, a._iVar, a._iArrayIndex, b._iVar, false, a.IsHaveShort(), false);
+					funs._cur->Push_Table_MASMDP(ar, NOP_FMOV2, a._iVar, a._iArrayIndex, b._iVar, false, a.IsHaveShort(), false);
 				}
 			}
 			else
@@ -2041,22 +2042,22 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			{
 				if (a.IsArray() == false)
 				{
-					funs._cur.Push_MOV(ar, op, a._iVar, b._iVar, b.IsShort());
+					funs._cur->Push_MOV(ar, op, a._iVar, b._iVar, b.IsShort());
 				}
 				else
 				{
-					funs._cur.Push_Table_MASMDP(ar, op, a._iVar, a._iArrayIndex, b._iVar, false, a.IsHaveShort(), b.IsShort());
+					funs._cur->Push_Table_MASMDP(ar, op, a._iVar, a._iArrayIndex, b._iVar, false, a.IsHaveShort(), b.IsShort());
 				}
 			}
 			else
 			{
 				if (a.IsArray() == false)
-					funs._cur.Push_TableRead(ar, b._iVar, b._iArrayIndex, a._iVar, b.IsHaveShort());
+					funs._cur->Push_TableRead(ar, b._iVar, b._iArrayIndex, a._iVar, b.IsHaveShort());
 				else
 				{
-					int iTempOffset2 = funs._cur.AllocLocalTempVar();
-					funs._cur.Push_TableRead(ar, b._iVar, b._iArrayIndex, iTempOffset2, b.IsHaveShort());
-					funs._cur.Push_Table_MASMDP(ar, op, a._iVar, a._iArrayIndex, iTempOffset2, false, false, false);
+					int iTempOffset2 = funs._cur->AllocLocalTempVar();
+					funs._cur->Push_TableRead(ar, b._iVar, b._iArrayIndex, iTempOffset2, b.IsHaveShort());
+					funs._cur->Push_Table_MASMDP(ar, op, a._iVar, a._iArrayIndex, iTempOffset2, false, false, false);
 				}
 			}
 		}
@@ -2066,23 +2067,23 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 
 			if (a.IsArray() == true)
 			{
-				iTempOffset2 = funs._cur.AllocLocalTempVar();
-				funs._cur.Push_TableRead(ar, a._iVar, a._iArrayIndex, iTempOffset2, a.IsHaveShort());
+				iTempOffset2 = funs._cur->AllocLocalTempVar();
+				funs._cur->Push_TableRead(ar, a._iVar, a._iArrayIndex, iTempOffset2, a.IsHaveShort());
 				a._iVar = iTempOffset2;
 			}
 			//else if(a.IsShort())
 			//	a = funs.AddStaticInt(a._iVar);
 			if (b.IsArray() == true)
 			{
-				iTempOffset2 = funs._cur.AllocLocalTempVar();
-				funs._cur.Push_TableRead(ar, b._iVar, b._iArrayIndex, iTempOffset2, b.IsHaveShort());
+				iTempOffset2 = funs._cur->AllocLocalTempVar();
+				funs._cur->Push_TableRead(ar, b._iVar, b._iArrayIndex, iTempOffset2, b.IsHaveShort());
 				b._iVar = iTempOffset2;
 			}
 			//else if (b.IsShort())
 			//	b = funs.AddStaticInt(b._iVar);
 
-			iTempOffset2 = funs._cur.AllocLocalTempVar();
-			funs._cur.Push_OP(ar, op, iTempOffset2, a._iVar, b._iVar, a.IsShort(), b.IsShort());
+			iTempOffset2 = funs._cur->AllocLocalTempVar();
+			funs._cur->Push_OP(ar, op, iTempOffset2, a._iVar, b._iVar, a.IsShort(), b.IsShort());
 			operands[iFindOffset] = iTempOffset2;
 		}
 		RemoveAt<SOperand>(operands, iFindOffset + 1);
@@ -2152,7 +2153,7 @@ eNOperation ConvertCheckOPToOptimizeInv(eNOperation n)
 //	for Check
 bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
-	if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
+	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
 		SetCompileError(ar, "Error (%d, %d): \"for\" is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
 		return false;
@@ -2187,10 +2188,10 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 	}
 
-	funs._cur.Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
-	SJumpValue jmp1(funs._cur._code->GetBufferOffset() - (sizeof(short)*3), funs._cur._code->GetBufferOffset());
+	funs._cur->Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
+	SJumpValue jmp1(funs._cur->_code->GetBufferOffset() - (sizeof(short)*3), funs._cur->_code->GetBufferOffset());
 
-	int PosLoopTop = funs._cur._code->GetBufferOffset(); // Loop 의 맨위
+	int PosLoopTop = funs._cur->_code->GetBufferOffset(); // Loop 의 맨위
 
 	// For Check
 	int Pos1 = PosLoopTop;
@@ -2202,8 +2203,8 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 	}
 	int iStackCheckVar = iTempOffset._iVar;
-	int Pos2 = funs._cur._code->GetBufferOffset();
-	eNOperation opCheck = funs._cur.GetLastOP();
+	int Pos2 = funs._cur->_code->GetBufferOffset();
+	eNOperation opCheck = funs._cur->GetLastOP();
 	bool isCheckOPOpt = false;
 	eNOperation opOpz = NOP_NONE;
 	if (IsTempVar(iStackCheckVar))
@@ -2214,17 +2215,17 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			isCheckOPOpt = true;
 		}
 	}
-	funs._cur._code->SetPointer(Pos1, SEEK_SET);
+	funs._cur->_code->SetPointer(Pos1, SEEK_SET);
 	int iCheckCodeSize = Pos2 - Pos1;
 	if (iCheckCodeSize > sizeof(byTempCheck))
 	{
 		SetCompileError(ar, "Error (%d, %d): Check Size Over %d", ar.CurLine(), ar.CurCol(), iCheckCodeSize);
 		return false;
 	}
-	funs._cur._code->Read(byTempCheck, iCheckCodeSize);
-	funs._cur._code->SetPointer(Pos1, SEEK_SET);
+	funs._cur->_code->Read(byTempCheck, iCheckCodeSize);
+	funs._cur->_code->SetPointer(Pos1, SEEK_SET);
 	for (int i = 0; i < iCheckCodeSize / 8; i++)
-		DebugCheck[i] = (*funs._cur._pDebugData)[Pos1 / 8 + i];
+		DebugCheck[i] = (*funs._cur->_pDebugData)[Pos1 / 8 + i];
 
 	// For Increase
 	iTempOffset = INVALID_ERROR_PARSEJOB;
@@ -2234,18 +2235,18 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		SetCompileError(ar, "Error (%d, %d): for Inc", ar.CurLine(), ar.CurCol());
 		return false;
 	}
-	Pos2 = funs._cur._code->GetBufferOffset();
-	funs._cur._code->SetPointer(Pos1, SEEK_SET);
+	Pos2 = funs._cur->_code->GetBufferOffset();
+	funs._cur->_code->SetPointer(Pos1, SEEK_SET);
 	int iIncCodeSize = Pos2 - Pos1;
 	if (iIncCodeSize > sizeof(byTempInc))
 	{
 		SetCompileError(ar, "Error (%d, %d): Inc Size Over %d", ar.CurLine(), ar.CurCol(), iIncCodeSize);
 		return false;
 	}
-	funs._cur._code->Read(byTempInc, iIncCodeSize);
-	funs._cur._code->SetPointer(Pos1, SEEK_SET);
+	funs._cur->_code->Read(byTempInc, iIncCodeSize);
+	funs._cur->_code->SetPointer(Pos1, SEEK_SET);
 	for (int i = 0; i < iIncCodeSize / 8; i++)
-		DebugInc[i] = (*funs._cur._pDebugData)[Pos1 / 8 + i];
+		DebugInc[i] = (*funs._cur->_pDebugData)[Pos1 / 8 + i];
 
 	//	for {} Process
 	std::vector<SJumpValue> sJumps;
@@ -2269,33 +2270,33 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 
 	// Write Inc Code
-	funs._cur._code->Write(byTempInc, iIncCodeSize);
+	funs._cur->_code->Write(byTempInc, iIncCodeSize);
 
-	funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
+	funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
 	// Write Check Code
-	funs._cur._code->Write(byTempCheck, iCheckCodeSize);
+	funs._cur->_code->Write(byTempCheck, iCheckCodeSize);
 	if(false == isCheckOPOpt)
-		funs._cur.Push_JMPTrue(ar, iStackCheckVar, PosLoopTop);
+		funs._cur->Push_JMPTrue(ar, iStackCheckVar, PosLoopTop);
 	else
 	{
 		int argLen = sizeof(short) * 3;
-		funs._cur._code->SetPointer(-((int)sizeof(OpType) + (int)sizeof(ArgFlag) + argLen), SEEK_CUR); // OP + flag + n1, n2, n3
+		funs._cur->_code->SetPointer(-((int)sizeof(OpType) + (int)sizeof(ArgFlag) + argLen), SEEK_CUR); // OP + flag + n1, n2, n3
 		OpType optype = GetOpTypeFromOp(opOpz);
-		funs._cur._code->Write(&optype, sizeof(optype));
+		funs._cur->_code->Write(&optype, sizeof(optype));
 		ArgFlag flag = 0;
-		funs._cur._code->Write(&flag, sizeof(flag));
-		int cur = funs._cur._code->GetBufferOffset();
-		funs._cur.Set_JumpOffet(SJumpValue(cur, cur + argLen), PosLoopTop);
-		funs._cur._code->SetPointer(argLen, SEEK_CUR);
+		funs._cur->_code->Write(&flag, sizeof(flag));
+		int cur = funs._cur->_code->GetBufferOffset();
+		funs._cur->Set_JumpOffet(SJumpValue(cur, cur + argLen), PosLoopTop);
+		funs._cur->_code->SetPointer(argLen, SEEK_CUR);
 	}
-	funs._cur.ClearLastOP();
+	funs._cur->ClearLastOP();
 
 
-	int forEndPos = funs._cur._code->GetBufferOffset();
+	int forEndPos = funs._cur->_code->GetBufferOffset();
 
 	for (int i = 0; i < (int)sJumps.size(); i++)
 	{
-		funs._cur.Set_JumpOffet(sJumps[i], forEndPos);
+		funs._cur->Set_JumpOffet(sJumps[i], forEndPos);
 	}
 
 	DelLocalVar(vars.GetCurrentLayer());
@@ -2303,19 +2304,19 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	// Debug info Inc, check restore
 	int iAddDebugCnt = iIncCodeSize / 8 + iCheckCodeSize / 8;
 	int iOffDebug = forEndPos / 8 - iAddDebugCnt;
-	funs._cur._pDebugData->resize(iOffDebug + iAddDebugCnt);
+	funs._cur->_pDebugData->resize(iOffDebug + iAddDebugCnt);
 
 	for (int i = 0; i < iIncCodeSize / 8; i++)
-		(*funs._cur._pDebugData)[iOffDebug + i] = DebugInc[i];
+		(*funs._cur->_pDebugData)[iOffDebug + i] = DebugInc[i];
 	for (int i = 0; i < iCheckCodeSize / 8; i++)
-		(*funs._cur._pDebugData)[iOffDebug + (iIncCodeSize / 8) + i] = DebugCheck[i];
+		(*funs._cur->_pDebugData)[iOffDebug + (iIncCodeSize / 8) + i] = DebugCheck[i];
 
 	return true;
 }
 #else
 bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
-	if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
+	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
 		SetCompileError(ar, "Error (%d, %d): \"for\" is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
 		return false;
@@ -2408,9 +2409,9 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	if (Try_ParseIntNum(iTryValue, ar, funs, vars, TK_COMMA) != TK_NONE)
 	{
 		if (IsShort(iTryValue))
-			funs._cur.Push_MOV(ar, NOP_MOV, i_Begin, iTryValue, true);
+			funs._cur->Push_MOV(ar, NOP_MOV, i_Begin, iTryValue, true);
 		else
-			funs._cur.Push_MOVI(ar, i_Begin, iTryValue);
+			funs._cur->Push_MOVI(ar, i_Begin, iTryValue);
 	}
 	else
 	{
@@ -2422,19 +2423,19 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			return false;
 		}
 		if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
-			funs._cur.Push_MOV(ar, NOP_MOV, i_Begin, iTempVar._iVar, false);
+			funs._cur->Push_MOV(ar, NOP_MOV, i_Begin, iTempVar._iVar, false);
 		else
-			funs._cur.Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_Begin, iTempVar.IsHaveShort());
-		funs._cur.Push_OP(ar, NOP_VERIFY_TYPE, i_Begin, VAR_INT, 0);
+			funs._cur->Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_Begin, iTempVar.IsHaveShort());
+		funs._cur->Push_OP(ar, NOP_VERIFY_TYPE, i_Begin, VAR_INT, 0);
 	}
 
 	iTryValue = -1;
 	if (Try_ParseIntNum(iTryValue, ar, funs, vars, TK_COMMA, TK_R_SMALL) != TK_NONE)
 	{
 		if(IsShort(iTryValue))
-			funs._cur.Push_MOV(ar, NOP_MOV, i_End, iTryValue, true);
+			funs._cur->Push_MOV(ar, NOP_MOV, i_End, iTryValue, true);
 		else
-			funs._cur.Push_MOVI(ar, i_End, iTryValue);
+			funs._cur->Push_MOVI(ar, i_End, iTryValue);
 	}
 	else
 	{
@@ -2446,19 +2447,19 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			return false;
 		}
 		if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
-			funs._cur.Push_MOV(ar, NOP_MOV, i_End, iTempVar._iVar, false);
+			funs._cur->Push_MOV(ar, NOP_MOV, i_End, iTempVar._iVar, false);
 		else
-			funs._cur.Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_End, iTempVar.IsHaveShort());
-		funs._cur.Push_OP(ar, NOP_VERIFY_TYPE, i_End, VAR_INT, 0);
+			funs._cur->Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_End, iTempVar.IsHaveShort());
+		funs._cur->Push_OP(ar, NOP_VERIFY_TYPE, i_End, VAR_INT, 0);
 	}
 
 	iTryValue = -1;
 	if (Try_ParseIntNum(iTryValue, ar, funs, vars, TK_COMMA, TK_R_SMALL) != TK_NONE)
 	{
 		if (IsShort(iTryValue))
-			funs._cur.Push_MOV(ar, NOP_MOV, i_Step, iTryValue, true);
+			funs._cur->Push_MOV(ar, NOP_MOV, i_Step, iTryValue, true);
 		else
-			funs._cur.Push_MOVI(ar, i_Step, iTryValue);
+			funs._cur->Push_MOVI(ar, i_Step, iTryValue);
 	}
 	else
 	{
@@ -2470,10 +2471,10 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			return false;
 		}
 		if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
-			funs._cur.Push_MOV(ar, NOP_MOV, i_Step, iTempVar._iVar, false);
+			funs._cur->Push_MOV(ar, NOP_MOV, i_Step, iTempVar._iVar, false);
 		else
-			funs._cur.Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_Step, iTempVar.IsHaveShort());
-		funs._cur.Push_OP(ar, NOP_VERIFY_TYPE, i_Step, VAR_INT, 0);
+			funs._cur->Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_Step, iTempVar.IsHaveShort());
+		funs._cur->Push_OP(ar, NOP_VERIFY_TYPE, i_Step, VAR_INT, 0);
 	}
 
 	/*
@@ -2498,13 +2499,13 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}*/
 
 
-	//funs._cur.Push_OP1(ar, NOP_VAR_CLEAR, iKey);
-	funs._cur.Push_MOV(ar, NOP_MOV, iKey + 1, iKey + 2, false); // Cur_inter = Begin
+	//funs._cur->Push_OP1(ar, NOP_VAR_CLEAR, iKey);
+	funs._cur->Push_MOV(ar, NOP_MOV, iKey + 1, iKey + 2, false); // Cur_inter = Begin
 
-	funs._cur.Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
-	SJumpValue jmp1(funs._cur._code->GetBufferOffset() - (sizeof(short) * 3), funs._cur._code->GetBufferOffset());
+	funs._cur->Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
+	SJumpValue jmp1(funs._cur->_code->GetBufferOffset() - (sizeof(short) * 3), funs._cur->_code->GetBufferOffset());
 
-	int PosLoopTop = funs._cur._code->GetBufferOffset(); // Loop 의 맨위
+	int PosLoopTop = funs._cur->_code->GetBufferOffset(); // Loop 의 맨위
 
 
 	//	for {} Process
@@ -2528,17 +2529,17 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			return false;
 	}
 
-	funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
-	funs._cur.Push_JMPFor(ar, PosLoopTop, iKey, iKey + 2);
+	funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
+	funs._cur->Push_JMPFor(ar, PosLoopTop, iKey, iKey + 2);
 
-	funs._cur.ClearLastOP();
+	funs._cur->ClearLastOP();
 
 
-	int forEndPos = funs._cur._code->GetBufferOffset();
+	int forEndPos = funs._cur->_code->GetBufferOffset();
 
 	for (int i = 0; i < (int)sJumps.size(); i++)
 	{
-		funs._cur.Set_JumpOffet(sJumps[i], forEndPos);
+		funs._cur->Set_JumpOffet(sJumps[i], forEndPos);
 	}
 
 	DelLocalVar(vars.GetCurrentLayer());
@@ -2549,7 +2550,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
-	if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
+	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
 		SetCompileError(ar, "Error (%d, %d): \"foreach\" is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
 		return false;
@@ -2659,7 +2660,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	if (iTempOffset._iArrayIndex != INVALID_ERROR_PARSEJOB)
 	{
 		iTable = AddLocalVar(ar, funs, vars);
-		funs._cur.Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iTable, operand.IsHaveShort());
+		funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iTable, operand.IsHaveShort());
 	}
 	else
 		iTable = operand._iVar;
@@ -2673,12 +2674,12 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 
 
-	funs._cur.Push_OP1(ar, NOP_VAR_CLEAR, iKey);
+	funs._cur->Push_OP1(ar, NOP_VAR_CLEAR, iKey);
 
-	funs._cur.Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
-	SJumpValue jmp1(funs._cur._code->GetBufferOffset() - (sizeof(short) * 3), funs._cur._code->GetBufferOffset());
+	funs._cur->Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
+	SJumpValue jmp1(funs._cur->_code->GetBufferOffset() - (sizeof(short) * 3), funs._cur->_code->GetBufferOffset());
 
-	int PosLoopTop = funs._cur._code->GetBufferOffset(); // Loop 의 맨위
+	int PosLoopTop = funs._cur->_code->GetBufferOffset(); // Loop 의 맨위
 
 
 	//	foreach {} Process
@@ -2702,17 +2703,17 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			return false;
 	}
 
-	funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
-	funs._cur.Push_JMPForEach(ar, PosLoopTop, iTable, iKey);
+	funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
+	funs._cur->Push_JMPForEach(ar, PosLoopTop, iTable, iKey);
 
-	funs._cur.ClearLastOP();
+	funs._cur->ClearLastOP();
 
 
-	int forEndPos = funs._cur._code->GetBufferOffset();
+	int forEndPos = funs._cur->_code->GetBufferOffset();
 
 	for (int i = 0; i < (int)sJumps.size(); i++)
 	{
-		funs._cur.Set_JumpOffet(sJumps[i], forEndPos);
+		funs._cur->Set_JumpOffet(sJumps[i], forEndPos);
 	}
 
 	DelLocalVar(vars.GetCurrentLayer());
@@ -2721,7 +2722,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 }
 bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
-	if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
+	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
 		SetCompileError(ar, "Error (%d, %d): \"while\" is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
 		return false;
@@ -2745,10 +2746,10 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	AddLocalVar(vars.GetCurrentLayer());
 
 
-	funs._cur.Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
-	SJumpValue jmp1(funs._cur._code->GetBufferOffset() - (sizeof(short) * 3), funs._cur._code->GetBufferOffset());
+	funs._cur->Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
+	SJumpValue jmp1(funs._cur->_code->GetBufferOffset() - (sizeof(short) * 3), funs._cur->_code->GetBufferOffset());
 
-	int PosLoopTop = funs._cur._code->GetBufferOffset(); // Loop 의 맨위
+	int PosLoopTop = funs._cur->_code->GetBufferOffset(); // Loop 의 맨위
 
 	// While Check
 	int Pos1 = PosLoopTop;
@@ -2760,8 +2761,8 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 	}
 	int iStackCheckVar = iTempOffset._iVar;
-	int Pos2 = funs._cur._code->GetBufferOffset();
-	eNOperation opCheck = funs._cur.GetLastOP();
+	int Pos2 = funs._cur->_code->GetBufferOffset();
+	eNOperation opCheck = funs._cur->GetLastOP();
 	bool isCheckOPOpt = false;
 	eNOperation opOpz = NOP_NONE;
 	if (IsTempVar(iStackCheckVar))
@@ -2772,17 +2773,17 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			isCheckOPOpt = true;
 		}
 	}
-	funs._cur._code->SetPointer(Pos1, SEEK_SET);
+	funs._cur->_code->SetPointer(Pos1, SEEK_SET);
 	int iCheckCodeSize = Pos2 - Pos1;
 	if (iCheckCodeSize > sizeof(byTempCheck))
 	{
 		SetCompileError(ar, "Error (%d, %d): Check Size Over %d", ar.CurLine(), ar.CurCol(), iCheckCodeSize);
 		return false;
 	}
-	funs._cur._code->Read(byTempCheck, iCheckCodeSize);
-	funs._cur._code->SetPointer(Pos1, SEEK_SET);
+	funs._cur->_code->Read(byTempCheck, iCheckCodeSize);
+	funs._cur->_code->SetPointer(Pos1, SEEK_SET);
 	for (int i = 0; i < iCheckCodeSize / 8; i++)
-		DebugCheck[i] = (*funs._cur._pDebugData)[Pos1 / 8 + i];
+		DebugCheck[i] = (*funs._cur->_pDebugData)[Pos1 / 8 + i];
 
 
 
@@ -2807,27 +2808,27 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			return false;
 	}
 
-	funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
-	funs._cur._code->Write(byTempCheck, iCheckCodeSize);
+	funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
+	funs._cur->_code->Write(byTempCheck, iCheckCodeSize);
 	if (false == isCheckOPOpt)
-		funs._cur.Push_JMPTrue(ar, iStackCheckVar, PosLoopTop);
+		funs._cur->Push_JMPTrue(ar, iStackCheckVar, PosLoopTop);
 	else
 	{
 		int argLen = sizeof(short) * 3;
-		funs._cur._code->SetPointer(-((int)sizeof(OpType) + argLen), SEEK_CUR); // OP + n1, n2, n3
+		funs._cur->_code->SetPointer(-((int)sizeof(OpType) + argLen), SEEK_CUR); // OP + n1, n2, n3
 		OpType optype = GetOpTypeFromOp(opOpz);
-		funs._cur._code->Write(&optype, sizeof(optype));
-		int cur = funs._cur._code->GetBufferOffset();
-		funs._cur.Set_JumpOffet(SJumpValue(cur, cur + argLen), PosLoopTop);
-		funs._cur._code->SetPointer(argLen, SEEK_CUR);
+		funs._cur->_code->Write(&optype, sizeof(optype));
+		int cur = funs._cur->_code->GetBufferOffset();
+		funs._cur->Set_JumpOffet(SJumpValue(cur, cur + argLen), PosLoopTop);
+		funs._cur->_code->SetPointer(argLen, SEEK_CUR);
 	}
-	funs._cur.ClearLastOP();
+	funs._cur->ClearLastOP();
 
-	int forEndPos = funs._cur._code->GetBufferOffset();
+	int forEndPos = funs._cur->_code->GetBufferOffset();
 
 	for (int i = 0; i < (int)sJumps.size(); i++)
 	{
-		funs._cur.Set_JumpOffet(sJumps[i], forEndPos);
+		funs._cur->Set_JumpOffet(sJumps[i], forEndPos);
 	}
 
 	DelLocalVar(vars.GetCurrentLayer());
@@ -2835,16 +2836,16 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	// Debug info Inc, check restore
 	int iAddDebugCnt = iCheckCodeSize / 8;
 	int iOffDebug = forEndPos / 8 - iAddDebugCnt;
-	funs._cur._pDebugData->resize(iOffDebug + iAddDebugCnt);
+	funs._cur->_pDebugData->resize(iOffDebug + iAddDebugCnt);
 
 	for (int i = 0; i < iCheckCodeSize / 8; i++)
-		(*funs._cur._pDebugData)[iOffDebug + i] = DebugCheck[i];
+		(*funs._cur->_pDebugData)[iOffDebug + i] = DebugCheck[i];
 
 	return true;
 }
 bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn)
 {
-	if (funs._cur._name == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
+	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
 		SetCompileError(ar, "Error (%d, %d): \"if\" is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
 		return false;
@@ -2878,7 +2879,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	bool blJmp1 = true;
 	bool blJmp2 = true;
 
-	eNOperation opCheck = funs._cur.GetLastOP();
+	eNOperation opCheck = funs._cur->GetLastOP();
 	bool isCheckOPOpt = false;
 	eNOperation opOpz = NOP_NONE;
 	if (IsTempVar(iTempOffset._iVar))
@@ -2891,23 +2892,23 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	}
 	if (false == isCheckOPOpt)
 	{
-		funs._cur.Push_JMPFalse(ar, iTempOffset._iVar, 0);
-		jmp1.Set(funs._cur._code->GetBufferOffset() - 6, funs._cur._code->GetBufferOffset()); // before "- 2"
+		funs._cur->Push_JMPFalse(ar, iTempOffset._iVar, 0);
+		jmp1.Set(funs._cur->_code->GetBufferOffset() - 6, funs._cur->_code->GetBufferOffset()); // before "- 2"
 	}
 	else
 	{
 		int argLen = sizeof(short) * 3;
-		funs._cur._code->SetPointer(-((int)sizeof(OpType) + (int)sizeof(ArgFlag) + argLen), SEEK_CUR); // OP + flag +  n1, n2, n3
+		funs._cur->_code->SetPointer(-((int)sizeof(OpType) + (int)sizeof(ArgFlag) + argLen), SEEK_CUR); // OP + flag +  n1, n2, n3
 		
 		eNOperation optype = GetOpTypeFromOp(opOpz);
-		funs._cur._code->Write(&optype, sizeof(optype));
-		funs._cur._code->SetPointer((int)sizeof(ArgFlag), SEEK_CUR);
+		funs._cur->_code->Write(&optype, sizeof(optype));
+		funs._cur->_code->SetPointer((int)sizeof(ArgFlag), SEEK_CUR);
 
-		int cur = funs._cur._code->GetBufferOffset();
-		funs._cur.Set_JumpOffet(SJumpValue(cur, cur + argLen), 0);
-		funs._cur._code->SetPointer(argLen, SEEK_CUR);
+		int cur = funs._cur->_code->GetBufferOffset();
+		funs._cur->Set_JumpOffet(SJumpValue(cur, cur + argLen), 0);
+		funs._cur->_code->SetPointer(argLen, SEEK_CUR);
 
-		jmp1.Set(funs._cur._code->GetBufferOffset() - 6, funs._cur._code->GetBufferOffset());
+		jmp1.Set(funs._cur->_code->GetBufferOffset() - 6, funs._cur->_code->GetBufferOffset());
 	}
 
 	tkType1 = GetToken(ar, tk1);
@@ -2938,33 +2939,33 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 == TK_ELSEIF)
 	{
-		if (funs._cur.GetLastOP() == NOP_RETURN) // Code Size OPT TODO !!
+		if (funs._cur->GetLastOP() == NOP_RETURN) // Code Size OPT TODO !!
 			blJmp2 = false;
 		if (blJmp2)
 		{
-			funs._cur.Push_JMP(ar, 0);
-			jmp2.Set(funs._cur._code->GetBufferOffset() - 6, funs._cur._code->GetBufferOffset());
+			funs._cur->Push_JMP(ar, 0);
+			jmp2.Set(funs._cur->_code->GetBufferOffset() - 6, funs._cur->_code->GetBufferOffset());
 		}
 
-		funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
+		funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
 
 		if (false == ParseIF(pJumps, ar, funs, vars, lastOPReturn))
 			return false;
 
 		ClearTempVars(funs);
 		if (blJmp2) // Code Size OPT TODO !!
-			funs._cur.Set_JumpOffet(jmp2, funs._cur._code->GetBufferOffset());
+			funs._cur->Set_JumpOffet(jmp2, funs._cur->_code->GetBufferOffset());
 	}	
 	else if (tkType1 == TK_ELSE)
 	{
-		if (funs._cur.GetLastOP() == NOP_RETURN) // Code Size OPT TODO !!
+		if (funs._cur->GetLastOP() == NOP_RETURN) // Code Size OPT TODO !!
 			blJmp2 = false;
 		if(blJmp2)
 		{
-			funs._cur.Push_JMP(ar, 0);
-			jmp2.Set(funs._cur._code->GetBufferOffset() - 6, funs._cur._code->GetBufferOffset());
+			funs._cur->Push_JMP(ar, 0);
+			jmp2.Set(funs._cur->_code->GetBufferOffset() - 6, funs._cur->_code->GetBufferOffset());
 		}
-		funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
+		funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
 
 		tkType1 = GetToken(ar, tk1);
 		/*if (tkType1 == TK_IF)
@@ -2995,8 +2996,8 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 		}
 		ClearTempVars(funs);
 		if(blJmp2) // Code Size OPT TODO !!
-			funs._cur.Set_JumpOffet(jmp2, funs._cur._code->GetBufferOffset());
-		else if (funs._cur.GetLastOP() == NOP_RETURN)
+			funs._cur->Set_JumpOffet(jmp2, funs._cur->_code->GetBufferOffset());
+		else if (funs._cur->GetLastOP() == NOP_RETURN)
 		{
 			if (lastOPReturn) *lastOPReturn = true;
 		}
@@ -3004,8 +3005,8 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	else
 	{
 		ar.PushToken(tkType1, tk1);
-		//if (funs._cur.GetLastOP() != NOP_RETURN) // Code Size OPT TODO !!
-			funs._cur.Set_JumpOffet(jmp1, funs._cur._code->GetBufferOffset());
+		//if (funs._cur->GetLastOP() != NOP_RETURN) // Code Size OPT TODO !!
+			funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
 	}
 	return true;
 }
@@ -3037,7 +3038,7 @@ bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport)
 	}
 	else
 	{
-		SetCompileError(ar, "Error (%d, %d): Function Local Var (%s) %d", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), tk1.c_str());
+		SetCompileError(ar, "Error (%d, %d): Function Local Var (%s) %d", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), tk1.c_str());
 		return false;
 	}
 	return true;
@@ -3070,16 +3071,16 @@ bool ParseSleep(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 
 	if (operand.IsShort())
-		funs._cur.Push_OP2(ar, NOP_SLEEP, 0, operand._iVar, true);
+		funs._cur->Push_OP2(ar, NOP_SLEEP, 0, operand._iVar, true);
 	else
 	{
 		if (operand._iArrayIndex == INVALID_ERROR_PARSEJOB)
-			funs._cur.Push_OP2(ar, NOP_SLEEP, 0, operand._iVar, false);
+			funs._cur->Push_OP2(ar, NOP_SLEEP, 0, operand._iVar, false);
 		else
 		{
-			int iTempVar = funs._cur.AllocLocalTempVar();
-			funs._cur.Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iTempVar, operand.IsHaveShort());
-			funs._cur.Push_OP2(ar, NOP_SLEEP, 0, operand._iVar, false);
+			int iTempVar = funs._cur->AllocLocalTempVar();
+			funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iTempVar, operand.IsHaveShort());
+			funs._cur->Push_OP2(ar, NOP_SLEEP, 0, operand._iVar, false);
 		}
 	}
 	return true;
@@ -3109,9 +3110,9 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 		switch (tkType1)
 		{
 		case TK_NONE:
-			if (funs._cur._name != GLOBAL_INIT_FUN_NAME)
+			if (funs.GetCurFunName() != GLOBAL_INIT_FUN_NAME)
 			{
-				SetCompileError(ar, "Error (%d, %d): Function End (%s)", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str());
+				SetCompileError(ar, "Error (%d, %d): Function End (%s)", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str());
 				return false;
 			}
 			blEnd = true;
@@ -3126,9 +3127,9 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			if(lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_R_MIDDLE:
-			if (ar._allowGlobalInitLogic == false && funs._cur._name == GLOBAL_INIT_FUN_NAME)
+			if (ar._allowGlobalInitLogic == false && funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME)
 			{
-				SetCompileError(ar, "Error (%d, %d): Global Init (%s) %d", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), tk1.c_str());
+				SetCompileError(ar, "Error (%d, %d): Global Init (%s) %d", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), tk1.c_str());
 				return false;
 			}
 			blEnd = true;
@@ -3156,8 +3157,8 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				SetCompileError(ar, "Error (%d, %d): break error\n", ar.CurLine(), ar.CurCol());
 				return TK_NONE;
 			}
-			funs._cur.Push_JMP(ar, 0);
-			pJumps->push_back(SJumpValue(funs._cur._code->GetBufferOffset() - 2, funs._cur._code->GetBufferOffset()));
+			funs._cur->Push_JMP(ar, 0);
+			pJumps->push_back(SJumpValue(funs._cur->_code->GetBufferOffset() - 2, funs._cur->_code->GetBufferOffset()));
 			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_IMPORT:
@@ -3184,7 +3185,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			}
 			else
 			{
-				SetCompileError(ar, "Error (%d, %d): Function Name (%d) '%s'\n", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), tk2.c_str());
+				SetCompileError(ar, "Error (%d, %d): Function Name (%d) '%s'\n", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), tk2.c_str());
 				return false;
 			}
 			if (lastOPReturn) *lastOPReturn = false;
@@ -3209,38 +3210,38 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_IF:
-			bGlobalLocal = funs._cur._name == GLOBAL_INIT_FUN_NAME;
-			if(bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME "IF";
+			bGlobalLocal = funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME;
+			if(bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME "IF";
 			if (false == ParseIF(pJumps, ar, funs, vars, lastOPReturn))
 				return false;
-			if (bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME;
+			if (bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME;
 			break;
 		case TK_FOR:
-			bGlobalLocal = funs._cur._name == GLOBAL_INIT_FUN_NAME;
-			if (bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME "FOR";
+			bGlobalLocal = funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME;
+			if (bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME "FOR";
 			if (false == ParseFor(ar, funs, vars))
 				return false;
-			if (bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME;
+			if (bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME;
 			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_FOREACH:
-			bGlobalLocal = funs._cur._name == GLOBAL_INIT_FUN_NAME;
-			if (bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME "FOREACH";
+			bGlobalLocal = funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME;
+			if (bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME "FOREACH";
 			if (false == ParseForEach(ar, funs, vars))
 				return false;
-			if (bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME;
+			if (bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME;
 			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_WHILE:
-			bGlobalLocal = funs._cur._name == GLOBAL_INIT_FUN_NAME;
-			if (bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME "WHILE";
+			bGlobalLocal = funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME;
+			if (bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME "WHILE";
 			if (false == ParseWhile(ar, funs, vars))
 				return false;
-			if (bGlobalLocal) funs._cur._name = GLOBAL_INIT_FUN_NAME;
+			if (bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME;
 			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		default:
-			SetCompileError(ar, "Error (%d, %d): Function Name (%s) '%s'\n", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), tk1.c_str());
+			SetCompileError(ar, "Error (%d, %d): Function Name (%s) '%s'\n", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), tk1.c_str());
 			return false;
 			break;
 		}
@@ -3253,25 +3254,25 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 
 void FinalizeFuction(SFunctions& funs)
 {
-	int iCode_Begin = funs._cur._iCode_Begin;
-	funs._cur._iCode_Begin = funs._codeFinal.GetBufferOffset();
+	int iCode_Begin = funs._cur->_iCode_Begin;
+	funs._cur->_iCode_Begin = funs._codeFinal.GetBufferOffset();
 
 	funs._codeTemp.SetBufferOffset(iCode_Begin);
 	u8* pSrc = (u8*)funs._codeTemp.GetDataCurrent();
-	funs._codeFinal.Write(pSrc, funs._cur._iCode_Size);
+	funs._codeFinal.Write(pSrc, funs._cur->_iCode_Size);
 
-	if (funs._cur._pDebugData)
+	if (funs._cur->_pDebugData)
 	{
 		int iSrcBeginDebugOff = iCode_Begin / 8;
 		int base = (int)funs.m_sDebugFinal.size();
 		funs.m_sDebugFinal.resize(funs._codeFinal.GetBufferOffset() / 8);
 		for (int i = base; i < funs.m_sDebugFinal.size(); i++)
-			funs.m_sDebugFinal[i] = (*funs._cur._pDebugData)[i + iSrcBeginDebugOff - base];
+			funs.m_sDebugFinal[i] = (*funs._cur->_pDebugData)[i + iSrcBeginDebugOff - base];
 
-		funs._cur._pDebugData->resize(iSrcBeginDebugOff);
+		funs._cur->_pDebugData->resize(iSrcBeginDebugOff);
 	}
 	
-	funs._funSequence.push_back(funs.FindFun(funs._cur._name));
+	funs._funSequence.push_back(funs.FindFun(funs.GetCurFunName()));
 }
 
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool addOPFunEnd)
@@ -3284,14 +3285,43 @@ bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool add
 		return false;
 
 	if(addOPFunEnd && LastOPReturn == false)
-		//funs._cur.Push_FUNEND(ar);
-		funs._cur.Push_RETURN(ar, 0, false);
+		//funs._cur->Push_FUNEND(ar);
+		funs._cur->Push_RETURN(ar, 0, false);
 
 	return true;
 }
-bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string& fname, FUNCTION_TYPE funType)
 {
-	funs._cur.Clear();
+	//funs._cur->Clear();
+	//funs._cur->_name = fname;
+	bool fowardDeclaration = false;
+	int fowardArgCnt = 0;
+
+	SFunctionInfo* pF = funs.FindFun(fname);
+	if(pF == nullptr)
+	{
+		int funID = funs.GetFunCountAll();
+
+		if (funType == FUNT_ANONYMOUS)
+		{
+			char ch[128];
+			sprintf_s(ch, _countof(ch), "#@_%d", funID);
+			fname = ch;
+		}
+
+		pF = funs.NewFun(fname, funs._cur->_code, funs._cur->_pDebugData);
+		pF->_funType = funType;
+
+		pF->_funID = funID;
+		funs._funIDs[pF->_funID] = pF;
+	}
+	else
+	{
+		fowardDeclaration = true;
+		fowardArgCnt = (int)pF->_args.size();
+		pF->_args.clear();
+	}
+	funs._cur = pF;
 
 	std::string tk1;
 	TK_TYPE tkType1;
@@ -3300,68 +3330,44 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	if (false == ParseFunctionArg(ar, funs, pCurLayer))
 		return false;
 
-	if (funs._cur._funType != FUNT_ANONYMOUS)
+	if(fowardDeclaration)
 	{
-		SFunctionInfo* pF = funs.FindFun(funs._cur._name);
-		if (pF != nullptr)
-		{
-			if (funs._cur._args.size() != pF->_args.size())
-				return false;
-			funs._cur = *pF;
-		}
-		else
-		{
-			funs._cur._funID = funs.GetFunCountAll();// + 1;
-			pF = funs.NewFun(funs._cur._name);
-
-			funs._funIDs[funs._cur._funID] = pF;
-			*pF = funs._cur;
-		}
+		if(fowardArgCnt != (int)pF->_args.size())
+			return false;
 	}
-	else
-	{
-		funs._cur._funID = funs.GetFunCountAll();// + 1;
-		char ch[128];
-		sprintf_s(ch, _countof(ch), "#@_%d", funs._cur._funID);
-		funs._cur._name = ch;
-		SFunctionInfo* pF = funs.NewFun(funs._cur._name);
-		funs._funIDs[funs._cur._funID] = pF;
-		*pF = funs._cur;
-	}
-
 
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_MIDDLE)
 	{
-		if (funs._cur._funType == FUNT_ANONYMOUS)
+		if (funs._cur->_funType == FUNT_ANONYMOUS)
 		{
-			SetCompileError(ar, "Error (%d, %d): anonymous function body (%s) %d\n", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), tk1.c_str());
+			SetCompileError(ar, "Error (%d, %d): anonymous function body (%s) %d\n", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), tk1.c_str());
 			return false;
 		}
 		if (tkType1 == TK_SEMICOLON)
 		{
 			DelVarsFunction(vars);
 
-			SFunctionInfo* pF = funs.FindFun(funs._cur._name);
-			*pF = funs._cur;
+//			SFunctionInfo* pF = funs.FindFun(funs.GetCurFunName());
+//			*pF = funs._cur;
 			return true;
 		}
-		SetCompileError(ar, "Error (%d, %d): Function Start (%s) %d\n", ar.CurLine(), ar.CurCol(), funs._cur._name.c_str(), tk1.c_str());
+		SetCompileError(ar, "Error (%d, %d): Function Start (%s) %d\n", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), tk1.c_str());
 		return false;
 	}
 
-	funs._cur._iCode_Begin = funs._cur._code->GetBufferOffset();
+	funs._cur->_iCode_Begin = funs._cur->_code->GetBufferOffset();
 	if (false == ParseFunctionBody(ar, funs, vars))
 		return false;
 
-	funs._cur._iCode_Size = funs._cur._code->GetBufferOffset() - funs._cur._iCode_Begin;
-	if (funs._cur._iCode_Size)
+	funs._cur->_iCode_Size = funs._cur->_code->GetBufferOffset() - funs._cur->_iCode_Begin;
+	if (funs._cur->_iCode_Size)
 	{
 		FinalizeFuction(funs);
 	}
 
-	SFunctionInfo* pF = funs.FindFun(funs._cur._name);
-	*pF = funs._cur;
+//	SFunctionInfo* pF = funs.FindFun(funs.GetCurFunName());
+//	*pF = funs._cur;
 
 	DelVarsFunction(vars);
 
@@ -3373,19 +3379,15 @@ int ParseFunctionBase(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::stri
 	auto tkType3 = GetToken(ar, tk3);
 	if (tkType3 == TK_L_SMALL) // 함수
 	{
-		SFunctionInfo save = funs._cur;
-		funs._cur.Clear();
+		SFunctionInfo* save = funs._cur;
+//		funs._cur->Clear();
 
-		funs._cur._name = fname;
-		funs._cur._funType = funType;
-		//funs._codeTemp.SetBufferOffset(0);
-		//funs._cur._iCode_Begin = 0;
-		//funs._cur._code = &funs._codeLocal;
-		//funs._cur._pDebugData = &funs.m_sDebugLocal;
-		if (false == ParseFunction(ar, funs, vars))
+		//funs._cur->_name = fname;
+		//funs._cur->_funType = funType;
+		if (false == ParseFunction(ar, funs, vars, fname, funType))
 			return -1;
 
-		int r = funs._cur._funID;
+		int r = funs._cur->_funID;
 		funs._cur = save;
 		return r;
 	}
@@ -3404,15 +3406,15 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 
 	funs.NewLayer();
 
-	funs.NewFun(GLOBAL_INIT_FUN_NAME);
-	funs._cur._funID = 0;
-	funs._cur._name = GLOBAL_INIT_FUN_NAME;
-	funs._cur._code = &funs._codeTemp;
+	funs._cur = funs.NewFun(GLOBAL_INIT_FUN_NAME, &funs._codeTemp, ar._debug ? &funs.m_sDebugTemp : nullptr);
+/*	funs._cur->_funID = 0;
+	funs._cur->_name = GLOBAL_INIT_FUN_NAME;
+	funs._cur->_code = &funs._codeTemp;
 	if (ar._debug)
-		funs._cur._pDebugData = &funs.m_sDebugTemp;
+		funs._cur->_pDebugData = &funs.m_sDebugTemp;
 	else
-		funs._cur._pDebugData = NULL;
-	funs._cur.Clear();
+		funs._cur->_pDebugData = NULL;
+	funs._cur->Clear();*/
 
 	SLayerVar* pCurLayer = AddVarsFunction(vars);
 
@@ -3421,11 +3423,11 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	bool r = ParseFunctionBody(ar, funs, vars);
 	if (true == r)
 	{
-		funs._cur._iCode_Size = funs._cur._code->GetBufferOffset();
+		funs._cur->_iCode_Size = funs._cur->_code->GetBufferOffset();
 
 		FinalizeFuction(funs);
-		SFunctionInfo* pF = funs.FindFun(funs._cur._name);
-		*pF = funs._cur;
+//		SFunctionInfo* pF = funs.FindFun(funs.GetCurFunName());
+//		*pF = funs._cur;
 
 		if(false == Write(ar, arw, funs, vars))
 			return false;

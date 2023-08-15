@@ -678,7 +678,7 @@ struct SFunctions
 	std::map<int, SFunctionInfo*>			_funIDs;
 	std::list<SFunctionInfo*>				_funSequence;
 
-	SFunctionInfo						_cur;
+	SFunctionInfo*						_cur = nullptr;
 	std::vector<VarInfo>				_staticVars;
 
 	CNArchive		_codeFinal;
@@ -715,6 +715,8 @@ struct SFunctions
 		_staticVars.clear();
 	}
 
+	inline const std::string& GetCurFunName() { return _cur->_name; }
+
 	int GetFunCountAll()
 	{
 		int cnt = 0;
@@ -733,14 +735,16 @@ struct SFunctions
 		_funLayers.push_back(pFLayer);
 	}
 
-	SFunctionInfo* NewFun(const std::string& name)
+	SFunctionInfo* NewFun(const std::string& name, CNArchive* code, std::vector<debug_info>* pDebugData)
 	{
 		SFunctionInfo* p = FindFun(name);
 		if(p != nullptr)
-			return p;
+			return nullptr;
 		p = new SFunctionInfo();
 		p->Clear();
 		p->_name = name;
+		p->_code = code;
+		p->_pDebugData = pDebugData;
 		_funLayers[_curModuleIndex]->_funs[name] = p;
 		return p;
 	}
