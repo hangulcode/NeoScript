@@ -122,7 +122,7 @@ public:
 
 	std::list<SToken> m_sTokenQueue;
 	std::string m_sErrorString;
-	std::set<std::string> m_sImports; // Document Load State
+//	std::set<std::string> m_sImports; // Document Load State
 
 	CArchiveRdWC()
 	{

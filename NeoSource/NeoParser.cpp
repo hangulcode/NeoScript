@@ -785,23 +785,24 @@ void ClearTempVars(SFunctions& funs)
 }
 bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
-	std::string tk1, tk2;
+	std::string fileName, tk2;
 	TK_TYPE tkType1, tkType2;
 
-	tkType1 = GetToken(ar, tk1);
+	tkType1 = GetToken(ar, fileName);
 	if (tkType1 != TK_STRING)
 	{
-		SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), fileName.c_str());
 		return false;
 	}
-	std::string name = tk1; // default equal
+	std::string defName = fileName; // default equal
+	std::transform(fileName.begin(), fileName.end(), fileName.begin(), ::tolower);
 	tkType2 = GetToken(ar, tk2);
 	if (tkType2 == TK_STRING && tk2 == "as")
 	{
 		tkType2 = GetToken(ar, tk2);
 		if (tkType2 == TK_STRING)
 		{
-			name = tk2;
+			defName = tk2;
 			tkType2 = GetToken(ar, tk2);
 		}
 	}
@@ -812,7 +813,7 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 	}
 
-	if(AbleName(name) == false)
+	if(AbleName(defName) == false)
 	{
 		SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), tk2.c_str());
 		return false;
@@ -823,15 +824,18 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	std::string fullFileName;
 	fullFileName = "../../Lib/";
-	fullFileName += tk1 + ".neo";
+	fullFileName += fileName + ".neo";
 
-	auto it2 = ar.m_sImports.find(tk1);
-	if (it2 == ar.m_sImports.end())
-		ar.m_sImports.insert(tk1);
+	//auto it2 = ar.m_sImports.find(fileName);
+	//if (it2 == ar.m_sImports.end())
+	//	ar.m_sImports.insert(fileName);
 
-	auto it = vars.m_sImports.find(tk1);
+	auto it = vars.m_sImports.find(fileName);
 	if (it != vars.m_sImports.end())
+	{
+		// TODO
 		return true;
+	}
 
 
 	void* pFileBuffer = NULL;
@@ -847,16 +851,20 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	ar2._allowGlobalInitLogic = ar._allowGlobalInitLogic;
 	ar2._debug = ar._debug;
 
-	funs.NewLayer();
+	SFunctionLayer* pLayerBackup = funs._curModule;
+	funs._curModule = funs.NewLayer();
 	std::string prefixBackup = funs._prefix;
-	//funs._prefix = tk1 + ".";
+	//funs._prefix = fileName + ".";
 	bool r = ParseFunctionBody(ar2, funs, vars, false);
+	vars.m_sImports[fileName] = funs._curModule;
 	//funs._prefix = prefixBackup;
+	pLayerBackup->_defModules[defName] = funs._curModule;
+	funs._curModule = pLayerBackup;
 
 	u16* pBuffer = ar2.GetBuffer();
 	if (pBuffer) delete[] pBuffer;
 
-	vars.m_sImports.insert(tk1);
+	//vars.m_sImports.insert(fileName);
 
 	ar.m_sErrorString = ar2.m_sErrorString;
 	return r;
@@ -1465,8 +1473,9 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 		return false;
 	}
 
-	auto it = ar.m_sImports.find(tk1);
-	if (it != ar.m_sImports.end())
+	SFunctionLayer* pOtherModule = nullptr;
+	auto it = funs._curModule->_defModules.find(tk1);
+	if (it != funs._curModule->_defModules.end())
 	{
 		tkType2 = GetToken(ar, tk2);
 		if(tkType2 != TK_DOT)
@@ -1475,13 +1484,16 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 			return false;
 		}
 		tkType2 = GetToken(ar, tk2);
-		tk1 = tk1 + "." + tk2;
+		//tk1 = tk1 + "." + tk2;
+		tk1 = tk2;
+		pOtherModule = (*it).second;
 	}
 
 	SOperand iTempOffset;
 	SOperand iTempOffset2;
 	//SOperand iArrayIndex = INVALID_ERROR_PARSEJOB;
-	iTempOffset._iVar = vars.FindVar(tk1);
+	if(pOtherModule == nullptr)
+		iTempOffset._iVar = vars.FindVar(tk1);
 
 	if (iTempOffset._iVar >= 0)
 	{
@@ -1582,7 +1594,11 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 	}
 	else
 	{
-		SFunctionInfo* pFun = funs.FindFun(tk1);
+		SFunctionInfo* pFun = nullptr;
+		if(pOtherModule == nullptr)
+			pFun = funs.FindFun(tk1);
+		else
+			pFun = funs.FindFun(tk1, pOtherModule);
 		if (pFun != NULL)
 		{
 			if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
@@ -3404,7 +3420,7 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	SVars	vars;
 	SFunctions funs;
 
-	funs.NewLayer();
+	funs._curModule = funs.NewLayer();
 
 	funs._cur = funs.NewFun(GLOBAL_INIT_FUN_NAME, &funs._codeTemp, ar._debug ? &funs.m_sDebugTemp : nullptr);
 /*	funs._cur->_funID = 0;

@@ -99,11 +99,12 @@ struct SLayerVar
 	}
 };
 
+struct SFunctionLayer;
 struct SVars
 {
 	std::vector<SLayerVar*>	_varsFunction;
 	std::vector<std::string> _varsExport;
-	std::set<std::string> m_sImports; // Only Once Load
+	std::map<std::string, SFunctionLayer*> m_sImports; // Only Once Load
 
 	~SVars()
 	{
@@ -670,6 +671,7 @@ struct SFunctionInfo
 struct SFunctionLayer
 {
 	std::map<std::string, SFunctionInfo*>	_funs;
+	std::map< std::string, SFunctionLayer*> _defModules;
 };
 
 struct SFunctions
@@ -685,7 +687,8 @@ struct SFunctions
 	CNArchive		_codeTemp;
 
 	std::string		_prefix;
-	int				_curModuleIndex = -1;
+	SFunctionLayer*			_curModule = nullptr;
+	int				_lastModuleIndex = -1;
 
 	std::vector<debug_info> m_sDebugFinal;
 	std::vector<debug_info> m_sDebugTemp;
@@ -728,11 +731,12 @@ struct SFunctions
 		return cnt;
 	}
 
-	void NewLayer()
+	SFunctionLayer* NewLayer()
 	{
 		SFunctionLayer* pFLayer = new SFunctionLayer();
-		++_curModuleIndex;
+		++_lastModuleIndex;
 		_funLayers.push_back(pFLayer);
+		return pFLayer;
 	}
 
 	SFunctionInfo* NewFun(const std::string& name, CNArchive* code, std::vector<debug_info>* pDebugData)
@@ -745,14 +749,21 @@ struct SFunctions
 		p->_name = name;
 		p->_code = code;
 		p->_pDebugData = pDebugData;
-		_funLayers[_curModuleIndex]->_funs[name] = p;
+		_curModule->_funs[name] = p;
 		return p;
 	}
 
 	SFunctionInfo*	FindFun(const std::string& name)
 	{
-		auto it = _funLayers[_curModuleIndex]->_funs.find(name);
-		if (it == _funLayers[_curModuleIndex]->_funs.end())
+		auto it = _curModule->_funs.find(name);
+		if (it == _curModule->_funs.end())
+			return NULL;
+		return (*it).second;
+	}
+	SFunctionInfo* FindFun(const std::string& name, SFunctionLayer* pLayer)
+	{
+		auto it = pLayer->_funs.find(name);
+		if (it == pLayer->_funs.end())
 			return NULL;
 		return (*it).second;
 	}
