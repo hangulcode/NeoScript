@@ -1,5 +1,4 @@
-import mod2;
-
+import mod2 as m2;
 
 fun test()
 {
@@ -10,7 +9,7 @@ fun test()
 
 export fun main()
 {
-	print(mod2.add(11, 22)); // 33
-	print(mod2.mul(11, 22)); // 33
+	print(m2.add(11, 22)); // 33
+	print(m2.mul(11, 22)); // 242
 	test();
 }

@@ -148,6 +148,7 @@ struct SFunctionInfo
 	std::string					_name;
 	std::set<std::string>		_args;
 	FUNCTION_TYPE				_funType = FUNT_NORMAL;
+	std::string					_moduleName;
 
 
 	int							_localVarCount;
@@ -169,6 +170,9 @@ struct SFunctionInfo
 		_iCode_Begin = 0;
 		_iCode_Size = 0;
 	}
+
+	std::string	GetFullName() { if(_moduleName.empty() == true) return _name; return _moduleName + "." + _name; }
+
 
 	int	AllocLocalTempVar()
 	{
@@ -686,7 +690,7 @@ struct SFunctions
 	CNArchive		_codeFinal;
 	CNArchive		_codeTemp;
 
-	std::string		_prefix;
+//	std::string		_prefix;
 	SFunctionLayer*			_curModule = nullptr;
 	int				_lastModuleIndex = -1;
 

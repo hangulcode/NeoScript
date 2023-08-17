@@ -83,9 +83,7 @@ std::string GetFunctionName(SFunctions& funs, short nID)
 	if(it == funs._funIDs.end())
 		return "Error";
 
-	//auto it2 = funs._funs.find((*it).second);
-	//return (*it2).second._name;
-	return (*it).second->_name;
+	return (*it).second->GetFullName();
 }
 
 void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionInfo& fi, SVars& vars, std::map<int, SFunctionTableForWriter>& funPos, std::vector< debug_info>& debugInfo)
@@ -511,7 +509,7 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 	int curFunStatkSize = 1 + (int)fi._args.size() + localCount + fi._localTempMax;
 
 	OutAsm("\n");
-	OutAsm(ANSI_COLOR_YELLOW "Fun - %s [T:%d ID:%d] arg:%d var:%d varTemp:%d" ANSI_RESET_ALL "\n", fi._name.c_str(), fi._funType, fi._funID, (int)fi._args.size(), fi._localVarCount, fi._localTempMax);
+	OutAsm(ANSI_COLOR_YELLOW "Fun - %s [T:%d ID:%d] arg:%d var:%d varTemp:%d" ANSI_RESET_ALL "\n", fi.GetFullName().c_str(), fi._funType, fi._funID, (int)fi._args.size(), fi._localVarCount, fi._localTempMax);
 
 	//if (fi._funType == FUNT_IMPORT)
 	//	return;
@@ -1056,7 +1054,7 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 	{
 		//auto it2 = funs._funs.find((*it));
 		SFunctionInfo& fi = *(*it).second;
-		mapFun[fi._funID] = fi._name;
+		mapFun[fi._funID] = fi.GetFullName();
 
 		//OutAsm("Fun [%d] %s\n", fi._funID, fi._name.c_str());
 	}

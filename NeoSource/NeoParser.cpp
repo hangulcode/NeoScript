@@ -850,10 +850,11 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	ToArchiveRdWC((const char*)pFileBuffer, iFileLen, ar2);
 	ar2._allowGlobalInitLogic = ar._allowGlobalInitLogic;
 	ar2._debug = ar._debug;
+	ar2.m_sModuleName = fileName;
 
 	SFunctionLayer* pLayerBackup = funs._curModule;
 	funs._curModule = funs.NewLayer();
-	std::string prefixBackup = funs._prefix;
+//	std::string prefixBackup = funs._prefix;
 	//funs._prefix = fileName + ".";
 	bool r = ParseFunctionBody(ar2, funs, vars, false);
 	vars.m_sImports[fileName] = funs._curModule;
@@ -3192,8 +3193,8 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				SetCompileError(ar, "Error (%d, %d): Unable Fun Name %s\n", ar.CurLine(), ar.CurCol(), tk2.c_str());
 				return false;
 			}
-			if (funs._prefix.empty() == false)
-				tk2 = funs._prefix + tk2;
+//			if (funs._prefix.empty() == false)
+//				tk2 = funs._prefix + tk2;
 			if (tkType2 == TK_STRING)
 			{
 				if (-1 == ParseFunctionBase(ar, funs, vars, tk2, funType))
@@ -3327,6 +3328,7 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string&
 
 		pF = funs.NewFun(fname, funs._cur->_code, funs._cur->_pDebugData);
 		pF->_funType = funType;
+		pF->_moduleName = ar.m_sModuleName;
 
 		pF->_funID = funID;
 		funs._funIDs[pF->_funID] = pF;

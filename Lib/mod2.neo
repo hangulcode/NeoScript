@@ -1,8 +1,13 @@
 import mod1;
 
-fun add(var a, var b)
+fun addInternal(var a, var b)
 {
 	return a + b;
+}
+
+fun add(var a, var b)
+{
+	return addInternal(a, b);
 }
 
 fun sub(var a, var b)
