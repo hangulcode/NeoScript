@@ -833,7 +833,6 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	auto it = vars.m_sImports.find(fileName);
 	if (it != vars.m_sImports.end())
 	{
-		// TODO
 		funs._curModule->_defModules[defName] = (*it).second;
 		return true;
 	}
