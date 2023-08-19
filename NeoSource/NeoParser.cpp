@@ -819,16 +819,9 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 	}
 
-	// TODO ???
-	//동일한 모듈 파일은 as로 다르게 import 하면 ...
-
 	std::string fullFileName;
 	fullFileName = "../../Lib/";
 	fullFileName += fileName + ".neo";
-
-	//auto it2 = ar.m_sImports.find(fileName);
-	//if (it2 == ar.m_sImports.end())
-	//	ar.m_sImports.insert(fileName);
 
 	auto it = vars.m_sImports.find(fileName);
 	if (it != vars.m_sImports.end())
@@ -854,18 +847,13 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	SFunctionLayer* pLayerBackup = funs._curModule;
 	funs._curModule = funs.NewLayer();
-//	std::string prefixBackup = funs._prefix;
-	//funs._prefix = fileName + ".";
 	bool r = ParseFunctionBody(ar2, funs, vars, false);
 	vars.m_sImports[fileName] = funs._curModule;
-	//funs._prefix = prefixBackup;
 	pLayerBackup->_defModules[defName] = funs._curModule;
 	funs._curModule = pLayerBackup;
 
 	u16* pBuffer = ar2.GetBuffer();
 	if (pBuffer) delete[] pBuffer;
-
-	//vars.m_sImports.insert(fileName);
 
 	ar.m_sErrorString = ar2.m_sErrorString;
 	return r;
@@ -3193,8 +3181,6 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				SetCompileError(ar, "Error (%d, %d): Unable Fun Name %s\n", ar.CurLine(), ar.CurCol(), tk2.c_str());
 				return false;
 			}
-//			if (funs._prefix.empty() == false)
-//				tk2 = funs._prefix + tk2;
 			if (tkType2 == TK_STRING)
 			{
 				if (-1 == ParseFunctionBase(ar, funs, vars, tk2, funType))

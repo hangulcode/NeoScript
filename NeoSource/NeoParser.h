@@ -690,7 +690,6 @@ struct SFunctions
 	CNArchive		_codeFinal;
 	CNArchive		_codeTemp;
 
-//	std::string		_prefix;
 	SFunctionLayer*			_curModule = nullptr;
 	int				_lastModuleIndex = -1;
 
