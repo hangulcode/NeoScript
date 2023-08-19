@@ -834,6 +834,7 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	if (it != vars.m_sImports.end())
 	{
 		// TODO
+		funs._curModule->_defModules[defName] = (*it).second;
 		return true;
 	}
 
