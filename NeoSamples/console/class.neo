@@ -1,0 +1,33 @@
+
+class A
+{
+	fun __Init__(var self, var name, var age)
+	{
+		self.name = name;
+		self.age = age;
+	}
+
+	fun Show(var self)
+	{
+		print("Name : " .. self.name .. ", Age : " .. self.age);
+	}
+};
+
+class B : A
+{
+	fun __Init__(var self, var name, var age, var sex)
+	{
+		Base::__Init(self, name, age)
+		self.sex = sex;
+	}
+
+	fun Show(var self)
+	{
+		print("Name : " .. self.name .. ", Age : " .. self.age .. ", Sex : " .. self.sex);
+	}
+};
+
+var a = A("Kim A Jung", 25);
+var b = B("Park Jung Hee", 40, "Man");
+a.Show();
+b.Show();

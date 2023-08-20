@@ -94,6 +94,7 @@ int main()
 		printf("12 coroutine\n");
 		printf("13 module\n");
 		printf("14 http\n");
+		printf("15 class\n");
 
 		printf("ESC press to exit\n");
 		printf("press the number and enter ...\n");
@@ -118,6 +119,7 @@ int main()
 		else if (key == "12") SAMPLE_etc("coroutine.neo", "test");
 		else if (key == "13") SAMPLE_etc("module.neo", "main");
 		else if (key == "14") SAMPLE_etc("http.neo", nullptr);
+		else if (key == "15") SAMPLE_etc("class.neo", nullptr);
 
 		system("pause");
 	}
