@@ -135,6 +135,7 @@ public:
 	inline u32 GetWorkerID() { return _idWorker; }
 	inline int GetBytesSize() { return _BytesSize; }
 
+	virtual bool RunFunctionResume(int iFID, std::vector<VarInfo>& _args) = 0;
 	virtual bool RunFunction(int iFID, std::vector<VarInfo>& _args) =0;
 	virtual bool RunFunction(const std::string& funName, std::vector<VarInfo>& _args) =0;
 	virtual void GC() =0;
@@ -453,6 +454,7 @@ public:
 	virtual bool IsWorking(u32 id) = 0;
 	virtual bool UpdateWorker(u32 id) = 0;
 
+	inline INeoVMWorker* GetMainWorker() { return _pMainWorker; }
 	int GetMainWorkerID() { return _pMainWorker == NULL ? 0 : _pMainWorker->GetWorkerID(); }
 	inline int GetBytesSize() { return _pMainWorker->GetBytesSize(); }
 

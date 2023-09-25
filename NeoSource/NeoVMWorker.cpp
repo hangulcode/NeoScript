@@ -2073,6 +2073,18 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 	return true;
 }
 
+bool CNeoVMWorker::RunFunctionResume(int iFID, std::vector<VarInfo>& _args)
+{
+	//Start(iFID, _args);
+	VarInfo r;
+	testCall(iFID, _args.empty() ? NULL : &_args[0], (int)_args.size());
+	return true;
+}
+bool CNeoVMWorker::RunFunction(int iFID, std::vector<VarInfo>& _args)
+{
+	Start(iFID, _args);
+	return true;
+}
 bool CNeoVMWorker::RunFunction(const std::string& funName, std::vector<VarInfo>& _args)
 {
 	auto it = m_sImExportTable.find(funName);

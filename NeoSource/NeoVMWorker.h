@@ -442,13 +442,8 @@ private:
 	CoroutineInfo* m_pCur = NULL;
 	CoroutineInfo* m_pRegisterActive = NULL;
 
-	virtual bool RunFunction(int iFID, std::vector<VarInfo>& _args)
-	{
-		//Start(iFID, _args);
-		VarInfo r;
-		testCall(iFID, _args.empty() ? NULL : &_args[0], (int)_args.size());
-		return true;
-	}
+	virtual bool RunFunctionResume(int iFID, std::vector<VarInfo>& _args);
+	virtual bool RunFunction(int iFID, std::vector<VarInfo>& _args);
 	virtual bool RunFunction(const std::string& funName, std::vector<VarInfo>& _args);
 
 	bool	IsMainCoroutine(CoroutineInfo* p) { return (&m_sDefault == p); }

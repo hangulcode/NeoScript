@@ -30,7 +30,10 @@ int SAMPLE_callback()
 	INeoVM* pVM = INeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
 	if (pVM != NULL)
 	{
-		pVM->CallN("Set", NeoHelper::Fun(Mul), NeoHelper::Fun(Sample1));
+//		pVM->CallN("Set", NeoHelper::Fun(Mul), NeoHelper::Fun(Sample1));
+
+		int iFid = pVM->FindFunction("Set");
+		pVM->GetMainWorker()->iCallN(iFid, NeoHelper::Fun(Mul), NeoHelper::Fun(Sample1));
 			
 
 		DWORD t1 = GetTickCount();
