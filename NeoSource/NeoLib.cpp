@@ -10,7 +10,7 @@
 #define MATH_PI				3.14159265358979323846f // Pi
 
 
-
+INeoVM::IO_Print INeoVM::m_pFunPrint = nullptr;
 
 void NVM_QuickSort(CNeoVMWorker* pN, int compare, std::vector<VarInfo*>& lst);
 
@@ -563,7 +563,10 @@ struct neo_libs
 		{
 			VarInfo* pArg1 = pN->GetStack(1);
 			std::string str = CNeoVMWorker::ToString(pArg1);
-			std::cout << str.c_str() << '\n';
+			if(INeoVM::m_pFunPrint == nullptr)
+				std::cout << str.c_str() << '\n';
+			else
+				INeoVM::m_pFunPrint(str.c_str());
 			pN->ReturnValue();
 			return true;
 		}
@@ -573,7 +576,10 @@ struct neo_libs
 			VarInfo* pArg2 = pN->GetStack(2);
 			std::string str1 = CNeoVMWorker::ToString(pArg1);
 			std::string str2 = CNeoVMWorker::ToString(pArg2);
-			std::cout << str1.c_str() << str2.c_str();
+			if (INeoVM::m_pFunPrint == nullptr)
+				std::cout << str1.c_str() << str2.c_str();
+			else
+				INeoVM::m_pFunPrint((str1 + str2).c_str());
 			pN->ReturnValue();
 			return true;
 		}

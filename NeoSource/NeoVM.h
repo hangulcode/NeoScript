@@ -407,6 +407,9 @@ public:
 	virtual int FindFunction(const std::string& name) =0;
 	virtual bool SetFunction(int iFID, FunctionPtr& fun, int argCount) =0;
 
+	typedef void(*IO_Print)(const char* pMsg);
+	static IO_Print m_pFunPrint;
+
 	void Var_AddRef(VarInfo* d);
 	static void Move_DestNoRelease(VarInfo* v1, VarInfo* v2);
 	void Var_ReleaseInternal(VarInfo* d);
