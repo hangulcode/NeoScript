@@ -8,7 +8,7 @@ int SAMPLE_time_limit()
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == FileLoad("time_limit.neo", pFileBuffer, iFileLen))
+	if (false == FileLoad("time_limit.ns", pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;

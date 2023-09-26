@@ -4,10 +4,10 @@
 <dict>
 	<key>fileTypes</key>
 	<array>
-		<string>neo</string>
+		<string>ns</string>
 	</array>
 	<key>name</key>
-	<string>neo</string>
+	<string>ns</string>
 	<key>patterns</key>
 	<array>
 		<dict>

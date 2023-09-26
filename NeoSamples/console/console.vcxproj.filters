@@ -127,49 +127,49 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <None Include="callback.neo">
+    <None Include="callback.ns">
       <Filter>Samples</Filter>
     </None>
-    <None Include="9_times.neo">
+    <None Include="9_times.ns">
       <Filter>Samples</Filter>
     </None>
-    <None Include="slice_run.neo">
+    <None Include="slice_run.ns">
       <Filter>Samples</Filter>
     </None>
-    <None Include="time_limit.neo">
+    <None Include="time_limit.ns">
       <Filter>Samples</Filter>
     </None>
-    <None Include="etc.neo">
+    <None Include="etc.ns">
       <Filter>Samples</Filter>
     </None>
-    <None Include="delegate.neo">
+    <None Include="delegate.ns">
       <Filter>Samples</Filter>
     </None>
-    <None Include="meta.neo">
+    <None Include="meta.ns">
       <Filter>Samples</Filter>
     </None>
-    <None Include="coroutine.neo">
+    <None Include="coroutine.ns">
       <Filter>Samples</Filter>
     </None>
-    <None Include="list.neo">
+    <None Include="list.ns">
       <Filter>Samples</Filter>
     </None>
-    <None Include="string.neo">
+    <None Include="string.ns">
       <Filter>Samples</Filter>
     </None>
-    <None Include="hello.neo">
+    <None Include="hello.ns">
       <Filter>Samples</Filter>
     </None>
-    <None Include="map.neo">
+    <None Include="map.ns">
       <Filter>Samples</Filter>
     </None>
-    <None Include="map_callback.neo">
+    <None Include="map_callback.ns">
       <Filter>Samples</Filter>
     </None>
-    <None Include="module.neo">
+    <None Include="module.ns">
       <Filter>Samples</Filter>
     </None>
-    <None Include="http.neo">
+    <None Include="http.ns">
       <Filter>Samples</Filter>
     </None>
   </ItemGroup>

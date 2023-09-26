@@ -20,7 +20,7 @@ int SAMPLE_callback()
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == FileLoad("callback.neo", pFileBuffer, iFileLen))
+	if (false == FileLoad("callback.ns", pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;

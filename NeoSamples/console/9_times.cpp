@@ -7,7 +7,7 @@ int SAMPLE_9_times()
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == FileLoad("9_times.neo", pFileBuffer, iFileLen))
+	if (false == FileLoad("9_times.ns", pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;

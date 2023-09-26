@@ -7,7 +7,7 @@ int SAMPLE_slice_run()
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == FileLoad("slice_run.neo", pFileBuffer, iFileLen))
+	if (false == FileLoad("slice_run.ns", pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;

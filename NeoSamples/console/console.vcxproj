@@ -90,7 +90,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_WIN32;_WINDOWS;WIN_PRJ</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_WIN32;_NEO_IMPORTABLE;_WINDOWS;WIN_PRJ</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <ExceptionHandling>Async</ExceptionHandling>
@@ -109,7 +109,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_WIN32;_WIN64;WIN_PRJ</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_WIN32;_NEO_IMPORTABLE;_WIN64;WIN_PRJ</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <ExceptionHandling>Async</ExceptionHandling>
     </ClCompile>
@@ -126,7 +126,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_WIN32;_WINDOWS;WIN_PRJ</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_WIN32;_NEO_IMPORTABLE;_WINDOWS;WIN_PRJ</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <ExceptionHandling>Async</ExceptionHandling>
@@ -149,7 +149,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_WIN32;_WIN64;WIN_PRJ</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_WIN32;_NEO_IMPORTABLE;_WIN64;WIN_PRJ</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <ExceptionHandling>Async</ExceptionHandling>
     </ClCompile>
@@ -257,21 +257,21 @@
     <ClCompile Include="time_limit.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="9_times.neo" />
-    <None Include="callback.neo" />
-    <None Include="coroutine.neo" />
-    <None Include="delegate.neo" />
-    <None Include="etc.neo" />
-    <None Include="hello.neo" />
-    <None Include="http.neo" />
-    <None Include="list.neo" />
-    <None Include="map.neo" />
-    <None Include="map_callback.neo" />
-    <None Include="meta.neo" />
-    <None Include="module.neo" />
-    <None Include="slice_run.neo" />
-    <None Include="string.neo" />
-    <None Include="time_limit.neo" />
+    <None Include="9_times.ns" />
+    <None Include="callback.ns" />
+    <None Include="coroutine.ns" />
+    <None Include="delegate.ns" />
+    <None Include="etc.ns" />
+    <None Include="hello.ns" />
+    <None Include="http.ns" />
+    <None Include="list.ns" />
+    <None Include="map.ns" />
+    <None Include="map_callback.ns" />
+    <None Include="meta.ns" />
+    <None Include="module.ns" />
+    <None Include="slice_run.ns" />
+    <None Include="string.ns" />
+    <None Include="time_limit.ns" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

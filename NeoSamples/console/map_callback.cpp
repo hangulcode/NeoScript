@@ -50,7 +50,7 @@ int SAMPLE_map_callback()
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == FileLoad("map_callback.neo", pFileBuffer, iFileLen))
+	if (false == FileLoad("map_callback.ns", pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;
