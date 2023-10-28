@@ -94,7 +94,7 @@ int main()
 		printf("12 coroutine\n");
 		printf("13 module\n");
 		printf("14 http\n");
-		printf("15 class\n");
+		printf("15 class (In development)\n");
 
 		printf("ESC press to exit\n");
 		printf("press the number and enter ...\n");
