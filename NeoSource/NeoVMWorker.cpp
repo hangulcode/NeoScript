@@ -2276,7 +2276,7 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFun
 	}
 	int iSave = _iSP_Vars;
 	_iSP_Vars = _iSP_VarsMax;
-	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1 + n3) // ??????? �̷��� �ϸ� �³�? ��...
+	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1 + n3) // ??????? 이렇게 하면 맞나? 흠...
 		_iSP_Vars_Max2 = _iSP_VarsMax + 1 + n3;
 
 	if ((func)(this, pFunObj, fname, n3) == false)

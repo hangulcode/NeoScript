@@ -940,11 +940,11 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 
 	std::vector< debug_info> debugInfo;
 
-	// Main �Լ� �ڵ� ����
+	// Main 함수 코드 저장
 	header._iMainFunctionOffset = ar.GetBufferOffset();
 	header._iGlobalVarCount = funs._cur->_localVarCount;
 	//WriteFun(arText, ar, funs, funs._cur, vars, funPos, debugInfo);
-	// Sub �Լ� �ڵ� ����
+	// Sub 함수 코드 저장
 	//for (auto it = funs._funs.begin(); it != funs._funs.end(); it++)
 	//{
 	//	SFunctionInfo& fi = (*it).second;
@@ -962,7 +962,7 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	header._iCodeSize = ar.GetBufferOffset() - sizeof(SNeoVMHeader);
 	header.m_iDebugCount = (int)debugInfo.size();
 
-	// �Լ� ������ ����
+	// 함수 포인터 저장
 	if ((int)funPos.size() != header._iFunctionCount)
 	{
 		SetCompileError(arText, "Function Count Miss");
@@ -996,7 +996,7 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	}
 
 
-	// Static ���� ����
+	// Static 변수 저장
 
 	for (int i = 0; i < header._iStaticVarCount; i++)
 	{
@@ -1025,7 +1025,7 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 		}
 	}
 
-	// Debug ���� Save
+	// Debug 정보 Save
 	if (header.m_iDebugCount)
 	{
 		header.m_iDebugOffset = ar.GetBufferOffset();
@@ -1070,7 +1070,7 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 
 	STempDebug td;
 	td._staticVars = funs._staticVars;
-	// Static ����
+	// Static 변수
 	for (int i = 0; i < header._iStaticVarCount; i++)
 	{
 		VarInfo& vi = funs._staticVars[i];
@@ -1083,7 +1083,7 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 		tempExportVars.insert(vars._varsExport[i]);
 	}
 
-	// Global ����
+	// Global 변수
 	if (vars._varsFunction.size() != 1) return false;
 	SLayerVar* pLayerVar = vars._varsFunction[0];
 	if (pLayerVar->_varsLayer.size() != 1) return false;
@@ -1113,16 +1113,16 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 	}
 
 
-	// Main �Լ� �ڵ� ����
+	// Main 함수 코드 저장
 	//WriteFunLog(arText, arw, funs, funs._cur, vars);
-	// Sub �Լ� �ڵ� ����
+	// Sub 함수 코드 저장
 	for (auto it = funs._funSequence.begin(); it != funs._funSequence.end(); it++)
 	{
 		SFunctionInfo& fi = *(*it);
 		WriteFunLog(arText, arw, funs, fi, vars, td);
 	}
 
-	//// �Լ� ������ ����
+	//// 함수 포인터 저장
 
 	return true;
 }

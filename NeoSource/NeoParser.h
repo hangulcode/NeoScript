@@ -9,7 +9,7 @@
 #define COMPILE_LOCALTMP_VAR_BEGIN		(10000)
 #define COMPILE_STATIC_VAR_BEGIN		(15000)
 #define COMPILE_GLOBAL_VAR_BEGIN		(20000)
-#define COMPILE_CALLARG_VAR_BEGIN		(30000) // 256 �� �̻� ������ �ʴ´�.
+#define COMPILE_CALLARG_VAR_BEGIN		(30000) // 256 개 이상 나오지 않는다.
 //#define COMPILE_VAR_NULL				(32766)
 #define STACK_POS_RETURN				(32767)
 #define COMPILE_VAR_MAX					(32768)
@@ -133,7 +133,7 @@ struct SVars
 	{
 		return _varsFunction[_varsFunction.size() - 1];
 	}
-	int _iTempVarNameIndex = 0; // �̸� ���� �ӽ� ���� ���� �ε���
+	int _iTempVarNameIndex = 0; // 이름 없는 임시 변수 생성 인덱스
 };
 
 struct SFunctionTableForWriter
