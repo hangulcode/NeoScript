@@ -345,7 +345,7 @@ namespace http
         {
             return (internetProtocol == InternetProtocol::v4) ? AF_INET :
                 (internetProtocol == InternetProtocol::v6) ? AF_INET6 :
-                throw RequestError{"Unsupported protocol"};
+                -1;//throw RequestError{"Unsupported protocol"};
         }
 
         class Socket final
@@ -364,9 +364,11 @@ namespace http
             {
                 if (endpoint == invalid)
 #if defined(_WIN32) || defined(__CYGWIN__)
-                    throw std::system_error{WSAGetLastError(), winsock::errorCategory, "Failed to create socket"};
+                    //throw std::system_error{WSAGetLastError(), winsock::errorCategory, "Failed to create socket"};
+					return;
 #else
-                    throw std::system_error{errno, std::system_category(), "Failed to create socket"};
+                    //throw std::system_error{errno, std::system_category(), "Failed to create socket"};
+					return;
 #endif // defined(_WIN32) || defined(__CYGWIN__)
 
 #if defined(_WIN32) || defined(__CYGWIN__)
@@ -374,20 +376,23 @@ namespace http
                 if (ioctlsocket(endpoint, FIONBIO, &mode) != 0)
                 {
                     close();
-                    throw std::system_error{WSAGetLastError(), winsock::errorCategory, "Failed to get socket flags"};
+                    //throw std::system_error{WSAGetLastError(), winsock::errorCategory, "Failed to get socket flags"};
+					return;
                 }
 #else
                 const auto flags = fcntl(endpoint, F_GETFL);
                 if (flags == -1)
                 {
                     close();
-                    throw std::system_error{errno, std::system_category(), "Failed to get socket flags"};
+                    //throw std::system_error{errno, std::system_category(), "Failed to get socket flags"};
+					return;
                 }
 
                 if (fcntl(endpoint, F_SETFL, flags | O_NONBLOCK) == -1)
                 {
                     close();
-                    throw std::system_error{errno, std::system_category(), "Failed to set socket flags"};
+                    //throw std::system_error{errno, std::system_category(), "Failed to set socket flags"};
+					return;
                 }
 #endif // defined(_WIN32) || defined(__CYGWIN__)
 
@@ -396,7 +401,8 @@ namespace http
                 if (setsockopt(endpoint, SOL_SOCKET, SO_NOSIGPIPE, &value, sizeof(value)) == -1)
                 {
                     close();
-                    throw std::system_error{errno, std::system_category(), "Failed to set socket option"};
+                    //throw std::system_error{errno, std::system_category(), "Failed to set socket option"};
+					return;
                 }
 #endif // __APPLE__
             }

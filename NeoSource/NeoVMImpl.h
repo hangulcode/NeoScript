@@ -118,7 +118,7 @@ public:
 	void RegLibrary(VarInfo* pSystem, const char* pLibName);// , SNeoFunLib* pFuns);
 	static void RegObjLibrary();
 	static void InitLib();
-	inline void SetError(const std::string& msg);
+	void SetError(const std::string& msg);
 	virtual int FindFunction(const std::string& name) { return GetMainWorker()->FindFunction(name); }
 	virtual bool SetFunction(int iFID, FunctionPtr& fun, int argCount) { return GetMainWorker()->SetFunction(iFID, fun, argCount); }
 public:

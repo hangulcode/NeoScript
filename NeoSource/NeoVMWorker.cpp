@@ -343,6 +343,8 @@ void CNeoVMWorker::Add2(eNOperationSub op, VarInfo* r, VarInfo* v2)
 		default: SetError("operator Error"); break;
 		}
 		break;
+	default:
+		break;
 	}
 	SetError("+= Error");
 }
@@ -394,6 +396,8 @@ void CNeoVMWorker::Add2(eNOperationSub op, VarInfo* r, int v2)
 		default: SetError("operator Error"); break;
 		}
 		break;
+	default:
+		break;
 	}
 	SetError("+= Error");
 }
@@ -439,6 +443,8 @@ void CNeoVMWorker::And(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		if (neo_DCalllibs::Set_And(this, r, v1, v2))
 			return;
 		break;
+	default:
+		break;
 	}
 	SetError("& Error");
 }
@@ -481,6 +487,8 @@ void CNeoVMWorker::Or(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	case VAR_SET:
 		if (neo_DCalllibs::Set_Or(this, r, v1, v2))
 			return;
+		break;
+	default:
 		break;
 	}
 	SetError("| Error");
@@ -607,6 +615,8 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, VarInfo* v2)
 			SetError("unsupported operand % Error"); break;
 		case eOP_LSH: SetError("unsupported operand << Error"); break;
 		case eOP_RSH: SetError("unsupported operand >> Error"); break;
+		default:
+			break;
 		}
 		break;
 	case VAR_LIST:
@@ -629,6 +639,8 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, VarInfo* v2)
 		default: SetError("operator Error"); break;
 		}
 		return;
+		break;
+	default:
 		break;
 	}
 	SetError("unsupported operand Error");
@@ -715,6 +727,8 @@ void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, int v2)
 		}
 		return;
 	}
+	default:
+		break;
 	}
 	SetError("unsupported operand Error");
 }
@@ -837,6 +851,8 @@ bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
 		else if (v2->GetType() == VAR_STRING)
 			return v1->_str->_str == v2->_str->_str;
 		break;
+	default:
+		break;
 	}
 	return false;
 }
@@ -867,6 +883,8 @@ bool CNeoVMWorker::CompareGR(VarInfo* v1, VarInfo* v2)
 			return v1->_str->_str > std::string(v2->_c.c);
 		else if (v2->GetType() == VAR_STRING)
 			return v1->_str->_str > v2->_str->_str;
+		break;
+	default:
 		break;
 	}
 	SetError("CompareGR Error");
@@ -899,6 +917,8 @@ bool CNeoVMWorker::CompareGE(VarInfo* v1, VarInfo* v2)
 			return v1->_str->_str >= std::string(v2->_c.c);
 		else if (v2->GetType() == VAR_STRING)
 			return v1->_str->_str >= v2->_str->_str;
+		break;
+	default:
 		break;
 	}
 	SetError("CompareGE Error");
@@ -1071,6 +1091,8 @@ bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 			}
 			break;
 		}
+	default:
+		break;
 	}
 	SetErrorFormat("error : foreach not support '%s'", GetDataType(pClt->GetType()).c_str());
 	return false;
@@ -1515,7 +1537,11 @@ void CNeoVMWorker::SetError(const char* pErrMsg)
 void CNeoVMWorker::SetErrorUnsupport(const char* pErrMsg, VarInfo* p)
 {
 	char buff[1024];
+#ifdef _WIN32
 	sprintf_s(buff, _countof(buff), pErrMsg, GetDataType(p->GetType()).c_str());
+#else
+	sprintf(buff, pErrMsg, GetDataType(p->GetType()).c_str());
+#endif
 	GetVM()->SetError(std::string(buff));
 }
 void CNeoVMWorker::SetErrorFormat(const char* lpszString, ...)
@@ -1614,9 +1640,10 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 	bool blDebugInfo = IsDebugInfo();
 	int _lineseq = -1;
 	u8 flagNum = 0;
-
+#ifdef _WIN32
 	try
 	{
+#endif
 		while (true)
 		{
 			GetOP(&OP);
@@ -2030,7 +2057,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 #ifdef _WIN32
 				sprintf_s(chMsg, _countof(chMsg), "%s : Index(%d), Line (%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
 #else
-				sprintf(chMsg, "%s : Index(%d), Line (%d)", _pVM->_pErrorMsg, idx, _lineseq);
+				sprintf(chMsg, "%s : Index(%d), Line (%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
 #endif
 				if(GetVM()->_sErrorMsgDetail.empty())
 					GetVM()->_sErrorMsgDetail = chMsg;
@@ -2056,6 +2083,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				}
 			}
 		}
+#ifdef _WIN32
 	}
 	catch (...)
 	{
@@ -2065,11 +2093,12 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 #ifdef _WIN32
 		sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", GetVM()->_pErrorMsg.c_str(), _lineseq);
 #else
-		sprintf(chMsg, "%s : Line (%d)", _pVM->_pErrorMsg, _lineseq);
+		sprintf(chMsg, "%s : Line (%d)", GetVM()->_pErrorMsg.c_str(), _lineseq);
 #endif
 		GetVM()->_sErrorMsgDetail = chMsg;
 		return false;
 	}
+#endif
 	return true;
 }
 
@@ -2247,7 +2276,7 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFun
 	}
 	int iSave = _iSP_Vars;
 	_iSP_Vars = _iSP_VarsMax;
-	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1 + n3) // ??????? ÀÌ·¸°Ô ÇÏ¸é ¸Â³ª? Èì...
+	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1 + n3) // ??????? ï¿½Ì·ï¿½ï¿½ï¿½ ï¿½Ï¸ï¿½ ï¿½Â³ï¿½? ï¿½ï¿½...
 		_iSP_Vars_Max2 = _iSP_VarsMax + 1 + n3;
 
 	if ((func)(this, pFunObj, fname, n3) == false)

@@ -2,9 +2,18 @@
 #include <stdio.h>
 #include <locale>
 #include <codecvt>
+#include <stdexcept>
 
 #include "UTFString.h"
 #include "NeoTextLoader.h"
+
+template<class I, class E, class S>
+struct MyCodecvt : std::codecvt<I, E, S>
+{
+	~MyCodecvt()
+	{ }
+};
+
 
 bool		ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar)
 {
@@ -18,7 +27,7 @@ bool		ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar)
 		size_toUni = iBufferSize / 2 - 1;
 		pWBuffer = new u16[size_toUni + 1];
 		memcpy(pWBuffer, (u16*)(pBuffer + 2), size_toUni * 2);
-		pWBuffer[size_toUni] = NULL;
+		pWBuffer[size_toUni] = 0;
 		ar.SetData(pWBuffer, size_toUni);
 	}
 	else if ((*(u16*)pBuffer) == FILE_UNICODE_HEADER_BE) // Big Endian
@@ -34,7 +43,7 @@ bool		ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar)
 			*pDest++ = pSrc[0];
 			pSrc += 2;
 		}
-		pWBuffer[size_toUni] = NULL;
+		pWBuffer[size_toUni] = 0;
 		ar.SetData(pWBuffer, size_toUni);
 	}
 	else
@@ -46,20 +55,25 @@ bool		ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar)
 			size_toUni = (int)str.length();
 			pWBuffer = new u16[str.length() + 1];
 			memcpy(pWBuffer, (u16*)(str.c_str()), size_toUni * 2);
-			pWBuffer[size_toUni] = NULL;
+			pWBuffer[size_toUni] = 0;
 			ar.SetData(pWBuffer, (int)str.length());
 		}
 		else
 		{
-			std::string ansi_str;
-			ansi_str.resize(iBufferSize);
-			memcpy((void*)ansi_str.c_str(), pBuffer, iBufferSize);
+//			std::vector<char> bytes;
+//			bytes.resize(iBufferSize);
+//			memcpy((void*)&*bytes.begin(), pBuffer, iBufferSize);
 #if 0
 			std::wstring wstr = std::wstring(ansi_str.begin(), ansi_str.end());
 #else
-			//std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-			std::wstring_convert<std::codecvt<wchar_t, char, std::mbstate_t>> converter;
-			std::wstring wstr = converter.from_bytes(ansi_str);
+			std::locale utf8Locale(std::locale(), new std::codecvt_utf8<wchar_t>);
+
+			std::wstring_convert<MyCodecvt<wchar_t, char, std::mbstate_t>> converter;
+			std::wstring wstr = converter.from_bytes(pBuffer, pBuffer + iBufferSize);
+
+
+//			std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
+//			std::wstring wstr = converter.from_bytes(ansi_str);
 #endif
 			size_toUni = (int)wstr.length();
 			pWBuffer = new u16[size_toUni + 1];
@@ -69,7 +83,7 @@ bool		ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar)
 			//pWBuffer = new u16[size_toUni + 1];
 
 			//::MultiByteToWideChar(CP_ACP, 0, pBuffer, iBufferSize, (u16*)str.c_str(), size_toUni);
-			pWBuffer[size_toUni] = NULL;
+			pWBuffer[size_toUni] = 0;
 			ar.SetData(pWBuffer, size_toUni);
 		}
 	}
@@ -90,7 +104,7 @@ bool StringToDoubleLow(double& r, const char *p)
 	while (true)
 	{
 		char c = *p++;
-		if (c == NULL)
+		if (c == 0)
 			break;
 
 		if (valid_digit(c) == false)

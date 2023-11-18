@@ -334,6 +334,8 @@ bool INeoVMWorker::GetArg_StlString(int idx, std::string& r)
 		case VAR_STRING:
 			r = p->_str->_str;
 			return true;
+		default:
+			break;
 	}
 	return false;
 }
@@ -349,6 +351,8 @@ bool INeoVMWorker::GetArg_Int(int idx, int& r)
 	case VAR_FLOAT:
 		r = (int)p->_float;
 		return true;
+	default:
+		break;
 	}
 	return false;
 }
@@ -364,6 +368,8 @@ bool INeoVMWorker::GetArg_Double(int idx, double& r)
 	case VAR_FLOAT:
 		r = p->_float;
 		return true;
+	default:
+		break;
 	}
 	return false;
 }
@@ -379,6 +385,8 @@ bool INeoVMWorker::GetArg_Float(int idx, float& r)
 	case VAR_FLOAT:
 		r = (float)p->_float;
 		return true;
+	default:
+		break;
 	}
 	return false;
 }

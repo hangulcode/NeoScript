@@ -56,6 +56,8 @@ u32 GetHashCode(VarInfo *p)
 	case VAR_COROUTINE:
 		//return (u32)p->_cor->_CoroutineID;
 		return GetHashCode((u8*)p->_cor, sizeof(p->_cor));
+	default:
+		break;
 	}
 	return 0;
 }
@@ -308,6 +310,8 @@ SetNode* SetBucket::Find(VarInfo* pKey, u32 hash)
 				pCur = pCur->pNext;
 			}
 		}
+		break;
+	default:
 		break;
 	}
 	return NULL;

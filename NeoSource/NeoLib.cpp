@@ -402,10 +402,10 @@ struct neo_libs
 
 			std::vector<VarInfo> lst3;
 			lst3.resize(lstSorted.size());
-			for (int i = 0; i < lstSorted.size(); i++)
+			for (size_t i = 0; i < lstSorted.size(); i++)
 				lst3[i] = *lstSorted[i];
 
-			for (int i = 0; i < lst.size(); i++)
+			for (size_t i = 0; i < lst.size(); i++)
 				*lst[i] = lst3[i];
 		}
 		pN->ReturnValue();

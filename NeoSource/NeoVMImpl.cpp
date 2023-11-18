@@ -4,9 +4,11 @@
 #include "NeoArchive.h"
 #include "UTFString.h"
 
+#ifdef _WIN32
 //https://github.com/elnormous/HTTPRequest
 #include "HttpRequest.h"
 #pragma comment(lib, "ws2_32.lib")
+#endif
 
 
 void CNeoVMImpl::Var_SetString(VarInfo *d, const char* str)
@@ -290,6 +292,7 @@ void CNeoVMImpl::ThreadFunction()
 		if(false == _job_queue.TryPop(p))
 			continue;
 
+#ifdef _WIN32
 		switch(p->_type)
 		{
 		case ASYNC_GET:
@@ -343,6 +346,7 @@ void CNeoVMImpl::ThreadFunction()
 			}
 			break;
 		}
+#endif
 		p->_state = ASYNC_COMPLETED;
 		_job_completed.Push(p);
 		p->_event.set();
@@ -523,7 +527,7 @@ bool CNeoVMImpl::BindWorkerFunction(u32 id, const std::string& funName)
 bool CNeoVMImpl::SetTimeout(u32 id, int iTimeout, int iCheckOpCount)
 {
 	CNeoVMWorker* pWorker;
-	if (id == -1)
+	if ((int)id == -1)
 	{
 		pWorker = (CNeoVMWorker*)_pMainWorker;
 	}

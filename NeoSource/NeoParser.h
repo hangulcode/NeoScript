@@ -9,10 +9,16 @@
 #define COMPILE_LOCALTMP_VAR_BEGIN		(10000)
 #define COMPILE_STATIC_VAR_BEGIN		(15000)
 #define COMPILE_GLOBAL_VAR_BEGIN		(20000)
-#define COMPILE_CALLARG_VAR_BEGIN		(30000) // 256 °³ ÀÌ»ó ³ª¿ÀÁö ¾Ê´Â´Ù.
+#define COMPILE_CALLARG_VAR_BEGIN		(30000) // 256 ï¿½ï¿½ ï¿½Ì»ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ê´Â´ï¿½.
 //#define COMPILE_VAR_NULL				(32766)
 #define STACK_POS_RETURN				(32767)
 #define COMPILE_VAR_MAX					(32768)
+
+#ifdef _WIN32
+#else
+#define _countof(a) (sizeof(a)/sizeof(*(a)))
+#define sprintf_s(format, ...) snprintf(format, __VA_ARGS__)
+#endif
 
 bool IsTempVar(int iVar);
 eNOperation	GetOpTypeFromOp(eNOperation op);
@@ -127,7 +133,7 @@ struct SVars
 	{
 		return _varsFunction[_varsFunction.size() - 1];
 	}
-	int _iTempVarNameIndex = 0; // ÀÌ¸§ ¾ø´Â ÀÓ½Ã º¯¼ö »ý¼º ÀÎµ¦½º
+	int _iTempVarNameIndex = 0; // ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ó½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Îµï¿½ï¿½ï¿½
 };
 
 struct SFunctionTableForWriter
@@ -233,7 +239,7 @@ struct SFunctionInfo
 	{
 		if (ar._debug == false) return;
 		int iOff = _code->GetBufferOffset() / 8;
-		if (_pDebugData->size() < iOff + 1)
+		if ((int)_pDebugData->size() < iOff + 1)
 			_pDebugData->resize(iOff + 1);
 
 		(*_pDebugData)[iOff] = debug_info(ar.CurFile(), ar.CurLine());

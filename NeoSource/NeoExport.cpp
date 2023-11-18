@@ -4,6 +4,8 @@
 #include "NeoTextLoader.h"
 #include "NeoExport.h"
 
+
+
 void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 
 u8 GetArgIndexToCode(u8 flag, short* n1, short* n2, short* n3)
@@ -544,6 +546,8 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 		case NOP_JMP_FOREACH:	// foreach
 			sJumpMark[off + 8 + v.n1] = 0;
 			break;
+		default:
+			break;
 		}
 	}
 	int idx = 0;
@@ -936,11 +940,11 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 
 	std::vector< debug_info> debugInfo;
 
-	// Main ÇÔ¼ö ÄÚµå ÀúÀå
+	// Main ï¿½Ô¼ï¿½ ï¿½Úµï¿½ ï¿½ï¿½ï¿½ï¿½
 	header._iMainFunctionOffset = ar.GetBufferOffset();
 	header._iGlobalVarCount = funs._cur->_localVarCount;
 	//WriteFun(arText, ar, funs, funs._cur, vars, funPos, debugInfo);
-	// Sub ÇÔ¼ö ÄÚµå ÀúÀå
+	// Sub ï¿½Ô¼ï¿½ ï¿½Úµï¿½ ï¿½ï¿½ï¿½ï¿½
 	//for (auto it = funs._funs.begin(); it != funs._funs.end(); it++)
 	//{
 	//	SFunctionInfo& fi = (*it).second;
@@ -958,7 +962,7 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	header._iCodeSize = ar.GetBufferOffset() - sizeof(SNeoVMHeader);
 	header.m_iDebugCount = (int)debugInfo.size();
 
-	// ÇÔ¼ö Æ÷ÀÎÅÍ ÀúÀå
+	// ï¿½Ô¼ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if ((int)funPos.size() != header._iFunctionCount)
 	{
 		SetCompileError(arText, "Function Count Miss");
@@ -992,7 +996,7 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	}
 
 
-	// Static º¯¼ö ÀúÀå
+	// Static ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 
 	for (int i = 0; i < header._iStaticVarCount; i++)
 	{
@@ -1021,7 +1025,7 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 		}
 	}
 
-	// Debug Á¤º¸ Save
+	// Debug ï¿½ï¿½ï¿½ï¿½ Save
 	if (header.m_iDebugCount)
 	{
 		header.m_iDebugOffset = ar.GetBufferOffset();
@@ -1066,7 +1070,7 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 
 	STempDebug td;
 	td._staticVars = funs._staticVars;
-	// Static º¯¼ö
+	// Static ï¿½ï¿½ï¿½ï¿½
 	for (int i = 0; i < header._iStaticVarCount; i++)
 	{
 		VarInfo& vi = funs._staticVars[i];
@@ -1079,7 +1083,7 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 		tempExportVars.insert(vars._varsExport[i]);
 	}
 
-	// Global º¯¼ö
+	// Global ï¿½ï¿½ï¿½ï¿½
 	if (vars._varsFunction.size() != 1) return false;
 	SLayerVar* pLayerVar = vars._varsFunction[0];
 	if (pLayerVar->_varsLayer.size() != 1) return false;
@@ -1109,16 +1113,16 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 	}
 
 
-	// Main ÇÔ¼ö ÄÚµå ÀúÀå
+	// Main ï¿½Ô¼ï¿½ ï¿½Úµï¿½ ï¿½ï¿½ï¿½ï¿½
 	//WriteFunLog(arText, arw, funs, funs._cur, vars);
-	// Sub ÇÔ¼ö ÄÚµå ÀúÀå
+	// Sub ï¿½Ô¼ï¿½ ï¿½Úµï¿½ ï¿½ï¿½ï¿½ï¿½
 	for (auto it = funs._funSequence.begin(); it != funs._funSequence.end(); it++)
 	{
 		SFunctionInfo& fi = *(*it);
 		WriteFunLog(arText, arw, funs, fi, vars, td);
 	}
 
-	//// ÇÔ¼ö Æ÷ÀÎÅÍ ÀúÀå
+	//// ï¿½Ô¼ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 
 	return true;
 }

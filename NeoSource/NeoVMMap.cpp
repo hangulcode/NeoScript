@@ -263,6 +263,8 @@ MapNode* MapBucket::Find(VarInfo* pKey, u32 hash)
 			}
 		}
 		break;
+	default:
+		break;
 	}
 	return NULL;
 }

@@ -1,29 +1,28 @@
 #pragma once
 
+
 #pragma pack(1)
-
-
 
 
 template <typename T, int iBlkSize = 100>
 class CNVMAllocPool
 {
-	template<class T>
+	template<class T1>
 	struct _SelfNode
 	{
 		union
 		{
 			_SelfNode*	m_pNext;
-			T			m_sObj;
+			T1			m_sObj;
 		};
 	};
 
 
-	template<class T>
+	template<class T1>
 	class _CSelfList
 	{
 	public:
-		typedef _SelfNode<T> __node;
+		typedef _SelfNode<T1> __node;
 	private:
 		__node*	m_pHead;
 #ifdef _DEBUG
@@ -179,19 +178,19 @@ public:
 template <typename T, int iBlkSize = 100>
 class CNVMInstPool
 {
-	template<class T>
+	template<class T1>
 	struct _SelfNode
 	{
 		_SelfNode*	m_pNext;
-		T			m_sObj;
+		T1			m_sObj;
 	};
 
 
-	template<class T>
+	template<class T1>
 	class _CSelfList
 	{
 	public:
-		typedef _SelfNode<T> __node;
+		typedef _SelfNode<T1> __node;
 	private:
 		__node*	m_pHead;
 #ifdef _DEBUG
@@ -323,7 +322,8 @@ public:
 
 	void    Confer(T* buf)
 	{
-		SNodePool* __p = (SNodePool*)((u8*)buf - offsetof(SNodePool, m_sObj.data));
+		//SNodePool* __p = (SNodePool*)((u8*)buf - offsetof(SNodePool, m_sObj.data));
+		SNodePool* __p = (SNodePool*)((u8*)buf - ((size_t) & (((SNodePool*)0)->m_sObj.data)));
 		__p->m_sObj.dwpFlag = 0;
 
 		m_sFreeNode.push_head(__p);
