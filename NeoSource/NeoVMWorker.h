@@ -204,7 +204,7 @@ struct CoroutineBase
 	int			_iSP_Vars;
 	int			_iSP_Vars_Max2;
 	int			_iSP_VarsMax;
-	u8*			_pCodeCurrent;
+	SVMOperation* _pCodeCurrent;
 	void ClearSP()
 	{
 		_iSP_Vars = 0;
@@ -367,6 +367,7 @@ private:
 	u8 *					_pCodeBegin;
 	int						_iCodeLen;
 
+	bool					_isError = false;
 
 	bool					_isSetup = false;
 	int						_iRemainSleep = 0;
@@ -380,20 +381,20 @@ private:
 
 	void	SetCodeData(u8* p, int sz)
 	{
-		_pCodeBegin = _pCodeCurrent = p;
+		_pCodeBegin = p;
+		_pCodeCurrent = (SVMOperation*)p;
 		_iCodeLen = sz;
 		//_iCodeOffset = 0;
 	}
 
-	inline void	GetOP(SVMOperation* op)
+	inline SVMOperation*	GetOP()
 	{
-		*op = *(SVMOperation*)(_pCodeCurrent);
-		_pCodeCurrent += sizeof(SVMOperation);
+		return _pCodeCurrent++;
 	}
 	int GetDebugLine();
-	inline int GetCodeptr() { return (int)(_pCodeCurrent - _pCodeBegin); }
-	inline void SetCodePtr(int off) { _pCodeCurrent = _pCodeBegin + off; }
-	inline void SetCodeIncPtr(int off) { _pCodeCurrent += off; }
+	inline int GetCodeptr() { return (int)((u8*)_pCodeCurrent - _pCodeBegin); }
+	inline void SetCodePtr(int off) { _pCodeCurrent = (SVMOperation*)(_pCodeBegin + off); }
+	inline void SetCodeIncPtr(int off) { _pCodeCurrent = (SVMOperation*)((u8*)_pCodeCurrent + off); }
 
 	SNeoVMHeader			_header;
 //	u8 *					_pCodePtr = NULL;
@@ -431,7 +432,8 @@ private:
 		return true;
 	}
 
-	std::vector<VarInfo>*	m_pVarStack;
+	std::vector<VarInfo>*	m_pVarStack_Base;
+	VarInfo*				m_pVarStack_Pointer;
 	std::vector<SCallStack>* m_pCallStack;
 
 	std::vector<VarInfo>*	m_pVarGlobal;
@@ -461,30 +463,31 @@ private:
 	inline VarInfo* GetVarPtr1Safe(SVMOperation& OP)
 	{
 		if (OP.argFlag & (1 << 5)) { _intA1 = OP.n1; return &_intA1; }
-		if (OP.argFlag & (1 << 2)) return &(*m_pVarStack)[_iSP_Vars + OP.n1];
+		if (OP.argFlag & (1 << 2)) return m_pVarStack_Pointer + OP.n1;
 		else return &(*m_pVarGlobal)[OP.n1];
 	}
 	inline VarInfo* GetVarPtr1(SVMOperation& OP)
 	{
 		//if (OP.argFlag & (1 << 5)) { _intA1 = OP.n1; return &_intA1; }
-		if (OP.argFlag & (1 << 2)) return &(*m_pVarStack)[_iSP_Vars + OP.n1];
+		if (OP.argFlag & (1 << 2)) return m_pVarStack_Pointer + OP.n1;
 		else return &(*m_pVarGlobal)[OP.n1];
 	}
 	inline VarInfo* GetVarPtr2(SVMOperation& OP)
 	{
 		if (OP.argFlag & (1 << 4)) { _intA2._int = OP.n2; return &_intA2; }
-		if (OP.argFlag & (1 << 1)) return &(*m_pVarStack)[_iSP_Vars + OP.n2];
+		if (OP.argFlag & (1 << 1)) return m_pVarStack_Pointer + OP.n2;
 		else return &(*m_pVarGlobal)[OP.n2];
 	}
 	inline VarInfo* GetVarPtr3(SVMOperation& OP)
 	{
 		if (OP.argFlag & (1 << 3)) { _intA3._int = OP.n3; return &_intA3; }
-		if (OP.argFlag & (1 << 0)) return &(*m_pVarStack)[_iSP_Vars + OP.n3];
+		if (OP.argFlag & (1 << 0)) return m_pVarStack_Pointer + OP.n3;
 		else return &(*m_pVarGlobal)[OP.n3];
 	}
-	inline VarInfo* GetVarPtr_L(short n) { return &(*m_pVarStack)[_iSP_Vars + n]; }
+	inline VarInfo* GetVarPtr_L(short n) { return m_pVarStack_Pointer + n; }
 	inline VarInfo* GetVarPtr_G(short n) { return &(*m_pVarGlobal)[n]; }
 
+	inline void SetStackPointer(short n) { m_pVarStack_Pointer = &(*m_pVarStack_Base)[n]; }
 public:
 	inline CNeoVMImpl* GetVM() { return (CNeoVMImpl*)_pVM;  }
 	virtual void SetTimeout(int iTimeout, int iCheckOpCount) {
@@ -520,7 +523,8 @@ public:
 private:
 	void MoveMinus(VarInfo* v1, VarInfo* v2);
 	void Add2(eNOperationSub op, VarInfo* r, VarInfo* v2);
-	void Add2(eNOperationSub op, VarInfo* r, int v2);
+	void Add22(VarInfo* r, VarInfo* v2);
+//	void Add2(eNOperationSub op, VarInfo* r, int v2);
 
 	void MoveMinusI(VarInfo* v1, int);
 
@@ -544,7 +548,7 @@ private:
 	void Call(int n1, int n2, VarInfo* pReturnValue = NULL);
 	bool Call_MetaTable(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, VarInfo* b);
 	bool Call_MetaTable2(VarInfo* pTable, std::string&, VarInfo* a, VarInfo* b);
-	bool Call_MetaTableI(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, int b);
+//	bool Call_MetaTableI(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, int b);
 
 	bool CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFunObj, const std::string& fname, int n3);
 
@@ -572,7 +576,8 @@ private:
 	void TableAdd2(eNOperationSub op, VarInfo *pTable, VarInfo *pArray, int v)
 	{
 		VarInfo* p = GetTableItemValid(pTable, pArray);
-		if (p) Add2(op, p, v);
+		VarInfo temp(v);
+		if (p) Add2(op, p, &temp);
 	}
 	void TableAdd2(eNOperationSub op, VarInfo *pTable, int Array, VarInfo *pValue)
 	{
@@ -582,7 +587,8 @@ private:
 	void TableAdd2(eNOperationSub op, VarInfo *pTable, int Array, int v)
 	{
 		VarInfo* p = GetTableItemValid(pTable, Array);
-		if (p) Add2(op, p, v);
+		VarInfo temp(v);
+		if (p) Add2(op, p, &temp);
 	}
 
 
@@ -595,21 +601,22 @@ private:
 	//}
 
 public:
-	virtual VarInfo* GetReturnVar() { return &(*m_pVarStack)[_iSP_Vars]; }
+//	virtual VarInfo* GetReturnVar() { return &(*m_pVarStack_Base)[_iSP_Vars]; }
+	virtual VarInfo* GetReturnVar() { return m_pVarStack_Pointer; }
 	virtual VarInfo* GetStackVar(int idx){ return GetStack (idx); }
 
 	virtual void GC()
 	{
 		for (int i = _iSP_Vars + 1; i < _iSP_Vars_Max2; i++)
-			Var_Release(&(*m_pVarStack)[i]);
+			Var_Release(&(*m_pVarStack_Base)[i]);
 		_iSP_Vars_Max2 = _iSP_Vars;
 	}
 
-	inline VarInfo *GetStack(int idx) { return &(*m_pVarStack)[_iSP_Vars + idx]; }
-	inline VarInfo* GetStackFormBottom(int idx) { return &(*m_pVarStack)[idx]; }
+	inline VarInfo *GetStack(int idx) { return m_pVarStack_Pointer + idx; }
+	inline VarInfo* GetStackFromBase(int idx) { return &(*m_pVarStack_Base)[idx]; }
 
 	template<typename T>
-	T read(int idx) { T r; _read(&(*m_pVarStack)[_iSP_Vars + idx], r); return r; }
+	T read(int idx) { T r; _read(m_pVarStack_Pointer + idx, r); return r; }
 
 
 

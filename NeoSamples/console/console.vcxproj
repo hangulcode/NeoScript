@@ -257,6 +257,7 @@
     <ClCompile Include="time_limit.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\..\NeoSource\NeoVMWorker.inl" />
     <None Include="9_times.ns" />
     <None Include="callback.ns" />
     <None Include="coroutine.ns" />

@@ -172,5 +172,8 @@
     <None Include="http.ns">
       <Filter>Samples</Filter>
     </None>
+    <None Include="..\..\NeoSource\NeoVMWorker.inl">
+      <Filter>NeoScript</Filter>
+    </None>
   </ItemGroup>
 </Project>
