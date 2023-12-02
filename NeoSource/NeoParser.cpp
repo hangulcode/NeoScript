@@ -1064,9 +1064,9 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 				iTempVar.Reset();
 				tkType3 = ParseJob(true, iTempVar, NULL, ar, funs, vars);
 				if(iTempVar.IsFun())
-					funs._cur->Push_MOV(ar, NOP_FMOV1, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTempVar._iVar, false);
+					funs._cur->Push_OP2(ar, NOP_FMOV1, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTempVar._iVar, false);
 				else if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
-					funs._cur->Push_MOV(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTempVar._iVar, iTempVar.IsShort());
+					funs._cur->Push_OP2(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTempVar._iVar, iTempVar.IsShort());
 				else
 					funs._cur->Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTempVar.IsHaveShort());
 				if (iTempVar.IsInvalidValue())
@@ -1101,7 +1101,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 		else
 			funs._cur->Push_CallPtr2(ar, iResultStack._iArrayIndex, iParamCount);
 		iResultStack = funs._cur->AllocLocalTempVar();
-		funs._cur->Push_MOV(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
+		funs._cur->Push_OP2(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
 	}
 	else if (tkType1 == TK_SEMICOLON)
 	{
@@ -1595,7 +1595,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 			}
 
 			int iTempOffset3 = funs._cur->AllocLocalTempVar();
-			funs._cur->Push_MOV(ar, NOP_MOV_MINUS, iTempOffset3, iTempOffset._iVar, false);
+			funs._cur->Push_OP2(ar, NOP_MOV_MINUS, iTempOffset3, iTempOffset._iVar, false);
 			iTempOffset = iTempOffset3;
 		}
 	}
@@ -1953,7 +1953,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				if (bReqReturn)
 				{
 					iTempOffset2 = funs._cur->AllocLocalTempVar();
-					funs._cur->Push_MOV(ar, NOP_MOV, iTempOffset2, a._iVar, false);
+					funs._cur->Push_OP2(ar, NOP_MOV, iTempOffset2, a._iVar, false);
 				}
 				funs._cur->Push_OP1(ar, tkType1 == TK_PLUS2 ? NOP_INC : NOP_DEC, a._iVar);
 
@@ -2038,7 +2038,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			{
 				if (a.IsArray() == false)
 				{
-					funs._cur->Push_MOV(ar, NOP_FMOV1, a._iVar, b._iVar, false);
+					funs._cur->Push_OP2(ar, NOP_FMOV1, a._iVar, b._iVar, false);
 				}
 				else
 				{
@@ -2065,7 +2065,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			{
 				if (a.IsArray() == false)
 				{
-					funs._cur->Push_MOV(ar, op, a._iVar, b._iVar, b.IsShort());
+					funs._cur->Push_OP2(ar, op, a._iVar, b._iVar, b.IsShort());
 				}
 				else
 				{
@@ -2432,7 +2432,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	if (Try_ParseIntNum(iTryValue, ar, funs, vars, TK_COMMA) != TK_NONE)
 	{
 		if (IsShort(iTryValue))
-			funs._cur->Push_MOV(ar, NOP_MOV, i_Begin, iTryValue, true);
+			funs._cur->Push_OP2(ar, NOP_MOV, i_Begin, iTryValue, true);
 		else
 			funs._cur->Push_MOVI(ar, i_Begin, iTryValue);
 	}
@@ -2446,7 +2446,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			return false;
 		}
 		if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
-			funs._cur->Push_MOV(ar, NOP_MOV, i_Begin, iTempVar._iVar, false);
+			funs._cur->Push_OP2(ar, NOP_MOV, i_Begin, iTempVar._iVar, false);
 		else
 			funs._cur->Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_Begin, iTempVar.IsHaveShort());
 		//funs._cur->Push_OP(ar, NOP_VERIFY_TYPE, i_Begin, VAR_INT, 0);
@@ -2457,7 +2457,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	if (Try_ParseIntNum(iTryValue, ar, funs, vars, TK_COMMA, TK_R_SMALL) != TK_NONE)
 	{
 		if(IsShort(iTryValue))
-			funs._cur->Push_MOV(ar, NOP_MOV, i_End, iTryValue, true);
+			funs._cur->Push_OP2(ar, NOP_MOV, i_End, iTryValue, true);
 		else
 			funs._cur->Push_MOVI(ar, i_End, iTryValue);
 	}
@@ -2471,7 +2471,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			return false;
 		}
 		if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
-			funs._cur->Push_MOV(ar, NOP_MOV, i_End, iTempVar._iVar, false);
+			funs._cur->Push_OP2(ar, NOP_MOV, i_End, iTempVar._iVar, false);
 		else
 			funs._cur->Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_End, iTempVar.IsHaveShort());
 		//funs._cur->Push_OP(ar, NOP_VERIFY_TYPE, i_End, VAR_INT, 0);
@@ -2482,7 +2482,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	if (Try_ParseIntNum(iTryValue, ar, funs, vars, TK_COMMA, TK_R_SMALL) != TK_NONE)
 	{
 		if (IsShort(iTryValue))
-			funs._cur->Push_MOV(ar, NOP_MOV, i_Step, iTryValue, true);
+			funs._cur->Push_OP2(ar, NOP_MOV, i_Step, iTryValue, true);
 		else
 			funs._cur->Push_MOVI(ar, i_Step, iTryValue);
 	}
@@ -2496,7 +2496,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			return false;
 		}
 		if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
-			funs._cur->Push_MOV(ar, NOP_MOV, i_Step, iTempVar._iVar, false);
+			funs._cur->Push_OP2(ar, NOP_MOV, i_Step, iTempVar._iVar, false);
 		else
 			funs._cur->Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_Step, iTempVar.IsHaveShort());
 		//funs._cur->Push_OP(ar, NOP_VERIFY_TYPE, i_Step, VAR_INT, 0);
@@ -2526,7 +2526,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 
 	//funs._cur->Push_OP1(ar, NOP_VAR_CLEAR, iKey);
-	funs._cur->Push_MOV(ar, NOP_MOV, iKey + 1, iKey + 2, false); // Cur_inter = Begin
+	funs._cur->Push_OP2(ar, NOP_MOV, iKey + 1, iKey + 2, false); // Cur_inter = Begin
 
 	funs._cur->Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
 	SJumpValue jmp1(funs._cur->_code->GetBufferOffset() - (sizeof(short) * 3), funs._cur->_code->GetBufferOffset());
@@ -3493,6 +3493,8 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	SLayerVar* pCurLayer = AddVarsFunction(vars);
 
 //	funs.AddStaticString("system");
+
+//	funs._cur->Push_OP0(ar, NOP_ERROR);
 
 	bool r = ParseFunctionBody(ar, funs, vars);
 	if (true == r)

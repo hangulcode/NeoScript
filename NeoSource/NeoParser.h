@@ -305,7 +305,7 @@ struct SFunctionInfo
 		//_code->Write(&args, sizeof(args));
 		Push_Arg(index, args, 0);
 	}
-	void	Push_MOV(CArchiveRdWC& ar, eNOperation op, short r, short s, bool b2)
+	void	Push_OP2(CArchiveRdWC& ar, eNOperation op, short r, short s, bool b2)
 	{
 		if (op == NOP_MOV)
 		{
@@ -402,7 +402,17 @@ struct SFunctionInfo
 		//_code->Write(&r, sizeof(r));
 		Push_Arg(r, 0, 0);
 	}
-	void	Push_OP2(CArchiveRdWC& ar, eNOperation op, short r, short s, bool b2)
+	void	Push_OP0(CArchiveRdWC& ar, eNOperation op)
+	{
+		AddDebugData(ar);
+		_iLastOPOffset = _code->GetBufferOffset();
+
+		OpType optype = op;//GetOpTypeFromOp(op);
+		_code->Write(&optype, sizeof(optype));
+		//_code->Write(&r, sizeof(r));
+		Push_Arg(0, 0, 0);
+	}
+/*	void	Push_OP2(CArchiveRdWC& ar, eNOperation op, short r, short s, bool b2)
 	{
 		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
@@ -417,7 +427,7 @@ struct SFunctionInfo
 		//_code->Write(&nArray, sizeof(nArray));
 		//_code->Write(&nValue, sizeof(nValue));
 		Push_FlagArg(flg, r, s, 0);
-	}
+	}*/
 	void	Push_RETURN(CArchiveRdWC& ar, short r, bool b1)
 	{
 		OpType optype = GetOpTypeFromOp(NOP_RETURN);

@@ -373,6 +373,8 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			break;
 		case NOP_YIELD:
 			break;
+		case NOP_ERROR:
+			break;
 		default:
 			SetCompileError(arText, "Error OP Type Error (%d)", v.op);
 			argFlag |= GetArgIndexToCode(argFlag, nullptr, nullptr, nullptr);
@@ -917,6 +919,9 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			else
 				SetCompileError(arText, "Error Yield Sub Type Error (%d)", v.n1);
 			break;
+		case NOP_ERROR:
+			OutAsm("Begin\n");
+			break;
 		default:
 			SetCompileError(arText, "Error OP Type Error (%d)", v.op);
 			break;
@@ -959,6 +964,12 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	//	if (fi._funType == FUNT_IMPORT)
 	//		WriteFun(arText, ar, funs, fi, vars, funPos, debugInfo);
 	//}
+
+	SVMOperation op;
+	memset(&op, 0, sizeof(op));
+	op.op =  NOP_ERROR;
+	ar << op;
+
 	for (auto it = funs._funSequence.begin(); it != funs._funSequence.end(); it++)
 	{
 		SFunctionInfo* fi = (*it);
@@ -1037,7 +1048,11 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	if (header.m_iDebugCount)
 	{
 		header.m_iDebugOffset = ar.GetBufferOffset();
+		debug_info di(0, 0);
+		ar.Write(&di, sizeof(debug_info)); // First Error OPeration Insert
+
 		ar.Write(&debugInfo[0], sizeof(debug_info) * header.m_iDebugCount);
+		header.m_iDebugCount += 1;
 	}
 
 	int iSaveOffset2 = ar.GetBufferOffset();
@@ -1060,6 +1075,8 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 	arw.SetBufferOffset(0);
 	arw >> header;
 
+	SVMOperation op;
+	arw >> op;
 
 	std::map<int, std::string> mapFun;
 	for (auto it = funs._funIDs.begin(); it != funs._funIDs.end(); it++)

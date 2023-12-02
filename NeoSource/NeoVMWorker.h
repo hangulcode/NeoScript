@@ -121,6 +121,7 @@ enum eNOperation : OpType
 	NOP_YIELD,
 
 	NOP_NONE,
+	NOP_ERROR,
 	NOP_MAX,
 }; // Operation length
 
@@ -377,7 +378,7 @@ private:
 	u8 *					_pCodeBegin;
 	int						_iCodeLen;
 
-	int					_isErrorOPIndex = -1;
+	int					_isErrorOPIndex = 0;
 
 	bool					_isSetup = false;
 	int						_iRemainSleep = 0;
@@ -387,7 +388,7 @@ private:
 	int m_iCheckOpCount = NEO_DEFAULT_CHECKOP;
 	int m_op_process = 0;
 
-	inline void SetCheckTime() { m_op_process = m_iCheckOpCount; }
+	inline void SetCheckTime() { m_op_process = 0; }
 
 	void	SetCodeData(u8* p, int sz)
 	{
@@ -470,25 +471,25 @@ private:
 	VarInfo _intA1;
 	VarInfo _intA2, _intA3;
 	VarInfo _funA3;
-	NEOS_FORCEINLINE VarInfo* GetVarPtr1Safe(SVMOperation& OP)
+	NEOS_FORCEINLINE VarInfo* GetVarPtr1Safe(const SVMOperation& OP)
 	{
 		if (OP.argFlag & (1 << 5)) { _intA1 = OP.n1; return &_intA1; }
 		if (OP.argFlag & (1 << 2)) return m_pVarStack_Pointer + OP.n1;
 		else return &(*m_pVarGlobal)[OP.n1];
 	}
-	NEOS_FORCEINLINE VarInfo* GetVarPtr1(SVMOperation& OP)
+	NEOS_FORCEINLINE VarInfo* GetVarPtrF1(const SVMOperation& OP)
 	{
 		//if (OP.argFlag & (1 << 5)) { _intA1 = OP.n1; return &_intA1; }
 		if (OP.argFlag & (1 << 2)) return m_pVarStack_Pointer + OP.n1;
 		else return &(*m_pVarGlobal)[OP.n1];
 	}
-	NEOS_FORCEINLINE VarInfo* GetVarPtr2(SVMOperation& OP)
+	NEOS_FORCEINLINE VarInfo* GetVarPtr2(const SVMOperation& OP)
 	{
 		if (OP.argFlag & (1 << 4)) { _intA2._int = OP.n2; return &_intA2; }
 		if (OP.argFlag & (1 << 1)) return m_pVarStack_Pointer + OP.n2;
 		else return &(*m_pVarGlobal)[OP.n2];
 	}
-	NEOS_FORCEINLINE VarInfo* GetVarPtr3(SVMOperation& OP)
+	NEOS_FORCEINLINE VarInfo* GetVarPtr3(const SVMOperation& OP)
 	{
 		if (OP.argFlag & (1 << 3)) { _intA3._int = OP.n3; return &_intA3; }
 		if (OP.argFlag & (1 << 0)) return m_pVarStack_Pointer + OP.n3;

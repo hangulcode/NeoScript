@@ -13,7 +13,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 			return;
 		}
 		pClt->_tbl->Insert(pKey, pValue);
-		break;
+		return;
 	case VAR_LIST:
 		if (pKey->GetType() != VAR_INT)
 		{
@@ -21,11 +21,11 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 			return;
 		}
 		pClt->_lst->SetValue(pKey->_int, pValue);
-		break;
-	default:
-		SetError("Collision Insert Error");
 		return;
+	default:
+		break;
 	}
+	SetError("Collision Insert Error");
 }
 NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, int key, VarInfo* v)
 {
@@ -33,14 +33,14 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, int key, VarInfo* v
 	{
 	case VAR_MAP:
 		pClt->_tbl->Insert(key, v);
-		break;
+		return;
 	case VAR_LIST:
 		pClt->_lst->SetValue(key, v);
-		break;
-	default:
-		SetError("Collision Insert Error");
 		return;
+	default:
+		break;
 	}
+	SetError("Collision Insert Error");
 }
 
 NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, int v)
@@ -49,14 +49,14 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, int 
 	{
 	case VAR_MAP:
 		pClt->_tbl->Insert(pKey, v);
-		break;
+		return;
 	case VAR_LIST:
 		pClt->_lst->SetValue(pKey->_int, v);
-		break;
-	default:
-		SetError("Collision Insert Error");
 		return;
+	default:
+		break;
 	}
+	SetError("Collision Insert Error");
 }
 NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, int key, int v)
 {
@@ -64,14 +64,14 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, int key, int v)
 	{
 	case VAR_MAP:
 		pClt->_tbl->Insert(key, v);
-		break;
+		return;
 	case VAR_LIST:
 		pClt->_lst->SetValue(key, v);
-		break;
-	default:
-		SetError("Collision Insert Error");
 		return;
+	default:
+		break;
 	}
+	SetError("Collision Insert Error");
 }
 NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItem(VarInfo* pTable, VarInfo* pKey)
 {
@@ -112,20 +112,20 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 			Move(pValue, pFind);
 		else
 			Var_Release(pValue);
-		break;
+		return;
 	case VAR_LIST:
 		if (pKey->GetType() != VAR_INT)
 		{
 			SetError("Collision Read Error");
 			return;
 		}
-		if (false == pClt->_lst->GetValue(pKey->_int, pValue))
-			SetError("Collision Read Error");
+		if (true == pClt->_lst->GetValue(pKey->_int, pValue))
+			return;
 		break;
 	default:
-		SetError("Collision Read Error");
-		return;
+		break;
 	}
+	SetError("Collision Read Error");
 }
 
 NEOS_FORCEINLINE void CNeoVMWorker::TableRemove(VarInfo* pTable, VarInfo* pKey)
@@ -592,19 +592,9 @@ NEOS_FORCEINLINE void CNeoVMWorker::Per3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			return;
 		}
 		break;
-	case VAR_FLOAT:
-		break;
-	case VAR_CHAR:
-		break;
-	case VAR_STRING:
-		break;
 	case VAR_MAP:
 		if (Call_MetaTable(v1, g_meta_Per3, r, v1, v2)) 
 			return;
-		break;
-	case VAR_LIST:
-		break;
-	case VAR_SET:
 		break;
 	default:
 		break;
@@ -904,28 +894,30 @@ NEOS_FORCEINLINE void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* 
 	case VAR_INT:
 		switch (op)
 		{
-		case eOP_ADD: Var_SetInt(r, v1->_int + v2); break;
-		case eOP_SUB: Var_SetInt(r, v1->_int - v2); break;
-		case eOP_MUL: Var_SetInt(r, v1->_int * v2); break;
-		case eOP_DIV: Var_SetInt(r, v1->_int / v2); break;
-		case eOP_PER: Var_SetInt(r, v1->_int % v2); break;
-		case eOP_LSH: Var_SetInt(r, v1->_int << v2); break;
-		case eOP_RSH: Var_SetInt(r, v1->_int >> v2); break;
-		case eOP_AND: Var_SetInt(r, v1->_int & v2); break;
-		case eOP__OR: Var_SetInt(r, v1->_int | v2); break;
-		case eOP_XOR: Var_SetInt(r, v1->_int ^ v2); break;
-		default: SetError("operator Error"); break;
+		case eOP_ADD: Var_SetInt(r, v1->_int + v2); return;
+		case eOP_SUB: Var_SetInt(r, v1->_int - v2); return;
+		case eOP_MUL: Var_SetInt(r, v1->_int * v2); return;
+		case eOP_DIV: Var_SetInt(r, v1->_int / v2); return;
+		case eOP_PER: Var_SetInt(r, v1->_int % v2); return;
+		case eOP_LSH: Var_SetInt(r, v1->_int << v2); return;
+		case eOP_RSH: Var_SetInt(r, v1->_int >> v2); return;
+		case eOP_AND: Var_SetInt(r, v1->_int & v2); return;
+		case eOP__OR: Var_SetInt(r, v1->_int | v2); return;
+		case eOP_XOR: Var_SetInt(r, v1->_int ^ v2); return;
+		default: break;
 		}
+		SetError("operator Error");
 		return;
 	case VAR_FLOAT:
 		switch (op)
 		{
-		case eOP_ADD: Var_SetFloat(r, v1->_float + v2); break;
-		case eOP_SUB: Var_SetFloat(r, v1->_float - v2); break;
-		case eOP_MUL: Var_SetFloat(r, v1->_float * v2); break;
-		case eOP_DIV: Var_SetFloat(r, v1->_float / v2); break;
-		default: SetError("operator Error"); break;
+		case eOP_ADD: Var_SetFloat(r, v1->_float + v2); return;
+		case eOP_SUB: Var_SetFloat(r, v1->_float - v2); return;
+		case eOP_MUL: Var_SetFloat(r, v1->_float * v2); return;
+		case eOP_DIV: Var_SetFloat(r, v1->_float / v2); return;
+		default: break;
 		}
+		SetError("operator Error");
 		return;
 	case VAR_STRING:
 		break;
@@ -936,22 +928,23 @@ NEOS_FORCEINLINE void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* 
 		{
 		case eOP_ADD:
 			if (Call_MetaTable(v1, g_meta_Add3, r, v1, &vv2)) return;
-			SetError("unsupported operand + Error"); break;
+			SetError("unsupported operand + Error"); return;
 		case eOP_SUB:
 			if (Call_MetaTable(v1, g_meta_Sub3, r, v1, &vv2)) return;
-			SetError("unsupported operand - Error"); break;
+			SetError("unsupported operand - Error"); return;
 		case eOP_MUL:
 			if (Call_MetaTable(v1, g_meta_Mul3, r, v1, &vv2)) return;
-			SetError("unsupported operand * Error"); break;
+			SetError("unsupported operand * Error"); return;
 		case eOP_DIV:
 			if (Call_MetaTable(v1, g_meta_Div3, r, v1, &vv2)) return;
-			SetError("unsupported operand / Error"); break;
+			SetError("unsupported operand / Error"); return;
 		case eOP_PER:
 			if (Call_MetaTable(v1, g_meta_Per3, r, v1, &vv2)) return;
-			SetError("unsupported operand % Error"); break;
-		default: SetError("operator Error"); break;
+			SetError("unsupported operand % Error"); return;
+		default: break;
 		}
-		break;
+		SetError("operator Error");
+		return;
 	}
 	case VAR_LIST:
 	{
@@ -960,10 +953,11 @@ NEOS_FORCEINLINE void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* 
 		{
 		case eOP_ADD:
 			if (neo_DCalllibs::List_Add(this, r, v1, &vv2)) return;
-			SetError("unsupported operand + Error"); break;
-		default: SetError("operator Error"); break;
+			SetError("unsupported operand + Error"); return;
+		default: break;
 		}
-		break;
+		SetError("operator Error");
+		return;
 	}
 	case VAR_SET:
 	{
@@ -971,12 +965,13 @@ NEOS_FORCEINLINE void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* 
 		switch (op)
 		{
 		case eOP_ADD:
-			SetError("unsupported operand + Error"); break;
+			SetError("unsupported operand + Error"); return;
 		case eOP_SUB:
 			if (neo_DCalllibs::Set_Sub(this, r, v1, &vv2)) return;
-			SetError("unsupported operand - Error"); break;
-		default: SetError("operator Error"); break;
+			SetError("unsupported operand - Error"); return;
+		default: break;
 		}
+		SetError("operator Error");
 		return;
 	}
 	default:
@@ -990,30 +985,32 @@ NEOS_FORCEINLINE void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, int v1, V
 	{
 		switch (op)
 		{
-		case eOP_ADD: Var_SetInt(r, v1 + v2->_int); break;
-		case eOP_SUB: Var_SetInt(r, v1 - v2->_int); break;
-		case eOP_MUL: Var_SetInt(r, v1 * v2->_int); break;
-		case eOP_DIV: Var_SetInt(r, v1 / v2->_int); break;
-		case eOP_PER: Var_SetInt(r, v1 % v2->_int); break;
-		case eOP_LSH: Var_SetInt(r, v1 << v2->_int); break;
-		case eOP_RSH: Var_SetInt(r, v1 >> v2->_int); break;
-		case eOP_AND: Var_SetInt(r, v1 & v2->_int); break;
-		case eOP__OR: Var_SetInt(r, v1 | v2->_int); break;
-		case eOP_XOR: Var_SetInt(r, v1 ^ v2->_int); break;
-		default: SetError("operator Error"); break;
+		case eOP_ADD: Var_SetInt(r, v1 + v2->_int); return;
+		case eOP_SUB: Var_SetInt(r, v1 - v2->_int); return;
+		case eOP_MUL: Var_SetInt(r, v1 * v2->_int); return;
+		case eOP_DIV: Var_SetInt(r, v1 / v2->_int); return;
+		case eOP_PER: Var_SetInt(r, v1 % v2->_int); return;
+		case eOP_LSH: Var_SetInt(r, v1 << v2->_int); return;
+		case eOP_RSH: Var_SetInt(r, v1 >> v2->_int); return;
+		case eOP_AND: Var_SetInt(r, v1 & v2->_int); return;
+		case eOP__OR: Var_SetInt(r, v1 | v2->_int); return;
+		case eOP_XOR: Var_SetInt(r, v1 ^ v2->_int); return;
+		default: break;
 		}
+		SetError("operator Error");
 		return;
 	}
 	else if (v2->GetType() == VAR_FLOAT)
 	{
 		switch (op)
 		{
-		case eOP_ADD: Var_SetFloat(r, v1 + v2->_float); break;
-		case eOP_SUB: Var_SetFloat(r, v1 - v2->_float); break;
-		case eOP_MUL: Var_SetFloat(r, v1 * v2->_float); break;
-		case eOP_DIV: Var_SetFloat(r, v1 / v2->_float); break;
-		default: SetError("operator Error"); break;
+		case eOP_ADD: Var_SetFloat(r, v1 + v2->_float); return;
+		case eOP_SUB: Var_SetFloat(r, v1 - v2->_float); return;
+		case eOP_MUL: Var_SetFloat(r, v1 * v2->_float); return;
+		case eOP_DIV: Var_SetFloat(r, v1 / v2->_float); return;
+		default: break;
 		}
+		SetError("operator Error");
 		return;
 	}
 	SetError("unsupported operand Error");
@@ -1029,10 +1026,10 @@ NEOS_FORCEINLINE void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, int v1, i
 	case eOP_PER: Var_SetInt(r, v1 % v2); return;
 	case eOP_LSH: Var_SetInt(r, v1 << v2); return;
 	case eOP_RSH: Var_SetInt(r, v1 >> v2); return;
-	case eOP_AND: Var_SetInt(r, v1 & v2); break;
-	case eOP__OR: Var_SetInt(r, v1 | v2); break;
-	case eOP_XOR: Var_SetInt(r, v1 ^ v2); break;
-	default: SetError("operator Error"); break;
+	case eOP_AND: Var_SetInt(r, v1 & v2); return;
+	case eOP__OR: Var_SetInt(r, v1 | v2); return;
+	case eOP_XOR: Var_SetInt(r, v1 ^ v2); return;
+	default: break;
 	}
 	SetError("unsupported operand Error");
 }
@@ -1232,8 +1229,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Add2(VarInfo* r, VarInfo* v2)
 		break;
 	case VAR_MAP:
 		if (Call_MetaTable(r, g_meta_Add2, r, r, v2)) 
-		return;
-//		break;
+			return;
 	default:
 		break;
 	}
@@ -1695,9 +1691,6 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 	}
 	SetErrorFormat("error : foreach not support '%s'", GetDataType(pClt->GetType()).c_str());
 	return false;
-
-	//	SetError("foreach table key Error");
-	//	return false;
 }
 
 NEOS_FORCEINLINE void INeoVMWorker::Var_Release(VarInfo* d)
