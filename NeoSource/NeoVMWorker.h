@@ -117,6 +117,7 @@ enum eNOperation : OpType
 	NOP_LIST_REMOVE,
 
 	NOP_VERIFY_TYPE,
+	NOP_CHANGE_INT,
 	NOP_YIELD,
 
 	NOP_NONE,
@@ -353,6 +354,15 @@ enum eNeoDefaultString
 	NDF_MAX
 };
 
+#if defined(_MSC_VER) && !defined(_DEBUG)
+#define NEOS_FORCEINLINE __forceinline
+#elif defined(__GNUC__) && __GNUC__ >= 4 && defined(NDEBUG)
+#define NEOS_FORCEINLINE __attribute__((always_inline))
+#else
+#define NEOS_FORCEINLINE
+#endif
+
+
 struct neo_DCalllibs;
 struct neo_libs;
 class CNeoVMImpl;
@@ -367,7 +377,7 @@ private:
 	u8 *					_pCodeBegin;
 	int						_iCodeLen;
 
-	bool					_isError = false;
+	int					_isErrorOPIndex = -1;
 
 	bool					_isSetup = false;
 	int						_iRemainSleep = 0;
@@ -391,10 +401,10 @@ private:
 	{
 		return _pCodeCurrent++;
 	}
-	int GetDebugLine();
-	inline int GetCodeptr() { return (int)((u8*)_pCodeCurrent - _pCodeBegin); }
-	inline void SetCodePtr(int off) { _pCodeCurrent = (SVMOperation*)(_pCodeBegin + off); }
-	inline void SetCodeIncPtr(int off) { _pCodeCurrent = (SVMOperation*)((u8*)_pCodeCurrent + off); }
+	int GetDebugLine(int iOPIndex);
+	NEOS_FORCEINLINE int GetCodeptr() { return (int)((u8*)_pCodeCurrent - _pCodeBegin); }
+	NEOS_FORCEINLINE void SetCodePtr(int off) { _pCodeCurrent = (SVMOperation*)(_pCodeBegin + off); }
+	NEOS_FORCEINLINE void SetCodeIncPtr(int off) { _pCodeCurrent = (SVMOperation*)((u8*)_pCodeCurrent + off); }
 
 	SNeoVMHeader			_header;
 //	u8 *					_pCodePtr = NULL;
@@ -460,34 +470,34 @@ private:
 	VarInfo _intA1;
 	VarInfo _intA2, _intA3;
 	VarInfo _funA3;
-	inline VarInfo* GetVarPtr1Safe(SVMOperation& OP)
+	NEOS_FORCEINLINE VarInfo* GetVarPtr1Safe(SVMOperation& OP)
 	{
 		if (OP.argFlag & (1 << 5)) { _intA1 = OP.n1; return &_intA1; }
 		if (OP.argFlag & (1 << 2)) return m_pVarStack_Pointer + OP.n1;
 		else return &(*m_pVarGlobal)[OP.n1];
 	}
-	inline VarInfo* GetVarPtr1(SVMOperation& OP)
+	NEOS_FORCEINLINE VarInfo* GetVarPtr1(SVMOperation& OP)
 	{
 		//if (OP.argFlag & (1 << 5)) { _intA1 = OP.n1; return &_intA1; }
 		if (OP.argFlag & (1 << 2)) return m_pVarStack_Pointer + OP.n1;
 		else return &(*m_pVarGlobal)[OP.n1];
 	}
-	inline VarInfo* GetVarPtr2(SVMOperation& OP)
+	NEOS_FORCEINLINE VarInfo* GetVarPtr2(SVMOperation& OP)
 	{
 		if (OP.argFlag & (1 << 4)) { _intA2._int = OP.n2; return &_intA2; }
 		if (OP.argFlag & (1 << 1)) return m_pVarStack_Pointer + OP.n2;
 		else return &(*m_pVarGlobal)[OP.n2];
 	}
-	inline VarInfo* GetVarPtr3(SVMOperation& OP)
+	NEOS_FORCEINLINE VarInfo* GetVarPtr3(SVMOperation& OP)
 	{
 		if (OP.argFlag & (1 << 3)) { _intA3._int = OP.n3; return &_intA3; }
 		if (OP.argFlag & (1 << 0)) return m_pVarStack_Pointer + OP.n3;
 		else return &(*m_pVarGlobal)[OP.n3];
 	}
-	inline VarInfo* GetVarPtr_L(short n) { return m_pVarStack_Pointer + n; }
-	inline VarInfo* GetVarPtr_G(short n) { return &(*m_pVarGlobal)[n]; }
+	NEOS_FORCEINLINE VarInfo* GetVarPtr_L(short n) { return m_pVarStack_Pointer + n; }
+	NEOS_FORCEINLINE VarInfo* GetVarPtr_G(short n) { return &(*m_pVarGlobal)[n]; }
 
-	inline void SetStackPointer(short n) { m_pVarStack_Pointer = &(*m_pVarStack_Base)[n]; }
+	NEOS_FORCEINLINE void SetStackPointer(short n) { m_pVarStack_Pointer = &(*m_pVarStack_Base)[n]; }
 public:
 	inline CNeoVMImpl* GetVM() { return (CNeoVMImpl*)_pVM;  }
 	virtual void SetTimeout(int iTimeout, int iCheckOpCount) {
@@ -504,13 +514,13 @@ public:
 	{
 		Move(v1, v2);
 	}
-	inline void Move(VarInfo* v1, VarInfo* v2)
+	NEOS_FORCEINLINE void Move(VarInfo* v1, VarInfo* v2)
 	{
 		if (v1->IsAllocType())
 			Var_Release(v1);
 		INeoVM::Move_DestNoRelease(v1, v2);
 	}
-	inline void MoveI(VarInfo* v1, int v)
+	NEOS_FORCEINLINE void MoveI(VarInfo* v1, int v)
 	{
 		if (v1->IsAllocType())
 			Var_Release(v1);
@@ -522,16 +532,36 @@ public:
 	void Swap(VarInfo* v1, VarInfo* v2);
 private:
 	void MoveMinus(VarInfo* v1, VarInfo* v2);
-	void Add2(eNOperationSub op, VarInfo* r, VarInfo* v2);
-	void Add22(VarInfo* r, VarInfo* v2);
-//	void Add2(eNOperationSub op, VarInfo* r, int v2);
+//	void Add2(eNOperationSub op, VarInfo* r, VarInfo* v2);
+
+	void Add2(VarInfo* r, VarInfo* v2);
+	void Sub2(VarInfo* r, VarInfo* v2);
+	void Mul2(VarInfo* r, VarInfo* v2);
+	void Div2(VarInfo* r, VarInfo* v2);
+	void Per2(VarInfo* r, VarInfo* v2);
+	void LSh2(VarInfo* r, VarInfo* v2);
+	void RSh2(VarInfo* r, VarInfo* v2);
+	void And2(VarInfo* r, VarInfo* v2);
+	void Or2 (VarInfo* r, VarInfo* v2);
+	void Xor2(VarInfo* r, VarInfo* v2);
 
 	void MoveMinusI(VarInfo* v1, int);
 
 	void And(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Or(VarInfo* r, VarInfo* v1, VarInfo* v2);
-	
-	void Add(eNOperationSub op, VarInfo* r, VarInfo* v1, VarInfo* v2);
+
+	void Add3(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	void Sub3(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	void Mul3(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	void Div3(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	void Per3(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	void LSh3(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	void RSh3(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	void And3(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	void Or3(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	void Xor3(VarInfo* r, VarInfo* v1, VarInfo* v2);
+
+//	void Add(eNOperationSub op, VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Add(eNOperationSub op, VarInfo* r, VarInfo* v1, int v2);
 	void Add(eNOperationSub op, VarInfo* r, int v1, VarInfo* v2);
 	void Add(eNOperationSub op, VarInfo* r, int v1, int v2);
@@ -568,31 +598,32 @@ private:
 	VarInfo* GetTableItemValid(VarInfo *pTable, VarInfo *pArray);
 	VarInfo* GetTableItemValid(VarInfo *pTable, int Array);
 
-	void TableAdd2(eNOperationSub op, VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
-	{
-		VarInfo* p = GetTableItemValid(pTable, pArray);
-		if (p) Add2(op, p, pValue);
-	}
-	void TableAdd2(eNOperationSub op, VarInfo *pTable, VarInfo *pArray, int v)
-	{
-		VarInfo* p = GetTableItemValid(pTable, pArray);
-		VarInfo temp(v);
-		if (p) Add2(op, p, &temp);
-	}
-	void TableAdd2(eNOperationSub op, VarInfo *pTable, int Array, VarInfo *pValue)
-	{
-		VarInfo* p = GetTableItemValid(pTable, Array);
-		if (p) Add2(op, p, pValue);
-	}
-	void TableAdd2(eNOperationSub op, VarInfo *pTable, int Array, int v)
-	{
-		VarInfo* p = GetTableItemValid(pTable, Array);
-		VarInfo temp(v);
-		if (p) Add2(op, p, &temp);
-	}
+	//void TableAdd2(eNOperationSub op, VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
+	//{
+	//	VarInfo* p = GetTableItemValid(pTable, pArray);
+	//	if (p) Add2(op, p, pValue);
+	//}
+	//void TableAdd2(eNOperationSub op, VarInfo *pTable, VarInfo *pArray, int v)
+	//{
+	//	VarInfo* p = GetTableItemValid(pTable, pArray);
+	//	VarInfo temp(v);
+	//	if (p) Add2(op, p, &temp);
+	//}
+	//void TableAdd2(eNOperationSub op, VarInfo *pTable, int Array, VarInfo *pValue)
+	//{
+	//	VarInfo* p = GetTableItemValid(pTable, Array);
+	//	if (p) Add2(op, p, pValue);
+	//}
+	//void TableAdd2(eNOperationSub op, VarInfo *pTable, int Array, int v)
+	//{
+	//	VarInfo* p = GetTableItemValid(pTable, Array);
+	//	VarInfo temp(v);
+	//	if (p) Add2(op, p, &temp);
+	//}
 
 
 	bool VerifyType(VarInfo *p, VAR_TYPE t);
+	bool ChangeNumber(VarInfo* p);
 
 
 	//void ClearArgs()
@@ -612,8 +643,8 @@ public:
 		_iSP_Vars_Max2 = _iSP_Vars;
 	}
 
-	inline VarInfo *GetStack(int idx) { return m_pVarStack_Pointer + idx; }
-	inline VarInfo* GetStackFromBase(int idx) { return &(*m_pVarStack_Base)[idx]; }
+	NEOS_FORCEINLINE VarInfo *GetStack(int idx) { return m_pVarStack_Pointer + idx; }
+	NEOS_FORCEINLINE VarInfo* GetStackFromBase(int idx) { return &(*m_pVarStack_Base)[idx]; }
 
 	template<typename T>
 	T read(int idx) { T r; _read(m_pVarStack_Pointer + idx, r); return r; }

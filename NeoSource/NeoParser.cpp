@@ -352,6 +352,7 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_LIST_REMOVE, 2);
 
 	OP_STR1(NOP_VERIFY_TYPE, 2);
+	OP_STR1(NOP_CHANGE_INT, 1);
 	OP_STR1(NOP_YIELD, 1);
 
 	if (blError)
@@ -2448,7 +2449,8 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			funs._cur->Push_MOV(ar, NOP_MOV, i_Begin, iTempVar._iVar, false);
 		else
 			funs._cur->Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_Begin, iTempVar.IsHaveShort());
-		funs._cur->Push_OP(ar, NOP_VERIFY_TYPE, i_Begin, VAR_INT, 0);
+		//funs._cur->Push_OP(ar, NOP_VERIFY_TYPE, i_Begin, VAR_INT, 0);
+		funs._cur->Push_OP(ar, NOP_CHANGE_INT, i_Begin, 0, 0);
 	}
 
 	iTryValue = -1;
@@ -2472,7 +2474,8 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			funs._cur->Push_MOV(ar, NOP_MOV, i_End, iTempVar._iVar, false);
 		else
 			funs._cur->Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_End, iTempVar.IsHaveShort());
-		funs._cur->Push_OP(ar, NOP_VERIFY_TYPE, i_End, VAR_INT, 0);
+		//funs._cur->Push_OP(ar, NOP_VERIFY_TYPE, i_End, VAR_INT, 0);
+		funs._cur->Push_OP(ar, NOP_CHANGE_INT, i_End, 0, 0);
 	}
 
 	iTryValue = -1;
@@ -2496,7 +2499,8 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			funs._cur->Push_MOV(ar, NOP_MOV, i_Step, iTempVar._iVar, false);
 		else
 			funs._cur->Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_Step, iTempVar.IsHaveShort());
-		funs._cur->Push_OP(ar, NOP_VERIFY_TYPE, i_Step, VAR_INT, 0);
+		//funs._cur->Push_OP(ar, NOP_VERIFY_TYPE, i_Step, VAR_INT, 0);
+		funs._cur->Push_OP(ar, NOP_CHANGE_INT, i_Step, 0, 0);
 	}
 
 	/*

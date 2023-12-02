@@ -473,15 +473,15 @@ bool CNeoVMWorker::Init(void* pBuffer, int iSize, int iStackSize)
 	}
 	return true;
 }
-int CNeoVMWorker::GetDebugLine()
+int CNeoVMWorker::GetDebugLine(int iOPIndex)
 {
-	int idx = int((u8*)_pCodeCurrent - _pCodeBegin - 1) / sizeof(SVMOperation);
-	if ((int)_DebugData.size() <= idx || idx < 0) return -1;
-	return _DebugData[idx]._lineseq;
+//	int idx = int((u8*)_pCodeCurrent - _pCodeBegin - 1) / sizeof(SVMOperation);
+	if ((int)_DebugData.size() <= iOPIndex || iOPIndex < 0) return -1;
+	return _DebugData[iOPIndex]._lineseq;
 }
 void CNeoVMWorker::SetError(const char* pErrMsg)
 {
-	_isError = true;
+	_isErrorOPIndex = int((u8*)_pCodeCurrent - _pCodeBegin - 1) / sizeof(SVMOperation);
 	GetVM()->SetError(std::string(pErrMsg));
 }
 void CNeoVMWorker::SetErrorUnsupport(const char* pErrMsg, VarInfo* p)
@@ -590,6 +590,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 	bool blDebugInfo = IsDebugInfo();
 	int _lineseq = -1;
 	u8 flagNum = 0;
+	VarInfo* pVarTemp = nullptr;
 #ifdef _WIN32
 	try
 	{
@@ -607,46 +608,50 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 			case NOP_MOV_MINUS:
 				MoveMinus(GetVarPtr1(OP), GetVarPtr2(OP)); break;
 			case NOP_ADD2:
-				Add22(GetVarPtr1(OP), GetVarPtr2(OP)); break;
+				Add2(GetVarPtr1(OP), GetVarPtr2(OP)); break;
 			case NOP_SUB2:
+				Sub2(GetVarPtr1(OP), GetVarPtr2(OP)); break;
 			case NOP_MUL2:
+				Mul2(GetVarPtr1(OP), GetVarPtr2(OP)); break;
 			case NOP_DIV2:
+				Div2(GetVarPtr1(OP), GetVarPtr2(OP)); break;
 			case NOP_PERSENT2:
+				Per2(GetVarPtr1(OP), GetVarPtr2(OP)); break;
 			case NOP_LSHIFT2:
+				LSh2(GetVarPtr1(OP), GetVarPtr2(OP)); break;
 			case NOP_RSHIFT2:
+				RSh2(GetVarPtr1(OP), GetVarPtr2(OP)); break;
 			case NOP_AND2:
+				And2(GetVarPtr1(OP), GetVarPtr2(OP)); break;
 			case NOP_OR2:
+				Or2(GetVarPtr1(OP), GetVarPtr2(OP)); break;
 			case NOP_XOR2:
-				Add2((eNOperationSub)(OP.op - NOP_ADD2), GetVarPtr1(OP), GetVarPtr2(OP)); break;
-				//switch ((OP.argFlag >> 3) & 0x2)
-				//{
-				//case 0: Add2((eNOperationSub)(OP.op - NOP_ADD2), GetVarPtr1(OP), GetVarPtr2(OP)); break;
-				//case 2: Add2((eNOperationSub)(OP.op - NOP_ADD2), GetVarPtr1(OP), OP.n2); break;
-				//}
-				//break;
+				Xor2(GetVarPtr1(OP), GetVarPtr2(OP)); break;
 
-			case NOP_VAR_CLEAR:
-				Var_Release(GetVarPtr1(OP));
-				break;
-			case NOP_INC:
-				Inc(GetVarPtr1(OP));
-				break;
-			case NOP_DEC:
-				Dec(GetVarPtr1(OP));
-				break;
+			case NOP_VAR_CLEAR: Var_Release(GetVarPtr1(OP)); break;
+			case NOP_INC: Inc(GetVarPtr1(OP)); break;
+			case NOP_DEC: Dec(GetVarPtr1(OP)); break;
 
-			case NOP_ADD3:
-			case NOP_SUB3:
-			case NOP_MUL3:
-			case NOP_DIV3:
-			case NOP_PERSENT3:
-			case NOP_LSHIFT3:
-			case NOP_RSHIFT3:
-			case NOP_AND3:
-			case NOP_OR3:
-			case NOP_XOR3:
-					Add((eNOperationSub)(OP.op - NOP_ADD3), GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
-				break;
+			case NOP_ADD3: 
+				Add3(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
+			case NOP_SUB3: 
+				Sub3(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
+			case NOP_MUL3: 
+				Mul3(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
+			case NOP_DIV3: 
+				Div3(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
+			case NOP_PERSENT3: 
+				Per3(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
+			case NOP_LSHIFT3: 
+				LSh3(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
+			case NOP_RSHIFT3: 
+				RSh3(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
+			case NOP_AND3: 
+				And3(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
+			case NOP_OR3: 
+				Or3(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
+			case NOP_XOR3: 
+				Xor3(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
 
 			case NOP_GREAT:		// >
 				Var_SetBool(GetVarPtr1(OP), CompareGR(GetVarPtr2(OP), GetVarPtr3(OP)));
@@ -872,7 +877,6 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				break;
 			}			
 			case NOP_RETURN:
-//			case NOP_FUNEND:
 				if (OP.n1 == 0 && (OP.argFlag & (1 << 5)) == 0)
 					Var_Release(&(*m_pVarStack_Base)[_iSP_Vars]); // Clear
 				else
@@ -901,29 +905,6 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				SetStackPointer(_iSP_Vars);
 				_iSP_VarsMax = callStack._iSP_VarsMax;
 				break;
-			//case NOP_FUNEND:
-/*				Var_Release(&(*m_pVarStack)[_iSP_Vars]); // Clear
-				if (iBreakingCallStack == (int)m_pCallStack->size())
-				{
-					if (iBreakingCallStack == 0 && IsMainCoroutine(m_pCur) == false)
-					{
-						if (StopCoroutine(true) == true) // Other Coroutine Active (No Stop)
-							break;
-					}
-					_isSetup = false;
-					return true;
-				}
-				iTemp = (int)m_pCallStack->size() - 1;
-				callStack = (*m_pCallStack)[iTemp];
-				m_pCallStack->resize(iTemp);
-
-				if (callStack._pReturnValue)
-					Move(callStack._pReturnValue, &(*m_pVarStack)[_iSP_Vars]);
-
-				SetCodePtr(callStack._iReturnOffset);
-				_iSP_Vars = callStack._iSP_Vars;
-				iSP_VarsMax = callStack._iSP_VarsMax;
-				break;*/
 			case NOP_TABLE_ALLOC:
 				Var_SetTable(GetVarPtr1(OP), GetVM()->TableAlloc(OP.n23));
 				break;
@@ -935,59 +916,39 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				break;
 			case NOP_CLT_MOV:
 				CltInsert(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
-				//switch ((OP.argFlag >> 3) & 0x3)
-				//{
-				//case 0: CltInsert(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
-				//case 1: CltInsert(GetVarPtr1(OP), GetVarPtr2(OP), OP.n3); break;
-				//case 2: CltInsert(GetVarPtr1(OP), OP.n2, GetVarPtr3(OP)); break;
-				//case 3: CltInsert(GetVarPtr1(OP), OP.n2, OP.n3); break;
-				//}
-				break;
 			case NOP_TABLE_ADD2:
+				pVarTemp = GetTableItemValid(GetVarPtr1(OP), GetVarPtr2(OP));
+				if (pVarTemp) Add2(pVarTemp, GetVarPtr3(OP));
+				break;
 			case NOP_TABLE_SUB2:
+				pVarTemp = GetTableItemValid(GetVarPtr1(OP), GetVarPtr2(OP));
+				if (pVarTemp) Sub2(pVarTemp, GetVarPtr3(OP));
+				break;
 			case NOP_TABLE_MUL2:
+				pVarTemp = GetTableItemValid(GetVarPtr1(OP), GetVarPtr2(OP));
+				if (pVarTemp) Mul2(pVarTemp, GetVarPtr3(OP));
+				break;
 			case NOP_TABLE_DIV2:
+				pVarTemp = GetTableItemValid(GetVarPtr1(OP), GetVarPtr2(OP));
+				if (pVarTemp) Div2(pVarTemp, GetVarPtr3(OP));
+				break;
 			case NOP_TABLE_PERSENT2:
-				TableAdd2((eNOperationSub)(OP.op - NOP_TABLE_ADD2), GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
-				//switch ((OP.argFlag >> 3) & 0x3)
-				//{
-				//case 0: TableAdd2((eNOperationSub)(OP.op - NOP_TABLE_ADD2), GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
-				//case 1: TableAdd2((eNOperationSub)(OP.op - NOP_TABLE_ADD2), GetVarPtr1(OP), GetVarPtr2(OP), OP.n3); break;
-				//case 2: TableAdd2((eNOperationSub)(OP.op - NOP_TABLE_ADD2), GetVarPtr1(OP), OP.n2, GetVarPtr3(OP)); break;
-				//case 3: TableAdd2((eNOperationSub)(OP.op - NOP_TABLE_ADD2), GetVarPtr1(OP), OP.n2, OP.n3); break;
-				//}
-				//break;
+				pVarTemp = GetTableItemValid(GetVarPtr1(OP), GetVarPtr2(OP));
+				if (pVarTemp) Per2(pVarTemp, GetVarPtr3(OP));
+				break;
 
 			case NOP_LIST_ALLOC:
 				Var_SetList(GetVarPtr1(OP), GetVM()->ListAlloc(OP.n23));
 				break;
-/*			case NOP_LIST_READ:
-				TableRead(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
-				break;*/
 			case NOP_LIST_REMOVE:
 				TableRemove(GetVarPtr1(OP), GetVarPtr2(OP));
 				break;
-/*			case NOP_LIST_MOV:
-				TableInsert(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
-				break;
-			case NOP_LIST_ADD2:
-				TableAdd2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
-				break;
-			case NOP_LIST_SUB2:
-				TableSub2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
-				break;
-			case NOP_LIST_MUL2:
-				TableMul2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
-				break;
-			case NOP_LIST_DIV2:
-				TableDiv2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
-				break;
-			case NOP_LIST_PERSENT2:
-				TablePer2(GetVarPtr1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
-				break;*/
 
 			case NOP_VERIFY_TYPE:
 				VerifyType(GetVarPtr1(OP), (VAR_TYPE)OP.n2);
+				break;
+			case NOP_CHANGE_INT:
+				ChangeNumber(GetVarPtr1(OP));
 				break;
 			case NOP_YIELD:
 				if (StopCoroutine(false) == false)
@@ -999,15 +960,15 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				SetError("Unknown OP");
 				break;
 			}
-			if (_isError)
+			if (_isErrorOPIndex >= 0)
 			{
-				_isError = false;
+				int idx = _isErrorOPIndex;
+				_isErrorOPIndex = -1;
 				m_pCallStack->clear();
 				_iSP_Vars = 0;
 				SetStackPointer(_iSP_Vars);
 				if(blDebugInfo)
-					_lineseq = GetDebugLine();
-				int idx = int(((u8*)_pCodeCurrent - _pCodeBegin) / 8 - 1);
+					_lineseq = GetDebugLine(idx);
 #ifdef _WIN32
 				sprintf_s(chMsg, _countof(chMsg), "%s : Index(%d), Line (%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
 #else
@@ -1042,8 +1003,9 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 	catch (...)
 	{
 		SetError("Exception");
+		int idx = int((u8*)_pCodeCurrent - _pCodeBegin - 1) / sizeof(SVMOperation);
 		if(blDebugInfo)
-			_lineseq = GetDebugLine();
+			_lineseq = GetDebugLine(idx);
 #ifdef _WIN32
 		sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", GetVM()->_pErrorMsg.c_str(), _lineseq);
 #else
@@ -1302,6 +1264,31 @@ bool CNeoVMWorker::VerifyType(VarInfo *p, VAR_TYPE t)
 	SetError(ch);
 	return false;
 }
+
+bool CNeoVMWorker::ChangeNumber(VarInfo* p)
+{
+	switch(p->GetType())
+	{
+		case VAR_INT:
+			return true;
+		case VAR_FLOAT:
+			p->SetType(VAR_INT);
+			p->_int = (int)p->_float;
+			return true;
+		default:
+			break;
+	}
+	char ch[256];
+#ifdef _WIN32
+	sprintf_s(ch, _countof(ch), "ChangeNumber (%s != number)", GetDataType(p->GetType()).c_str());
+#else
+	sprintf(ch, "ChangeNumber (%s != number)", GetDataType(p->GetType()).c_str());
+#endif
+
+	SetError(ch);
+	return false;
+}
+
 
 std::string GetDataType(VAR_TYPE t)
 {

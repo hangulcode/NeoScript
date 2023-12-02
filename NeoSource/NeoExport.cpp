@@ -367,6 +367,10 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
 			break;
+		case NOP_CHANGE_INT:
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
+			break;
 		case NOP_YIELD:
 			break;
 		default:
@@ -901,6 +905,10 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 		case NOP_VERIFY_TYPE:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("Verify %s %s\n", GetLog(td, v, 1).c_str(), GetDataType((VAR_TYPE)v.n2).c_str());
+			break;
+		case NOP_CHANGE_INT:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
+			OutAsm("Change Number %s\n", GetLog(td, v, 1).c_str());
 			break;
 		case NOP_YIELD:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
