@@ -589,16 +589,34 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 	if(isTimeout)
 		_preClock = clock();
 
-	bool blDebugInfo = IsDebugInfo();
-	int _lineseq = -1;
-	u8 flagNum = 0;
 	VarInfo* pVarTemp = nullptr;
+
 #ifdef _WIN32
 	try
 	{
 #endif
 		while (true)
 		{
+			if (--m_op_process <= 0)
+			{
+				m_op_process = m_iCheckOpCount;
+				if (isTimeout)
+				{
+					t2 = clock() - _preClock;
+					if (t2 >= m_iTimeout || t2 < 0)
+						break;
+				}
+				while (true)
+				{
+					AsyncInfo* p = GetVM()->Pop_AsyncInfo();
+					if (p == nullptr) break;
+					Var_SetBool(GetStackFromBase(_iSP_VarsMax + 1), p->_success);
+					Var_SetStringA(GetStackFromBase(_iSP_VarsMax + 2), p->_resultValue);
+					Call(p->_fun_index, 2); // no no no !!
+					GetVM()->Var_Release(&p->_LockReferance);
+				}
+			}
+
 			const SVMOperation& OP = *GetOP();
 			switch (OP.op)
 			{
@@ -965,6 +983,8 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 					m_pCallStack->clear();
 					_iSP_Vars = 0;
 					SetStackPointer(_iSP_Vars);
+					bool blDebugInfo = IsDebugInfo();
+					int _lineseq = -1;
 					if (blDebugInfo)
 						_lineseq = GetDebugLine(idx);
 	#ifdef _WIN32
@@ -980,34 +1000,18 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 				SetError("Unknown OP");
 				break;
 			}
-			if (--m_op_process <= 0)
-			{
-				m_op_process = m_iCheckOpCount;
-				if (isTimeout)
-				{
-					t2 = clock() - _preClock;
-					if (t2 >= m_iTimeout || t2 < 0)
-						break;
-				}
-				while (true)
-				{
-					AsyncInfo* p = GetVM()->Pop_AsyncInfo();
-					if(p == nullptr) break;
-					Var_SetBool(GetStackFromBase(_iSP_VarsMax + 1), p->_success);
-					Var_SetStringA(GetStackFromBase(_iSP_VarsMax + 2), p->_resultValue);
-					Call(p->_fun_index, 2); // no no no !!
-					GetVM()->Var_Release(&p->_LockReferance);
-				}
-			}
 		}
 #ifdef _WIN32
 	}
 	catch (...)
 	{
-		SetError("Exception");
 		int idx = int((u8*)_pCodeCurrent - _pCodeBegin - 1) / sizeof(SVMOperation);
+		SetError("Exception");
+		bool blDebugInfo = IsDebugInfo();
+		int _lineseq = -1;
 		if(blDebugInfo)
 			_lineseq = GetDebugLine(idx);
+
 #ifdef _WIN32
 		sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", GetVM()->_pErrorMsg.c_str(), _lineseq);
 #else
