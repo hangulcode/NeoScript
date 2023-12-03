@@ -363,6 +363,12 @@ enum eNeoDefaultString
 #define NEOS_FORCEINLINE
 #endif
 
+#ifdef _DEBUG
+	#define NEOS_GLOBAL_VAR(idx) &(*m_pVarGlobal)[idx]
+#else
+	#define NEOS_GLOBAL_VAR(idx) m_pVarGlobal_Pointer + idx
+#endif
+
 
 struct neo_DCalllibs;
 struct neo_libs;
@@ -448,6 +454,7 @@ private:
 	std::vector<SCallStack>* m_pCallStack;
 
 	std::vector<VarInfo>*	m_pVarGlobal;
+	VarInfo* m_pVarGlobal_Pointer;
 
 	std::list< CoroutineInfo*> m_sCoroutines;
 
@@ -475,28 +482,28 @@ private:
 	{
 //		if (OP.argFlag & (1 << 5)) { _intA1 = OP.n1; return &_intA1; }
 		if (OP.argFlag & (1 << 2)) return m_pVarStack_Pointer + OP.n1;
-		else return &(*m_pVarGlobal)[OP.n1];
+		else return NEOS_GLOBAL_VAR(OP.n1);
 	}
 	NEOS_FORCEINLINE VarInfo* GetVarPtrF1(const SVMOperation& OP)
 	{
 		//if (OP.argFlag & (1 << 5)) { _intA1 = OP.n1; return &_intA1; }
 		if (OP.argFlag & (1 << 2)) return m_pVarStack_Pointer + OP.n1;
-		else return &(*m_pVarGlobal)[OP.n1];
+		else return NEOS_GLOBAL_VAR(OP.n1);
 	}
 	NEOS_FORCEINLINE VarInfo* GetVarPtr2(const SVMOperation& OP)
 	{
 //		if (OP.argFlag & (1 << 4)) { _intA2._int = OP.n2; return &_intA2; }
 		if (OP.argFlag & (1 << 1)) return m_pVarStack_Pointer + OP.n2;
-		else return &(*m_pVarGlobal)[OP.n2];
+		else return NEOS_GLOBAL_VAR(OP.n2);
 	}
 	NEOS_FORCEINLINE VarInfo* GetVarPtr3(const SVMOperation& OP)
 	{
 //		if (OP.argFlag & (1 << 3)) { _intA3._int = OP.n3; return &_intA3; }
 		if (OP.argFlag & (1 << 0)) return m_pVarStack_Pointer + OP.n3;
-		else return &(*m_pVarGlobal)[OP.n3];
+		else return NEOS_GLOBAL_VAR(OP.n3);
 	}
 	NEOS_FORCEINLINE VarInfo* GetVarPtr_L(short n) { return m_pVarStack_Pointer + n; }
-	NEOS_FORCEINLINE VarInfo* GetVarPtr_G(short n) { return &(*m_pVarGlobal)[n]; }
+	NEOS_FORCEINLINE VarInfo* GetVarPtr_G(short n) { return NEOS_GLOBAL_VAR(n); }
 
 	NEOS_FORCEINLINE void SetStackPointer(short n) { m_pVarStack_Pointer = &(*m_pVarStack_Base)[n]; }
 public:

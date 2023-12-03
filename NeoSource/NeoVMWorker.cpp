@@ -39,6 +39,7 @@ CNeoVMWorker::CNeoVMWorker(INeoVM* pVM, u32 id, int iStackSize)
 	_idWorker = id;
 	//SetCodeData(pVM->_pCodePtr, pVM->_iCodeLen);
 	m_pVarGlobal = &m_sVarGlobal;
+	m_pVarGlobal_Pointer = nullptr;
 
 	m_pCur = &m_sDefault;
 	m_pCur->_state = COROUTINE_STATE_RUNNING;
@@ -61,6 +62,7 @@ CNeoVMWorker::~CNeoVMWorker()
 	for (int i = 0; i < (int)m_sVarGlobal.size(); i++)
 		Var_Release(&m_sVarGlobal[i]);
 	m_sVarGlobal.clear();
+	m_pVarGlobal_Pointer = nullptr;
 
 	if (_pCodeBegin != NULL)
 	{
@@ -429,6 +431,9 @@ bool CNeoVMWorker::Init(void* pBuffer, int iSize, int iStackSize)
 	std::string tempStr;
 	int iMaxVar = header._iStaticVarCount + header._iGlobalVarCount;
 	m_sVarGlobal.resize(iMaxVar);
+	if(m_sVarGlobal.empty()) m_pVarGlobal_Pointer = nullptr;
+	else m_pVarGlobal_Pointer = &m_sVarGlobal[0];
+
 	for (int i = 0; i < header._iStaticVarCount; i++)
 	{
 		VarInfo& vi = m_sVarGlobal[i];
