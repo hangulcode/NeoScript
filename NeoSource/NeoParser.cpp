@@ -1,4 +1,4 @@
-#include "NeoParser.h"
+﻿#include "NeoParser.h"
 #include "NeoVM.h"
 #include "NeoExport.h"
 #include "UTFString.h"
@@ -3072,7 +3072,7 @@ bool ParseClass(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	std::string tk1;
 	TK_TYPE tkType1;
-	TK_TYPE r;
+//	TK_TYPE r;
 
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_STRING)

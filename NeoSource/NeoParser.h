@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "NeoArchive.h"
 #include "NeoVMImpl.h"
