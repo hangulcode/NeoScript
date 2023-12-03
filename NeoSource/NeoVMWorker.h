@@ -363,6 +363,7 @@ enum eNeoDefaultString
 #define NEOS_FORCEINLINE
 #endif
 
+
 #ifdef _DEBUG
 	#define NEOS_GLOBAL_VAR(idx) &(*m_pVarGlobal)[idx]
 #else
@@ -471,6 +472,8 @@ private:
 	virtual bool	Start(int iFunctionID, std::vector<VarInfo>& _args);
 	virtual bool IsWorking();
 	virtual bool	Run(int iBreakingCallStack = 0);
+
+	bool	RunInternal(int iBreakingCallStack);
 
 	bool	StopCoroutine(bool doDead = true);
 	void	DeadCoroutine(CoroutineInfo* pCI);
