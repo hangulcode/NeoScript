@@ -9,7 +9,10 @@ void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 #ifdef _NEO_IMPORTABLE
 bool    FileLoad(const char* pFileName, void*& pBuffer, int& iLen);
 #endif
+
+#if 0
 inline bool	IsShort(int v) { return (-32768 <= v && v <= 32767) ? true : false; }
+#endif
 
 
 template<class T>
@@ -1007,6 +1010,7 @@ TK_TYPE Try_ParseIntNum(int& iResultInt, CArchiveRdWC& ar, SFunctions& funs, SVa
 			if (tkTypePre == TK_MINUS)
 				num = -num;
 			int inum = (int)num;
+#if 0
 			if (IsShort(inum))
 			{
 				iResultInt = inum;
@@ -1017,9 +1021,7 @@ TK_TYPE Try_ParseIntNum(int& iResultInt, CArchiveRdWC& ar, SFunctions& funs, SVa
 				ar.PushToken(tkType1, tk1);
 				return tkType2;
 			}
-			//ar.PushToken(tkType1, tk1);
-			//return TK_NONE;
-
+#endif
 			iResultInt = inum;
 			tkType2 = GetToken(ar, tk2);
 			if (tkType2 == tkTypeEnd1 || tkType2 == tkTypeEnd2 || tkType2 == tkTypeEnd3)
@@ -1157,20 +1159,14 @@ bool ParseNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArch
 			if (tkTypePre == TK_MINUS)
 				num = -num;
 			int inum = (int)num;
-			//if (bShortRet)
-			//{
-			//	if (IsShort(inum))
-			//	{
-			//		iResultStack = (u16)inum + COMPILE_VAR_MAX;
-			//		return true;
-			//	}
-			//}
+#if 0
 			if (IsShort(inum))
 			{
 				iResultStack = inum;
 				iResultStack._operandType = Data_NS;
 			}
 			else
+#endif
 				iResultStack = funs.AddStaticInt(inum);
 		}
 	}
@@ -1220,14 +1216,6 @@ bool ParseNum2(int& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArchiveR
 			if (tkTypePre == TK_MINUS)
 				num = -num;
 			int inum = (int)num;
-			//if (bShortRet)
-			//{
-			//	if (IsShort(inum))
-			//	{
-			//		iResultStack = (u16)inum + COMPILE_VAR_MAX;
-			//		return true;
-			//	}
-			//}
 			iResultStack = funs.AddStaticInt(inum);
 		}
 	}
@@ -1299,10 +1287,11 @@ TK_TYPE ParseListDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs,
 		{
 			break;
 		}
-
+#if 0
 		if (IsShort(iItemCount))
 			funs._cur->Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iItemCount, iTempOffsetValue._iVar, false, true, iTempOffsetValue.IsShort());
 		else
+#endif
 		{
 			int iTempOffsetKey = funs.AddStaticInt(iItemCount);
 			funs._cur->Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey, iTempOffsetValue._iVar, false, false, iTempOffsetValue.IsShort());
@@ -1399,9 +1388,12 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 		else
 		{
 			iTempOffsetValue = iTempOffsetKey;
-			if(IsShort(++iCurArrayOffset))
+			++iCurArrayOffset;
+#if 0
+			if(IsShort(iCurArrayOffset))
 				funs._cur->Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iCurArrayOffset, iTempOffsetValue._iVar, false, true, iTempOffsetValue.IsShort());
 			else
+#endif
 			{
 				iTempOffsetKey = funs.AddStaticInt(iCurArrayOffset);
 				funs._cur->Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey._iVar, iTempOffsetValue._iVar, false, false, iTempOffsetValue.IsShort());
@@ -2431,9 +2423,11 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	int iTryValue = -1;
 	if (Try_ParseIntNum(iTryValue, ar, funs, vars, TK_COMMA) != TK_NONE)
 	{
+#if 0
 		if (IsShort(iTryValue))
 			funs._cur->Push_OP2(ar, NOP_MOV, i_Begin, iTryValue, true);
 		else
+#endif
 			funs._cur->Push_MOVI(ar, i_Begin, iTryValue);
 	}
 	else
@@ -2456,9 +2450,11 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	iTryValue = -1;
 	if (Try_ParseIntNum(iTryValue, ar, funs, vars, TK_COMMA, TK_R_SMALL) != TK_NONE)
 	{
+#if 0
 		if(IsShort(iTryValue))
 			funs._cur->Push_OP2(ar, NOP_MOV, i_End, iTryValue, true);
 		else
+#endif
 			funs._cur->Push_MOVI(ar, i_End, iTryValue);
 	}
 	else
@@ -2481,9 +2477,11 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	iTryValue = -1;
 	if (Try_ParseIntNum(iTryValue, ar, funs, vars, TK_COMMA, TK_R_SMALL) != TK_NONE)
 	{
+#if 0
 		if (IsShort(iTryValue))
 			funs._cur->Push_OP2(ar, NOP_MOV, i_Step, iTryValue, true);
 		else
+#endif
 			funs._cur->Push_MOVI(ar, i_Step, iTryValue);
 	}
 	else
