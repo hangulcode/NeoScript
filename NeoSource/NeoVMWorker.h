@@ -572,10 +572,9 @@ private:
 	void Or3(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Xor3(VarInfo* r, VarInfo* v1, VarInfo* v2);
 
-//	void Add(eNOperationSub op, VarInfo* r, VarInfo* v1, VarInfo* v2);
-	void Add(eNOperationSub op, VarInfo* r, VarInfo* v1, int v2);
-	void Add(eNOperationSub op, VarInfo* r, int v1, VarInfo* v2);
-	void Add(eNOperationSub op, VarInfo* r, int v1, int v2);
+//	void Add(eNOperationSub op, VarInfo* r, VarInfo* v1, int v2);
+//	void Add(eNOperationSub op, VarInfo* r, int v1, VarInfo* v2);
+//	void Add(eNOperationSub op, VarInfo* r, int v1, int v2);
 
 	void Inc(VarInfo* v1);
 	void Dec(VarInfo* v1);
