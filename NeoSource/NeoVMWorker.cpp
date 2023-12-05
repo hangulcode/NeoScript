@@ -1203,7 +1203,7 @@ VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 	_isSetup = true;
 	return r;
 }
-bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFunObj, const std::string& fname, int n3)
+bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserData, const std::string& fname, int n3)
 {
 	Neo_NativeFunction func = functionPtrNative._func;
 	if (func == NULL)
@@ -1217,7 +1217,7 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFun
 	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1 + n3) // ??????? 이렇게 하면 맞나? 흠...
 		_iSP_Vars_Max2 = _iSP_VarsMax + 1 + n3;
 
-	if ((func)(this, pFunObj, fname, n3) == false)
+	if ((func)(this, pUserData, fname, n3) == false)
 	{
 		SetError("Ptr Call Error");
 		return false;
@@ -1261,6 +1261,72 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFun
 			default:
 				SetError("Coroutine Error 1");
 				break;
+		}
+	}
+
+	return true;
+}
+bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUserData, const std::string& fname, VarInfo* pRet, bool get)
+{
+	Neo_NativeProperty func = functionPtrNative._property;
+	if (func == NULL)
+	{
+		SetError("Ptr Call Error");
+		return false;
+	}
+	int iSave = _iSP_Vars;
+	_iSP_Vars = _iSP_VarsMax;
+	SetStackPointer(_iSP_Vars);
+	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1)
+		_iSP_Vars_Max2 = _iSP_VarsMax + 1;
+
+	if ((func)(this, pUserData, fname, pRet, get) == false)
+	{
+		SetError("Ptr Call Error");
+		return false;
+	}
+
+//	Move(pRet, GetReturnVar());
+
+	int argSP_Vars = _iSP_Vars;
+	_iSP_Vars = iSave;
+	SetStackPointer(_iSP_Vars);
+	if (m_pRegisterActive != NULL)
+	{
+		switch (m_pRegisterActive->_sub_state)
+		{
+		case COROUTINE_SUB_START:
+			StartCoroutione(argSP_Vars, 0);
+			break;
+		case COROUTINE_SUB_CLOSE:
+			switch (m_pRegisterActive->_state)
+			{
+			case COROUTINE_STATE_SUSPENDED:
+				DeadCoroutine(m_pRegisterActive);
+				break;
+			case COROUTINE_STATE_RUNNING:
+				if (m_pCur != m_pRegisterActive)SetError("Coroutine Error 1");
+				else							StopCoroutine(true);
+				break;
+			case COROUTINE_STATE_DEAD:
+				break;
+			case COROUTINE_STATE_NORMAL:
+				DeadCoroutine(m_pRegisterActive);
+				for (auto it = m_sCoroutines.begin(); it != m_sCoroutines.end(); it++)
+				{
+					if ((*it) == m_pRegisterActive)
+					{
+						m_sCoroutines.erase(it);
+						break;
+					}
+				}
+				break;
+			}
+			m_pRegisterActive = NULL;
+			break;
+		default:
+			SetError("Coroutine Error 1");
+			break;
 		}
 	}
 

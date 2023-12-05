@@ -6,9 +6,11 @@ class CNArchive;
 
 struct INeoVMWorker;
 struct FunctionPtr;
+struct VarInfo;
 
 typedef int(*Neo_CFunction) (INeoVMWorker* N, FunctionPtr* pFun, short args);
 typedef bool(*Neo_NativeFunction) (INeoVMWorker* N, void* pUserData, const std::string& fun, short args);
+typedef bool(*Neo_NativeProperty) (INeoVMWorker* N, void* pUserData, const std::string& fun, VarInfo* p, bool get);
 
 #define NEO_DEFAULT_CHECKOP		(500)
 
@@ -23,6 +25,7 @@ struct FunctionPtr
 struct FunctionPtrNative
 {
 	Neo_NativeFunction			_func;
+	Neo_NativeProperty			_property;
 };
 struct NeoFunction
 {
@@ -120,6 +123,10 @@ public:
 			return _bl;
 		return false;
 	}
+
+	bool TableInsertFloat(const std::string& pKey, double value);
+	bool TableFindFloat(const std::string& pKey, double& value);
+
 };
 #pragma pack()
 
@@ -141,10 +148,15 @@ public:
 	virtual void GC() =0;
 	virtual VarInfo* GetReturnVar() =0;
 	virtual VarInfo* GetStackVar(int idx) =0;
+	virtual bool ChangeVarType(VarInfo* p, VAR_TYPE type) =0;
 
 	static void neo_pushcclosureNative(FunctionPtrNative* pOut, Neo_NativeFunction pFun)
 	{
 		pOut->_func = pFun;
+	}
+	static void neo_pushcclosureNative(FunctionPtrNative* pOut, Neo_NativeProperty property)
+	{
+		pOut->_property = property;
 	}
 	static void neo_pushcclosure(FunctionPtr* pOut, Neo_CFunction fn, void* pFun)
 	{
@@ -448,7 +460,7 @@ public:
 	bool Call_TL(); // Time Limit
 	VarInfo* GetVar(const std::string& name);
 
-	static bool	RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFunction func);
+	static bool	RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFunction func, Neo_NativeProperty property);
 
 	virtual u32 CreateWorker(int iStackSize = 50 * 1024) =0;
 	virtual bool ReleaseWorker(u32 id) = 0;

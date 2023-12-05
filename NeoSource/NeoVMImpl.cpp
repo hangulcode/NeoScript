@@ -142,6 +142,7 @@ MapInfo* CNeoVMImpl::TableAlloc(int cnt)
 	pTable->_pUserData = NULL;
 	pTable->_meta = NULL;
 	pTable->_fun._func = NULL;
+	pTable->_fun._property = NULL;
 
 	_sTables[m_sPool_TableInfo._dwLastID] = pTable;
 	if (cnt > 0) pTable->Reserve(cnt);
@@ -164,6 +165,7 @@ void CNeoVMImpl::FreeTable(MapInfo* tbl)
 		tbl->_meta = NULL;
 	}
 	tbl->_fun._func = NULL;
+	tbl->_fun._property = NULL;
 
 	tbl->Free();
 
@@ -228,6 +230,7 @@ SetInfo* CNeoVMImpl::SetAlloc()
 	pSet->_pUserData = NULL;
 	pSet->_meta = NULL;
 	pSet->_fun._func = NULL;
+	pSet->_fun._property = NULL;
 
 	_sSets[m_sPool_SetInfo._dwLastID] = pSet;
 	return pSet;
@@ -248,6 +251,7 @@ void CNeoVMImpl::FreeSet(SetInfo* set)
 		set->_meta = NULL;
 	}
 	set->_fun._func = NULL;
+	set->_fun._property = NULL;
 
 	set->Free();
 

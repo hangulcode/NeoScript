@@ -54,14 +54,15 @@ struct MapInfo : AllocBase
 
 	void Reserve(int sz);
 	VarInfo* Insert(VarInfo* pKey);
-	void Insert(std::string& pKey, VarInfo* pValue);
+	void Insert(const std::string& pKey, VarInfo* pValue);
+	bool Insert(const std::string& pKey, double value);
 	void Insert(VarInfo* pKey, VarInfo* pValue);
 	void Insert(VarInfo* pKey, int v);
 	void Insert(int Key, VarInfo* pValue);
 	void Insert(int Key, int v);
 	void Remove(VarInfo* pKey);
 	VarInfo* Find(VarInfo *pKey);
-	VarInfo* Find(std::string& key);
+	VarInfo* Find(const std::string& key);
 
 	CollectionIterator FirstNode();
 	bool NextNode(CollectionIterator&);

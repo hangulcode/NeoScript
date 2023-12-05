@@ -30,13 +30,16 @@ VarInfo* INeoVM::GetVar(const std::string& name)
 {
 	return ((CNeoVMWorker*)_pMainWorker)->GetVar(name);
 }
-bool	INeoVM::RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFunction func)
+
+bool	INeoVM::RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFunction func, Neo_NativeProperty property)
 {
 	if (p == nullptr || p->GetType() != VAR_MAP) return false;
 
 	MapInfo* pTable = p->_tbl;
 	pTable->_pUserData = pUserData;
-	pTable->_fun = INeoVM::RegisterNative(func);
+	CNeoVMWorker::neo_pushcclosureNative(&pTable->_fun, func);
+	CNeoVMWorker::neo_pushcclosureNative(&pTable->_fun, property);
+
 	return true;
 }
 
@@ -184,3 +187,19 @@ const std::string* INeoVMWorker::PopStlString(VarInfo* V)
 
 	return NULL;
 }
+
+bool VarInfo::TableInsertFloat(const std::string& pKey, double value)
+{
+	if(_type != VAR_MAP) return false;
+	return _tbl->Insert(pKey, value);
+}
+bool VarInfo::TableFindFloat(const std::string& pKey, double& value)
+{
+	if (_type != VAR_MAP) return false;
+	VarInfo* p = _tbl->Find(pKey);
+	if(p == NULL) return false;
+	if(p->GetType() != VAR_FLOAT) return false;
+	value = p->_float;
+	return true;
+}
+

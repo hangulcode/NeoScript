@@ -30,19 +30,55 @@ public:
 
 		return true;
 	}
+	double _x = 0.1f;
+	double _y = 1.0f;
+	double _z = 10.0f;
+	bool PryTransform(INeoVMWorker* pN, VarInfo* pVar, bool get)
+	{
+		if(get)
+		{
+			if(pN->ChangeVarType(pVar, VAR_MAP))
+			{
+				pVar->TableInsertFloat("x", _x);
+				pVar->TableInsertFloat("y", _y);
+				pVar->TableInsertFloat("z", _z);
+			}
+		}
+		else
+		{
+			if(pVar->GetType() == VAR_MAP)
+			{
+				pVar->TableFindFloat("x", _x);
+				pVar->TableFindFloat("y", _y);
+				pVar->TableFindFloat("z", _z);
+			}
+		}
+		return true;
+	}
 };
 
 typedef bool (CA::*TYPE_FUN)(INeoVMWorker* pN, short args);
-std::map<std::string, TYPE_FUN> g_sTablesFun;
+typedef bool (CA::* TYPE_PRY)(INeoVMWorker* pN, VarInfo* pVar, bool get);
+std::map<std::string, TYPE_FUN> g_sTablesFunction;
+std::map<std::string, TYPE_PRY> g_sTablesProperty;
 
 bool Fun(INeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
 {
-	auto it = g_sTablesFun.find(fun);
-	if (it == g_sTablesFun.end())
+	auto it = g_sTablesFunction.find(fun);
+	if (it == g_sTablesFunction.end())
 		return false;
 
 	TYPE_FUN f = (*it).second;
 	return (((CA*)pUserData)->*f)(pN, args);
+}
+bool Property(INeoVMWorker* pN, void* pUserData, const std::string& fun, VarInfo* p, bool get)
+{
+	auto it = g_sTablesProperty.find(fun);
+	if (it == g_sTablesProperty.end())
+		return false;
+
+	TYPE_PRY f = (*it).second;
+	return (((CA*)pUserData)->*f)(pN, p, get);
 }
 
 
@@ -66,10 +102,11 @@ int SAMPLE_map_callback()
 		g_sData = pVM->GetVar("g_sData");
 		if (g_sData != NULL && g_sData->GetType() == VAR_MAP)
 		{
-			if(INeoVM::RegisterTableCallBack(g_sData, pClass, Fun))
+			if(INeoVM::RegisterTableCallBack(g_sData, pClass, Fun, Property))
 			{
-				g_sTablesFun["sum"] = &CA::FunSum;
-				g_sTablesFun["mul"] = &CA::FunMul;
+				g_sTablesFunction["sum"] = &CA::FunSum;
+				g_sTablesFunction["mul"] = &CA::FunMul;
+				g_sTablesProperty["Transform"] = &CA::PryTransform;
 			}
 		}
 
@@ -90,7 +127,7 @@ int SAMPLE_map_callback()
 		INeoVM::ReleaseVM(pVM);
 	}
 	delete[] pFileBuffer;
-	g_sTablesFun.clear();
+	g_sTablesFunction.clear();
 
     return 0;
 }

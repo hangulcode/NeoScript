@@ -590,7 +590,8 @@ private:
 	bool Call_MetaTable2(VarInfo* pTable, std::string&, VarInfo* a, VarInfo* b);
 //	bool Call_MetaTableI(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, int b);
 
-	bool CallNative(FunctionPtrNative functionPtrNative, VarInfo* pFunObj, const std::string& fname, int n3);
+	bool CallNative(FunctionPtrNative functionPtrNative, void* pUserData, const std::string& fname, int n3);
+	bool PropertyNative(FunctionPtrNative functionPtrNative, void* pUserData, const std::string& fname, VarInfo* pRet, bool get);
 
 	static std::string ToString(VarInfo* v1);
 	int ToInt(VarInfo* v1);
@@ -645,6 +646,7 @@ public:
 //	virtual VarInfo* GetReturnVar() { return &(*m_pVarStack_Base)[_iSP_Vars]; }
 	virtual VarInfo* GetReturnVar() { return m_pVarStack_Pointer; }
 	virtual VarInfo* GetStackVar(int idx){ return GetStack (idx); }
+	virtual bool ChangeVarType(VarInfo* p, VAR_TYPE type);
 
 	virtual void GC()
 	{

@@ -386,7 +386,7 @@ VarInfo* MapInfo::Insert(VarInfo* pKey)
 		return &pFindNode->value;
 	}
 }
-void MapInfo::Insert(std::string& Key, VarInfo* pValue)
+void MapInfo::Insert(const std::string& Key, VarInfo* pValue)
 {
 	VarInfo var;
 	var.SetType(VAR_STRING);
@@ -395,6 +395,23 @@ void MapInfo::Insert(std::string& Key, VarInfo* pValue)
 
 	Insert(&var, pValue);
 }
+bool MapInfo::Insert(const std::string& key, double value)
+{
+	VarInfo var;
+	var.SetType(VAR_STRING);
+	var._str = _pVM->StringAlloc(key);
+	VarInfo* pDest = Insert(&var);
+	if (pDest == NULL)
+	{
+		_pVM->FreeString(&var);
+		return false;
+	}
+	_pVM->Var_Release(pDest);
+	pDest->SetType(VAR_FLOAT);
+	pDest->_float = value;
+	return true;
+}
+
 void MapInfo::Insert(VarInfo* pKey, VarInfo* pValue)
 {
 	VarInfo* pDest = Insert(pKey);
@@ -467,7 +484,7 @@ VarInfo* MapInfo::Find(VarInfo *pKey)
 
 	return &pCur->value;
 }
-VarInfo* MapInfo::Find(std::string& key)
+VarInfo* MapInfo::Find(const std::string& key)
 {
 	if (_BucketCapa <= 0)
 		return NULL;

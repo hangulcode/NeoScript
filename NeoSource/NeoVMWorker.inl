@@ -7,13 +7,21 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 	switch (pClt->GetType())
 	{
 	case VAR_MAP:
+	{
 		if (pValue->GetType() == VAR_NONE)
 		{
 			TableRemove(pClt, pKey);
 			return;
 		}
-		pClt->_tbl->Insert(pKey, pValue);
+		MapInfo* tbl = pClt->_tbl;
+		if (tbl->_fun._property)
+		{
+			PropertyNative(tbl->_fun, tbl->_pUserData, pKey->_str->_str, pValue, false);
+		}
+		else
+			tbl->Insert(pKey, pValue);
 		return;
+	}
 	case VAR_LIST:
 		if (pKey->GetType() != VAR_INT)
 		{
@@ -107,12 +115,22 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 	switch (pClt->GetType())
 	{
 	case VAR_MAP:
-		pFind = GetTableItem(pClt, pKey);
-		if (pFind)
-			Move(pValue, pFind);
-		else
-			Var_Release(pValue);
-		return;
+		{
+			MapInfo* tbl = pClt->_tbl;
+			if (tbl->_fun._property)
+			{
+				PropertyNative(tbl->_fun, tbl->_pUserData, pKey->_str->_str, pValue, true);
+			}
+			else
+			{
+				pFind = GetTableItem(pClt, pKey);
+				if (pFind)
+					Move(pValue, pFind);
+				else
+					Var_Release(pValue);
+			}
+			return;
+		}
 	case VAR_LIST:
 		if (pKey->GetType() != VAR_INT)
 		{
@@ -138,6 +156,17 @@ NEOS_FORCEINLINE void CNeoVMWorker::TableRemove(VarInfo* pTable, VarInfo* pKey)
 
 	pTable->_tbl->Remove(pKey);
 }
+
+bool CNeoVMWorker::ChangeVarType(VarInfo* p, VAR_TYPE type)
+{
+	if(type == VAR_MAP)
+	{
+		Var_SetTable(p, GetVM()->TableAlloc());
+		return true;
+	}
+	return false;
+}
+
 
 NEOS_FORCEINLINE void CNeoVMWorker::Swap(VarInfo* v1, VarInfo* v2)
 {
