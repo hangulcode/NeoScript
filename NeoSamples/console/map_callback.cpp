@@ -48,9 +48,9 @@ public:
 		{
 			if(pVar->GetType() == VAR_MAP)
 			{
-				pVar->TableFindFloat("x", _x);
-				pVar->TableFindFloat("y", _y);
-				pVar->TableFindFloat("z", _z);
+				if (false == pVar->TableFindFloat("x", _x)) return false;
+				if (false == pVar->TableFindFloat("y", _y)) return false;
+				if (false == pVar->TableFindFloat("z", _z)) return false;
 			}
 		}
 		return true;
@@ -100,7 +100,7 @@ int SAMPLE_map_callback()
 
 		VarInfo* g_sData;
 		g_sData = pVM->GetVar("g_sData");
-		if (g_sData != NULL && g_sData->GetType() == VAR_MAP)
+		if (g_sData != NULL && pVM->GetMainWorker()->ChangeVarType(g_sData, VAR_MAP))
 		{
 			if(INeoVM::RegisterTableCallBack(g_sData, pClass, Fun, Property))
 			{
