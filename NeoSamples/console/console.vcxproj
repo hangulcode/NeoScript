@@ -164,6 +164,7 @@
     <ClInclude Include="..\..\NeoSource\HttpRequest.h" />
     <ClInclude Include="..\..\NeoSource\Neo.h" />
     <ClInclude Include="..\..\NeoSource\NeoArchive.h" />
+    <ClInclude Include="..\..\NeoSource\NeoConfig.h" />
     <ClInclude Include="..\..\NeoSource\NeoExport.h" />
     <ClInclude Include="..\..\NeoSource\NeoLibDCall.h" />
     <ClInclude Include="..\..\NeoSource\NeoParser.h" />
