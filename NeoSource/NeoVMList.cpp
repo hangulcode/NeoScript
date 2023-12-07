@@ -54,6 +54,15 @@ bool ListInfo::GetValue(int idx, VarInfo* pValue)
 	_pVM->Move(pValue, &_Bucket[idx]);
 	return true;
 }
+
+VarInfo* ListInfo::GetValue(int idx)
+{
+	if (idx < 0 || idx >= _itemCount)
+		return nullptr;
+	return &_Bucket[idx];
+}
+
+
 bool ListInfo::SetValue(int idx, VarInfo* pValue)
 {
 	if (idx < 0 || idx >= _itemCount)
@@ -71,6 +80,17 @@ bool ListInfo::SetValue(int idx, int v)
 	_Bucket[idx]._int = v;
 	return true;
 }
+bool ListInfo::SetValue(int idx, double v)
+{
+	if (idx < 0 || idx >= _itemCount)
+		return false;
+	if (_Bucket[idx].IsAllocType())
+		_pVM->Var_Release(&_Bucket[idx]);
+	_Bucket[idx].SetType(VAR_FLOAT);
+	_Bucket[idx]._float = v;
+	return true;
+}
+
 bool ListInfo::Insert(int idx, VarInfo* pValue)
 {
 	if (idx < 0 || idx > _itemCount)

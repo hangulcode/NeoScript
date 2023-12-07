@@ -646,7 +646,7 @@ public:
 //	virtual VarInfo* GetReturnVar() { return &(*m_pVarStack_Base)[_iSP_Vars]; }
 	virtual VarInfo* GetReturnVar() { return m_pVarStack_Pointer; }
 	virtual VarInfo* GetStackVar(int idx){ return GetStack (idx); }
-	virtual bool ChangeVarType(VarInfo* p, VAR_TYPE type);
+	virtual bool ChangeVarType(VarInfo* p, VAR_TYPE type, int capa);
 
 	virtual void GC()
 	{

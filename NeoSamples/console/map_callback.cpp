@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "../../NeoSource/Neo.h"
 
+std::map<std::string, int> g_sVector3Indexer;
+
 class CA
 {
 public:
@@ -37,20 +39,21 @@ public:
 	{
 		if(get)
 		{
-			if(pN->ChangeVarType(pVar, VAR_MAP))
+			if(pN->ChangeVarType(pVar, VAR_LIST, 3))
 			{
-				pVar->TableInsertFloat("x", _x);
-				pVar->TableInsertFloat("y", _y);
-				pVar->TableInsertFloat("z", _z);
+				pVar->SetListIndexer(&g_sVector3Indexer);
+				pVar->ListInsertFloat(0, _x);
+				pVar->ListInsertFloat(1, _y);
+				pVar->ListInsertFloat(2, _z);
 			}
 		}
 		else
 		{
-			if(pVar->GetType() == VAR_MAP)
+			if(pVar->GetType() == VAR_LIST)
 			{
-				if (false == pVar->TableFindFloat("x", _x)) return false;
-				if (false == pVar->TableFindFloat("y", _y)) return false;
-				if (false == pVar->TableFindFloat("z", _z)) return false;
+				if (false == pVar->ListFindFloat(0, _x)) return false;
+				if (false == pVar->ListFindFloat(1, _y)) return false;
+				if (false == pVar->ListFindFloat(2, _z)) return false;
 			}
 		}
 		return true;
@@ -61,6 +64,7 @@ typedef bool (CA::*TYPE_FUN)(INeoVMWorker* pN, short args);
 typedef bool (CA::* TYPE_PRY)(INeoVMWorker* pN, VarInfo* pVar, bool get);
 std::map<std::string, TYPE_FUN> g_sTablesFunction;
 std::map<std::string, TYPE_PRY> g_sTablesProperty;
+
 
 bool Fun(INeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
 {
@@ -91,6 +95,10 @@ int SAMPLE_map_callback()
 		printf("file read error");
 		return -1;
 	}
+
+	g_sVector3Indexer["x"] = 0;
+	g_sVector3Indexer["y"] = 1;
+	g_sVector3Indexer["z"] = 2;
 
 	std::string err;
 	INeoVM* pVM = INeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);

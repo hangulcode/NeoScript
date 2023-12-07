@@ -21,6 +21,8 @@ struct ListInfo
 
 	int _BucketCapa;
 
+	std::map<std::string, int>* _pIndexer;
+
 	void Free();
 	void Resize(int size);
 	void Reserve(int capa);
@@ -31,8 +33,10 @@ struct ListInfo
 
 	inline int		GetCount() { return _itemCount; }
 	bool GetValue(int idx, VarInfo* pValue);
+	VarInfo* GetValue(int idx);
 	bool SetValue(int idx, VarInfo* pValue);
 	bool SetValue(int idx, int v);
+	bool SetValue(int idx, double v);
 
 	bool Insert(int idx, VarInfo* pValue);
 	bool InsertLast(VarInfo* pValue);

@@ -191,6 +191,7 @@ ListInfo* CNeoVMImpl::ListAlloc(int cnt)
 	pList->_itemCount = 0;
 	pList->_BucketCapa = 0;
 	pList->_pUserData = NULL;
+	pList->_pIndexer = nullptr;
 
 	_sLists[m_sPool_ListInfo._dwLastID] = pList;
 	if (cnt > 0) pList->Resize(cnt);

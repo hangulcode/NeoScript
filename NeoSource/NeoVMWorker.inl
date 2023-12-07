@@ -25,11 +25,22 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 	case VAR_LIST:
 		if (pKey->GetType() != VAR_INT)
 		{
+			if (pClt->_lst->_pIndexer != nullptr && pKey->GetType() == VAR_STRING)
+			{
+				auto it = pClt->_lst->_pIndexer->find(pKey->_str->_str);
+				if(it != pClt->_lst->_pIndexer->end())
+				{
+					if(pClt->_lst->SetValue((*it).second, pValue))
+						return;
+				}
+			}
+
 			SetError("Collision Insert Error");
 			return;
 		}
-		pClt->_lst->SetValue(pKey->_int, pValue);
-		return;
+		if(pClt->_lst->SetValue(pKey->_int, pValue))
+			return;
+		break;
 	default:
 		break;
 	}
@@ -134,6 +145,12 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 	case VAR_LIST:
 		if (pKey->GetType() != VAR_INT)
 		{
+			if(pClt->_lst->_pIndexer != nullptr && pKey->GetType() == VAR_STRING)
+			{
+				auto it = pClt->_lst->_pIndexer->find(pKey->_str->_str);
+				if (true == pClt->_lst->GetValue((*it).second, pValue))
+					return;
+			}
 			SetError("Collision Read Error");
 			return;
 		}
@@ -157,11 +174,16 @@ NEOS_FORCEINLINE void CNeoVMWorker::TableRemove(VarInfo* pTable, VarInfo* pKey)
 	pTable->_tbl->Remove(pKey);
 }
 
-bool CNeoVMWorker::ChangeVarType(VarInfo* p, VAR_TYPE type)
+bool CNeoVMWorker::ChangeVarType(VarInfo* p, VAR_TYPE type, int capa)
 {
 	if(type == VAR_MAP)
 	{
-		Var_SetTable(p, GetVM()->TableAlloc());
+		Var_SetTable(p, GetVM()->TableAlloc(capa));
+		return true;
+	}
+	else if (type == VAR_LIST)
+	{
+		Var_SetList(p, GetVM()->ListAlloc(capa));
 		return true;
 	}
 	return false;

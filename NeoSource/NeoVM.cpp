@@ -203,3 +203,30 @@ bool VarInfo::TableFindFloat(const std::string& pKey, double& value)
 	return true;
 }
 
+bool VarInfo::ListInsertFloat(int idx, double value)
+{
+	if (_type != VAR_LIST) return false;
+	return _lst->SetValue(idx, value);
+}
+bool VarInfo::ListFindFloat(int idx, double& value)
+{
+	VarInfo* p = _lst->GetValue(idx);
+	if(p == nullptr) return false;
+	if (p->GetType() == VAR_INT)
+	{
+		value = p->_int;
+		return true;
+	}
+	else if (p->GetType() == VAR_FLOAT)
+	{
+		value = p->_float;
+		return true;
+	}
+	return false;
+}
+bool VarInfo::SetListIndexer(std::map<std::string, int>* pIndexer)
+{
+	if (_type != VAR_LIST) return false;
+	_lst->_pIndexer = pIndexer;
+	return true;
+}

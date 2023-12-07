@@ -127,6 +127,9 @@ public:
 	bool TableInsertFloat(const std::string& pKey, double value);
 	bool TableFindFloat(const std::string& pKey, double& value);
 
+	bool ListInsertFloat(int idx, double value);
+	bool ListFindFloat(int idx, double& value);
+	bool SetListIndexer(std::map<std::string, int>* pIndexer);
 };
 #pragma pack()
 
@@ -148,7 +151,7 @@ public:
 	virtual void GC() =0;
 	virtual VarInfo* GetReturnVar() =0;
 	virtual VarInfo* GetStackVar(int idx) =0;
-	virtual bool ChangeVarType(VarInfo* p, VAR_TYPE type) =0;
+	virtual bool ChangeVarType(VarInfo* p, VAR_TYPE type, int capa = 0) =0;
 
 	static void neo_pushcclosureNative(FunctionPtrNative* pOut, Neo_NativeFunction pFun)
 	{
