@@ -35,7 +35,7 @@ public:
 	NS_FLOAT _x = 0.1f;
 	NS_FLOAT _y = 1.0f;
 	NS_FLOAT _z = 10.0f;
-	bool PryTransform(INeoVMWorker* pN, VarInfo* pVar, bool get)
+	bool PropertyTransform(INeoVMWorker* pN, VarInfo* pVar, bool get)
 	{
 		if(get)
 		{
@@ -114,7 +114,7 @@ int SAMPLE_map_callback()
 			{
 				g_sTablesFunction["sum"] = &CA::FunSum;
 				g_sTablesFunction["mul"] = &CA::FunMul;
-				g_sTablesProperty["Transform"] = &CA::PryTransform;
+				g_sTablesProperty["Transform"] = &CA::PropertyTransform;
 			}
 		}
 

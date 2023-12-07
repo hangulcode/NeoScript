@@ -1611,7 +1611,7 @@ void INeoVMWorker::Var_SetAsync(VarInfo* d, AsyncInfo* p)
 	++p->_refCount;
 }
 
-NEOS_FORCEINLINE bool INeoVMWorker::GetArg_StlString(int idx, std::string& r)
+bool INeoVMWorker::GetArg_StlString(int idx, std::string& r)
 {
 	VarInfo* p = GetStackVar(idx);
 	if (p == nullptr) return false;
@@ -1628,7 +1628,7 @@ NEOS_FORCEINLINE bool INeoVMWorker::GetArg_StlString(int idx, std::string& r)
 	}
 	return false;
 }
-NEOS_FORCEINLINE bool INeoVMWorker::GetArg_Int(int idx, int& r)
+bool INeoVMWorker::GetArg_Int(int idx, int& r)
 {
 	VarInfo* p = GetStackVar(idx);
 	if (p == nullptr) return false;
@@ -1645,24 +1645,24 @@ NEOS_FORCEINLINE bool INeoVMWorker::GetArg_Int(int idx, int& r)
 	}
 	return false;
 }
-NEOS_FORCEINLINE bool INeoVMWorker::GetArg_Float(int idx, NS_FLOAT& r)
+bool INeoVMWorker::GetArg_Float(int idx, NS_FLOAT& r)
 {
 	VarInfo* p = GetStackVar(idx);
 	if (p == nullptr) return false;
 	switch (p->GetType())
 	{
 	case VAR_INT:
-		r = (float)p->_int;
+		r = (NS_FLOAT)p->_int;
 		return true;
 	case VAR_FLOAT:
-		r = (float)p->_float;
+		r = (NS_FLOAT)p->_float;
 		return true;
 	default:
 		break;
 	}
 	return false;
 }
-NEOS_FORCEINLINE bool INeoVMWorker::GetArg_Bool(int idx, bool& r)
+bool INeoVMWorker::GetArg_Bool(int idx, bool& r)
 {
 	VarInfo* p = GetStackVar(idx);
 	if (p == nullptr) return false;
