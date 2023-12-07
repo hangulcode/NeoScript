@@ -596,6 +596,14 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 #endif
 	return b;
 }
+void CNeoVMWorker::JumpAsyncMsg()
+{
+	int dist = int((u8*)_pCodeCurrent - _pCodeBegin);
+	if (dist < 2 * sizeof(SVMOperation)) // 0 : Error, 1 : Idle(Already?)
+		return;
+	SetCodePtr(sizeof(SVMOperation));
+	_pCodeCurrent->n23 = dist - int(sizeof(SVMOperation) * 2); // Idle
+}
 bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 {
 	if (false == _isSetup)
@@ -619,33 +627,17 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 	int iTemp;
 	char chMsg[256];
 
-	m_op_process = m_iCheckOpCount;
+	int op_process = m_iCheckOpCount;
 	bool isTimeout = (m_iTimeout >= 0);
 	if(isTimeout)
 		_preClock = clock();
 
 	VarInfo* pVarTemp = nullptr;
-
 	while (true)
 	{
-		if (--m_op_process <= 0)
+		if (--op_process <= 0)
 		{
-			m_op_process = m_iCheckOpCount;
-			if (isTimeout)
-			{
-				t2 = clock() - _preClock;
-				if (t2 >= m_iTimeout || t2 < 0)
-					break;
-			}
-			while (true)
-			{
-				AsyncInfo* p = GetVM()->Pop_AsyncInfo();
-				if (p == nullptr) break;
-				Var_SetBool(GetStackFromBase(_iSP_VarsMax + 1), p->_success);
-				Var_SetStringA(GetStackFromBase(_iSP_VarsMax + 2), p->_resultValue);
-				Call(p->_fun_index, 2); // no no no !!
-				GetVM()->Var_Release(&p->_LockReferance);
-			}
+			JumpAsyncMsg();
 		}
 
 		const SVMOperation& OP = *GetOP();
@@ -827,7 +819,10 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 					return true;
 				}
 				else if (r == 2)
-					SetCheckTime();
+				{
+					//SetCheckTime();
+					op_process = 0;
+				}
 			}
 			break;
 
@@ -1004,6 +999,25 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_YIELD:
 			if (StopCoroutine(false) == false)
 				return true;
+			break;
+		case NOP_IDLE:
+			op_process = m_iCheckOpCount;
+			SetCodeIncPtr(OP.n23);
+			if (isTimeout)
+			{
+				t2 = clock() - _preClock;
+				if (t2 >= m_iTimeout || t2 < 0)
+					break;
+			}
+			while (true)
+			{
+				AsyncInfo* p = GetVM()->Pop_AsyncInfo();
+				if (p == nullptr) break;
+				Var_SetBool(GetStackFromBase(_iSP_VarsMax + 1), p->_success);
+				Var_SetStringA(GetStackFromBase(_iSP_VarsMax + 2), p->_resultValue);
+				Call(p->_fun_index, 2); // no no no !!
+				GetVM()->Var_Release(&p->_LockReferance);
+			}
 			break;
 		case NOP_NONE:
 			break;

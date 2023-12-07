@@ -119,6 +119,7 @@ enum eNOperation : OpType
 	NOP_VERIFY_TYPE,
 	NOP_CHANGE_INT,
 	NOP_YIELD,
+	NOP_IDLE,
 
 	NOP_NONE,
 	NOP_ERROR,
@@ -393,9 +394,10 @@ private:
 
 	int m_iTimeout = -1;
 	int m_iCheckOpCount = NEO_DEFAULT_CHECKOP;
-	int m_op_process = 0;
+//	int m_op_process = 0;
 
-	inline void SetCheckTime() { m_op_process = 0; }
+//	inline void SetCheckTime() { m_op_process = 0; }
+	void JumpAsyncMsg();
 
 	void	SetCodeData(u8* p, int sz)
 	{

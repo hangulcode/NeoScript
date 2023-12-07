@@ -969,6 +969,8 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	memset(&op, 0, sizeof(op));
 	op.op =  NOP_ERROR;
 	ar << op;
+	op.op = NOP_IDLE;
+	ar << op;
 
 	for (auto it = funs._funSequence.begin(); it != funs._funSequence.end(); it++)
 	{
@@ -1050,9 +1052,10 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 		header.m_iDebugOffset = ar.GetBufferOffset();
 		debug_info di(0, 0);
 		ar.Write(&di, sizeof(debug_info)); // First Error OPeration Insert
+		ar.Write(&di, sizeof(debug_info)); // Second Idle OPeration Insert
 
 		ar.Write(&debugInfo[0], sizeof(debug_info) * header.m_iDebugCount);
-		header.m_iDebugCount += 1;
+		header.m_iDebugCount += 2;
 	}
 
 	int iSaveOffset2 = ar.GetBufferOffset();
@@ -1076,7 +1079,8 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 	arw >> header;
 
 	SVMOperation op;
-	arw >> op;
+	arw >> op;	// NOP_ERROR
+	arw >> op;  // NOP_IDLE
 
 	std::map<int, std::string> mapFun;
 	for (auto it = funs._funIDs.begin(); it != funs._funIDs.end(); it++)

@@ -544,7 +544,7 @@ struct neo_libs
 		if (pAsync->_state != ASYNC_PENDING) return true;
 
 		bool ok = pAsync->_event.wait(pAsync->_timeout);
-		pN->SetCheckTime();
+		pN->JumpAsyncMsg();
 		pN->ReturnValue(ok);
 		return true;
 	}

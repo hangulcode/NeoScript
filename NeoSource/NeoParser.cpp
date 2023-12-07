@@ -3492,8 +3492,6 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 
 //	funs.AddStaticString("system");
 
-//	funs._cur->Push_OP0(ar, NOP_ERROR);
-
 	bool r = ParseFunctionBody(ar, funs, vars);
 	if (true == r)
 	{
