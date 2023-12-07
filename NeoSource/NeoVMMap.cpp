@@ -395,7 +395,7 @@ void MapInfo::Insert(const std::string& Key, VarInfo* pValue)
 
 	Insert(&var, pValue);
 }
-bool MapInfo::Insert(const std::string& key, double value)
+bool MapInfo::Insert(const std::string& key, NS_FLOAT value)
 {
 	VarInfo var;
 	var.SetType(VAR_STRING);

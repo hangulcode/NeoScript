@@ -36,7 +36,7 @@ struct ListInfo
 	VarInfo* GetValue(int idx);
 	bool SetValue(int idx, VarInfo* pValue);
 	bool SetValue(int idx, int v);
-	bool SetValue(int idx, double v);
+	bool SetValue(int idx, NS_FLOAT v);
 
 	bool Insert(int idx, VarInfo* pValue);
 	bool InsertLast(VarInfo* pValue);

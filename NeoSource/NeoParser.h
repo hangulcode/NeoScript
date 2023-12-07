@@ -797,7 +797,7 @@ struct SFunctions
 		}
 		VarInfo v;
 		v.SetType(VAR_FLOAT);
-		v._float = num;
+		v._float = (NS_FLOAT)num;
 
 		int idx = (int)_staticVars.size() + COMPILE_STATIC_VAR_BEGIN;
 		_staticVars.push_back(v);

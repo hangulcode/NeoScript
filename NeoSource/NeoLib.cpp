@@ -217,7 +217,7 @@ struct neo_libs
 	{
 		if (args != 1) return false;
 
-		double v = pN->read<double>(1);
+		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::abs(v));
 		return true;
 	}
@@ -225,7 +225,7 @@ struct neo_libs
 	{
 		if (args != 1) return false;
 
-		double v = pN->read<double>(1);
+		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::acos(v));
 		return true;
 	}
@@ -233,7 +233,7 @@ struct neo_libs
 	{
 		if (args != 1) return false;
 
-		double v = pN->read<double>(1);
+		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::asin(v));
 		return true;
 	}
@@ -241,7 +241,7 @@ struct neo_libs
 	{
 		if (args != 1) return false;
 
-		double v = pN->read<double>(1);
+		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::atan(v));
 		return true;
 	}
@@ -249,7 +249,7 @@ struct neo_libs
 	{
 		if (args != 1) return false;
 
-		double v = pN->read<double>(1);
+		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::ceil(v));
 		return true;
 	}
@@ -257,7 +257,7 @@ struct neo_libs
 	{
 		if (args != 1) return false;
 
-		double v = pN->read<double>(1);
+		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::floor(v));
 		return true;
 	}
@@ -265,7 +265,7 @@ struct neo_libs
 	{
 		if (args != 1) return false;
 
-		double v = pN->read<double>(1);
+		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::sin(v));
 		return true;
 	}
@@ -273,7 +273,7 @@ struct neo_libs
 	{
 		if (args != 1) return false;
 
-		double v = pN->read<double>(1);
+		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::cos(v));
 		return true;
 	}
@@ -281,7 +281,7 @@ struct neo_libs
 	{
 		if (args != 1) return false;
 
-		double v = pN->read<double>(1);
+		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::tan(v));
 		return true;
 	}
@@ -289,7 +289,7 @@ struct neo_libs
 	{
 		if (args != 1) return false;
 
-		double v = pN->read<double>(1);
+		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::log(v));
 		return true;
 	}
@@ -297,7 +297,7 @@ struct neo_libs
 	{
 		if (args != 1) return false;
 
-		double v = pN->read<double>(1);
+		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::log10(v));
 		return true;
 	}
@@ -305,8 +305,8 @@ struct neo_libs
 	{
 		if (args != 2) return false;
 
-		double v1 = pN->read<double>(1);
-		double v2 = pN->read<double>(2);
+		NS_FLOAT v1 = pN->read<NS_FLOAT>(1);
+		NS_FLOAT v2 = pN->read<NS_FLOAT>(2);
 		pN->ReturnValue(::pow(v1, v2));
 		return true;
 	}
@@ -314,7 +314,7 @@ struct neo_libs
 	{
 		if (args != 1) return false;
 
-		double radian = pN->read<double>(1);
+		NS_FLOAT radian = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(((radian) * (180.0f / MATH_PI)));
 		return true;
 	}
@@ -322,7 +322,7 @@ struct neo_libs
 	{
 		if (args != 1) return false;
 
-		double degree = pN->read<double>(1);
+		NS_FLOAT degree = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(((degree) * (MATH_PI / 180.0f)));
 		return true;
 	}
@@ -330,7 +330,7 @@ struct neo_libs
 	{
 		if (args != 1) return false;
 
-		double v = pN->read<double>(1);
+		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::sqrt(v));
 		return true;
 	}
@@ -590,7 +590,7 @@ struct neo_libs
 	{
 		if (args != 0) return false;
 
-		pN->ReturnValue(double((double)clock() / (double)CLOCKS_PER_SEC));
+		pN->ReturnValue(NS_FLOAT((double)clock() / (double)CLOCKS_PER_SEC));
 		return true;
 	}
 	static bool sys_load(CNeoVMWorker* pN, VarInfo* pVar, short args)

@@ -323,7 +323,7 @@ struct SVarWrapper
 
 	void SetNone();
 	void SetInt(int v);
-	void SetFloat(double v);
+	void SetFloat(NS_FLOAT v);
 	void SetBool(bool v);
 	void SetString(const char* str);
 //	void SetTableFun(FunctionPtrNative fun);
@@ -595,7 +595,7 @@ private:
 
 	static std::string ToString(VarInfo* v1);
 	int ToInt(VarInfo* v1);
-	double ToFloat(VarInfo* v1);
+	NS_FLOAT ToFloat(VarInfo* v1);
 	int ToSize(VarInfo* v1);
 	VarInfo* GetType(VarInfo* v1);
 

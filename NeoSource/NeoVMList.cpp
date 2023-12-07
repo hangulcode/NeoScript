@@ -80,7 +80,7 @@ bool ListInfo::SetValue(int idx, int v)
 	_Bucket[idx]._int = v;
 	return true;
 }
-bool ListInfo::SetValue(int idx, double v)
+bool ListInfo::SetValue(int idx, NS_FLOAT v)
 {
 	if (idx < 0 || idx >= _itemCount)
 		return false;

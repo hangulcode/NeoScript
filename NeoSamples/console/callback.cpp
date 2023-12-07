@@ -1,16 +1,16 @@
 #include "stdafx.h"
 #include "../../NeoSource/Neo.h"
 
-float Mul(float a, float b)
+NS_FLOAT Mul(NS_FLOAT a, NS_FLOAT b)
 {
 	return a * b;
 }
 
 
-float Sample1(NeoFunction fun, float a, float b)
+NS_FLOAT Sample1(NeoFunction fun, NS_FLOAT a, NS_FLOAT b)
 {
-	float r;
-	if(NeoHelper::Call<float>(&r, fun, a, b))
+	NS_FLOAT r;
+	if(NeoHelper::Call<NS_FLOAT>(&r, fun, a, b))
 		return r;
 	return 0;
 }
@@ -37,8 +37,8 @@ int SAMPLE_callback()
 			
 
 		DWORD t1 = GetTickCount();
-		double r;
-		pVM->Call<double>(&r, "Sum", 100, 200);
+		NS_FLOAT r;
+		pVM->Call<NS_FLOAT>(&r, "Sum", 100, 200);
 		DWORD t2 = GetTickCount();
 
 		if (pVM->IsLastErrorMsg())

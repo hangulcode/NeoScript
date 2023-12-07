@@ -41,7 +41,7 @@ enum VAR_TYPE : u8
 	VAR_NONE,
 	VAR_BOOL,
 	VAR_INT,
-	VAR_FLOAT,	// double
+	VAR_FLOAT,	// float or double 
 	VAR_FUN,
 
 	VAR_ITERATOR,
@@ -96,7 +96,7 @@ public:
 		SetInfo* _set;
 		FunctionPtr* _funPtr; // C Native
 		int			_int;
-		double		_float;
+		NS_FLOAT	_float;
 		int			_fun_index;
 		INeoVMWorker* _module;
 		AsyncInfo*	_async;
@@ -124,11 +124,11 @@ public:
 		return false;
 	}
 
-	bool TableInsertFloat(const std::string& pKey, double value);
-	bool TableFindFloat(const std::string& pKey, double& value);
+	bool TableInsertFloat(const std::string& pKey, NS_FLOAT value);
+	bool TableFindFloat(const std::string& pKey, NS_FLOAT& value);
 
-	bool ListInsertFloat(int idx, double value);
-	bool ListFindFloat(int idx, double& value);
+	bool ListInsertFloat(int idx, NS_FLOAT value);
+	bool ListFindFloat(int idx, NS_FLOAT& value);
 	bool SetListIndexer(std::map<std::string, int>* pIndexer);
 };
 #pragma pack()
@@ -179,7 +179,7 @@ public:
 		d._int = v;
 		_args->push_back(d);
 	}
-	void PushFloat(double v)
+	void PushFloat(NS_FLOAT v)
 	{
 		VarInfo d;
 		d.SetType(VAR_FLOAT);
@@ -209,12 +209,12 @@ public:
 		}
 		return -1;
 	}
-	double PopFloat(VarInfo* V)
+	NS_FLOAT PopFloat(VarInfo* V)
 	{
 		switch (V->GetType())
 		{
 		case VAR_INT:
-			return V->_int;
+			return (NS_FLOAT)V->_int;
 		case VAR_FLOAT:
 			return V->_float;
 		default:
@@ -249,8 +249,7 @@ public:
 
 	bool GetArg_StlString(int idx, std::string &r);
 	bool GetArg_Int(int idx, int& r);
-	bool GetArg_Double(int idx, double& r);
-	bool GetArg_Float(int idx, float& r);
+	bool GetArg_Float(int idx, NS_FLOAT& r);
 	bool GetArg_Bool(int idx, bool &r);
 
 	inline void push(char ret) { PushInt(ret); }
@@ -261,8 +260,7 @@ public:
 	inline void push(unsigned long ret) { PushInt(ret); }
 	inline void push(int ret) { PushInt(ret); }
 	inline void push(unsigned int ret) { PushInt(ret); }
-	inline void push(float ret) { PushFloat(ret); }
-	inline void push(double ret) { PushFloat((double)ret); }
+	inline void push(NS_FLOAT ret) { PushFloat(ret); }
 	inline void push(char* ret) { PushString(ret); }
 	inline void push(const char* ret) { PushString(ret); }
 	inline void push(bool ret) { PushBool(ret); }
@@ -281,8 +279,7 @@ public:
 	inline void		_read(VarInfo* V, unsigned long& r) { r = (unsigned long)PopInt(V); }
 	inline void		_read(VarInfo* V, int& r) { r = (int)PopInt(V); }
 	inline void		_read(VarInfo* V, unsigned int& r) { r = (unsigned int)PopInt(V); }
-	inline void		_read(VarInfo* V, float& r) { r = (float)PopFloat(V); }
-	inline void		_read(VarInfo* V, double& r) { r = (double)PopFloat(V); }
+	inline void		_read(VarInfo* V, NS_FLOAT& r) { r = (NS_FLOAT)PopFloat(V); }
 	inline void		_read(VarInfo* V, bool& r) { r = PopBool(V); }
 	inline void		_read(VarInfo* V) {}
 	inline void		_read(VarInfo* V, long long& r) { r = (long long)PopInt(V); }
@@ -291,7 +288,7 @@ public:
 	inline void		_read(VarInfo* V, NeoFunction& r) { r = PopNeoFunction(V); }
 
 	void Var_SetInt(VarInfo* d, int v);
-	void Var_SetFloat(VarInfo* d, double v);
+	void Var_SetFloat(VarInfo* d, NS_FLOAT v);
 	void Var_SetBool(VarInfo* d, bool v);
 	void Var_SetCoroutine(VarInfo* d, CoroutineInfo* p);
 	void Var_SetString(VarInfo* d, const char* str);
@@ -316,8 +313,7 @@ public:
 	inline void	ReturnValue(unsigned long p) { Var_SetInt(GetReturnVar(), p); }
 	inline void	ReturnValue(int p) { Var_SetInt(GetReturnVar(), p); }
 	inline void	ReturnValue(unsigned int p) { Var_SetInt(GetReturnVar(), p); }
-	inline void	ReturnValue(float p) { Var_SetFloat(GetReturnVar(), p); }
-	inline void	ReturnValue(double p) { Var_SetFloat(GetReturnVar(), p); }
+	inline void	ReturnValue(NS_FLOAT p) { Var_SetFloat(GetReturnVar(), p); }
 	inline void	ReturnValue(bool p) { Var_SetBool(GetReturnVar(), p); }
 	inline void	ReturnValue(long long p) { Var_SetInt(GetReturnVar(), (int)p); }
 	inline void	ReturnValue(unsigned long long p) { Var_SetInt(GetReturnVar(), (int)p); }

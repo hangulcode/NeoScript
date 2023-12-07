@@ -13,7 +13,7 @@ void	SetCompileError(const char*	lpszString, ...);
 
 void SVarWrapper::SetNone() { _vmw->Var_SetNone(_var); }
 void SVarWrapper::SetInt(int v) { _vmw->Var_SetInt(_var, v); }
-void SVarWrapper::SetFloat(double v) { _vmw->Var_SetFloat(_var, v); }
+void SVarWrapper::SetFloat(NS_FLOAT v) { _vmw->Var_SetFloat(_var, v); }
 void SVarWrapper::SetBool(bool v) { _vmw->Var_SetBool(_var, v); }
 void SVarWrapper::SetString(const char* str) { _vmw->Var_SetString(_var, str); }
 //void SVarWrapper::SetTableFun(FunctionPtrNative fun) { _vmw->Var_SetTableFun(_var, fun); }
@@ -193,22 +193,22 @@ int CNeoVMWorker::ToInt(VarInfo* v1)
 	}
 	return -1;
 }
-double CNeoVMWorker::ToFloat(VarInfo* v1)
+NS_FLOAT CNeoVMWorker::ToFloat(VarInfo* v1)
 {
 	switch (v1->GetType())
 	{
 	case VAR_NONE:
 		return -1;
 	case VAR_BOOL:
-		return v1->_bl ? 1 : 0;
+		return v1->_bl ? (NS_FLOAT)1 : (NS_FLOAT)0;
 	case VAR_INT:
-		return v1->_int;
+		return (NS_FLOAT)v1->_int;
 	case VAR_FLOAT:
 		return v1->_float;
 	case VAR_CHAR:
-		return atof(v1->_c.c);
+		return (NS_FLOAT)atof(v1->_c.c);
 	case VAR_STRING:
-		return atof(v1->_str->_str.c_str());
+		return (NS_FLOAT)atof(v1->_str->_str.c_str());
 	case VAR_MAP:
 		return -1;
 	default:

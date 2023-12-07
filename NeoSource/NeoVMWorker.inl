@@ -968,7 +968,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Add2(VarInfo* r, VarInfo* v2)
 		else if (v2->GetType() == VAR_FLOAT)
 		{
 			r->SetType(VAR_FLOAT);
-			r->_float = (double)r->_int + v2->_float;
+			r->_float = (NS_FLOAT)r->_int + v2->_float;
 			return;
 		}
 		break;
@@ -1028,7 +1028,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Sub2(VarInfo* r, VarInfo* v2)
 		}
 		else if (v2->GetType() == VAR_FLOAT)
 		{
-			r->_float = (double)r->_int - v2->_float;
+			r->_float = (NS_FLOAT)r->_int - v2->_float;
 			return;
 		}
 		break;
@@ -1069,7 +1069,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Mul2(VarInfo* r, VarInfo* v2)
 		}
 		else if (v2->GetType() == VAR_FLOAT)
 		{
-			r->_float = (double)r->_int * v2->_float;
+			r->_float = (NS_FLOAT)r->_int * v2->_float;
 			return;
 		}
 		break;
@@ -1111,7 +1111,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Div2(VarInfo* r, VarInfo* v2)
 		else if (v2->GetType() == VAR_FLOAT)
 		{
 			r->SetType(VAR_FLOAT);
-			r->_float = (double)r->_int / v2->_float;
+			r->_float = (NS_FLOAT)r->_int / v2->_float;
 			return;
 		}
 		break;
@@ -1493,7 +1493,7 @@ NEOS_FORCEINLINE void INeoVMWorker::Var_SetInt(VarInfo* d, int v)
 	d->_int = v;
 }
 
-NEOS_FORCEINLINE void INeoVMWorker::Var_SetFloat(VarInfo* d, double v)
+NEOS_FORCEINLINE void INeoVMWorker::Var_SetFloat(VarInfo* d, NS_FLOAT v)
 {
 	if (d->GetType() != VAR_FLOAT)
 	{
@@ -1645,24 +1645,7 @@ NEOS_FORCEINLINE bool INeoVMWorker::GetArg_Int(int idx, int& r)
 	}
 	return false;
 }
-bool INeoVMWorker::GetArg_Double(int idx, double& r)
-{
-	VarInfo* p = GetStackVar(idx);
-	if (p == nullptr) return false;
-	switch (p->GetType())
-	{
-	case VAR_INT:
-		r = (double)p->_int;
-		return true;
-	case VAR_FLOAT:
-		r = p->_float;
-		return true;
-	default:
-		break;
-	}
-	return false;
-}
-NEOS_FORCEINLINE bool INeoVMWorker::GetArg_Float(int idx, float& r)
+NEOS_FORCEINLINE bool INeoVMWorker::GetArg_Float(int idx, NS_FLOAT& r)
 {
 	VarInfo* p = GetStackVar(idx);
 	if (p == nullptr) return false;

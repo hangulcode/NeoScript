@@ -55,7 +55,7 @@ struct MapInfo : AllocBase
 	void Reserve(int sz);
 	VarInfo* Insert(VarInfo* pKey);
 	void Insert(const std::string& pKey, VarInfo* pValue);
-	bool Insert(const std::string& pKey, double value);
+	bool Insert(const std::string& pKey, NS_FLOAT value);
 	void Insert(VarInfo* pKey, VarInfo* pValue);
 	void Insert(VarInfo* pKey, int v);
 	void Insert(int Key, VarInfo* pValue);

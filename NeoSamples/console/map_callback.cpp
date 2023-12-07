@@ -11,9 +11,9 @@ public:
 		if (args != 2)
 			return false;
 
-		double v1, v2;
-		if (pN->GetArg_Double(1, v1) == false) return false;
-		if (pN->GetArg_Double(2, v2) == false) return false;
+		NS_FLOAT v1, v2;
+		if (pN->GetArg_Float(1, v1) == false) return false;
+		if (pN->GetArg_Float(2, v2) == false) return false;
 
 		pN->ReturnValue(v1 + v2);
 
@@ -24,17 +24,17 @@ public:
 		if (args != 2)
 			return false;
 
-		double v1, v2;
-		if (pN->GetArg_Double(1, v1) == false) return false;
-		if (pN->GetArg_Double(2, v2) == false) return false;
+		NS_FLOAT v1, v2;
+		if (pN->GetArg_Float(1, v1) == false) return false;
+		if (pN->GetArg_Float(2, v2) == false) return false;
 
 		pN->ReturnValue(v1 * v2);
 
 		return true;
 	}
-	double _x = 0.1f;
-	double _y = 1.0f;
-	double _z = 10.0f;
+	NS_FLOAT _x = 0.1f;
+	NS_FLOAT _y = 1.0f;
+	NS_FLOAT _z = 10.0f;
 	bool PryTransform(INeoVMWorker* pN, VarInfo* pVar, bool get)
 	{
 		if(get)
@@ -119,7 +119,7 @@ int SAMPLE_map_callback()
 		}
 
 		DWORD t1 = GetTickCount();
-		double r;
+		NS_FLOAT r;
 		pVM->Call(&r, "update", 5, 15);
 		DWORD t2 = GetTickCount();
 

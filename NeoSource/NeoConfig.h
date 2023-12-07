@@ -7,6 +7,13 @@ typedef short			s16;
 typedef unsigned int	u32;
 typedef int				s32;
 
+#ifdef NS_SINGLE_PRECISION
+	typedef float		NS_FLOAT;
+#else
+	typedef double		NS_FLOAT;
+#endif
+
+
 #pragma pack(1)
 struct debug_info
 {
