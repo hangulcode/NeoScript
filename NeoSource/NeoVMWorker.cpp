@@ -48,9 +48,9 @@ CNeoVMWorker::CNeoVMWorker(INeoVM* pVM, u32 id, int iStackSize)
 
 	ClearSP();
 
-	_intA1.SetType(VAR_INT);
-	_intA2.SetType(VAR_INT);
-	_intA3.SetType(VAR_INT);
+	//_intA1.SetType(VAR_INT);
+	//_intA2.SetType(VAR_INT);
+	//_intA3.SetType(VAR_INT);
 	_funA3.SetType(VAR_FUN);
 
 	m_pVarStack_Base->resize(iStackSize);
@@ -926,7 +926,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 			if (OP.n1 == 0 && (OP.argFlag & (1 << 5)) == 0)
 				Var_Release(&(*m_pVarStack_Base)[_iSP_Vars]); // Clear
 			else
-				Move(&(*m_pVarStack_Base)[_iSP_Vars], GetVarPtr1Safe(OP));
+				Move(&(*m_pVarStack_Base)[_iSP_Vars], GetVarPtrF1(OP));
 
 			//if (m_sCallStack.empty())
 			if(iBreakingCallStack == (int)m_pCallStack->size())
