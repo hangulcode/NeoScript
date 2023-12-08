@@ -14,7 +14,12 @@ int SAMPLE_time_limit()
 	}
 
 	std::string err;
-	INeoVM* pVM = INeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
+	NeoCompilerParam param(pFileBuffer, iFileLen);
+	param.err = &err;
+	param.putASM = true;
+	param.debug = true;
+
+	INeoVM* pVM = INeoVM::CompileAndLoadVM(param);
 	if (pVM != NULL)
 	{
 		pVM->SetTimeout(-1, 100, 1000); // -1 is main worker

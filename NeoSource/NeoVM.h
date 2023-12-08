@@ -410,6 +410,24 @@ public:
 	virtual bool BindWorkerFunction(const std::string& funName) = 0;
 };
 
+struct NeoCompilerParam
+{
+	const void* pBufferSrc;
+	int iLenSrc;
+	std::string* err = nullptr;
+	bool putASM = false;
+	bool debug = false;
+	bool allowGlobalInitLogic = true;
+	int iStackSize = 50 * 1024;
+//	pFileBuffer, iFileLen, err, true, true;
+
+	NeoCompilerParam(const void* pSrc, int SrcLen)
+	{
+		pBufferSrc = pSrc;
+		iLenSrc = SrcLen;
+	}
+};
+
 struct INeoVM
 {
 protected:
@@ -484,9 +502,9 @@ public:
 
 	static INeoVM* 	CreateVM();
 	static void		ReleaseVM(INeoVM* pVM);
-	static bool		Compile(const void* pBufferSrc, int iLenSrc, CNArchive& arw, std::string& err, bool putASM = false, bool debug = false, bool allowGlobalInitLogic = true);
+	static bool		Compile(CNArchive& arw, const NeoCompilerParam& param);
 
-	static INeoVM*	CompileAndLoadVM(const void* pBufferSrc, int iLenSrc, std::string& err, bool putASM = false, bool debug = false, bool allowGlobalInitLogic = true, int iStackSize = 50 * 1024);
+	static INeoVM*	CompileAndLoadVM(const NeoCompilerParam& param);
 };
 
 };

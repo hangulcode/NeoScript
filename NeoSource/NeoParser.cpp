@@ -3523,31 +3523,31 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	return r;
 }
 
-bool INeoVM::Compile(const void* pBufferSrc, int iLenSrc, CNArchive& arw, std::string& err, bool putASM, bool debug, bool allowGlobalInitLogic)
+bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
 {
 	CArchiveRdWC ar2;
-	ToArchiveRdWC((const char*)pBufferSrc, iLenSrc, ar2);
-	ar2._allowGlobalInitLogic = allowGlobalInitLogic;
-	ar2._debug = debug;
+	ToArchiveRdWC((const char*)param.pBufferSrc, param.iLenSrc, ar2);
+	ar2._allowGlobalInitLogic = param.allowGlobalInitLogic;
+	ar2._debug = param.debug;
 
-	bool b = Parse(ar2, arw, putASM);
-	if(b == false)
-		err = ar2.m_sErrorString;
+	bool b = Parse(ar2, arw, param.putASM);
+	if(b == false && param.err)
+		*(param.err) = ar2.m_sErrorString;
 
 	u16* pBuffer = ar2.GetBuffer();
 	if (pBuffer) delete[] pBuffer;
 
 	return b;
 }
-INeoVM* INeoVM::CompileAndLoadVM(const void* pBufferSrc, int iLenSrc, std::string& err, bool putASM, bool debug, bool allowGlobalInitLogic, int iStackSize)
+INeoVM* INeoVM::CompileAndLoadVM(const NeoCompilerParam& param)
 {
 	CNArchive arCode;
 
-	if (false == Compile(pBufferSrc, iLenSrc, arCode, err, putASM, debug, allowGlobalInitLogic))
+	if (false == Compile(arCode, param))
 	{
 #ifdef _WIN32
-		if(putASM)
-			printf((ANSI_COLOR_RED + err + ANSI_RESET_ALL).c_str());
+		if(param.putASM && param.err != nullptr)
+			printf((ANSI_COLOR_RED + *(param.err) + ANSI_RESET_ALL).c_str());
 #endif
 		return NULL;
 	}
@@ -3556,7 +3556,7 @@ INeoVM* INeoVM::CompileAndLoadVM(const void* pBufferSrc, int iLenSrc, std::strin
 	//	SetCompileError(ar, "Comile Success. Code : %d bytes !!\n\n", arCode.GetBufferOffset());
 
 	INeoVM* pVM = INeoVM::CreateVM();
-	if (pVM->LoadVM(arCode.GetData(), arCode.GetBufferOffset(), iStackSize) == NULL)
+	if (pVM->LoadVM(arCode.GetData(), arCode.GetBufferOffset(), param.iStackSize) == NULL)
 	{
 		INeoVM::ReleaseVM(pVM);
 		return NULL;

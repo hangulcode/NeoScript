@@ -29,7 +29,12 @@ int SAMPLE_callback()
 	}
 
 	std::string err;
-	INeoVM* pVM = INeoVM::CompileAndLoadVM(pFileBuffer, iFileLen, err, true, true);
+	NeoCompilerParam param(pFileBuffer, iFileLen);
+	param.err = &err;
+	param.putASM = true;
+	param.debug = true;
+
+	INeoVM* pVM = INeoVM::CompileAndLoadVM(param);
 	if (pVM != NULL)
 	{
 //		pVM->CallN("Set", NeoHelper::Fun(Mul), NeoHelper::Fun(Sample1));

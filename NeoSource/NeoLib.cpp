@@ -608,7 +608,15 @@ struct neo_libs
 
 		CNArchive arCode;
 		std::string err;
-		if (false == INeoVM::Compile(pArg1->_str->_str.c_str(), (int)pArg1->_str->_str.length(), arCode, err, false, false))
+
+		NeoCompilerParam param(pArg1->_str->_str.c_str(), (int)pArg1->_str->_str.length());
+		param.err = &err;
+		param.putASM = false;
+		param.debug = false;
+
+		INeoVM* pVM = INeoVM::CompileAndLoadVM(param);
+
+		if (false == INeoVM::Compile(arCode, param))
 		{
 			return false;
 		}
