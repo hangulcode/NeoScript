@@ -4,7 +4,8 @@
 #include "NeoTextLoader.h"
 #include "NeoExport.h"
 
-
+namespace NeoScript
+{
 
 void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 
@@ -1155,3 +1156,5 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 
 	return true;
 }
+
+};

@@ -8,6 +8,8 @@
 #include "NeoVMWorker.h"
 #include "NeoVMMap.h"
 
+namespace NeoScript
+{
 
 extern u32 GetHashCode(const std::string& str);
 extern u32 GetHashCode(u8 *buffer, int len);
@@ -580,3 +582,4 @@ void NVM_QuickSort(CNeoVMWorker* pN, int compare, std::vector<VarInfo*>& lst)
 	std::sort(lst.begin(), lst.end(), NeoSortLocal(pN, compare));
 }
 
+};

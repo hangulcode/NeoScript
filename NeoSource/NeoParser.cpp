@@ -3,12 +3,16 @@
 #include "NeoExport.h"
 #include "UTFString.h"
 
-//#define CSTYLE_FOR
-
-void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 #ifdef _NEO_IMPORTABLE
 bool    FileLoad(const char* pFileName, void*& pBuffer, int& iLen);
 #endif
+
+namespace NeoScript
+{
+
+//#define CSTYLE_FOR
+
+void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 
 #if 0
 inline bool	IsShort(int v) { return (-32768 <= v && v <= 32767) ? true : false; }
@@ -3564,3 +3568,5 @@ INeoVM* INeoVM::CompileAndLoadVM(const void* pBufferSrc, int iLenSrc, std::strin
 
 	return pVM;
 }
+
+};

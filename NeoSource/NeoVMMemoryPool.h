@@ -1,8 +1,10 @@
 #pragma once
 
+namespace NeoScript
+{
+
 
 #pragma pack(1)
-
 
 template <typename T, int iBlkSize = 100>
 class CNVMAllocPool
@@ -331,3 +333,5 @@ public:
 };
 
 #pragma pack()
+
+};

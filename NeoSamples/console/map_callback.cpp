@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "../../NeoSource/Neo.h"
 
+using namespace NeoScript;
+
 std::map<std::string, int> g_sVector3Indexer;
 
 class CA

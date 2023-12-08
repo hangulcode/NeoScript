@@ -2,6 +2,10 @@
 
 #include "NeoArchive.h"
 
+namespace NeoScript
+{
+
+
 //	0000 0000 ~ 0000 007F:	 0xxxxxxx
 //	0000 0080 ~ 0000 07FF:	 110xxxxx 10xxxxxx
 //	0000 0800 ~ 0000 FFFF:	 1110xxxx 10xxxxxx 10xxxxxx
@@ -525,3 +529,4 @@ static int UNICODE_ASCII(const wchar_t* _pStr, int iLength, std::string& str)
 }
 };
 
+};

@@ -1,8 +1,7 @@
 #include "stdafx.h"
 #include "../../NeoSource/Neo.h"
 
-
-
+using namespace NeoScript;
 
 int SAMPLE_time_limit()
 {

@@ -1,5 +1,8 @@
 #pragma once
 
+namespace NeoScript
+{
+
 #pragma pack(1)
 struct MapNode
 {
@@ -74,3 +77,4 @@ struct MapInfo : AllocBase
 private:
 };
 
+};

@@ -4,6 +4,9 @@
 #include "NeoVMImpl.h"
 #include "NeoTextLoader.h"
 
+namespace NeoScript
+{
+
 #define INVALID_ERROR_PARSEJOB			(-1)
 
 #define COMPILE_LOCALTMP_VAR_BEGIN		(10000)
@@ -874,3 +877,5 @@ struct SFunctions
 #define ANSI_COLOR_MAGENTA      "\x1b[35m"
 #define ANSI_COLOR_CYAN         "\x1b[36m"
 #define ANSI_COLOR_WHITE        "\x1b[37m"
+
+};

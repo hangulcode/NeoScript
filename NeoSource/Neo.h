@@ -3,6 +3,9 @@
 
 #include "NeoVM.h"
 
+namespace NeoScript
+{
+
 namespace NeoHelper
 {
 	template<typename T>
@@ -210,3 +213,4 @@ namespace NeoHelper
 	}
 };
 
+};

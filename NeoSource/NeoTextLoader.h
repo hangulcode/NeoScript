@@ -2,6 +2,9 @@
 
 #include "NeoConfig.h"
 
+namespace NeoScript
+{
+
 #define FILE_UNICODE_HEADER_LE	u16(0xFEFF)
 #define FILE_UNICODE_HEADER_BE	u16(0xFFFE)
 #define FILE_UTF8_HEADER		u16(0xBBEF)
@@ -213,3 +216,5 @@ void	OutBytes(const u8* pBuffer, int iCount, int iMaxCount);
 
 bool	StringToDouble(double& r, const char *p);
 bool	StringToDoubleLow(double& r, const char *p);
+
+};

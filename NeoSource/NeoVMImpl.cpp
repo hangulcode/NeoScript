@@ -11,6 +11,9 @@
 #endif
 
 
+namespace NeoScript
+{
+
 void CNeoVMImpl::Var_SetString(VarInfo *d, const char* str)
 {
 	std::string s(str);
@@ -567,3 +570,5 @@ bool CNeoVMImpl::UpdateWorker(u32 id)
 	auto pWorker = (*it).second;
 	return pWorker->Run();// iTimeout >= 0, iTimeout, iCheckOpCount);
 }
+
+};

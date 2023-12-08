@@ -8,6 +8,9 @@
 #include "NeoVMWorker.h"
 #include "NeoVMList.h"
 
+namespace NeoScript
+{
+
 void ListInfo::Free()
 {
 	if (_BucketCapa <= 0)
@@ -122,3 +125,5 @@ bool ListInfo::InsertLast(const std::string& str)
 	_pVM->Var_SetStringA(&_Bucket[_itemCount++], str);
 	return true;
 }
+
+};

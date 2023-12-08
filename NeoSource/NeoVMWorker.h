@@ -4,6 +4,10 @@
 #include "NeoConfig.h"
 #include "NeoQueue.h"
 
+namespace NeoScript
+{
+
+
 typedef u8	OpType;
 typedef u8	ArgFlag;
 
@@ -262,13 +266,15 @@ struct ListInfo;
 struct SetInfo;
 struct SetNode;
 
-
+};
 
 #include "NeoVM.h"
 #include "NeoVMMap.h"
 #include "NeoVMSet.h"
 #include "NeoVMList.h"
 
+namespace NeoScript
+{
 
 struct SNeoVMHeader
 {
@@ -699,3 +705,5 @@ public:
 	
 };
 extern std::string GetDataType(VAR_TYPE t);
+
+};

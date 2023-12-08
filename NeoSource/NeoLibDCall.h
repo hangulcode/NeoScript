@@ -1,3 +1,6 @@
+namespace NeoScript
+{
+
 struct neo_DCalllibs
 {
 	static bool List_Add(CNeoVMWorker* pN, VarInfo* r, VarInfo* v1, VarInfo* v2)
@@ -100,4 +103,6 @@ struct neo_DCalllibs
 		}
 		return true;
 	}
+};
+
 };

@@ -7,6 +7,9 @@
 #include "NeoArchive.h"
 #include "UTFString.h"
 
+namespace NeoScript
+{
+
 #define MATH_PI				3.14159265358979323846f // Pi
 
 
@@ -934,3 +937,4 @@ void CNeoVMImpl::InitLib()
 	RegObjLibrary();
 }
 
+};

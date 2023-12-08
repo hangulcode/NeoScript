@@ -4,6 +4,9 @@
 #include <mutex>
 #include <condition_variable>
 
+namespace NeoScript
+{
+
 template<typename T>
 class NeoThreadSafeQueue {
 private:
@@ -84,4 +87,6 @@ public:
 private:
     std::condition_variable _cv;
     std::mutex _mutex;
+};
+
 };

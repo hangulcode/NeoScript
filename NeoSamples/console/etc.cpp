@@ -1,7 +1,7 @@
 #include "stdafx.h"
 #include "../../NeoSource/Neo.h"
 
-
+using namespace NeoScript;
 
 int SAMPLE_etc(const char*pFileName, const char* pFunctionName)
 {

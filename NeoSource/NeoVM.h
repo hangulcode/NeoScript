@@ -2,6 +2,9 @@
 
 #include "NeoConfig.h"
 
+namespace NeoScript
+{
+
 class CNArchive;
 
 struct INeoVMWorker;
@@ -486,3 +489,4 @@ public:
 	static INeoVM*	CompileAndLoadVM(const void* pBufferSrc, int iLenSrc, std::string& err, bool putASM = false, bool debug = false, bool allowGlobalInitLogic = true, int iStackSize = 50 * 1024);
 };
 
+};

@@ -2,6 +2,9 @@
 
 #include "NeoConfig.h"
 
+namespace NeoScript
+{
+
 class CNArchive
 {
 private:
@@ -203,5 +206,7 @@ public:
 
 
 protected:
+
+};
 
 };

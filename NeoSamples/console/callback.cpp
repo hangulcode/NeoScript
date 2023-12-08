@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "../../NeoSource/Neo.h"
 
+using namespace NeoScript;
+
 NS_FLOAT Mul(NS_FLOAT a, NS_FLOAT b)
 {
 	return a * b;

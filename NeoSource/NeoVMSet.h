@@ -1,5 +1,8 @@
 #pragma once
 
+namespace NeoScript
+{
+
 #pragma pack(1)
 struct SetNode
 {
@@ -69,3 +72,4 @@ struct SetInfo : AllocBase
 private:
 };
 
+};

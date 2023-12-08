@@ -7,6 +7,9 @@
 #include "UTFString.h"
 #include "NeoTextLoader.h"
 
+namespace NeoScript
+{
+
 template<class I, class E, class S>
 struct MyCodecvt : std::codecvt<I, E, S>
 {
@@ -244,3 +247,5 @@ void OutBytes(const u8*	pBuffer, int iCount, int iMaxCount)
 	printf(buff);
 #endif
 }
+
+};

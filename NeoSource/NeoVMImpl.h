@@ -7,6 +7,9 @@
 #include "NeoVMMemoryPool.h"
 #include "NeoQueue.h"
 
+namespace NeoScript
+{
+
 struct neo_libs;
 struct neo_DCalllibs;;
 class CNArchive;
@@ -141,3 +144,4 @@ public:
 	virtual bool PCall(int iModule);
 };
 
+};

@@ -8,6 +8,8 @@
 #include "NeoVMWorker.h"
 #include "NeoVMSet.h"
 
+namespace NeoScript
+{
 
 u32 GetHashCode(const std::string& str)
 {
@@ -534,3 +536,5 @@ bool SetInfo::ToList(std::vector<VarInfo*>& lst)
 		return false;
 	return true;
 }
+
+};

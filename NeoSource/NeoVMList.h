@@ -1,9 +1,7 @@
 #pragma once
 
-#pragma pack(1)
-#pragma pack()
-
-
+namespace NeoScript
+{
 
 class CNeoVMImpl;
 class CNeoVMWorker;
@@ -46,3 +44,4 @@ struct ListInfo
 private:
 };
 
+};

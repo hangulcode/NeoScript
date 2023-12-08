@@ -5,6 +5,9 @@
 #include "NeoArchive.h"
 #include "UTFString.h"
 
+namespace NeoScript
+{
+
 INeoVM* 	INeoVM::CreateVM()
 {
 	CNeoVMImpl* p = new CNeoVMImpl();
@@ -230,3 +233,5 @@ bool VarInfo::SetListIndexer(std::map<std::string, int>* pIndexer)
 	_lst->_pIndexer = pIndexer;
 	return true;
 }
+
+};

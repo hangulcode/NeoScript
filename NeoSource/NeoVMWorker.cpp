@@ -9,6 +9,9 @@
 #include "NeoLibDCall.h"
 #include "UTFString.h"
 
+namespace NeoScript
+{
+
 void	SetCompileError(const char*	lpszString, ...);
 
 void SVarWrapper::SetNone() { _vmw->Var_SetNone(_var); }
@@ -1428,3 +1431,5 @@ std::string GetDataType(VAR_TYPE t)
 	}
 	return "unknown";
 }
+
+};
