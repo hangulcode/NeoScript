@@ -394,9 +394,9 @@ CNeoVMImpl::CNeoVMImpl()
 		switch (i)
 		{
 		case NDF_NULL: Var_SetStringA(&m_sDefaultValue[i], "null"); break;
-		case NDF_BOOL: Var_SetStringA(&m_sDefaultValue[i], "bool"); break;
 		case NDF_INT: Var_SetStringA(&m_sDefaultValue[i], "int"); break;
 		case NDF_FLOAT: Var_SetStringA(&m_sDefaultValue[i], "float"); break;
+		case NDF_BOOL: Var_SetStringA(&m_sDefaultValue[i], "bool"); break;
 		case NDF_STRING: Var_SetStringA(&m_sDefaultValue[i], "string"); break;
 		case NDF_TABLE: Var_SetStringA(&m_sDefaultValue[i], "map"); break;
 		case NDF_LIST: Var_SetStringA(&m_sDefaultValue[i], "list"); break;

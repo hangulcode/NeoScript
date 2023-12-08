@@ -225,18 +225,6 @@ NEOS_FORCEINLINE void CNeoVMWorker::And(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
 	{
-	case VAR_BOOL:
-		if (v2->GetType() == VAR_INT)
-		{
-			Var_SetInt(r, (int)v1->_bl & v2->_int);
-			return;
-		}
-		else if (v2->GetType() == VAR_BOOL)
-		{
-			Var_SetBool(r, v1->_bl & v2->_bl);
-			return;
-		}
-		break;
 	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 		{
@@ -250,6 +238,18 @@ NEOS_FORCEINLINE void CNeoVMWorker::And(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		}
 		break;
 	case VAR_FLOAT:
+		break;
+	case VAR_BOOL:
+		if (v2->GetType() == VAR_INT)
+		{
+			Var_SetInt(r, (int)v1->_bl & v2->_int);
+			return;
+		}
+		else if (v2->GetType() == VAR_BOOL)
+		{
+			Var_SetBool(r, v1->_bl & v2->_bl);
+			return;
+		}
 		break;
 	case VAR_STRING:
 		break;
@@ -270,18 +270,6 @@ NEOS_FORCEINLINE void CNeoVMWorker::Or(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
 	{
-	case VAR_BOOL:
-		if (v2->GetType() == VAR_INT)
-		{
-			Var_SetInt(r, (int)v1->_bl | v2->_int);
-			return;
-		}
-		else if (v2->GetType() == VAR_BOOL)
-		{
-			Var_SetBool(r, v1->_bl | v2->_bl);
-			return;
-		}
-		break;
 	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 		{
@@ -295,6 +283,18 @@ NEOS_FORCEINLINE void CNeoVMWorker::Or(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		}
 		break;
 	case VAR_FLOAT:
+		break;
+	case VAR_BOOL:
+		if (v2->GetType() == VAR_INT)
+		{
+			Var_SetInt(r, (int)v1->_bl | v2->_int);
+			return;
+		}
+		else if (v2->GetType() == VAR_BOOL)
+		{
+			Var_SetBool(r, v1->_bl | v2->_bl);
+			return;
+		}
 		break;
 	case VAR_STRING:
 		break;
@@ -853,10 +853,6 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
 		if (v2->GetType() == VAR_NONE)
 			return true;
 		break;
-	case VAR_BOOL:
-		if (v2->GetType() == VAR_BOOL)
-			return v1->_bl == v2->_bl;
-		break;
 	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 			return v1->_int == v2->_int;
@@ -868,6 +864,10 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
 			return v1->_float == v2->_int;
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float == v2->_float;
+		break;
+	case VAR_BOOL:
+		if (v2->GetType() == VAR_BOOL)
+			return v1->_bl == v2->_bl;
 		break;
 	case VAR_CHAR:
 		if (v2->GetType() == VAR_CHAR)

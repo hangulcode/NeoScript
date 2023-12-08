@@ -333,9 +333,9 @@ struct SVarWrapper
 enum eNeoDefaultString
 {
 	NDF_NULL,
-	NDF_BOOL,
 	NDF_INT,
 	NDF_FLOAT,
+	NDF_BOOL,
 	NDF_STRING,
 	NDF_TABLE,
 	NDF_LIST,

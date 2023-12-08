@@ -39,9 +39,9 @@ struct NeoFunction
 enum VAR_TYPE : u8
 {
 	VAR_NONE,
-	VAR_BOOL,
 	VAR_INT,
 	VAR_FLOAT,	// float or double 
+	VAR_BOOL,
 	VAR_FUN,
 
 	VAR_ITERATOR,

@@ -133,8 +133,6 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 	{
 	case VAR_NONE:
 		return "null";
-	case VAR_BOOL:
-		return v1->_bl ? "true" : "false";
 	case VAR_INT:
 #ifdef _WIN32
 		sprintf_s(ch, _countof(ch), "%d", v1->_int);
@@ -149,6 +147,8 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 		sprintf(ch, "%lf", v1->_float);
 #endif
 		return ch;
+	case VAR_BOOL:
+		return v1->_bl ? "true" : "false";
 	case VAR_CHAR:
 		return std::string(v1->_c.c);
 	case VAR_STRING:
@@ -176,12 +176,12 @@ int CNeoVMWorker::ToInt(VarInfo* v1)
 	{
 	case VAR_NONE:
 		return -1;
-	case VAR_BOOL:
-		return v1->_bl ? 1 : 0;
 	case VAR_INT:
 		return v1->_int;
 	case VAR_FLOAT:
 		return (int)v1->_float;
+	case VAR_BOOL:
+		return v1->_bl ? 1 : 0;
 	case VAR_CHAR:
 		return ::atoi(v1->_c.c);
 	case VAR_STRING:
@@ -199,12 +199,12 @@ NS_FLOAT CNeoVMWorker::ToFloat(VarInfo* v1)
 	{
 	case VAR_NONE:
 		return -1;
-	case VAR_BOOL:
-		return v1->_bl ? (NS_FLOAT)1 : (NS_FLOAT)0;
 	case VAR_INT:
 		return (NS_FLOAT)v1->_int;
 	case VAR_FLOAT:
 		return v1->_float;
+	case VAR_BOOL:
+		return v1->_bl ? (NS_FLOAT)1 : (NS_FLOAT)0;
 	case VAR_CHAR:
 		return (NS_FLOAT)atof(v1->_c.c);
 	case VAR_STRING:
@@ -222,11 +222,11 @@ int CNeoVMWorker::ToSize(VarInfo* v1)
 	{
 	case VAR_NONE:
 		return 0;
-	case VAR_BOOL:
-		return 0;
 	case VAR_INT:
 		return 0;
 	case VAR_FLOAT:
+		return 0;
+	case VAR_BOOL:
 		return 0;
 	case VAR_CHAR:
 		return (v1->_c.c[0] == 0) ? 0 : 1;
@@ -245,12 +245,12 @@ VarInfo* CNeoVMWorker::GetType(VarInfo* v1)
 	{
 	case VAR_NONE:
 		return &GetVM()->m_sDefaultValue[NDF_NULL];
-	case VAR_BOOL:
-		return &GetVM()->m_sDefaultValue[NDF_BOOL];
 	case VAR_INT:
 		return &GetVM()->m_sDefaultValue[NDF_INT];
 	case VAR_FLOAT:
 		return &GetVM()->m_sDefaultValue[NDF_FLOAT];
+	case VAR_BOOL:
+		return &GetVM()->m_sDefaultValue[NDF_BOOL];
 	case VAR_FUN:
 		return &GetVM()->m_sDefaultValue[NDF_FUNCTION];
 	case VAR_ITERATOR:
@@ -637,7 +637,14 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 	{
 		if (--op_process <= 0)
 		{
-			JumpAsyncMsg();
+//			JumpAsyncMsg();
+			op_process = m_iCheckOpCount;
+			if (isTimeout)
+			{
+				t2 = clock() - _preClock;
+				if (t2 >= m_iTimeout || t2 < 0)
+					break;
+			}
 		}
 
 		const SVMOperation& OP = *GetOP();
@@ -1001,14 +1008,14 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 				return true;
 			break;
 		case NOP_IDLE:
-			op_process = m_iCheckOpCount;
+//			op_process = m_iCheckOpCount;
 			SetCodeIncPtr(OP.n23);
-			if (isTimeout)
-			{
-				t2 = clock() - _preClock;
-				if (t2 >= m_iTimeout || t2 < 0)
-					break;
-			}
+			//if (isTimeout)
+			//{
+			//	t2 = clock() - _preClock;
+			//	if (t2 >= m_iTimeout || t2 < 0)
+			//		break;
+			//}
 			while (true)
 			{
 				AsyncInfo* p = GetVM()->Pop_AsyncInfo();
@@ -1393,12 +1400,12 @@ std::string GetDataType(VAR_TYPE t)
 	{
 	case VAR_NONE:
 		return "none";
-	case VAR_BOOL:
-		return "bool";
 	case VAR_INT:
 		return "int";
 	case VAR_FLOAT:
 		return "float";
+	case VAR_BOOL:
+		return "bool";
 	case VAR_FUN:
 		return "fun";
 	case VAR_ITERATOR:

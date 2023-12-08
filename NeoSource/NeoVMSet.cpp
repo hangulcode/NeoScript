@@ -32,12 +32,12 @@ u32 GetHashCode(VarInfo *p)
 	{
 	case VAR_NONE:
 		return 0;
-	case VAR_BOOL:
-		return p->_bl;
 	case VAR_INT:
 		return (u32)p->_int;
 	case VAR_FLOAT:
 		return GetHashCode((u8*)&p->_float, sizeof(p->_float));
+	case VAR_BOOL:
+		return p->_bl;
 	case VAR_FUN:
 		return (u32)p->_fun_index;
 		break;
@@ -173,20 +173,6 @@ SetNode* SetBucket::Find(VarInfo* pKey, u32 hash)
 			pCur = pCur->pNext;
 		}
 		break;
-	case VAR_BOOL:
-		{
-			bool b = pKey->_bl;
-			while (pCur)
-			{
-				if (pCur->key.GetType() == VAR_BOOL)
-				{
-					if (pCur->key._bl == b)
-						return pCur;
-				}
-				pCur = pCur->pNext;
-			}
-		}
-		break;
 	case VAR_INT:
 		{
 			int iKey = pKey->_int;
@@ -216,6 +202,20 @@ SetNode* SetBucket::Find(VarInfo* pKey, u32 hash)
 						if (pCur->key._float == fKey)
 							return pCur;
 					}
+				}
+				pCur = pCur->pNext;
+			}
+		}
+		break;
+	case VAR_BOOL:
+		{
+			bool b = pKey->_bl;
+			while (pCur)
+			{
+				if (pCur->key.GetType() == VAR_BOOL)
+				{
+					if (pCur->key._bl == b)
+						return pCur;
 				}
 				pCur = pCur->pNext;
 			}

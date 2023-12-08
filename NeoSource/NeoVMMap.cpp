@@ -125,20 +125,6 @@ MapNode* MapBucket::Find(VarInfo* pKey, u32 hash)
 			pCur = pCur->pNext;
 		}
 		break;
-	case VAR_BOOL:
-		{
-			bool b = pKey->_bl;
-			while (pCur)
-			{
-				if (pCur->key.GetType() == VAR_BOOL)
-				{
-					if (pCur->key._bl == b)
-						return pCur;
-				}
-				pCur = pCur->pNext;
-			}
-		}
-		break;
 	case VAR_INT:
 		{
 			int iKey = pKey->_int;
@@ -168,6 +154,20 @@ MapNode* MapBucket::Find(VarInfo* pKey, u32 hash)
 						if (pCur->key._float == fKey)
 							return pCur;
 					}
+				}
+				pCur = pCur->pNext;
+			}
+		}
+		break;
+	case VAR_BOOL:
+		{
+			bool b = pKey->_bl;
+			while (pCur)
+			{
+				if (pCur->key.GetType() == VAR_BOOL)
+				{
+					if (pCur->key._bl == b)
+						return pCur;
 				}
 				pCur = pCur->pNext;
 			}
