@@ -1011,6 +1011,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Add2(VarInfo* r, VarInfo* v2)
 	case VAR_MAP:
 		if (Call_MetaTable(r, g_meta_Add2, r, r, v2)) 
 			return;
+		break;
 	default:
 		break;
 	}
