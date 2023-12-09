@@ -1,5 +1,19 @@
 #pragma once
 
+NEOS_FORCEINLINE void CNeoVMWorker::Move(VarInfo* v1, VarInfo* v2)
+{
+	if (v1->IsAllocType())
+		Var_Release(v1);
+	Move_DestNoRelease(v1, v2);
+}
+NEOS_FORCEINLINE void CNeoVMWorker::MoveI(VarInfo* v1, int v)
+{
+	if (v1->IsAllocType())
+		Var_Release(v1);
+
+	v1->SetType(VAR_INT);
+	v1->_int = v;
+}
 
 
 NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue)

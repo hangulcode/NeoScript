@@ -374,7 +374,7 @@ VarInfo* MapInfo::Insert(VarInfo* pKey)
 		_itemCount++;
 
 		MapNode* pNew = _pVM->m_sPool_TableNode.Receive();
-		INeoVM::Move_DestNoRelease(&pNew->key, pKey);
+		Move_DestNoRelease(&pNew->key, pKey);
 		pNew->value.ClearType();
 		//INeoVM::Move_DestNoRelease(&pNew->value, pValue);
 		pNew->hash = hash;

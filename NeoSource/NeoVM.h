@@ -414,12 +414,12 @@ struct NeoCompilerParam
 {
 	const void* pBufferSrc;
 	int iLenSrc;
+
 	std::string* err = nullptr;
 	bool putASM = false;
 	bool debug = false;
 	bool allowGlobalInitLogic = true;
 	int iStackSize = 50 * 1024;
-//	pFileBuffer, iFileLen, err, true, true;
 
 	NeoCompilerParam(const void* pSrc, int SrcLen)
 	{
@@ -427,6 +427,8 @@ struct NeoCompilerParam
 		iLenSrc = SrcLen;
 	}
 };
+
+
 
 struct INeoVM
 {
@@ -442,8 +444,9 @@ public:
 	typedef void(*IO_Print)(const char* pMsg);
 	static IO_Print m_pFunPrint;
 
-	void Var_AddRef(VarInfo* d);
-	static void Move_DestNoRelease(VarInfo* v1, VarInfo* v2);
+//	void Var_AddRef(VarInfo* d);
+//	static void Move_DestNoRelease(VarInfo* v1, VarInfo* v2);
+
 	void Var_ReleaseInternal(VarInfo* d);
 
 	template<typename F>

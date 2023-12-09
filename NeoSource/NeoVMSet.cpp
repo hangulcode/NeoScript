@@ -458,7 +458,7 @@ bool SetInfo::Insert(VarInfo* pKey)
 		_itemCount++;
 
 		SetNode* pNew = _pVM->m_sPool_SetNode.Receive();
-		INeoVM::Move_DestNoRelease(&pNew->key, pKey);
+		Move_DestNoRelease(&pNew->key, pKey);
 		pNew->hash = hash;
 
 		pBucket->Add_NoCheck(pNew);

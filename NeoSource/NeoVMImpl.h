@@ -76,7 +76,7 @@ public:
 	{
 		if (v1->IsAllocType())
 			Var_Release(v1);
-		INeoVM::Move_DestNoRelease(v1, v2);
+		Move_DestNoRelease(v1, v2);
 	}
 
 

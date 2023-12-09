@@ -367,7 +367,7 @@ enum eNeoDefaultString
 #elif defined(__GNUC__) && __GNUC__ >= 4 && defined(NDEBUG)
 #define NEOS_FORCEINLINE __attribute__((always_inline))
 #else
-#define NEOS_FORCEINLINE
+#define NEOS_FORCEINLINE inline
 #endif
 
 
@@ -525,20 +525,9 @@ public:
 	{
 		Move(v1, v2);
 	}
-	NEOS_FORCEINLINE void Move(VarInfo* v1, VarInfo* v2)
-	{
-		if (v1->IsAllocType())
-			Var_Release(v1);
-		INeoVM::Move_DestNoRelease(v1, v2);
-	}
-	NEOS_FORCEINLINE void MoveI(VarInfo* v1, int v)
-	{
-		if (v1->IsAllocType())
-			Var_Release(v1);
+	void Move(VarInfo* v1, VarInfo* v2);
+	void MoveI(VarInfo* v1, int v);
 
-		v1->SetType(VAR_INT);
-		v1->_int = v;
-	}
 
 	void Swap(VarInfo* v1, VarInfo* v2);
 private:
@@ -705,5 +694,60 @@ public:
 	
 };
 extern std::string GetDataType(VAR_TYPE t);
+
+NEOS_FORCEINLINE void Var_AddRef(VarInfo* d)
+{
+	switch (d->GetType())
+	{
+	case VAR_STRING:
+		++d->_str->_refCount;
+		break;
+	case VAR_MAP:
+		++d->_tbl->_refCount;
+		break;
+	case VAR_LIST:
+		++d->_lst->_refCount;
+		break;
+	case VAR_SET:
+		++d->_set->_refCount;
+		break;
+	case VAR_COROUTINE:
+		++d->_cor->_refCount;
+		break;
+	case VAR_MODULE:
+		++((CNeoVMWorker*)(d->_module))->_refCount;
+		break;
+	case VAR_ASYNC:
+		++d->_async->_refCount;
+		break;
+	default:
+		break;
+	}
+}
+
+NEOS_FORCEINLINE void Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
+{
+	v1->SetType(v2->GetType());
+	switch (v2->GetType())
+	{
+	case VAR_NONE: break;
+	case VAR_INT: v1->_int = v2->_int; break;
+	case VAR_FLOAT: v1->_float = v2->_float; break;
+	case VAR_BOOL: v1->_bl = v2->_bl; break;
+	case VAR_FUN: v1->_fun_index = v2->_fun_index; break;
+	case VAR_FUN_NATIVE: v1->_funPtr = v2->_funPtr; break;
+	case VAR_CHAR: v1->_c = v2->_c; break;
+
+	case VAR_STRING: v1->_str = v2->_str; ++v1->_str->_refCount; break;
+	case VAR_MAP: v1->_tbl = v2->_tbl; ++v1->_tbl->_refCount; break;
+	case VAR_LIST: v1->_lst = v2->_lst; ++v1->_lst->_refCount; break;
+	case VAR_SET: v1->_set = v2->_set; ++v1->_set->_refCount; break;
+	case VAR_COROUTINE: v1->_cor = v2->_cor; ++v1->_cor->_refCount; break;
+	case VAR_MODULE: v1->_module = v2->_module; ++((CNeoVMWorker*)(v1->_module))->_refCount; break;
+	case VAR_ASYNC: v1->_async = v2->_async; ++v1->_async->_refCount; break;
+	default: break;
+	}
+}
+
 
 };
