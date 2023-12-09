@@ -37,7 +37,7 @@ public:
 	NS_FLOAT _x = 0.1f;
 	NS_FLOAT _y = 1.0f;
 	NS_FLOAT _z = 10.0f;
-#if 0
+#if 1
 	bool PropertyTransform(INeoVMWorker* pN, VarInfo* pVar, bool get)
 	{
 		if(get)

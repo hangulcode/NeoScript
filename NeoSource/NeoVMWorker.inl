@@ -106,15 +106,30 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, int key, int v)
 	}
 	SetError("Collision Insert Error");
 }
-NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItem(VarInfo* pTable, VarInfo* pKey)
+NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItem(VarInfo* pClt, VarInfo* pKey)
 {
-	if (pTable->GetType() != VAR_MAP)
+	if (pClt->GetType() == VAR_MAP)
 	{
-		SetError("TableRead Error");
-		return NULL;
+		return pClt->_tbl->Find(pKey);
+	}
+	else if (pClt->GetType() == VAR_LIST)
+	{
+		if (pKey->GetType() == VAR_INT)
+		{
+			return pClt->_lst->GetValue(pKey->_int);
+		}
+		else
+		{
+			if (pClt->_lst->_pIndexer != nullptr && pKey->GetType() == VAR_STRING)
+			{
+				auto it = pClt->_lst->_pIndexer->find(pKey->_str->_str);
+				return pClt->_lst->GetValue((*it).second);
+			}
+		}
 	}
 
-	return pTable->_tbl->Find(pKey);
+	SetError("TableRead Error");
+	return nullptr;
 }
 NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItemValid(VarInfo* pTable, VarInfo* pKey)
 {
