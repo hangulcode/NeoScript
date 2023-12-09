@@ -7,13 +7,12 @@
 #include "NeoArchive.h"
 #include "UTFString.h"
 
+#define MATH_PI				3.14159265358979323846f // Pi
+NeoScript::INeoVM::IO_Print NeoScript::INeoVM::m_pFunPrint = nullptr;
+
 namespace NeoScript
 {
 
-#define MATH_PI				3.14159265358979323846f // Pi
-
-
-INeoVM::IO_Print INeoVM::m_pFunPrint = nullptr;
 
 void NVM_QuickSort(CNeoVMWorker* pN, int compare, std::vector<VarInfo*>& lst);
 

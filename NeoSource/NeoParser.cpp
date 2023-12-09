@@ -3562,7 +3562,8 @@ INeoVM* INeoVM::CompileAndLoadVM(const NeoCompilerParam& param)
 		return NULL;
 	}
 
-	printf(ANSI_COLOR_GREEN "Compile Success. Code : %d bytes !!" ANSI_RESET_ALL "\n", pVM->GetBytesSize());
+	if(param.putASM)
+		printf(ANSI_COLOR_GREEN "Compile Success. Code : %d bytes !!" ANSI_RESET_ALL "\n", pVM->GetBytesSize());
 
 	pVM->PCall(pVM->GetMainWorkerID());
 
