@@ -188,7 +188,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::TableRemove(VarInfo* pTable, VarInfo* pKey)
 	pTable->_tbl->Remove(pKey);
 }
 
-bool CNeoVMWorker::ChangeVarType(VarInfo* p, VAR_TYPE type, int capa)
+bool CNeoVMWorker::ResetVarType(VarInfo* p, VAR_TYPE type, int capa)
 {
 	if(type == VAR_MAP)
 	{

@@ -191,12 +191,12 @@ const std::string* INeoVMWorker::PopStlString(VarInfo* V)
 	return NULL;
 }
 
-bool VarInfo::TableInsertFloat(const std::string& pKey, NS_FLOAT value)
+bool VarInfo::MapInsertFloat(const std::string& pKey, NS_FLOAT value)
 {
 	if(_type != VAR_MAP) return false;
 	return _tbl->Insert(pKey, value);
 }
-bool VarInfo::TableFindFloat(const std::string& pKey, NS_FLOAT& value)
+bool VarInfo::MapFindFloat(const std::string& pKey, NS_FLOAT& value)
 {
 	if (_type != VAR_MAP) return false;
 	VarInfo* p = _tbl->Find(pKey);

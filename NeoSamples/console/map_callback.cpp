@@ -37,11 +37,12 @@ public:
 	NS_FLOAT _x = 0.1f;
 	NS_FLOAT _y = 1.0f;
 	NS_FLOAT _z = 10.0f;
+#if 0
 	bool PropertyTransform(INeoVMWorker* pN, VarInfo* pVar, bool get)
 	{
 		if(get)
 		{
-			if(pN->ChangeVarType(pVar, VAR_LIST, 3))
+			if(pN->ResetVarType(pVar, VAR_LIST, 3))
 			{
 				pVar->SetListIndexer(&g_sVector3Indexer);
 				pVar->ListInsertFloat(0, _x);
@@ -60,6 +61,30 @@ public:
 		}
 		return true;
 	}
+#else
+	bool PropertyTransform(INeoVMWorker* pN, VarInfo* pVar, bool get)
+	{
+		if (get)
+		{
+			if (pN->ResetVarType(pVar, VAR_MAP, 3))
+			{
+				pVar->MapInsertFloat("x", _x);
+				pVar->MapInsertFloat("y", _y);
+				pVar->MapInsertFloat("z", _z);
+			}
+		}
+		else
+		{
+			if (pVar->GetType() == VAR_MAP)
+			{
+				if (false == pVar->MapFindFloat("x", _x)) return false;
+				if (false == pVar->MapFindFloat("y", _y)) return false;
+				if (false == pVar->MapFindFloat("z", _z)) return false;
+			}
+		}
+		return true;
+	}
+#endif
 };
 
 typedef bool (CA::*TYPE_FUN)(INeoVMWorker* pN, short args);
@@ -115,7 +140,7 @@ int SAMPLE_map_callback()
 
 		VarInfo* g_sData;
 		g_sData = pVM->GetVar("g_sData");
-		if (g_sData != NULL && pVM->GetMainWorker()->ChangeVarType(g_sData, VAR_MAP))
+		if (g_sData != NULL && pVM->GetMainWorker()->ResetVarType(g_sData, VAR_MAP))
 		{
 			if(INeoVM::RegisterTableCallBack(g_sData, pClass, Fun, Property))
 			{

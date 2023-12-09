@@ -127,8 +127,8 @@ public:
 		return false;
 	}
 
-	bool TableInsertFloat(const std::string& pKey, NS_FLOAT value);
-	bool TableFindFloat(const std::string& pKey, NS_FLOAT& value);
+	bool MapInsertFloat(const std::string& pKey, NS_FLOAT value);
+	bool MapFindFloat(const std::string& pKey, NS_FLOAT& value);
 
 	bool ListInsertFloat(int idx, NS_FLOAT value);
 	bool ListFindFloat(int idx, NS_FLOAT& value);
@@ -154,7 +154,7 @@ public:
 	virtual void GC() =0;
 	virtual VarInfo* GetReturnVar() =0;
 	virtual VarInfo* GetStackVar(int idx) =0;
-	virtual bool ChangeVarType(VarInfo* p, VAR_TYPE type, int capa = 0) =0;
+	virtual bool ResetVarType(VarInfo* p, VAR_TYPE type, int capa = 0) =0;
 
 	static void neo_pushcclosureNative(FunctionPtrNative* pOut, Neo_NativeFunction pFun)
 	{

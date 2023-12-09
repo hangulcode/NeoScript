@@ -18,7 +18,7 @@ export fun update(var a, var b)
 
 	//g_sData.Transform = pos;
 
-	pos = g_sData.Transform;
+	g_sData.Transform = pos;
 //	print("Pos : " .. pos.x .. "," .. pos.y .. "," .. pos.z);
 
 	//return pos.x + pos.y + pos.z;
