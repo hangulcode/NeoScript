@@ -602,7 +602,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 void CNeoVMWorker::JumpAsyncMsg()
 {
 	int dist = int((u8*)_pCodeCurrent - _pCodeBegin);
-	if (dist < 2 * sizeof(SVMOperation)) // 0 : Error, 1 : Idle(Already?)
+	if (dist < int(2 * sizeof(SVMOperation))) // 0 : Error, 1 : Idle(Already?)
 		return;
 	SetCodePtr(sizeof(SVMOperation));
 	_pCodeCurrent->n23 = dist - int(sizeof(SVMOperation) * 2); // Idle
