@@ -3,6 +3,7 @@
 #include <time.h>
 #include "NeoConfig.h"
 #include "NeoQueue.h"
+#include "NeoVMMemoryPool.h"
 
 namespace NeoScript
 {
@@ -230,7 +231,7 @@ struct CoroutineInfo : AllocBase
 	CoroutineBase _info;
 
 	std::vector<VarInfo>	m_sVarStack;
-	std::vector<SCallStack>	m_sCallStack;
+	SimpleVector<SCallStack>	m_sCallStack;
 };
 
 struct StringInfo : AllocBase
@@ -460,7 +461,7 @@ private:
 
 	std::vector<VarInfo>*	m_pVarStack_Base;
 	VarInfo*				m_pVarStack_Pointer;
-	std::vector<SCallStack>* m_pCallStack;
+	SimpleVector<SCallStack>* m_pCallStack;
 
 	std::vector<VarInfo>*	m_pVarGlobal;
 	VarInfo* m_pVarGlobal_Pointer;
