@@ -53,6 +53,14 @@ struct SUtf8One
 #define FILE_NEOS	(('N' << 24) | ('E' << 16) | ('O' << 8) | ('S'))
 #define NEO_VER		(('0' << 24) | ('1' << 16) | ('0' << 8) | ('5'))
 
+#if defined(_MSC_VER) && !defined(_DEBUG)
+#define NEOS_FORCEINLINE __forceinline
+#elif defined(__GNUC__) && __GNUC__ >= 4 && defined(NDEBUG)
+#define NEOS_FORCEINLINE __attribute__((always_inline))
+#else
+#define NEOS_FORCEINLINE inline
+#endif
+
 };
 
 #include <vector>

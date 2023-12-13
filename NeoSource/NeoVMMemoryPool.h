@@ -366,7 +366,7 @@ public:
 		_buffer = p;
 		_capa = size;
 	}
-	inline int calc_capa(int cnt)
+	NEOS_FORCEINLINE int calc_capa(int cnt)
 	{
 		int new_capa = _capa;
 		while (cnt > new_capa)
@@ -378,7 +378,7 @@ public:
 		}
 		return new_capa;
 	}
-	inline void push_back(T& t)
+	NEOS_FORCEINLINE void push_back(T& t)
 	{
 		if(_cnt >= _capa)
 		{
@@ -389,23 +389,34 @@ public:
 		}
 		_buffer[_cnt++] = t;
 	}
-	inline int size() { return _cnt; }
-	inline void resize(int cnt) 
+	NEOS_FORCEINLINE T& push_back()
+	{
+		if (_cnt >= _capa)
+		{
+			if (_capa >= 128)
+				Alloc(_capa + 128);
+			else
+				Alloc(_capa << 1); // * 2
+		}
+		return _buffer[_cnt++];
+	}
+	NEOS_FORCEINLINE int size() { return _cnt; }
+	NEOS_FORCEINLINE void resize(int cnt)
 	{ 
 		if(cnt < 0) cnt = 0;
 		if(cnt > _capa)
 			Alloc(calc_capa(cnt));
 		_cnt = cnt;
 	}
-	inline T& operator[](const int idx)
+	NEOS_FORCEINLINE T& operator[](const int idx)
 	{
 		return _buffer[idx];
 	}
-	inline void reserve(int cnt)
+	void reserve(int cnt)
 	{
 		Alloc(calc_capa(cnt));
 	}
-	void clear()
+	NEOS_FORCEINLINE void clear()
 	{
 		_cnt = 0;
 	}

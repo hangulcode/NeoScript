@@ -339,7 +339,7 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_JMP_FALSE, 2);
 	OP_STR1(NOP_JMP_TRUE, 2);
 
-	OP_STR1(NOP_CALL, 2);
+	OP_STR1(NOP_CALL, 3);
 	OP_STR1(NOP_PTRCALL, 3);
 	OP_STR1(NOP_PTRCALL2, 2);
 	OP_STR1(NOP_RETURN, 1);
@@ -802,6 +802,14 @@ void ClearTempVars(SFunctions& funs)
 			funs._cur->ClearLastOP();
 		}
 	}
+	else if(opLast == NOP_CALL)
+	{
+		SVMOperation* op = funs._cur->GetOPPointer(funs._cur->_iLastOPOffset); // 3rd
+		if (IsTempVar(op->n3))
+		{
+			op->argFlag |= NEOS_OP_CALL_NORESULT;
+		}
+	}
 }
 bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
@@ -1099,8 +1107,13 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 				SetCompileError(ar, "Error (%d, %d): Arg Count Invalid (%d != %d)", ar.CurLine(), ar.CurCol(), (int)pFun->_args.size(), iParamCount);
 				return false;
 			}
-			//funs._cur->Push_Call(ar, pFun->_funType == FUNT_IMPORT ? NOP_FARCALL : NOP_CALL, pFun->_funID, iParamCount);
-			funs._cur->Push_Call(ar, NOP_CALL, pFun->_funID, iParamCount);
+			iResultStack = funs._cur->AllocLocalTempVar();
+			funs._cur->Push_Call(ar, NOP_CALL, pFun->_funID, iParamCount, iResultStack._iVar);
+			if (tkTypePre == TK_MINUS)
+			{
+				funs._cur->Push_OP2(ar, NOP_MOV_MINUS, iResultStack._iVar, iResultStack._iVar, false);
+			}
+			return true;
 		}
 		else if(iResultStack._iVar >= 0)
 			funs._cur->Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);

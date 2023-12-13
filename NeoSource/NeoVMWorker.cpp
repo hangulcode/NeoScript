@@ -310,12 +310,20 @@ void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 {
 	SFunctionTable& fun = m_sFunctionPtr[n1];
 	// n2 is Arg Count not use
+#if _DEBUG
 	SCallStack callStack;
 	callStack._iReturnOffset = GetCodeptr();
 	callStack._iSP_Vars = _iSP_Vars;
 	callStack._iSP_VarsMax = _iSP_VarsMax;
 	callStack._pReturnValue = pReturnValue;
 	m_pCallStack->push_back(callStack);
+#else
+	SCallStack& callStack = m_pCallStack->push_back();
+	callStack._iReturnOffset = GetCodeptr();
+	callStack._iSP_Vars = _iSP_Vars;
+	callStack._iSP_VarsMax = _iSP_VarsMax;
+	callStack._pReturnValue = pReturnValue;
+#endif
 
 	SetCodePtr(fun._codePtr);
 	_iSP_Vars = _iSP_VarsMax;
@@ -626,7 +634,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 			return true;
 	}
 
-	SCallStack callStack;
+	//SCallStack callStack;
 	int iTemp;
 	char chMsg[256];
 
@@ -846,7 +854,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 			break;
 
 		case NOP_CALL:
-			Call(OP.n1, OP.n2);
+			Call(OP.n1, OP.n2, (OP.argFlag & NEOS_OP_CALL_NORESULT) ? nullptr : GetVarPtr3(OP));
 			if(GetVM()->IsLocalErrorMsg())
 				break;
 			break;
@@ -933,6 +941,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 			break;
 		}			
 		case NOP_RETURN:
+		{
 			if (OP.n1 == 0 && (OP.argFlag & (1 << 5)) == 0)
 				Var_Release(&(*m_pVarStack_Base)[_iSP_Vars]); // Clear
 			else
@@ -950,7 +959,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 				return true;
 			}
 			iTemp = (int)m_pCallStack->size() - 1;
-			callStack = (*m_pCallStack)[iTemp];
+			SCallStack &callStack = (*m_pCallStack)[iTemp];
 			m_pCallStack->resize(iTemp);
 
 			if(callStack._pReturnValue)
@@ -961,6 +970,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 			SetStackPointer(_iSP_Vars);
 			_iSP_VarsMax = callStack._iSP_VarsMax;
 			break;
+		}
 		case NOP_TABLE_ALLOC:
 			Var_SetTable(GetVarPtrF1(OP), GetVM()->TableAlloc(OP.n23));
 			break;

@@ -363,13 +363,7 @@ enum eNeoDefaultString
 	NDF_MAX
 };
 
-#if defined(_MSC_VER) && !defined(_DEBUG)
-#define NEOS_FORCEINLINE __forceinline
-#elif defined(__GNUC__) && __GNUC__ >= 4 && defined(NDEBUG)
-#define NEOS_FORCEINLINE __attribute__((always_inline))
-#else
-#define NEOS_FORCEINLINE inline
-#endif
+#define NEOS_OP_CALL_NORESULT	0x80
 
 
 #ifdef _DEBUG
@@ -414,7 +408,7 @@ private:
 		//_iCodeOffset = 0;
 	}
 
-	inline SVMOperation*	GetOP()
+	NEOS_FORCEINLINE SVMOperation*	GetOP()
 	{
 		return _pCodeCurrent++;
 	}
@@ -511,7 +505,7 @@ private:
 
 	NEOS_FORCEINLINE void SetStackPointer(short n) { m_pVarStack_Pointer = &(*m_pVarStack_Base)[n]; }
 public:
-	inline CNeoVMImpl* GetVM() { return (CNeoVMImpl*)_pVM;  }
+	NEOS_FORCEINLINE CNeoVMImpl* GetVM() { return (CNeoVMImpl*)_pVM;  }
 	virtual void SetTimeout(int iTimeout, int iCheckOpCount) {
 		m_iTimeout = iTimeout;
 		m_iCheckOpCount = iCheckOpCount;
