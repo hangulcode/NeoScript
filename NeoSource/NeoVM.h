@@ -106,21 +106,21 @@ public:
 		CollectionIterator	_it;
 	};
 
-	inline VarInfo() { _type = VAR_NONE; }
-	inline VarInfo(VAR_TYPE t) { _type = t; }
-	inline VarInfo(int v) { _type = VAR_INT; _int = v; }
+	NEOS_FORCEINLINE VarInfo() { _type = VAR_NONE; }
+	NEOS_FORCEINLINE VarInfo(VAR_TYPE t) { _type = t; }
+	NEOS_FORCEINLINE VarInfo(int v) { _type = VAR_INT; _int = v; }
 
-	inline VAR_TYPE GetType() { return _type; }
-	inline void SetType(VAR_TYPE t) { _type = t; }
-	inline void ClearType()
+	NEOS_FORCEINLINE VAR_TYPE GetType() { return _type; }
+	NEOS_FORCEINLINE void SetType(VAR_TYPE t) { _type = t; }
+	NEOS_FORCEINLINE void ClearType()
 	{
 		_type = VAR_NONE;
 	}
-	inline bool IsAllocType()
+	NEOS_FORCEINLINE bool IsAllocType()
 	{
 		return ((_type >= VAR_STRING));
 	}
-	inline bool IsTrue()
+	NEOS_FORCEINLINE bool IsTrue()
 	{
 		if (VAR_BOOL == _type)
 			return _bl;
