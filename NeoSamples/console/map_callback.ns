@@ -12,7 +12,10 @@ export fun update(var a, var b)
 	var pos = g_sData.Transform;
 	print("Pos : " .. pos.x .. "," .. pos.y .. "," .. pos.z);
 
-	pos.x = 2.0;
+	pos.x += 2.0;
+	var xx = 0.1;
+	xx = pos.x;
+	print(xx);
 
 //	g_sData.Transform.x = 2;
 

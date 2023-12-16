@@ -339,7 +339,7 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_JMP_FALSE, 2);
 	OP_STR1(NOP_JMP_TRUE, 2);
 
-	OP_STR1(NOP_CALL, 2);
+	OP_STR1(NOP_CALL, 3);
 	OP_STR1(NOP_PTRCALL, 3);
 	OP_STR1(NOP_PTRCALL2, 2);
 	OP_STR1(NOP_RETURN, 1);
@@ -802,6 +802,65 @@ void ClearTempVars(SFunctions& funs)
 			funs._cur->ClearLastOP();
 		}
 	}
+	else if(opLast == NOP_CALL)
+	{
+		SVMOperation* op = funs._cur->GetOPPointer(funs._cur->_iLastOPOffset); // 3rd
+		if (IsTempVar(op->n3))
+		{
+			op->argFlag |= NEOS_OP_CALL_NORESULT;
+		}
+	}
+}
+void AddBuildinFunction(CArchiveRdWC& ar, SFunctions& funs, const std::string& fname, int argc)
+{
+	SFunctionInfo* pF = funs.NewFun(fname, nullptr, funs._cur->_pDebugData);
+	pF->_funType = FUNT_BUILT_IN;
+	pF->_name = "#" + fname;
+	pF->_moduleName = ar.m_sModuleName;
+
+	pF->_built_in_arg_c = argc;
+	pF->_funID = -1;
+	//funs._funIDs[pF->_funID] = pF;
+}
+bool AddBuildinModule(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string mod)
+{
+	SFunctionLayer* pLayerBackup = funs._curModule;
+	if(mod == "system")
+	{
+		AddBuildinFunction(ar, funs, "clock", 0);
+		AddBuildinFunction(ar, funs, "meta", 2);
+		AddBuildinFunction(ar, funs, "load", 2);
+		AddBuildinFunction(ar, funs, "pcall", 1);
+		AddBuildinFunction(ar, funs, "aysnc_create", 0);
+		AddBuildinFunction(ar, funs, "set", 1);
+	}
+	if (mod == "math")
+	{
+		AddBuildinFunction(ar, funs, "acos", 1);
+		AddBuildinFunction(ar, funs, "asin", 1);
+		AddBuildinFunction(ar, funs, "atan", 1);
+		AddBuildinFunction(ar, funs, "ceil", 1);
+		AddBuildinFunction(ar, funs, "floor", 1);
+		AddBuildinFunction(ar, funs, "sin", 1);
+		AddBuildinFunction(ar, funs, "cos", 1);
+		AddBuildinFunction(ar, funs, "tan", 1);
+		AddBuildinFunction(ar, funs, "log", 1);
+		AddBuildinFunction(ar, funs, "log10", 1);
+		AddBuildinFunction(ar, funs, "pow", 2);
+		AddBuildinFunction(ar, funs, "deg", 1);
+		AddBuildinFunction(ar, funs, "rad", 1);
+		AddBuildinFunction(ar, funs, "sqrt", 1);
+		AddBuildinFunction(ar, funs, "srand", 1);
+		AddBuildinFunction(ar, funs, "rand", 0);
+	}
+	if (mod == "coroutine")
+	{
+		AddBuildinFunction(ar, funs, "create", 1);
+		AddBuildinFunction(ar, funs, "resume", -1);
+		AddBuildinFunction(ar, funs, "status", 1);
+		AddBuildinFunction(ar, funs, "close", -1);
+	}
+	return true;
 }
 bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
@@ -856,6 +915,19 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	int iFileLen = 0;
 	if (false == FileLoad(fullFileName.c_str(), pFileBuffer, iFileLen))
 	{
+		if(fileName == "system" || fileName == "math" || fileName == "coroutine") // Built-in Import
+		{
+			SFunctionLayer* pLayerBackup = funs._curModule;
+			funs._curModule = funs.NewLayer();
+			funs._curModule->_blBuiltInModule = true;
+
+			AddBuildinModule(ar, funs, vars, fileName);
+
+			vars.m_sImports[fileName] = funs._curModule;
+			pLayerBackup->_defModules[defName] = funs._curModule;
+			funs._curModule = pLayerBackup;
+			return true;
+		}
 		SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), tk2.c_str());
 		return false;
 	}
@@ -868,7 +940,9 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	SFunctionLayer* pLayerBackup = funs._curModule;
 	funs._curModule = funs.NewLayer();
+	/////////////////////////////////
 	bool r = ParseFunctionBody(ar2, funs, vars, false);
+	/////////////////////////////////
 	vars.m_sImports[fileName] = funs._curModule;
 	pLayerBackup->_defModules[defName] = funs._curModule;
 	funs._curModule = pLayerBackup;
@@ -1094,13 +1168,39 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 		}
 		if (pFun != NULL)
 		{
-			if ((int)pFun->_args.size() != iParamCount)
+			if(pFun->_funType == FUNT_BUILT_IN)
 			{
-				SetCompileError(ar, "Error (%d, %d): Arg Count Invalid (%d != %d)", ar.CurLine(), ar.CurCol(), (int)pFun->_args.size(), iParamCount);
-				return false;
+				if(pFun->_built_in_arg_c != -1)
+				{
+					if (pFun->_built_in_arg_c != iParamCount)
+					{
+						SetCompileError(ar, "Error (%d, %d): Arg Count Invalid (%d != %d)", ar.CurLine(), ar.CurCol(), (int)pFun->_args.size(), iParamCount);
+						return false;
+					}
+				}
+				//SetCompileError(ar, "Error (%d, %d):  Built-In", ar.CurLine(), ar.CurCol());
+				iResultStack._iArrayIndex = funs.AddStaticString(pFun->_name);
+				funs._cur->Push_CallPtr2(ar, iResultStack._iArrayIndex, iParamCount);
+				iResultStack = funs._cur->AllocLocalTempVar();
+				funs._cur->Push_OP2(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
+				return true;
 			}
-			//funs._cur->Push_Call(ar, pFun->_funType == FUNT_IMPORT ? NOP_FARCALL : NOP_CALL, pFun->_funID, iParamCount);
-			funs._cur->Push_Call(ar, NOP_CALL, pFun->_funID, iParamCount);
+			else
+			{
+				if ((int)pFun->_args.size() != iParamCount)
+				{
+					SetCompileError(ar, "Error (%d, %d): Arg Count Invalid (%d != %d)", ar.CurLine(), ar.CurCol(), (int)pFun->_args.size(), iParamCount);
+					return false;
+				}
+
+				iResultStack = funs._cur->AllocLocalTempVar();
+				funs._cur->Push_Call(ar, NOP_CALL, pFun->_funID, iParamCount, iResultStack._iVar);
+			}
+			if (tkTypePre == TK_MINUS)
+			{
+				funs._cur->Push_OP2(ar, NOP_MOV_MINUS, iResultStack._iVar, iResultStack._iVar, false);
+			}
+			return true;
 		}
 		else if(iResultStack._iVar >= 0)
 			funs._cur->Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
@@ -1625,7 +1725,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 				iTempOffset._operandType = Data_Fun;
 			}
 		}
-		else if (CNeoVMImpl::IsGlobalLibFun(tk1))
+		else if (pOtherModule == nullptr && CNeoVMImpl::IsGlobalLibFun(tk1))
 		{
 			tkType2 = GetToken(ar, tk2);
 			if (tkType2 == TK_L_SMALL)

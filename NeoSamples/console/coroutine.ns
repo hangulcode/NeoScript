@@ -1,3 +1,5 @@
+import coroutine;
+
 var cr;
 fun sub(var param1)
 {
@@ -12,14 +14,14 @@ fun sub(var param1)
 
 fun test_multi()
 {
-	cr = coroutine_create(sub);
+	cr = coroutine.create(sub);
 
 	for(var i in 0, 10, 1)
 	{
-		var state = coroutine_status(cr);
+		var state = coroutine.status(cr);
 		if(state == "suspended")
 		{
-			coroutine_resume(cr, 2);
+			coroutine.resume(cr, 2);
 		}
 		print("Main " .. state .. i);
 		sleep(200);

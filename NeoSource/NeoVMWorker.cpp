@@ -310,12 +310,20 @@ void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 {
 	SFunctionTable& fun = m_sFunctionPtr[n1];
 	// n2 is Arg Count not use
+#if _DEBUG
 	SCallStack callStack;
 	callStack._iReturnOffset = GetCodeptr();
 	callStack._iSP_Vars = _iSP_Vars;
 	callStack._iSP_VarsMax = _iSP_VarsMax;
 	callStack._pReturnValue = pReturnValue;
 	m_pCallStack->push_back(callStack);
+#else
+	SCallStack& callStack = m_pCallStack->push_back();
+	callStack._iReturnOffset = GetCodeptr();
+	callStack._iSP_Vars = _iSP_Vars;
+	callStack._iSP_VarsMax = _iSP_VarsMax;
+	callStack._pReturnValue = pReturnValue;
+#endif
 
 	SetCodePtr(fun._codePtr);
 	_iSP_Vars = _iSP_VarsMax;
@@ -323,6 +331,13 @@ void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 	_iSP_VarsMax = _iSP_Vars + fun._localAddCount;
 	if (_iSP_Vars_Max2 < _iSP_VarsMax)
 		_iSP_Vars_Max2 = _iSP_VarsMax;
+
+	if (_iSP_VarsMax >= (int)m_pVarStack_Base->size())
+	{
+		SetCodePtr(callStack._iReturnOffset); // Error Line Finder
+		SetError("Call Stack Overflow");
+		return;
+	}
 }
 
 bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo* r, VarInfo* a, VarInfo* b)
@@ -334,6 +349,11 @@ bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo
 		return false;
 
 	int n3 = 2;
+	if (_iSP_VarsMax + n3 >= (int)m_pVarStack_Base->size())
+	{
+		SetError("Call Stack Overflow");
+		return false;
+	}
 
 	Move(&(*m_pVarStack_Base)[_iSP_VarsMax + 1], a);
 	Move(&(*m_pVarStack_Base)[_iSP_VarsMax + 2], b);
@@ -358,6 +378,11 @@ bool CNeoVMWorker::Call_MetaTable2(VarInfo* pTable, std::string& funName, VarInf
 		return false;
 
 	int n3 = 2;
+	if (_iSP_VarsMax + n3 >= (int)m_pVarStack_Base->size())
+	{
+		SetError("Call Stack Overflow");
+		return false;
+	}
 
 	Move(&(*m_pVarStack_Base)[_iSP_VarsMax + 1], r);
 	Move(&(*m_pVarStack_Base)[_iSP_VarsMax + 2], b);
@@ -580,19 +605,21 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 	}
 	catch (...)
 	{
-		int idx = int((u8*)_pCodeCurrent - _pCodeBegin - 1) / sizeof(SVMOperation);
+		//int idx = int((u8*)_pCodeCurrent - _pCodeBegin - 1) / sizeof(SVMOperation);
 		SetError("Exception");
 		bool blDebugInfo = IsDebugInfo();
 		int _lineseq = -1;
 		if (blDebugInfo)
-			_lineseq = GetDebugLine(idx);
+			_lineseq = GetDebugLine(_isErrorOPIndex);
 
 		char chMsg[256];
+
 #ifdef _WIN32
-		sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", GetVM()->_pErrorMsg.c_str(), _lineseq);
+		sprintf_s(chMsg, _countof(chMsg), "%s : Index(%d), Line (%d)", GetVM()->_pErrorMsg.c_str(), _isErrorOPIndex, _lineseq);
 #else
-		sprintf(chMsg, "%s : Line (%d)", GetVM()->_pErrorMsg.c_str(), _lineseq);
+		sprintf(chMsg, "%s : Index(%d), Line (%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
 #endif
+
 		GetVM()->_sErrorMsgDetail = chMsg;
 		return false;
 	}
@@ -602,7 +629,7 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 void CNeoVMWorker::JumpAsyncMsg()
 {
 	int dist = int((u8*)_pCodeCurrent - _pCodeBegin);
-	if (dist < 2 * sizeof(SVMOperation)) // 0 : Error, 1 : Idle(Already?)
+	if (dist < int(2 * sizeof(SVMOperation))) // 0 : Error, 1 : Idle(Already?)
 		return;
 	SetCodePtr(sizeof(SVMOperation));
 	_pCodeCurrent->n23 = dist - int(sizeof(SVMOperation) * 2); // Idle
@@ -626,7 +653,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 			return true;
 	}
 
-	SCallStack callStack;
+	//SCallStack callStack;
 	int iTemp;
 	char chMsg[256];
 
@@ -846,7 +873,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 			break;
 
 		case NOP_CALL:
-			Call(OP.n1, OP.n2);
+			Call(OP.n1, OP.n2, (OP.argFlag & NEOS_OP_CALL_NORESULT) ? nullptr : GetVarPtr3(OP));
 			if(GetVM()->IsLocalErrorMsg())
 				break;
 			break;
@@ -933,6 +960,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 			break;
 		}			
 		case NOP_RETURN:
+		{
 			if (OP.n1 == 0 && (OP.argFlag & (1 << 5)) == 0)
 				Var_Release(&(*m_pVarStack_Base)[_iSP_Vars]); // Clear
 			else
@@ -950,7 +978,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 				return true;
 			}
 			iTemp = (int)m_pCallStack->size() - 1;
-			callStack = (*m_pCallStack)[iTemp];
+			SCallStack &callStack = (*m_pCallStack)[iTemp];
 			m_pCallStack->resize(iTemp);
 
 			if(callStack._pReturnValue)
@@ -961,6 +989,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 			SetStackPointer(_iSP_Vars);
 			_iSP_VarsMax = callStack._iSP_VarsMax;
 			break;
+		}
 		case NOP_TABLE_ALLOC:
 			Var_SetTable(GetVarPtrF1(OP), GetVM()->TableAlloc(OP.n23));
 			break;

@@ -3,6 +3,7 @@
 #include <time.h>
 #include "NeoConfig.h"
 #include "NeoQueue.h"
+#include "NeoVMMemoryPool.h"
 
 namespace NeoScript
 {
@@ -230,7 +231,7 @@ struct CoroutineInfo : AllocBase
 	CoroutineBase _info;
 
 	std::vector<VarInfo>	m_sVarStack;
-	std::vector<SCallStack>	m_sCallStack;
+	SimpleVector<SCallStack>	m_sCallStack;
 };
 
 struct StringInfo : AllocBase
@@ -302,6 +303,7 @@ enum FUNCTION_TYPE : u8
 	FUNT_NORMAL = 0,
 	FUNT_EXPORT,
 	FUNT_ANONYMOUS,
+	FUNT_BUILT_IN,
 };
 
 
@@ -362,13 +364,7 @@ enum eNeoDefaultString
 	NDF_MAX
 };
 
-#if defined(_MSC_VER) && !defined(_DEBUG)
-#define NEOS_FORCEINLINE __forceinline
-#elif defined(__GNUC__) && __GNUC__ >= 4 && defined(NDEBUG)
-#define NEOS_FORCEINLINE __attribute__((always_inline))
-#else
-#define NEOS_FORCEINLINE inline
-#endif
+#define NEOS_OP_CALL_NORESULT	0x80
 
 
 #ifdef _DEBUG
@@ -413,7 +409,7 @@ private:
 		//_iCodeOffset = 0;
 	}
 
-	inline SVMOperation*	GetOP()
+	NEOS_FORCEINLINE SVMOperation*	GetOP()
 	{
 		return _pCodeCurrent++;
 	}
@@ -460,7 +456,7 @@ private:
 
 	std::vector<VarInfo>*	m_pVarStack_Base;
 	VarInfo*				m_pVarStack_Pointer;
-	std::vector<SCallStack>* m_pCallStack;
+	SimpleVector<SCallStack>* m_pCallStack;
 
 	std::vector<VarInfo>*	m_pVarGlobal;
 	VarInfo* m_pVarGlobal_Pointer;
@@ -508,9 +504,9 @@ private:
 	NEOS_FORCEINLINE VarInfo* GetVarPtr_L(short n) { return m_pVarStack_Pointer + n; }
 	NEOS_FORCEINLINE VarInfo* GetVarPtr_G(short n) { return NEOS_GLOBAL_VAR(n); }
 
-	NEOS_FORCEINLINE void SetStackPointer(short n) { m_pVarStack_Pointer = &(*m_pVarStack_Base)[n]; }
+	NEOS_FORCEINLINE void SetStackPointer(int n) { m_pVarStack_Pointer = &(*m_pVarStack_Base)[n]; }
 public:
-	inline CNeoVMImpl* GetVM() { return (CNeoVMImpl*)_pVM;  }
+	NEOS_FORCEINLINE CNeoVMImpl* GetVM() { return (CNeoVMImpl*)_pVM;  }
 	virtual void SetTimeout(int iTimeout, int iCheckOpCount) {
 		m_iTimeout = iTimeout;
 		m_iCheckOpCount = iCheckOpCount;

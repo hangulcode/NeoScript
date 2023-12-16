@@ -353,7 +353,7 @@ struct neo_libs
 		return true;
 	}
 
-	static bool util_meta(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	static bool sys_meta(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 2) return false; // table, meta
 
@@ -643,7 +643,7 @@ struct neo_libs
 		pN->ReturnValue();
 		return true;
 	}
-	static bool sys_coroutine_create(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	static bool coroutine_create(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1) return false;
 
@@ -660,7 +660,7 @@ struct neo_libs
 		pN->ReturnValue(pCI);
 		return true;
 	}
-	static bool sys_coroutine_resume(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	static bool coroutine_resume(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args < 1) return false; // param : index 1 ~ 
 
@@ -675,7 +675,7 @@ struct neo_libs
 		pN->ReturnValue();
 		return true;
 	}
-	static bool sys_coroutine_status(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	static bool coroutine_status(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1) return false;
 
@@ -704,7 +704,7 @@ struct neo_libs
 
 		return true;
 	}
-	static bool sys_coroutine_close(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	static bool coroutine_close(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args >= 2) return false;
 
@@ -731,7 +731,7 @@ struct neo_libs
 		return true;
 	}
 
-	static bool aysnc_create(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	static bool sys_aysnc_create(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 0) return false;
 
@@ -740,7 +740,7 @@ struct neo_libs
 		return true;
 	}	
 
-	static bool set(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	static bool sys_set(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1) return false;
 
@@ -840,39 +840,40 @@ static void AddGlobalLibFun()
 	if (g_sNeoFunLib_Default.empty() == false)
 		return;
 
-	g_sNeoFunLib_Default["abs"] = &neo_libs::Math_abs;
-	g_sNeoFunLib_Default["acos"] = &neo_libs::Math_acos;
-	g_sNeoFunLib_Default["asin"] = &neo_libs::Math_asin;
-	g_sNeoFunLib_Default["atan"] = &neo_libs::Math_atan;
-	g_sNeoFunLib_Default["ceil"] = &neo_libs::Math_ceil;
-	g_sNeoFunLib_Default["floor"] = &neo_libs::Math_floor;
-	g_sNeoFunLib_Default["sin"] = &neo_libs::Math_sin;
-	g_sNeoFunLib_Default["cos"] = &neo_libs::Math_cos;
-	g_sNeoFunLib_Default["tan"] = &neo_libs::Math_tan;
-	g_sNeoFunLib_Default["log"] = &neo_libs::Math_log;
-	g_sNeoFunLib_Default["log10"] = &neo_libs::Math_log10;
-	g_sNeoFunLib_Default["pow"] = &neo_libs::Math_pow;
-	g_sNeoFunLib_Default["deg"] = &neo_libs::Math_deg;
-	g_sNeoFunLib_Default["rad"] = &neo_libs::Math_rad;
-	g_sNeoFunLib_Default["sqrt"] = &neo_libs::Math_sqrt;
-	g_sNeoFunLib_Default["srand"] = &neo_libs::Math_srand;
-	g_sNeoFunLib_Default["rand"] = &neo_libs::Math_rand;
-
-	g_sNeoFunLib_Default["sys_meta"] = &neo_libs::util_meta;
 	g_sNeoFunLib_Default["print"] = &neo_libs::io_print;
-	g_sNeoFunLib_Default["clock"] = &neo_libs::sys_clock;
 
-	g_sNeoFunLib_Default["load"] = &neo_libs::sys_load;
-	g_sNeoFunLib_Default["pcall"] = &neo_libs::sys_pcall;
+	g_sNeoFunLib_Default["#abs"] = &neo_libs::Math_abs;
+	g_sNeoFunLib_Default["#acos"] = &neo_libs::Math_acos;
+	g_sNeoFunLib_Default["#asin"] = &neo_libs::Math_asin;
+	g_sNeoFunLib_Default["#atan"] = &neo_libs::Math_atan;
+	g_sNeoFunLib_Default["#ceil"] = &neo_libs::Math_ceil;
+	g_sNeoFunLib_Default["#floor"] = &neo_libs::Math_floor;
+	g_sNeoFunLib_Default["#sin"] = &neo_libs::Math_sin;
+	g_sNeoFunLib_Default["#cos"] = &neo_libs::Math_cos;
+	g_sNeoFunLib_Default["#tan"] = &neo_libs::Math_tan;
+	g_sNeoFunLib_Default["#log"] = &neo_libs::Math_log;
+	g_sNeoFunLib_Default["#log10"] = &neo_libs::Math_log10;
+	g_sNeoFunLib_Default["#pow"] = &neo_libs::Math_pow;
+	g_sNeoFunLib_Default["#deg"] = &neo_libs::Math_deg;
+	g_sNeoFunLib_Default["#rad"] = &neo_libs::Math_rad;
+	g_sNeoFunLib_Default["#sqrt"] = &neo_libs::Math_sqrt;
+	g_sNeoFunLib_Default["#srand"] = &neo_libs::Math_srand;
+	g_sNeoFunLib_Default["#rand"] = &neo_libs::Math_rand;
 
-	g_sNeoFunLib_Default["set"] = &neo_libs::set;
+	g_sNeoFunLib_Default["#clock"] = &neo_libs::sys_clock;
+	g_sNeoFunLib_Default["#meta"] = &neo_libs::sys_meta;
 
-	g_sNeoFunLib_Default["coroutine_create"] = &neo_libs::sys_coroutine_create;
-	g_sNeoFunLib_Default["coroutine_resume"] = &neo_libs::sys_coroutine_resume;
-	g_sNeoFunLib_Default["coroutine_status"] = &neo_libs::sys_coroutine_status;
-	g_sNeoFunLib_Default["coroutine_close"] = &neo_libs::sys_coroutine_close;
+	g_sNeoFunLib_Default["#load"] = &neo_libs::sys_load;
+	g_sNeoFunLib_Default["#pcall"] = &neo_libs::sys_pcall;
+	g_sNeoFunLib_Default["#aysnc_create"] = &neo_libs::sys_aysnc_create;
+	g_sNeoFunLib_Default["#set"] = &neo_libs::sys_set;
 
-	g_sNeoFunLib_Default["aysnc_create"] = &neo_libs::aysnc_create;
+
+	g_sNeoFunLib_Default["#create"] = &neo_libs::coroutine_create;
+	g_sNeoFunLib_Default["#resume"] = &neo_libs::coroutine_resume;
+	g_sNeoFunLib_Default["#status"] = &neo_libs::coroutine_status;
+	g_sNeoFunLib_Default["#close"] = &neo_libs::coroutine_close;
+
 }
 bool CNeoVMImpl::IsGlobalLibFun(std::string& FunName)
 {

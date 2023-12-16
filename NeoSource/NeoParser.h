@@ -156,6 +156,7 @@ struct SFunctionInfo
 //	int							_staticIndex;
 	std::string					_name;
 	std::set<std::string>		_args;
+	int							_built_in_arg_c;
 	FUNCTION_TYPE				_funType = FUNT_NORMAL;
 	std::string					_moduleName;
 
@@ -212,6 +213,10 @@ struct SFunctionInfo
 	{
 		return CODE_TO_NOP(*(OpType*)((u8*)_code->GetData() + iOffsetOP));
 	}
+	SVMOperation* GetOPPointer(int iOffsetOP)
+	{
+		return (SVMOperation*)((u8*)_code->GetData() + iOffsetOP);
+	}
 	s16 GetN(int iOffsetOP, int n)
 	{
 		s16* pN = (s16*)((u8*)_code->GetData() + iOffsetOP + sizeof(OpType) + sizeof(ArgFlag));
@@ -263,7 +268,7 @@ struct SFunctionInfo
 
 		Push_Flag(r, a1, a2);
 	}
-	void	Push_Call(CArchiveRdWC& ar, eNOperation op, short fun, short args)
+	void	Push_Call(CArchiveRdWC& ar, eNOperation op, short fun, short args, short res)
 	{
 		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
@@ -272,7 +277,7 @@ struct SFunctionInfo
 		_code->Write(&optype, sizeof(optype));
 		//_code->Write(&fun, sizeof(fun));
 		//_code->Write(&args, sizeof(args));
-		Push_Flag(fun, args, 0);
+		Push_Flag(fun, args, res);
 	}
 	void	Push_CallPtr(CArchiveRdWC& ar, short table, short index, short args)
 	{
@@ -308,6 +313,7 @@ struct SFunctionInfo
 				switch (preOP)
 				{
 				case NOP_MOV:
+				case NOP_MOV_MINUS:
 				case NOP_ADD3:
 				case NOP_SUB3:
 				case NOP_MUL3:
@@ -641,6 +647,7 @@ struct SFunctionInfo
 
 struct SFunctionLayer
 {
+	bool _blBuiltInModule = false;
 	std::map<std::string, SFunctionInfo*>	_funs;
 	std::map< std::string, SFunctionLayer*> _defModules;
 };
@@ -696,6 +703,8 @@ struct SFunctions
 		for (int i = (int)_funLayers.size() - 1; i >= 0; i--)
 		{
 			SFunctionLayer* pFLayer = _funLayers[i];
+			if(pFLayer->_blBuiltInModule)
+				continue;
 			cnt += (int)pFLayer->_funs.size();
 		}
 		return cnt;
