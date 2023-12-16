@@ -1,3 +1,5 @@
+import system;
+
 fun Vector3_Meta(var r);
 fun Vector3_New(var x, var y, var z)
 {
@@ -69,13 +71,13 @@ fun Vector3_Meta(var r)
 		staticVector3Meta["-"] = Vector3_Sub3;
 		staticVector3Meta["+="] = Vector3_Add2;
 	}
-	sys_meta(r, staticVector3Meta);
+	system.meta(r, staticVector3Meta);
 }
 
 export fun meta()
 {
 	var c;
-	var tm = clock();
+	var tm = system.clock();
 	for(var i in 0, 10000, 1)
 	{
 		var a = Vector3_New(3.0, 4.0, 5.0);
@@ -87,5 +89,5 @@ export fun meta()
 	print("x : " .. c.x);
 	print("y : " .. c.y);
 	print("z : " .. c.z);
-	print("Loop  Time : " .. (clock() - tm));
+	print("Loop  Time : " .. (system.clock() - tm));
 }

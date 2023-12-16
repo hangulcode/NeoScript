@@ -818,42 +818,46 @@ void AddBuildinFunction(CArchiveRdWC& ar, SFunctions& funs, const std::string& f
 	pF->_name = "#" + fname;
 	pF->_moduleName = ar.m_sModuleName;
 
-
-	char ch[64];
-	for (int i = 0; i < argc; i++)
-	{
-#ifdef _WIN32
-		sprintf_s(ch, _countof(ch), "a%d", i);
-#else
-		sprintf(ch, "a%d", i);
-#endif
-		pF->_args.insert(ch);
-	}
-
+	pF->_built_in_arg_c = argc;
 	pF->_funID = -1;
 	//funs._funIDs[pF->_funID] = pF;
 }
 bool AddBuildinModule(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string mod)
 {
 	SFunctionLayer* pLayerBackup = funs._curModule;
-	if(mod == "math")
+	if(mod == "system")
 	{
-		AddBuildinFunction(ar, funs, "acos",	1);
-		AddBuildinFunction(ar, funs, "asin",	1);
-		AddBuildinFunction(ar, funs, "atan",	1);
-		AddBuildinFunction(ar, funs, "ceil",	1);
-		AddBuildinFunction(ar, funs, "floor",	1);
-		AddBuildinFunction(ar, funs, "sin",		1);
-		AddBuildinFunction(ar, funs, "cos",		1);
-		AddBuildinFunction(ar, funs, "tan",		1);
-		AddBuildinFunction(ar, funs, "log",		1);
-		AddBuildinFunction(ar, funs, "log10",	1);
-		AddBuildinFunction(ar, funs, "pow",		2);
-		AddBuildinFunction(ar, funs, "deg",		1);
-		AddBuildinFunction(ar, funs, "rad",		1);
-		AddBuildinFunction(ar, funs, "sqrt",	1);
-		AddBuildinFunction(ar, funs, "srand",	1);
-		AddBuildinFunction(ar, funs, "rand",	0);
+		AddBuildinFunction(ar, funs, "clock", 0);
+		AddBuildinFunction(ar, funs, "meta", 2);
+		AddBuildinFunction(ar, funs, "load", 2);
+		AddBuildinFunction(ar, funs, "pcall", 1);
+		AddBuildinFunction(ar, funs, "aysnc_create", 0);
+	}
+	if (mod == "math")
+	{
+		AddBuildinFunction(ar, funs, "acos", 1);
+		AddBuildinFunction(ar, funs, "asin", 1);
+		AddBuildinFunction(ar, funs, "atan", 1);
+		AddBuildinFunction(ar, funs, "ceil", 1);
+		AddBuildinFunction(ar, funs, "floor", 1);
+		AddBuildinFunction(ar, funs, "sin", 1);
+		AddBuildinFunction(ar, funs, "cos", 1);
+		AddBuildinFunction(ar, funs, "tan", 1);
+		AddBuildinFunction(ar, funs, "log", 1);
+		AddBuildinFunction(ar, funs, "log10", 1);
+		AddBuildinFunction(ar, funs, "pow", 2);
+		AddBuildinFunction(ar, funs, "deg", 1);
+		AddBuildinFunction(ar, funs, "rad", 1);
+		AddBuildinFunction(ar, funs, "sqrt", 1);
+		AddBuildinFunction(ar, funs, "srand", 1);
+		AddBuildinFunction(ar, funs, "rand", 0);
+	}
+	if (mod == "coroutine")
+	{
+		AddBuildinFunction(ar, funs, "create", 1);
+		AddBuildinFunction(ar, funs, "resume", -1);
+		AddBuildinFunction(ar, funs, "status", 1);
+		AddBuildinFunction(ar, funs, "close", -1);
 	}
 	return true;
 }
@@ -910,7 +914,7 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	int iFileLen = 0;
 	if (false == FileLoad(fullFileName.c_str(), pFileBuffer, iFileLen))
 	{
-		if(fileName == "math") // Built-in Import
+		if(fileName == "system" || fileName == "math" || fileName == "coroutine") // Built-in Import
 		{
 			SFunctionLayer* pLayerBackup = funs._curModule;
 			funs._curModule = funs.NewLayer();
@@ -1163,13 +1167,16 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 		}
 		if (pFun != NULL)
 		{
-			if ((int)pFun->_args.size() != iParamCount)
-			{
-				SetCompileError(ar, "Error (%d, %d): Arg Count Invalid (%d != %d)", ar.CurLine(), ar.CurCol(), (int)pFun->_args.size(), iParamCount);
-				return false;
-			}
 			if(pFun->_funType == FUNT_BUILT_IN)
 			{
+				if(pFun->_built_in_arg_c != -1)
+				{
+					if (pFun->_built_in_arg_c != iParamCount)
+					{
+						SetCompileError(ar, "Error (%d, %d): Arg Count Invalid (%d != %d)", ar.CurLine(), ar.CurCol(), (int)pFun->_args.size(), iParamCount);
+						return false;
+					}
+				}
 				//SetCompileError(ar, "Error (%d, %d):  Built-In", ar.CurLine(), ar.CurCol());
 				iResultStack._iArrayIndex = funs.AddStaticString(pFun->_name);
 				funs._cur->Push_CallPtr2(ar, iResultStack._iArrayIndex, iParamCount);
@@ -1179,6 +1186,12 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 			}
 			else
 			{
+				if ((int)pFun->_args.size() != iParamCount)
+				{
+					SetCompileError(ar, "Error (%d, %d): Arg Count Invalid (%d != %d)", ar.CurLine(), ar.CurCol(), (int)pFun->_args.size(), iParamCount);
+					return false;
+				}
+
 				iResultStack = funs._cur->AllocLocalTempVar();
 				funs._cur->Push_Call(ar, NOP_CALL, pFun->_funID, iParamCount, iResultStack._iVar);
 			}

@@ -1,3 +1,4 @@
+import system;
 
 fun dumpMap(var o)
 {
@@ -74,7 +75,7 @@ fun fun_Sort()
 fun Fun_Performanc()
 {
 	var map = {};
-	var tm = clock();
+	var tm = system.clock();
 	
 //	var count = 10000001; // release
 	var count = 10001; // debug
@@ -86,29 +87,29 @@ fun Fun_Performanc()
 	var sum = 0.0;
 	print("Map Size : " ..tosize(map));
 	//sleep(5000);
-	print("Insert Time : " .. (clock() - tm));
+	print("Insert Time : " .. (system.clock() - tm));
 	
-	tm = clock();
+	tm = system.clock();
 	map.sort(fun(var a, var b) { return a > b; });
-	print("Sort  Time : " .. (clock() - tm));
+	print("Sort  Time : " .. (system.clock() - tm));
 	//print("Sorted   : " .. dumpMap(map));
 
-	tm = clock();
+	tm = system.clock();
 	foreach(var a, b in map)
 	{
 		sum += b;
 	}
 	print("Map Size : " ..tosize(map));
 	print("Sum " .. sum .. "");
-	print("Foreach Time : " .. (clock() - tm));
+	print("Foreach Time : " .. (system.clock() - tm));
 
-	tm = clock();
+	tm = system.clock();
 	sum = 0.0;
 	for (var i in 1, count, 1)
 	{
 		sum += i;
 	}
-	print("for Time : " .. (clock() - tm));
+	print("for Time : " .. (system.clock() - tm));
 }
 export fun main()
 {

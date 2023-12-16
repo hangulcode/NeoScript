@@ -156,6 +156,7 @@ struct SFunctionInfo
 //	int							_staticIndex;
 	std::string					_name;
 	std::set<std::string>		_args;
+	int							_built_in_arg_c;
 	FUNCTION_TYPE				_funType = FUNT_NORMAL;
 	std::string					_moduleName;
 

@@ -1,10 +1,11 @@
+import system;
 import mod2 as m2;
 
 fun test()
 {
-	var m = load("print('ok');", "chunk");
-	pcall(m); // ok
-	pcall(m); // ok
+	var m = system.load("print('ok');", "chunk");
+	system.pcall(m); // ok
+	system.pcall(m); // ok
 }
 
 export fun main()
