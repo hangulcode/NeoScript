@@ -811,6 +811,52 @@ void ClearTempVars(SFunctions& funs)
 		}
 	}
 }
+void AddBuildinFunction(CArchiveRdWC& ar, SFunctions& funs, const std::string& fname, int argc)
+{
+	SFunctionInfo* pF = funs.NewFun(fname, nullptr, funs._cur->_pDebugData);
+	pF->_funType = FUNT_BUILT_IN;
+	pF->_name = "#" + fname;
+	pF->_moduleName = ar.m_sModuleName;
+
+
+	char ch[64];
+	for (int i = 0; i < argc; i++)
+	{
+#ifdef _WIN32
+		sprintf_s(ch, _countof(ch), "a%d", i);
+#else
+		sprintf(ch, "a%d", i);
+#endif
+		pF->_args.insert(ch);
+	}
+
+	pF->_funID = -1;
+	//funs._funIDs[pF->_funID] = pF;
+}
+bool AddBuildinModule(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string mod)
+{
+	SFunctionLayer* pLayerBackup = funs._curModule;
+	if(mod == "math")
+	{
+		AddBuildinFunction(ar, funs, "acos",	1);
+		AddBuildinFunction(ar, funs, "asin",	1);
+		AddBuildinFunction(ar, funs, "atan",	1);
+		AddBuildinFunction(ar, funs, "ceil",	1);
+		AddBuildinFunction(ar, funs, "floor",	1);
+		AddBuildinFunction(ar, funs, "sin",		1);
+		AddBuildinFunction(ar, funs, "cos",		1);
+		AddBuildinFunction(ar, funs, "tan",		1);
+		AddBuildinFunction(ar, funs, "log",		1);
+		AddBuildinFunction(ar, funs, "log10",	1);
+		AddBuildinFunction(ar, funs, "pow",		2);
+		AddBuildinFunction(ar, funs, "deg",		1);
+		AddBuildinFunction(ar, funs, "rad",		1);
+		AddBuildinFunction(ar, funs, "sqrt",	1);
+		AddBuildinFunction(ar, funs, "srand",	1);
+		AddBuildinFunction(ar, funs, "rand",	0);
+	}
+	return true;
+}
 bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 #ifdef _NEO_IMPORTABLE
@@ -864,6 +910,19 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	int iFileLen = 0;
 	if (false == FileLoad(fullFileName.c_str(), pFileBuffer, iFileLen))
 	{
+		if(fileName == "math") // Built-in Import
+		{
+			SFunctionLayer* pLayerBackup = funs._curModule;
+			funs._curModule = funs.NewLayer();
+			funs._curModule->_blBuiltInModule = true;
+
+			AddBuildinModule(ar, funs, vars, fileName);
+
+			vars.m_sImports[fileName] = funs._curModule;
+			pLayerBackup->_defModules[defName] = funs._curModule;
+			funs._curModule = pLayerBackup;
+			return true;
+		}
 		SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), tk2.c_str());
 		return false;
 	}
@@ -876,7 +935,9 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	SFunctionLayer* pLayerBackup = funs._curModule;
 	funs._curModule = funs.NewLayer();
+	/////////////////////////////////
 	bool r = ParseFunctionBody(ar2, funs, vars, false);
+	/////////////////////////////////
 	vars.m_sImports[fileName] = funs._curModule;
 	pLayerBackup->_defModules[defName] = funs._curModule;
 	funs._curModule = pLayerBackup;
@@ -1107,8 +1168,20 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 				SetCompileError(ar, "Error (%d, %d): Arg Count Invalid (%d != %d)", ar.CurLine(), ar.CurCol(), (int)pFun->_args.size(), iParamCount);
 				return false;
 			}
-			iResultStack = funs._cur->AllocLocalTempVar();
-			funs._cur->Push_Call(ar, NOP_CALL, pFun->_funID, iParamCount, iResultStack._iVar);
+			if(pFun->_funType == FUNT_BUILT_IN)
+			{
+				//SetCompileError(ar, "Error (%d, %d):  Built-In", ar.CurLine(), ar.CurCol());
+				iResultStack._iArrayIndex = funs.AddStaticString(pFun->_name);
+				funs._cur->Push_CallPtr2(ar, iResultStack._iArrayIndex, iParamCount);
+				iResultStack = funs._cur->AllocLocalTempVar();
+				funs._cur->Push_OP2(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
+				return true;
+			}
+			else
+			{
+				iResultStack = funs._cur->AllocLocalTempVar();
+				funs._cur->Push_Call(ar, NOP_CALL, pFun->_funID, iParamCount, iResultStack._iVar);
+			}
 			if (tkTypePre == TK_MINUS)
 			{
 				funs._cur->Push_OP2(ar, NOP_MOV_MINUS, iResultStack._iVar, iResultStack._iVar, false);
@@ -1638,7 +1711,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 				iTempOffset._operandType = Data_Fun;
 			}
 		}
-		else if (CNeoVMImpl::IsGlobalLibFun(tk1))
+		else if (pOtherModule == nullptr && CNeoVMImpl::IsGlobalLibFun(tk1))
 		{
 			tkType2 = GetToken(ar, tk2);
 			if (tkType2 == TK_L_SMALL)

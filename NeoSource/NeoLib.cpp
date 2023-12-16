@@ -840,23 +840,23 @@ static void AddGlobalLibFun()
 	if (g_sNeoFunLib_Default.empty() == false)
 		return;
 
-	g_sNeoFunLib_Default["abs"] = &neo_libs::Math_abs;
-	g_sNeoFunLib_Default["acos"] = &neo_libs::Math_acos;
-	g_sNeoFunLib_Default["asin"] = &neo_libs::Math_asin;
-	g_sNeoFunLib_Default["atan"] = &neo_libs::Math_atan;
-	g_sNeoFunLib_Default["ceil"] = &neo_libs::Math_ceil;
-	g_sNeoFunLib_Default["floor"] = &neo_libs::Math_floor;
-	g_sNeoFunLib_Default["sin"] = &neo_libs::Math_sin;
-	g_sNeoFunLib_Default["cos"] = &neo_libs::Math_cos;
-	g_sNeoFunLib_Default["tan"] = &neo_libs::Math_tan;
-	g_sNeoFunLib_Default["log"] = &neo_libs::Math_log;
-	g_sNeoFunLib_Default["log10"] = &neo_libs::Math_log10;
-	g_sNeoFunLib_Default["pow"] = &neo_libs::Math_pow;
-	g_sNeoFunLib_Default["deg"] = &neo_libs::Math_deg;
-	g_sNeoFunLib_Default["rad"] = &neo_libs::Math_rad;
-	g_sNeoFunLib_Default["sqrt"] = &neo_libs::Math_sqrt;
-	g_sNeoFunLib_Default["srand"] = &neo_libs::Math_srand;
-	g_sNeoFunLib_Default["rand"] = &neo_libs::Math_rand;
+	g_sNeoFunLib_Default["#abs"] = &neo_libs::Math_abs;
+	g_sNeoFunLib_Default["#acos"] = &neo_libs::Math_acos;
+	g_sNeoFunLib_Default["#asin"] = &neo_libs::Math_asin;
+	g_sNeoFunLib_Default["#atan"] = &neo_libs::Math_atan;
+	g_sNeoFunLib_Default["#ceil"] = &neo_libs::Math_ceil;
+	g_sNeoFunLib_Default["#floor"] = &neo_libs::Math_floor;
+	g_sNeoFunLib_Default["#sin"] = &neo_libs::Math_sin;
+	g_sNeoFunLib_Default["#cos"] = &neo_libs::Math_cos;
+	g_sNeoFunLib_Default["#tan"] = &neo_libs::Math_tan;
+	g_sNeoFunLib_Default["#log"] = &neo_libs::Math_log;
+	g_sNeoFunLib_Default["#log10"] = &neo_libs::Math_log10;
+	g_sNeoFunLib_Default["#pow"] = &neo_libs::Math_pow;
+	g_sNeoFunLib_Default["#deg"] = &neo_libs::Math_deg;
+	g_sNeoFunLib_Default["#rad"] = &neo_libs::Math_rad;
+	g_sNeoFunLib_Default["#sqrt"] = &neo_libs::Math_sqrt;
+	g_sNeoFunLib_Default["#srand"] = &neo_libs::Math_srand;
+	g_sNeoFunLib_Default["#rand"] = &neo_libs::Math_rand;
 
 	g_sNeoFunLib_Default["sys_meta"] = &neo_libs::util_meta;
 	g_sNeoFunLib_Default["print"] = &neo_libs::io_print;

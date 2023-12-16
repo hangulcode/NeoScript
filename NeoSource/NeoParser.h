@@ -646,6 +646,7 @@ struct SFunctionInfo
 
 struct SFunctionLayer
 {
+	bool _blBuiltInModule = false;
 	std::map<std::string, SFunctionInfo*>	_funs;
 	std::map< std::string, SFunctionLayer*> _defModules;
 };
@@ -701,6 +702,8 @@ struct SFunctions
 		for (int i = (int)_funLayers.size() - 1; i >= 0; i--)
 		{
 			SFunctionLayer* pFLayer = _funLayers[i];
+			if(pFLayer->_blBuiltInModule)
+				continue;
 			cnt += (int)pFLayer->_funs.size();
 		}
 		return cnt;
