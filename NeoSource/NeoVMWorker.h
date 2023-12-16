@@ -504,7 +504,7 @@ private:
 	NEOS_FORCEINLINE VarInfo* GetVarPtr_L(short n) { return m_pVarStack_Pointer + n; }
 	NEOS_FORCEINLINE VarInfo* GetVarPtr_G(short n) { return NEOS_GLOBAL_VAR(n); }
 
-	NEOS_FORCEINLINE void SetStackPointer(short n) { m_pVarStack_Pointer = &(*m_pVarStack_Base)[n]; }
+	NEOS_FORCEINLINE void SetStackPointer(int n) { m_pVarStack_Pointer = &(*m_pVarStack_Base)[n]; }
 public:
 	NEOS_FORCEINLINE CNeoVMImpl* GetVM() { return (CNeoVMImpl*)_pVM;  }
 	virtual void SetTimeout(int iTimeout, int iCheckOpCount) {

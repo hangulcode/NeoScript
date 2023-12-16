@@ -331,6 +331,13 @@ void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 	_iSP_VarsMax = _iSP_Vars + fun._localAddCount;
 	if (_iSP_Vars_Max2 < _iSP_VarsMax)
 		_iSP_Vars_Max2 = _iSP_VarsMax;
+
+	if (_iSP_VarsMax >= (int)m_pVarStack_Base->size())
+	{
+		SetCodePtr(callStack._iReturnOffset); // Error Line Finder
+		SetError("Call Stack Overflow");
+		return;
+	}
 }
 
 bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo* r, VarInfo* a, VarInfo* b)
@@ -342,6 +349,11 @@ bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo
 		return false;
 
 	int n3 = 2;
+	if (_iSP_VarsMax + n3 >= (int)m_pVarStack_Base->size())
+	{
+		SetError("Call Stack Overflow");
+		return false;
+	}
 
 	Move(&(*m_pVarStack_Base)[_iSP_VarsMax + 1], a);
 	Move(&(*m_pVarStack_Base)[_iSP_VarsMax + 2], b);
@@ -366,6 +378,11 @@ bool CNeoVMWorker::Call_MetaTable2(VarInfo* pTable, std::string& funName, VarInf
 		return false;
 
 	int n3 = 2;
+	if (_iSP_VarsMax + n3 >= (int)m_pVarStack_Base->size())
+	{
+		SetError("Call Stack Overflow");
+		return false;
+	}
 
 	Move(&(*m_pVarStack_Base)[_iSP_VarsMax + 1], r);
 	Move(&(*m_pVarStack_Base)[_iSP_VarsMax + 2], b);
@@ -588,19 +605,21 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 	}
 	catch (...)
 	{
-		int idx = int((u8*)_pCodeCurrent - _pCodeBegin - 1) / sizeof(SVMOperation);
+		//int idx = int((u8*)_pCodeCurrent - _pCodeBegin - 1) / sizeof(SVMOperation);
 		SetError("Exception");
 		bool blDebugInfo = IsDebugInfo();
 		int _lineseq = -1;
 		if (blDebugInfo)
-			_lineseq = GetDebugLine(idx);
+			_lineseq = GetDebugLine(_isErrorOPIndex);
 
 		char chMsg[256];
+
 #ifdef _WIN32
-		sprintf_s(chMsg, _countof(chMsg), "%s : Line (%d)", GetVM()->_pErrorMsg.c_str(), _lineseq);
+		sprintf_s(chMsg, _countof(chMsg), "%s : Index(%d), Line (%d)", GetVM()->_pErrorMsg.c_str(), _isErrorOPIndex, _lineseq);
 #else
-		sprintf(chMsg, "%s : Line (%d)", GetVM()->_pErrorMsg.c_str(), _lineseq);
+		sprintf(chMsg, "%s : Index(%d), Line (%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
 #endif
+
 		GetVM()->_sErrorMsgDetail = chMsg;
 		return false;
 	}
