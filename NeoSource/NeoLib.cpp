@@ -740,7 +740,7 @@ struct neo_libs
 		return true;
 	}	
 
-	static bool set(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	static bool sys_set(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1) return false;
 
@@ -866,8 +866,8 @@ static void AddGlobalLibFun()
 	g_sNeoFunLib_Default["#load"] = &neo_libs::sys_load;
 	g_sNeoFunLib_Default["#pcall"] = &neo_libs::sys_pcall;
 	g_sNeoFunLib_Default["#aysnc_create"] = &neo_libs::sys_aysnc_create;
+	g_sNeoFunLib_Default["#set"] = &neo_libs::sys_set;
 
-	g_sNeoFunLib_Default["set"] = &neo_libs::set;
 
 	g_sNeoFunLib_Default["#create"] = &neo_libs::coroutine_create;
 	g_sNeoFunLib_Default["#resume"] = &neo_libs::coroutine_resume;

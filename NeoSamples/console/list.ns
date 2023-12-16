@@ -1,3 +1,4 @@
+import system;
 
 fun Fun_List()
 {
@@ -31,19 +32,19 @@ fun Fun_Set()
 	var List2 = [ 1, 4, 5, 7 ];
 
 	print("Set | : ", " ");
-	var Set2 = set(List1) | set(List2);
+	var Set2 = system.set(List1) | system.set(List2);
 	foreach(var i,v in Set2)
 		print(i, " ");
 	print("");
 
 	print("Set & : ", " ");
-	var Set3 = set(List1) & set(List2);
+	var Set3 = system.set(List1) & system.set(List2);
 	foreach(var i,v in Set3)
 		print(i, " ");
 	print("");
 
 	print("Set - : ", " ");
-	var Set4 = set(List1) - set(List2);
+	var Set4 = system.set(List1) - system.set(List2);
 	foreach(var i,v in Set4)
 		print(i, " ");
 	print(""); 
@@ -70,7 +71,7 @@ fun Fun_Map()
 	print("");
 
 	print("Map To Set | : ", " ");
-	foreach(var i,v in set(Map1.values()) | set(Map2.values()))
+	foreach(var i,v in system.set(Map1.values()) | system.set(Map2.values()))
 		print(i, " ");
 	print("");
 }

@@ -40,7 +40,6 @@
 	- fun: Notice the start of the function
 	- import: prefixed to fun and declared to call a c ++ function
 	- export: can be prepended to fun and the function can be called from external (c ++)
-	- system: support for a set of built-in functions.
 	- tostring (x): change the value of x variable to string
 	- toint (x): change the value of x variable to int
 	- tofloat (x): change the value of x variable to double
@@ -50,8 +49,8 @@
 	- return [x]: Return x value
 	- break: causes for / foreach / while loop to exit
 	- if (x) / else: same as c ++
-	- for / while: same as c ++
-	- For foreach: talbe variable only. Must be foreach (var a, b in table)
+	- for : for (var a int 1, 100, 1)
+	- foreach : map, list, set variable only. Must be foreach (var a, b in map)
 	- true / false: value stored in a variable of type bool
 	- null: no value
 	- ++ / - Same as c ++ (variable value is incremented by 1 or decremented by 1)
@@ -61,6 +60,22 @@
 
 ### Built-in system function use system.
 	## Basic
+	- print (x): print string x
+
+	## system
+	- clock ():  return time
+	- load ():  load module scipt
+	- pcall (x) : run mdule script
+	- meta(x,y) : bind the y function of var x
+	- set(x) : list to set
+	
+	## coroutine
+	- create (): coroutine create and return (suspended mode )
+	- resume (x): suspended coroutine active
+	- status (x): coroutine state string return
+	- close ([x]): coroutine close
+
+	## math
 	- abs (x): same as c ++
 	- acos (x): same as c ++
 	- asin (x): same as c ++
@@ -78,14 +93,6 @@
 	- sqrt (x): same as c ++
 	- srand (x): same as c ++
 	- rand (): same as c ++
-	- print (x): print string x
-	- clock ():  return time
-	- load ():  load module scipt
-	- pcall (x) : run mdule script
-	- sys_meta(x,y) : bind the y function of var x.
-	- coroutine_create (): coroutine create and return (suspended mode )
-	- coroutine_resume (x): suspended coroutine active
-	- coroutine_status (x): coroutine state string return
 
     ## string
 	- len (): Return the length of the string

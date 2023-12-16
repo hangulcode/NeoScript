@@ -832,6 +832,7 @@ bool AddBuildinModule(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::stri
 		AddBuildinFunction(ar, funs, "load", 2);
 		AddBuildinFunction(ar, funs, "pcall", 1);
 		AddBuildinFunction(ar, funs, "aysnc_create", 0);
+		AddBuildinFunction(ar, funs, "set", 1);
 	}
 	if (mod == "math")
 	{
