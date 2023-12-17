@@ -390,7 +390,7 @@ private:
 
 	int					_isErrorOPIndex = 0;
 
-	bool					_isSetup = false;
+	bool					_isInitialized = false;
 	int						_iRemainSleep = 0;
 	clock_t					_preClock;
 
@@ -467,6 +467,8 @@ private:
 	CoroutineInfo* m_pCur = NULL;
 	CoroutineInfo* m_pRegisterActive = NULL;
 
+	bool	Initialize(int iFunctionID, std::vector<VarInfo>& _args);
+
 	virtual bool RunFunctionResume(int iFID, std::vector<VarInfo>& _args);
 	virtual bool RunFunction(int iFID, std::vector<VarInfo>& _args);
 	virtual bool RunFunction(const std::string& funName, std::vector<VarInfo>& _args);
@@ -475,7 +477,8 @@ private:
 	virtual bool	Setup(int iFunctionID, std::vector<VarInfo>& _args);
 	virtual bool	Start(int iFunctionID, std::vector<VarInfo>& _args);
 	virtual bool IsWorking();
-	virtual bool	Run(int iBreakingCallStack = 0);
+	virtual bool	Run();
+
 
 	bool	RunInternal(int iBreakingCallStack);
 
@@ -653,11 +656,11 @@ public:
 
 	bool CallN_TL()
 	{
-		if (_isSetup == false)
+		if (_isInitialized == false)
 			return true;
 
 		Run();
-		if (_isSetup == true)
+		if (_isInitialized == true)
 		{	// yet ... not completed
 			//GC();
 			return false;

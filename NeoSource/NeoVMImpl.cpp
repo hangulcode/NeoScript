@@ -491,7 +491,7 @@ bool CNeoVMImpl::PCall(int iModule)
 
 	auto pWorker = (*it).second;
 	std::vector<VarInfo> _args;
-	pWorker->Start(0, _args);
+	pWorker->Initialize(0, _args);
 	return true;
 }
 
