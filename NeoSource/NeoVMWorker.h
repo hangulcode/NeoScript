@@ -479,8 +479,8 @@ private:
 	virtual bool IsWorking();
 	virtual bool	Run();
 
-
-	bool	RunInternal(int iBreakingCallStack);
+	template<typename T>
+	bool	RunInternal(T slide, int iBreakingCallStack);
 
 	bool	StopCoroutine(bool doDead = true);
 	void	DeadCoroutine(CoroutineInfo* pCI);
@@ -656,11 +656,11 @@ public:
 
 	bool CallN_TL()
 	{
-		if (_isInitialized == false)
+		if (_iSP_Vars == _iSP_VarsMax)
 			return true;
 
 		Run();
-		if (_isInitialized == true)
+		if (_iSP_Vars != _iSP_VarsMax)
 		{	// yet ... not completed
 			//GC();
 			return false;

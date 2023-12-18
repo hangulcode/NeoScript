@@ -622,7 +622,10 @@ bool	CNeoVMWorker::Run()
 	try
 	{
 #endif
-		b = RunInternal((int)m_pCallStack->size());
+		if(m_iTimeout >= 0)
+			b = RunInternal(0, (int)m_pCallStack->size());
+		else
+			b = RunInternal("abc", (int)m_pCallStack->size());
 #ifdef _WIN32
 	}
 	catch (...)
@@ -656,7 +659,8 @@ void CNeoVMWorker::JumpAsyncMsg()
 	SetCodePtr(sizeof(SVMOperation));
 	_pCodeCurrent->n23 = dist - int(sizeof(SVMOperation) * 2); // Idle
 }
-bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
+template<typename T>
+bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 {
 	if (false == _isInitialized)
 		return false;
@@ -687,15 +691,17 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 	VarInfo* pVarTemp = nullptr;
 	while (true)
 	{
-		if (--op_process <= 0)
+		if(std::is_integral<T>::value)
 		{
-//			JumpAsyncMsg();
-			op_process = m_iCheckOpCount;
-			if (isTimeout)
+			if (--op_process <= 0)
 			{
-				t2 = clock() - _preClock;
-				if (t2 >= m_iTimeout || t2 < 0)
-					break;
+				op_process = m_iCheckOpCount;
+//				if (isTimeout)
+				{
+					t2 = clock() - _preClock;
+					if (t2 >= m_iTimeout || t2 < 0)
+						break;
+				}
 			}
 		}
 
