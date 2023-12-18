@@ -602,7 +602,8 @@ bool	CNeoVMWorker::Setup(int iFunctionID, std::vector<VarInfo>& _args)
 }
 bool CNeoVMWorker::IsWorking()
 {
-	return _isInitialized;
+	//return _isInitialized;
+	return _iSP_VarsMax > 0;
 }
 
 bool CNeoVMWorker::BindWorkerFunction(const std::string& funName)
@@ -994,6 +995,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 						break;
 				}
 //				_isInitialized = false;
+				_iSP_VarsMax = _iSP_Vars;
 				return true;
 			}
 			iTemp = (int)m_pCallStack->size() - 1;
