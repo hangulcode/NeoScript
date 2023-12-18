@@ -284,6 +284,12 @@ VarInfo* CNeoVMWorker::GetType(VarInfo* v1)
 
 void CNeoVMWorker::Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue)
 {
+	if (_iSP_VarsMax + n2 >= (int)m_pVarStack_Base->size())
+	{
+		SetError("Call Stack Overflow");
+		return;
+	}
+
 	if (_iSP_Vars_Max2 < _iSP_VarsMax + (1 + n2))
 		_iSP_Vars_Max2 = _iSP_VarsMax + (1 + n2);
 
@@ -292,8 +298,10 @@ void CNeoVMWorker::Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue)
 		SetError("Ptr Call is null");
 		return;
 	}
+	int op = GetCodeptr();
+	int iSave_SP_Vars = _iSP_Vars;
+	int iSave_SP_VarsMax = _iSP_VarsMax;
 
-	int iSave = _iSP_Vars;
 	_iSP_Vars = _iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);
 
@@ -302,8 +310,10 @@ void CNeoVMWorker::Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue)
 		SetError("Ptr Call Argument Count Error");
 		return;
 	}
-	_iSP_Vars = iSave;
+	_iSP_Vars = iSave_SP_Vars;
 	SetStackPointer(_iSP_Vars);
+	SetCodePtr(op);
+	_iSP_VarsMax = iSave_SP_VarsMax;
 }
 
 void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
@@ -544,6 +554,18 @@ void CNeoVMWorker::SetErrorFormat(const char* lpszString, ...)
 	SetError(buff);
 }
 
+bool	CNeoVMWorker::Initialize(int iFunctionID, std::vector<VarInfo>& _args)
+{
+	_iSP_Vars = 0;// _header._iStaticVarCount;
+	_iSP_VarsMax = 0;
+	_iSP_Vars_Max2 = 0;
+	if (false == Setup(iFunctionID, _args))
+		return false;
+	_isInitialized = true;
+	return Run();
+}
+
+
 bool	CNeoVMWorker::Start(int iFunctionID, std::vector<VarInfo>& _args)
 {
 	if(false == Setup(iFunctionID, _args))
@@ -561,11 +583,11 @@ bool	CNeoVMWorker::Setup(int iFunctionID, std::vector<VarInfo>& _args)
 
 	SetCodePtr(fun._codePtr);
 
-	_iSP_Vars = 0;// _header._iStaticVarCount;
+//	_iSP_Vars = 0;// _header._iStaticVarCount;
 	SetStackPointer(_iSP_Vars);
 	_iSP_VarsMax = _iSP_Vars + fun._localAddCount;
-
-	_iSP_Vars_Max2 = _iSP_VarsMax;
+	if(_iSP_Vars_Max2 < _iSP_VarsMax)
+		_iSP_Vars_Max2 = _iSP_VarsMax;
 
 	if (iArgs > fun._argsCount)
 		iArgs = fun._argsCount;
@@ -576,12 +598,12 @@ bool	CNeoVMWorker::Setup(int iFunctionID, std::vector<VarInfo>& _args)
 	for (; iCur < fun._argsCount; iCur++)
 		Var_Release(&(*m_pVarStack_Base)[1 + _iSP_Vars + iCur]);
 
-	_isSetup = true;
 	return true;
 }
 bool CNeoVMWorker::IsWorking()
 {
-	return _isSetup;
+	//return _isInitialized;
+	return _iSP_VarsMax > 0;
 }
 
 bool CNeoVMWorker::BindWorkerFunction(const std::string& funName)
@@ -593,14 +615,17 @@ bool CNeoVMWorker::BindWorkerFunction(const std::string& funName)
 	std::vector<VarInfo> _args;
 	return Setup(iFID, _args);
 }
-bool	CNeoVMWorker::Run(int iBreakingCallStack)
+bool	CNeoVMWorker::Run()
 {
 	bool b = true;
 #ifdef _WIN32
 	try
 	{
 #endif
-		b = RunInternal(iBreakingCallStack);
+		if(m_iTimeout >= 0)
+			b = RunInternal(0, (int)m_pCallStack->size());
+		else
+			b = RunInternal("abc", (int)m_pCallStack->size());
 #ifdef _WIN32
 	}
 	catch (...)
@@ -615,9 +640,9 @@ bool	CNeoVMWorker::Run(int iBreakingCallStack)
 		char chMsg[256];
 
 #ifdef _WIN32
-		sprintf_s(chMsg, _countof(chMsg), "%s : Index(%d), Line (%d)", GetVM()->_pErrorMsg.c_str(), _isErrorOPIndex, _lineseq);
+		sprintf_s(chMsg, _countof(chMsg), "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), _isErrorOPIndex, _lineseq);
 #else
-		sprintf(chMsg, "%s : Index(%d), Line (%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
+		sprintf(chMsg, "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
 #endif
 
 		GetVM()->_sErrorMsgDetail = chMsg;
@@ -634,9 +659,10 @@ void CNeoVMWorker::JumpAsyncMsg()
 	SetCodePtr(sizeof(SVMOperation));
 	_pCodeCurrent->n23 = dist - int(sizeof(SVMOperation) * 2); // Idle
 }
-bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
+template<typename T>
+bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 {
-	if (false == _isSetup)
+	if (false == _isInitialized)
 		return false;
 
 	clock_t t1, t2;
@@ -665,15 +691,17 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 	VarInfo* pVarTemp = nullptr;
 	while (true)
 	{
-		if (--op_process <= 0)
+		if(std::is_integral<T>::value)
 		{
-//			JumpAsyncMsg();
-			op_process = m_iCheckOpCount;
-			if (isTimeout)
+			if (--op_process <= 0)
 			{
-				t2 = clock() - _preClock;
-				if (t2 >= m_iTimeout || t2 < 0)
-					break;
+				op_process = m_iCheckOpCount;
+//				if (isTimeout)
+				{
+					t2 = clock() - _preClock;
+					if (t2 >= m_iTimeout || t2 < 0)
+						break;
+				}
 			}
 		}
 
@@ -874,8 +902,6 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 
 		case NOP_CALL:
 			Call(OP.n1, OP.n2, (OP.argFlag & NEOS_OP_CALL_NORESULT) ? nullptr : GetVarPtr3(OP));
-			if(GetVM()->IsLocalErrorMsg())
-				break;
 			break;
 		case NOP_PTRCALL:
 		{
@@ -974,7 +1000,8 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 					if(StopCoroutine(true) == true) // Other Coroutine Active (No Stop)
 						break;
 				}
-				_isSetup = false;
+//				_isInitialized = false;
+				_iSP_VarsMax = _iSP_Vars;
 				return true;
 			}
 			iTemp = (int)m_pCallStack->size() - 1;
@@ -1072,9 +1099,9 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 				if (blDebugInfo)
 					_lineseq = GetDebugLine(idx);
 #ifdef _WIN32
-				sprintf_s(chMsg, _countof(chMsg), "%s : Index(%d), Line (%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
+				sprintf_s(chMsg, _countof(chMsg), "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
 #else
-				sprintf(chMsg, "%s : Index(%d), Line (%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
+				sprintf(chMsg, "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
 #endif
 				if (GetVM()->_sErrorMsgDetail.empty())
 					GetVM()->_sErrorMsgDetail = chMsg;
@@ -1210,7 +1237,7 @@ bool CNeoVMWorker::StartCoroutione(int argSP_Vars, int n3)
 
 VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 {
-	if (_isSetup == false)
+	if (_isInitialized == false)
 		return NULL;
 
 	SFunctionTable& fun = m_sFunctionPtr[iFID];
@@ -1241,7 +1268,7 @@ VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 	for (; iCur < fun._argsCount; iCur++)
 		Var_Release(&(*m_pVarStack_Base)[1 + _iSP_Vars + iCur]);
 
-	Run((int)m_pCallStack->size());
+	Run();
 
 //	_read(&(*m_pVarStack)[_iSP_Vars], *r);
 	VarInfo* r = &(*m_pVarStack_Base)[_iSP_Vars];
@@ -1253,7 +1280,7 @@ VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 
 	//GC();
 	
-	_isSetup = true;
+	_isInitialized = true;
 	return r;
 }
 bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserData, const std::string& fname, int n3)
