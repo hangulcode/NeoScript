@@ -776,11 +776,11 @@ struct neo_libs
 //typedef bool (ClassName::*TYPE_NeoLib)(CNeoVMWorker* pN, short args);
 //typedef bool(*TYPE_NeoLib)(CNeoVMWorker* pN, short args);
 typedef bool(*TYPE_NeoLib)(CNeoVMWorker* pN, VarInfo* pVar, short args);
-static std::unordered_map<std::string, TYPE_NeoLib> g_sNeoFunLib_Default;
-static std::unordered_map<std::string, TYPE_NeoLib> g_sNeoFunLib_List;
-static std::unordered_map<std::string, TYPE_NeoLib> g_sNeoFunLib_String;
-static std::unordered_map<std::string, TYPE_NeoLib> g_sNeoFunLib_Map;
-static std::unordered_map<std::string, TYPE_NeoLib> g_sNeoFunLib_Async;
+static SimpleHash<TYPE_NeoLib, 512> g_sNeoFunLib_Default;
+static std::map<std::string, TYPE_NeoLib> g_sNeoFunLib_List;
+static std::map<std::string, TYPE_NeoLib> g_sNeoFunLib_String;
+static std::map<std::string, TYPE_NeoLib> g_sNeoFunLib_Map;
+static std::map<std::string, TYPE_NeoLib> g_sNeoFunLib_Async;
 
 bool CNeoVMImpl::_funInitLib = false;
 FunctionPtrNative CNeoVMImpl::_funLib_Default;
@@ -790,16 +790,15 @@ FunctionPtrNative CNeoVMImpl::_funLib_Map;
 FunctionPtrNative CNeoVMImpl::_funLib_Async;
 
 
-static bool Fun_Default(INeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
+static bool Fun_Default(INeoVMWorker* pN, void* pUserData, const std::string& fun, u32 h, short args)
 {
-	auto it = g_sNeoFunLib_Default.find(fun);
-	if (it == g_sNeoFunLib_Default.end())
+	TYPE_NeoLib f;
+	if(false == g_sNeoFunLib_Default.TryGetValue(fun, h, &f))
 		return false;
 
-	TYPE_NeoLib f = (*it).second;
 	return (*f)((CNeoVMWorker*)pN, (VarInfo*)pUserData, args);
 }
-static bool Fun_String(INeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
+static bool Fun_String(INeoVMWorker* pN, void* pUserData, const std::string& fun, u32 h, short args)
 {
 	auto it = g_sNeoFunLib_String.find(fun);
 	if (it == g_sNeoFunLib_String.end())
@@ -808,7 +807,7 @@ static bool Fun_String(INeoVMWorker* pN, void* pUserData, const std::string& fun
 	TYPE_NeoLib f = (*it).second;
 	return (*f)((CNeoVMWorker*)pN, (VarInfo*)pUserData, args);
 }
-static bool Fun_List(INeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
+static bool Fun_List(INeoVMWorker* pN, void* pUserData, const std::string& fun, u32 h, short args)
 {
 	auto it = g_sNeoFunLib_List.find(fun);
 	if (it == g_sNeoFunLib_List.end())
@@ -817,7 +816,7 @@ static bool Fun_List(INeoVMWorker* pN, void* pUserData, const std::string& fun, 
 	TYPE_NeoLib f = (*it).second;
 	return (*f)((CNeoVMWorker*)pN, (VarInfo*)pUserData, args);
 }
-static bool Fun_Map(INeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
+static bool Fun_Map(INeoVMWorker* pN, void* pUserData, const std::string& fun, u32 h, short args)
 {
 	auto it = g_sNeoFunLib_Map.find(fun);
 	if (it == g_sNeoFunLib_Map.end())
@@ -826,7 +825,7 @@ static bool Fun_Map(INeoVMWorker* pN, void* pUserData, const std::string& fun, s
 	TYPE_NeoLib f = (*it).second;
 	return (*f)((CNeoVMWorker*)pN, (VarInfo*)pUserData, args);
 }
-static bool Fun_Async(INeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
+static bool Fun_Async(INeoVMWorker* pN, void* pUserData, const std::string& fun, u32 h, short args)
 {
 	auto it = g_sNeoFunLib_Async.find(fun);
 	if (it == g_sNeoFunLib_Async.end())
@@ -840,49 +839,46 @@ static void AddGlobalLibFun()
 	if (g_sNeoFunLib_Default.empty() == false)
 		return;
 
-	g_sNeoFunLib_Default["print"] = &neo_libs::io_print;
+	g_sNeoFunLib_Default.Add("print", &neo_libs::io_print);
 
-	g_sNeoFunLib_Default["#abs"] = &neo_libs::Math_abs;
-	g_sNeoFunLib_Default["#acos"] = &neo_libs::Math_acos;
-	g_sNeoFunLib_Default["#asin"] = &neo_libs::Math_asin;
-	g_sNeoFunLib_Default["#atan"] = &neo_libs::Math_atan;
-	g_sNeoFunLib_Default["#ceil"] = &neo_libs::Math_ceil;
-	g_sNeoFunLib_Default["#floor"] = &neo_libs::Math_floor;
-	g_sNeoFunLib_Default["#sin"] = &neo_libs::Math_sin;
-	g_sNeoFunLib_Default["#cos"] = &neo_libs::Math_cos;
-	g_sNeoFunLib_Default["#tan"] = &neo_libs::Math_tan;
-	g_sNeoFunLib_Default["#log"] = &neo_libs::Math_log;
-	g_sNeoFunLib_Default["#log10"] = &neo_libs::Math_log10;
-	g_sNeoFunLib_Default["#pow"] = &neo_libs::Math_pow;
-	g_sNeoFunLib_Default["#deg"] = &neo_libs::Math_deg;
-	g_sNeoFunLib_Default["#rad"] = &neo_libs::Math_rad;
-	g_sNeoFunLib_Default["#sqrt"] = &neo_libs::Math_sqrt;
-	g_sNeoFunLib_Default["#srand"] = &neo_libs::Math_srand;
-	g_sNeoFunLib_Default["#rand"] = &neo_libs::Math_rand;
+	g_sNeoFunLib_Default.Add("#abs", &neo_libs::Math_abs);
+	g_sNeoFunLib_Default.Add("#acos", &neo_libs::Math_acos);
+	g_sNeoFunLib_Default.Add("#asin", &neo_libs::Math_asin);
+	g_sNeoFunLib_Default.Add("#atan", &neo_libs::Math_atan);
+	g_sNeoFunLib_Default.Add("#ceil", &neo_libs::Math_ceil);
+	g_sNeoFunLib_Default.Add("#floor", &neo_libs::Math_floor);
+	g_sNeoFunLib_Default.Add("#sin", &neo_libs::Math_sin);
+	g_sNeoFunLib_Default.Add("#cos", &neo_libs::Math_cos);
+	g_sNeoFunLib_Default.Add("#tan", &neo_libs::Math_tan);
+	g_sNeoFunLib_Default.Add("#log", &neo_libs::Math_log);
+	g_sNeoFunLib_Default.Add("#log10", &neo_libs::Math_log10);
+	g_sNeoFunLib_Default.Add("#pow", &neo_libs::Math_pow);
+	g_sNeoFunLib_Default.Add("#deg", &neo_libs::Math_deg);
+	g_sNeoFunLib_Default.Add("#rad", &neo_libs::Math_rad);
+	g_sNeoFunLib_Default.Add("#sqrt", &neo_libs::Math_sqrt);
+	g_sNeoFunLib_Default.Add("#srand", &neo_libs::Math_srand);
+	g_sNeoFunLib_Default.Add("#rand", &neo_libs::Math_rand);
 
-	g_sNeoFunLib_Default["#clock"] = &neo_libs::sys_clock;
-	g_sNeoFunLib_Default["#meta"] = &neo_libs::sys_meta;
+	g_sNeoFunLib_Default.Add("#clock", &neo_libs::sys_clock);
+	g_sNeoFunLib_Default.Add("#meta", &neo_libs::sys_meta);
 
-	g_sNeoFunLib_Default["#load"] = &neo_libs::sys_load;
-	g_sNeoFunLib_Default["#pcall"] = &neo_libs::sys_pcall;
-	g_sNeoFunLib_Default["#aysnc_create"] = &neo_libs::sys_aysnc_create;
-	g_sNeoFunLib_Default["#set"] = &neo_libs::sys_set;
+	g_sNeoFunLib_Default.Add("#load", &neo_libs::sys_load);
+	g_sNeoFunLib_Default.Add("#pcall", &neo_libs::sys_pcall);
+	g_sNeoFunLib_Default.Add("#aysnc_create", &neo_libs::sys_aysnc_create);
+	g_sNeoFunLib_Default.Add("#set", &neo_libs::sys_set);
 
 
-	g_sNeoFunLib_Default["#create"] = &neo_libs::coroutine_create;
-	g_sNeoFunLib_Default["#resume"] = &neo_libs::coroutine_resume;
-	g_sNeoFunLib_Default["#status"] = &neo_libs::coroutine_status;
-	g_sNeoFunLib_Default["#close"] = &neo_libs::coroutine_close;
+	g_sNeoFunLib_Default.Add("#create", &neo_libs::coroutine_create);
+	g_sNeoFunLib_Default.Add("#resume", &neo_libs::coroutine_resume);
+	g_sNeoFunLib_Default.Add("#status", &neo_libs::coroutine_status);
+	g_sNeoFunLib_Default.Add("#close", &neo_libs::coroutine_close);
 
 }
 bool CNeoVMImpl::IsGlobalLibFun(std::string& FunName)
 {
 	//AddGlobalLibFun();
 	InitLib();
-	auto it = g_sNeoFunLib_Default.find(FunName);
-	if(it == g_sNeoFunLib_Default.end())
-		return false;
-	return true;
+	return g_sNeoFunLib_Default.IsKey(FunName);
 }
 void CNeoVMImpl::RegLibrary(VarInfo* pSystem, const char* pLibName)
 {

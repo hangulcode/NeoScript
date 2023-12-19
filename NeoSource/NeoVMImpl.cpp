@@ -105,6 +105,7 @@ StringInfo* CNeoVMImpl::StringAlloc(const std::string& str)
 	}
 
 	p->_StringID = m_sPool_String._dwLastID;
+	p->_hash = 0;
 	p->_refCount = 0;
 
 	p->_str = str;

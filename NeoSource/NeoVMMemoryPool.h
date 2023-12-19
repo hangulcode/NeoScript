@@ -443,8 +443,6 @@ class SimpleHash
 		T			value;
 
 		u32		hash;
-
-		//MapNode* pNext; // List In Bucket
 	};
 
 	SimpleVector<HNode>* _bucket = nullptr;
@@ -497,6 +495,24 @@ public:
 			if (n.hash == hkey)
 			{
 				if (n.key == key)
+				{
+					*d = n.value;
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+	bool TryGetValue(const std::string& key, u32 hkey, T* d)
+	{
+		u32 bkIndex = hkey % _capa;
+		SimpleVector<HNode>& bk = _bucket[bkIndex];
+		for (int idx = bk.size() - 1; idx >= 0; --idx)
+		{
+			HNode& n = bk[idx];
+			if (n.hash == hkey)
+			{
+				if (key == n.key)
 				{
 					*d = n.value;
 					return true;

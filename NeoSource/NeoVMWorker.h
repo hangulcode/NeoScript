@@ -239,6 +239,14 @@ struct StringInfo : AllocBase
 	std::string _str;
 	int	_StringID;
 	int _StringLen;
+	u32	_hash;
+
+	NEOS_FORCEINLINE u32 GetHash() 
+	{ 
+		if(_hash != 0) return _hash;
+		_hash = GetHashCode(_str);
+		return _hash;
+	}
 };
 
 
@@ -578,8 +586,8 @@ private:
 	bool Call_MetaTable2(VarInfo* pTable, std::string&, VarInfo* a, VarInfo* b);
 //	bool Call_MetaTableI(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, int b);
 
-	bool CallNative(FunctionPtrNative functionPtrNative, void* pUserData, const std::string& fname, int n3);
-	bool PropertyNative(FunctionPtrNative functionPtrNative, void* pUserData, const std::string& fname, VarInfo* pRet, bool get);
+	bool CallNative(FunctionPtrNative functionPtrNative, void* pUserData, StringInfo *pStr, int n3);
+	bool PropertyNative(FunctionPtrNative functionPtrNative, void* pUserData, StringInfo* pStr, VarInfo* pRet, bool get);
 
 	static std::string ToString(VarInfo* v1);
 	int ToInt(VarInfo* v1);

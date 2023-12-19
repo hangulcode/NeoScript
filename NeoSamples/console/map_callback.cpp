@@ -93,7 +93,7 @@ std::map<std::string, TYPE_FUN> g_sTablesFunction;
 std::map<std::string, TYPE_PRY> g_sTablesProperty;
 
 
-bool Fun(INeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
+bool Fun(INeoVMWorker* pN, void* pUserData, const std::string& fun, u32 h, short args)
 {
 	auto it = g_sTablesFunction.find(fun);
 	if (it == g_sTablesFunction.end())
@@ -102,7 +102,7 @@ bool Fun(INeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
 	TYPE_FUN f = (*it).second;
 	return (((CA*)pUserData)->*f)(pN, args);
 }
-bool Property(INeoVMWorker* pN, void* pUserData, const std::string& fun, VarInfo* p, bool get)
+bool Property(INeoVMWorker* pN, void* pUserData, const std::string& fun, u32 h, VarInfo* p, bool get)
 {
 	auto it = g_sTablesProperty.find(fun);
 	if (it == g_sTablesProperty.end())

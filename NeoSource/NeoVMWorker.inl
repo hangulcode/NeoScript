@@ -30,7 +30,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 		MapInfo* tbl = pClt->_tbl;
 		if (tbl->_fun._property)
 		{
-			PropertyNative(tbl->_fun, tbl->_pUserData, pKey->_str->_str, pValue, false);
+			PropertyNative(tbl->_fun, tbl->_pUserData, pKey->_str, pValue, false);
 		}
 		else
 			tbl->Insert(pKey, pValue);
@@ -159,7 +159,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 			MapInfo* tbl = pClt->_tbl;
 			if (tbl->_fun._property)
 			{
-				PropertyNative(tbl->_fun, tbl->_pUserData, pKey->_str->_str, pValue, true);
+				PropertyNative(tbl->_fun, tbl->_pUserData, pKey->_str, pValue, true);
 			}
 			else
 			{
