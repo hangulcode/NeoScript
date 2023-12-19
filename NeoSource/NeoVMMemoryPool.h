@@ -343,7 +343,7 @@ class SimpleVector
 public:
 	SimpleVector()
 	{
-		Alloc(2);
+//		Alloc(2);
 	}
 	~SimpleVector()
 	{
@@ -358,8 +358,8 @@ public:
 		if(size <= _capa) return;
 
 		T* p = new T[size];
-		if (_cnt > 0)
-			memcpy(p, _buffer, _capa * sizeof(T));
+		for(int i = 0; i < _capa; i++)
+			p[i] = _buffer[i];
 		if(_buffer)
 			delete[] _buffer;
 
@@ -369,6 +369,8 @@ public:
 	NEOS_FORCEINLINE int calc_capa(int cnt)
 	{
 		int new_capa = _capa;
+		if(new_capa <= 0) new_capa = 1;
+
 		while (cnt > new_capa)
 		{
 			if (new_capa >= 128)
@@ -385,7 +387,7 @@ public:
 			if(_capa >= 128)
 				Alloc(_capa + 128);
 			else
-				Alloc(_capa << 1); // * 2
+				Alloc(_capa > 0 ? (_capa << 1) : 1); // * 2
 		}
 		_buffer[_cnt++] = t;
 	}
@@ -399,6 +401,14 @@ public:
 				Alloc(_capa << 1); // * 2
 		}
 		return _buffer[_cnt++];
+	}
+	void RemoveIndex(int idx)
+	{
+		if(idx < 0 || idx >= _cnt) return;
+		for(int i = idx + 1; i < _cnt; i++)
+		{
+			_buffer[i - 1] = _buffer[i];
+		}
 	}
 	NEOS_FORCEINLINE int size() { return _cnt; }
 	NEOS_FORCEINLINE void resize(int cnt)
@@ -421,5 +431,106 @@ public:
 		_cnt = 0;
 	}
 };
+
+extern u32 GetHashCode(const std::string& str);
+
+template <typename T, int iBlkSize = 128>
+class SimpleHash
+{
+	struct HNode
+	{
+		std::string	key;
+		T			value;
+
+		u32		hash;
+
+		//MapNode* pNext; // List In Bucket
+	};
+
+	SimpleVector<HNode>* _bucket = nullptr;
+	int _cnt = 0;
+	int _capa = 0;
+public:
+	SimpleHash()
+	{
+		_capa = iBlkSize;
+		_bucket = new SimpleVector<HNode>[_capa];
+	}
+	~SimpleHash()
+	{
+		if (_bucket)
+			delete[] _bucket;
+		_bucket = nullptr;
+		_capa = 0;
+		_cnt = 0;
+	}
+
+	NEOS_FORCEINLINE void clear()
+	{
+		_cnt = 0;
+		for(int i = 0; i < _capa; i++)
+			_bucket[i].clear();
+	}
+	NEOS_FORCEINLINE bool empty() { return _cnt == 0; }
+
+	void Add(const std::string& key, T d)
+	{
+		Remove(key);
+
+		u32 hkey = GetHashCode(key);
+		u32 bkIndex = hkey % _capa;
+		HNode n;
+		n.hash = hkey;
+		n.key = key;
+		n.value = d;
+		_bucket[bkIndex].push_back(n);
+		++_cnt;
+	}
+	bool TryGetValue(const std::string& key, T* d)
+	{
+		u32 hkey = GetHashCode(key);
+		u32 bkIndex = hkey % _capa;
+		SimpleVector<HNode>& bk = _bucket[bkIndex];
+		for (int idx = bk.size() - 1; idx >= 0; --idx)
+		{
+			HNode& n = bk[idx];
+			if (n.hash == hkey)
+			{
+				if (n.key == key)
+				{
+					*d = n.value;
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+	bool IsKey(const std::string& key)
+	{
+		T d;
+		return TryGetValue(key, &d);
+	}
+	bool Remove(const std::string& key)
+	{
+		u32 hkey = GetHashCode(key);
+		u32 bkIndex = hkey % _capa;
+		SimpleVector<HNode>& bk = _bucket[bkIndex];
+		for(int idx = bk.size() - 1; idx >= 0; --idx)
+		{
+			HNode& n = bk[idx];
+			if(n.hash == hkey)
+			{
+				if(n.key == key)
+				{
+					bk.RemoveIndex(idx);
+					--_cnt;
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+};
+
 
 };

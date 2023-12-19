@@ -776,11 +776,11 @@ struct neo_libs
 //typedef bool (ClassName::*TYPE_NeoLib)(CNeoVMWorker* pN, short args);
 //typedef bool(*TYPE_NeoLib)(CNeoVMWorker* pN, short args);
 typedef bool(*TYPE_NeoLib)(CNeoVMWorker* pN, VarInfo* pVar, short args);
-static std::map<std::string, TYPE_NeoLib> g_sNeoFunLib_Default;
-static std::map<std::string, TYPE_NeoLib> g_sNeoFunLib_List;
-static std::map<std::string, TYPE_NeoLib> g_sNeoFunLib_String;
-static std::map<std::string, TYPE_NeoLib> g_sNeoFunLib_Map;
-static std::map<std::string, TYPE_NeoLib> g_sNeoFunLib_Async;
+static std::unordered_map<std::string, TYPE_NeoLib> g_sNeoFunLib_Default;
+static std::unordered_map<std::string, TYPE_NeoLib> g_sNeoFunLib_List;
+static std::unordered_map<std::string, TYPE_NeoLib> g_sNeoFunLib_String;
+static std::unordered_map<std::string, TYPE_NeoLib> g_sNeoFunLib_Map;
+static std::unordered_map<std::string, TYPE_NeoLib> g_sNeoFunLib_Async;
 
 bool CNeoVMImpl::_funInitLib = false;
 FunctionPtrNative CNeoVMImpl::_funLib_Default;
