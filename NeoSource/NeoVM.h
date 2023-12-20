@@ -512,6 +512,15 @@ public:
 	static bool		Compile(CNArchive& arw, const NeoCompilerParam& param);
 
 	static INeoVM*	CompileAndLoadVM(const NeoCompilerParam& param);
+
+	static bool		IsSinglePrecision() 
+	{
+	#ifdef NS_SINGLE_PRECISION
+		return true;
+	#else
+		return false;
+	#endif
+	}
 };
 
 };

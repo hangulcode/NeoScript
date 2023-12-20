@@ -433,6 +433,12 @@ bool CNeoVMWorker::Init(void* pBuffer, int iSize, int iStackSize)
 		return false;
 	}
 
+	bool IsDataSinglePrecision = (header ._dwFlag & NEO_HEADER_FLAG_SINGLE_PRECISION) ? true : false;
+	if(IsDataSinglePrecision != INeoVM::IsSinglePrecision())
+	{
+		return false;
+	}
+
 
 	u8* pCode = new u8[header._iCodeSize];
 	SetCodeData(pCode, header._iCodeSize);
