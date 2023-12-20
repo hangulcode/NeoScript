@@ -130,3 +130,10 @@
 
 #### Neo Script Output Image
 ![](/docs/img/vs002.png)
+
+
+|               | Neo Script     | Lua Script    |
+| :-----------  |:--------------:| -------------:|
+| Loop          | Data 2         | Data 3        |
+| Math          | Data 5         | Data 6        |
+| Math          | Data 5         | Data 6        |
