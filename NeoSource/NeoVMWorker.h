@@ -234,19 +234,8 @@ struct CoroutineInfo : AllocBase
 	SimpleVector<SCallStack>	m_sCallStack;
 };
 
-struct StringInfo : AllocBase
+struct StringInfo : AllocBase, VMString
 {
-	std::string _str;
-	int	_StringID;
-	int _StringLen;
-	u32	_hash;
-
-	NEOS_FORCEINLINE u32 GetHash() 
-	{ 
-		if(_hash != 0) return _hash;
-		_hash = GetHashCode(_str);
-		return _hash;
-	}
 };
 
 

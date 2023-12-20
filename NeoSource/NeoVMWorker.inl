@@ -41,10 +41,10 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 		{
 			if (pClt->_lst->_pIndexer != nullptr && pKey->GetType() == VAR_STRING)
 			{
-				auto it = pClt->_lst->_pIndexer->find(pKey->_str->_str);
-				if(it != pClt->_lst->_pIndexer->end())
+				int idx;
+				if(pClt->_lst->_pIndexer->TryGetValue(pKey->_str, &idx))
 				{
-					if(pClt->_lst->SetValue((*it).second, pValue))
+					if(pClt->_lst->SetValue(idx, pValue))
 						return;
 				}
 			}
@@ -122,8 +122,9 @@ NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItem(VarInfo* pClt, VarInfo* pKe
 		{
 			if (pClt->_lst->_pIndexer != nullptr && pKey->GetType() == VAR_STRING)
 			{
-				auto it = pClt->_lst->_pIndexer->find(pKey->_str->_str);
-				return pClt->_lst->GetValue((*it).second);
+				int idx;
+				if (pClt->_lst->_pIndexer->TryGetValue(pKey->_str, &idx))
+					return pClt->_lst->GetValue(idx);
 			}
 		}
 	}
@@ -176,9 +177,12 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 		{
 			if(pClt->_lst->_pIndexer != nullptr && pKey->GetType() == VAR_STRING)
 			{
-				auto it = pClt->_lst->_pIndexer->find(pKey->_str->_str);
-				if (true == pClt->_lst->GetValue((*it).second, pValue))
+				int idx;
+				if (pClt->_lst->_pIndexer->TryGetValue(pKey->_str, &idx))
+				{
+					pClt->_lst->GetValue(idx, pValue);
 					return;
+				}
 			}
 			SetError("Collision Read Error");
 			return;
@@ -1513,25 +1517,19 @@ NEOS_FORCEINLINE void INeoVMWorker::Var_Release(VarInfo* d)
 }
 NEOS_FORCEINLINE void INeoVMWorker::Var_SetInt(VarInfo* d, int v)
 {
-	if (d->GetType() != VAR_INT)
-	{
-		if (d->IsAllocType())
-			Var_Release(d);
+	if (d->IsAllocType())
+		Var_Release(d);
 
-		d->SetType(VAR_INT);
-	}
+	d->SetType(VAR_INT);
 	d->_int = v;
 }
 
 NEOS_FORCEINLINE void INeoVMWorker::Var_SetFloat(VarInfo* d, NS_FLOAT v)
 {
-	if (d->GetType() != VAR_FLOAT)
-	{
-		if (d->IsAllocType())
-			Var_Release(d);
+	if (d->IsAllocType())
+		Var_Release(d);
 
-		d->SetType(VAR_FLOAT);
-	}
+	d->SetType(VAR_FLOAT);
 	d->_float = v;
 }
 NEOS_FORCEINLINE void INeoVMWorker::Var_SetNone(VarInfo* d)
@@ -1547,13 +1545,10 @@ NEOS_FORCEINLINE void INeoVMWorker::Var_SetNone(VarInfo* d)
 
 NEOS_FORCEINLINE void INeoVMWorker::Var_SetBool(VarInfo* d, bool v)
 {
-	if (d->GetType() != VAR_BOOL)
-	{
-		if (d->IsAllocType())
-			Var_Release(d);
+	if (d->IsAllocType())
+		Var_Release(d);
 
-		d->SetType(VAR_BOOL);
-	}
+	d->SetType(VAR_BOOL);
 	d->_bl = v;
 }
 NEOS_FORCEINLINE void INeoVMWorker::Var_SetFun(VarInfo* d, int fun_index)

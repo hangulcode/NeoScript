@@ -106,7 +106,11 @@ StringInfo* CNeoVMImpl::StringAlloc(const std::string& str)
 
 	p->_StringID = m_sPool_String._dwLastID;
 	p->_hash = 0;
+	p->_container = nullptr;
 	p->_refCount = 0;
+#ifdef _DEBUG
+	p->_value = nullptr;
+#endif
 
 	p->_str = str;
 	p->_StringLen = utf_string::UTF8_LENGTH(str);

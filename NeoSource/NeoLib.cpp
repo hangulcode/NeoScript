@@ -776,11 +776,12 @@ struct neo_libs
 //typedef bool (ClassName::*TYPE_NeoLib)(CNeoVMWorker* pN, short args);
 //typedef bool(*TYPE_NeoLib)(CNeoVMWorker* pN, short args);
 typedef bool(*TYPE_NeoLib)(CNeoVMWorker* pN, VarInfo* pVar, short args);
-static SimpleHash<TYPE_NeoLib, 512> g_sNeoFunLib_Default;
-static std::map<std::string, TYPE_NeoLib> g_sNeoFunLib_List;
-static std::map<std::string, TYPE_NeoLib> g_sNeoFunLib_String;
-static std::map<std::string, TYPE_NeoLib> g_sNeoFunLib_Map;
-static std::map<std::string, TYPE_NeoLib> g_sNeoFunLib_Async;
+
+static VMHash<TYPE_NeoLib> g_sNeoFunLib_Default;
+static VMHash<TYPE_NeoLib> g_sNeoFunLib_List;
+static VMHash<TYPE_NeoLib> g_sNeoFunLib_String;
+static VMHash<TYPE_NeoLib> g_sNeoFunLib_Map;
+static VMHash<TYPE_NeoLib> g_sNeoFunLib_Async;
 
 bool CNeoVMImpl::_funInitLib = false;
 FunctionPtrNative CNeoVMImpl::_funLib_Default;
@@ -790,48 +791,44 @@ FunctionPtrNative CNeoVMImpl::_funLib_Map;
 FunctionPtrNative CNeoVMImpl::_funLib_Async;
 
 
-static bool Fun_Default(INeoVMWorker* pN, void* pUserData, const std::string& fun, u32 h, short args)
+static bool Fun_Default(INeoVMWorker* pN, void* pUserData, const VMString* pStr, short args)
 {
 	TYPE_NeoLib f;
-	if(false == g_sNeoFunLib_Default.TryGetValue(fun, h, &f))
+	if(false == g_sNeoFunLib_Default.TryGetValue(pStr, &f))
 		return false;
 
 	return (*f)((CNeoVMWorker*)pN, (VarInfo*)pUserData, args);
 }
-static bool Fun_String(INeoVMWorker* pN, void* pUserData, const std::string& fun, u32 h, short args)
+static bool Fun_String(INeoVMWorker* pN, void* pUserData, const VMString* pStr, short args)
 {
-	auto it = g_sNeoFunLib_String.find(fun);
-	if (it == g_sNeoFunLib_String.end())
+	TYPE_NeoLib f;
+	if (false == g_sNeoFunLib_String.TryGetValue(pStr, &f))
 		return false;
 
-	TYPE_NeoLib f = (*it).second;
 	return (*f)((CNeoVMWorker*)pN, (VarInfo*)pUserData, args);
 }
-static bool Fun_List(INeoVMWorker* pN, void* pUserData, const std::string& fun, u32 h, short args)
+static bool Fun_List(INeoVMWorker* pN, void* pUserData, const VMString* pStr, short args)
 {
-	auto it = g_sNeoFunLib_List.find(fun);
-	if (it == g_sNeoFunLib_List.end())
+	TYPE_NeoLib f;
+	if (false == g_sNeoFunLib_List.TryGetValue(pStr, &f))
 		return false;
 
-	TYPE_NeoLib f = (*it).second;
 	return (*f)((CNeoVMWorker*)pN, (VarInfo*)pUserData, args);
 }
-static bool Fun_Map(INeoVMWorker* pN, void* pUserData, const std::string& fun, u32 h, short args)
+static bool Fun_Map(INeoVMWorker* pN, void* pUserData, const VMString* pStr, short args)
 {
-	auto it = g_sNeoFunLib_Map.find(fun);
-	if (it == g_sNeoFunLib_Map.end())
+	TYPE_NeoLib f;
+	if (false == g_sNeoFunLib_Map.TryGetValue(pStr, &f))
 		return false;
 
-	TYPE_NeoLib f = (*it).second;
 	return (*f)((CNeoVMWorker*)pN, (VarInfo*)pUserData, args);
 }
-static bool Fun_Async(INeoVMWorker* pN, void* pUserData, const std::string& fun, u32 h, short args)
+static bool Fun_Async(INeoVMWorker* pN, void* pUserData, const VMString* pStr, short args)
 {
-	auto it = g_sNeoFunLib_Async.find(fun);
-	if (it == g_sNeoFunLib_Async.end())
+	TYPE_NeoLib f;
+	if (false == g_sNeoFunLib_Async.TryGetValue(pStr, &f))
 		return false;
 
-	TYPE_NeoLib f = (*it).second;
 	return (*f)((CNeoVMWorker*)pN, (VarInfo*)pUserData, args);
 }
 static void AddGlobalLibFun()
@@ -899,37 +896,37 @@ void CNeoVMImpl::RegObjLibrary()
 
 	// String Lib
 	_funLib_String = CNeoVMImpl::RegisterNative(Fun_String);
-	g_sNeoFunLib_String["sub"] = &neo_libs::Str_sub;
-	g_sNeoFunLib_String["len"] = &neo_libs::Str_len;
-	g_sNeoFunLib_String["find"] = &neo_libs::Str_find;
-	g_sNeoFunLib_String["upper"] = &neo_libs::Str_upper;
-	g_sNeoFunLib_String["lower"] = &neo_libs::Str_lower;
-	g_sNeoFunLib_String["trim"] = &neo_libs::Str_trim;
-	g_sNeoFunLib_String["ltrim"] = &neo_libs::Str_ltrim;
-	g_sNeoFunLib_String["rtrim"] = &neo_libs::Str_rtrim;
-	g_sNeoFunLib_String["replace"] = &neo_libs::Str_replace;
-	g_sNeoFunLib_String["split"] = &neo_libs::Str_split;
+	g_sNeoFunLib_String.Add("sub", &neo_libs::Str_sub);
+	g_sNeoFunLib_String.Add("len", &neo_libs::Str_len);
+	g_sNeoFunLib_String.Add("find", &neo_libs::Str_find);
+	g_sNeoFunLib_String.Add("upper", &neo_libs::Str_upper);
+	g_sNeoFunLib_String.Add("lower", &neo_libs::Str_lower);
+	g_sNeoFunLib_String.Add("trim", &neo_libs::Str_trim);
+	g_sNeoFunLib_String.Add("ltrim", &neo_libs::Str_ltrim);
+	g_sNeoFunLib_String.Add("rtrim", &neo_libs::Str_rtrim);
+	g_sNeoFunLib_String.Add("replace", &neo_libs::Str_replace);
+	g_sNeoFunLib_String.Add("split", &neo_libs::Str_split);
 
 	// List Lib
 	_funLib_List = CNeoVMImpl::RegisterNative(Fun_List);
-	g_sNeoFunLib_List["resize"] = &neo_libs::List_resize;
-	g_sNeoFunLib_List["len"] = &neo_libs::List_len;
-	g_sNeoFunLib_List["append"] = &neo_libs::List_append;
+	g_sNeoFunLib_List.Add("resize", &neo_libs::List_resize);
+	g_sNeoFunLib_List.Add("len", &neo_libs::List_len);
+	g_sNeoFunLib_List.Add("append", &neo_libs::List_append);
 
 	// Map Lib
 	_funLib_Map = CNeoVMImpl::RegisterNative(Fun_Map);
-	g_sNeoFunLib_Map["reserve"] = &neo_libs::map_reserve;
-	g_sNeoFunLib_Map["sort"] = &neo_libs::map_sort;
-	g_sNeoFunLib_Map["keys"] = &neo_libs::map_keys;
-	g_sNeoFunLib_Map["values"] = &neo_libs::map_values;
+	g_sNeoFunLib_Map.Add("reserve", &neo_libs::map_reserve);
+	g_sNeoFunLib_Map.Add("sort", &neo_libs::map_sort);
+	g_sNeoFunLib_Map.Add("keys", &neo_libs::map_keys);
+	g_sNeoFunLib_Map.Add("values", &neo_libs::map_values);
 
 	// Async Lib
 	_funLib_Async = CNeoVMImpl::RegisterNative(Fun_Async);
-	g_sNeoFunLib_Async["get"] = &neo_libs::async_get;
-	g_sNeoFunLib_Async["post"] = &neo_libs::async_post;
-	g_sNeoFunLib_Async["add_header"] = &neo_libs::async_add_header;
-	g_sNeoFunLib_Async["wait"] = &neo_libs::async_wait;
-	g_sNeoFunLib_Async["close"] = &neo_libs::async_close;
+	g_sNeoFunLib_Async.Add("get", &neo_libs::async_get);
+	g_sNeoFunLib_Async.Add("post", &neo_libs::async_post);
+	g_sNeoFunLib_Async.Add("add_header", &neo_libs::async_add_header);
+	g_sNeoFunLib_Async.Add("wait", &neo_libs::async_wait);
+	g_sNeoFunLib_Async.Add("close", &neo_libs::async_close);
 }
 
 void CNeoVMImpl::InitLib()

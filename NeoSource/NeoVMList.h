@@ -19,7 +19,7 @@ struct ListInfo
 
 	int _BucketCapa;
 
-	std::map<std::string, int>* _pIndexer;
+	VMHash<int>* _pIndexer;
 
 	void Free();
 	void Resize(int size);

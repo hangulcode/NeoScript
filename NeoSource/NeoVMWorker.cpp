@@ -1295,7 +1295,7 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1 + n3) // ??????? 이렇게 하면 맞나? 흠...
 		_iSP_Vars_Max2 = _iSP_VarsMax + 1 + n3;
 
-	if ((func)(this, pUserData, pStr->_str, pStr->GetHash(), n3) == false)
+	if ((func)(this, pUserData, pStr, n3) == false)
 	{
 		SetError("Ptr Call Error");
 		return false;
@@ -1358,7 +1358,7 @@ bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUs
 	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1)
 		_iSP_Vars_Max2 = _iSP_VarsMax + 1;
 
-	if ((func)(this, pUserData, pStr->_str, pStr->GetHash(), pRet, get) == false)
+	if ((func)(this, pUserData, pStr, pRet, get) == false)
 	{
 		SetError("Ptr Call Error");
 		return false;
