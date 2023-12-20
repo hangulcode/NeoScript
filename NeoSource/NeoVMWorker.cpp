@@ -974,9 +974,7 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 			}				
 			if (pFunName->GetType() == VAR_STRING)
 			{
-				CallNative(GetVM()->_funLib_Default, NULL, pFunName->_str, n2);
-//					SetError("Ptr Call Error");
-				break;
+				CallNative(GetVM()->_funLib_Default, NULL, pFunName->_str, n2, (OP.argFlag & NEOS_OP_CALL_NORESULT) ? nullptr : GetVarPtr3(OP));
 			}
 
 			if (_iSP_Vars_Max2 < _iSP_VarsMax + (1 + n2))
@@ -1281,7 +1279,7 @@ VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 	_isInitialized = true;
 	return r;
 }
-bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserData, StringInfo* pStr, int n3)
+bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserData, StringInfo* pStr, int n3, VarInfo* pRet)
 {
 	Neo_NativeFunction func = functionPtrNative._func;
 	if (func == NULL)
@@ -1300,6 +1298,9 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 		SetError("Ptr Call Error");
 		return false;
 	}
+	if (nullptr != pRet)
+		Move(pRet, m_pVarStack_Pointer);
+
 	int argSP_Vars = _iSP_Vars;
 	_iSP_Vars = iSave;
 	SetStackPointer(_iSP_Vars);

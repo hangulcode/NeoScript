@@ -132,7 +132,7 @@
 ![](/docs/img/vs002.png)
 
 
-|               | Neo Script     | Lua Script    |
+|               | Neo Script     | Lua Script 5.42   |
 | :-----------  |:--------------:| -------------:|
 | Loop          | Data 2         | Data 3        |
 | Math          | Data 5         | Data 6        |

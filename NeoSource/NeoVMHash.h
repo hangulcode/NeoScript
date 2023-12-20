@@ -190,15 +190,9 @@ public:
 		}
 		return false;
 	}
-	bool TryGetValue(const VMString* pStr, T* d)
+	bool TryGetValueForce(const VMString* pStr, T* d)
 	{
-		if(pStr->_container == this)
-		{
-			//*d = (T)reinterpret_cast<uintptr_t>(pStr->_value);
-			*d = *((T*)&pStr->_value);
-			return true;
-		}
-		u32 hkey= pStr->GetHash();
+		u32 hkey = pStr->GetHash();
 		u32 bkIndex = hkey % _capa;
 		SimpleVector<HNode>& bk = _bucket[bkIndex];
 		for (int idx = bk.size() - 1; idx >= 0; --idx)
@@ -218,6 +212,17 @@ public:
 			}
 		}
 		return false;
+	}
+
+	NEOS_FORCEINLINE bool TryGetValue(const VMString* pStr, T* d)
+	{
+		if(pStr->_container == this)
+		{
+			//*d = (T)reinterpret_cast<uintptr_t>(pStr->_value);
+			*d = *((T*)&pStr->_value);
+			return true;
+		}
+		return TryGetValueForce(pStr, d);
 	}
 	bool IsKey(const std::string& key)
 	{

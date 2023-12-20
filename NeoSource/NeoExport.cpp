@@ -297,7 +297,8 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			break;
 		case NOP_PTRCALL2:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
-			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
+			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, &v.n3);
 			break;
 		case NOP_CALL:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
@@ -842,15 +843,28 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutAsm("PCALL %s.%s arg:%d\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), v.n3);
 			break;
 		case NOP_PTRCALL2:
-			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("PCALL2 %s arg:%d\n", GetLog(td, v, 1).c_str(), v.n2);
+			if (v.argFlag & NEOS_OP_CALL_NORESULT)
+			{
+				OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
+				OutAsm("PCALL2 %s arg:%d\n", GetLog(td, v, 1).c_str(), v.n2);
+			}
+			else
+			{
+				OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+				OutAsm("PCALL2%s = %s arg:%d\n", GetLog(td, v, 3).c_str(), GetLog(td, v, 1).c_str(), v.n2);
+			}
 			break;
 		case NOP_CALL:
-			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			if(v.argFlag & NEOS_OP_CALL_NORESULT)
+			{
+				OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 				OutAsm("CALL %s arg:%d\n", GetFunctionName(funs, v.n1).c_str(), v.n2);
+			}
 			else
+			{
+				OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 				OutAsm("CALL%s = %s arg:%d\n", GetLog(td, v, 3).c_str(), GetFunctionName(funs, v.n1).c_str(), v.n2);
+			}
 			break;
 		case NOP_RETURN:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
