@@ -131,6 +131,10 @@
 #### Neo Script Output Image
 ![](/docs/img/vs002.png)
 
+#### Performance test results
+CPU : 12th Gen Intel(R) Core(TM) i7-12700F 2.10GHz
+RAM : 64GB
+OS  : Windows 10 Pro 64bit
 
 |               | Neo Script     | Lua Script 5.42| Visual C++ 2022 |
 | :-----------  |:--------------:| :-------------:|:---------------:|
