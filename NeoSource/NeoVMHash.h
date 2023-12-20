@@ -194,7 +194,8 @@ public:
 	{
 		if(pStr->_container == this)
 		{
-			*d = (T)reinterpret_cast<uintptr_t>(pStr->_value);
+			//*d = (T)reinterpret_cast<uintptr_t>(pStr->_value);
+			*d = *((T*)&pStr->_value);
 			return true;
 		}
 		u32 hkey= pStr->GetHash();
@@ -208,7 +209,8 @@ public:
 				if (pStr->_str == n.key)
 				{
 					pStr->_container = this;
-					pStr->_value = reinterpret_cast<void*>((uintptr_t)n.value);
+					//pStr->_value = reinterpret_cast<void*>((uintptr_t)n.value);
+					pStr->_value = *((void**)&n.value);
 
 					*d = n.value;
 					return true;
