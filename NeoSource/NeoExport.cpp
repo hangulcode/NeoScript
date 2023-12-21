@@ -844,7 +844,7 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 
 		case NOP_PTRCALL:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("PCALL %s.%s arg:%d\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), v.n3);
+			OutAsm("PCAL %s.%s arg:%d\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), v.n3);
 			break;
 		case NOP_PTRCALL2:
 			if (v.argFlag & NEOS_OP_CALL_NORESULT)
