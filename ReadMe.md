@@ -157,26 +157,20 @@ fun calculateSum(var n)
 {
     var sum = 0.0;
     for(var i in 0, n, 1)
-	{
         sum += i;
-    }
     return sum;
 }
 start_time = system.clock();
 print("Loop Sum :" .. calculateSum(100000001));
 print("Time :" .. (system.clock() - start_time));
 
-
 fun calculateMath(var n)
 {
     var sum = 0.0;
     for(var i in 0, n, 1)
-	{
         sum += math.sqrt(i);
-    }
     return sum;
 }
-
 start_time = system.clock();
 print("Math :" .. calculateMath(100000001));
 print("Time :" .. (system.clock() - start_time));
@@ -185,12 +179,10 @@ fun isPrime(var num)
 {
     if( num < 2)
         return false;
-    
 	for(var i in 2, math.sqrt(num) + 1, 1)
 	{
         if(num % i == 0)
             return false;
-        
     }
     return true;
 }
@@ -208,7 +200,6 @@ start_time = system.clock();
 print("PrimeCount :" .. PrimeCount(10000001));
 print("Time : " .. (system.clock() - start_time));
 
-
 fun fibonacci_recursive(var n)
 {
     if( n <= 1)
@@ -216,7 +207,6 @@ fun fibonacci_recursive(var n)
     else
         return fibonacci_recursive(n - 1) + fibonacci_recursive(n - 2);
 }
-
 start_time = system.clock();
 print("fibonacci :" .. fibonacci_recursive(40));
 print("Time :" .. (system.clock() - start_time));
