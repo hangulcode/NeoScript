@@ -932,7 +932,7 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			break;
 		case NOP_CHANGE_INT:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
-			OutAsm("Change Number %s\n", GetLog(td, v, 1).c_str());
+			OutAsm("Change Int %s\n", GetLog(td, v, 1).c_str());
 			break;
 		case NOP_YIELD:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
