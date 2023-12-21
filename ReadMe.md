@@ -220,3 +220,69 @@ start_time = system.clock();
 print("fibonacci :" .. fibonacci_recursive(40));
 print("Time :" .. (system.clock() - start_time));
 ```
+
+### Lua Script Test Code
+```lua
+local startTime
+
+function calculateSum(n)
+    local sum = 0
+    for i = 0, n do
+        sum = sum + i
+    end
+    return sum
+end
+
+startTime = os.clock()
+print("calculateSum:" .. calculateSum(100000000))
+print("Time:" .. (os.clock() - startTime))
+
+function calculateMath(n)
+    local sum = 0
+    for i = 0, n do
+        sum = sum + math.sqrt(i)
+    end
+    return sum
+end
+
+startTime = os.clock()
+print("calculateMath:" .. calculateMath(100000000))
+print("Time:" .. (os.clock() - startTime))
+
+function isPrime(num)
+    if num < 2 then
+        return false
+    end
+    for i = 2, math.sqrt(num) do
+        if num % i == 0 then
+            return false
+        end
+    end
+    return true
+end
+function PrimeCount(num)
+	local cnt = 0
+	for i = 1, num do
+		if isPrime(i) then
+			cnt = cnt + 1
+		end
+	end
+	return cnt
+end
+
+startTime = os.clock()
+print("PrimeCount :" .. PrimeCount(10000000));
+print("Time:" .. (os.clock() - startTime))
+
+function fibonacci_recursive(n)
+    if n <= 1 then
+        return n
+    else
+        return fibonacci_recursive(n - 1) + fibonacci_recursive(n - 2)
+    end
+end
+
+start_time = os.clock()
+print("fibonacci:" .. fibonacci_recursive(40))
+print("Time:", os.clock() - start_time)
+...
