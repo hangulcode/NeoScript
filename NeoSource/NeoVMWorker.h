@@ -362,7 +362,7 @@ enum eNeoDefaultString
 	NDF_MAX
 };
 
-#define NEOS_OP_CALL_NORESULT	0x80
+#define NEOS_OP_CALL_NORESULT	(1 << 7) // 0x80
 
 
 #ifdef _DEBUG

@@ -1204,9 +1204,18 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 		}
 		else if(iResultStack._iVar != -1)
 		{
-			funs._cur->Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
-			iResultStack = funs._cur->AllocLocalTempVar();
-			funs._cur->Push_OP2(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
+			if(iResultStack._iArrayIndex != -1)
+			{
+				funs._cur->Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
+				iResultStack = funs._cur->AllocLocalTempVar();
+				funs._cur->Push_OP2(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
+			}
+			else
+			{	// TODO
+				funs._cur->Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
+				iResultStack = funs._cur->AllocLocalTempVar();
+				funs._cur->Push_OP2(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
+			}
 		}
 		else
 		{
