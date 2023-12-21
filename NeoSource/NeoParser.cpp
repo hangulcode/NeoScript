@@ -341,7 +341,7 @@ int InitDefaultTokenString()
 
 	OP_STR1(NOP_CALL, 3);
 	OP_STR1(NOP_PTRCALL, 3);
-	OP_STR1(NOP_PTRCALL2, 2);
+	OP_STR1(NOP_PTRCALL2, 3);
 	OP_STR1(NOP_RETURN, 1);
 //	OP_STR1(NOP_FUNEND, 0);
 
@@ -802,7 +802,7 @@ void ClearTempVars(SFunctions& funs)
 			funs._cur->ClearLastOP();
 		}
 	}
-	else if(opLast == NOP_CALL)
+	else if(opLast == NOP_CALL || opLast == NOP_PTRCALL2)
 	{
 		SVMOperation* op = funs._cur->GetOPPointer(funs._cur->_iLastOPOffset); // 3rd
 		if (IsTempVar(op->n3))
@@ -1179,10 +1179,12 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 					}
 				}
 				//SetCompileError(ar, "Error (%d, %d):  Built-In", ar.CurLine(), ar.CurCol());
-				iResultStack._iArrayIndex = funs.AddStaticString(pFun->_name);
-				funs._cur->Push_CallPtr2(ar, iResultStack._iArrayIndex, iParamCount);
+				int iArrayIndex = funs.AddStaticString(pFun->_name);
 				iResultStack = funs._cur->AllocLocalTempVar();
-				funs._cur->Push_OP2(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
+				funs._cur->Push_CallPtr2(ar, iArrayIndex, iParamCount, iResultStack._iVar);
+				//funs._cur->Push_OP2(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
+				if (tkTypePre == TK_MINUS)
+					funs._cur->Push_OP2(ar, NOP_MOV_MINUS, iResultStack._iVar, iResultStack._iVar, false);
 				return true;
 			}
 			else
@@ -1197,17 +1199,24 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 				funs._cur->Push_Call(ar, NOP_CALL, pFun->_funID, iParamCount, iResultStack._iVar);
 			}
 			if (tkTypePre == TK_MINUS)
-			{
 				funs._cur->Push_OP2(ar, NOP_MOV_MINUS, iResultStack._iVar, iResultStack._iVar, false);
-			}
 			return true;
 		}
 		else if(iResultStack._iVar >= 0)
+		{
 			funs._cur->Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
+			iResultStack = funs._cur->AllocLocalTempVar();
+			funs._cur->Push_OP2(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
+		}
 		else
-			funs._cur->Push_CallPtr2(ar, iResultStack._iArrayIndex, iParamCount);
-		iResultStack = funs._cur->AllocLocalTempVar();
-		funs._cur->Push_OP2(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
+		{
+			int iArrayIndex = iResultStack._iArrayIndex;
+			iResultStack = funs._cur->AllocLocalTempVar();
+			funs._cur->Push_CallPtr2(ar, iArrayIndex, iParamCount, iResultStack._iVar);
+//			funs._cur->Push_OP2(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
+			if (tkTypePre == TK_MINUS)
+				funs._cur->Push_OP2(ar, NOP_MOV_MINUS, iResultStack._iVar, iResultStack._iVar, false);
+		}
 	}
 	else if (tkType1 == TK_SEMICOLON)
 	{

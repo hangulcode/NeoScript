@@ -128,6 +128,11 @@ int CNeoVMWorker::Sleep(int iTimeout, VarInfo* v1)
 	return 1;
 }
 
+#ifdef NS_SINGLE_PRECISION
+	#define FLOAT_FORMAT	"%f"
+#else
+	#define FLOAT_FORMAT	"%lf"
+#endif
 
 std::string CNeoVMWorker::ToString(VarInfo* v1)
 {
@@ -144,10 +149,11 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 #endif
 		return ch;
 	case VAR_FLOAT:
+		
 #ifdef _WIN32
-		sprintf_s(ch, _countof(ch), "%lf", v1->_float);
+		sprintf_s(ch, _countof(ch), FLOAT_FORMAT, v1->_float);
 #else
-		sprintf(ch, "%lf", v1->_float);
+		sprintf(ch, FLOAT_FORMAT, v1->_float);
 #endif
 		return ch;
 	case VAR_BOOL:
@@ -429,6 +435,12 @@ bool CNeoVMWorker::Init(void* pBuffer, int iSize, int iStackSize)
 		return false;
 	}
 	if (header._dwNeoVersion != NEO_VER)
+	{
+		return false;
+	}
+
+	bool IsDataSinglePrecision = (header ._dwFlag & NEO_HEADER_FLAG_SINGLE_PRECISION) ? true : false;
+	if(IsDataSinglePrecision != INeoVM::IsSinglePrecision())
 	{
 		return false;
 	}
@@ -922,7 +934,7 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 				Var_SetString(pVar1, pVar1->_c.c); // char -> string
 			case VAR_STRING:
 				pFunName = GetVarPtr2(OP);
-				CallNative(GetVM()->_funLib_String, pVar1, pFunName->_str->_str, n3);
+				CallNative(GetVM()->_funLib_String, pVar1, pFunName->_str, n3);
 				break;
 			case VAR_MAP:
 			{
@@ -942,21 +954,21 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 				FunctionPtrNative fun = pVar1->_tbl->_fun;
 				if (fun._func)
 				{
-					CallNative(fun, pVar1, pFunName->_str->_str, n3);
+					CallNative(fun, pVar1, pFunName->_str, n3);
 					break;
 				}
-				CallNative(GetVM()->_funLib_Map, pVar1, pFunName->_str->_str, n3);
+				CallNative(GetVM()->_funLib_Map, pVar1, pFunName->_str, n3);
 				break;
 			}
 			case VAR_LIST:
 				pFunName = GetVarPtr2(OP);
-				CallNative(GetVM()->_funLib_List, pVar1, pFunName->_str->_str, n3);
+				CallNative(GetVM()->_funLib_List, pVar1, pFunName->_str, n3);
 				break;
 			case VAR_SET:
 				break;
 			case VAR_ASYNC:
 				pFunName = GetVarPtr2(OP);
-				CallNative(GetVM()->_funLib_Async, pVar1, pFunName->_str->_str, n3);
+				CallNative(GetVM()->_funLib_Async, pVar1, pFunName->_str, n3);
 				break;
 			default:
 				SetError("Ptr Call Error");
@@ -970,15 +982,11 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 			VarInfo* pFunName = GetVarPtrF1(OP);
 			if (pFunName->GetType() == VAR_CHAR)
 			{
-				CallNative(GetVM()->_funLib_Default, NULL, pFunName->_c.c, n2);
-				//					SetError("Ptr Call Error");
-				break;
+				GetVM()->Var_SetStringA(pFunName, pFunName->_c.c);
 			}				
-			else if (pFunName->GetType() == VAR_STRING)
+			if (pFunName->GetType() == VAR_STRING)
 			{
-				CallNative(GetVM()->_funLib_Default, NULL, pFunName->_str->_str, n2);
-//					SetError("Ptr Call Error");
-				break;
+				CallNative(GetVM()->_funLib_Default, NULL, pFunName->_str, n2, (OP.argFlag & NEOS_OP_CALL_NORESULT) ? nullptr : GetVarPtr3(OP));
 			}
 
 			if (_iSP_Vars_Max2 < _iSP_VarsMax + (1 + n2))
@@ -1283,7 +1291,7 @@ VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 	_isInitialized = true;
 	return r;
 }
-bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserData, const std::string& fname, int n3)
+bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserData, StringInfo* pStr, int n3, VarInfo* pRet)
 {
 	Neo_NativeFunction func = functionPtrNative._func;
 	if (func == NULL)
@@ -1297,11 +1305,14 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1 + n3) // ??????? 이렇게 하면 맞나? 흠...
 		_iSP_Vars_Max2 = _iSP_VarsMax + 1 + n3;
 
-	if ((func)(this, pUserData, fname, n3) == false)
+	if ((func)(this, pUserData, pStr, n3) == false)
 	{
 		SetError("Ptr Call Error");
 		return false;
 	}
+	if (nullptr != pRet)
+		Move(pRet, m_pVarStack_Pointer);
+
 	int argSP_Vars = _iSP_Vars;
 	_iSP_Vars = iSave;
 	SetStackPointer(_iSP_Vars);
@@ -1346,7 +1357,7 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 
 	return true;
 }
-bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUserData, const std::string& fname, VarInfo* pRet, bool get)
+bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUserData, StringInfo* pStr, VarInfo* pRet, bool get)
 {
 	Neo_NativeProperty func = functionPtrNative._property;
 	if (func == NULL)
@@ -1360,7 +1371,7 @@ bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUs
 	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1)
 		_iSP_Vars_Max2 = _iSP_VarsMax + 1;
 
-	if ((func)(this, pUserData, fname, pRet, get) == false)
+	if ((func)(this, pUserData, pStr, pRet, get) == false)
 	{
 		SetError("Ptr Call Error");
 		return false;

@@ -3,7 +3,7 @@
 
 using namespace NeoScript;
 
-std::map<std::string, int> g_sVector3Indexer;
+VMHash<int> g_sVector3Indexer;
 
 class CA
 {
@@ -93,18 +93,18 @@ std::map<std::string, TYPE_FUN> g_sTablesFunction;
 std::map<std::string, TYPE_PRY> g_sTablesProperty;
 
 
-bool Fun(INeoVMWorker* pN, void* pUserData, const std::string& fun, short args)
+bool Fun(INeoVMWorker* pN, void* pUserData, const VMString* pStr, short args)
 {
-	auto it = g_sTablesFunction.find(fun);
+	auto it = g_sTablesFunction.find(pStr->_str);
 	if (it == g_sTablesFunction.end())
 		return false;
 
 	TYPE_FUN f = (*it).second;
 	return (((CA*)pUserData)->*f)(pN, args);
 }
-bool Property(INeoVMWorker* pN, void* pUserData, const std::string& fun, VarInfo* p, bool get)
+bool Property(INeoVMWorker* pN, void* pUserData, const VMString* pStr, VarInfo* p, bool get)
 {
-	auto it = g_sTablesProperty.find(fun);
+	auto it = g_sTablesProperty.find(pStr->_str);
 	if (it == g_sTablesProperty.end())
 		return false;
 
@@ -123,9 +123,9 @@ int SAMPLE_map_callback()
 		return -1;
 	}
 
-	g_sVector3Indexer["x"] = 0;
-	g_sVector3Indexer["y"] = 1;
-	g_sVector3Indexer["z"] = 2;
+	g_sVector3Indexer.Add("x", 0);
+	g_sVector3Indexer.Add("y", 1);
+	g_sVector3Indexer.Add("z", 2);
 
 	std::string err;
 	NeoCompilerParam param(pFileBuffer, iFileLen);

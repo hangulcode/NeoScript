@@ -227,7 +227,7 @@ bool VarInfo::ListFindFloat(int idx, NS_FLOAT& value)
 	}
 	return false;
 }
-bool VarInfo::SetListIndexer(std::map<std::string, int>* pIndexer)
+bool VarInfo::SetListIndexer(VMHash<int>* pIndexer)
 {
 	if (_type != VAR_LIST) return false;
 	_lst->_pIndexer = pIndexer;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "NeoConfig.h"
+#include "NeoVMHash.h"
 
 namespace NeoScript
 {
@@ -11,9 +12,12 @@ struct INeoVMWorker;
 struct FunctionPtr;
 struct VarInfo;
 
+
+
+
 typedef int(*Neo_CFunction) (INeoVMWorker* N, FunctionPtr* pFun, short args);
-typedef bool(*Neo_NativeFunction) (INeoVMWorker* N, void* pUserData, const std::string& fun, short args);
-typedef bool(*Neo_NativeProperty) (INeoVMWorker* N, void* pUserData, const std::string& fun, VarInfo* p, bool get);
+typedef bool(*Neo_NativeFunction) (INeoVMWorker* N, void* pUserData, const VMString* pStr, short args);
+typedef bool(*Neo_NativeProperty) (INeoVMWorker* N, void* pUserData, const VMString* pStr, VarInfo* p, bool get);
 
 #define NEO_DEFAULT_CHECKOP		(500)
 
@@ -132,7 +136,7 @@ public:
 
 	bool ListInsertFloat(int idx, NS_FLOAT value);
 	bool ListFindFloat(int idx, NS_FLOAT& value);
-	bool SetListIndexer(std::map<std::string, int>* pIndexer);
+	bool SetListIndexer(VMHash<int>* pIndexer);
 };
 #pragma pack()
 
@@ -508,6 +512,16 @@ public:
 	static bool		Compile(CNArchive& arw, const NeoCompilerParam& param);
 
 	static INeoVM*	CompileAndLoadVM(const NeoCompilerParam& param);
+
+	static bool		IsSinglePrecision() 
+	{
+	#ifdef NS_SINGLE_PRECISION
+		return true;
+	#else
+		return false;
+	#endif
+	}
 };
 
 };
+

@@ -47,8 +47,8 @@ u32 GetHashCode(VarInfo *p)
 		return (u32)(uintptr_t)p->_funPtr;
 		break;
 	case VAR_STRING:
-		//return GetHashCode((u8*)p->_str->_str.c_str(), (int)p->_str->_str.length());
-		return GetHashCode(p->_str->_str);
+		//return GetHashCode(p->_str->_str);
+		return p->_str->GetHash();
 	case VAR_MAP:
 		return GetHashCode((u8*)p->_tbl, sizeof(p->_tbl));
 	case VAR_LIST:

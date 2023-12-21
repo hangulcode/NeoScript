@@ -130,3 +130,230 @@
 
 #### Neo Script Output Image
 ![](/docs/img/vs002.png)
+
+#### Performance test results
+CPU : 12th Gen Intel(R) Core(TM) i7-12700F 2.10GHz  
+RAM : 64GB  
+OS  : Windows 10 Pro 64bit  
+Build : Release Mode 64bit  
+
+|               | Neo Script     | Lua Script 5.42| Visual C++ 2022 |
+| :-----------  |:--------------:| :-------------:|:---------------:|
+| Loop Sum (1~N)| 0.256          | 0.286          | 0.044           |
+| Math          | 1.427          | 1.55           | 0.135           |
+| Prime Count   | 9.517          | 11.073         | 2.354           |
+| fibonacci     | 4.629          | 4.977          | 0.298           |
+
+
+### Neo Script Test Code
+```cpp
+import math;
+import system;
+
+print("Start ...");
+var start_time;
+
+fun calculateSum(var n)
+{
+    var sum = 0.0;
+    for(var i in 0, n, 1)
+        sum += i;
+    return sum;
+}
+start_time = system.clock();
+print("Loop Sum :" .. calculateSum(100000001));
+print("Time :" .. (system.clock() - start_time));
+
+fun calculateMath(var n)
+{
+    var sum = 0.0;
+    for(var i in 0, n, 1)
+        sum += math.sqrt(i);
+    return sum;
+}
+start_time = system.clock();
+print("Math :" .. calculateMath(100000001));
+print("Time :" .. (system.clock() - start_time));
+
+fun isPrime(var num)
+{
+    if( num < 2)
+        return false;
+	for(var i in 2, math.sqrt(num) + 1, 1)
+	{
+        if(num % i == 0)
+            return false;
+    }
+    return true;
+}
+fun PrimeCount(var num)
+{
+	var cnt = 0;
+	for(var i in 1, num, 1)
+	{
+		if(isPrime(i))
+			cnt++;
+	}
+	return cnt;
+}
+start_time = system.clock();
+print("PrimeCount :" .. PrimeCount(10000001));
+print("Time : " .. (system.clock() - start_time));
+
+fun fibonacci_recursive(var n)
+{
+    if( n <= 1)
+        return n;
+    else
+        return fibonacci_recursive(n - 1) + fibonacci_recursive(n - 2);
+}
+start_time = system.clock();
+print("fibonacci :" .. fibonacci_recursive(40));
+print("Time :" .. (system.clock() - start_time));
+```
+
+### Lua Script Test Code
+```lua
+local startTime
+print("Start ...")
+
+function calculateSum(n)
+    local sum = 0
+    for i = 0, n do
+        sum = sum + i
+    end
+    return sum
+end
+
+startTime = os.clock()
+print("calculateSum:" .. calculateSum(100000000))
+print("Time:" .. (os.clock() - startTime))
+
+function calculateMath(n)
+    local sum = 0
+    for i = 0, n do
+        sum = sum + math.sqrt(i)
+    end
+    return sum
+end
+
+startTime = os.clock()
+print("calculateMath:" .. calculateMath(100000000))
+print("Time:" .. (os.clock() - startTime))
+
+function isPrime(num)
+    if num < 2 then
+        return false
+    end
+    for i = 2, math.sqrt(num) do
+        if num % i == 0 then
+            return false
+        end
+    end
+    return true
+end
+function PrimeCount(num)
+	local cnt = 0
+	for i = 1, num do
+		if isPrime(i) then
+			cnt = cnt + 1
+		end
+	end
+	return cnt
+end
+
+startTime = os.clock()
+print("PrimeCount :" .. PrimeCount(10000000));
+print("Time:" .. (os.clock() - startTime))
+
+function fibonacci_recursive(n)
+    if n <= 1 then
+        return n
+    else
+        return fibonacci_recursive(n - 1) + fibonacci_recursive(n - 2)
+    end
+end
+
+start_time = os.clock()
+print("fibonacci:" .. fibonacci_recursive(40))
+print("Time:", os.clock() - start_time)
+```
+
+### Visual C++ 2022 Test Code
+```cpp
+#include <iostream>
+
+double Clock()
+{
+	return (double)clock() / (double)CLOCKS_PER_SEC;
+}
+double calculateSum(int n)
+{
+	double sum = 0.0;
+	for (int i  = 0; i <  n; i++)
+	{
+		sum += i;
+	}
+	return sum;
+}
+double calculateMath(int n)
+{
+	double sum = 0.0;
+	for (int i = 0; i < n; i++)
+	{
+		sum += sqrt(i);
+	}
+	return sum;
+}
+bool isPrime(int num)
+{
+	if (num < 2)
+		return false;
+
+	for (int i = 2; i < sqrt(num) + 1; i++)
+	{
+		if (num % i == 0)
+			return false;
+	}
+	return true;
+}
+int PrimeCount(int num)
+{
+	int cnt = 0;
+	for (int i = 1; i < num; i++)
+	{
+		if (isPrime(i))
+			cnt++;
+	}
+	return cnt;
+}
+int fibonacci_recursive(int n)
+{
+	if (n <= 1)
+		return n;
+	else
+		return fibonacci_recursive(n - 1) + fibonacci_recursive(n - 2);
+}
+int main()
+{
+	printf("\nStart ...");
+	double start_time;
+
+	start_time = Clock();
+	printf("\nLoop Sum : %lf", calculateSum(100000001));
+	printf("\nTime : %lf", (Clock() - start_time));
+
+	start_time = Clock();
+	printf("\nMath : %lf", calculateMath(100000001));
+	printf("\nTime : %lf", (Clock() - start_time));
+
+
+	start_time = Clock();
+	printf("\nPrimeCount : %d", PrimeCount(10000001));
+	printf("\nTime : %lf", (Clock() - start_time));
+
+	start_time = Clock();
+	printf("\nfibonacci : %d", fibonacci_recursive(40));
+	printf("\nTime :%lf", (Clock() - start_time));
+}
+```

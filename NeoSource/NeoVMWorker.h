@@ -234,11 +234,8 @@ struct CoroutineInfo : AllocBase
 	SimpleVector<SCallStack>	m_sCallStack;
 };
 
-struct StringInfo : AllocBase
+struct StringInfo : AllocBase, VMString
 {
-	std::string _str;
-	int	_StringID;
-	int _StringLen;
 };
 
 
@@ -295,7 +292,8 @@ struct SNeoVMHeader
 	u32		_dwFlag;
 };
 
-#define NEO_HEADER_FLAG_DEBUG		0x00000001
+#define NEO_HEADER_FLAG_DEBUG				0x00000001
+#define NEO_HEADER_FLAG_SINGLE_PRECISION	0x00000002
 
 
 enum FUNCTION_TYPE : u8
@@ -578,8 +576,8 @@ private:
 	bool Call_MetaTable2(VarInfo* pTable, std::string&, VarInfo* a, VarInfo* b);
 //	bool Call_MetaTableI(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, int b);
 
-	bool CallNative(FunctionPtrNative functionPtrNative, void* pUserData, const std::string& fname, int n3);
-	bool PropertyNative(FunctionPtrNative functionPtrNative, void* pUserData, const std::string& fname, VarInfo* pRet, bool get);
+	bool CallNative(FunctionPtrNative functionPtrNative, void* pUserData, StringInfo *pStr, int n3, VarInfo* pRet = nullptr);
+	bool PropertyNative(FunctionPtrNative functionPtrNative, void* pUserData, StringInfo* pStr, VarInfo* pRet, bool get);
 
 	static std::string ToString(VarInfo* v1);
 	int ToInt(VarInfo* v1);

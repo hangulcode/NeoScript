@@ -297,7 +297,8 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			break;
 		case NOP_PTRCALL2:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
-			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
+			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
+			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, &v.n3);
 			break;
 		case NOP_CALL:
 			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
@@ -407,7 +408,11 @@ static std::string ToPtringString(const std::string & str)
 	}
 	return r;
 }
-
+#ifdef NS_SINGLE_PRECISION
+#define FLOAT_FORMAT	"%f"
+#else
+#define FLOAT_FORMAT	"%lf"
+#endif
 std::string GetValueString(VarInfo& vi, std::map<int, std::string>* pFunTable = NULL)
 {
 	char ch[64] = { 0, };
@@ -417,7 +422,7 @@ std::string GetValueString(VarInfo& vi, std::map<int, std::string>* pFunTable = 
 		sprintf_s(ch, _countof(ch), "%d", vi._int);
 		break;
 	case VAR_FLOAT:
-		sprintf_s(ch, _countof(ch), "%lf", vi._float); // double
+		sprintf_s(ch, _countof(ch), FLOAT_FORMAT, vi._float); // double ?
 		break;
 	case VAR_BOOL:
 		sprintf_s(ch, _countof(ch), "'%s'", vi._bl ? "true" : "false");
@@ -842,15 +847,28 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutAsm("PCALL %s.%s arg:%d\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), v.n3);
 			break;
 		case NOP_PTRCALL2:
-			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("PCALL2 %s arg:%d\n", GetLog(td, v, 1).c_str(), v.n2);
+			if (v.argFlag & NEOS_OP_CALL_NORESULT)
+			{
+				OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
+				OutAsm("PCALL2 %s arg:%d\n", GetLog(td, v, 1).c_str(), v.n2);
+			}
+			else
+			{
+				OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+				OutAsm("PCALL2%s = %s arg:%d\n", GetLog(td, v, 3).c_str(), GetLog(td, v, 1).c_str(), v.n2);
+			}
 			break;
 		case NOP_CALL:
-			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			if(v.argFlag & NEOS_OP_CALL_NORESULT)
+			{
+				OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 				OutAsm("CALL %s arg:%d\n", GetFunctionName(funs, v.n1).c_str(), v.n2);
+			}
 			else
+			{
+				OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 				OutAsm("CALL%s = %s arg:%d\n", GetLog(td, v, 3).c_str(), GetFunctionName(funs, v.n1).c_str(), v.n2);
+			}
 			break;
 		case NOP_RETURN:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
@@ -952,6 +970,9 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	header._dwNeoVersion = NEO_VER;
 	header._iFunctionCount = (int)(funs.GetFunCountAll());
 	header._dwFlag = arText._debug ? NEO_HEADER_FLAG_DEBUG : 0;
+#ifdef NS_SINGLE_PRECISION
+		header._dwFlag |= NEO_HEADER_FLAG_SINGLE_PRECISION;
+#endif
 	
 	std::map<int, SFunctionTableForWriter> funPos;
 
