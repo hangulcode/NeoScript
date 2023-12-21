@@ -137,7 +137,7 @@ RAM : 64GB
 OS  : Windows 10 Pro 64bit  
 Build : Release Mode 64bit  
 
-|               |Neo Script 1.0.6| [Lua Script 5.42][https://luabinaries.sourceforge.net/]| Visual C++ 2022 |
+|               |Neo Script 1.0.6| [Lua Script 5.42](https://luabinaries.sourceforge.net/)| Visual C++ 2022 |
 | :-----------  |:--------------:| :-------------:|:---------------:|
 | Loop Sum (1~N)| 0.256          | 0.286          | 0.043           |
 | Math          | 1.427          | 1.55           | 0.135           |
