@@ -408,7 +408,11 @@ static std::string ToPtringString(const std::string & str)
 	}
 	return r;
 }
-
+#ifdef NS_SINGLE_PRECISION
+#define FLOAT_FORMAT	"%f"
+#else
+#define FLOAT_FORMAT	"%lf"
+#endif
 std::string GetValueString(VarInfo& vi, std::map<int, std::string>* pFunTable = NULL)
 {
 	char ch[64] = { 0, };
@@ -418,7 +422,7 @@ std::string GetValueString(VarInfo& vi, std::map<int, std::string>* pFunTable = 
 		sprintf_s(ch, _countof(ch), "%d", vi._int);
 		break;
 	case VAR_FLOAT:
-		sprintf_s(ch, _countof(ch), "%lf", vi._float); // double
+		sprintf_s(ch, _countof(ch), FLOAT_FORMAT, vi._float); // double ?
 		break;
 	case VAR_BOOL:
 		sprintf_s(ch, _countof(ch), "'%s'", vi._bl ? "true" : "false");

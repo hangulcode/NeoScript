@@ -128,6 +128,11 @@ int CNeoVMWorker::Sleep(int iTimeout, VarInfo* v1)
 	return 1;
 }
 
+#ifdef NS_SINGLE_PRECISION
+	#define FLOAT_FORMAT	"%f"
+#else
+	#define FLOAT_FORMAT	"%lf"
+#endif
 
 std::string CNeoVMWorker::ToString(VarInfo* v1)
 {
@@ -144,10 +149,11 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 #endif
 		return ch;
 	case VAR_FLOAT:
+		
 #ifdef _WIN32
-		sprintf_s(ch, _countof(ch), "%lf", v1->_float);
+		sprintf_s(ch, _countof(ch), FLOAT_FORMAT, v1->_float);
 #else
-		sprintf(ch, "%lf", v1->_float);
+		sprintf(ch, FLOAT_FORMAT, v1->_float);
 #endif
 		return ch;
 	case VAR_BOOL:
