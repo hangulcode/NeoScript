@@ -995,7 +995,7 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 		}			
 		case NOP_RETURN:
 		{
-			if (OP.n1 == 0 && (OP.argFlag & (1 << 5)) == 0)
+			if ((OP.argFlag & NEOS_OP_CALL_NORESULT))
 				Var_Release(&(*m_pVarStack_Base)[_iSP_Vars]); // Clear
 			else
 				Move(&(*m_pVarStack_Base)[_iSP_Vars], GetVarPtrF1(OP));

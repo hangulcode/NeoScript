@@ -321,6 +321,8 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_RETURN:
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
+			if((argFlag & (1 << 2)) && v.n1 == 0)
+				argFlag |= NEOS_OP_CALL_NORESULT;
 			break;
 		//case NOP_FUNEND:
 		//	//ar << optype;
@@ -889,7 +891,7 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			break;
 		case NOP_RETURN:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
-			if(v.n1 == 0 && v.argFlag == 7) OutAsm("RET\n");
+			if(v.argFlag & NEOS_OP_CALL_NORESULT) OutAsm("RET\n");
 			else							OutAsm("RET  %s\n", GetLog(td, v, 1).c_str());
 			break;
 		//case NOP_FUNEND:
