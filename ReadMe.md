@@ -135,13 +135,14 @@
 CPU : 12th Gen Intel(R) Core(TM) i7-12700F 2.10GHz  
 RAM : 64GB  
 OS  : Windows 10 Pro 64bit  
+Build : Release Mode 64bit  
 
 |               | Neo Script     | Lua Script 5.42| Visual C++ 2022 |
 | :-----------  |:--------------:| :-------------:|:---------------:|
-| Loop Sum (1~N)| Data 2         | Data 3         | 0.044           |
-| Math          | Data 2         | Data 3         | 0.135           |
-| Prime Count   | Data 5         | Data 6         | 2.354           |
-| fibonacci     | Data 5         | Data 6         | 0.298           |
+| Loop Sum (1~N)| 0.256          | 0.286          | 0.044           |
+| Math          | 1.427          | 1.55           | 0.135           |
+| Prime Count   | 9.517          | 11.073         | 2.354           |
+| fibonacci     | 4.629          | 4.977          | 0.298           |
 
 
 ### Neo Script Test Code
