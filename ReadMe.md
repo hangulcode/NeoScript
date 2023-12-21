@@ -35,7 +35,7 @@
 	- map : Dictionary
 
 
-### Neo Scrit reserved words
+### Neo Script reserved words
 	- var: Save the value as a variable name later
 	- fun: Notice the start of the function
 	- import: prefixed to fun and declared to call a c ++ function
@@ -181,9 +181,9 @@ fun isPrime(var num)
         return false;
 	for(var i in 2, math.sqrt(num) + 1, 1)
 	{
-        if(num % i == 0)
-            return false;
-    }
+		if(num % i == 0)
+			return false;
+	}
     return true;
 }
 fun PrimeCount(var num)
