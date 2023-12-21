@@ -923,11 +923,11 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 			switch (pVar1->GetType())
 			{
 			case VAR_FUN:
-				if ((OP.argFlag & 0x02) == 0 && 0 == OP.n2)
+				if ((OP.argFlag & 0x02) == 0 && -1 == OP.n2)
 					Call(pVar1->_fun_index, OP.n3);
 				break;
 			case VAR_FUN_NATIVE:
-				if ((OP.argFlag & 0x02) == 0 && 0 == OP.n2)
+				if ((OP.argFlag & 0x02) == 0 && -1 == OP.n2)
 					Call(pVar1->_funPtr, OP.n3);
 				break;
 			case VAR_CHAR:

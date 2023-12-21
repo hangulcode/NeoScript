@@ -11,11 +11,12 @@ namespace NeoScript
 
 #define COMPILE_LOCALTMP_VAR_BEGIN		(10000)
 #define COMPILE_STATIC_VAR_BEGIN		(15000)
-#define COMPILE_GLOBAL_VAR_BEGIN		(20000)
 #define COMPILE_CALLARG_VAR_BEGIN		(30000) // 256 개 이상 나오지 않는다.
 //#define COMPILE_VAR_NULL				(32766)
 #define STACK_POS_RETURN				(32767)
 #define COMPILE_VAR_MAX					(32768)
+
+#define COMPILE_GLOBAL_VAR_BEGIN		(-2)	// -2 ~ -32767
 
 #ifdef _WIN32
 #else
@@ -81,7 +82,7 @@ struct SLayerVar
 		if(i >= 0)
 		{
 			int r = _varsLayer[i]->FindVar(name);
-			if (r >= 0)
+			if (r != -1)
 				return r;
 		}
 		return -1;
@@ -92,7 +93,7 @@ struct SLayerVar
 		for (int i = (int)_varsLayer.size() - 1; i >= 0; i--)
 		{
 			int r = _varsLayer[i]->FindVar(name);
-			if(r >= 0)
+			if(r != -1)
 				return r;
 		}
 		return -1;
@@ -127,7 +128,7 @@ struct SVars
 		for (int i = (int)_varsFunction.size() - 1; i >= 0; i--)
 		{
 			int r = _varsFunction[i]->FindVar(name);
-			if (r >= 0)
+			if (r != -1)
 				return r;
 		}
 		return -1;

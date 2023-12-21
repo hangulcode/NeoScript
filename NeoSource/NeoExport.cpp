@@ -11,7 +11,7 @@ void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 
 u8 GetArgIndexToCode(u8 flag, short* n1, short* n2, short* n3)
 {
-	u8 r = 0;
+/*	u8 r = 0;
 	if ((flag & (1 << 5)) == 0)
 	{
 		if (n1 == nullptr || *n1 >= 0)
@@ -35,43 +35,56 @@ u8 GetArgIndexToCode(u8 flag, short* n1, short* n2, short* n3)
 		else
 			*n3 = -*n3 - 1;
 	}
-	return r;
+	return r;*/
+	return 0;
 }
 
-void ChangeIndex(int staticCount, int localCount, int curFunStatkSize, SVMOperation& op, int argIndex)
+u8 ChangeIndex(int staticCount, int localCount, int curFunStatkSize, SVMOperation& op, int argIndex)
 {
 	short* n = nullptr;
-	if (argIndex == 1) { if(op.argFlag & (1 << 5)) return; n = &op.n1; }
-	else if (argIndex == 2) { if (op.argFlag & (1 << 4)) return; n = &op.n2; }
-	else if (argIndex == 3) { if (op.argFlag & (1 << 3)) return; n = &op.n3; }
+	if (argIndex == 1)		{ if (op.argFlag & (1 << 5)) return 0; n = &op.n1; }
+	else if (argIndex == 2) { if (op.argFlag & (1 << 4)) return 0; n = &op.n2; }
+	else if (argIndex == 3) { if (op.argFlag & (1 << 3)) return 0; n = &op.n3; }
+
+	if (*n == -1)
+		return 0;
 
 	if (*n == STACK_POS_RETURN)
 	{
 		*n = curFunStatkSize;
-		return;
+		if (argIndex == 1) return (1 << 2);
+		else if (argIndex == 2) return (1 << 1);
+		else if (argIndex == 3) return (1 << 0);
+	}
+	if(*n <= COMPILE_GLOBAL_VAR_BEGIN)
+	{
+		*n = -(*n) + COMPILE_GLOBAL_VAR_BEGIN + staticCount;
+		return 0;
 	}
 
 	if (*n >= COMPILE_LOCALTMP_VAR_BEGIN)
 	{
 		if (*n >= COMPILE_STATIC_VAR_BEGIN)
 		{
-			if (*n >= COMPILE_GLOBAL_VAR_BEGIN)
+			if (*n >= COMPILE_CALLARG_VAR_BEGIN)
 			{
-				if (*n >= COMPILE_CALLARG_VAR_BEGIN)
-				{
-					*n = (*n - COMPILE_CALLARG_VAR_BEGIN) + curFunStatkSize;
-					return;
-				}
-				*n = -(*n - COMPILE_GLOBAL_VAR_BEGIN) - 1 - staticCount;
-				return;
+				*n = (*n - COMPILE_CALLARG_VAR_BEGIN) + curFunStatkSize;
+				if (argIndex == 1) return (1 << 2);
+				else if (argIndex == 2) return (1 << 1);
+				else if (argIndex == 3) return (1 << 0);
 			}
-			*n = -(*n - COMPILE_STATIC_VAR_BEGIN) - 1;
-			return;
+			*n = (*n - COMPILE_STATIC_VAR_BEGIN);
+			return 0;
 		}
 		*n = *n - COMPILE_LOCALTMP_VAR_BEGIN + localCount;
-		return;
+		if (argIndex == 1) return (1 << 2);
+		else if (argIndex == 2) return (1 << 1);
+		else if (argIndex == 3) return (1 << 0);
 	}
-	return;
+	if (argIndex == 1) return (1 << 2);
+	else if (argIndex == 2) return (1 << 1);
+	else if (argIndex == 3) return (1 << 0);
+	return 0;
 }
 struct STempDebug
 {
@@ -165,8 +178,8 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_AND2:
 		case NOP_OR2:
 		case NOP_XOR2:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
 
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, nullptr);
 			break;
@@ -181,9 +194,9 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_AND3:
 		case NOP_OR3:
 		case NOP_XOR3:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
 			
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, &v.n3);
 			break;
@@ -191,7 +204,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_VAR_CLEAR:
 		case NOP_INC:
 		case NOP_DEC:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
 			break;
@@ -207,9 +220,9 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_LOG_AND:		// &&
 		case NOP_LOG_OR:		// ||
 		case NOP_STR_ADD: // ..
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
 
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, &v.n3);
 			break;
@@ -220,7 +233,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			break;
 		case NOP_JMP_FALSE:
 		case NOP_JMP_TRUE:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
 			argFlag |= GetArgIndexToCode(argFlag, nullptr, &v.n2, nullptr);
 			break;
 
@@ -234,20 +247,20 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_JMP_OR:		// ||
 		case NOP_JMP_NAND:	// !(&&)
 		case NOP_JMP_NOR:	// !(||)
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
 
 			argFlag |= GetArgIndexToCode(argFlag, nullptr, &v.n2, &v.n3);
 			break;
 		case NOP_JMP_FOR:	// 
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
 
 			argFlag |= GetArgIndexToCode(argFlag, nullptr, &v.n2, &v.n3);
 			break;
 		case NOP_JMP_FOREACH:	// 
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
 
 			argFlag |= GetArgIndexToCode(argFlag, nullptr, &v.n2, &v.n3);
 			break;
@@ -257,55 +270,56 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_TOFLOAT:
 		case NOP_TOSIZE:
 		case NOP_GETTYPE:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
 
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, nullptr);
 			break;
 		case NOP_SLEEP:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
 			argFlag |= GetArgIndexToCode(argFlag, nullptr, &v.n2, nullptr);
 			break;
 
 		case NOP_MOV:
 		case NOP_MOV_MINUS:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			if ((argFlag & (1 << 4)) == 0)
-				ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+				argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, nullptr);
 			break;
 
 		case NOP_MOVI:
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
 			break;
 
 		case NOP_FMOV1:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
 			break;
 		case NOP_FMOV2:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			if ((argFlag & (1 << 4)) == 0)
-				ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+				argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, nullptr);
 			break;
 
 		case NOP_PTRCALL:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, nullptr);
 			break;
 		case NOP_PTRCALL2:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, &v.n3);
 			break;
 		case NOP_CALL:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
 			argFlag |= GetArgIndexToCode(argFlag, nullptr, nullptr, &v.n3);
 			break;
 		case NOP_RETURN:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
 			break;
 		//case NOP_FUNEND:
@@ -313,7 +327,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		//	argFlag |= GetArgIndexToCode(argFlag, nullptr, nullptr, nullptr);
 		//	break;
 		case NOP_TABLE_ALLOC:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			//ar << optype << v.n1;
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
 			break;
@@ -325,24 +339,24 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_TABLE_DIV2:
 		case NOP_TABLE_PERSENT2:
 			if ((argFlag & (1 << 5)) == 0)
-				ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+				argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			if ((argFlag & (1 << 4)) == 0)
-				ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+				argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
 			if ((argFlag & (1 << 3)) == 0)
-				ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
+				argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
 
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, &v.n3);
 			break;
 
 		case NOP_TABLE_REMOVE:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
 			//ar << optype << v.n1 << v.n2;
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, nullptr);
 			break;
 
 		case NOP_LIST_ALLOC:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			//ar << optype << v.n1;
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
 			break;
@@ -353,24 +367,24 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_LIST_MUL2:
 		case NOP_LIST_DIV2:
 		case NOP_LIST_PERSENT2:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
 
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, &v.n3);
 			break;*/
 		case NOP_LIST_REMOVE:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
 			//ar << optype << v.n1 << v.n2;
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, nullptr);
 			break;
 		case NOP_VERIFY_TYPE:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
 			break;
 		case NOP_CHANGE_INT:
-			ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
 			break;
 		case NOP_YIELD:
@@ -844,7 +858,10 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 
 		case NOP_PTRCALL:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("PCAL %s.%s arg:%d\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), v.n3);
+			if(v.n2 != -1)
+				OutAsm("PCAL %s.%s arg:%d\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str(), v.n3);
+			else
+				OutAsm("PCAL %s arg:%d\n", GetLog(td, v, 1).c_str(), v.n3);
 			break;
 		case NOP_PTRCALL2:
 			if (v.argFlag & NEOS_OP_CALL_NORESULT)
@@ -1145,7 +1162,7 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 	std::map<int, std::string> global;
 	for (auto it2 = pLocalLayer->_localVars.begin(); it2 != pLocalLayer->_localVars.end(); it2++)
 	{
-		int idx = (*it2).second - COMPILE_GLOBAL_VAR_BEGIN + header._iStaticVarCount;
+		int idx = -(*it2).second + COMPILE_GLOBAL_VAR_BEGIN + header._iStaticVarCount;
 		global[idx] = (*it2).first;
 	}
 	for (auto it2 = global.begin(); it2 != global.end(); it2++)

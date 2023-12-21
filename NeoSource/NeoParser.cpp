@@ -737,7 +737,7 @@ bool UseableName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, const std::str
 	}
 	SLayerVar* pCurLayer = vars.GetCurrentLayer();
 
-	if (pCurLayer->FindVarOnlyCurrentBlock(name) >= 0)
+	if (pCurLayer->FindVarOnlyCurrentBlock(name) != -1)
 	{
 		SetCompileError(ar, "Error (%d, %d): Function Local Var Already (%s) %s", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), name.c_str());
 		return false;
@@ -751,7 +751,7 @@ int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExp
 		return -1;
 	int iLocalVar;
 	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME)
-		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN + funs._cur->_localVarCount++;
+		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN - funs._cur->_localVarCount++;
 	else
 		iLocalVar = 1 + (int)funs._cur->_args.size() + funs._cur->_localVarCount++; // 0 번은 리턴 저장용
 	SLayerVar* pCurLayer = vars.GetCurrentLayer();
@@ -775,14 +775,14 @@ int  AddLocalVar(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	char name[256];
 	sprintf_s(name, _countof(name), "^_#@_temp_%d", vars._iTempVarNameIndex++);
 
-	if (pCurLayer->FindVarOnlyCurrentBlock(name) >= 0)
+	if (pCurLayer->FindVarOnlyCurrentBlock(name) != -1)
 	{
 		SetCompileError(ar, "Error (%d, %d): Function Local Var Already (%s) %s", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), name);
 		return -1;
 	}
 	int iLocalVar;
 	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME)
-		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN + funs._cur->_localVarCount++;
+		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN - funs._cur->_localVarCount++;
 	else
 		iLocalVar = 1 + (int)funs._cur->_args.size() + funs._cur->_localVarCount++; // 0 번은 리턴 저장용
 	pCurLayer->AddLocalVar(name, iLocalVar);
@@ -1202,7 +1202,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 				funs._cur->Push_OP2(ar, NOP_MOV_MINUS, iResultStack._iVar, iResultStack._iVar, false);
 			return true;
 		}
-		else if(iResultStack._iVar >= 0)
+		else if(iResultStack._iVar != -1)
 		{
 			funs._cur->Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
 			iResultStack = funs._cur->AllocLocalTempVar();
@@ -1242,7 +1242,7 @@ bool ParseNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArch
 	double num;
 
 	iResultStack = vars.FindVar(tk1);
-	if (iResultStack._iVar >= 0)
+	if (iResultStack._iVar != -1)
 		return true;
 
 	if (true == StringToDouble(num, tk1.c_str()))
@@ -1299,7 +1299,7 @@ bool ParseNum2(int& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArchiveR
 	double num;
 
 	iResultStack = vars.FindVar(tk1);
-	if (iResultStack >= 0)
+	if (iResultStack != -1)
 		return true;
 
 	if (true == StringToDouble(num, tk1.c_str()))
@@ -1607,7 +1607,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 	if(pOtherModule == nullptr)
 		iTempOffset._iVar = vars.FindVar(tk1);
 
-	if (iTempOffset._iVar >= 0)
+	if (iTempOffset._iVar != -1)
 	{
 		while (true)
 		{
@@ -2480,7 +2480,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 	}
 	int iKey = AddLocalVarName(ar, funs, vars, false, tk1);
-	if (iKey < 0)
+	if (iKey == -1)
 		return false;
 
 	/*tkType1 = GetToken(ar, tk1);
@@ -2497,7 +2497,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 	}
 	int iValue = AddLocalVarName(ar, funs, vars, tk1);
-	if (iValue < 0)
+	if (iValue == -1)
 		return false;
 
 	if (iKey + 1 != iValue)
@@ -2507,16 +2507,16 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}*/
 
 	int iIterator1 = AddLocalVar(ar, funs, vars); // Current Save
-	if (iIterator1 < 0)
+	if (iIterator1 == -1)
 		return false;
 	int i_Begin = AddLocalVar(ar, funs, vars); // Begin
-	if (i_Begin < 0)
+	if (i_Begin == -1)
 		return false;
 	int i_End = AddLocalVar(ar, funs, vars); // End
-	if (i_End < 0)
+	if (i_End == -1)
 		return false;
 	int i_Step = AddLocalVar(ar, funs, vars); // Step
-	if (i_Step < 0)
+	if (i_Step == -1)
 		return false;
 
 
@@ -2622,7 +2622,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 	}
 	int iTable = vars.FindVar(tk1);
-	if (iTable < 0)
+	if (iTable == -1)
 	{
 		SetCompileError(ar, "Error (%d, %d): for 'talbe' Not Found %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
 		return false;
@@ -2723,7 +2723,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 	}
 	int iKey = AddLocalVarName(ar, funs, vars, false, tk1);
-	if(iKey < 0)
+	if(iKey == -1)
 		return false;
 
 	int iValue = -1;
@@ -2751,7 +2751,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		}
 		iValue = AddLocalVarName(ar, funs, vars, false, tk1);
 	}
-	if (iValue < 0)
+	if (iValue == -1)
 		return false;
 
 	if (iKey + 1 != iValue)
@@ -2762,7 +2762,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	// Iterator를 저장할 임시 자동 생성 변수
 	int iIterator = AddLocalVar(ar, funs, vars);
-	if (iIterator < 0)
+	if (iIterator == -1)
 		return false;
 
 	if (iKey + 2 != iIterator)
@@ -2785,7 +2785,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 	}
 	int iTable = vars.FindVar(tk1);
-	if(iTable < 0)
+	if(iTable == -1)
 	{
 		SetCompileError(ar, "Error (%d, %d): foreach 'talbe' Not Found %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
 		return false;
@@ -3160,7 +3160,7 @@ bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport)
 	if (tkType1 == TK_STRING)
 	{
 		int iLocalVar = AddLocalVarName(ar, funs, vars, blExport, tk1);
-		if (iLocalVar < 0)
+		if (iLocalVar == -1)
 			return false;
 
 		ar.PushToken(tkType1, tk1);
@@ -3205,7 +3205,7 @@ bool ParseClass(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	if (tkType1 == TK_STRING)
 	{
 		int iLocalVar = AddLocalVarName(ar, funs, vars, blExport, tk1);
-		if (iLocalVar < 0)
+		if (iLocalVar == -1)
 			return false;
 
 		ar.PushToken(tkType1, tk1);
