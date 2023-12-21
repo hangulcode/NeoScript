@@ -138,10 +138,10 @@ OS  : Windows 10 Pro 64bit
 
 |               | Neo Script     | Lua Script 5.42| Visual C++ 2022 |
 | :-----------  |:--------------:| :-------------:|:---------------:|
-| Loop Sum (1~N)| Data 2         | Data 3         |                 |
-| Math          | Data 2         | Data 3         |                 |
-| Prime Count   | Data 5         | Data 6         |                 |
-| fibonacci     | Data 5         | Data 6         |                 |
+| Loop Sum (1~N)| Data 2         | Data 3         | 0.044           |
+| Math          | Data 2         | Data 3         | 0.135           |
+| Prime Count   | Data 5         | Data 6         | 2.354           |
+| fibonacci     | Data 5         | Data 6         | 0.298           |
 
 
 ### Neo Script Test Code
@@ -224,6 +224,7 @@ print("Time :" .. (system.clock() - start_time));
 ### Lua Script Test Code
 ```lua
 local startTime
+print("Start ...")
 
 function calculateSum(n)
     local sum = 0
@@ -285,4 +286,83 @@ end
 start_time = os.clock()
 print("fibonacci:" .. fibonacci_recursive(40))
 print("Time:", os.clock() - start_time)
-...
+```
+
+### Visual C++ 2022 Test Code
+```cpp
+#include <iostream>
+
+double Clock()
+{
+	return (double)clock() / (double)CLOCKS_PER_SEC;
+}
+double calculateSum(int n)
+{
+	double sum = 0.0;
+	for (int i  = 0; i <  n; i++)
+	{
+		sum += i;
+	}
+	return sum;
+}
+double calculateMath(int n)
+{
+	double sum = 0.0;
+	for (int i = 0; i < n; i++)
+	{
+		sum += sqrt(i);
+	}
+	return sum;
+}
+bool isPrime(int num)
+{
+	if (num < 2)
+		return false;
+
+	for (int i = 2; i < sqrt(num) + 1; i++)
+	{
+		if (num % i == 0)
+			return false;
+	}
+	return true;
+}
+int PrimeCount(int num)
+{
+	int cnt = 0;
+	for (int i = 1; i < num; i++)
+	{
+		if (isPrime(i))
+			cnt++;
+	}
+	return cnt;
+}
+int fibonacci_recursive(int n)
+{
+	if (n <= 1)
+		return n;
+	else
+		return fibonacci_recursive(n - 1) + fibonacci_recursive(n - 2);
+}
+int main()
+{
+	printf("\nStart ...");
+	double start_time;
+
+	start_time = Clock();
+	printf("\nLoop Sum : %lf", calculateSum(100000001));
+	printf("\nTime : %lf", (Clock() - start_time));
+
+	start_time = Clock();
+	printf("\nMath : %lf", calculateMath(100000001));
+	printf("\nTime : %lf", (Clock() - start_time));
+
+
+	start_time = Clock();
+	printf("\nPrimeCount : %d", PrimeCount(10000001));
+	printf("\nTime : %lf", (Clock() - start_time));
+
+	start_time = Clock();
+	printf("\nfibonacci : %d", fibonacci_recursive(40));
+	printf("\nTime :%lf", (Clock() - start_time));
+}
+```
