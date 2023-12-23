@@ -87,7 +87,7 @@ public:
 			if (_capa >= 128)
 				Alloc(_capa + 128);
 			else
-				Alloc(_capa << 1); // * 2
+				Alloc(_capa > 0 ? (_capa << 1) : 1); // * 2
 		}
 		return _buffer[_cnt++];
 	}

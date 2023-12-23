@@ -995,14 +995,13 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 		}			
 		case NOP_RETURN:
 		{
-			if ((OP.argFlag & NEOS_OP_CALL_NORESULT))
-				Var_Release(&(*m_pVarStack_Base)[_iSP_Vars]); // Clear
-			else
-				Move(&(*m_pVarStack_Base)[_iSP_Vars], GetVarPtrF1(OP));
-
-			//if (m_sCallStack.empty())
 			if(iBreakingCallStack == (int)m_pCallStack->size())
 			{
+				if ((OP.argFlag & NEOS_OP_CALL_NORESULT))
+					Var_Release(m_pVarStack_Pointer); // Clear
+				else
+					Move(m_pVarStack_Pointer, GetVarPtrF1(OP));
+
 				if (iBreakingCallStack == 0 && IsMainCoroutine(m_pCur) == false)
 				{
 					if(StopCoroutine(true) == true) // Other Coroutine Active (No Stop)
@@ -1017,7 +1016,19 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 			m_pCallStack->resize(iTemp);
 
 			if(callStack._pReturnValue)
-				Move(callStack._pReturnValue, &(*m_pVarStack_Base)[_iSP_Vars]);
+			{
+				if ((OP.argFlag & NEOS_OP_CALL_NORESULT))
+					Var_Release(callStack._pReturnValue); // Clear
+				else
+					Move(callStack._pReturnValue, GetVarPtrF1(OP));
+			}
+			else
+			{
+				if ((OP.argFlag & NEOS_OP_CALL_NORESULT))
+					Var_Release(m_pVarStack_Pointer); // Clear
+				else
+					Move(m_pVarStack_Pointer, GetVarPtrF1(OP));
+			}
 
 			SetCodePtr(callStack._iReturnOffset);
 			_iSP_Vars = callStack._iSP_Vars;
