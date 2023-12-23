@@ -362,7 +362,7 @@ enum eNeoDefaultString
 	NDF_MAX
 };
 
-#define NEOS_OP_CALL_NORESULT	0x80
+#define NEOS_OP_CALL_NORESULT	(1 << 7) // 0x80
 
 
 #ifdef _DEBUG
@@ -727,10 +727,10 @@ NEOS_FORCEINLINE void Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
 	v1->SetType(v2->GetType());
 	switch (v2->GetType())
 	{
-	case VAR_NONE: break;
 	case VAR_INT: v1->_int = v2->_int; break;
 	case VAR_FLOAT: v1->_float = v2->_float; break;
 	case VAR_BOOL: v1->_bl = v2->_bl; break;
+	case VAR_NONE: break;
 	case VAR_FUN: v1->_fun_index = v2->_fun_index; break;
 	case VAR_FUN_NATIVE: v1->_funPtr = v2->_funPtr; break;
 	case VAR_CHAR: v1->_c = v2->_c; break;

@@ -35,7 +35,7 @@
 	- map : Dictionary
 
 
-### Neo Scrit reserved words
+### Neo Script reserved words
 	- var: Save the value as a variable name later
 	- fun: Notice the start of the function
 	- import: prefixed to fun and declared to call a c ++ function
@@ -137,7 +137,7 @@ RAM : 64GB
 OS  : Windows 10 Pro 64bit  
 Build : Release Mode 64bit  
 
-|               |Neo Script 1.0.6| Lua Script 5.42| Visual C++ 2022 |
+|               |Neo Script 1.0.6| [Lua Script 5.4.2](https://luabinaries.sourceforge.net/)| Visual C++ 2022 |
 | :-----------  |:--------------:| :-------------:|:---------------:|
 | Loop Sum (1~N)| 0.256          | 0.286          | 0.043           |
 | Math          | 1.427          | 1.55           | 0.135           |
@@ -181,9 +181,9 @@ fun isPrime(var num)
         return false;
 	for(var i in 2, math.sqrt(num) + 1, 1)
 	{
-        if(num % i == 0)
-            return false;
-    }
+		if(num % i == 0)
+			return false;
+	}
     return true;
 }
 fun PrimeCount(var num)

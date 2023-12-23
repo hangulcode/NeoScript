@@ -45,10 +45,10 @@ struct NeoFunction
 };
 enum VAR_TYPE : u8
 {
-	VAR_NONE,
 	VAR_INT,
 	VAR_FLOAT,	// float or double 
 	VAR_BOOL,
+	VAR_NONE,
 	VAR_FUN,
 
 	VAR_ITERATOR,
@@ -138,7 +138,6 @@ public:
 	bool ListFindFloat(int idx, NS_FLOAT& value);
 	bool SetListIndexer(VMHash<int>* pIndexer);
 };
-#pragma pack()
 
 struct INeoVMWorker
 {

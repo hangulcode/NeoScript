@@ -119,14 +119,6 @@ MapNode* MapBucket::Find(VarInfo* pKey, u32 hash)
 	MapNode* pCur = pFirst;
 	switch (pKey->GetType())
 	{
-	case VAR_NONE:
-		while(pCur)
-		{
-			if (pCur->key.GetType() == VAR_NONE)
-				return pCur;
-			pCur = pCur->pNext;
-		}
-		break;
 	case VAR_INT:
 		{
 			int iKey = pKey->_int;
@@ -173,6 +165,14 @@ MapNode* MapBucket::Find(VarInfo* pKey, u32 hash)
 				}
 				pCur = pCur->pNext;
 			}
+		}
+		break;
+	case VAR_NONE:
+		while (pCur)
+		{
+			if (pCur->key.GetType() == VAR_NONE)
+				return pCur;
+			pCur = pCur->pNext;
 		}
 		break;
 	case VAR_FUN:
