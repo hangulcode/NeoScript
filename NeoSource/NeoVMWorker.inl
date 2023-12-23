@@ -882,10 +882,6 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
 	{
-	case VAR_NONE:
-		if (v2->GetType() == VAR_NONE)
-			return true;
-		break;
 	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 			return v1->_int == v2->_int;
@@ -901,6 +897,10 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
 	case VAR_BOOL:
 		if (v2->GetType() == VAR_BOOL)
 			return v1->_bl == v2->_bl;
+		break;
+	case VAR_NONE:
+		if (v2->GetType() == VAR_NONE)
+			return true;
 		break;
 	case VAR_CHAR:
 		if (v2->GetType() == VAR_CHAR)
