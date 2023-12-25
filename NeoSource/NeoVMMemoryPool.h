@@ -6,7 +6,7 @@ namespace NeoScript
 
 #pragma pack(1)
 
-template <typename T, int iBlkSize = 100>
+template <typename T, int iBlkSize = 128>
 class CNVMAllocPool
 {
 	template<class T1>
@@ -135,7 +135,8 @@ private:
 		m_sFreeNode.set_head(&pData[0]);
 		pData[m_iBlkSize - 1].m_pNext = NULL;
 #endif
-		m_iBlkSize *= 2;
+		if (m_iBlkSize < 1024*100)
+			m_iBlkSize *= 2;
 	}
 
 public:
@@ -150,7 +151,7 @@ public:
 	{
 		clear();
 	}
-	T*	Receive()
+	inline T*	Receive()
 	{
 		if (m_sFreeNode.empty())
 			alloc();
@@ -164,7 +165,7 @@ public:
 		return (T*)&__p->m_sObj.data;
 	}
 
-	void    Confer(T* buf)
+	inline void    Confer(T* buf)
 	{
 		SNodePool* __p = (SNodePool*)((u8*)buf - offsetof(SNodePool, m_sObj.data));
 
@@ -177,7 +178,7 @@ public:
 };
 
 
-template <typename T, int iBlkSize = 100>
+template <typename T, int iBlkSize = 128>
 class CNVMInstPool
 {
 	template<class T1>
@@ -292,7 +293,8 @@ private:
 			m_sFreeNode.push_head(pNode);
 		}
 
-		m_iBlkSize *= 2;
+		if (m_iBlkSize < 1024 * 100)
+			m_iBlkSize *= 2;
 	}
 
 public:
@@ -307,7 +309,7 @@ public:
 	{
 		clear();
 	}
-	T*	Receive()
+	inline T*	Receive()
 	{
 		SNodePool* __p = m_sFreeNode.pop_head();
 		if (__p == NULL)
@@ -322,7 +324,7 @@ public:
 		return &__p->m_sObj.data;
 	}
 
-	void    Confer(T* buf)
+	inline void    Confer(T* buf)
 	{
 		//SNodePool* __p = (SNodePool*)((u8*)buf - offsetof(SNodePool, m_sObj.data));
 		SNodePool* __p = (SNodePool*)((u8*)buf - ((size_t) & (((SNodePool*)0)->m_sObj.data)));

@@ -124,7 +124,7 @@ MapNode* MapBucket::Find(VarInfo* pKey, u32 hash)
 			int iKey = pKey->_int;
 			while (pCur)
 			{
-				if (pCur->hash == hash)
+				//if (pCur->hash == hash)
 				{
 					if (pCur->key.GetType() == VAR_INT)
 					{
@@ -141,7 +141,7 @@ MapNode* MapBucket::Find(VarInfo* pKey, u32 hash)
 			auto fKey = pKey->_float;
 			while (pCur)
 			{
-				if (pCur->hash == hash)
+				//if (pCur->hash == hash)
 				{
 					if (pCur->key.GetType() == VAR_FLOAT)
 					{
@@ -253,7 +253,7 @@ MapNode* MapBucket::Find(VarInfo* pKey, u32 hash)
 			auto cor = pKey->_cor;
 			while (pCur)
 			{
-				if (pCur->hash == hash)
+				//if (pCur->hash == hash)
 				{
 					if (pCur->key.GetType() == VAR_COROUTINE)
 					{

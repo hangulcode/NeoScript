@@ -90,15 +90,15 @@ public:
 
 	VarInfo m_sDefaultValue[NDF_MAX];
 	
-	CNVMAllocPool < MapNode, 10> m_sPool_TableNode;
-	CNVMAllocPool< MapInfo, 10 > m_sPool_TableInfo;
-	CNVMAllocPool < SetNode, 10> m_sPool_SetNode;
-	CNVMAllocPool< SetInfo, 10 > m_sPool_SetInfo;
-	CNVMAllocPool< ListInfo, 10 > m_sPool_ListInfo;
+	CNVMAllocPool < MapNode, 32> m_sPool_TableNode;
+	CNVMAllocPool< MapInfo, 32> m_sPool_TableInfo;
+	CNVMAllocPool < SetNode, 32> m_sPool_SetNode;
+	CNVMAllocPool< SetInfo, 32> m_sPool_SetInfo;
+	CNVMAllocPool< ListInfo, 32> m_sPool_ListInfo;
 
-	CNVMInstPool< AsyncInfo, 10 > m_sPool_Async;
-	CNVMInstPool< StringInfo, 10 > m_sPool_String;
-	CNVMInstPool< CoroutineInfo, 10 > m_sPool_Coroutine;
+	CNVMInstPool< AsyncInfo, 32> m_sPool_Async;
+	CNVMInstPool< StringInfo, 32> m_sPool_String;
+	CNVMInstPool< CoroutineInfo, 32> m_sPool_Coroutine;
 
 	std::map<void*, FunctionPtr*> m_sCache_FunPtr;
 
