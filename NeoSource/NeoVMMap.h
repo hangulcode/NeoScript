@@ -1,5 +1,7 @@
 #pragma once
 
+//#define HASH_FIND_FLAG
+
 namespace NeoScript
 {
 
@@ -26,12 +28,12 @@ struct MapSortInfo
 struct MapBucket
 {
 	MapNode*	pFirst;
-#if 0
+#ifdef HASH_FIND_FLAG
 	u32			flag;// 이 비트가 off 이면 반드시 없음. on 이면 있을수도 없을수도 있음 (추가 될때는 on 하고, 삭제시 off 하지 않음)
 #endif
 	bool	Pop_Used(MapNode* pTar);
 	MapNode* Find(VarInfo* pKey, u32 hash);
-	#if 0
+#ifdef HASH_FIND_FLAG
 	inline void Add_NoCheck(MapNode* p, int bit)
 	{
 		p->pNext = pFirst;
@@ -42,7 +44,7 @@ struct MapBucket
 	{
 		return (flag & (1 << ((hash >> bit) & 0x1F))) == 0;
 	}
-	#else
+#else
 	inline void Add_NoCheck(MapNode* p)
 	{
 		p->pNext = pFirst;
