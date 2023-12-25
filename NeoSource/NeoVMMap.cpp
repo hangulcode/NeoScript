@@ -319,7 +319,7 @@ void MapInfo::Reserve(int sz)
 			while (pCur)
 			{
 				MapNode*	pNext = pCur->pNext;
-#if 0
+#ifdef HASH_FIND_FLAG
 				_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur, _HashCheckBit);
 #else
 				_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur); 
@@ -369,7 +369,7 @@ VarInfo* MapInfo::Insert(VarInfo* pKey)
 			while (pCur)
 			{
 				MapNode*	pNext = pCur->pNext;
-#if 0
+#ifdef HASH_FIND_FLAG
 				_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur, _HashCheckBit);
 #else
 				_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur);
@@ -386,7 +386,7 @@ VarInfo* MapInfo::Insert(VarInfo* pKey)
 	u32 hash = GetHashCode(pKey);
 	MapBucket* pBucket = &_Bucket[hash & _HashBase];
 	MapNode* pFindNode;
-#if 0
+#ifdef HASH_FIND_FLAG
 	if(pBucket->IsNoHaveKey(hash, _HashCheckBit))
 	{
 		pFindNode = NULL;
@@ -409,7 +409,7 @@ VarInfo* MapInfo::Insert(VarInfo* pKey)
 		//INeoVM::Move_DestNoRelease(&pNew->value, pValue);
 		pNew->hash = hash;
 
-#if 0
+#ifdef HASH_FIND_FLAG
 		pBucket->Add_NoCheck(pNew, _HashCheckBit);
 #else
 		pBucket->Add_NoCheck(pNew);
