@@ -89,6 +89,7 @@ void MapInfo::Free()
 
 	delete[] _Bucket;
 	_BucketCapa = _HashBase = 0;
+	_HashCheckBit = 0;
 	_itemCount = 0;
 }
 bool	MapBucket::Pop_Used(MapNode* pTar)
@@ -271,6 +272,16 @@ MapNode* MapBucket::Find(VarInfo* pKey, u32 hash)
 	return NULL;
 }
 
+int HashShiftBit(int HashBase)
+{
+	for(int i = 0; i < 32; i++)
+	{
+		if((HashBase & (1 << i)) == 0)
+			return i;
+	}
+	return 32;
+}
+
 void MapInfo::Reserve(int sz)
 {
 	if (sz < 0) sz = 0;
@@ -293,6 +304,7 @@ void MapInfo::Reserve(int sz)
 		_Bucket = new MapBucket[_BucketCapa];
 		memset(_Bucket, 0, sizeof(MapBucket) * _BucketCapa);
 		_HashBase = _BucketCapa - 1;
+		_HashCheckBit = HashShiftBit(_HashBase);
 
 
 		for (int iBucket = 0; iBucket < Old_BucketCapa; iBucket++)
@@ -307,7 +319,11 @@ void MapInfo::Reserve(int sz)
 			while (pCur)
 			{
 				MapNode*	pNext = pCur->pNext;
-				_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur);
+#if 0
+				_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur, _HashCheckBit);
+#else
+				_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur); 
+#endif
 
 				pCur = pNext;
 			}
@@ -338,6 +354,7 @@ VarInfo* MapInfo::Insert(VarInfo* pKey)
 		_Bucket = new MapBucket[_BucketCapa];
 		memset(_Bucket, 0, sizeof(MapBucket) * _BucketCapa);
 		_HashBase = _BucketCapa - 1;
+		_HashCheckBit = HashShiftBit(_HashBase);
 
 
 		for (int iBucket = 0; iBucket < Old_BucketCapa; iBucket++)
@@ -352,7 +369,11 @@ VarInfo* MapInfo::Insert(VarInfo* pKey)
 			while (pCur)
 			{
 				MapNode*	pNext = pCur->pNext;
+#if 0
+				_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur, _HashCheckBit);
+#else
 				_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur);
+#endif
 
 				pCur = pNext;
 			}
@@ -365,10 +386,19 @@ VarInfo* MapInfo::Insert(VarInfo* pKey)
 	u32 hash = GetHashCode(pKey);
 	MapBucket* pBucket = &_Bucket[hash & _HashBase];
 	MapNode* pFindNode;
-	if (pBucket->pFirst)
-		pFindNode = pBucket->Find(pKey, hash);
-	else
+#if 0
+	if(pBucket->IsNoHaveKey(hash, _HashCheckBit))
+	{
 		pFindNode = NULL;
+	}
+	else
+#endif
+	{
+		if (pBucket->pFirst)
+			pFindNode = pBucket->Find(pKey, hash);
+		else
+			pFindNode = NULL;
+	}
 	if (pFindNode == NULL)
 	{
 		_itemCount++;
@@ -379,7 +409,12 @@ VarInfo* MapInfo::Insert(VarInfo* pKey)
 		//INeoVM::Move_DestNoRelease(&pNew->value, pValue);
 		pNew->hash = hash;
 
+#if 0
+		pBucket->Add_NoCheck(pNew, _HashCheckBit);
+#else
 		pBucket->Add_NoCheck(pNew);
+#endif
+
 		return &pNew->value;
 	}
 	else // Replace
@@ -456,7 +491,6 @@ void MapInfo::Remove(VarInfo* pKey)
 		return;
 	u32 hash = GetHashCode(pKey);
 	MapBucket* pBucket = &_Bucket[hash & _HashBase];
-
 	MapNode* pCur = pBucket->Find(pKey, hash);
 	if (pCur == NULL)
 		return;
@@ -477,10 +511,8 @@ VarInfo* MapInfo::Find(VarInfo *pKey)
 		return NULL;
 	u32 hash = GetHashCode(pKey);
 
-	MapBucket* Bucket = &_Bucket[hash & _HashBase];
-
-
-	MapNode* pCur = Bucket->Find(pKey, hash);
+	MapBucket* pBucket = &_Bucket[hash & _HashBase];
+	MapNode* pCur = pBucket->Find(pKey, hash);
 	if (pCur == 0)
 		return NULL;
 
@@ -493,6 +525,7 @@ VarInfo* MapInfo::Find(const std::string& key)
 	u32 hash = GetHashCode(key);
 
 	MapBucket* pBucket = &_Bucket[hash & _HashBase];
+
 	MapNode* pCur = pBucket->pFirst;
 	while (pCur)
 	{

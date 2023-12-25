@@ -873,9 +873,9 @@ static void AddGlobalLibFun()
 }
 bool CNeoVMImpl::IsGlobalLibFun(std::string& FunName)
 {
-	//AddGlobalLibFun();
-	InitLib();
-	return g_sNeoFunLib_Default.IsKey(FunName);
+	//InitLib();
+	//return g_sNeoFunLib_Default.IsKey(FunName);
+	return FunName == "print";
 }
 void CNeoVMImpl::RegLibrary(VarInfo* pSystem, const char* pLibName)
 {
