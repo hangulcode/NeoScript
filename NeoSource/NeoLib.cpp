@@ -341,7 +341,8 @@ struct neo_libs
 		if (args != 1) return false;
 
 		int init = pN->read<int>(1);
-		::srand((u32)init);
+		//::srand((u32)init);
+		pN->m_sRand.seed(init);
 		pN->ReturnValue();
 		return true;
 	}
@@ -349,7 +350,8 @@ struct neo_libs
 	{
 		if (args != 0) return false;
 
-		pN->ReturnValue((int)::rand());
+		//pN->ReturnValue((int)::rand());
+		pN->ReturnValue(pN->m_sRand.rnd());
 		return true;
 	}
 

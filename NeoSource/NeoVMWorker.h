@@ -371,6 +371,22 @@ enum eNeoDefaultString
 	#define NEOS_GLOBAL_VAR(idx) m_pVarGlobal_Pointer + idx
 #endif
 
+class mRND 
+{
+public:
+	void seed(unsigned int s) {
+		_seed = s;
+	}
+	int rnd() // 0 ~ 0x7fff
+	{
+		_seed = (a * _seed + c) % m;
+		return (_seed >> 16);
+	}
+	mRND() : _seed(0), a(214013), c(2531011), m(2147483648) { }
+protected:
+	int a, c;
+	unsigned int m, _seed;
+};
 
 struct neo_DCalllibs;
 struct neo_libs;
@@ -395,6 +411,7 @@ private:
 	int m_iTimeout = -1;
 	int m_iCheckOpCount = NEO_DEFAULT_CHECKOP;
 //	int m_op_process = 0;
+
 
 //	inline void SetCheckTime() { m_op_process = 0; }
 	void JumpAsyncMsg();
@@ -518,6 +535,8 @@ private:
 
 
 public:
+	mRND m_sRand;
+
 	virtual void Var_Move(VarInfo* v1, VarInfo* v2)
 	{
 		Move(v1, v2);
