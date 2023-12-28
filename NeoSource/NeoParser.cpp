@@ -825,40 +825,14 @@ void AddBuildinFunction(CArchiveRdWC& ar, SFunctions& funs, const std::string& f
 bool AddBuildinModule(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string mod)
 {
 	SFunctionLayer* pLayerBackup = funs._curModule;
-	if(mod == "system")
+	const std::list< SystemFun>* p = CNeoVMImpl::GetSystemModule(mod);
+	if(p != nullptr)
 	{
-		AddBuildinFunction(ar, funs, "clock", 0);
-		AddBuildinFunction(ar, funs, "meta", 2);
-		AddBuildinFunction(ar, funs, "load", 2);
-		AddBuildinFunction(ar, funs, "pcall", 1);
-		AddBuildinFunction(ar, funs, "aysnc_create", 0);
-		AddBuildinFunction(ar, funs, "set", 1);
-	}
-	if (mod == "math")
-	{
-		AddBuildinFunction(ar, funs, "acos", 1);
-		AddBuildinFunction(ar, funs, "asin", 1);
-		AddBuildinFunction(ar, funs, "atan", 1);
-		AddBuildinFunction(ar, funs, "ceil", 1);
-		AddBuildinFunction(ar, funs, "floor", 1);
-		AddBuildinFunction(ar, funs, "sin", 1);
-		AddBuildinFunction(ar, funs, "cos", 1);
-		AddBuildinFunction(ar, funs, "tan", 1);
-		AddBuildinFunction(ar, funs, "log", 1);
-		AddBuildinFunction(ar, funs, "log10", 1);
-		AddBuildinFunction(ar, funs, "pow", 2);
-		AddBuildinFunction(ar, funs, "deg", 1);
-		AddBuildinFunction(ar, funs, "rad", 1);
-		AddBuildinFunction(ar, funs, "sqrt", 1);
-		AddBuildinFunction(ar, funs, "srand", 1);
-		AddBuildinFunction(ar, funs, "rand", 0);
-	}
-	if (mod == "coroutine")
-	{
-		AddBuildinFunction(ar, funs, "create", 1);
-		AddBuildinFunction(ar, funs, "resume", -1);
-		AddBuildinFunction(ar, funs, "status", 1);
-		AddBuildinFunction(ar, funs, "close", -1);
+		for(auto it = (*p).begin(); it != (*p).end(); it++)
+		{
+			const SystemFun& f = (*it);
+			AddBuildinFunction(ar, funs, f.fname, f.argCount);
+		}
 	}
 	return true;
 }
@@ -3643,6 +3617,8 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 
 bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
 {
+	CNeoVMImpl::InitLib();
+
 	CArchiveRdWC ar2;
 	ToArchiveRdWC((const char*)param.pBufferSrc, param.iLenSrc, ar2);
 	ar2._allowGlobalInitLogic = param.allowGlobalInitLogic;

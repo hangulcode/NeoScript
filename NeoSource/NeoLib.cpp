@@ -5,6 +5,7 @@
 
 #include "NeoVMImpl.h"
 #include "NeoArchive.h"
+//#include "NeoTime.h"
 #include "UTFString.h"
 
 #define MATH_PI				3.14159265358979323846f // Pi
@@ -590,6 +591,42 @@ struct neo_libs
 		return false;
 	}
 
+	static bool sys_time(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 0) return false;
+
+		auto now = std::chrono::system_clock::now();
+		std::time_t currentTime = std::chrono::system_clock::to_time_t(now);
+		//std::localtime(&currentTime)
+
+		pN->ReturnValue((int)currentTime);
+		return true;
+	}
+	static bool sys_date(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+
+		VarInfo* pArg1 = pN->GetStack(1);
+		VarInfo* pArg2 = pN->GetStack(2);
+
+		if (pArg1->GetType() != VAR_STRING || pArg2->GetType() != VAR_INT)
+			return false;
+
+		std::time_t currentTime = (u32)pArg2->_int;
+		char buffer[80];
+#ifdef _WIN32
+		struct tm timeinfo;
+		if (localtime_s(&timeinfo, &currentTime) != 0) 
+			return false;
+		std::strftime(buffer, sizeof(buffer), pArg1->_str->_str.c_str(), &timeinfo);
+#else
+		if(0 == std::strftime(buffer, sizeof(buffer), pArg1->_str->_str.c_str(), std::localtime(&currentTime)))
+			return false;
+#endif
+
+		pN->ReturnValue(buffer);
+		return true;
+	}
 	static bool sys_clock(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 0) return false;
@@ -833,6 +870,37 @@ static bool Fun_Async(INeoVMWorker* pN, void* pUserData, const VMString* pStr, s
 
 	return (*f)((CNeoVMWorker*)pN, (VarInfo*)pUserData, args);
 }
+
+std::map<std::string, std::list< SystemFun>> g_sSystemFuns;
+std::string g_sCurrentSystem;
+
+static void AddSystemFun(const std::string& fname, TYPE_NeoLib fun, int argcnt)
+{
+	g_sNeoFunLib_Default.Add("#" + fname, fun);
+	if(g_sCurrentSystem.empty() == false)
+	{
+		auto it = g_sSystemFuns.find(g_sCurrentSystem);
+		if(it == g_sSystemFuns.end())
+		{
+			std::list< SystemFun> lst;
+			SystemFun v;
+			v.fname = fname;
+			v.argCount = argcnt;
+			lst.push_back(v);
+
+			g_sSystemFuns[g_sCurrentSystem] = lst;
+		}
+		else
+		{
+			std::list< SystemFun>& lst = (*it).second;
+			SystemFun v;
+			v.fname = fname;
+			v.argCount = argcnt;
+			lst.push_back(v);
+		}
+	}
+}
+
 static void AddGlobalLibFun()
 {
 	if (g_sNeoFunLib_Default.empty() == false)
@@ -840,44 +908,56 @@ static void AddGlobalLibFun()
 
 	g_sNeoFunLib_Default.Add("print", &neo_libs::io_print);
 
-	g_sNeoFunLib_Default.Add("#abs", &neo_libs::Math_abs);
-	g_sNeoFunLib_Default.Add("#acos", &neo_libs::Math_acos);
-	g_sNeoFunLib_Default.Add("#asin", &neo_libs::Math_asin);
-	g_sNeoFunLib_Default.Add("#atan", &neo_libs::Math_atan);
-	g_sNeoFunLib_Default.Add("#ceil", &neo_libs::Math_ceil);
-	g_sNeoFunLib_Default.Add("#floor", &neo_libs::Math_floor);
-	g_sNeoFunLib_Default.Add("#sin", &neo_libs::Math_sin);
-	g_sNeoFunLib_Default.Add("#cos", &neo_libs::Math_cos);
-	g_sNeoFunLib_Default.Add("#tan", &neo_libs::Math_tan);
-	g_sNeoFunLib_Default.Add("#log", &neo_libs::Math_log);
-	g_sNeoFunLib_Default.Add("#log10", &neo_libs::Math_log10);
-	g_sNeoFunLib_Default.Add("#pow", &neo_libs::Math_pow);
-	g_sNeoFunLib_Default.Add("#deg", &neo_libs::Math_deg);
-	g_sNeoFunLib_Default.Add("#rad", &neo_libs::Math_rad);
-	g_sNeoFunLib_Default.Add("#sqrt", &neo_libs::Math_sqrt);
-	g_sNeoFunLib_Default.Add("#srand", &neo_libs::Math_srand);
-	g_sNeoFunLib_Default.Add("#rand", &neo_libs::Math_rand);
+	g_sCurrentSystem = "math";
+	AddSystemFun("abs", &neo_libs::Math_abs, 1);
+	AddSystemFun("acos", &neo_libs::Math_acos, 1);
+	AddSystemFun("asin", &neo_libs::Math_asin, 1);
+	AddSystemFun("atan", &neo_libs::Math_atan, 1);
+	AddSystemFun("ceil", &neo_libs::Math_ceil, 1);
+	AddSystemFun("floor", &neo_libs::Math_floor, 1);
+	AddSystemFun("sin", &neo_libs::Math_sin, 1);
+	AddSystemFun("cos", &neo_libs::Math_cos, 1);
+	AddSystemFun("tan", &neo_libs::Math_tan, 1);
+	AddSystemFun("log", &neo_libs::Math_log, 1);
+	AddSystemFun("log10", &neo_libs::Math_log10, 1);
+	AddSystemFun("pow", &neo_libs::Math_pow, 2);
+	AddSystemFun("deg", &neo_libs::Math_deg, 1);
+	AddSystemFun("rad", &neo_libs::Math_rad, 1);
+	AddSystemFun("sqrt", &neo_libs::Math_sqrt, 1);
+	AddSystemFun("srand", &neo_libs::Math_srand, 1);
+	AddSystemFun("rand", &neo_libs::Math_rand, 0);
 
-	g_sNeoFunLib_Default.Add("#clock", &neo_libs::sys_clock);
-	g_sNeoFunLib_Default.Add("#meta", &neo_libs::sys_meta);
+	g_sCurrentSystem = "system";
+	AddSystemFun("time", &neo_libs::sys_time, 0);
+	AddSystemFun("date", &neo_libs::sys_date, 2);
+	AddSystemFun("clock", &neo_libs::sys_clock, 0);
+	AddSystemFun("meta", &neo_libs::sys_meta, 2);
+	AddSystemFun("load", &neo_libs::sys_load, 2);
+	AddSystemFun("pcall", &neo_libs::sys_pcall, 1);
+	AddSystemFun("aysnc_create", &neo_libs::sys_aysnc_create, 0);
+	AddSystemFun("set", &neo_libs::sys_set, 1);
 
-	g_sNeoFunLib_Default.Add("#load", &neo_libs::sys_load);
-	g_sNeoFunLib_Default.Add("#pcall", &neo_libs::sys_pcall);
-	g_sNeoFunLib_Default.Add("#aysnc_create", &neo_libs::sys_aysnc_create);
-	g_sNeoFunLib_Default.Add("#set", &neo_libs::sys_set);
 
+	g_sCurrentSystem = "coroutine";
+	AddSystemFun("create", &neo_libs::coroutine_create, 1);
+	AddSystemFun("resume", &neo_libs::coroutine_resume, -1);
+	AddSystemFun("status", &neo_libs::coroutine_status, 1);
+	AddSystemFun("close", &neo_libs::coroutine_close, -1);
 
-	g_sNeoFunLib_Default.Add("#create", &neo_libs::coroutine_create);
-	g_sNeoFunLib_Default.Add("#resume", &neo_libs::coroutine_resume);
-	g_sNeoFunLib_Default.Add("#status", &neo_libs::coroutine_status);
-	g_sNeoFunLib_Default.Add("#close", &neo_libs::coroutine_close);
-
+	g_sCurrentSystem.clear();
 }
 bool CNeoVMImpl::IsGlobalLibFun(std::string& FunName)
 {
 	//InitLib();
 	//return g_sNeoFunLib_Default.IsKey(FunName);
 	return FunName == "print";
+}
+const std::list< SystemFun>* CNeoVMImpl::GetSystemModule(const std::string& module)
+{
+	auto it = g_sSystemFuns.find(module);
+	if(it == g_sSystemFuns.end())
+		return nullptr;
+	return &(*it).second;
 }
 void CNeoVMImpl::RegLibrary(VarInfo* pSystem, const char* pLibName)
 {

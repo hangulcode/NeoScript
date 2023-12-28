@@ -9,10 +9,16 @@
 
 namespace NeoScript
 {
-
 struct neo_libs;
 struct neo_DCalllibs;;
 class CNArchive;
+
+struct SystemFun
+{
+	std::string fname;
+	int			argCount;
+};
+
 class CNeoVMImpl : public INeoVM
 {
 	friend					CNeoVMWorker;
@@ -118,6 +124,7 @@ public:
 	std::string _pErrorMsg;
 
 	static bool IsGlobalLibFun(std::string& FunName);
+	static const std::list< SystemFun>* GetSystemModule(const std::string& module);
 	void RegLibrary(VarInfo* pSystem, const char* pLibName);// , SNeoFunLib* pFuns);
 	static void RegObjLibrary();
 	static void InitLib();

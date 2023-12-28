@@ -3,6 +3,7 @@
 #include <locale>
 #include <codecvt>
 #include <stdexcept>
+#include <iostream>
 
 #include "UTFString.h"
 #include "NeoTextLoader.h"
@@ -216,7 +217,13 @@ void OutAsm(const char*	lpszString, ...)
 
 
 #ifdef _WIN32	
-	printf(buff);
+	std::cout << buff;
+#endif
+}
+void OutString(const char* lpszString)
+{
+#ifdef _WIN32	
+	std::cout << lpszString;
 #endif
 }
 
@@ -244,7 +251,7 @@ void OutBytes(const u8*	pBuffer, int iCount, int iMaxCount)
 #endif
 
 #ifdef _WIN32	
-	printf(buff);
+	std::cout << buff;
 #endif
 }
 
