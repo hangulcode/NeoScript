@@ -335,53 +335,56 @@ void MapInfo::Reserve(int sz)
 }
 
 //int g_MaxList = 0;
-VarInfo* MapInfo::Insert(VarInfo* pKey)
+void MapInfo::ReMap()
 {
-	if (_itemCount >= _BucketCapa * 4)
+	MapBucket* Old_Bucket = _Bucket;
+	int Old_BucketCapa = _BucketCapa;
+	int Old_HashBase = _HashBase;
+
+	if (_BucketCapa == 0)
+		_BucketCapa = 1;
+	while (true)
 	{
-		MapBucket* Old_Bucket = _Bucket;
-		int Old_BucketCapa = _BucketCapa;
-		int Old_HashBase = _HashBase;
+		_BucketCapa <<= 1;
+		if (_BucketCapa > _itemCount)
+			break;
+	}
+	_Bucket = new MapBucket[_BucketCapa];
+	memset(_Bucket, 0, sizeof(MapBucket) * _BucketCapa);
+	_HashBase = _BucketCapa - 1;
+	_HashCheckBit = HashShiftBit(_HashBase);
 
-		if (_BucketCapa == 0)
-			_BucketCapa = 1;
-		while (true)
+
+	for (int iBucket = 0; iBucket < Old_BucketCapa; iBucket++)
+	{
+		MapBucket* pBucket = &Old_Bucket[iBucket];
+
+		MapNode* pFirst = pBucket->pFirst;
+		if (pFirst == NULL)
+			continue;
+
+		MapNode* pCur = pFirst;
+		while (pCur)
 		{
-			_BucketCapa <<= 1;
-			if (_BucketCapa > _itemCount)
-				break;
-		}
-		_Bucket = new MapBucket[_BucketCapa];
-		memset(_Bucket, 0, sizeof(MapBucket) * _BucketCapa);
-		_HashBase = _BucketCapa - 1;
-		_HashCheckBit = HashShiftBit(_HashBase);
-
-
-		for (int iBucket = 0; iBucket < Old_BucketCapa; iBucket++)
-		{
-			MapBucket* pBucket = &Old_Bucket[iBucket];
-
-			MapNode*	pFirst = pBucket->pFirst;
-			if (pFirst == NULL)
-				continue;
-
-			MapNode*	pCur = pFirst;
-			while (pCur)
-			{
-				MapNode*	pNext = pCur->pNext;
+			MapNode* pNext = pCur->pNext;
 #ifdef HASH_FIND_FLAG
-				_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur, _HashCheckBit);
+			_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur, _HashCheckBit);
 #else
-				_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur);
+			_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur);
 #endif
 
-				pCur = pNext;
-			}
+			pCur = pNext;
 		}
-
-		if (Old_BucketCapa > 0)
-			delete[] Old_Bucket;
 	}
+
+	if (Old_BucketCapa > 0)
+		delete[] Old_Bucket;
+}
+
+VarInfo* MapInfo::Insert(VarInfo* pKey)
+{
+	if (_itemCount >= _BucketCapa * 2)
+		ReMap();
 
 	u32 hash = GetHashCode(pKey);
 	MapBucket* pBucket = &_Bucket[hash & _HashBase];

@@ -93,6 +93,7 @@ struct MapInfo : AllocBase
 	inline int		GetCount() { return _itemCount; }
 
 private:
+	void ReMap();
 };
 
 };

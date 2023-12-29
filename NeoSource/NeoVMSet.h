@@ -70,6 +70,7 @@ struct SetInfo : AllocBase
 	inline int		GetCount() { return _itemCount; }
 
 private:
+	void ReMap();
 };
 
 };

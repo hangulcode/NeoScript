@@ -78,7 +78,7 @@ public:
 
 
 
-	inline void Move(VarInfo* v1, VarInfo* v2)
+	NEOS_FORCEINLINE void Move(VarInfo* v1, VarInfo* v2)
 	{
 		if (v1->IsAllocType())
 			Var_Release(v1);
@@ -86,7 +86,7 @@ public:
 	}
 
 
-	inline void Var_Release(VarInfo *d)
+	NEOS_FORCEINLINE void Var_Release(VarInfo *d)
 	{
 		if (d->IsAllocType())
 			Var_ReleaseInternal(d);
@@ -115,7 +115,7 @@ public:
 	static FunctionPtrNative _funLib_Map;
 	static FunctionPtrNative _funLib_Async;
 public:
-	inline CNeoVMWorker* GetMainWorker() { return (CNeoVMWorker*)_pMainWorker; }
+	NEOS_FORCEINLINE CNeoVMWorker* GetMainWorker() { return (CNeoVMWorker*)_pMainWorker; }
 
 	bool RunFunction(const std::string& funName);
 

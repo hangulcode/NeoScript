@@ -751,7 +751,7 @@ int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExp
 		return -1;
 	int iLocalVar;
 	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME)
-		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN - funs._cur->_localVarCount++;
+		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN - vars._globalVarCount++;
 	else
 		iLocalVar = 1 + (int)funs._cur->_args.size() + funs._cur->_localVarCount++; // 0 번은 리턴 저장용
 	SLayerVar* pCurLayer = vars.GetCurrentLayer();
@@ -782,7 +782,7 @@ int  AddLocalVar(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	int iLocalVar;
 	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME)
-		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN - funs._cur->_localVarCount++;
+		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN - vars._globalVarCount++;
 	else
 		iLocalVar = 1 + (int)funs._cur->_args.size() + funs._cur->_localVarCount++; // 0 번은 리턴 저장용
 	pCurLayer->AddLocalVar(name, iLocalVar);
@@ -2466,33 +2466,10 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	if (iKey == -1)
 		return false;
 
-	/*tkType1 = GetToken(ar, tk1);
-	if (tkType1 != TK_COMMA) // ,
-	{
-		SetCompileError(ar, "Error (%d, %d): for 'comma' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
-		return false;
-	}
-	
-	tkType1 = GetToken(ar, tk1); // TODO ?
-	if (tkType1 != TK_STRING) // value
-	{
-		SetCompileError(ar, "Error (%d, %d): for 'value' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
-		return false;
-	}
-	int iValue = AddLocalVarName(ar, funs, vars, tk1);
-	if (iValue == -1)
-		return false;
-
-	if (iKey + 1 != iValue)
-	{
-		SetCompileError(ar, "Error (%d, %d): for key / Value Var Alloc Error", ar.CurLine(), ar.CurCol());
-		return false;
-	}*/
-
-	int iIterator1 = AddLocalVar(ar, funs, vars); // Current Save
-	if (iIterator1 == -1)
-		return false;
-	int i_Begin = AddLocalVar(ar, funs, vars); // Begin
+	//int iIterator1 = AddLocalVar(ar, funs, vars); // Current Save
+	//if (iIterator1 == -1)
+	//	return false;
+	int i_Begin = AddLocalVar(ar, funs, vars); // Begin & iIterator1
 	if (i_Begin == -1)
 		return false;
 	int i_End = AddLocalVar(ar, funs, vars); // End
@@ -2503,7 +2480,8 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 
 
-	if (iKey + 1 != iIterator1)
+	//if (iKey + 1 != iIterator1)
+	if (iKey + 1 != i_Begin)
 	{
 		SetCompileError(ar, "Error (%d, %d): for key / Value Var Alloc Error", ar.CurLine(), ar.CurCol());
 		return false;
@@ -2597,30 +2575,8 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		funs._cur->Push_OP(ar, NOP_CHANGE_INT, i_Step, 0, 0);
 	}
 
-	/*
-	tkType1 = GetToken(ar, tk1);
-	if (tkType1 != TK_STRING) // Table Name
-	{
-		SetCompileError(ar, "Error (%d, %d): for 'table_name' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
-		return false;
-	}
-	int iTable = vars.FindVar(tk1);
-	if (iTable == -1)
-	{
-		SetCompileError(ar, "Error (%d, %d): for 'talbe' Not Found %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
-		return false;
-	}
-	
-	tkType1 = GetToken(ar, tk1);
-	if (tkType1 != TK_R_SMALL) // )
-	{
-		SetCompileError(ar, "Error (%d, %d): for ')' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
-		return false;
-	}*/
 
-
-	//funs._cur->Push_OP1(ar, NOP_VAR_CLEAR, iKey);
-	funs._cur->Push_OP2(ar, NOP_MOV, iKey + 1, iKey + 2, false); // Cur_inter = Begin
+	//funs._cur->Push_OP2(ar, NOP_MOV, iIterator1, i_Begin, false); // Cur_inter = Begin
 
 	funs._cur->Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
 	SJumpValue jmp1(funs._cur->_code->GetBufferOffset() - (sizeof(short) * 3), funs._cur->_code->GetBufferOffset());

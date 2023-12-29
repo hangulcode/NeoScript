@@ -1323,9 +1323,8 @@ NEOS_FORCEINLINE bool CNeoVMWorker::For(VarInfo* pCur)
 {
 #ifdef _DEBUG
 	VarInfo* pCur_Inter = pCur + 1;
-	VarInfo* pBegin = pCur + 2;
-	VarInfo* pEnd = pCur + 3;
-	VarInfo* pStep = pCur + 4;
+	VarInfo* pEnd = pCur + 2;
+	VarInfo* pStep = pCur + 3;
 
 	Move(pCur, pCur_Inter);
 	if (pCur->_int < pEnd->_int)
@@ -1341,9 +1340,9 @@ NEOS_FORCEINLINE bool CNeoVMWorker::For(VarInfo* pCur)
 		pCur->_int = pCur_Inter->_int;
 	else
 		Move(pCur, pCur_Inter);
-	if (pCur->_int < pCur[3]._int)
+	if (pCur->_int < pCur[2]._int)
 	{
-		pCur_Inter->_int += pCur[4]._int;
+		pCur_Inter->_int += pCur[3]._int;
 		return true;
 	}
 	return false;

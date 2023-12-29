@@ -635,7 +635,7 @@ bool	CNeoVMWorker::Run()
 	{
 #endif
 		if(m_iTimeout >= 0)
-			b = RunInternal(0, (int)m_pCallStack->size());
+			b = RunInternal((int)0, (int)m_pCallStack->size());
 		else
 			b = RunInternal("abc", (int)m_pCallStack->size());
 #ifdef _WIN32

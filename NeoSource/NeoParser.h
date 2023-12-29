@@ -138,6 +138,7 @@ struct SVars
 		return _varsFunction[_varsFunction.size() - 1];
 	}
 	int _iTempVarNameIndex = 0; // 이름 없는 임시 변수 생성 인덱스
+	int							_globalVarCount = 0;
 };
 
 struct SFunctionTableForWriter
