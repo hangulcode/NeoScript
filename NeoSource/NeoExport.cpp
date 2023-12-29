@@ -999,7 +999,9 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 
 	// Main 함수 코드 저장
 	header._iMainFunctionOffset = ar.GetBufferOffset();
-	header._iGlobalVarCount = funs._cur->_localVarCount;
+	//header._iGlobalVarCount = funs._cur->_localVarCount;
+	header._iGlobalVarCount = vars._globalVarCount;
+
 	//WriteFun(arText, ar, funs, funs._cur, vars, funPos, debugInfo);
 	// Sub 함수 코드 저장
 	//for (auto it = funs._funs.begin(); it != funs._funs.end(); it++)

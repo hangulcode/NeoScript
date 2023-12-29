@@ -1486,7 +1486,7 @@ std::string GetDataType(VAR_TYPE t)
 	case VAR_BOOL:
 		return "bool";
 	case VAR_NONE:
-		return "none";
+		return "null";
 	case VAR_FUN:
 		return "fun";
 	case VAR_ITERATOR:
