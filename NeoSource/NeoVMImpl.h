@@ -81,8 +81,12 @@ public:
 	NEOS_FORCEINLINE void Move(VarInfo* v1, VarInfo* v2)
 	{
 		if (v1->IsAllocType())
-			Var_Release(v1);
-		Move_DestNoRelease(v1, v2);
+			Var_ReleaseInternal(v1);
+
+		if (v2->IsAllocType() == false)
+			*v1 = *v2;
+		else
+			Move_DestNoRelease(v1, v2);
 	}
 
 
