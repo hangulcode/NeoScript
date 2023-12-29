@@ -5,7 +5,7 @@ namespace NeoScript
 
 class CNeoVMImpl;
 class CNeoVMWorker;
-struct ListInfo
+struct ListInfo : AllocBase
 {
 	VarInfo*	_Bucket;
 
@@ -13,7 +13,6 @@ struct ListInfo
 
 
 	int	_ListID;
-	int _refCount;
 	int _itemCount;
 	void* _pUserData;
 

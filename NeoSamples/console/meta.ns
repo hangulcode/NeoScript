@@ -76,6 +76,8 @@ fun Vector3_Meta(var r)
 
 export fun meta()
 {
+	print("Time : " .. system.date("%Y-%m-%d %H:%M:%S", system.time()));
+
 	var c;
 	var tm = system.clock();
 	for(var i in 0, 10000, 1)
