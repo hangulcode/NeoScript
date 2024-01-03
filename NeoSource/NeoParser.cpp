@@ -838,7 +838,6 @@ bool AddBuildinModule(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::stri
 }
 bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
-#ifdef _NEO_IMPORTABLE
 	std::string fileName, tk2;
 	TK_TYPE tkType1, tkType2;
 
@@ -887,7 +886,9 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
+#ifdef _NEO_IMPORTABLE
 	if (false == FileLoad(fullFileName.c_str(), pFileBuffer, iFileLen))
+#endif
 	{
 		if(fileName == "system" || fileName == "math" || fileName == "coroutine") // Built-in Import
 		{
@@ -926,10 +927,10 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	ar.m_sErrorString = ar2.m_sErrorString;
 	return r;
-#else
-	SetCompileError(ar, "Error (%d, %d): Import Not Defined)", ar.CurLine(), ar.CurCol());
-	return false;
-#endif
+//#else
+//	SetCompileError(ar, "Error (%d, %d): Import Not Defined)", ar.CurLine(), ar.CurCol());
+//	return false;
+//#endif
 }
 bool ParseFunctionArg(CArchiveRdWC& ar, SFunctions& funs, SLayerVar* pCurLayer)
 {
