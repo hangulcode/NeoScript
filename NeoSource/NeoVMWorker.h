@@ -382,10 +382,12 @@ public:
 		_seed = (a * _seed + c) % m;
 		return (_seed >> 16);
 	}
-	mRND() : _seed(0), a(214013), c(2531011), m(2147483648) { }
+	mRND() {}
 protected:
-	int a, c;
-	unsigned int m, _seed;
+	int a = 214013;
+	int c = 2531011;
+	unsigned int m = 2147483648;
+	unsigned int _seed = 0;
 };
 
 struct neo_DCalllibs;
