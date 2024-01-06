@@ -108,16 +108,16 @@ int main()
 		else if (key ==  "1") SAMPLE_callback();
 		else if (key ==  "2") SAMPLE_map_callback();
 		else if (key ==  "3") SAMPLE_9_times();
-		else if (key ==  "4") SAMPLE_etc("string.ns", "main");
-		else if (key ==  "5") SAMPLE_etc("map.ns", "main");
-		else if (key ==  "6") SAMPLE_etc("list.ns", "main");
+		else if (key ==  "4") SAMPLE_etc("string.ns", nullptr);
+		else if (key ==  "5") SAMPLE_etc("map.ns", nullptr);
+		else if (key ==  "6") SAMPLE_etc("list.ns", nullptr);
 		else if (key ==  "7") SAMPLE_slice_run();
 		else if (key ==  "8") SAMPLE_time_limit();
 		else if (key ==  "9") SAMPLE_etc("etc.ns", "divide_by_zero");
-		else if (key == "10") SAMPLE_etc("delegate.ns", "delegate");
+		else if (key == "10") SAMPLE_etc("delegate.ns", nullptr);
 		else if (key == "11") SAMPLE_etc("meta.ns", "meta");
 		else if (key == "12") SAMPLE_etc("coroutine.ns", "test");
-		else if (key == "13") SAMPLE_etc("module.ns", "main");
+		else if (key == "13") SAMPLE_etc("module.ns", nullptr);
 		else if (key == "14") SAMPLE_etc("http.ns", nullptr);
 		else if (key == "15") SAMPLE_etc("class.ns", nullptr);
 

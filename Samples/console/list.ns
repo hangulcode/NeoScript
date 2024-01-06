@@ -76,9 +76,6 @@ fun Fun_Map()
 	print("");
 }
 
-export fun main()
-{
-	Fun_List();
-	Fun_Set();
-	Fun_Map();
-}
+Fun_List();
+Fun_Set();
+Fun_Map();

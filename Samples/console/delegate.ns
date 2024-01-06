@@ -9,20 +9,17 @@ fun sub2()
 	print("sub2");
 }
 
-export fun delegate()
-{
-	var funPointer = sub1;
+var funPointer = sub1;
 
-	var funPointer2 = fun(){ print("anonymous fun"); };
+var funPointer2 = fun(){ print("anonymous fun"); };
 	
-	funPointer();
-	funPointer2();
+funPointer();
+funPointer2();
 	
-	funPointer = sub2;
-	funPointer();
+funPointer = sub2;
+funPointer();
 	
-	var table = {};
+var table = {};
 	
-	table.funPointer2 = sub1;
-	table.funPointer2();
-}
+table.funPointer2 = sub1;
+table.funPointer2();

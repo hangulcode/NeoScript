@@ -111,9 +111,7 @@ fun Fun_Performanc()
 	}
 	print("for Time : " .. (system.clock() - tm));
 }
-export fun main()
-{
-	Fun_General();
-	fun_Sort();
-	Fun_Performanc();
-}
+
+Fun_General();
+fun_Sort();
+Fun_Performanc();
