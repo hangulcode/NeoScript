@@ -58,7 +58,7 @@ int SAMPLE_callback()
 
 		INeoVM::ReleaseVM(pVM);
 	}
-	delete[] pFileBuffer;
+	FileUnoad(nullptr, pFileBuffer, iFileLen);
 
     return 0;
 }

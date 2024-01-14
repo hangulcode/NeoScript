@@ -71,7 +71,7 @@ int SAMPLE_slice_run()
 		pVM->ReleaseWorker(id);
 		INeoVM::ReleaseVM(pVM);
 	}
-	delete[] pFileBuffer;
+	FileUnoad(nullptr, pFileBuffer, iFileLen);
 
     return 0;
 }

@@ -17,3 +17,4 @@
 #include <string>
 
 bool        FileLoad(const char* pFileName, void*& pBuffer, int& iLen);
+void        FileUnoad(const char* pFileName, void* pBuffer, int iLen);

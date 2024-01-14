@@ -21,6 +21,10 @@ bool        FileLoad(const char* pFileName, void*& pBuffer, int& iLen)
 	iLen = iFileSize;
 	return true;
 }
+void        FileUnoad(const char* pFileName, void* pBuffer, int iLen)
+{
+	delete [] pBuffer;
+}
 
 std::string getKeyString()
 {
@@ -73,6 +77,7 @@ int main()
 #ifdef _WIN32
 	activateVirtualTerminal();
 #endif
+	NeoScript::INeoVM::Initialize(FileLoad, FileUnoad);
 
 	bool blEnd = false;
 	while (blEnd == false)
@@ -123,6 +128,7 @@ int main()
 
 		system("pause");
 	}
+	NeoScript::INeoVM::Shutdown();
     return 0;
 }
 

@@ -39,7 +39,7 @@ int SAMPLE_etc(const char*pFileName, const char* pFunctionName)
 
 		INeoVM::ReleaseVM(pVM);
 	}
-	delete[] pFileBuffer;
+	FileUnoad(nullptr, pFileBuffer, iFileLen);
 
     return 0;
 }

@@ -13,6 +13,8 @@ struct FunctionPtr;
 struct VarInfo;
 
 
+typedef bool(*Neo_FileLoad) (const char* pFileName, void*& pBuffer, int& iLen);
+typedef void(*Neo_FileUnload)(const char* pFileName, void* pBuffer, int iLen);
 
 
 typedef int(*Neo_CFunction) (INeoVMWorker* N, FunctionPtr* pFun, short args);
@@ -509,6 +511,9 @@ public:
 	static INeoVM* 	CreateVM();
 	static void		ReleaseVM(INeoVM* pVM);
 	static bool		Compile(CNArchive& arw, const NeoCompilerParam& param);
+
+	static bool		Initialize(Neo_FileLoad loader = nullptr, Neo_FileUnload unloader = nullptr);
+	static bool		Shutdown();
 
 	static INeoVM*	CompileAndLoadVM(const NeoCompilerParam& param);
 

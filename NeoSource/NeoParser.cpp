@@ -3,9 +3,6 @@
 #include "NeoExport.h"
 #include "UTFString.h"
 
-#ifdef _NEO_IMPORTABLE
-bool    FileLoad(const char* pFileName, void*& pBuffer, int& iLen);
-#endif
 
 namespace NeoScript
 {
@@ -370,7 +367,9 @@ int InitDefaultTokenString()
 
 	return 1;
 }
-static int staticTempData = InitDefaultTokenString();
+static bool g_bInitVM = false;
+Neo_FileLoad g_NeoLoader = nullptr;
+Neo_FileUnload g_NeoUnloader = nullptr;
 
 std::string GetTokenString(TK_TYPE tk)
 {
@@ -887,7 +886,7 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
 #ifdef _NEO_IMPORTABLE
-	if (false == FileLoad(fullFileName.c_str(), pFileBuffer, iFileLen))
+	if (g_NeoLoader && false == g_NeoLoader(fullFileName.c_str(), pFileBuffer, iFileLen))
 #endif
 	{
 		if(fileName == "system" || fileName == "math" || fileName == "coroutine") // Built-in Import
@@ -923,7 +922,8 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	funs._curModule = pLayerBackup;
 
 	u16* pBuffer = ar2.GetBuffer();
-	if (pBuffer) delete[] pBuffer;
+	if(g_NeoUnloader)
+		g_NeoUnloader(fullFileName.c_str(), pBuffer, iFileLen);
 
 	ar.m_sErrorString = ar2.m_sErrorString;
 	return r;
@@ -3574,10 +3574,10 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 
 bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
 {
-	CNeoVMImpl::InitLib();
+	//CNeoVMImpl::InitLib();
 
 	CArchiveRdWC ar2;
-	ToArchiveRdWC((const char*)param.pBufferSrc, param.iLenSrc, ar2);
+	ToArchiveRdWC((const char*)param.pBufferSrc, param.iLenSrc, ar2); // memory alloc
 	ar2._allowGlobalInitLogic = param.allowGlobalInitLogic;
 	ar2._debug = param.debug;
 
@@ -3590,6 +3590,23 @@ bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
 
 	return b;
 }
+bool INeoVM::Initialize(Neo_FileLoad loader, Neo_FileUnload unloader)
+{
+	InitDefaultTokenString();
+	CNeoVMImpl::InitLib();
+	g_bInitVM = true;
+	g_NeoLoader = loader;
+	g_NeoUnloader = unloader;
+	return true;
+}
+bool	INeoVM::Shutdown()
+{
+	g_bInitVM = false;
+	g_NeoLoader = nullptr;
+	g_NeoUnloader = nullptr;
+	return true;
+}
+
 INeoVM* INeoVM::CompileAndLoadVM(const NeoCompilerParam& param)
 {
 	CNArchive arCode;

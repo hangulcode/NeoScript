@@ -166,7 +166,7 @@ int SAMPLE_map_callback()
 		delete pClass;
 		INeoVM::ReleaseVM(pVM);
 	}
-	delete[] pFileBuffer;
+	FileUnoad(nullptr, pFileBuffer, iFileLen);
 	g_sTablesFunction.clear();
 
     return 0;
