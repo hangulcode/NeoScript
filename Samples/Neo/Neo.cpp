@@ -43,12 +43,13 @@ int main(int argc, const char** argv)
 		std::cout << "file read error";
 		return -1;
 	}
+	std::cout << pFileName << std::endl;;
 
 	std::string err;
 	NeoCompilerParam param(pFileBuffer, iFileLen);
 	param.err = &err;
-	param.putASM = true;
-	param.debug = true;
+	//param.putASM = true;
+	//param.debug = true;
 
 	INeoVM* pVM = INeoVM::CompileAndLoadVM(param);
 	if (pVM != NULL)
