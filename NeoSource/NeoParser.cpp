@@ -821,17 +821,14 @@ void AddBuildinFunction(CArchiveRdWC& ar, SFunctions& funs, const std::string& f
 	pF->_funID = -1;
 	//funs._funIDs[pF->_funID] = pF;
 }
-bool AddBuildinModule(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string mod)
+bool AddBuildinModule(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, const std::list< SystemFun>* p)
 {
 	SFunctionLayer* pLayerBackup = funs._curModule;
-	const std::list< SystemFun>* p = CNeoVMImpl::GetSystemModule(mod);
-	if(p != nullptr)
+
+	for(auto it = (*p).begin(); it != (*p).end(); it++)
 	{
-		for(auto it = (*p).begin(); it != (*p).end(); it++)
-		{
-			const SystemFun& f = (*it);
-			AddBuildinFunction(ar, funs, f.fname, f.argCount);
-		}
+		const SystemFun& f = (*it);
+		AddBuildinFunction(ar, funs, f.fname, f.argCount);
 	}
 	return true;
 }
@@ -882,20 +879,26 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return true;
 	}
 
-
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-#ifdef _NEO_IMPORTABLE
-	if (g_NeoLoader && false == g_NeoLoader(fullFileName.c_str(), pFileBuffer, iFileLen))
-#endif
+	if (g_NeoLoader)
 	{
-		if(fileName == "system" || fileName == "math" || fileName == "coroutine") // Built-in Import
+		if(false == g_NeoLoader(fullFileName.c_str(), pFileBuffer, iFileLen))
+		{
+			//SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), tk2.c_str());
+			//return false;
+		}
+	}
+	if(pFileBuffer == nullptr)
+	{
+		const std::list< SystemFun>* p = CNeoVMImpl::GetSystemModule(fileName);
+		if (p) // Built-in Import
 		{
 			SFunctionLayer* pLayerBackup = funs._curModule;
 			funs._curModule = funs.NewLayer();
 			funs._curModule->_blBuiltInModule = true;
 
-			AddBuildinModule(ar, funs, vars, fileName);
+			AddBuildinModule(ar, funs, vars, p);
 
 			vars.m_sImports[fileName] = funs._curModule;
 			pLayerBackup->_defModules[defName] = funs._curModule;

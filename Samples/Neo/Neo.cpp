@@ -34,6 +34,7 @@ int main(int argc, const char** argv)
 		return -1;
 	}
 
+	INeoVM::Initialize();
 	const char* pFileName = argv[1];
 
 	void* pFileBuffer = NULL;
@@ -65,6 +66,7 @@ int main(int argc, const char** argv)
 		INeoVM::ReleaseVM(pVM);
 	}
 	delete[] pFileBuffer;
+	INeoVM::Shutdown();
 }
 
 

@@ -90,7 +90,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_WIN32;_NEO_IMPORTABLE;_WINDOWS;WIN_PRJ</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_WIN32;_WINDOWS;WIN_PRJ</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <ExceptionHandling>Async</ExceptionHandling>
@@ -109,7 +109,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_WIN32;_NEO_IMPORTABLE;_WIN64;WIN_PRJ</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_WIN32;_WIN64;WIN_PRJ</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <ExceptionHandling>Async</ExceptionHandling>
     </ClCompile>
@@ -126,7 +126,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_WIN32;_NEO_IMPORTABLE;_WINDOWS;WIN_PRJ</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_WIN32;_WINDOWS;WIN_PRJ</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <ExceptionHandling>Async</ExceptionHandling>
@@ -149,7 +149,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_WIN32;_NEO_IMPORTABLE;_WIN64;WIN_PRJ</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_WIN32;_WIN64;WIN_PRJ</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <ExceptionHandling>Async</ExceptionHandling>
     </ClCompile>
