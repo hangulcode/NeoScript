@@ -368,8 +368,7 @@ int InitDefaultTokenString()
 	return 1;
 }
 static bool g_bInitVM = false;
-Neo_FileLoad g_NeoLoader = nullptr;
-Neo_FileUnload g_NeoUnloader = nullptr;
+INeoLoader* g_NeoLoader = nullptr;
 
 std::string GetTokenString(TK_TYPE tk)
 {
@@ -883,7 +882,7 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	int iFileLen = 0;
 	if (g_NeoLoader)
 	{
-		if(false == g_NeoLoader(fullFileName.c_str(), pFileBuffer, iFileLen))
+		if(false == g_NeoLoader->Load(fullFileName.c_str(), pFileBuffer, iFileLen))
 		{
 			//SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), tk2.c_str());
 			//return false;
@@ -925,8 +924,8 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	funs._curModule = pLayerBackup;
 
 	u16* pBuffer = ar2.GetBuffer();
-	if(g_NeoUnloader)
-		g_NeoUnloader(fullFileName.c_str(), pBuffer, iFileLen);
+	if(g_NeoLoader)
+		g_NeoLoader->Unload(fullFileName.c_str(), pBuffer, iFileLen);
 
 	ar.m_sErrorString = ar2.m_sErrorString;
 	return r;
@@ -3593,20 +3592,18 @@ bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
 
 	return b;
 }
-bool INeoVM::Initialize(Neo_FileLoad loader, Neo_FileUnload unloader)
+bool INeoVM::Initialize(INeoLoader* loader)
 {
 	InitDefaultTokenString();
 	CNeoVMImpl::InitLib();
 	g_bInitVM = true;
 	g_NeoLoader = loader;
-	g_NeoUnloader = unloader;
 	return true;
 }
 bool	INeoVM::Shutdown()
 {
 	g_bInitVM = false;
 	g_NeoLoader = nullptr;
-	g_NeoUnloader = nullptr;
 	return true;
 }
 

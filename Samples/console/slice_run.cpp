@@ -3,11 +3,11 @@
 
 using namespace NeoScript;
 
-int SAMPLE_slice_run()
+int SAMPLE_slice_run(INeoLoader* pLoader)
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == FileLoad("slice_run.ns", pFileBuffer, iFileLen))
+	if (false == pLoader->Load("slice_run.ns", pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;
@@ -71,7 +71,7 @@ int SAMPLE_slice_run()
 		pVM->ReleaseWorker(id);
 		INeoVM::ReleaseVM(pVM);
 	}
-	FileUnoad(nullptr, pFileBuffer, iFileLen);
+	pLoader->Unload(nullptr, pFileBuffer, iFileLen);
 
     return 0;
 }

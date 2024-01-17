@@ -3,11 +3,11 @@
 
 using namespace NeoScript;
 
-int SAMPLE_9_times()
+int SAMPLE_9_times(INeoLoader* pLoader)
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == FileLoad("9_times.ns", pFileBuffer, iFileLen))
+	if (false == pLoader->Load("9_times.ns", pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;
@@ -37,7 +37,7 @@ int SAMPLE_9_times()
 		}
 		INeoVM::ReleaseVM(pVM);
 	}
-	FileUnoad(nullptr, pFileBuffer, iFileLen);
+	pLoader->Unload(nullptr, pFileBuffer, iFileLen);
 
     return 0;
 }

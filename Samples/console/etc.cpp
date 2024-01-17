@@ -3,11 +3,11 @@
 
 using namespace NeoScript;
 
-int SAMPLE_etc(const char*pFileName, const char* pFunctionName)
+int SAMPLE_etc(INeoLoader* pLoader, const char*pFileName, const char* pFunctionName)
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == FileLoad(pFileName, pFileBuffer, iFileLen))
+	if (false == pLoader->Load(pFileName, pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;
@@ -39,7 +39,7 @@ int SAMPLE_etc(const char*pFileName, const char* pFunctionName)
 
 		INeoVM::ReleaseVM(pVM);
 	}
-	FileUnoad(nullptr, pFileBuffer, iFileLen);
+	pLoader->Unload(nullptr, pFileBuffer, iFileLen);
 
     return 0;
 }

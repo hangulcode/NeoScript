@@ -113,11 +113,11 @@ bool Property(INeoVMWorker* pN, void* pUserData, const VMString* pStr, VarInfo* 
 }
 
 
-int SAMPLE_map_callback()
+int SAMPLE_map_callback(INeoLoader* pLoader)
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == FileLoad("map_callback.ns", pFileBuffer, iFileLen))
+	if (false == pLoader->Load("map_callback.ns", pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;
@@ -166,7 +166,7 @@ int SAMPLE_map_callback()
 		delete pClass;
 		INeoVM::ReleaseVM(pVM);
 	}
-	FileUnoad(nullptr, pFileBuffer, iFileLen);
+	pLoader->Unload(nullptr, pFileBuffer, iFileLen);
 	g_sTablesFunction.clear();
 
     return 0;

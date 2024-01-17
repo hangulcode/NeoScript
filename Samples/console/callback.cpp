@@ -18,11 +18,11 @@ NS_FLOAT Sample1(NeoFunction fun, NS_FLOAT a, NS_FLOAT b)
 }
 
 
-int SAMPLE_callback()
+int SAMPLE_callback(INeoLoader* pLoader)
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == FileLoad("callback.ns", pFileBuffer, iFileLen))
+	if (false == pLoader->Load("callback.ns", pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;
@@ -58,7 +58,7 @@ int SAMPLE_callback()
 
 		INeoVM::ReleaseVM(pVM);
 	}
-	FileUnoad(nullptr, pFileBuffer, iFileLen);
+	pLoader->Unload(nullptr, pFileBuffer, iFileLen);
 
     return 0;
 }

@@ -3,11 +3,11 @@
 
 using namespace NeoScript;
 
-int SAMPLE_time_limit()
+int SAMPLE_time_limit(INeoLoader* pLoader)
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == FileLoad("time_limit.ns", pFileBuffer, iFileLen))
+	if (false == pLoader->Load("time_limit.ns", pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;
@@ -44,7 +44,7 @@ int SAMPLE_time_limit()
 		}
 		INeoVM::ReleaseVM(pVM);
 	}
-	FileUnoad(nullptr, pFileBuffer, iFileLen);
+	pLoader->Unload(nullptr, pFileBuffer, iFileLen);
 
     return 0;
 }
