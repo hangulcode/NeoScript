@@ -139,10 +139,10 @@ Build : Release Mode 64bit
 
 |               |Neo Script 1.0.6| [Lua Script 5.4.2](https://luabinaries.sourceforge.net/)| Visual C++ 2022 |
 | :-----------  |:--------------:| :-------------:|:---------------:|
-| Loop Sum (1~N)| 0.256          | 0.286          | 0.043           |
-| Math          | 1.427          | 1.55           | 0.135           |
-| Prime Count   | 9.517          | 11.073         | 2.277           |
-| fibonacci     | 4.629          | 4.977          | 0.287           |
+| Loop Sum (1~N)| 0.256 (12%↑)   | 0.286          | 0.043           |
+| Math          | 1.427 (9%↑)    | 1.55           | 0.135           |
+| Prime Count   | 9.517 (16%↑)   | 11.073         | 2.277           |
+| fibonacci     | 4.629 (8%↑)    | 4.977          | 0.287           |
 
 
 ### Neo Script Test Code
