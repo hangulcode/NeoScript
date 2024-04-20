@@ -1,0 +1,81 @@
+import system;
+
+fun Fun_List()
+{
+	var List1 = [ 2, 4, 5, 8 ];
+	var List2 = [ 1, 4, 5, 7 ];
+
+
+	print("List original : ", "");
+	for(var i in 0, List1.len(), 1)
+		print(List1[i] .. " ", "");
+	print("");
+
+	List1.append(99); // last add
+	List1.append(-99, 2); // index add
+
+	print("List append : ", "");
+	for(var i in 0, List1.len(), 1)
+		print(List1[i] .. " ", "");
+	print("");
+
+	print("List + : ", "");
+	var List3 = List1 + List2;
+	for(var i in 0, List3.len(), 1)
+		print(List3[i] .. " ", "");
+	print("");
+}
+
+fun Fun_Set()
+{
+	var List1 = [ 2, 4, 5, 8 ];
+	var List2 = [ 1, 4, 5, 7 ];
+
+	print("Set | : ", " ");
+	var Set2 = system.set(List1) | system.set(List2);
+	foreach(var i,v in Set2)
+		print(i, " ");
+	print("");
+
+	print("Set & : ", " ");
+	var Set3 = system.set(List1) & system.set(List2);
+	foreach(var i,v in Set3)
+		print(i, " ");
+	print("");
+
+	print("Set - : ", " ");
+	var Set4 = system.set(List1) - system.set(List2);
+	foreach(var i,v in Set4)
+		print(i, " ");
+	print(""); 
+}
+
+fun Fun_Map()
+{
+	var Map1 = { "a" : 1, "b" : 4, "c" : 5, "d" : 8 };
+	var Map2 = { "a" : 3, "X" : 4, "Y" : 5 };
+
+	print("Map : ", " ");
+	foreach(var i,v in Map1)
+		print(i .. "=" .. v, " ");
+	print("");
+
+	print("Map Keys : ", " ");
+	foreach(var i,v in Map1.keys())
+		print(i, " ");
+	print("");
+
+	print("Map Values : ", " ");
+	foreach(var i,v in Map1.values())
+		print(i, " ");
+	print("");
+
+	print("Map To Set | : ", " ");
+	foreach(var i,v in system.set(Map1.values()) | system.set(Map2.values()))
+		print(i, " ");
+	print("");
+}
+
+Fun_List();
+Fun_Set();
+Fun_Map();

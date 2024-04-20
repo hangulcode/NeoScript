@@ -134,6 +134,16 @@ public:
 			return _bl;
 		return false;
 	}
+	NEOS_FORCEINLINE bool IsNumber()
+	{
+		return (VAR_INT == _type || VAR_FLOAT == _type);
+	}
+	NEOS_FORCEINLINE NS_FLOAT GetFloatNumber()
+	{
+		if (VAR_INT == _type) return (NS_FLOAT)_int;
+		if (VAR_FLOAT == _type) return (NS_FLOAT)_float;
+		return 0;
+	}
 
 	bool MapInsertFloat(const std::string& pKey, NS_FLOAT value);
 	bool MapFindFloat(const std::string& pKey, NS_FLOAT& value);

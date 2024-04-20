@@ -128,11 +128,18 @@ int CNeoVMWorker::Sleep(int iTimeout, VarInfo* v1)
 	return 1;
 }
 
+//#ifdef NS_SINGLE_PRECISION
+//	#define FLOAT_FORMAT	"%f"
+//#else
+//	#define FLOAT_FORMAT	"%lf"
+//#endif
+
 #ifdef NS_SINGLE_PRECISION
-	#define FLOAT_FORMAT	"%f"
+	#define FLOAT_FORMAT	"%g"
 #else
-	#define FLOAT_FORMAT	"%lf"
+	#define FLOAT_FORMAT	"%g"
 #endif
+
 
 std::string CNeoVMWorker::ToString(VarInfo* v1)
 {

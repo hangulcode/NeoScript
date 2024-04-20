@@ -27,8 +27,9 @@ Build : Release Mode 64bit
 	- console / map_callback: map 자료구조를 통해서 script 에서 c++ 함수 호출, 변수 가져오기
 	- console / 9_times: 구구단 1단 부터 9단 까지 출력
 	- console / string: string 기능 예제
+	- console / list: list 자료구제 예제 (행렬 예제)
 	- console / map: map 자료구조 예제
-	- console / list: list 자료구제 예제
+	- console / contailer: list/set/map 자료구제 예제
 	- console / slice_run: 스크립트를 정해진 시간동안 실행하고, 이후에 이어서 실행을 진행
 	- console / time_limit: 스크립트를 정해진 시간동안 실행하고, 이후에 이어서 실행을 진행
 	- console / divide_by_zero: 0으로 나눗셈을 할 경우 예외 처리
@@ -126,6 +127,10 @@ Build : Release Mode 64bit
 	- len () : 리스트 아이템 갯수를 리턴
 	- resize (x) : 리스트 아이템 갯수 변경
 	- append (x, [y]) : 리스트에 아이템을 추가 (y 는 위치)
+	- broadcast (x) : 두 행렬의 각각의 원소 위치의 값을 더한(+) 행렬을 리턴
+	- multiply (x) : 두 행렬의 곱셈을한 행렬을 리턴
+	- dot (x) : 두 행렬에 대해서 각각의 row 부분 전체를 dot product 한 결과를 list에 넣어서 리턴
+	- sum () : 행렬에 대해서 각각 원소의 총합을 리턴
 
 	## map
 	- len () : map 아이템 갯수를 리턴

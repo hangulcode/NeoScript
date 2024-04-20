@@ -215,6 +215,167 @@ struct neo_libs
 		}
 		return true;
 	}
+	static bool List_broadcast(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_LIST) return false;
+		if (args != 1) return false;
+		VarInfo* pArg = pN->GetStack(1);
+		if (pArg->GetType() != VAR_LIST) return false;
+
+		auto m1 = pVar->_lst->GetMatrix();
+		auto m2 = pArg->_lst->GetMatrix();
+		if (m1.row <= 0 || m1.col <= 0) return false;
+		if (m2.row <= 0 || m2.col <= 0) return false;
+
+		if (m1.col != m2.col && m1.col != 1 && m2.col != 1) return false;
+		if (m1.col != m2.col && m1.col != 1 && m2.col != 1) return false;
+
+		VarInfo* pRet = pN->GetStack(0);
+		ListInfo* pR = pN->GetVM()->ListAlloc();
+		pN->Var_SetList(pRet, pR); // return value
+
+		int row = m1.row > m2.row ? m1.row : m2.row;
+		int col = m1.col > m2.col ? m1.col : m2.col;
+
+		pR->Resize(row, col);
+
+		for(int r = 0; r < row; r++)
+		{
+			ListInfo* pTar = row != 1 ? pR->GetValue(r)->_lst : pR;
+			ListInfo* pS1 = m1.row != 1 ? pVar->_lst->GetValue(r)->_lst : pVar->_lst;
+			ListInfo* pS2 = m2.row != 1 ? pArg->_lst->GetValue(r)->_lst : pArg->_lst;
+
+			NS_FLOAT v10 = pS1->GetValue(0)->GetFloatNumber();
+			NS_FLOAT v20 = pS2->GetValue(0)->GetFloatNumber();
+			pTar->SetValue(0, v10 + v20);
+
+			NS_FLOAT v1, v2;
+			for (int c = 1; c < col; c++)
+			{
+				if(m1.col == 1) v1 = v10;
+				else v1 = pS1->GetValue(c)->GetFloatNumber();
+
+				if (m2.col == 1) v2 = v20;
+				else v2 = pS2->GetValue(c)->GetFloatNumber();
+				pTar->SetValue(c, v1 + v2);
+			}
+		}
+
+		return true;
+	}
+	static bool List_multiply(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_LIST) return false;
+		if (args != 1) return false;
+		VarInfo* pArg = pN->GetStack(1);
+		if (pArg->GetType() != VAR_LIST) return false;
+
+		auto m1 = pVar->_lst->GetMatrix();
+		auto m2 = pArg->_lst->GetMatrix();
+		if (m1.row <= 0 || m1.col <= 0) return false;
+		if (m2.row <= 0 || m2.col <= 0) return false;
+
+		if (m1.col != m2.row) return false;
+
+		VarInfo* pRet = pN->GetStack(0);
+		ListInfo* pR = pN->GetVM()->ListAlloc();
+		pN->Var_SetList(pRet, pR); // return value
+
+		int row = m1.row;
+		int col = m2.col;
+
+		pR->Resize(row, col);
+
+		std::vector< ListInfo*> S2;
+		S2.resize(m2.row);
+		for (int r = 0; r < m2.row; r++)
+		{
+			ListInfo* pS2 = m2.row != 1 ? pArg->_lst->GetValue(r)->_lst : pArg->_lst;
+			S2[r] = pS2;
+		}
+		for (int r = 0; r < row; r++)
+		{
+			ListInfo* pTar = row != 1 ? pR->GetValue(r)->_lst : pR;
+			ListInfo* pS1 = m1.row != 1 ? pVar->_lst->GetValue(r)->_lst : pVar->_lst;
+
+			NS_FLOAT v1, v2;
+			for (int c = 0; c < col; c++)
+			{
+				NS_FLOAT r = 0;
+				for(int i = 0; i < m1.col; i++)
+				{
+					v1 = pS1->GetValue(i)->GetFloatNumber();
+					v2 = S2[i]->GetValue(c)->GetFloatNumber();
+					r += v1 * v2;
+				}
+				pTar->SetValue(c, r);
+			}
+		}
+		return true;
+	}
+	static bool List_dot(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_LIST) return false;
+		if (args != 1) return false;
+		VarInfo* pArg = pN->GetStack(1);
+		if (pArg->GetType() != VAR_LIST) return false;
+
+		auto m1 = pVar->_lst->GetMatrix();
+		auto m2 = pArg->_lst->GetMatrix();
+		if (m1.row <= 0 || m1.col <= 0) return false;
+		if (m2.row <= 0 || m2.col <= 0) return false;
+
+		if (m1.row != m2.row) return false;
+		if (m1.col != m2.col) return false;
+
+		VarInfo* pRet = pN->GetStack(0);
+		ListInfo* pR = pN->GetVM()->ListAlloc();
+		pN->Var_SetList(pRet, pR); // return value
+
+		int row = 1;
+		int col = m1.row;
+
+		pR->Resize(row, col);
+
+		ListInfo* pTar = pR;
+		for (int r = 0; r < m1.row; r++)
+		{
+			ListInfo* pS1 = m1.row != 1 ? pVar->_lst->GetValue(r)->_lst : pVar->_lst;
+			ListInfo* pS2 = m2.row != 1 ? pArg->_lst->GetValue(r)->_lst : pArg->_lst;
+
+			NS_FLOAT sum = 0;
+			for (int c = 0; c < m1.col; c++)
+			{
+				NS_FLOAT v1 = pS1->GetValue(c)->GetFloatNumber();
+				NS_FLOAT v2 = pS2->GetValue(c)->GetFloatNumber();
+				sum += v1 * v2;
+			}
+			pTar->SetValue(r, sum);
+		}
+
+		return true;
+	}
+	static bool List_sum(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_LIST) return false;
+		if (args != 0) return false;
+
+		auto m1 = pVar->_lst->GetMatrix();
+		if (m1.row <= 0 || m1.col <= 0) return false;
+
+		NS_FLOAT sum = 0;
+		for (int r = 0; r < m1.row; r++)
+		{
+			ListInfo* pS1 = m1.row != 1 ? pVar->_lst->GetValue(r)->_lst : pVar->_lst;
+			for (int c = 0; c < m1.col; c++)
+				sum += pS1->GetValue(c)->GetFloatNumber();
+		}
+		pN->ReturnValue(sum);
+		return true;
+	}
+
+
+
 
 	static bool Math_abs(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
@@ -1002,6 +1163,10 @@ void CNeoVMImpl::RegObjLibrary()
 	g_sNeoFunLib_List.Add("resize", &neo_libs::List_resize);
 	g_sNeoFunLib_List.Add("len", &neo_libs::List_len);
 	g_sNeoFunLib_List.Add("append", &neo_libs::List_append);
+	g_sNeoFunLib_List.Add("broadcast", &neo_libs::List_broadcast);
+	g_sNeoFunLib_List.Add("multiply", &neo_libs::List_multiply);
+	g_sNeoFunLib_List.Add("dot", &neo_libs::List_dot);
+	g_sNeoFunLib_List.Add("sum", &neo_libs::List_sum);
 
 	// Map Lib
 	_funLib_Map = CNeoVMImpl::RegisterNative(Fun_Map);
