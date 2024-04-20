@@ -57,7 +57,7 @@ Build : Release Mode 64bit
 	- toint (x): x 변수를 정수로 변환한 변수를 리턴
 	- tofloat (x): x 변수를 부동소수점으로 변환한 변수를 리턴
 	- tosize (x): 
-		x  문자열일 경우 : 문자열 리턴
+		x  문자열일 경우 : 문자열 길이 리턴
 		x  가 list / map /set 일 경우 : 자료구조 Count를 리턴
 		기타 : 0을  리턴
 	- totype (x): x 변수의 자료구조 타입의 문자열을 리턴
