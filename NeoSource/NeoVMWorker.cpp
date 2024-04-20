@@ -237,12 +237,16 @@ int CNeoVMWorker::ToSize(VarInfo* v1)
 		return 0;
 	case VAR_NONE:
 		return 0;
-	case VAR_CHAR:
+	case VAR_CHAR: // 문자열 길이
 		return (v1->_c.c[0] == 0) ? 0 : 1;
-	case VAR_STRING:
+	case VAR_STRING: // 문자열 길이
 		return (int)v1->_str->_str.length();
 	case VAR_MAP:
 		return (int)v1->_tbl->_itemCount;
+	case VAR_LIST:
+		return (int)v1->_lst->_itemCount;
+	case VAR_SET:
+		return (int)v1->_set->_itemCount;
 	default:
 		break;
 	}

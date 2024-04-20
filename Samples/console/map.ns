@@ -1,22 +1,6 @@
 import system;
+import dump;
 
-fun dumpMap(var o)
-{
-    if( type(o) == "map")
-	{
-        var s = "{ ";
-        foreach(var k, v in o)
-		{
-            // key 가 숫자가 아닌 경우 "key" 
-            if( type(k) != "int" )
-                k = " "..k.. " " ;
-            s = s .. "[".. k .."] = " .. dumpMap(v) .. ",";
-        }
-        return s .. "} ";
-	}
-    else
-        return tostring(o);
-}
 
 fun Fun_General()
 {
@@ -53,9 +37,9 @@ fun fun_Sort()
 	//var map = { 10, 11, 100:12,"test", 13 };
 	var mapNumber = { 5, 3, 1, 4, 7, 2 };
 
-	print("Before    : " .. dumpMap(mapNumber));
+	print("Before    : " .. dump.object(mapNumber));
 	mapNumber.sort(fun(var a, var b) { return a < b; });
-	print("Ascending : " .. dumpMap(mapNumber));
+	print("Ascending : " .. dump.object(mapNumber));
 	
 	var mapPeople = {
 		{"nationality" : "Ameraca", "name" : "James"},
@@ -63,13 +47,13 @@ fun fun_Sort()
 		{"nationality" : "Japan",   "name" : "Donard"},
 	};
 
-	print("Before : " .. dumpMap(mapPeople));
+	print("Before : " .. dump.object(mapPeople));
 
 	mapPeople.sort(fun(var a, var b){return a.name < b.name;});
-	print("Name   : " .. dumpMap(mapPeople));
+	print("Name   : " .. dump.object(mapPeople));
 
 	mapPeople.sort(fun(var a, var b){return a["nationality"] < b["nationality"];});
-	print("Nation : " .. dumpMap(mapPeople));
+	print("Nation : " .. dump.object(mapPeople));
 }
 
 fun Fun_Performanc()
@@ -92,7 +76,7 @@ fun Fun_Performanc()
 	tm = system.clock();
 	map.sort(fun(var a, var b) { return a > b; });
 	print("Sort  Time : " .. (system.clock() - tm));
-	//print("Sorted   : " .. dumpMap(map));
+	//print("Sorted   : " .. dump.object(map));
 
 	tm = system.clock();
 	foreach(var a, b in map)

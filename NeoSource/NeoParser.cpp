@@ -1415,8 +1415,8 @@ TK_TYPE ParseListDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs,
 	}
 	else
 	{
-		if (tkType1 != TK_COMMA)
-			ar.PushToken(tkType1, tk1);
+		//if (tkType1 != TK_COMMA)
+		//	ar.PushToken(tkType1, tk1);
 	}
 	if (iItemCount > 0)
 	{
@@ -1518,8 +1518,8 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 	}
 	else
 	{
-		if(tkType1 != TK_COMMA)
-			ar.PushToken(tkType1, tk1);
+		//if(tkType1 != TK_COMMA)
+		//	ar.PushToken(tkType1, tk1);
 	}
 	if (iItemCount > 0)
 	{

@@ -1,0 +1,57 @@
+
+fun object(var o)
+{
+	var first = true;
+
+	var t = type(o);
+    if( t == "map")
+	{
+        var s = "{";
+        foreach(var k, v in o)
+		{
+            // key 가 숫자가 아닌 경우 "key" 
+            if( type(k) != "int" )
+                k = " "..k.. " " ;
+			if(first)
+			{
+				first = false;
+				s = s .. "^".. k .." = " .. object(v);
+			}
+			else
+				s = s .. ", ^".. k .." = " .. object(v);
+        }
+        return s .. "}";
+	}
+    elif(t == "list")
+	{
+        var s = "[";
+        foreach(var v in o)
+		{
+			if(first)
+			{
+				first = false;
+				s = s .. object(v);
+			}
+			else
+				s = s .. ", ".. object(v);
+        }
+        return s .. "]";
+	}
+    elif(t == "set")
+	{
+        var s = "(";
+        foreach(var k in o)
+		{
+			if(first)
+			{
+				first = false;
+				s = s .. object(k);
+			}
+			else
+				s = s .. ", ".. object(k);
+        }
+        return s .. ")";
+	}
+    else
+        return tostring(o);
+}
