@@ -128,6 +128,7 @@ Build : Release Mode 64bit
 	- append (x, [y]) : 리스트에 아이템을 추가 (y 는 위치)
 
 	## map
+	- len () : map 아이템 갯수를 리턴
 	- reserve (x) : 메모리를 x 갯수만큼 할당 (아이템 갯수는 증가하지 않음)
 	- sort () : map 의 value를 정렬
 	- keys() : map 의 key 들을 list 자료구조에 담아서 리턴

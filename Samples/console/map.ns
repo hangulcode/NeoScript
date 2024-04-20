@@ -69,7 +69,7 @@ fun Fun_Performanc()
 		map[i] = i;
 	}
 	var sum = 0.0;
-	print("Map Size : " ..tosize(map));
+	print("Map Size : " .. map.len());
 	//sleep(5000);
 	print("Insert Time : " .. (system.clock() - tm));
 	
@@ -83,7 +83,7 @@ fun Fun_Performanc()
 	{
 		sum += b;
 	}
-	print("Map Size : " ..tosize(map));
+	print("Map Size : " .. map.len());
 	print("Sum " .. sum .. "");
 	print("Foreach Time : " .. (system.clock() - tm));
 

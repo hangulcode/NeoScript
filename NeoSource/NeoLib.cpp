@@ -378,6 +378,14 @@ struct neo_libs
 		pN->ReturnValue();
 		return true;
 	}
+	static bool map_len(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_MAP) return false;
+		if (args != 0) return false;
+
+		pN->ReturnValue((int)pVar->_tbl->GetCount());
+		return true;
+	}
 	static bool map_reserve(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (pVar->GetType() != VAR_MAP) return false;
@@ -997,6 +1005,7 @@ void CNeoVMImpl::RegObjLibrary()
 
 	// Map Lib
 	_funLib_Map = CNeoVMImpl::RegisterNative(Fun_Map);
+	g_sNeoFunLib_Map.Add("len", &neo_libs::map_len);
 	g_sNeoFunLib_Map.Add("reserve", &neo_libs::map_reserve);
 	g_sNeoFunLib_Map.Add("sort", &neo_libs::map_sort);
 	g_sNeoFunLib_Map.Add("keys", &neo_libs::map_keys);
