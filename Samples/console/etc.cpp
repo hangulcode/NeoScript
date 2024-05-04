@@ -9,7 +9,7 @@ int SAMPLE_etc(INeoLoader* pLoader, const char*pFileName, const char* pFunctionN
 	int iFileLen = 0;
 	if (false == pLoader->Load(pFileName, pFileBuffer, iFileLen))
 	{
-		printf("file read error");
+		printf("file read error\n");
 		return -1;
 	}
 

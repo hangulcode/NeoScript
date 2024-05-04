@@ -2913,13 +2913,15 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	DelLocalVar(vars.GetCurrentLayer());
 
 	// Debug info Inc, check restore
-	int iAddDebugCnt = iCheckCodeSize / 8;
-	int iOffDebug = forEndPos / 8 - iAddDebugCnt;
-	funs._cur->_pDebugData->resize(iOffDebug + iAddDebugCnt);
+	if(ar._debug)
+	{
+		int iAddDebugCnt = iCheckCodeSize / 8;
+		int iOffDebug = forEndPos / 8 - iAddDebugCnt;
+		funs._cur->_pDebugData->resize(iOffDebug + iAddDebugCnt);
 
-	for (int i = 0; i < iCheckCodeSize / 8; i++)
-		(*funs._cur->_pDebugData)[iOffDebug + i] = DebugCheck[i];
-
+		for (int i = 0; i < iCheckCodeSize / 8; i++)
+			(*funs._cur->_pDebugData)[iOffDebug + i] = DebugCheck[i];
+	}
 	return true;
 }
 bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn)
@@ -3526,6 +3528,11 @@ int ParseFunctionBase(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::stri
 }
 bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 {
+	if(g_bInitVM == false)
+	{
+		SetCompileError(ar, "Please call NeoScript::INeoVM::Initialize()");
+		return false;
+	}
 	ar.m_sTokenQueue.clear();
 
 	SVars	vars;

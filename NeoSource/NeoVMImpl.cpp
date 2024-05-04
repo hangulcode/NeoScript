@@ -476,7 +476,7 @@ void CNeoVMImpl::SetError(const std::string& msg)
 	}
 }
 
-INeoVMWorker* CNeoVMImpl::LoadVM(void* pBuffer, int iSize, bool blMainWorker, int iStackSize)
+INeoVMWorker* CNeoVMImpl::LoadVM(void* pBuffer, int iSize, bool blMainWorker, bool init, int iStackSize)
 {
 	CNeoVMWorker*pWorker = WorkerAlloc(iStackSize);
 	if (false == pWorker->Init(pBuffer, iSize, iStackSize))
@@ -486,6 +486,11 @@ INeoVMWorker* CNeoVMImpl::LoadVM(void* pBuffer, int iSize, bool blMainWorker, in
 	}
 	if (blMainWorker && NULL == _pMainWorker)
 		_pMainWorker = pWorker;
+	if(init)
+	{
+		std::vector<VarInfo> _args;
+		pWorker->Initialize(0, _args);
+	}
 	return pWorker;
 }
 bool CNeoVMImpl::PCall(int iModule)

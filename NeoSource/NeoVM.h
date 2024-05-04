@@ -517,7 +517,7 @@ public:
 	virtual  bool IsLastErrorMsg() = 0;
 	virtual  void ClearLastErrorMsg() = 0;
 
-	virtual  INeoVMWorker*	LoadVM(void* pBuffer, int iSize, bool blMainWorker = true, int iStackSize = 50 * 1024) =0; // 0 is error
+	virtual  INeoVMWorker*	LoadVM(void* pBuffer, int iSize, bool blMainWorker = true, bool init = false, int iStackSize = 50 * 1024) =0; // 0 is error
 	virtual  bool PCall(int iModule) = 0;
 
 	static INeoVM* 	CreateVM();

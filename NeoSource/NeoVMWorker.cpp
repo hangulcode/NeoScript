@@ -965,7 +965,7 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 				FunctionPtrNative fun = pVar1->_tbl->_fun;
 				if (fun._func)
 				{
-					CallNative(fun, pVar1, pFunName->_str, n3);
+					CallNative(fun, pVar1->_tbl->_pUserData, pFunName->_str, n3);
 					break;
 				}
 				CallNative(GetVM()->_funLib_Map, pVar1, pFunName->_str, n3);

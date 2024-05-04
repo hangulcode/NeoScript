@@ -151,7 +151,7 @@ public:
 	virtual bool IsLastErrorMsg() { return (_sErrorMsgDetail.empty() == false); }
 	virtual void ClearLastErrorMsg() { _bError = false; _sErrorMsgDetail.clear(); }
 
-	virtual INeoVMWorker*	LoadVM(void* pBuffer, int iSize, bool blMainWorker, int iStackSize); // 0 is error
+	virtual INeoVMWorker*	LoadVM(void* pBuffer, int iSize, bool blMainWorker, bool init, int iStackSize); // 0 is error
 	virtual bool PCall(int iModule);
 };
 

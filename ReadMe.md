@@ -143,8 +143,8 @@ Build : Release Mode 64bit
 	- len () : set 의 아이템 갯수를 리턴
 
 ### Comment
-	- // 한줄 주석
-	- / * * / 여러줄 주석
+	- //    : 한줄 주석
+	- /* */ : 여러줄 주석
 
 
 #### Neo Script Code Image
