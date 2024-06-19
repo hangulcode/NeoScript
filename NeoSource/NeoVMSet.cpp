@@ -461,7 +461,7 @@ bool SetInfo::Insert(VarInfo* pKey)
 		_itemCount++;
 
 		SetNode* pNew = _pVM->m_sPool_SetNode.Receive();
-		Move_DestNoRelease(&pNew->key, pKey);
+		CNeoVMWorker::Move_DestNoRelease(&pNew->key, pKey);
 		pNew->hash = hash;
 
 		pBucket->Add_NoCheck(pNew);

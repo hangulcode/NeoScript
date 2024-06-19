@@ -600,7 +600,7 @@ struct neo_libs
 
 		VarInfo* dest = pR->GetDataUnsafe();
 		for (int i = 0; i < (int)lst.size(); i++)
-			Move_DestNoRelease(&dest[i], lst[i]);
+			CNeoVMWorker::Move_DestNoRelease(&dest[i], lst[i]);
 		return true;
 	}
 	static bool map_values(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -618,7 +618,7 @@ struct neo_libs
 
 		VarInfo* dest = pR->GetDataUnsafe();
 		for (int i = 0; i < (int)lst.size(); i++)
-			Move_DestNoRelease(&dest[i], lst[i]);
+			CNeoVMWorker::Move_DestNoRelease(&dest[i], lst[i]);
 		return true;
 	}
 

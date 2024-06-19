@@ -86,7 +86,7 @@ public:
 		if (v2->IsAllocType() == false)
 			*v1 = *v2;
 		else
-			Move_DestNoRelease(v1, v2);
+			CNeoVMWorker::Move_DestNoRelease(v1, v2);
 	}
 
 
