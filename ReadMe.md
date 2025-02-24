@@ -1,3 +1,7 @@
+|    ![](/docs/img/Neo_Icon.png)    |
+|:----------------------------:|
+
+
 # Neo Script Documentation
 	- The grammar uses a C-like syntax, but it is somewhat similar to Lua script.
 	- It was developed in Visual Studio Pro 2022 C++.
