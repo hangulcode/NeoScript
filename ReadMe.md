@@ -1,5 +1,6 @@
-![](/docs/img/Neo_Icon.png){ style="display: block; margin: 0 auto;" }
-
+<p align="center">
+  <img src="/docs/img/Neo_Icon.png" alt="My Image">
+</p>
 
 # Neo Script Documentation
 	- The grammar uses a C-like syntax, but it is somewhat similar to Lua script.
