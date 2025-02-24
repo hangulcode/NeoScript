@@ -1,5 +1,4 @@
-|    ![](/docs/img/Neo_Icon.png)    |
-|:----------------------------:|
+![](/docs/img/Neo_Icon.png){ style="display: block; margin: 0 auto;" }
 
 
 # Neo Script Documentation
