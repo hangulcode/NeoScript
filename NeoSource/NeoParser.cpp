@@ -3533,7 +3533,7 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 		SetCompileError(ar, "Please call NeoScript::INeoVM::Initialize()");
 		return false;
 	}
-	ar.m_sTokenQueue.clear();
+//	ar.m_sTokenQueue.clear();
 
 	SVars	vars;
 	SFunctions funs;
@@ -3586,9 +3586,38 @@ bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
 	//CNeoVMImpl::InitLib();
 
 	CArchiveRdWC ar2;
-	ToArchiveRdWC((const char*)param.pBufferSrc, param.iLenSrc, ar2); // memory alloc
 	ar2._allowGlobalInitLogic = param.allowGlobalInitLogic;
 	ar2._debug = param.debug;
+
+	if (param.preCompileHeader && param.preCompileHeader->empty() == false)
+	{
+		int sz = (int)param.preCompileHeader->size();
+		const char* pSrc = param.preCompileHeader->c_str();
+		u16* pDest = new u16[sz + 1];
+		for(int i = 0; i < sz; i++)
+			pDest[i] = pSrc[i];
+		pDest[sz] = 0;
+
+		ar2.SetData(pDest, sz);
+		std::list< SToken> preToken;
+		SToken stoken;
+		while(true)
+		{
+			stoken._type = GetToken(ar2, stoken._tk);
+			if(stoken._type == TK_NONE)
+				break;
+			preToken.push_back(stoken);
+		}
+
+		ar2.m_sTokenQueue.swap(preToken);
+
+		ar2.SetData(NULL, 0);
+
+		delete [] pDest;
+	}
+
+	ToArchiveRdWC((const char*)param.pBufferSrc, param.iLenSrc, ar2); // memory alloc
+
 
 	bool b = Parse(ar2, arw, param.putASM);
 	if(b == false && param.err)
@@ -3614,7 +3643,7 @@ bool	INeoVM::Shutdown()
 	return true;
 }
 
-INeoVM* INeoVM::CompileAndLoadVM(const NeoCompilerParam& param)
+INeoVM* INeoVM::CompileAndLoadVM(const NeoCompilerParam& param, const NeoLoadVMParam* vparam)
 {
 	CNArchive arCode;
 
@@ -3631,7 +3660,7 @@ INeoVM* INeoVM::CompileAndLoadVM(const NeoCompilerParam& param)
 	//	SetCompileError(ar, "Comile Success. Code : %d bytes !!\n\n", arCode.GetBufferOffset());
 
 	INeoVM* pVM = INeoVM::CreateVM();
-	if (pVM->LoadVM(arCode.GetData(), arCode.GetBufferOffset(), param.iStackSize) == NULL)
+	if (pVM->LoadVM(vparam, arCode.GetData(), arCode.GetBufferOffset(), param.iStackSize) == NULL)
 	{
 		INeoVM::ReleaseVM(pVM);
 		return NULL;

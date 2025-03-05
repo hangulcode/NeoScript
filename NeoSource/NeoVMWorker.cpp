@@ -432,7 +432,7 @@ static void ReadString(CNArchive& ar, std::string& str)
 
 	ar.Read((char*)str.data(), nLen);
 }
-bool CNeoVMWorker::Init(void* pBuffer, int iSize, int iStackSize)
+bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, int iStackSize)
 {
 	_BytesSize = iSize;
 	CNArchive ar(pBuffer, iSize);
@@ -480,14 +480,19 @@ bool CNeoVMWorker::Init(void* pBuffer, int iSize, int iStackSize)
 		fun._localAddCount = 1 + fun._argsCount + fun._localVarCount + fun._localTempMax;
 		m_sFunctionPtr[iID] = fun;
 	}
-
+	int iGlobalInterfaceIndex = -1;
 	for (int i = 0; i < header._iExportVarCount; i++)
 	{
 		int idx;
 		ar >> idx;
 		ReadString(ar, Name);
 		m_sImportVars[Name] = idx;
+		if (vparam && Name == *vparam->globalInterfaceName)
+		{
+			iGlobalInterfaceIndex = idx;
+		}
 	}
+
 
 	std::string tempStr;
 	int iMaxVar = header._iStaticVarCount + header._iGlobalVarCount;
@@ -536,6 +541,10 @@ bool CNeoVMWorker::Init(void* pBuffer, int iSize, int iStackSize)
 	{
 		_DebugData.resize(header.m_iDebugCount);
 		ar.Read(&_DebugData[0], sizeof(debug_info) * header.m_iDebugCount);
+	}
+	if(iGlobalInterfaceIndex >= 0)
+	{
+		vparam->NeoGlobalInterface(this, &m_sVarGlobal[iGlobalInterfaceIndex], vparam->param);
 	}
 	return true;
 }

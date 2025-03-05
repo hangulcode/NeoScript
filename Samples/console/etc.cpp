@@ -3,6 +3,10 @@
 
 using namespace NeoScript;
 
+static void neo_globalinterface(VarInfo* v, void* This)
+{
+}
+
 int SAMPLE_etc(INeoLoader* pLoader, const char*pFileName, const char* pFunctionName)
 {
 	void* pFileBuffer = NULL;
@@ -18,8 +22,18 @@ int SAMPLE_etc(INeoLoader* pLoader, const char*pFileName, const char* pFunctionN
 	param.err = &err;
 	param.putASM = true;
 	param.debug = true;
-
+#if true
+	static std::string preHeader = "export var gameObject;";
+	static std::string preObejct = "gameObject";
+	param.preCompileHeader = &preHeader;
+	NeoLoadVMParam vparam;
+	vparam.globalInterfaceName = &preObejct;
+	vparam.NeoGlobalInterface = neo_globalinterface;
+	INeoVM* pVM = INeoVM::CompileAndLoadVM(param, &vparam);
+#else
 	INeoVM* pVM = INeoVM::CompileAndLoadVM(param);
+#endif
+
 	if (pVM != NULL)
 	{
 		DWORD dwCallTime = 0;

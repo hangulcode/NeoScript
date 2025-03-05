@@ -427,6 +427,7 @@ public:
 	virtual bool BindWorkerFunction(const std::string& funName) = 0;
 };
 
+
 struct NeoCompilerParam
 {
 	const void* pBufferSrc;
@@ -438,6 +439,8 @@ struct NeoCompilerParam
 	bool allowGlobalInitLogic = true;
 	int iStackSize = 50 * 1024;
 
+	std::string* preCompileHeader = nullptr;
+
 	NeoCompilerParam(const void* pSrc, int SrcLen)
 	{
 		pBufferSrc = pSrc;
@@ -445,6 +448,17 @@ struct NeoCompilerParam
 	}
 };
 
+typedef void (*NEO_GLOBALINTERFACE)(INeoVMWorker*, VarInfo*, void*);
+struct NeoLoadVMParam
+{
+	std::string* globalInterfaceName = nullptr;
+	NEO_GLOBALINTERFACE NeoGlobalInterface = nullptr;
+	void* param = nullptr;
+
+	NeoLoadVMParam()
+	{
+	}
+};
 
 
 struct INeoVM
@@ -517,7 +531,7 @@ public:
 	virtual  bool IsLastErrorMsg() = 0;
 	virtual  void ClearLastErrorMsg() = 0;
 
-	virtual  INeoVMWorker*	LoadVM(void* pBuffer, int iSize, bool blMainWorker = true, bool init = false, int iStackSize = 50 * 1024) =0; // 0 is error
+	virtual  INeoVMWorker*	LoadVM(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, bool blMainWorker = true, bool init = false, int iStackSize = 50 * 1024) =0; // 0 is error
 	virtual  bool PCall(int iModule) = 0;
 
 	static INeoVM* 	CreateVM();
@@ -527,7 +541,7 @@ public:
 	static bool		Initialize(INeoLoader* loader = nullptr);
 	static bool		Shutdown();
 
-	static INeoVM*	CompileAndLoadVM(const NeoCompilerParam& param);
+	static INeoVM*	CompileAndLoadVM(const NeoCompilerParam& param, const NeoLoadVMParam* vparam = nullptr);
 
 	static bool		IsSinglePrecision() 
 	{

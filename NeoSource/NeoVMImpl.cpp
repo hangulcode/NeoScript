@@ -476,10 +476,10 @@ void CNeoVMImpl::SetError(const std::string& msg)
 	}
 }
 
-INeoVMWorker* CNeoVMImpl::LoadVM(void* pBuffer, int iSize, bool blMainWorker, bool init, int iStackSize)
+INeoVMWorker* CNeoVMImpl::LoadVM(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, bool blMainWorker, bool init, int iStackSize)
 {
 	CNeoVMWorker*pWorker = WorkerAlloc(iStackSize);
-	if (false == pWorker->Init(pBuffer, iSize, iStackSize))
+	if (false == pWorker->Init(vparam, pBuffer, iSize, iStackSize))
 	{
 		FreeWorker(pWorker);
 		return NULL;

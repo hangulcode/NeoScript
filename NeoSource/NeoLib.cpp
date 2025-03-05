@@ -828,7 +828,7 @@ struct neo_libs
 			return false;
 		}
 
-		INeoVMWorker* pModule = pN->_pVM->LoadVM(arCode.GetData(), arCode.GetBufferOffset());
+		INeoVMWorker* pModule = pN->_pVM->LoadVM(nullptr, arCode.GetData(), arCode.GetBufferOffset());
 		if (pModule == NULL)
 		{
 			pN->ReturnValue();

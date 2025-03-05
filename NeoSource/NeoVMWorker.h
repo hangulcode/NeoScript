@@ -708,7 +708,7 @@ public:
 	CNeoVMWorker(INeoVM* pVM, u32 id, int iStackSize);
 	virtual ~CNeoVMWorker();
 
-	bool Init(void* pBuffer, int iSize, int iStackSize);
+	bool Init(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, int iStackSize);
 
 	NEOS_FORCEINLINE static void Var_AddRef(VarInfo* d)
 	{
