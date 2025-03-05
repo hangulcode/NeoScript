@@ -29,11 +29,10 @@ int SAMPLE_etc(INeoLoader* pLoader, const char*pFileName, const char* pFunctionN
 #if true
 	param.preCompileHeader = &preHeader;
 	NeoLoadVMParam vparam;
-	vparam.globalInterfaceName = &preObejct;
 	vparam.NeoGlobalInterface = neo_globalinterface;
-	INeoVM* pVM = INeoVM::CompileAndLoadVM(param, &vparam);
+	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param, &vparam);
 #else
-	INeoVM* pVM = INeoVM::CompileAndLoadVM(param);
+	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param);
 #endif
 
 	if (pVM != NULL)

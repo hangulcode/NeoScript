@@ -3581,6 +3581,8 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	return r;
 }
 
+#define MAX_PRECOMPILE_TEMP_BUFFER	512
+
 bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
 {
 	//CNeoVMImpl::InitLib();
@@ -3591,9 +3593,12 @@ bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
 
 	if (param.preCompileHeader && param.preCompileHeader->empty() == false)
 	{
+		u16 tmp[MAX_PRECOMPILE_TEMP_BUFFER + 1];
 		int sz = (int)param.preCompileHeader->size();
 		const char* pSrc = param.preCompileHeader->c_str();
-		u16* pDest = new u16[sz + 1];
+		u16* pDest;
+		if (sz > MAX_PRECOMPILE_TEMP_BUFFER) pDest = new u16[sz + 1];
+		else	pDest = tmp;
 		for(int i = 0; i < sz; i++)
 			pDest[i] = pSrc[i];
 		pDest[sz] = 0;
@@ -3613,7 +3618,8 @@ bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
 
 		ar2.SetData(NULL, 0);
 
-		delete [] pDest;
+		if (sz > MAX_PRECOMPILE_TEMP_BUFFER) 
+			delete [] pDest;
 	}
 
 	ToArchiveRdWC((const char*)param.pBufferSrc, param.iLenSrc, ar2); // memory alloc
@@ -3669,9 +3675,17 @@ INeoVM* INeoVM::CompileAndLoadVM(const NeoCompilerParam& param, const NeoLoadVMP
 	if(param.putASM)
 		printf(ANSI_COLOR_GREEN "Compile Success. Code : %d bytes !!" ANSI_RESET_ALL "\n", pVM->GetBytesSize());
 
+	return pVM;
+}
+INeoVM* INeoVM::CompileAndLoadRunVM(const NeoCompilerParam& param, const NeoLoadVMParam* vparam)
+{
+	auto pVM = CompileAndLoadVM(param, vparam);
+
+	if(pVM == nullptr)
+		return nullptr;
+
 	pVM->PCall(pVM->GetMainWorkerID());
 
 	return pVM;
 }
-
 };

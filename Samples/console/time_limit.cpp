@@ -19,7 +19,7 @@ int SAMPLE_time_limit(INeoLoader* pLoader)
 	param.putASM = true;
 	param.debug = true;
 
-	INeoVM* pVM = INeoVM::CompileAndLoadVM(param);
+	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param);
 	if (pVM != NULL)
 	{
 		pVM->SetTimeout(-1, 100, 1000); // -1 is main worker

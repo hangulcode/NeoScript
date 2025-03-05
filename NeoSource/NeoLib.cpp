@@ -821,7 +821,7 @@ struct neo_libs
 		param.putASM = false;
 		param.debug = false;
 
-		INeoVM* pVM = INeoVM::CompileAndLoadVM(param);
+		INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param);
 
 		if (false == INeoVM::Compile(arCode, param))
 		{

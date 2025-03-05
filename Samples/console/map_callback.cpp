@@ -133,7 +133,7 @@ int SAMPLE_map_callback(INeoLoader* pLoader)
 	param.putASM = true;
 	param.debug = true;
 
-	INeoVM* pVM = INeoVM::CompileAndLoadVM(param);
+	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param);
 	if (pVM != NULL)
 	{
 		CA* pClass = new CA();

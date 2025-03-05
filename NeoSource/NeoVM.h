@@ -162,6 +162,7 @@ protected:
 	u32						_idWorker;
 	int	_BytesSize = 0;
 public:
+	inline void* GetVMPointer() { return _pVM; }
 	inline u32 GetWorkerID() { return _idWorker; }
 	inline int GetBytesSize() { return _BytesSize; }
 
@@ -451,7 +452,6 @@ struct NeoCompilerParam
 typedef void (*NEO_GLOBALINTERFACE)(INeoVMWorker*, void*);
 struct NeoLoadVMParam
 {
-	std::string* globalInterfaceName = nullptr;
 	NEO_GLOBALINTERFACE NeoGlobalInterface = nullptr;
 	void* param = nullptr;
 
@@ -542,6 +542,7 @@ public:
 	static bool		Shutdown();
 
 	static INeoVM*	CompileAndLoadVM(const NeoCompilerParam& param, const NeoLoadVMParam* vparam = nullptr);
+	static INeoVM*  CompileAndLoadRunVM(const NeoCompilerParam& param, const NeoLoadVMParam* vparam = nullptr);
 
 	static bool		IsSinglePrecision() 
 	{

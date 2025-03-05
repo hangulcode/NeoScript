@@ -34,7 +34,7 @@ int SAMPLE_callback(INeoLoader* pLoader)
 	param.putASM = true;
 	param.debug = true;
 
-	INeoVM* pVM = INeoVM::CompileAndLoadVM(param);
+	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param);
 	if (pVM != NULL)
 	{
 //		pVM->CallN("Set", NeoHelper::Fun(Mul), NeoHelper::Fun(Sample1));

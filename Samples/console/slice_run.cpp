@@ -20,7 +20,7 @@ int SAMPLE_slice_run(INeoLoader* pLoader)
 	param.putASM = true;
 	param.debug = true;
 
-	INeoVM* pVM = INeoVM::CompileAndLoadVM(param);
+	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param);
 	if (pVM != NULL)
 	{
 		// Alloc Worker Stack
