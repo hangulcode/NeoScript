@@ -448,7 +448,7 @@ struct NeoCompilerParam
 	}
 };
 
-typedef void (*NEO_GLOBALINTERFACE)(INeoVMWorker*, VarInfo*, void*);
+typedef void (*NEO_GLOBALINTERFACE)(INeoVMWorker*, void*);
 struct NeoLoadVMParam
 {
 	std::string* globalInterfaceName = nullptr;

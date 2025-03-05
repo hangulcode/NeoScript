@@ -3,8 +3,12 @@
 
 using namespace NeoScript;
 
-static void neo_globalinterface(VarInfo* v, void* This)
+static std::string preHeader = "export var gameObject;";
+static std::string preObejct = "gameObject";
+
+static void neo_globalinterface(INeoVMWorker* pWorker, void* This)
 {
+	VarInfo* g_sGameObject = pWorker->GetVar(preObejct);
 }
 
 int SAMPLE_etc(INeoLoader* pLoader, const char*pFileName, const char* pFunctionName)
@@ -23,8 +27,6 @@ int SAMPLE_etc(INeoLoader* pLoader, const char*pFileName, const char* pFunctionN
 	param.putASM = true;
 	param.debug = true;
 #if true
-	static std::string preHeader = "export var gameObject;";
-	static std::string preObejct = "gameObject";
 	param.preCompileHeader = &preHeader;
 	NeoLoadVMParam vparam;
 	vparam.globalInterfaceName = &preObejct;

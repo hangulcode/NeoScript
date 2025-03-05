@@ -480,17 +480,12 @@ bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, 
 		fun._localAddCount = 1 + fun._argsCount + fun._localVarCount + fun._localTempMax;
 		m_sFunctionPtr[iID] = fun;
 	}
-	int iGlobalInterfaceIndex = -1;
 	for (int i = 0; i < header._iExportVarCount; i++)
 	{
 		int idx;
 		ar >> idx;
 		ReadString(ar, Name);
 		m_sImportVars[Name] = idx;
-		if (vparam && Name == *vparam->globalInterfaceName)
-		{
-			iGlobalInterfaceIndex = idx;
-		}
 	}
 
 
@@ -542,9 +537,9 @@ bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, 
 		_DebugData.resize(header.m_iDebugCount);
 		ar.Read(&_DebugData[0], sizeof(debug_info) * header.m_iDebugCount);
 	}
-	if(iGlobalInterfaceIndex >= 0)
+	if(vparam)
 	{
-		vparam->NeoGlobalInterface(this, &m_sVarGlobal[iGlobalInterfaceIndex], vparam->param);
+		vparam->NeoGlobalInterface(this, vparam->param);
 	}
 	return true;
 }
