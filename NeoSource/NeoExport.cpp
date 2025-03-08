@@ -1057,7 +1057,7 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	for(int i = 0; i < header._iExportVarCount; i++)
 	{
 		auto it = pLocalLayer->_localVars.find(vars._varsExport[i]);
-		int idx = (*it).second - COMPILE_GLOBAL_VAR_BEGIN + header._iStaticVarCount;
+		int idx = COMPILE_GLOBAL_VAR_BEGIN - (*it).second + header._iStaticVarCount;
 		ar << idx;
 		WriteString(ar, (*it).first);
 	}

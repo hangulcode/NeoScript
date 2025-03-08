@@ -553,7 +553,7 @@ void CNeoVMWorker::SetError(const char* pErrMsg)
 {
 	if(_isErrorOPIndex == 0)
 		_isErrorOPIndex = int((u8*)_pCodeCurrent - _pCodeBegin - 1) / sizeof(SVMOperation);
-	SetCodePtr(0);
+	SetCodePtr(0); // Jump To Error
 	GetVM()->SetError(std::string(pErrMsg));
 }
 void CNeoVMWorker::SetErrorUnsupport(const char* pErrMsg, VarInfo* p)
@@ -1139,6 +1139,10 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 #endif
 				if (GetVM()->_sErrorMsgDetail.empty())
 					GetVM()->_sErrorMsgDetail = chMsg;
+
+				if (INeoVM::m_pFunError) {
+					INeoVM::m_pFunError(chMsg);
+				}
 				return false;
 			}
 		default:

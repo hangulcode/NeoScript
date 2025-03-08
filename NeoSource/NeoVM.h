@@ -474,6 +474,7 @@ public:
 
 	typedef void(*IO_Print)(const char* pMsg);
 	static IO_Print m_pFunPrint;
+	static IO_Print m_pFunError;
 
 //	void Var_AddRef(VarInfo* d);
 //	static void Move_DestNoRelease(VarInfo* v1, VarInfo* v2);

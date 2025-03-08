@@ -10,6 +10,7 @@
 
 #define MATH_PI				3.14159265358979323846f // Pi
 NeoScript::INeoVM::IO_Print NeoScript::INeoVM::m_pFunPrint = nullptr;
+NeoScript::INeoVM::IO_Print NeoScript::INeoVM::m_pFunError = nullptr;
 
 namespace NeoScript
 {

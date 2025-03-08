@@ -150,11 +150,19 @@ public:
 		_cnt = 0;
 	}
 
-	NEOS_FORCEINLINE void clear()
+	NEOS_FORCEINLINE void clear(int newCapa = iBlkSize)
 	{
 		_cnt = 0;
 		for(int i = 0; i < _capa; i++)
 			_bucket[i].clear();
+		if(newCapa != _capa)
+		{
+			if (_bucket)
+				delete[] _bucket;
+
+			_capa = iBlkSize;
+			_bucket = new SimpleVector<HNode>[_capa];
+		}
 	}
 	NEOS_FORCEINLINE bool empty() { return _cnt == 0; }
 
