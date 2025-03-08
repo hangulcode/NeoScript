@@ -26,7 +26,7 @@ int SAMPLE_etc(INeoLoader* pLoader, const char*pFileName, const char* pFunctionN
 	param.err = &err;
 	param.putASM = true;
 	param.debug = true;
-#if true
+#if false
 	param.preCompileHeader = &preHeader;
 	NeoLoadVMParam vparam;
 	vparam.NeoGlobalInterface = neo_globalinterface;

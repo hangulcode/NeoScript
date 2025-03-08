@@ -96,7 +96,6 @@ bool		ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar)
 
 
 
-
 #define white_space(c) ((c) == ' ' || (c) == '\t')
 #define valid_digit(c) ((c) >= '0' && (c) <= '9')
 
@@ -120,6 +119,8 @@ bool StringToDoubleLow(double& r, const char *p)
 	r = f2;
 	return true;
 }
+
+#if false
 
 bool StringToDouble(double& r, const char *p) 
 {
@@ -183,6 +184,163 @@ bool StringToDouble(double& r, const char *p)
 
 	return true;
 }
+#else
+//#include <cmath>
+//#include <cctype>
+
+// 헥사 숫자 판단 및 값을 얻기 위한 헬퍼 함수들
+bool isHexDigit(char c) {
+	return (c >= '0' && c <= '9') ||
+		(c >= 'a' && c <= 'f') ||
+		(c >= 'A' && c <= 'F');
+}
+
+int hexValue(char c) {
+	if (c >= '0' && c <= '9') return c - '0';
+	if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+	if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+	return 0;  // isHexDigit()를 사용하면 여기에 도달하지 않음.
+}
+
+// 문자열을 double로 변환하는 함수
+// 문자열에 약간의 오류라도 있으면 false를 리턴하고,
+// 올바른 경우에만 변환한 값을 r에 대입합니다.
+bool StringToDouble(double& r, const char* p) {
+	// 선행 공백(공백, 탭) 건너뛰기
+/*	while (*p == ' ' || *p == '\t')
+		p++;
+*/
+	// 부호 처리
+	bool negative = false;
+	if (*p == '-' || *p == '+') {
+		negative = (*p == '-');
+		p++;
+	}
+
+	// 16진수 형식 처리: "0x" 또는 "0X"로 시작하는 경우
+	if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+		p += 2;  // "0x" 또는 "0X" 건너뛰기
+		double value = 0.0;
+		int digits = 0;
+		// 헥사 정수부 파싱
+		while (isHexDigit(*p)) {
+			value = value * 16 + hexValue(*p);
+			p++;
+			digits++;
+		}
+		if (digits == 0)
+			return false;  // 헥사 숫자가 하나도 없음
+
+		// 선택적 헥사 소수부 (예, "0x1a.FF")
+		if (*p == '.') {
+			p++;
+			double frac = 0.0;
+			double scale = 1.0 / 16;
+			int fracDigits = 0;
+			while (isHexDigit(*p)) {
+				frac += hexValue(*p) * scale;
+				scale /= 16;
+				p++;
+				fracDigits++;
+			}
+			if (fracDigits == 0)
+				return false;  // 소수점 뒤에 헥사 숫자가 없으면 오류
+			value += frac;
+		}
+
+		// 선택적 헥사 부동소수점 지수부 (C99 스타일, 'p' 또는 'P' 사용)
+		if (*p == 'p' || *p == 'P') {
+			p++;
+			bool expNegative = false;
+			if (*p == '-' || *p == '+') {
+				expNegative = (*p == '-');
+				p++;
+			}
+			if (!std::isdigit(*p))
+				return false;  // 지수부는 최소 한 자리 숫자 필요
+			int exp = 0;
+			while (std::isdigit(*p)) {
+				exp = exp * 10 + (*p - '0');
+				p++;
+			}
+			if (expNegative)
+				exp = -exp;
+			// ldexp(value, exp) == value * 2^(exp)
+			value = std::ldexp(value, exp);
+		}
+
+		// 문자열의 끝이어야 함
+		if (*p != '\0')
+			return false;
+
+		r = negative ? -value : value;
+		return true;
+	}
+	else {
+		// 10진수 형식 처리
+
+		// 정수부 파싱
+		double intPart = 0.0;
+		bool hasDigits = false;
+		while (std::isdigit(*p)) {
+			hasDigits = true;
+			intPart = intPart * 10 + (*p - '0');
+			p++;
+		}
+
+		// 소수부 파싱 (있다면)
+		double fracPart = 0.0;
+		if (*p == '.') {
+			p++;
+			bool fracDigits = false;
+			double factor = 0.1;
+			while (std::isdigit(*p)) {
+				fracDigits = true;
+				fracPart += (*p - '0') * factor;
+				factor /= 10;
+				p++;
+			}
+			// 정수부, 소수부 모두 숫자가 없으면 오류 처리
+			if (!hasDigits && !fracDigits)
+				return false;
+		}
+		else if (!hasDigits) {
+			// 정수부가 하나도 없고 소수점이 없는 경우
+			return false;
+		}
+
+		double value = intPart + fracPart;
+
+		// 선택적 지수부 파싱 (e 또는 E 사용)
+		if (*p == 'e' || *p == 'E') {
+			p++;
+			bool expNegative = false;
+			if (*p == '-' || *p == '+') {
+				expNegative = (*p == '-');
+				p++;
+			}
+			if (!std::isdigit(*p))
+				return false;  // 지수부는 최소 한 자리 숫자 필요
+			int exp = 0;
+			while (std::isdigit(*p)) {
+				exp = exp * 10 + (*p - '0');
+				p++;
+			}
+			if (expNegative)
+				exp = -exp;
+			value *= std::pow(10, exp);
+		}
+
+		// 남은 문자가 없어야 함
+		if (*p != '\0')
+			return false;
+
+		r = negative ? -value : value;
+		return true;
+	}
+}
+
+#endif
 
 void SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...)
 {
