@@ -10,8 +10,10 @@ fun Sum2(var a, var b)
 {
 	if(true)
 		return 1;
-	else
+	elif(true)
 		return 0;
+	else
+		return 1;
 }
 
 fun Sum3(var a, var b)
