@@ -219,6 +219,11 @@ bool CNeoVMWorker::ResetVarType(VarInfo* p, VAR_TYPE type, int capa)
 		Var_SetList(p, GetVM()->ListAlloc(capa));
 		return true;
 	}
+	else if (type == VAR_NONE)
+	{
+		Var_Release(p);
+		return true;
+	}
 	return false;
 }
 
