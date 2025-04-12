@@ -372,4 +372,4 @@ int main()
 }
 ```
 
-[![유튜브 동영상 썸네일](https://youtu.be/iEpmlLcxBVg/maxresdefault.jpg))](https://youtu.be/iEpmlLcxBVg)
+[![유튜브 동영상 썸네일](https://www.youtube.com/watch?v=iEpmlLcxBVg/maxresdefault.jpg))](https://www.youtube.com/watch?v=iEpmlLcxBVg)
