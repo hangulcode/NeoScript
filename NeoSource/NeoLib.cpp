@@ -7,6 +7,7 @@
 #include "NeoArchive.h"
 //#include "NeoTime.h"
 #include "UTFString.h"
+#include <chrono>
 
 #define MATH_PI				3.14159265358979323846f // Pi
 NeoScript::INeoVM::IO_Print NeoScript::INeoVM::m_pFunPrint = nullptr;

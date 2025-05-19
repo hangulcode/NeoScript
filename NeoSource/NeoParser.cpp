@@ -2,7 +2,7 @@
 #include "NeoVM.h"
 #include "NeoExport.h"
 #include "UTFString.h"
-
+#include <algorithm>
 
 namespace NeoScript
 {
