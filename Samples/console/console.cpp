@@ -90,26 +90,27 @@ int main()
 	while (blEnd == false)
 	{
 		printf("\n");
+		int idx = 0;
+		printf("%d hello\n", idx++);
+		printf("%d performace\n", idx++);
+		printf("%d callback\n", idx++);
+		printf("%d map_callback\n", idx++);
+		printf("%d 9_times\n", idx++);
+		printf("%d string\n", idx++);
+		printf("%d list\n", idx++);
+		printf("%d map\n", idx++);
+		printf("%d contailer\n", idx++);
+		printf("%d slice_run\n", idx++);
+		printf("%d time_limit\n", idx++);
+		printf("%d divide_by_zero\n", idx++);
+		printf("%d delegate\n", idx++);
+		printf("%d meta\n", idx++);
+		printf("%d coroutine\n", idx++);
+		printf("%d module\n", idx++);
+		printf("%d http\n", idx++);
+		printf("%d class (In development)\n", idx++);
 
-		printf("0 hello\n");
-		printf("1 callback\n");
-		printf("2 map_callback\n");
-		printf("3 9_times\n");
-		printf("4 string\n");
-		printf("5 list\n");
-		printf("6 map\n");
-		printf("7 contailer\n");
-		printf("8 slice_run\n");
-		printf("9 time_limit\n");
-		printf("10 divide_by_zero\n");
-		printf("11 delegate\n");
-		printf("12 meta\n");
-		printf("13 coroutine\n");
-		printf("14 module\n");
-		printf("15 http\n");
-		printf("16 class (In development)\n");
-
-		printf("ESC press to exit\n");
+		printf("\nESC press to exit\n");
 		printf("press the number and enter ...\n");
 
 		std::string key = getKeyString();
@@ -117,23 +118,24 @@ int main()
 		printf((key + "\n\n").c_str());
 
 		if (key == "") break;
-		else if (key ==  "0") SAMPLE_etc(pLoader, "hello.ns", nullptr);
-		else if (key ==  "1") SAMPLE_callback(pLoader);
-		else if (key ==  "2") SAMPLE_map_callback(pLoader);
-		else if (key ==  "3") SAMPLE_9_times(pLoader);
-		else if (key ==  "4") SAMPLE_etc(pLoader, "string.ns", nullptr);
-		else if (key ==  "5") SAMPLE_etc(pLoader, "list.ns", nullptr);
-		else if (key ==  "6") SAMPLE_etc(pLoader, "map.ns", nullptr);
-		else if (key ==  "7") SAMPLE_etc(pLoader, "contailer.ns", nullptr);
-		else if (key ==  "8") SAMPLE_slice_run(pLoader);
-		else if (key ==  "9") SAMPLE_time_limit(pLoader);
-		else if (key == "10") SAMPLE_etc(pLoader, "etc.ns", "divide_by_zero");
-		else if (key == "11") SAMPLE_etc(pLoader, "delegate.ns", nullptr);
-		else if (key == "12") SAMPLE_etc(pLoader, "meta.ns", "meta");
-		else if (key == "13") SAMPLE_etc(pLoader, "coroutine.ns", "test");
-		else if (key == "14") SAMPLE_etc(pLoader, "module.ns", nullptr);
-		else if (key == "15") SAMPLE_etc(pLoader, "http.ns", nullptr);
-		else if (key == "16") SAMPLE_etc(pLoader, "class.ns", nullptr);
+		else if (key == "0") SAMPLE_etc(pLoader, "hello.ns", nullptr);
+		else if (key == "1") SAMPLE_etc(pLoader, "performance.ns", nullptr);
+		else if (key == "2") SAMPLE_callback(pLoader);
+		else if (key == "3") SAMPLE_map_callback(pLoader);
+		else if (key == "4") SAMPLE_9_times(pLoader);
+		else if (key == "5") SAMPLE_etc(pLoader, "string.ns", nullptr);
+		else if (key == "6") SAMPLE_etc(pLoader, "list.ns", nullptr);
+		else if (key == "7") SAMPLE_etc(pLoader, "map.ns", nullptr);
+		else if (key == "8") SAMPLE_etc(pLoader, "contailer.ns", nullptr);
+		else if (key == "9") SAMPLE_slice_run(pLoader);
+		else if (key == "10") SAMPLE_time_limit(pLoader);
+		else if (key == "11") SAMPLE_etc(pLoader, "etc.ns", "divide_by_zero");
+		else if (key == "12") SAMPLE_etc(pLoader, "delegate.ns", nullptr);
+		else if (key == "13") SAMPLE_etc(pLoader, "meta.ns", "meta");
+		else if (key == "14") SAMPLE_etc(pLoader, "coroutine.ns", "test");
+		else if (key == "15") SAMPLE_etc(pLoader, "module.ns", nullptr);
+		else if (key == "16") SAMPLE_etc(pLoader, "http.ns", nullptr);
+		else if (key == "17") SAMPLE_etc(pLoader, "class.ns", nullptr);
 
 		system("pause");
 	}
