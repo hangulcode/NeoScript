@@ -124,7 +124,7 @@ private:
 	int m_iTimeout = -1;
 	int m_iCheckOpCount = NEO_DEFAULT_CHECKOP;
 	int m_op_process = 0;
-	int iBreakingCallStack = 0;
+	int m_iBreakingCallStack = 0;
 
 
 //	inline void SetCheckTime() { m_op_process = 0; }

@@ -411,14 +411,14 @@ NEOS_FORCEINLINE bool handle_PTRCALL2(const SVMOperation& OP) {
 }
 
 NEOS_FORCEINLINE bool handle_RETURN(const SVMOperation& OP) {
-    if (iBreakingCallStack == (int)m_pCallStack->size())
+    if (m_iBreakingCallStack == (int)m_pCallStack->size())
     {
         if ((OP.argFlag & NEOS_OP_CALL_NORESULT))
             Var_Release(m_pVarStack_Pointer); // Clear
         else
             Move(m_pVarStack_Pointer, GetVarPtrF1(OP));
 
-        if (iBreakingCallStack == 0 && IsMainCoroutine(m_pCur) == false)
+        if (m_iBreakingCallStack == 0 && IsMainCoroutine(m_pCur) == false)
         {
             if (StopCoroutine(true) == true) // Other Coroutine Active (No Stop)
                 return false; // break, continue loop

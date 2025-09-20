@@ -801,9 +801,11 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 			return true;
 	}
 
+	m_iBreakingCallStack = iBreakingCallStack;
+
 	//SCallStack callStack;
-	int iTemp;
-	char chMsg[256];
+//	int iTemp;
+//	char chMsg[256];
 
 	m_op_process = m_iCheckOpCount;
 	bool isTimeout = (m_iTimeout >= 0);
@@ -1106,14 +1108,14 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 		}			
 		case NOP_RETURN:
 		{
-			if(iBreakingCallStack == (int)m_pCallStack->size())
+			if(m_iBreakingCallStack == (int)m_pCallStack->size())
 			{
 				if ((OP.argFlag & NEOS_OP_CALL_NORESULT))
 					Var_Release(m_pVarStack_Pointer); // Clear
 				else
 					Move(m_pVarStack_Pointer, GetVarPtrF1(OP));
 
-				if (iBreakingCallStack == 0 && IsMainCoroutine(m_pCur) == false)
+				if (m_iBreakingCallStack == 0 && IsMainCoroutine(m_pCur) == false)
 				{
 					if(StopCoroutine(true) == true) // Other Coroutine Active (No Stop)
 						break;
@@ -1348,12 +1350,6 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 		{
 			// IsError() 플래그를 확인하여 정상 종료인지 에러로 인한 종료인지 구분
 			return false;//!IsError();
-		}
-		
-		// 에러 핸들러가 IsError() 플래그만 설정하고 루프를 계속 진행할 경우를 대비
-		if (IsError())
-		{
-			return false;
 		}
 #endif
 #endif
