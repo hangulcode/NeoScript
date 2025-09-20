@@ -35,6 +35,10 @@ static std::string g_meta_Per2 = "%=";
 
 #include "NeoVMWorker.inl"
 
+int& GetModuleRefCount(VarInfo* p)
+{
+	return ((CNeoVMWorker*)(p->_module))->_refCount;
+}
 
 CNeoVMWorker::CNeoVMWorker(INeoVM* pVM, u32 id, int iStackSize)
 {
@@ -74,7 +78,98 @@ CNeoVMWorker::~CNeoVMWorker()
 	}
 }
 
+// 테이블 초기화 함수 구현
+CNeoVMWorker::OpcodeHandler CNeoVMWorker::dispatch_table[NOP_MAX];
+void CNeoVMWorker::InitializeDispatchTable()
+{
+	// 1. 안전을 위해 모든 포인터를 알 수 없는 OP 핸들러로 초기화
+	for (int i = 0; i < NOP_MAX; ++i) {
+		dispatch_table[i] = &CNeoVMWorker::handle_UNKNOWN;
+	}
 
+	// 2. 각 opcode에 맞는 핸들러 함수 주소 할당
+	dispatch_table[NOP_MOV] = &CNeoVMWorker::handle_MOV;
+	dispatch_table[NOP_MOVI] = &CNeoVMWorker::handle_MOVI;
+	dispatch_table[NOP_MOV_MINUS] = &CNeoVMWorker::handle_MOV_MINUS;
+	dispatch_table[NOP_ADD2] = &CNeoVMWorker::handle_ADD2;
+	dispatch_table[NOP_SUB2] = &CNeoVMWorker::handle_SUB2;
+	dispatch_table[NOP_MUL2] = &CNeoVMWorker::handle_MUL2;
+	dispatch_table[NOP_DIV2] = &CNeoVMWorker::handle_DIV2;
+	dispatch_table[NOP_PERSENT2] = &CNeoVMWorker::handle_PERSENT2;
+	dispatch_table[NOP_LSHIFT2] = &CNeoVMWorker::handle_LSHIFT2;
+	dispatch_table[NOP_RSHIFT2] = &CNeoVMWorker::handle_RSHIFT2;
+	dispatch_table[NOP_AND2] = &CNeoVMWorker::handle_AND2;
+	dispatch_table[NOP_OR2] = &CNeoVMWorker::handle_OR2;
+	dispatch_table[NOP_XOR2] = &CNeoVMWorker::handle_XOR2;
+	dispatch_table[NOP_VAR_CLEAR] = &CNeoVMWorker::handle_VAR_CLEAR;
+	dispatch_table[NOP_INC] = &CNeoVMWorker::handle_INC;
+	dispatch_table[NOP_DEC] = &CNeoVMWorker::handle_DEC;
+	dispatch_table[NOP_ADD3] = &CNeoVMWorker::handle_ADD3;
+	dispatch_table[NOP_SUB3] = &CNeoVMWorker::handle_SUB3;
+	dispatch_table[NOP_MUL3] = &CNeoVMWorker::handle_MUL3;
+	dispatch_table[NOP_DIV3] = &CNeoVMWorker::handle_DIV3;
+	dispatch_table[NOP_PERSENT3] = &CNeoVMWorker::handle_PERSENT3;
+	dispatch_table[NOP_LSHIFT3] = &CNeoVMWorker::handle_LSHIFT3;
+	dispatch_table[NOP_RSHIFT3] = &CNeoVMWorker::handle_RSHIFT3;
+	dispatch_table[NOP_AND3] = &CNeoVMWorker::handle_AND3;
+	dispatch_table[NOP_OR3] = &CNeoVMWorker::handle_OR3;
+	dispatch_table[NOP_XOR3] = &CNeoVMWorker::handle_XOR3;
+	dispatch_table[NOP_GREAT] = &CNeoVMWorker::handle_GREAT;
+	dispatch_table[NOP_GREAT_EQ] = &CNeoVMWorker::handle_GREAT_EQ;
+	dispatch_table[NOP_LESS] = &CNeoVMWorker::handle_LESS;
+	dispatch_table[NOP_LESS_EQ] = &CNeoVMWorker::handle_LESS_EQ;
+	dispatch_table[NOP_EQUAL2] = &CNeoVMWorker::handle_EQUAL2;
+	dispatch_table[NOP_NEQUAL] = &CNeoVMWorker::handle_NEQUAL;
+	dispatch_table[NOP_AND] = &CNeoVMWorker::handle_AND;
+	dispatch_table[NOP_OR] = &CNeoVMWorker::handle_OR;
+	dispatch_table[NOP_LOG_AND] = &CNeoVMWorker::handle_LOG_AND;
+	dispatch_table[NOP_LOG_OR] = &CNeoVMWorker::handle_LOG_OR;
+	dispatch_table[NOP_JMP] = &CNeoVMWorker::handle_JMP;
+	dispatch_table[NOP_JMP_FALSE] = &CNeoVMWorker::handle_JMP_FALSE;
+	dispatch_table[NOP_JMP_TRUE] = &CNeoVMWorker::handle_JMP_TRUE;
+	dispatch_table[NOP_JMP_GREAT] = &CNeoVMWorker::handle_JMP_GREAT;
+	dispatch_table[NOP_JMP_GREAT_EQ] = &CNeoVMWorker::handle_JMP_GREAT_EQ;
+	dispatch_table[NOP_JMP_LESS] = &CNeoVMWorker::handle_JMP_LESS;
+	dispatch_table[NOP_JMP_LESS_EQ] = &CNeoVMWorker::handle_JMP_LESS_EQ;
+	dispatch_table[NOP_JMP_EQUAL2] = &CNeoVMWorker::handle_JMP_EQUAL2;
+	dispatch_table[NOP_JMP_NEQUAL] = &CNeoVMWorker::handle_JMP_NEQUAL;
+	dispatch_table[NOP_JMP_AND] = &CNeoVMWorker::handle_JMP_AND;
+	dispatch_table[NOP_JMP_OR] = &CNeoVMWorker::handle_JMP_OR;
+	dispatch_table[NOP_JMP_NAND] = &CNeoVMWorker::handle_JMP_NAND;
+	dispatch_table[NOP_JMP_NOR] = &CNeoVMWorker::handle_JMP_NOR;
+	dispatch_table[NOP_JMP_FOR] = &CNeoVMWorker::handle_JMP_FOR;
+	dispatch_table[NOP_JMP_FOREACH] = &CNeoVMWorker::handle_JMP_FOREACH;
+	dispatch_table[NOP_STR_ADD] = &CNeoVMWorker::handle_STR_ADD;
+	dispatch_table[NOP_TOSTRING] = &CNeoVMWorker::handle_TOSTRING;
+	dispatch_table[NOP_TOINT] = &CNeoVMWorker::handle_TOINT;
+	dispatch_table[NOP_TOFLOAT] = &CNeoVMWorker::handle_TOFLOAT;
+	dispatch_table[NOP_TOSIZE] = &CNeoVMWorker::handle_TOSIZE;
+	dispatch_table[NOP_GETTYPE] = &CNeoVMWorker::handle_GETTYPE;
+	dispatch_table[NOP_SLEEP] = &CNeoVMWorker::handle_SLEEP;
+	dispatch_table[NOP_FMOV1] = &CNeoVMWorker::handle_FMOV1;
+	dispatch_table[NOP_FMOV2] = &CNeoVMWorker::handle_FMOV2;
+	dispatch_table[NOP_CALL] = &CNeoVMWorker::handle_CALL;
+	dispatch_table[NOP_PTRCALL] = &CNeoVMWorker::handle_PTRCALL;
+	dispatch_table[NOP_PTRCALL2] = &CNeoVMWorker::handle_PTRCALL2;
+	dispatch_table[NOP_RETURN] = &CNeoVMWorker::handle_RETURN;
+	dispatch_table[NOP_TABLE_ALLOC] = &CNeoVMWorker::handle_TABLE_ALLOC;
+	dispatch_table[NOP_CLT_READ] = &CNeoVMWorker::handle_CLT_READ;
+	dispatch_table[NOP_TABLE_REMOVE] = &CNeoVMWorker::handle_TABLE_REMOVE;
+	dispatch_table[NOP_CLT_MOV] = &CNeoVMWorker::handle_CLT_MOV;
+	dispatch_table[NOP_TABLE_ADD2] = &CNeoVMWorker::handle_TABLE_ADD2;
+	dispatch_table[NOP_TABLE_SUB2] = &CNeoVMWorker::handle_TABLE_SUB2;
+	dispatch_table[NOP_TABLE_MUL2] = &CNeoVMWorker::handle_TABLE_MUL2;
+	dispatch_table[NOP_TABLE_DIV2] = &CNeoVMWorker::handle_TABLE_DIV2;
+	dispatch_table[NOP_TABLE_PERSENT2] = &CNeoVMWorker::handle_TABLE_PERSENT2;
+	dispatch_table[NOP_LIST_ALLOC] = &CNeoVMWorker::handle_LIST_ALLOC;
+	dispatch_table[NOP_LIST_REMOVE] = &CNeoVMWorker::handle_LIST_REMOVE;
+	dispatch_table[NOP_VERIFY_TYPE] = &CNeoVMWorker::handle_VERIFY_TYPE;
+	dispatch_table[NOP_CHANGE_INT] = &CNeoVMWorker::handle_CHANGE_INT;
+	dispatch_table[NOP_YIELD] = &CNeoVMWorker::handle_YIELD;
+	dispatch_table[NOP_IDLE] = &CNeoVMWorker::handle_IDLE;
+	dispatch_table[NOP_NONE] = &CNeoVMWorker::handle_NONE;
+	dispatch_table[NOP_ERROR] = &CNeoVMWorker::handle_ERROR;
+}
 
 
 // -1 : Error
@@ -710,7 +805,7 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 	int iTemp;
 	char chMsg[256];
 
-	int op_process = m_iCheckOpCount;
+	m_op_process = m_iCheckOpCount;
 	bool isTimeout = (m_iTimeout >= 0);
 	if(isTimeout)
 		_preClock = clock();
@@ -720,9 +815,9 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 	{
 		if(std::is_integral<T>::value)
 		{
-			if (--op_process <= 0)
+			if (--m_op_process <= 0)
 			{
-				op_process = m_iCheckOpCount;
+				m_op_process = m_iCheckOpCount;
 //				if (isTimeout)
 				{
 					t2 = clock() - _preClock;
@@ -733,6 +828,7 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 		}
 
 		const SVMOperation& OP = *GetOP();
+#if false
 		switch (OP.op)
 		{
 		case NOP_MOV:
@@ -1149,6 +1245,119 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 			SetError("Unknown OP");
 			break;
 		}
+#else
+		switch (OP.op)
+		{
+		case NOP_MOV:           handle_MOV(OP); break;
+		case NOP_MOVI:          handle_MOVI(OP); break;
+		case NOP_MOV_MINUS:     handle_MOV_MINUS(OP); break;
+		case NOP_ADD2:          handle_ADD2(OP); break;
+		case NOP_SUB2:          handle_SUB2(OP); break;
+		case NOP_MUL2:          handle_MUL2(OP); break;
+		case NOP_DIV2:          handle_DIV2(OP); break;
+		case NOP_PERSENT2:      handle_PERSENT2(OP); break;
+		case NOP_LSHIFT2:       handle_LSHIFT2(OP); break;
+		case NOP_RSHIFT2:       handle_RSHIFT2(OP); break;
+		case NOP_AND2:          handle_AND2(OP); break;
+		case NOP_OR2:           handle_OR2(OP); break;
+		case NOP_XOR2:          handle_XOR2(OP); break;
+		case NOP_VAR_CLEAR:     handle_VAR_CLEAR(OP); break;
+		case NOP_INC:           handle_INC(OP); break;
+		case NOP_DEC:           handle_DEC(OP); break;
+		case NOP_ADD3:          handle_ADD3(OP); break;
+		case NOP_SUB3:          handle_SUB3(OP); break;
+		case NOP_MUL3:          handle_MUL3(OP); break;
+		case NOP_DIV3:          handle_DIV3(OP); break;
+		case NOP_PERSENT3:      handle_PERSENT3(OP); break;
+		case NOP_LSHIFT3:       handle_LSHIFT3(OP); break;
+		case NOP_RSHIFT3:       handle_RSHIFT3(OP); break;
+		case NOP_AND3:          handle_AND3(OP); break;
+		case NOP_OR3:           handle_OR3(OP); break;
+		case NOP_XOR3:          handle_XOR3(OP); break;
+		case NOP_GREAT:         handle_GREAT(OP); break;
+		case NOP_GREAT_EQ:      handle_GREAT_EQ(OP); break;
+		case NOP_LESS:          handle_LESS(OP); break;
+		case NOP_LESS_EQ:       handle_LESS_EQ(OP); break;
+		case NOP_EQUAL2:        handle_EQUAL2(OP); break;
+		case NOP_NEQUAL:        handle_NEQUAL(OP); break;
+		case NOP_AND:           handle_AND(OP); break;
+		case NOP_OR:            handle_OR(OP); break;
+		case NOP_LOG_AND:       handle_LOG_AND(OP); break;
+		case NOP_LOG_OR:        handle_LOG_OR(OP); break;
+		case NOP_JMP:           handle_JMP(OP); break;
+		case NOP_JMP_FALSE:     handle_JMP_FALSE(OP); break;
+		case NOP_JMP_TRUE:      handle_JMP_TRUE(OP); break;
+		case NOP_JMP_GREAT:     handle_JMP_GREAT(OP); break;
+		case NOP_JMP_GREAT_EQ:  handle_JMP_GREAT_EQ(OP); break;
+		case NOP_JMP_LESS:      handle_JMP_LESS(OP); break;
+		case NOP_JMP_LESS_EQ:   handle_JMP_LESS_EQ(OP); break;
+		case NOP_JMP_EQUAL2:    handle_JMP_EQUAL2(OP); break;
+		case NOP_JMP_NEQUAL:    handle_JMP_NEQUAL(OP); break;
+		case NOP_JMP_AND:       handle_JMP_AND(OP); break;
+		case NOP_JMP_OR:        handle_JMP_OR(OP); break;
+		case NOP_JMP_NAND:      handle_JMP_NAND(OP); break;
+		case NOP_JMP_NOR:       handle_JMP_NOR(OP); break;
+		case NOP_JMP_FOR:       handle_JMP_FOR(OP); break;
+		case NOP_JMP_FOREACH:   handle_JMP_FOREACH(OP); break;
+		case NOP_STR_ADD:       handle_STR_ADD(OP); break;
+		case NOP_TOSTRING:      handle_TOSTRING(OP); break;
+		case NOP_TOINT:         handle_TOINT(OP); break;
+		case NOP_TOFLOAT:       handle_TOFLOAT(OP); break;
+		case NOP_TOSIZE:        handle_TOSIZE(OP); break;
+		case NOP_GETTYPE:       handle_GETTYPE(OP); break;
+		case NOP_SLEEP:
+			if (handle_SLEEP(OP)) return true;
+			break;
+		case NOP_FMOV1:         handle_FMOV1(OP); break;
+		case NOP_FMOV2:         handle_FMOV2(OP); break;
+		case NOP_CALL:          handle_CALL(OP); break;
+		case NOP_PTRCALL:       handle_PTRCALL(OP); break;
+		case NOP_PTRCALL2:      handle_PTRCALL2(OP); break;
+		case NOP_RETURN:
+			if (handle_RETURN(OP)) return true;
+			break;
+		case NOP_TABLE_ALLOC:   handle_TABLE_ALLOC(OP); break;
+		case NOP_CLT_READ:      handle_CLT_READ(OP); break;
+		case NOP_TABLE_REMOVE:  handle_TABLE_REMOVE(OP); break;
+		case NOP_CLT_MOV:       handle_CLT_MOV(OP); break;
+		case NOP_TABLE_ADD2:    handle_TABLE_ADD2(OP); break;
+		case NOP_TABLE_SUB2:    handle_TABLE_SUB2(OP); break;
+		case NOP_TABLE_MUL2:    handle_TABLE_MUL2(OP); break;
+		case NOP_TABLE_DIV2:    handle_TABLE_DIV2(OP); break;
+		case NOP_TABLE_PERSENT2:handle_TABLE_PERSENT2(OP); break;
+		case NOP_LIST_ALLOC:    handle_LIST_ALLOC(OP); break;
+		case NOP_LIST_REMOVE:   handle_LIST_REMOVE(OP); break;
+		case NOP_VERIFY_TYPE:   handle_VERIFY_TYPE(OP); break;
+		case NOP_CHANGE_INT:    handle_CHANGE_INT(OP); break;
+		case NOP_YIELD:
+			if (handle_YIELD(OP)) return true;
+			break;
+		case NOP_IDLE:          handle_IDLE(OP); break;
+		case NOP_NONE:          handle_NONE(OP); break;
+		case NOP_ERROR:
+			handle_ERROR(OP);
+			return false;
+		default:
+			SetError("Unknown OP");
+			break;
+		}
+#if false
+		// Dispatch Table에서 핸들러 함수 포인터를 가져와 직접 호출
+		// 핸들러가 true를 반환하면 루프를 종료하고 RunInternal 함수를 빠져나감
+		if ((this->*dispatch_table[OP.op])(OP))
+		{
+			// IsError() 플래그를 확인하여 정상 종료인지 에러로 인한 종료인지 구분
+			return false;//!IsError();
+		}
+		
+		// 에러 핸들러가 IsError() 플래그만 설정하고 루프를 계속 진행할 경우를 대비
+		if (IsError())
+		{
+			return false;
+		}
+#endif
+#endif
+
 	}
 	return true;
 }

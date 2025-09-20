@@ -173,6 +173,7 @@
     <ClInclude Include="..\..\NeoSource\NeoVM.h" />
     <ClInclude Include="..\..\NeoSource\NeoVMHash.h" />
     <ClInclude Include="..\..\NeoSource\NeoVMImpl.h" />
+    <ClInclude Include="..\..\NeoSource\NeoVMInternal.h" />
     <ClInclude Include="..\..\NeoSource\NeoVMList.h" />
     <ClInclude Include="..\..\NeoSource\NeoVMMemoryPool.h" />
     <ClInclude Include="..\..\NeoSource\NeoVMSet.h" />
@@ -260,6 +261,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\NeoSource\NeoVMWorker.inl" />
+    <None Include="..\..\NeoSource\NeoVMWorker_Handlers.inl" />
     <None Include="9_times.ns" />
     <None Include="callback.ns" />
     <None Include="coroutine.ns" />

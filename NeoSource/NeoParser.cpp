@@ -1,5 +1,5 @@
 ﻿#include "NeoParser.h"
-#include "NeoVM.h"
+#include "NeoVMImpl.h"
 #include "NeoExport.h"
 #include "UTFString.h"
 #include <algorithm>

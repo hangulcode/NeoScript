@@ -118,6 +118,9 @@
     <ClInclude Include="..\..\NeoSource\NeoVMHash.h">
       <Filter>NeoScript</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\NeoSource\NeoVMInternal.h">
+      <Filter>NeoScript</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="NeoScript">
@@ -177,6 +180,9 @@
       <Filter>Samples</Filter>
     </None>
     <None Include="..\..\NeoSource\NeoVMWorker.inl">
+      <Filter>NeoScript</Filter>
+    </None>
+    <None Include="..\..\NeoSource\NeoVMWorker_Handlers.inl">
       <Filter>NeoScript</Filter>
     </None>
   </ItemGroup>

@@ -4,6 +4,8 @@
 
 namespace NeoScript
 {
+class CNeoVMWorker;
+class CNeoVMImpl;
 
 #pragma pack(1)
 struct MapNode
@@ -53,8 +55,12 @@ struct MapBucket
 #endif
 };
 
-class CNeoVMImpl;
-class CNeoVMWorker;
+
+struct AllocBase
+{
+	int _refCount;
+};
+
 struct MapInfo : AllocBase
 {
 	MapBucket*	_Bucket;

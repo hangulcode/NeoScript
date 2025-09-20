@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "NeoVMImpl.h"
+#include "NeoVMWorker.h"
 #include "NeoArchive.h"
 //#include "NeoTime.h"
 #include "UTFString.h"
@@ -602,7 +603,7 @@ struct neo_libs
 
 		VarInfo* dest = pR->GetDataUnsafe();
 		for (int i = 0; i < (int)lst.size(); i++)
-			CNeoVMWorker::Move_DestNoRelease(&dest[i], lst[i]);
+			Move_DestNoRelease(&dest[i], lst[i]);
 		return true;
 	}
 	static bool map_values(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -620,7 +621,7 @@ struct neo_libs
 
 		VarInfo* dest = pR->GetDataUnsafe();
 		for (int i = 0; i < (int)lst.size(); i++)
-			CNeoVMWorker::Move_DestNoRelease(&dest[i], lst[i]);
+			Move_DestNoRelease(&dest[i], lst[i]);
 		return true;
 	}
 
@@ -1194,6 +1195,8 @@ void CNeoVMImpl::InitLib()
 
 	RegLibrary(pSystem, "sys");*/
 	RegObjLibrary();
+
+	CNeoVMWorker::InitializeDispatchTable();
 }
 
 };

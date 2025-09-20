@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "NeoArchive.h"
-#include "NeoVMImpl.h"
+#include "NeoVMWorker.h"
 #include "NeoTextLoader.h"
 
 namespace NeoScript

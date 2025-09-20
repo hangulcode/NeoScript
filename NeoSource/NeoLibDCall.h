@@ -24,9 +24,9 @@ struct neo_DCalllibs
 		VarInfo* src2 = pV2->GetDataUnsafe();
 
 		for (int i = 0; i < s1; i++)
-			CNeoVMWorker::Move_DestNoRelease(&dest[i], &src1[i]);
+			Move_DestNoRelease(&dest[i], &src1[i]);
 		for (int i = 0; i < s2; i++)
-			CNeoVMWorker::Move_DestNoRelease(&dest[i + s1], &src2[i]);
+			Move_DestNoRelease(&dest[i + s1], &src2[i]);
 
 		return true;
 	}

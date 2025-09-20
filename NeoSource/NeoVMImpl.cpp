@@ -1,6 +1,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include "NeoVMImpl.h"
+#include "NeoVMWorker.h"
 #include "NeoArchive.h"
 #include "UTFString.h"
 
@@ -75,6 +76,10 @@ CNeoVMWorker* CNeoVMImpl::FindWorker(int iModule)
 
 	return (*it).second;
 }
+
+int CNeoVMImpl::FindFunction(const std::string& name) { return GetMainWorker()->FindFunction(name); }
+bool CNeoVMImpl::SetFunction(int iFID, FunctionPtr& fun, int argCount) { return GetMainWorker()->SetFunction(iFID, fun, argCount); }
+
 
 CoroutineInfo* CNeoVMImpl::CoroutineAlloc()
 {
@@ -426,7 +431,7 @@ CNeoVMImpl::CNeoVMImpl()
 			break;
 		}
 	}
-	InitLib();
+//	InitLib();
 }
 CNeoVMImpl::~CNeoVMImpl()
 {

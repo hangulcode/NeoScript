@@ -2,26 +2,16 @@
 
 #include <thread>
 
-#include "NeoVM.h"
-#include "NeoVMWorker.h"
-#include "NeoVMMemoryPool.h"
-#include "NeoQueue.h"
+#include "NeoVMInternal.h"
+
 
 namespace NeoScript
 {
-struct neo_libs;
-struct neo_DCalllibs;;
-class CNArchive;
 
-struct SystemFun
-{
-	std::string fname;
-	int			argCount;
-};
 
 class CNeoVMImpl : public INeoVM
 {
-	friend					CNeoVMWorker;
+//	friend					CNeoVMWorker;
 	friend					MapInfo;
 	friend					ListInfo;
 	friend					SetInfo;
@@ -86,7 +76,7 @@ public:
 		if (v2->IsAllocType() == false)
 			*v1 = *v2;
 		else
-			CNeoVMWorker::Move_DestNoRelease(v1, v2);
+			Move_DestNoRelease(v1, v2);
 	}
 
 
@@ -133,8 +123,8 @@ public:
 	static void RegObjLibrary();
 	static void InitLib();
 	void SetError(const std::string& msg);
-	virtual int FindFunction(const std::string& name) { return GetMainWorker()->FindFunction(name); }
-	virtual bool SetFunction(int iFID, FunctionPtr& fun, int argCount) { return GetMainWorker()->SetFunction(iFID, fun, argCount); }
+	virtual int FindFunction(const std::string& name);
+	virtual bool SetFunction(int iFID, FunctionPtr& fun, int argCount);
 public:
 	CNeoVMImpl();
 	virtual ~CNeoVMImpl();
