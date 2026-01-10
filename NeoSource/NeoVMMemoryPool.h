@@ -5,7 +5,8 @@ namespace NeoScript
 
 
 #pragma pack(1)
-
+// 성능 최적화를 위해서 생성자/소멸자 지원하지 않음. 
+// 생성자 소멸자 처리가 필요한 풀은 CNVMInstPool 을 사용하면 됨.
 template <typename T, int iBlkSize = 128>
 class CNVMAllocPool
 {
@@ -119,7 +120,7 @@ private:
 
 		m_sMemPagePool.push_back(pool);
 
-		for (int i = 0; i < m_iBlkSize; i++)
+		for (int i = m_iBlkSize - 2; i >= 0; i--)
 		{
 #ifdef _DEBUG
 			SNodePool* pNode = &pData[i];
