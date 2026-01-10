@@ -155,6 +155,7 @@ void INeoVMWorker::PushString(const char* p)
 	VarInfo d;
 	d.SetType(VAR_STRING);
 	d._str = ((CNeoVMImpl*)_pVM)->StringAlloc(s);
+	//++d._str->_refCount; ?? TODO
 	_args->push_back(d);
 }
 void INeoVMWorker::PushNeoFunction(NeoFunction v)
@@ -187,12 +188,13 @@ const std::string* INeoVMWorker::PopStlString(VarInfo* V)
 {
 	if (V->GetType() == VAR_STRING)
 		return &V->_str->_str;
-	else if (V->GetType() == VAR_CHAR)
+/*	else if (V->GetType() == VAR_CHAR) // TODO
 	{
 		V->SetType(VAR_STRING);
 		V->_str = ((CNeoVMImpl*)_pVM)->StringAlloc(std::string(V->_c.c));
+		++V->_str->_refCount; // ?? TODO
 		return &V->_str->_str;
-	}
+	}*/
 
 	return NULL;
 }
