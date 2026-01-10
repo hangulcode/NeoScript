@@ -60,6 +60,7 @@ CNeoVMWorker::CNeoVMWorker(INeoVM* pVM, u32 id, int iStackSize)
 	//_intA3.SetType(VAR_INT);
 	_funA3.SetType(VAR_FUN);
 
+	if(iStackSize < 100) iStackSize = 100;
 	m_pVarStack_Base->resize(iStackSize);
 	m_pCallStack->reserve(1000);
 	m_pVarStack_Pointer = &(*m_pVarStack_Base)[0];
