@@ -661,18 +661,16 @@ void CNeoVMWorker::SetErrorUnsupport(const char* pErrMsg, VarInfo* p)
 #endif
 	SetError(buff);
 }
-void CNeoVMWorker::SetErrorFormat(const char* lpszString, ...)
+void CNeoVMWorker::SetErrorFormat(const char* fmt, ...)
 {
 	char buff[1024];
-	va_list arg_ptr;
-	va_start(arg_ptr, lpszString);
-#ifdef _WIN32
-	vsprintf_s(buff, _countof(buff), lpszString, arg_ptr);
-#else
-	vsnprintf(buff, 8, lpszString, arg_ptr);
-#endif
-	va_end(arg_ptr);
 
+	va_list ap;
+	va_start(ap, fmt);
+	vsnprintf(buff, sizeof(buff), fmt, ap);
+	va_end(ap);
+
+	buff[sizeof(buff)-1] = '\0';
 	SetError(buff);
 }
 
