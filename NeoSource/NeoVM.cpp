@@ -210,7 +210,7 @@ bool VarInfo::MapFindFloat(const std::string& pKey, NS_FLOAT& value)
 	VarInfo* p = _tbl->Find(pKey);
 	if (p == NULL) return false;
 	if (p->GetType() == VAR_FLOAT) { value = p->_float; return true; }
-	if (p->GetType() == VAR_INT) { value = p->_int; return true; }
+	if (p->GetType() == VAR_INT) { value = (NS_FLOAT)p->_int; return true; }
 	return false;
 }
 
