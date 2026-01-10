@@ -185,8 +185,14 @@ const char* INeoVMWorker::PopString(VarInfo* V)
 }
 const std::string* INeoVMWorker::PopStlString(VarInfo* V)
 {
-	//		if (V->GetType() == VAR_STRING)
-	//			return &V->_str->_str;
+	if (V->GetType() == VAR_STRING)
+		return &V->_str->_str;
+	else if (V->GetType() == VAR_CHAR)
+	{
+		V->SetType(VAR_STRING);
+		V->_str = ((CNeoVMImpl*)_pVM)->StringAlloc(std::string(V->_c.c));
+		return &V->_str->_str;
+	}
 
 	return NULL;
 }
@@ -200,10 +206,10 @@ bool VarInfo::MapFindFloat(const std::string& pKey, NS_FLOAT& value)
 {
 	if (_type != VAR_MAP) return false;
 	VarInfo* p = _tbl->Find(pKey);
-	if(p == NULL) return false;
-	if(p->GetType() != VAR_FLOAT) return false;
-	value = p->_float;
-	return true;
+	if (p == NULL) return false;
+	if (p->GetType() == VAR_FLOAT) { value = p->_float; return true; }
+	if (p->GetType() == VAR_INT) { value = p->_int; return true; }
+	return false;
 }
 
 bool VarInfo::ListInsertFloat(int idx, NS_FLOAT value)
