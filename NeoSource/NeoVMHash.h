@@ -98,6 +98,7 @@ public:
 		{
 			_buffer[i - 1] = _buffer[i];
 		}
+		--_cnt;
 	}
 	NEOS_FORCEINLINE int size() { return _cnt; }
 	NEOS_FORCEINLINE void resize(int cnt)

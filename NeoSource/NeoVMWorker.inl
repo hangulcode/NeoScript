@@ -380,24 +380,24 @@ NEOS_FORCEINLINE void CNeoVMWorker::Add3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	case VAR_CHAR:
 		if (v2->GetType() == VAR_CHAR)
 		{
-			Var_SetStringA(r, std::string(r->_c.c) + v2->_c.c);
+			Var_SetStringA(r, std::string(v1->_c.c) + v2->_c.c);
 			return;
 		}
 		else if (v2->GetType() == VAR_STRING)
 		{
-			Var_SetStringA(r, std::string(r->_c.c) + v2->_str->_str);
+			Var_SetStringA(r, std::string(v1->_c.c) + v2->_str->_str);
 			return;
 		}
 		break;
 	case VAR_STRING:
 		if (v2->GetType() == VAR_CHAR)
 		{
-			Var_SetStringA(r, r->_str->_str + v2->_c.c);
+			Var_SetStringA(r, v1->_str->_str + v2->_c.c);
 			return;
 		}
 		else if (v2->GetType() == VAR_STRING)
 		{
-			Var_SetStringA(r, r->_str->_str + v2->_str->_str);
+			Var_SetStringA(r, v1->_str->_str + v2->_str->_str);
 			return;
 		}
 		break;
@@ -1067,6 +1067,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Sub2(VarInfo* r, VarInfo* v2)
 		}
 		else if (v2->GetType() == VAR_FLOAT)
 		{
+			r->SetType(VAR_FLOAT);
 			r->_float = (NS_FLOAT)r->_int - v2->_float;
 			return;
 		}
@@ -1108,6 +1109,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Mul2(VarInfo* r, VarInfo* v2)
 		}
 		else if (v2->GetType() == VAR_FLOAT)
 		{
+			r->SetType(VAR_FLOAT);
 			r->_float = (NS_FLOAT)r->_int * v2->_float;
 			return;
 		}
@@ -1129,7 +1131,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Mul2(VarInfo* r, VarInfo* v2)
 	case VAR_STRING:
 		break;
 	case VAR_MAP:
-		if (Call_MetaTable(r, g_meta_Div2, r, r, v2)) 
+		if (Call_MetaTable(r, g_meta_Mul2, r, r, v2))
 			return;
 		break;
 	default:
@@ -1171,7 +1173,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Div2(VarInfo* r, VarInfo* v2)
 	case VAR_STRING:
 		break;
 	case VAR_MAP:
-		if (Call_MetaTable(r, g_meta_Per2, r, r, v2)) 
+		if (Call_MetaTable(r, g_meta_Div2, r, r, v2))
 			return;
 		break;
 	default:
