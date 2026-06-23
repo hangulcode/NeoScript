@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+
 #include "NeoVMInternal.h"
 
 #include "NeoVMImpl.h"
@@ -119,7 +121,7 @@ private:
 
 	bool					_isInitialized = false;
 	int						_iRemainSleep = 0;
-	clock_t					_preClock;
+	std::chrono::steady_clock::time_point _preClock;
 
 	int m_iTimeout = -1;
 	int m_iCheckOpCount = NEO_DEFAULT_CHECKOP;

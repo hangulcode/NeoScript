@@ -91,6 +91,10 @@ public:
 		}
 		return _buffer[_cnt++];
 	}
+	NEOS_FORCEINLINE T& pop_back()
+	{
+		return _buffer[--_cnt];
+	}
 	void RemoveIndex(int idx)
 	{
 		if(idx < 0 || idx >= _cnt) return;

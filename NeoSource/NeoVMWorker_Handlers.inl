@@ -307,7 +307,6 @@ NEOS_FORCEINLINE bool handle_GETTYPE(const SVMOperation& OP) {
 NEOS_FORCEINLINE bool handle_SLEEP(const SVMOperation& OP) {
     int r = Sleep(m_iTimeout, GetVarPtr2(OP));
     if (r == 0) {
-        _preClock = clock();
         return true; // Exit RunInternal
     }
     else if (r == 2) {
@@ -427,9 +426,7 @@ NEOS_FORCEINLINE bool handle_RETURN(const SVMOperation& OP) {
         return true; // exit RunInternal
     }
 
-    int iTemp = (int)m_pCallStack->size() - 1;
-    SCallStack& callStack = (*m_pCallStack)[iTemp];
-    m_pCallStack->resize(iTemp);
+    SCallStack& callStack = m_pCallStack->pop_back();
 
     if (callStack._pReturnValue)
     {

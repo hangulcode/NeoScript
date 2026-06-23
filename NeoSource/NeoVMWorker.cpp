@@ -192,35 +192,17 @@ int CNeoVMWorker::Sleep(int iTimeout, VarInfo* v1)
 		SetError("Sleep Value Error");
 		return -1;
 	}
+	if (iSleepTick < 0)
+		iSleepTick = 0;
 
 	if (iTimeout >= 0)
 	{
 		_iRemainSleep = iSleepTick;
+		_preClock = std::chrono::steady_clock::now();
 		return 0;
 	}
-	else
-	{
-		if (iTimeout >= 0)
-		{
-			auto cur = clock();
-			auto delta = cur - _preClock;
-			if (iTimeout > delta)
-			{
-				auto sleepAble = iTimeout - delta;
-				if (iSleepTick > sleepAble)
-					iSleepTick = sleepAble;
-				std::this_thread::sleep_for(std::chrono::milliseconds(iSleepTick));
-				return 1;
-			}
-			return 2;
-		}
-		else
-		{
-			std::this_thread::sleep_for(std::chrono::milliseconds(iSleepTick));
-			return 1;
-		}
-		return 1;
-	}
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(iSleepTick));
 	return 1;
 }
 
@@ -786,15 +768,14 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 	if (false == _isInitialized)
 		return false;
 
-	clock_t t1, t2;
 	if (_iRemainSleep > 0)
 	{
-		t1 = clock();
-		t2 = t1 - _preClock;
-		if (t2 > 0)
-			_iRemainSleep -= t2;
+		auto now = std::chrono::steady_clock::now();
+		auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - _preClock).count();
+		if (elapsed > 0)
+			_iRemainSleep -= (int)elapsed;
 
-		_preClock = t1;
+		_preClock = now;
 
 		if (_iRemainSleep > 0)
 			return true;
@@ -809,7 +790,7 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 	m_op_process = m_iCheckOpCount;
 	bool isTimeout = (m_iTimeout >= 0);
 	if(isTimeout)
-		_preClock = clock();
+		_preClock = std::chrono::steady_clock::now();
 
 	VarInfo* pVarTemp = nullptr;
 	while (true)
@@ -821,8 +802,9 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 				m_op_process = m_iCheckOpCount;
 //				if (isTimeout)
 				{
-					t2 = clock() - _preClock;
-					if (t2 >= m_iTimeout || t2 < 0)
+					auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+						std::chrono::steady_clock::now() - _preClock).count();
+					if (elapsed >= m_iTimeout || elapsed < 0)
 						break;
 				}
 			}
@@ -1004,7 +986,6 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 				int r = Sleep(m_iTimeout, GetVarPtr2(OP));
 				if (r == 0)
 				{
-					_preClock = clock();
 					return true;
 				}
 				else if (r == 2)
@@ -1123,9 +1104,7 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 				_iSP_VarsMax = _iSP_Vars;
 				return true;
 			}
-			iTemp = (int)m_pCallStack->size() - 1;
-			SCallStack &callStack = (*m_pCallStack)[iTemp];
-			m_pCallStack->resize(iTemp);
+			SCallStack& callStack = m_pCallStack->pop_back();
 
 			if(callStack._pReturnValue)
 			{
