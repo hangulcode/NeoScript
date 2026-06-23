@@ -128,6 +128,25 @@ private:
 	int m_op_process = 0;
 	int m_iBreakingCallStack = 0;
 
+    enum EDebugRunMode
+    {
+        DBG_CONTINUE,
+        DBG_STEP_INTO,
+        DBG_STEP_OVER,
+        DBG_STEP_OUT,
+        DBG_PAUSED,
+    };
+
+    INeoVMDebugListener* m_pDebugListener = nullptr;
+    std::set<int> m_sDebugBreakLines;
+    NeoDebugLocation m_sDebugLocation;
+    EDebugRunMode m_eDebugRunMode = DBG_CONTINUE;
+    bool m_bDebugPauseRequested = false;
+    bool m_bDebugPaused = false;
+    int m_iDebugSkipLine = -1;
+    int m_iDebugSkipOpIndex = -1;
+    int m_iDebugStepDepth = -1;
+
 
 //	inline void SetCheckTime() { m_op_process = 0; }
 	void JumpAsyncMsg();
@@ -145,6 +164,9 @@ private:
 		return _pCodeCurrent++;
 	}
 	int GetDebugLine(int iOPIndex);
+    bool CheckDebugStop(int iOPIndex);
+    void StopDebug(int iOPIndex, NeoDebugStopReason reason);
+    int GetFunctionIndexFromCodeOffset(int codeOffset);
 	NEOS_FORCEINLINE int GetCodeptr() { return (int)((u8*)_pCodeCurrent - _pCodeBegin); }
 	NEOS_FORCEINLINE void SetCodePtr(int off) { _pCodeCurrent = (SVMOperation*)(_pCodeBegin + off); }
 	NEOS_FORCEINLINE void SetCodeIncPtr(int off) { _pCodeCurrent = (SVMOperation*)((u8*)_pCodeCurrent + off); }
@@ -156,6 +178,9 @@ private:
 	std::map<std::string, int> m_sImExportTable;
 	std::map<std::string, int> m_sImportVars;
 	std::vector<debug_info>	_DebugData;
+	std::map<int, std::map<int, std::string>> m_sDebugVarNames;
+	std::map<int, std::string> m_sDebugGlobalNames;
+	std::map<int, std::string> m_sDebugFunctionNames;
 
 	//void	SetCodeData(u8* p, int sz)
 	//{
@@ -203,6 +228,17 @@ private:
 	virtual bool RunFunctionResume(int iFID, std::vector<VarInfo>& _args);
 	virtual bool RunFunction(int iFID, std::vector<VarInfo>& _args);
 	virtual bool RunFunction(const std::string& funName, std::vector<VarInfo>& _args);
+    virtual void DebugSetListener(INeoVMDebugListener* listener);
+    virtual void DebugSetBreakpoints(const std::vector<int>& lines);
+    virtual void DebugContinue();
+    virtual void DebugStepInto();
+    virtual void DebugStepOver();
+    virtual void DebugStepOut();
+    virtual void DebugPause();
+    virtual bool DebugIsPaused();
+    virtual NeoDebugLocation DebugGetLocation();
+    virtual void DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames);
+    virtual void DebugGetFrameVariables(int frameId, std::vector<NeoDebugVariable>& vars);
 
 	bool	IsMainCoroutine(CoroutineInfo* p) { return (&m_sDefault == p); }
 	virtual bool	Setup(int iFunctionID, std::vector<VarInfo>& _args);

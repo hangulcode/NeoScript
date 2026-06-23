@@ -1,0 +1,70 @@
+{
+  "Function": {
+    "prefix": "fun",
+    "body": [
+      "fun ${1:name}(${2:var arg})",
+      "{",
+      "\t$0",
+      "}"
+    ],
+    "description": "Create a Neo Script function."
+  },
+  "Variable": {
+    "prefix": "var",
+    "body": "var ${1:name} = ${2:null};",
+    "description": "Create a variable."
+  },
+  "For Range": {
+    "prefix": "for",
+    "body": [
+      "for(var ${1:i} in ${2:0}, ${3:count}, ${4:1})",
+      "{",
+      "\t$0",
+      "}"
+    ],
+    "description": "Create a range loop."
+  },
+  "Foreach": {
+    "prefix": "foreach",
+    "body": [
+      "foreach(var ${1:key}, ${2:value} in ${3:map})",
+      "{",
+      "\t$0",
+      "}"
+    ],
+    "description": "Create a foreach loop."
+  },
+  "If": {
+    "prefix": "if",
+    "body": [
+      "if(${1:condition})",
+      "{",
+      "\t$0",
+      "}"
+    ],
+    "description": "Create an if block."
+  },
+  "Class": {
+    "prefix": "class",
+    "body": [
+      "class ${1:Name}",
+      "{",
+      "\tfun __Init__(var self${2:, var arg})",
+      "\t{",
+      "\t\t$0",
+      "\t}",
+      "};"
+    ],
+    "description": "Create a class."
+  },
+  "Import": {
+    "prefix": "import",
+    "body": "import ${1:system};",
+    "description": "Import a module."
+  },
+  "Print": {
+    "prefix": "print",
+    "body": "print(${1:value});",
+    "description": "Print a value."
+  }
+}

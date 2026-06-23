@@ -512,6 +512,17 @@ static void ReadString(CNArchive& ar, std::string& str)
 
 	ar.Read((char*)str.data(), nLen);
 }
+static u32 ReadCount(CNArchive& ar)
+{
+	u16 wCount = 0;
+	ar >> wCount;
+	if (wCount < 0xFFFF)
+		return wCount;
+
+	u32 dwCount = 0;
+	ar >> dwCount;
+	return dwCount;
+}
 bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, int iStackSize)
 {
 	_BytesSize = iSize;
@@ -617,6 +628,46 @@ bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, 
 		_DebugData.resize(header.m_iDebugCount);
 		ar.Read(&_DebugData[0], sizeof(debug_info) * header.m_iDebugCount);
 	}
+	while (ar.GetBufferOffset() + (int)sizeof(u32) <= ar.GetBufferSize())
+	{
+		u32 magic = 0;
+		int oldOffset = ar.GetBufferOffset();
+		ar >> magic;
+		if (magic == 0x4E445642)
+		{
+			u32 funCount = ReadCount(ar);
+			for (u32 i = 0; i < funCount; ++i)
+			{
+				int funId = -1;
+				ar >> funId;
+				u32 nameCount = ReadCount(ar);
+				std::map<int, std::string>& names = (funId == -1) ? m_sDebugGlobalNames : m_sDebugVarNames[funId];
+				for (u32 n = 0; n < nameCount; ++n)
+				{
+					int slot = -1;
+					ar >> slot;
+					ReadString(ar, Name);
+					names[slot] = Name;
+				}
+			}
+		}
+		else if (magic == 0x4E44464E)
+		{
+			u32 funCount = ReadCount(ar);
+			for (u32 i = 0; i < funCount; ++i)
+			{
+				int funId = -1;
+				ar >> funId;
+				ReadString(ar, Name);
+				m_sDebugFunctionNames[funId] = Name;
+			}
+		}
+		else
+		{
+			ar.SetBufferOffset(oldOffset);
+			break;
+		}
+	}
 	if(vparam)
 	{
 		vparam->NeoGlobalInterface(this, vparam->param);
@@ -628,6 +679,100 @@ int CNeoVMWorker::GetDebugLine(int iOPIndex)
 //	int idx = int((u8*)_pCodeCurrent - _pCodeBegin - 1) / sizeof(SVMOperation);
 	if ((int)_DebugData.size() <= iOPIndex || iOPIndex < 0) return -1;
 	return _DebugData[iOPIndex]._lineseq;
+}
+int CNeoVMWorker::GetFunctionIndexFromCodeOffset(int codeOffset)
+{
+	int iFind = -1;
+	int iFindCodePtr = -1;
+	for (int i = 0; i < (int)m_sFunctionPtr.size(); ++i)
+	{
+		int codePtr = m_sFunctionPtr[i]._codePtr;
+		if (codePtr <= codeOffset && codePtr >= iFindCodePtr)
+		{
+			iFind = i;
+			iFindCodePtr = codePtr;
+		}
+	}
+	return iFind;
+}
+bool CNeoVMWorker::CheckDebugStop(int iOPIndex)
+{
+	if (m_bDebugPaused)
+		return true;
+	if (m_pDebugListener == nullptr && m_sDebugBreakLines.empty() && m_eDebugRunMode == DBG_CONTINUE && m_bDebugPauseRequested == false)
+		return false;
+	if (IsDebugInfo() == false)
+		return false;
+	if ((int)_DebugData.size() <= iOPIndex || iOPIndex < 0)
+		return false;
+
+	const debug_info& info = _DebugData[iOPIndex];
+	int line = info._lineseq;
+	if (line <= 0)
+		return false;
+	int callDepth = m_pCallStack ? (int)m_pCallStack->size() : 0;
+
+	if (m_iDebugSkipOpIndex >= 0)
+	{
+		if (iOPIndex == m_iDebugSkipOpIndex)
+			return false;
+		m_iDebugSkipOpIndex = -1;
+	}
+
+	if (m_iDebugSkipLine >= 0)
+	{
+		if (line == m_iDebugSkipLine && m_eDebugRunMode != DBG_STEP_INTO && m_bDebugPauseRequested == false)
+			return false;
+		if (m_eDebugRunMode == DBG_STEP_OVER && callDepth > m_iDebugStepDepth)
+			return false;
+		m_iDebugSkipLine = -1;
+	}
+
+	if (m_bDebugPauseRequested)
+	{
+		StopDebug(iOPIndex, NEO_DEBUG_STOP_PAUSE);
+		return true;
+	}
+	if (m_eDebugRunMode == DBG_STEP_INTO)
+	{
+		StopDebug(iOPIndex, NEO_DEBUG_STOP_STEP);
+		return true;
+	}
+	if (m_eDebugRunMode == DBG_STEP_OVER)
+	{
+		if (callDepth <= m_iDebugStepDepth)
+		{
+			StopDebug(iOPIndex, NEO_DEBUG_STOP_STEP);
+			return true;
+		}
+	}
+	if (m_eDebugRunMode == DBG_STEP_OUT)
+	{
+		if (callDepth < m_iDebugStepDepth)
+		{
+			StopDebug(iOPIndex, NEO_DEBUG_STOP_STEP);
+			return true;
+		}
+	}
+	if (m_sDebugBreakLines.find(line) != m_sDebugBreakLines.end())
+	{
+		StopDebug(iOPIndex, NEO_DEBUG_STOP_BREAKPOINT);
+		return true;
+	}
+	return false;
+}
+void CNeoVMWorker::StopDebug(int iOPIndex, NeoDebugStopReason reason)
+{
+	const debug_info& info = _DebugData[iOPIndex];
+	m_sDebugLocation.opIndex = iOPIndex;
+	m_sDebugLocation.file = info._fileseq;
+	m_sDebugLocation.line = info._lineseq;
+	m_sDebugLocation.callDepth = m_pCallStack ? (int)m_pCallStack->size() : 0;
+	m_bDebugPaused = true;
+	m_bDebugPauseRequested = false;
+	m_eDebugRunMode = DBG_PAUSED;
+	if (m_pDebugListener)
+		m_pDebugListener->OnNeoDebugStopped(this, m_sDebugLocation, reason);
 }
 void CNeoVMWorker::SetError(const char* pErrMsg)
 {
@@ -723,6 +868,263 @@ bool CNeoVMWorker::BindWorkerFunction(const std::string& funName)
 	std::vector<VarInfo> _args;
 	return Setup(iFID, _args);
 }
+void CNeoVMWorker::DebugSetListener(INeoVMDebugListener* listener)
+{
+	m_pDebugListener = listener;
+}
+void CNeoVMWorker::DebugSetBreakpoints(const std::vector<int>& lines)
+{
+	m_sDebugBreakLines.clear();
+	for (int line : lines)
+	{
+		if (line > 0)
+			m_sDebugBreakLines.insert(line);
+	}
+}
+void CNeoVMWorker::DebugContinue()
+{
+	m_bDebugPaused = false;
+	m_bDebugPauseRequested = false;
+	m_eDebugRunMode = DBG_CONTINUE;
+	m_iDebugSkipLine = m_sDebugLocation.line;
+	m_iDebugSkipOpIndex = m_sDebugLocation.opIndex;
+	m_iDebugStepDepth = -1;
+}
+void CNeoVMWorker::DebugStepInto()
+{
+	m_bDebugPaused = false;
+	m_bDebugPauseRequested = false;
+	m_eDebugRunMode = DBG_STEP_INTO;
+	m_iDebugSkipLine = -1;
+	m_iDebugSkipOpIndex = m_sDebugLocation.opIndex;
+	m_iDebugStepDepth = m_sDebugLocation.callDepth;
+}
+void CNeoVMWorker::DebugStepOver()
+{
+	m_bDebugPaused = false;
+	m_bDebugPauseRequested = false;
+	m_eDebugRunMode = DBG_STEP_OVER;
+	m_iDebugSkipLine = m_sDebugLocation.line;
+	m_iDebugSkipOpIndex = m_sDebugLocation.opIndex;
+	m_iDebugStepDepth = m_sDebugLocation.callDepth;
+}
+void CNeoVMWorker::DebugStepOut()
+{
+	m_bDebugPaused = false;
+	m_bDebugPauseRequested = false;
+	m_eDebugRunMode = DBG_STEP_OUT;
+	m_iDebugSkipLine = m_sDebugLocation.line;
+	m_iDebugSkipOpIndex = m_sDebugLocation.opIndex;
+	m_iDebugStepDepth = m_sDebugLocation.callDepth;
+}
+void CNeoVMWorker::DebugPause()
+{
+	m_bDebugPauseRequested = true;
+}
+bool CNeoVMWorker::DebugIsPaused()
+{
+	return m_bDebugPaused;
+}
+NeoDebugLocation CNeoVMWorker::DebugGetLocation()
+{
+	return m_sDebugLocation;
+}
+static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out)
+{
+	char buf[128];
+	switch (pVar->GetType())
+	{
+	case VAR_INT:
+		out.type = "int";
+		snprintf(buf, sizeof(buf), "%d", pVar->_int);
+		out.value = buf;
+		break;
+	case VAR_FLOAT:
+		out.type = "float";
+		snprintf(buf, sizeof(buf), "%g", (double)pVar->_float);
+		out.value = buf;
+		break;
+	case VAR_BOOL:
+		out.type = "bool";
+		out.value = pVar->_bl ? "true" : "false";
+		break;
+	case VAR_NONE:
+		out.type = "none";
+		out.value = "none";
+		break;
+	case VAR_FUN:
+		out.type = "function";
+		snprintf(buf, sizeof(buf), "#%d", pVar->_fun_index);
+		out.value = buf;
+		break;
+	case VAR_FUN_NATIVE:
+		out.type = "native_function";
+		out.value = "native_function";
+		break;
+	case VAR_CHAR:
+		out.type = "char";
+		out.value = pVar->_c.c;
+		break;
+	case VAR_STRING:
+		out.type = "string";
+		out.value = pVar->_str ? pVar->_str->_str : "";
+		break;
+	case VAR_MAP:
+		out.type = "map";
+		snprintf(buf, sizeof(buf), "map(%d)", pVar->_tbl ? pVar->_tbl->GetCount() : 0);
+		out.value = buf;
+		break;
+	case VAR_LIST:
+		out.type = "list";
+		snprintf(buf, sizeof(buf), "list(%d)", pVar->_lst ? pVar->_lst->GetCount() : 0);
+		out.value = buf;
+		break;
+	case VAR_SET:
+		out.type = "set";
+		snprintf(buf, sizeof(buf), "set(%d)", pVar->_set ? pVar->_set->GetCount() : 0);
+		out.value = buf;
+		break;
+	case VAR_COROUTINE:
+		out.type = "coroutine";
+		out.value = "coroutine";
+		break;
+	case VAR_MODULE:
+		out.type = "module";
+		out.value = "module";
+		break;
+	case VAR_ASYNC:
+		out.type = "async";
+		out.value = "async";
+		break;
+	case VAR_ITERATOR:
+		out.type = "iterator";
+		out.value = "iterator";
+		break;
+	default:
+		out.type = "unknown";
+		out.value = "unknown";
+		break;
+	}
+}
+void CNeoVMWorker::DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames)
+{
+	frames.clear();
+
+	int codeOffset = m_bDebugPaused ? m_sDebugLocation.opIndex * (int)sizeof(SVMOperation) : GetCodeptr();
+	if (codeOffset < 0)
+		codeOffset = 0;
+
+	NeoDebugStackFrame cur;
+	cur.frameId = 0;
+	cur.functionId = GetFunctionIndexFromCodeOffset(codeOffset);
+	if (cur.functionId >= 0)
+	{
+		auto itName = m_sDebugFunctionNames.find(cur.functionId);
+		if (itName != m_sDebugFunctionNames.end())
+			cur.functionName = itName->second;
+	}
+	cur.opIndex = codeOffset / (int)sizeof(SVMOperation);
+	cur.file = (cur.opIndex >= 0 && cur.opIndex < (int)_DebugData.size()) ? _DebugData[cur.opIndex]._fileseq : -1;
+	cur.line = GetDebugLine(cur.opIndex);
+	cur.stackBase = _iSP_Vars;
+	if (cur.functionId >= 0)
+	{
+		SFunctionTable& fun = m_sFunctionPtr[cur.functionId];
+		cur.argsCount = fun._argsCount;
+		cur.localCount = fun._localVarCount;
+		cur.tempCount = fun._localTempMax;
+	}
+	frames.push_back(cur);
+
+	if (m_pCallStack == nullptr)
+		return;
+
+	for (int i = (int)m_pCallStack->size() - 1; i >= 0; --i)
+	{
+		SCallStack& cs = (*m_pCallStack)[i];
+		NeoDebugStackFrame frame;
+		frame.frameId = (int)frames.size();
+		frame.stackBase = cs._iSP_Vars;
+		frame.opIndex = cs._iReturnOffset / (int)sizeof(SVMOperation);
+		frame.functionId = GetFunctionIndexFromCodeOffset(cs._iReturnOffset);
+		if (frame.functionId >= 0)
+		{
+			auto itName = m_sDebugFunctionNames.find(frame.functionId);
+			if (itName != m_sDebugFunctionNames.end())
+				frame.functionName = itName->second;
+		}
+		frame.file = (frame.opIndex >= 0 && frame.opIndex < (int)_DebugData.size()) ? _DebugData[frame.opIndex]._fileseq : -1;
+		frame.line = GetDebugLine(frame.opIndex);
+		if (frame.functionId >= 0)
+		{
+			SFunctionTable& fun = m_sFunctionPtr[frame.functionId];
+			frame.argsCount = fun._argsCount;
+			frame.localCount = fun._localVarCount;
+			frame.tempCount = fun._localTempMax;
+		}
+		frames.push_back(frame);
+	}
+}
+void CNeoVMWorker::DebugGetFrameVariables(int frameId, std::vector<NeoDebugVariable>& vars)
+{
+	vars.clear();
+	std::vector<NeoDebugStackFrame> frames;
+	DebugGetStackTrace(frames);
+	if (frameId < 0 || frameId >= (int)frames.size())
+		return;
+
+	const NeoDebugStackFrame& frame = frames[frameId];
+	int base = frame.stackBase;
+	int total = 1 + frame.argsCount + frame.localCount + frame.tempCount;
+	for (int i = 0; i < total; ++i)
+	{
+		int stackIndex = base + i;
+		if (stackIndex < 0 || stackIndex >= (int)m_pVarStack_Base->size())
+			continue;
+
+		NeoDebugVariable var;
+		if (i == 0)
+			var.name = "return";
+		else
+		{
+			auto itFun = m_sDebugVarNames.find(frame.functionId);
+			if (itFun != m_sDebugVarNames.end())
+			{
+				auto itName = itFun->second.find(i);
+				if (itName != itFun->second.end())
+					var.name = itName->second;
+			}
+			if (var.name.empty())
+			{
+				if (i <= frame.argsCount)
+					var.name = "arg" + std::to_string(i);
+				else if (i <= frame.argsCount + frame.localCount)
+					var.name = "local" + std::to_string(i - frame.argsCount);
+				else
+					var.name = "temp" + std::to_string(i - frame.argsCount - frame.localCount);
+			}
+		}
+
+		var.stackIndex = stackIndex;
+		NeoDebugFormatValue(&(*m_pVarStack_Base)[stackIndex], var);
+		vars.push_back(var);
+	}
+	if (frameId == 0)
+	{
+		for (auto it = m_sDebugGlobalNames.begin(); it != m_sDebugGlobalNames.end(); ++it)
+		{
+			int globalIndex = it->first;
+			if (globalIndex < 0 || globalIndex >= (int)m_sVarGlobal.size())
+				continue;
+
+			NeoDebugVariable var;
+			var.name = it->second;
+			var.stackIndex = globalIndex;
+			NeoDebugFormatValue(&m_sVarGlobal[globalIndex], var);
+			vars.push_back(var);
+		}
+	}
+}
 bool	CNeoVMWorker::Run()
 {
 	bool b = true;
@@ -730,10 +1132,11 @@ bool	CNeoVMWorker::Run()
 	try
 	{
 #endif
+		int breakingCallStack = (m_pDebugListener || m_sDebugBreakLines.empty() == false || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested) ? 0 : (int)m_pCallStack->size();
 		if(m_iTimeout >= 0)
-			b = RunInternal((int)0, (int)m_pCallStack->size());
+			b = RunInternal((int)0, breakingCallStack);
 		else
-			b = RunInternal("abc", (int)m_pCallStack->size());
+			b = RunInternal("abc", breakingCallStack);
 #ifdef _WIN32
 	}
 	catch (...)
@@ -754,6 +1157,12 @@ bool	CNeoVMWorker::Run()
 #endif
 
 		GetVM()->_sErrorMsgDetail = chMsg;
+		if (m_pDebugListener || m_sDebugBreakLines.empty() == false || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
+		{
+			if (_isErrorOPIndex >= 0 && _isErrorOPIndex < (int)_DebugData.size())
+				StopDebug(_isErrorOPIndex, NEO_DEBUG_STOP_EXCEPTION);
+			return true;
+		}
 		return false;
 	}
 #endif
@@ -813,6 +1222,13 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 						break;
 				}
 			}
+		}
+
+		if (m_pDebugListener || m_sDebugBreakLines.empty() == false || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
+		{
+			int iOPIndex = int((u8*)_pCodeCurrent - _pCodeBegin) / sizeof(SVMOperation);
+			if (CheckDebugStop(iOPIndex))
+				return true;
 		}
 
 		const SVMOperation& OP = *GetOP();
@@ -1220,6 +1636,13 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 #endif
 				if (GetVM()->_sErrorMsgDetail.empty())
 					GetVM()->_sErrorMsgDetail = chMsg;
+
+				if (m_pDebugListener || m_sDebugBreakLines.empty() == false || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
+				{
+					if (idx >= 0 && idx < (int)_DebugData.size())
+						StopDebug(idx, NEO_DEBUG_STOP_EXCEPTION);
+					return true;
+				}
 
 				if (INeoVM::m_pFunError) {
 					INeoVM::m_pFunError(chMsg);

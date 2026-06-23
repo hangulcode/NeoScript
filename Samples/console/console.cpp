@@ -1,8 +1,13 @@
 #include "stdafx.h"
 #include "console.h"
 #include "../../NeoSource/Neo.h"
+#include <cctype>
 #include <chrono>
 #include <conio.h>
+#include <fstream>
+#include <iostream>
+#include <io.h>
+#include <sstream>
 
 using namespace NeoScript;
 
@@ -288,6 +293,567 @@ export fun MapStringRead(var n)
 	return 0;
 }
 
+class DebugSmokeListener : public INeoVMDebugListener
+{
+public:
+	int stopCount = 0;
+	NeoDebugLocation lastLocation;
+	NeoDebugStopReason lastReason = NEO_DEBUG_STOP_NONE;
+
+	virtual void OnNeoDebugStopped(INeoVMWorker* worker, const NeoDebugLocation& location, NeoDebugStopReason reason)
+	{
+		++stopCount;
+		lastLocation = location;
+		lastReason = reason;
+		printf("[debug-smoke] stopped line=%d op=%d reason=%d\n", location.line, location.opIndex, (int)reason);
+	}
+};
+
+static int RunDebugSmoke()
+{
+	const char* source =
+		"var a = 1;\n"
+		"var b = 2;\n"
+		"var c = a + b;\n"
+		"print(c);\n";
+
+	std::string err;
+	NeoCompilerParam param(source, (int)strlen(source));
+	param.err = &err;
+	param.putASM = false;
+	param.debug = true;
+
+	INeoVM* pVM = INeoVM::CompileAndLoadVM(param);
+	if (pVM == nullptr)
+	{
+		printf("[debug-smoke] compile failed: %s\n", err.c_str());
+		return -1;
+	}
+
+	INeoVMWorker* worker = pVM->GetMainWorker();
+	DebugSmokeListener listener;
+	worker->DebugSetListener(&listener);
+	worker->DebugSetBreakpoints(std::vector<int>{ 3 });
+
+	pVM->PCall(pVM->GetMainWorkerID());
+	if (listener.stopCount != 1 || worker->DebugIsPaused() == false || listener.lastLocation.line != 3)
+	{
+		printf("[debug-smoke] breakpoint failed count=%d paused=%d line=%d\n",
+			listener.stopCount, worker->DebugIsPaused() ? 1 : 0, listener.lastLocation.line);
+		INeoVM::ReleaseVM(pVM);
+		return -1;
+	}
+
+	std::vector<NeoDebugStackFrame> frames;
+	worker->DebugGetStackTrace(frames);
+	std::vector<NeoDebugVariable> vars;
+	worker->DebugGetFrameVariables(0, vars);
+	printf("[debug-smoke] frames=%d vars=%d\n", (int)frames.size(), (int)vars.size());
+	if (frames.empty() || vars.empty())
+	{
+		INeoVM::ReleaseVM(pVM);
+		return -1;
+	}
+	if (frames[0].functionName.empty())
+	{
+		printf("[debug-smoke] function name failed\n");
+		INeoVM::ReleaseVM(pVM);
+		return -1;
+	}
+	bool foundA = false;
+	bool foundB = false;
+	for (const NeoDebugVariable& var : vars)
+	{
+		if (var.name == "a")
+			foundA = true;
+		if (var.name == "b")
+			foundB = true;
+	}
+	if (!foundA || !foundB)
+	{
+		printf("[debug-smoke] variable names failed a=%d b=%d\n", foundA ? 1 : 0, foundB ? 1 : 0);
+		INeoVM::ReleaseVM(pVM);
+		return -1;
+	}
+
+	worker->DebugContinue();
+	worker->Run();
+	if (worker->DebugIsPaused())
+	{
+		printf("[debug-smoke] continue failed\n");
+		INeoVM::ReleaseVM(pVM);
+		return -1;
+	}
+
+	INeoVM::ReleaseVM(pVM);
+
+	const char* stepSource =
+		"fun add(var x) {\n"
+		"    var y = x + 1;\n"
+		"    return y;\n"
+		"}\n"
+		"var a = 1;\n"
+		"var b = add(a);\n"
+		"var c = b + 1;\n";
+	err.clear();
+	NeoCompilerParam stepParam(stepSource, (int)strlen(stepSource));
+	stepParam.err = &err;
+	stepParam.putASM = false;
+	stepParam.debug = true;
+	pVM = INeoVM::CompileAndLoadVM(stepParam);
+	if (pVM == nullptr)
+	{
+		printf("[debug-smoke] step compile failed: %s\n", err.c_str());
+		return -1;
+	}
+
+	worker = pVM->GetMainWorker();
+	DebugSmokeListener stepListener;
+	worker->DebugSetListener(&stepListener);
+	worker->DebugSetBreakpoints(std::vector<int>{ 6 });
+	pVM->PCall(pVM->GetMainWorkerID());
+	if (worker->DebugIsPaused() == false || stepListener.lastLocation.line != 6)
+	{
+		printf("[debug-smoke] step breakpoint failed line=%d\n", stepListener.lastLocation.line);
+		INeoVM::ReleaseVM(pVM);
+		return -1;
+	}
+
+	worker->DebugStepOver();
+	worker->Run();
+	if (worker->DebugIsPaused() == false || worker->DebugGetLocation().line != 7)
+	{
+		printf("[debug-smoke] step over failed line=%d\n", worker->DebugGetLocation().line);
+		INeoVM::ReleaseVM(pVM);
+		return -1;
+	}
+
+	worker->DebugSetBreakpoints(std::vector<int>{});
+	worker->DebugContinue();
+	worker->Run();
+	INeoVM::ReleaseVM(pVM);
+
+	err.clear();
+	pVM = INeoVM::CompileAndLoadVM(stepParam);
+	if (pVM == nullptr)
+	{
+		printf("[debug-smoke] step-out compile failed: %s\n", err.c_str());
+		return -1;
+	}
+
+	worker = pVM->GetMainWorker();
+	DebugSmokeListener outListener;
+	worker->DebugSetListener(&outListener);
+	worker->DebugSetBreakpoints(std::vector<int>{ 2 });
+	pVM->PCall(pVM->GetMainWorkerID());
+	if (worker->DebugIsPaused() == false || outListener.lastLocation.line != 2)
+	{
+		printf("[debug-smoke] step-out breakpoint failed line=%d\n", outListener.lastLocation.line);
+		INeoVM::ReleaseVM(pVM);
+		return -1;
+	}
+
+	worker->DebugStepOut();
+	worker->Run();
+	if (worker->DebugIsPaused() == false || worker->DebugGetLocation().callDepth != 0)
+	{
+		printf("[debug-smoke] step out failed line=%d depth=%d\n",
+			worker->DebugGetLocation().line, worker->DebugGetLocation().callDepth);
+		INeoVM::ReleaseVM(pVM);
+		return -1;
+	}
+
+	worker->DebugContinue();
+	worker->Run();
+	INeoVM::ReleaseVM(pVM);
+
+	const char* errorSource =
+		"var a = 1;\n"
+		"var b = 0;\n"
+		"var c = a / b;\n";
+	err.clear();
+	NeoCompilerParam errorParam(errorSource, (int)strlen(errorSource));
+	errorParam.err = &err;
+	errorParam.putASM = false;
+	errorParam.debug = true;
+	pVM = INeoVM::CompileAndLoadVM(errorParam);
+	if (pVM == nullptr)
+	{
+		printf("[debug-smoke] exception compile failed: %s\n", err.c_str());
+		return -1;
+	}
+
+	worker = pVM->GetMainWorker();
+	DebugSmokeListener errorListener;
+	worker->DebugSetListener(&errorListener);
+	pVM->PCall(pVM->GetMainWorkerID());
+	if (worker->DebugIsPaused() == false || errorListener.lastReason != NEO_DEBUG_STOP_EXCEPTION || pVM->IsLastErrorMsg() == false)
+	{
+		printf("[debug-smoke] exception failed paused=%d reason=%d err=%d\n",
+			worker->DebugIsPaused() ? 1 : 0, (int)errorListener.lastReason, pVM->IsLastErrorMsg() ? 1 : 0);
+		INeoVM::ReleaseVM(pVM);
+		return -1;
+	}
+	INeoVM::ReleaseVM(pVM);
+	return 0;
+}
+
+static std::string JsonEscape(const std::string& s)
+{
+	std::string out;
+	out.reserve(s.size() + 8);
+	for (char c : s)
+	{
+		switch (c)
+		{
+		case '\\': out += "\\\\"; break;
+		case '"': out += "\\\""; break;
+		case '\n': out += "\\n"; break;
+		case '\r': out += "\\r"; break;
+		case '\t': out += "\\t"; break;
+		default: out += c; break;
+		}
+	}
+	return out;
+}
+
+static bool DapReadMessage(std::string& body)
+{
+	std::string line;
+	int contentLength = -1;
+	while (std::getline(std::cin, line))
+	{
+		if (!line.empty() && line.back() == '\r')
+			line.pop_back();
+		if (line.empty())
+			break;
+		const char* header = "Content-Length:";
+		if (line.compare(0, strlen(header), header) == 0)
+			contentLength = atoi(line.c_str() + strlen(header));
+	}
+	if (contentLength <= 0)
+		return false;
+	body.resize(contentLength);
+	std::cin.read(&body[0], contentLength);
+	return (int)std::cin.gcount() == contentLength;
+}
+
+static FILE* g_DapOutput = stdout;
+
+static void DapSendMessage(const std::string& body)
+{
+	FILE* out = g_DapOutput ? g_DapOutput : stdout;
+	fprintf(out, "Content-Length: %d\r\n\r\n", (int)body.size());
+	fwrite(body.data(), 1, body.size(), out);
+	fflush(out);
+}
+
+static int JsonInt(const std::string& body, const char* key, int defaultValue = 0)
+{
+	std::string pat = std::string("\"") + key + "\"";
+	size_t pos = body.find(pat);
+	if (pos == std::string::npos)
+		return defaultValue;
+	pos = body.find(':', pos + pat.size());
+	if (pos == std::string::npos)
+		return defaultValue;
+	++pos;
+	while (pos < body.size() && isspace((unsigned char)body[pos]))
+		++pos;
+	return atoi(body.c_str() + pos);
+}
+
+static std::string JsonString(const std::string& body, const char* key)
+{
+	std::string pat = std::string("\"") + key + "\"";
+	size_t pos = body.find(pat);
+	if (pos == std::string::npos)
+		return "";
+	pos = body.find(':', pos + pat.size());
+	if (pos == std::string::npos)
+		return "";
+	pos = body.find('"', pos);
+	if (pos == std::string::npos)
+		return "";
+	std::string out;
+	for (++pos; pos < body.size(); ++pos)
+	{
+		char c = body[pos];
+		if (c == '"')
+			break;
+		if (c == '\\' && pos + 1 < body.size())
+		{
+			char n = body[++pos];
+			if (n == 'n') out += '\n';
+			else if (n == 'r') out += '\r';
+			else if (n == 't') out += '\t';
+			else out += n;
+		}
+		else
+			out += c;
+	}
+	return out;
+}
+
+static std::vector<int> JsonBreakpointLines(const std::string& body)
+{
+	std::vector<int> lines;
+	size_t pos = body.find("\"breakpoints\"");
+	while (pos != std::string::npos)
+	{
+		pos = body.find("\"line\"", pos);
+		if (pos == std::string::npos)
+			break;
+		int line = JsonInt(body.substr(pos), "line", -1);
+		if (line > 0)
+			lines.push_back(line);
+		++pos;
+	}
+	return lines;
+}
+
+class NeoDapSession : public INeoVMDebugListener
+{
+public:
+	int seq = 1;
+	INeoVM* vm = nullptr;
+	INeoVMWorker* worker = nullptr;
+	std::string sourcePath;
+	std::vector<int> breakpoints;
+	bool terminated = false;
+
+	virtual void OnNeoDebugStopped(INeoVMWorker* w, const NeoDebugLocation& location, NeoDebugStopReason reason)
+	{
+		const char* reasonText = "pause";
+		if (reason == NEO_DEBUG_STOP_BREAKPOINT)
+			reasonText = "breakpoint";
+		else if (reason == NEO_DEBUG_STOP_STEP)
+			reasonText = "step";
+		else if (reason == NEO_DEBUG_STOP_EXCEPTION)
+			reasonText = "exception";
+		std::ostringstream os;
+		os << "{\"seq\":" << seq++ << ",\"type\":\"event\",\"event\":\"stopped\",\"body\":{\"reason\":\""
+			<< reasonText << "\",\"threadId\":1,\"allThreadsStopped\":true}}";
+		DapSendMessage(os.str());
+	}
+
+	void SendResponse(int requestSeq, const std::string& command, const std::string& body = "{}", bool success = true, const std::string& message = "")
+	{
+		std::ostringstream os;
+		os << "{\"seq\":" << seq++ << ",\"type\":\"response\",\"request_seq\":" << requestSeq
+			<< ",\"success\":" << (success ? "true" : "false") << ",\"command\":\"" << command << "\"";
+		if (!message.empty())
+			os << ",\"message\":\"" << JsonEscape(message) << "\"";
+		os << ",\"body\":" << body << "}";
+		DapSendMessage(os.str());
+	}
+
+	void SendEvent(const std::string& event, const std::string& body = "{}")
+	{
+		std::ostringstream os;
+		os << "{\"seq\":" << seq++ << ",\"type\":\"event\",\"event\":\"" << event << "\",\"body\":" << body << "}";
+		DapSendMessage(os.str());
+	}
+
+	bool LoadProgram(const std::string& path, std::string& err)
+	{
+		std::ifstream in(path.c_str(), std::ios::binary);
+		if (!in)
+		{
+			err = "cannot open program";
+			return false;
+		}
+		std::string src((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+		NeoCompilerParam param(src.data(), (int)src.size());
+		param.err = &err;
+		param.putASM = false;
+		param.debug = true;
+		vm = INeoVM::CompileAndLoadVM(param);
+		if (vm == nullptr)
+			return false;
+		worker = vm->GetMainWorker();
+		worker->DebugSetListener(this);
+		worker->DebugSetBreakpoints(breakpoints);
+		sourcePath = path;
+		return true;
+	}
+
+	void RunCurrent(bool initial)
+	{
+		if (worker == nullptr || terminated)
+			return;
+		fflush(stdout);
+		int savedStdout = _dup(_fileno(stdout));
+		FILE* nullOut = nullptr;
+		fopen_s(&nullOut, "NUL", "w");
+		if (savedStdout >= 0 && nullOut)
+			_dup2(_fileno(nullOut), _fileno(stdout));
+		if (initial)
+			vm->PCall(vm->GetMainWorkerID());
+		else
+			worker->Run();
+		fflush(stdout);
+		if (savedStdout >= 0)
+		{
+			_dup2(savedStdout, _fileno(stdout));
+			_close(savedStdout);
+		}
+		if (nullOut)
+			fclose(nullOut);
+		if (!worker->DebugIsPaused() && !terminated)
+		{
+			terminated = true;
+			SendEvent("terminated");
+		}
+	}
+
+	void Handle(const std::string& body)
+	{
+		int requestSeq = JsonInt(body, "seq", 0);
+		std::string command = JsonString(body, "command");
+		if (command == "initialize")
+		{
+			SendResponse(requestSeq, command, "{\"supportsConfigurationDoneRequest\":true,\"supportsStepInTargetsRequest\":false,\"supportsExceptionInfoRequest\":true}");
+			SendEvent("initialized");
+		}
+		else if (command == "launch")
+		{
+			std::string path = JsonString(body, "program");
+			if (path.empty())
+				path = JsonString(body, "path");
+			std::string err;
+			bool ok = LoadProgram(path, err);
+			SendResponse(requestSeq, command, "{}", ok, ok ? "" : err);
+		}
+		else if (command == "setBreakpoints")
+		{
+			breakpoints = JsonBreakpointLines(body);
+			if (worker)
+				worker->DebugSetBreakpoints(breakpoints);
+			std::ostringstream os;
+			os << "{\"breakpoints\":[";
+			for (size_t i = 0; i < breakpoints.size(); ++i)
+			{
+				if (i) os << ",";
+				os << "{\"verified\":true,\"line\":" << breakpoints[i] << "}";
+			}
+			os << "]}";
+			SendResponse(requestSeq, command, os.str());
+		}
+		else if (command == "configurationDone")
+		{
+			SendResponse(requestSeq, command);
+			RunCurrent(true);
+		}
+		else if (command == "threads")
+		{
+			SendResponse(requestSeq, command, "{\"threads\":[{\"id\":1,\"name\":\"Neo VM\"}]}");
+		}
+		else if (command == "continue")
+		{
+			if (worker) worker->DebugContinue();
+			SendResponse(requestSeq, command, "{\"allThreadsContinued\":true}");
+			RunCurrent(false);
+		}
+		else if (command == "stepIn")
+		{
+			if (worker) worker->DebugStepInto();
+			SendResponse(requestSeq, command);
+			RunCurrent(false);
+		}
+		else if (command == "next")
+		{
+			if (worker) worker->DebugStepOver();
+			SendResponse(requestSeq, command);
+			RunCurrent(false);
+		}
+		else if (command == "stepOut")
+		{
+			if (worker) worker->DebugStepOut();
+			SendResponse(requestSeq, command);
+			RunCurrent(false);
+		}
+		else if (command == "stackTrace")
+		{
+			std::vector<NeoDebugStackFrame> frames;
+			if (worker) worker->DebugGetStackTrace(frames);
+			std::string sourceName = sourcePath;
+			size_t slash = sourceName.find_last_of("\\/");
+			if (slash != std::string::npos)
+				sourceName = sourceName.substr(slash + 1);
+			std::ostringstream os;
+			os << "{\"stackFrames\":[";
+			for (size_t i = 0; i < frames.size(); ++i)
+			{
+				if (i) os << ",";
+				std::string name = frames[i].functionName.empty() ? ("function #" + std::to_string(frames[i].functionId)) : frames[i].functionName;
+				os << "{\"id\":" << frames[i].frameId << ",\"name\":\"" << JsonEscape(name)
+					<< "\",\"line\":" << frames[i].line << ",\"column\":1,\"source\":{\"path\":\""
+					<< JsonEscape(sourcePath) << "\",\"name\":\"" << JsonEscape(sourceName) << "\"}}";
+			}
+			os << "],\"totalFrames\":" << frames.size() << "}";
+			SendResponse(requestSeq, command, os.str());
+		}
+		else if (command == "scopes")
+		{
+			int frameId = JsonInt(body, "frameId", 0);
+			std::ostringstream os;
+			os << "{\"scopes\":[{\"name\":\"Locals\",\"variablesReference\":" << (1000 + frameId) << ",\"expensive\":false}]}";
+			SendResponse(requestSeq, command, os.str());
+		}
+		else if (command == "variables")
+		{
+			int ref = JsonInt(body, "variablesReference", 1000);
+			std::vector<NeoDebugVariable> vars;
+			if (worker) worker->DebugGetFrameVariables(ref - 1000, vars);
+			std::ostringstream os;
+			os << "{\"variables\":[";
+			for (size_t i = 0; i < vars.size(); ++i)
+			{
+				if (i) os << ",";
+				os << "{\"name\":\"" << JsonEscape(vars[i].name) << "\",\"type\":\"" << JsonEscape(vars[i].type)
+					<< "\",\"value\":\"" << JsonEscape(vars[i].value) << "\",\"variablesReference\":0}";
+			}
+			os << "]}";
+			SendResponse(requestSeq, command, os.str());
+		}
+		else if (command == "exceptionInfo")
+		{
+			std::string description = vm && vm->IsLastErrorMsg() ? vm->GetLastErrorMsg() : "";
+			std::ostringstream os;
+			os << "{\"exceptionId\":\"NeoScript.RuntimeError\",\"description\":\"" << JsonEscape(description)
+				<< "\",\"breakMode\":\"always\"}";
+			SendResponse(requestSeq, command, os.str());
+		}
+		else if (command == "disconnect")
+		{
+			SendResponse(requestSeq, command);
+			terminated = true;
+		}
+		else
+		{
+			SendResponse(requestSeq, command, "{}", true);
+		}
+	}
+};
+
+static int RunDebugAdapter()
+{
+	int dapOutFd = _dup(_fileno(stdout));
+	if (dapOutFd >= 0)
+		g_DapOutput = _fdopen(dapOutFd, "wb");
+	NeoDapSession session;
+	std::string body;
+	while (!session.terminated && DapReadMessage(body))
+		session.Handle(body);
+	if (session.vm)
+		INeoVM::ReleaseVM(session.vm);
+	if (g_DapOutput && g_DapOutput != stdout)
+		fclose(g_DapOutput);
+	g_DapOutput = stdout;
+	return 0;
+}
+
 #ifdef _WIN32
 #include <windows.h>
 
@@ -335,9 +901,17 @@ int main(int argc, char* argv[])
 		{
 			exitCode = RunBenchmarks();
 		}
+		else if (command == "--debug-smoke")
+		{
+			exitCode = RunDebugSmoke();
+		}
+		else if (command == "--dap")
+		{
+			exitCode = RunDebugAdapter();
+		}
 		else
 		{
-			printf("usage: console.exe [--list | --run <sample> | --smoke | --bench]\n");
+			printf("usage: console.exe [--list | --run <sample> | --smoke | --bench | --debug-smoke | --dap]\n");
 			exitCode = -1;
 		}
 

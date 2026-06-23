@@ -12,6 +12,12 @@
 	NeoScript is free software.
 	The only requirement is that if you do use NeoScript, then you should give us credit by including the copyright notice somewhere in your product or its documentation.
 
+### VS Code extension
+	- Extension source: Tools/vscode-neo-script
+	- Supports .ns syntax highlighting and Debug Adapter Protocol debugging.
+	- Build Samples/console in x64 Release, then use the "Debug Neo Script" launch configuration.
+	- If the adapter executable is not in the default sample path, set neoScript.debugAdapterPath.
+
 ### Performance test results
 CPU : 12th Gen Intel(R) Core(TM) i7-12700F 2.10GHz  
 RAM : 64GB  

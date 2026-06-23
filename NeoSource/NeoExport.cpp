@@ -978,6 +978,52 @@ static void WriteString(CNArchive& ar, const std::string& str)
 	ar.Write((char*)str.data(), nLen);
 }
 
+static void WriteDebugVarNames(CNArchive& ar, SFunctions& funs, SVars& vars, int staticVarCount)
+{
+	const u32 magic = 0x4E445642; // NDVB
+	ar << magic;
+	u32 debugScopeCount = (u32)funs._funSequence.size();
+	if (vars._varsFunction.size() == 1 && vars._varsFunction[0]->_varsLayer.size() == 1)
+		++debugScopeCount;
+	ar.WriteCount(debugScopeCount);
+	if (vars._varsFunction.size() == 1 && vars._varsFunction[0]->_varsLayer.size() == 1)
+	{
+		SLocalVar* pLocalLayer = vars._varsFunction[0]->_varsLayer[0];
+		ar << -1;
+		ar.WriteCount((u32)pLocalLayer->_localVars.size());
+		for (auto it = pLocalLayer->_localVars.begin(); it != pLocalLayer->_localVars.end(); ++it)
+		{
+			int idx = -it->second + COMPILE_GLOBAL_VAR_BEGIN + staticVarCount;
+			ar << idx;
+			WriteString(ar, it->first);
+		}
+	}
+	for (auto it = funs._funSequence.begin(); it != funs._funSequence.end(); it++)
+	{
+		SFunctionInfo& fi = *(*it);
+		ar << fi._funID;
+		ar.WriteCount((u32)fi._debugVarNames.size());
+		for (auto itName = fi._debugVarNames.begin(); itName != fi._debugVarNames.end(); ++itName)
+		{
+			ar << itName->first;
+			WriteString(ar, itName->second);
+		}
+	}
+}
+
+static void WriteDebugFunctionNames(CNArchive& ar, SFunctions& funs)
+{
+	const u32 magic = 0x4E44464E; // NDFN
+	ar << magic;
+	ar.WriteCount((u32)funs._funSequence.size());
+	for (auto it = funs._funSequence.begin(); it != funs._funSequence.end(); it++)
+	{
+		SFunctionInfo& fi = *(*it);
+		ar << fi._funID;
+		WriteString(ar, fi.GetFullName());
+	}
+}
+
 bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 {
 	int iSaveOffset1 = ar.GetBufferOffset();
@@ -1102,6 +1148,8 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 
 		ar.Write(&debugInfo[0], sizeof(debug_info) * header.m_iDebugCount);
 		header.m_iDebugCount += 2;
+		WriteDebugVarNames(ar, funs, vars, header._iStaticVarCount);
+		WriteDebugFunctionNames(ar, funs);
 	}
 
 	int iSaveOffset2 = ar.GetBufferOffset();

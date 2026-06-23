@@ -153,6 +153,50 @@ public:
 	bool SetListIndexer(VMHash<int>* pIndexer);
 };
 
+enum NeoDebugStopReason
+{
+	NEO_DEBUG_STOP_NONE = 0,
+	NEO_DEBUG_STOP_BREAKPOINT,
+	NEO_DEBUG_STOP_STEP,
+	NEO_DEBUG_STOP_PAUSE,
+	NEO_DEBUG_STOP_EXCEPTION,
+};
+
+struct NeoDebugLocation
+{
+	int opIndex = -1;
+	int file = -1;
+	int line = -1;
+	int callDepth = 0;
+};
+
+struct NeoDebugStackFrame
+{
+	int frameId = 0;
+	int functionId = -1;
+	std::string functionName;
+	int file = -1;
+	int line = -1;
+	int opIndex = -1;
+	int stackBase = 0;
+	int argsCount = 0;
+	int localCount = 0;
+	int tempCount = 0;
+};
+
+struct NeoDebugVariable
+{
+	std::string name;
+	std::string type;
+	std::string value;
+	int stackIndex = -1;
+};
+
+struct INeoVMDebugListener
+{
+	virtual void OnNeoDebugStopped(INeoVMWorker* worker, const NeoDebugLocation& location, NeoDebugStopReason reason) = 0;
+};
+
 struct INeoVMWorker
 {
 protected:
@@ -173,6 +217,17 @@ public:
 	virtual VarInfo* GetReturnVar() =0;
 	virtual VarInfo* GetStackVar(int idx) =0;
 	virtual bool ResetVarType(VarInfo* p, VAR_TYPE type, int capa = 0) =0;
+	virtual void DebugSetListener(INeoVMDebugListener* listener) = 0;
+	virtual void DebugSetBreakpoints(const std::vector<int>& lines) = 0;
+	virtual void DebugContinue() = 0;
+	virtual void DebugStepInto() = 0;
+	virtual void DebugStepOver() = 0;
+	virtual void DebugStepOut() = 0;
+	virtual void DebugPause() = 0;
+	virtual bool DebugIsPaused() = 0;
+	virtual NeoDebugLocation DebugGetLocation() = 0;
+	virtual void DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames) = 0;
+	virtual void DebugGetFrameVariables(int frameId, std::vector<NeoDebugVariable>& vars) = 0;
 
 	static void neo_pushcclosureNative(FunctionPtrNative* pOut, Neo_NativeFunction pFun)
 	{

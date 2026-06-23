@@ -161,6 +161,7 @@ struct SFunctionInfo
 	int							_built_in_arg_c;
 	FUNCTION_TYPE				_funType = FUNT_NORMAL;
 	std::string					_moduleName;
+	std::map<int, std::string>	_debugVarNames;
 
 
 	int							_localVarCount;
@@ -176,6 +177,7 @@ struct SFunctionInfo
 	void Clear()
 	{
 		_args.clear();
+		_debugVarNames.clear();
 		_localVarCount = 0;
 		_localTempMax = _localTempCount = 0;
 

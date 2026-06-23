@@ -1,0 +1,150 @@
+{
+  "name": "neo-script-vscode",
+  "displayName": "Neo Script",
+  "description": "Language support and debugging for Neo Script.",
+  "version": "0.1.0",
+  "publisher": "neo-script",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Debuggers"
+  ],
+  "activationEvents": [
+    "onLanguage:neoscript",
+    "onDebugResolve:neo-script"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "neoscript",
+        "aliases": [
+          "Neo Script",
+          "NeoScript",
+          "neoscript"
+        ],
+        "extensions": [
+          ".ns"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "neoscript",
+        "scopeName": "source.neoscript",
+        "path": "./syntaxes/ns.tmLanguage"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "neoscript",
+        "path": "./snippets/neoscript.json"
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "neoscript"
+      }
+    ],
+    "commands": [
+      {
+        "command": "neoScript.createLaunchConfig",
+        "title": "Neo Script: Create Launch Config"
+      },
+      {
+        "command": "neoScript.openSettings",
+        "title": "Neo Script: Open Settings"
+      }
+    ],
+    "menus": {
+      "editor/title/run": [
+        {
+          "command": "neoScript.createLaunchConfig",
+          "when": "resourceLangId == neoscript",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "neoScript.createLaunchConfig"
+        },
+        {
+          "command": "neoScript.openSettings"
+        }
+      ]
+    },
+    "debuggers": [
+      {
+        "type": "neo-script",
+        "label": "Neo Script",
+        "languages": [
+          "neoscript"
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Neo Script: Launch current file",
+            "description": "Debug the currently open Neo Script file.",
+            "body": {
+              "type": "neo-script",
+              "request": "launch",
+              "name": "Debug Neo Script",
+              "program": "${file}",
+              "cwd": "${workspaceFolder}"
+            }
+          }
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Absolute path to the Neo Script file to debug.",
+                "default": "${file}"
+              },
+              "adapterPath": {
+                "type": "string",
+                "description": "Optional path to console.exe or NeoDebugAdapter.exe. The executable must support --dap.",
+                "default": ""
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Working directory for the debug adapter.",
+                "default": "${workspaceFolder}"
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "neo-script",
+            "request": "launch",
+            "name": "Debug Neo Script",
+            "program": "${file}",
+            "cwd": "${workspaceFolder}"
+          }
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "Neo Script",
+      "properties": {
+        "neoScript.debugAdapterPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to console.exe or NeoDebugAdapter.exe. If empty, the extension tries common repo build paths."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "check": "node --check src/extension.js"
+  },
+  "devDependencies": {}
+}

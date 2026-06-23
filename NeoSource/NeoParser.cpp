@@ -754,6 +754,8 @@ int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExp
 		iLocalVar = 1 + (int)funs._cur->_args.size() + funs._cur->_localVarCount++; // 0 번은 리턴 저장용
 	SLayerVar* pCurLayer = vars.GetCurrentLayer();
 	pCurLayer->AddLocalVar(name, iLocalVar);
+	if (funs.GetCurFunName() != GLOBAL_INIT_FUN_NAME && iLocalVar > 0)
+		funs._cur->_debugVarNames[iLocalVar] = name;
 	if (blExport)
 	{
 		if(vars._varsFunction.size() == 1)
@@ -956,7 +958,9 @@ bool ParseFunctionArg(CArchiveRdWC& ar, SFunctions& funs, SLayerVar* pCurLayer)
 					SetCompileError(ar, "Error (%d, %d): Already Function Arg (%s)", ar.CurLine(), ar.CurCol(), tk2.c_str());
 					return false;
 				}
-				pCurLayer->AddLocalVar(tk2, 1 + (int)funs._cur->_args.size());
+				int iArg = 1 + (int)funs._cur->_args.size();
+				pCurLayer->AddLocalVar(tk2, iArg);
+				funs._cur->_debugVarNames[iArg] = tk2;
 				funs._cur->_args.insert(tk2);
 				bPreviusComa = false;
 			}

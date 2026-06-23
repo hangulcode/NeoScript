@@ -547,10 +547,6 @@ NEOS_FORCEINLINE bool handle_NONE(const SVMOperation& OP) {
 
 NEOS_FORCEINLINE bool handle_ERROR(const SVMOperation& OP) {
     int idx = _isErrorOPIndex;
-    _isErrorOPIndex = 0;
-    m_pCallStack->clear();
-    _iSP_Vars = 0;
-    SetStackPointer(_iSP_Vars);
     bool blDebugInfo = IsDebugInfo();
     int _lineseq = -1;
     if (blDebugInfo)
@@ -564,6 +560,18 @@ NEOS_FORCEINLINE bool handle_ERROR(const SVMOperation& OP) {
 #endif
     if (GetVM()->_sErrorMsgDetail.empty())
         GetVM()->_sErrorMsgDetail = chMsg;
+
+    if (m_pDebugListener || m_sDebugBreakLines.empty() == false || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
+    {
+        if (idx >= 0 && idx < (int)_DebugData.size())
+            StopDebug(idx, NEO_DEBUG_STOP_EXCEPTION);
+        return true;
+    }
+
+    _isErrorOPIndex = 0;
+    m_pCallStack->clear();
+    _iSP_Vars = 0;
+    SetStackPointer(_iSP_Vars);
 
     if (INeoVM::m_pFunError) {
         INeoVM::m_pFunError(chMsg);
