@@ -452,6 +452,8 @@ bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo
 	VarInfo* pVarItem = pTable->_tbl->_meta->Find(funName);
 	if (pVarItem == NULL)
 		return false;
+	if (pVarItem->GetType() != VAR_FUN)
+		return false;
 
 	int n3 = 2;
 	if (_iSP_VarsMax + n3 >= (int)m_pVarStack_Base->size())
@@ -466,8 +468,7 @@ bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo
 	if (_iSP_Vars_Max2 < _iSP_VarsMax + (1 + n3))
 		_iSP_Vars_Max2 = _iSP_VarsMax + (1 + n3);
 
-	if (pVarItem->GetType() == VAR_FUN)
-		Call(pVarItem->_fun_index, n3, r);
+	Call(pVarItem->_fun_index, n3, r);
 
 	//Move(r, &(*m_pVarStack)[iSP_VarsMax]); ???
 	return true;
@@ -480,6 +481,8 @@ bool CNeoVMWorker::Call_MetaTable2(VarInfo* pTable, std::string& funName, VarInf
 		return false;
 	VarInfo* pVarItem = pTable->_tbl->_meta->Find(funName);
 	if (pVarItem == NULL)
+		return false;
+	if (pVarItem->GetType() != VAR_FUN)
 		return false;
 
 	int n3 = 2;
@@ -495,8 +498,7 @@ bool CNeoVMWorker::Call_MetaTable2(VarInfo* pTable, std::string& funName, VarInf
 	if (_iSP_Vars_Max2 < _iSP_VarsMax + (1 + n3))
 		_iSP_Vars_Max2 = _iSP_VarsMax + (1 + n3);
 
-	if (pVarItem->GetType() == VAR_FUN)
-		Call(pVarItem->_fun_index, n3, NULL);
+	Call(pVarItem->_fun_index, n3, NULL);
 
 	return true;
 }
@@ -679,6 +681,9 @@ bool	CNeoVMWorker::Start(int iFunctionID, std::vector<VarInfo>& _args)
 
 bool	CNeoVMWorker::Setup(int iFunctionID, std::vector<VarInfo>& _args)
 {
+	if (iFunctionID < 0 || iFunctionID >= (int)m_sFunctionPtr.size())
+		return false;
+
 	SFunctionTable& fun = m_sFunctionPtr[iFunctionID];
 	int iArgs = (int)_args.size();
 	if (iArgs != fun._argsCount)
@@ -697,7 +702,7 @@ bool	CNeoVMWorker::Setup(int iFunctionID, std::vector<VarInfo>& _args)
 
 	int iCur;
 	for (iCur = 0; iCur < iArgs; iCur++)
-		(*m_pVarStack_Base)[1 + _iSP_Vars + iCur] = _args[iCur];
+		Move(&(*m_pVarStack_Base)[1 + _iSP_Vars + iCur], &_args[iCur]);
 	for (; iCur < fun._argsCount; iCur++)
 		Var_Release(&(*m_pVarStack_Base)[1 + _iSP_Vars + iCur]);
 
@@ -1345,8 +1350,7 @@ bool CNeoVMWorker::RunFunctionResume(int iFID, std::vector<VarInfo>& _args)
 }
 bool CNeoVMWorker::RunFunction(int iFID, std::vector<VarInfo>& _args)
 {
-	Start(iFID, _args);
-	return true;
+	return Start(iFID, _args);
 }
 bool CNeoVMWorker::RunFunction(const std::string& funName, std::vector<VarInfo>& _args)
 {
@@ -1362,9 +1366,7 @@ bool CNeoVMWorker::RunFunction(const std::string& funName, std::vector<VarInfo>&
 	}
 
 	int iID = (*it).second;
-	Start(iID, _args);
-
-	return true;
+	return Start(iID, _args);
 }
 
 void	CNeoVMWorker::DeadCoroutine(CoroutineInfo* pCI)

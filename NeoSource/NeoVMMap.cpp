@@ -466,6 +466,8 @@ void MapInfo::Insert(VarInfo* pKey, int v)
 {
 	VarInfo* pDest = Insert(pKey);
 	if (pDest == NULL) return;
+	if (pDest->IsAllocType())
+		_pVM->Var_Release(pDest);
 	pDest->SetType(VAR_INT);
 	pDest->_int = v;
 }
@@ -488,6 +490,8 @@ void MapInfo::Insert(int Key, int v)
 
 	VarInfo* pDest = Insert(pKey);
 	if (pDest == NULL) return;
+	if (pDest->IsAllocType())
+		_pVM->Var_Release(pDest);
 	pDest->SetType(VAR_INT);
 	pDest->_int = v;
 }

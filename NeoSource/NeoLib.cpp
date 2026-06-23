@@ -580,10 +580,13 @@ struct neo_libs
 			std::vector<VarInfo> lst3;
 			lst3.resize(lstSorted.size());
 			for (size_t i = 0; i < lstSorted.size(); i++)
-				lst3[i] = *lstSorted[i];
+				Move_DestNoRelease(&lst3[i], lstSorted[i]);
 
 			for (size_t i = 0; i < lst.size(); i++)
-				*lst[i] = lst3[i];
+				pN->Move(lst[i], &lst3[i]);
+
+			for (size_t i = 0; i < lst3.size(); i++)
+				pN->Var_Release(&lst3[i]);
 		}
 		pN->ReturnValue();
 		return true;

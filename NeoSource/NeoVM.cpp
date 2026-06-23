@@ -155,7 +155,7 @@ void INeoVMWorker::PushString(const char* p)
 	VarInfo d;
 	d.SetType(VAR_STRING);
 	d._str = ((CNeoVMImpl*)_pVM)->StringAlloc(s);
-	//++d._str->_refCount; ?? TODO
+	++d._str->_refCount;
 	_args->push_back(d);
 }
 void INeoVMWorker::PushNeoFunction(NeoFunction v)

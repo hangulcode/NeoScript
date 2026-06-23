@@ -449,12 +449,29 @@ CNeoVMImpl::~CNeoVMImpl()
 	}
 	_sVMWorkers.clear();
 
-	for (auto it = _sTables.begin(); it != _sTables.end(); it++)
+	while (_sTables.empty() == false)
 	{
+		auto it = _sTables.begin();
 		MapInfo* p = (*it).second;
+		_sTables.erase(it);
 		p->Free();
 	}
-	_sTables.clear();
+
+	while (_sLists.empty() == false)
+	{
+		auto it = _sLists.begin();
+		ListInfo* p = (*it).second;
+		_sLists.erase(it);
+		p->Free();
+	}
+
+	while (_sSets.empty() == false)
+	{
+		auto it = _sSets.begin();
+		SetInfo* p = (*it).second;
+		_sSets.erase(it);
+		p->Free();
+	}
 
 	_sStrings.clear();
 

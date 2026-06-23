@@ -29,6 +29,8 @@ void ListInfo::Free()
 void ListInfo::Resize(int size)
 {
 	if (size < 0) size = 0;
+	for (int i = size; i < _itemCount; i++)
+		_pVM->Var_Release(&_Bucket[i]);
 	Reserve(size);
 	_itemCount = size;
 }

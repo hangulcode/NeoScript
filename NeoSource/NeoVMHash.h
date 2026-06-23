@@ -157,6 +157,8 @@ public:
 
 	NEOS_FORCEINLINE void clear(int newCapa = iBlkSize)
 	{
+		if (newCapa <= 0)
+			newCapa = iBlkSize;
 		_cnt = 0;
 		for(int i = 0; i < _capa; i++)
 			_bucket[i].clear();
@@ -165,7 +167,7 @@ public:
 			if (_bucket)
 				delete[] _bucket;
 
-			_capa = iBlkSize;
+			_capa = newCapa;
 			_bucket = new SimpleVector<HNode>[_capa];
 		}
 	}

@@ -348,6 +348,11 @@ public:
 		push(arg1);
 		PushArgs(args...);
 	}
+	inline void ReleaseArgs(std::vector<VarInfo>& args)
+	{
+		for (VarInfo& arg : args)
+			Var_Release(&arg);
+	}
 
 	template<typename RVal, typename ... Types>
 	bool iCall(RVal& r, int iFID, Types ... args)
@@ -357,8 +362,13 @@ public:
 		PushArgs(args...);
 		_args = NULL;
 
-		RunFunction(iFID, args_);
+		if (RunFunction(iFID, args_) == false)
+		{
+			ReleaseArgs(args_);
+			return false;
+		}
 		GC();
+		ReleaseArgs(args_);
 		_read(GetReturnVar(), r);
 		return true;
 	}
@@ -371,8 +381,13 @@ public:
 		PushArgs(args...);
 		_args = NULL;
 
-		RunFunction(iFID, args_);
+		if (RunFunction(iFID, args_) == false)
+		{
+			ReleaseArgs(args_);
+			return false;
+		}
 		GC();
+		ReleaseArgs(args_);
 		ReturnValue();
 		return true;
 	}
@@ -385,8 +400,13 @@ public:
 		PushArgs(args...);
 		_args = NULL;
 
-		RunFunction(funName, args_);
+		if (RunFunction(funName, args_) == false)
+		{
+			ReleaseArgs(args_);
+			return false;
+		}
 		GC();
+		ReleaseArgs(args_);
 		_read(GetReturnVar(), r);
 		return true;
 	}
@@ -399,8 +419,13 @@ public:
 		PushArgs(args...);
 		_args = NULL;
 
-		RunFunction(funName, args_);
+		if (RunFunction(funName, args_) == false)
+		{
+			ReleaseArgs(args_);
+			return false;
+		}
 		GC();
+		ReleaseArgs(args_);
 		ReturnValue();
 		return true;
 	}
@@ -414,7 +439,11 @@ public:
 		_args = NULL;
 
 		if (false == Setup(iFID, args_))
+		{
+			ReleaseArgs(args_);
 			return false;
+		}
+		ReleaseArgs(args_);
 		return true;
 	}
 
