@@ -481,6 +481,8 @@ void SetInfo::Insert(std::string& Key)
 	VarInfo* pKey = &var;
 
 	Insert(&var);
+	if (var._str->_refCount <= 0)
+		_pVM->FreeString(&var);
 }
 void SetInfo::Insert(int Key)
 {

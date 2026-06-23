@@ -71,7 +71,11 @@ public:
 	NEOS_FORCEINLINE void Move(VarInfo* v1, VarInfo* v2)
 	{
 		if (v1->IsAllocType())
+		{
+			if (v1 == v2)
+				return;
 			Var_ReleaseInternal(v1);
+		}
 
 		if (v2->IsAllocType() == false)
 			*v1 = *v2;

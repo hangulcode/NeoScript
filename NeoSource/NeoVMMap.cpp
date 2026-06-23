@@ -434,6 +434,8 @@ void MapInfo::Insert(const std::string& Key, VarInfo* pValue)
 	VarInfo* pKey = &var;
 
 	Insert(&var, pValue);
+	if (var._str->_refCount <= 0)
+		_pVM->FreeString(&var);
 }
 bool MapInfo::Insert(const std::string& key, NS_FLOAT value)
 {
@@ -449,6 +451,8 @@ bool MapInfo::Insert(const std::string& key, NS_FLOAT value)
 	_pVM->Var_Release(pDest);
 	pDest->SetType(VAR_FLOAT);
 	pDest->_float = value;
+	if (var._str->_refCount <= 0)
+		_pVM->FreeString(&var);
 	return true;
 }
 
