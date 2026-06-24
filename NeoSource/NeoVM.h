@@ -16,6 +16,7 @@ struct INeoLoader
 {
 	virtual bool Load(const char* pFileName, void*& pBuffer, int& iLen) = 0;
 	virtual void Unload(const char* pFileName, void* pBuffer, int iLen) = 0;
+	virtual const char* GetLibPath() = 0;
 };
 
 

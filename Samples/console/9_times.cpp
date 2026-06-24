@@ -3,11 +3,11 @@
 
 using namespace NeoScript;
 
-int SAMPLE_9_times(INeoLoader* pLoader)
+int SAMPLE_9_times(INeoLoader* pLoader, std::string filename)
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == pLoader->Load("9_times.ns", pFileBuffer, iFileLen))
+	if (false == pLoader->Load(filename.c_str(), pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;

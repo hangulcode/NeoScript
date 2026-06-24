@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "neo-script",
+      "request": "launch",
+      "name": "Debug Neo Script",
+      "program": "${file}",
+      "cwd": "${workspaceFolder}",
+      "libPath": "${workspaceFolder}\\..\\Lib",
+      "adapterPath": "${workspaceFolder}\\..\\Samples\\console\\x64\\Release\\console.exe"
+    }
+  ]
+}

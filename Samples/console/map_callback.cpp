@@ -113,11 +113,11 @@ bool Property(INeoVMWorker* pN, void* pUserData, const VMString* pStr, VarInfo* 
 }
 
 
-int SAMPLE_map_callback(INeoLoader* pLoader)
+int SAMPLE_map_callback(INeoLoader* pLoader, std::string filename)
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == pLoader->Load("map_callback.ns", pFileBuffer, iFileLen))
+	if (false == pLoader->Load(filename.c_str(), pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;

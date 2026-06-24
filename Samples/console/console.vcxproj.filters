@@ -134,51 +134,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <None Include="callback.ns">
-      <Filter>Samples</Filter>
-    </None>
-    <None Include="9_times.ns">
-      <Filter>Samples</Filter>
-    </None>
-    <None Include="slice_run.ns">
-      <Filter>Samples</Filter>
-    </None>
-    <None Include="time_limit.ns">
-      <Filter>Samples</Filter>
-    </None>
-    <None Include="etc.ns">
-      <Filter>Samples</Filter>
-    </None>
-    <None Include="delegate.ns">
-      <Filter>Samples</Filter>
-    </None>
-    <None Include="meta.ns">
-      <Filter>Samples</Filter>
-    </None>
-    <None Include="coroutine.ns">
-      <Filter>Samples</Filter>
-    </None>
-    <None Include="list.ns">
-      <Filter>Samples</Filter>
-    </None>
-    <None Include="string.ns">
-      <Filter>Samples</Filter>
-    </None>
-    <None Include="hello.ns">
-      <Filter>Samples</Filter>
-    </None>
-    <None Include="map.ns">
-      <Filter>Samples</Filter>
-    </None>
-    <None Include="map_callback.ns">
-      <Filter>Samples</Filter>
-    </None>
-    <None Include="module.ns">
-      <Filter>Samples</Filter>
-    </None>
-    <None Include="http.ns">
-      <Filter>Samples</Filter>
-    </None>
     <None Include="..\..\NeoSource\NeoVMWorker.inl">
       <Filter>NeoScript</Filter>
     </None>

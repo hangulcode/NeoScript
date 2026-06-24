@@ -1076,6 +1076,8 @@ void CNeoVMWorker::DebugGetFrameVariables(int frameId, std::vector<NeoDebugVaria
 	const NeoDebugStackFrame& frame = frames[frameId];
 	int base = frame.stackBase;
 	int total = 1 + frame.argsCount + frame.localCount + frame.tempCount;
+	auto itFunNames = m_sDebugVarNames.find(frame.functionId);
+	bool hasDebugVarNames = itFunNames != m_sDebugVarNames.end();
 	for (int i = 0; i < total; ++i)
 	{
 		int stackIndex = base + i;
@@ -1087,13 +1089,14 @@ void CNeoVMWorker::DebugGetFrameVariables(int frameId, std::vector<NeoDebugVaria
 			var.name = "return";
 		else
 		{
-			auto itFun = m_sDebugVarNames.find(frame.functionId);
-			if (itFun != m_sDebugVarNames.end())
+			if (hasDebugVarNames)
 			{
-				auto itName = itFun->second.find(i);
-				if (itName != itFun->second.end())
+				auto itName = itFunNames->second.find(i);
+				if (itName != itFunNames->second.end())
 					var.name = itName->second;
 			}
+			if (hasDebugVarNames && var.name.empty())
+				continue;
 			if (var.name.empty())
 			{
 				if (i <= frame.argsCount)
@@ -1107,6 +1110,8 @@ void CNeoVMWorker::DebugGetFrameVariables(int frameId, std::vector<NeoDebugVaria
 
 		var.stackIndex = stackIndex;
 		NeoDebugFormatValue(&(*m_pVarStack_Base)[stackIndex], var);
+		if (i == 0 && var.type == "none")
+			continue;
 		vars.push_back(var);
 	}
 	if (frameId == 0)

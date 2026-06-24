@@ -18,11 +18,11 @@ NS_FLOAT Sample1(NeoFunction fun, NS_FLOAT a, NS_FLOAT b)
 }
 
 
-int SAMPLE_callback(INeoLoader* pLoader)
+int SAMPLE_callback(INeoLoader* pLoader, std::string filename)
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == pLoader->Load("callback.ns", pFileBuffer, iFileLen))
+	if (false == pLoader->Load(filename.c_str(), pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;

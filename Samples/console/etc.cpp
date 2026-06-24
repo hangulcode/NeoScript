@@ -11,11 +11,11 @@ static void neo_globalinterface(INeoVMWorker* pWorker, void* This)
 	VarInfo* g_sGameObject = pWorker->GetVar(preObejct);
 }
 
-int SAMPLE_etc(INeoLoader* pLoader, const char*pFileName, const char* pFunctionName)
+int SAMPLE_etc(INeoLoader* pLoader, std::string filename, const char* pFunctionName)
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == pLoader->Load(pFileName, pFileBuffer, iFileLen))
+	if (false == pLoader->Load(filename.c_str(), pFileBuffer, iFileLen))
 	{
 		printf("file read error\n");
 		return -1;

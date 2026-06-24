@@ -3,11 +3,11 @@
 
 using namespace NeoScript;
 
-int SAMPLE_time_limit(INeoLoader* pLoader)
+int SAMPLE_time_limit(INeoLoader* pLoader, std::string filename)
 {
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (false == pLoader->Load("time_limit.ns", pFileBuffer, iFileLen))
+	if (false == pLoader->Load(filename.c_str(), pFileBuffer, iFileLen))
 	{
 		printf("file read error");
 		return -1;

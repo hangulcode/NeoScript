@@ -262,21 +262,6 @@
   <ItemGroup>
     <None Include="..\..\NeoSource\NeoVMWorker.inl" />
     <None Include="..\..\NeoSource\NeoVMWorker_Handlers.inl" />
-    <None Include="9_times.ns" />
-    <None Include="callback.ns" />
-    <None Include="coroutine.ns" />
-    <None Include="delegate.ns" />
-    <None Include="etc.ns" />
-    <None Include="hello.ns" />
-    <None Include="http.ns" />
-    <None Include="list.ns" />
-    <None Include="map.ns" />
-    <None Include="map_callback.ns" />
-    <None Include="meta.ns" />
-    <None Include="module.ns" />
-    <None Include="slice_run.ns" />
-    <None Include="string.ns" />
-    <None Include="time_limit.ns" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

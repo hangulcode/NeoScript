@@ -117,6 +117,11 @@
                 "type": "string",
                 "description": "Working directory for the debug adapter.",
                 "default": "${workspaceFolder}"
+              },
+              "libPath": {
+                "type": "string",
+                "description": "Directory used to resolve Neo Script imports such as system and math.",
+                "default": "${workspaceFolder}\\Lib"
               }
             }
           }
@@ -127,7 +132,8 @@
             "request": "launch",
             "name": "Debug Neo Script",
             "program": "${file}",
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}",
+            "libPath": "${workspaceFolder}\\Lib"
           }
         ]
       }

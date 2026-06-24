@@ -6,6 +6,7 @@
 #include <conio.h>
 #include <fstream>
 #include <iostream>
+#include <fcntl.h>
 #include <io.h>
 #include <sstream>
 
@@ -13,7 +14,17 @@ using namespace NeoScript;
 
 class CNeoLoader : public INeoLoader
 {
+	std::string m_libPath = "../../Lib/";
 public:
+	void SetLibPath(const std::string& libPath)
+	{
+		if (libPath.empty())
+			return;
+		m_libPath = libPath;
+		char last = m_libPath[m_libPath.size() - 1];
+		if (last != '/' && last != '\\')
+			m_libPath += "/";
+	}
 	virtual bool        Load(const char* pFileName, void*& pBuffer, int& iLen)
 	{
 		FILE* fp = NULL;
@@ -35,6 +46,10 @@ public:
 	virtual void        Unload(const char* pFileName, void* pBuffer, int iLen)
 	{
 		delete [] pBuffer;
+	}
+	virtual const char* GetLibPath()
+	{
+		return m_libPath.c_str();
 	}
 };
 
@@ -58,12 +73,12 @@ std::string getKeyString()
 	return 0;
 }
 
-int SAMPLE_callback(INeoLoader* pLoader);
-int SAMPLE_map_callback(INeoLoader* pLoader);
-int SAMPLE_9_times(INeoLoader* pLoader);
-int SAMPLE_slice_run(INeoLoader* pLoader);
-int SAMPLE_time_limit(INeoLoader* pLoader);
-int SAMPLE_etc(INeoLoader* pLoader, const char*pFileName, const char* pFunctionName);
+int SAMPLE_callback(INeoLoader* pLoader, std::string filename);
+int SAMPLE_map_callback(INeoLoader* pLoader, std::string filename);
+int SAMPLE_9_times(INeoLoader* pLoader, std::string filename);
+int SAMPLE_slice_run(INeoLoader* pLoader, std::string filename);
+int SAMPLE_time_limit(INeoLoader* pLoader, std::string filename);
+int SAMPLE_etc(INeoLoader* pLoader, std::string filename, const char* pFunctionName);
 
 static void PrintSampleList()
 {
@@ -87,26 +102,27 @@ static void PrintSampleList()
 	printf("class\n");
 }
 
+static std::string s_path = "../../TestScript/";
 static int RunSample(INeoLoader* pLoader, const std::string& key)
 {
-	if (key == "0" || key == "hello") return SAMPLE_etc(pLoader, "hello.ns", nullptr);
-	if (key == "1" || key == "performance" || key == "performace") return SAMPLE_etc(pLoader, "performance.ns", nullptr);
-	if (key == "2" || key == "callback") return SAMPLE_callback(pLoader);
-	if (key == "3" || key == "map_callback") return SAMPLE_map_callback(pLoader);
-	if (key == "4" || key == "9_times") return SAMPLE_9_times(pLoader);
-	if (key == "5" || key == "string") return SAMPLE_etc(pLoader, "string.ns", nullptr);
-	if (key == "6" || key == "list") return SAMPLE_etc(pLoader, "list.ns", nullptr);
-	if (key == "7" || key == "map") return SAMPLE_etc(pLoader, "map.ns", nullptr);
-	if (key == "8" || key == "contailer") return SAMPLE_etc(pLoader, "contailer.ns", nullptr);
-	if (key == "9" || key == "slice_run") return SAMPLE_slice_run(pLoader);
-	if (key == "10" || key == "time_limit") return SAMPLE_time_limit(pLoader);
-	if (key == "11" || key == "divide_by_zero") return SAMPLE_etc(pLoader, "etc.ns", "divide_by_zero");
-	if (key == "12" || key == "delegate") return SAMPLE_etc(pLoader, "delegate.ns", nullptr);
-	if (key == "13" || key == "meta") return SAMPLE_etc(pLoader, "meta.ns", "meta");
-	if (key == "14" || key == "coroutine") return SAMPLE_etc(pLoader, "coroutine.ns", "test");
-	if (key == "15" || key == "module") return SAMPLE_etc(pLoader, "module.ns", nullptr);
-	if (key == "16" || key == "http") return SAMPLE_etc(pLoader, "http.ns", nullptr);
-	if (key == "17" || key == "class") return SAMPLE_etc(pLoader, "class.ns", nullptr);
+	if (key == "0" || key == "hello") return SAMPLE_etc(pLoader, s_path + "hello.ns", nullptr);
+	if (key == "1" || key == "performance" || key == "performace") return SAMPLE_etc(pLoader, s_path + "performance.ns", nullptr);
+	if (key == "2" || key == "callback") return SAMPLE_callback(pLoader, s_path + "callback.ns");
+	if (key == "3" || key == "map_callback") return SAMPLE_map_callback(pLoader, s_path + "map_callback.ns");
+	if (key == "4" || key == "9_times") return SAMPLE_9_times(pLoader, s_path + "9_times.ns");
+	if (key == "5" || key == "string") return SAMPLE_etc(pLoader, s_path + "string.ns", nullptr);
+	if (key == "6" || key == "list") return SAMPLE_etc(pLoader, s_path + "list.ns", nullptr);
+	if (key == "7" || key == "map") return SAMPLE_etc(pLoader, s_path + "map.ns", nullptr);
+	if (key == "8" || key == "contailer") return SAMPLE_etc(pLoader, s_path + "contailer.ns", nullptr);
+	if (key == "9" || key == "slice_run") return SAMPLE_slice_run(pLoader, s_path + "slice_run.ns");
+	if (key == "10" || key == "time_limit") return SAMPLE_time_limit(pLoader, s_path + "time_limit.ns");
+	if (key == "11" || key == "divide_by_zero") return SAMPLE_etc(pLoader, s_path + "etc.ns", "divide_by_zero");
+	if (key == "12" || key == "delegate") return SAMPLE_etc(pLoader, s_path + "delegate.ns", nullptr);
+	if (key == "13" || key == "meta") return SAMPLE_etc(pLoader, s_path + "meta.ns", "meta");
+	if (key == "14" || key == "coroutine") return SAMPLE_etc(pLoader, s_path + "coroutine.ns", "test");
+	if (key == "15" || key == "module") return SAMPLE_etc(pLoader, s_path + "module.ns", nullptr);
+	if (key == "16" || key == "http") return SAMPLE_etc(pLoader, s_path + "http.ns", nullptr);
+	if (key == "17" || key == "class") return SAMPLE_etc(pLoader, s_path + "class.ns", nullptr);
 
 	printf("unknown sample: %s\n", key.c_str());
 	return -1;
@@ -467,6 +483,71 @@ static int RunDebugSmoke()
 	worker->Run();
 	INeoVM::ReleaseVM(pVM);
 
+	const char* exportSource =
+		"export fun Time9(var n)\n"
+		"{\n"
+		"    for(var i in 1, 10, 1)\n"
+		"    {\n"
+		"        var value = n * i;\n"
+		"        print(n..\" x \"..i..\" = \"..value);\n"
+		"    }\n"
+		"}\n";
+	err.clear();
+	NeoCompilerParam exportParam(exportSource, (int)strlen(exportSource));
+	exportParam.err = &err;
+	exportParam.putASM = false;
+	exportParam.debug = true;
+	pVM = INeoVM::CompileAndLoadVM(exportParam);
+	if (pVM == nullptr)
+	{
+		printf("[debug-smoke] export compile failed: %s\n", err.c_str());
+		return -1;
+	}
+
+	worker = pVM->GetMainWorker();
+	DebugSmokeListener exportListener;
+	worker->DebugSetListener(&exportListener);
+	worker->DebugSetBreakpoints(std::vector<int>{ 5 });
+	pVM->PCall(pVM->GetMainWorkerID());
+	int time9Id = worker->FindFunction("Time9");
+	std::vector<VarInfo> time9Args;
+	VarInfo time9Arg;
+	worker->Var_SetInt(&time9Arg, 9);
+	time9Args.push_back(time9Arg);
+	if (time9Id < 0 || worker->Start(time9Id, time9Args) == false)
+	{
+		printf("[debug-smoke] export call failed: %s\n", pVM->IsLastErrorMsg() ? pVM->GetLastErrorMsg() : "");
+		INeoVM::ReleaseVM(pVM);
+		return -1;
+	}
+	if (worker->DebugIsPaused() == false || exportListener.lastLocation.line != 5)
+	{
+		printf("[debug-smoke] export breakpoint failed paused=%d line=%d\n",
+			worker->DebugIsPaused() ? 1 : 0, exportListener.lastLocation.line);
+		INeoVM::ReleaseVM(pVM);
+		return -1;
+	}
+	std::vector<NeoDebugVariable> exportVars;
+	worker->DebugGetFrameVariables(0, exportVars);
+	bool foundN = false;
+	bool foundTemp = false;
+	for (const NeoDebugVariable& var : exportVars)
+	{
+		if (var.name == "n" && var.value == "9")
+			foundN = true;
+		if (var.name.rfind("local", 0) == 0 || var.name.rfind("temp", 0) == 0)
+			foundTemp = true;
+	}
+	if (!foundN || foundTemp)
+	{
+		printf("[debug-smoke] export vars failed n=%d temp=%d\n", foundN ? 1 : 0, foundTemp ? 1 : 0);
+		INeoVM::ReleaseVM(pVM);
+		return -1;
+	}
+	worker->DebugContinue();
+	worker->Run();
+	INeoVM::ReleaseVM(pVM);
+
 	const char* errorSource =
 		"var a = 1;\n"
 		"var b = 0;\n"
@@ -517,6 +598,8 @@ static std::string JsonEscape(const std::string& s)
 	return out;
 }
 
+static FILE* g_DapOutput = stdout;
+
 static bool DapReadMessage(std::string& body)
 {
 	std::string line;
@@ -537,8 +620,6 @@ static bool DapReadMessage(std::string& body)
 	std::cin.read(&body[0], contentLength);
 	return (int)std::cin.gcount() == contentLength;
 }
-
-static FILE* g_DapOutput = stdout;
 
 static void DapSendMessage(const std::string& body)
 {
@@ -615,12 +696,14 @@ static std::vector<int> JsonBreakpointLines(const std::string& body)
 class NeoDapSession : public INeoVMDebugListener
 {
 public:
+	CNeoLoader* loader = nullptr;
 	int seq = 1;
 	INeoVM* vm = nullptr;
 	INeoVMWorker* worker = nullptr;
 	std::string sourcePath;
 	std::vector<int> breakpoints;
 	bool terminated = false;
+	bool initialRunStarted = false;
 
 	virtual void OnNeoDebugStopped(INeoVMWorker* w, const NeoDebugLocation& location, NeoDebugStopReason reason)
 	{
@@ -655,6 +738,13 @@ public:
 		DapSendMessage(os.str());
 	}
 
+	void SendOutput(const std::string& output)
+	{
+		if (output.empty())
+			return;
+		SendEvent("output", "{\"category\":\"stdout\",\"output\":\"" + JsonEscape(output) + "\"}");
+	}
+
 	bool LoadProgram(const std::string& path, std::string& err)
 	{
 		std::ifstream in(path.c_str(), std::ios::binary);
@@ -684,22 +774,40 @@ public:
 			return;
 		fflush(stdout);
 		int savedStdout = _dup(_fileno(stdout));
-		FILE* nullOut = nullptr;
-		fopen_s(&nullOut, "NUL", "w");
-		if (savedStdout >= 0 && nullOut)
-			_dup2(_fileno(nullOut), _fileno(stdout));
+		FILE* captureOut = nullptr;
+		tmpfile_s(&captureOut);
+		if (savedStdout >= 0 && captureOut)
+			_dup2(_fileno(captureOut), _fileno(stdout));
 		if (initial)
+		{
 			vm->PCall(vm->GetMainWorkerID());
+		}
 		else
+		{
 			worker->Run();
+		}
 		fflush(stdout);
+		std::string capturedOutput;
+		if (captureOut)
+		{
+			fflush(captureOut);
+			fseek(captureOut, 0, SEEK_END);
+			long size = ftell(captureOut);
+			if (size > 0)
+			{
+				capturedOutput.resize((size_t)size);
+				fseek(captureOut, 0, SEEK_SET);
+				fread(&capturedOutput[0], 1, (size_t)size, captureOut);
+			}
+		}
 		if (savedStdout >= 0)
 		{
 			_dup2(savedStdout, _fileno(stdout));
 			_close(savedStdout);
 		}
-		if (nullOut)
-			fclose(nullOut);
+		if (captureOut)
+			fclose(captureOut);
+		SendOutput(capturedOutput);
 		if (!worker->DebugIsPaused() && !terminated)
 		{
 			terminated = true;
@@ -713,17 +821,21 @@ public:
 		std::string command = JsonString(body, "command");
 		if (command == "initialize")
 		{
-			SendResponse(requestSeq, command, "{\"supportsConfigurationDoneRequest\":true,\"supportsStepInTargetsRequest\":false,\"supportsExceptionInfoRequest\":true}");
-			SendEvent("initialized");
+			SendResponse(requestSeq, command, "{\"supportsConfigurationDoneRequest\":true,\"supportsStepInTargetsRequest\":false,\"supportsExceptionInfoRequest\":true,\"supportsEvaluateForHovers\":true}");
 		}
 		else if (command == "launch")
 		{
 			std::string path = JsonString(body, "program");
 			if (path.empty())
 				path = JsonString(body, "path");
+			std::string libPath = JsonString(body, "libPath");
+			if (!libPath.empty() && loader)
+				loader->SetLibPath(libPath);
 			std::string err;
 			bool ok = LoadProgram(path, err);
 			SendResponse(requestSeq, command, "{}", ok, ok ? "" : err);
+			if (ok)
+				SendEvent("initialized");
 		}
 		else if (command == "setBreakpoints")
 		{
@@ -743,7 +855,11 @@ public:
 		else if (command == "configurationDone")
 		{
 			SendResponse(requestSeq, command);
-			RunCurrent(true);
+			if (!initialRunStarted)
+			{
+				initialRunStarted = true;
+				RunCurrent(true);
+			}
 		}
 		else if (command == "threads")
 		{
@@ -817,6 +933,39 @@ public:
 			os << "]}";
 			SendResponse(requestSeq, command, os.str());
 		}
+		else if (command == "evaluate")
+		{
+			std::string expression = JsonString(body, "expression");
+			int frameId = JsonInt(body, "frameId", 0);
+			while (!expression.empty() && isspace((unsigned char)expression.front()))
+				expression.erase(expression.begin());
+			while (!expression.empty() && isspace((unsigned char)expression.back()))
+				expression.pop_back();
+
+			std::vector<NeoDebugVariable> vars;
+			if (worker) worker->DebugGetFrameVariables(frameId, vars);
+			const NeoDebugVariable* found = nullptr;
+			for (const NeoDebugVariable& var : vars)
+			{
+				if (var.name == expression)
+				{
+					found = &var;
+					break;
+				}
+			}
+
+			std::ostringstream os;
+			if (found)
+			{
+				os << "{\"result\":\"" << JsonEscape(found->value) << "\",\"type\":\""
+					<< JsonEscape(found->type) << "\",\"variablesReference\":0}";
+			}
+			else
+			{
+				os << "{\"result\":\"not available\",\"variablesReference\":0}";
+			}
+			SendResponse(requestSeq, command, os.str());
+		}
 		else if (command == "exceptionInfo")
 		{
 			std::string description = vm && vm->IsLastErrorMsg() ? vm->GetLastErrorMsg() : "";
@@ -837,12 +986,26 @@ public:
 	}
 };
 
-static int RunDebugAdapter()
+static int RunDebugAdapter(CNeoLoader* loader)
 {
+#ifdef _WIN32
+	_setmode(_fileno(stdin), _O_BINARY);
+	_setmode(_fileno(stdout), _O_BINARY);
+#endif
 	int dapOutFd = _dup(_fileno(stdout));
 	if (dapOutFd >= 0)
+	{
+#ifdef _WIN32
+		_setmode(dapOutFd, _O_BINARY);
+#endif
 		g_DapOutput = _fdopen(dapOutFd, "wb");
+	}
+	else
+	{
+		g_DapOutput = stdout;
+	}
 	NeoDapSession session;
+	session.loader = loader;
 	std::string body;
 	while (!session.terminated && DapReadMessage(body))
 		session.Handle(body);
@@ -907,7 +1070,7 @@ int main(int argc, char* argv[])
 		}
 		else if (command == "--dap")
 		{
-			exitCode = RunDebugAdapter();
+			exitCode = RunDebugAdapter(pLoader);
 		}
 		else
 		{

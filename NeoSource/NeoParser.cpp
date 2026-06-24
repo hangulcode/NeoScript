@@ -869,9 +869,7 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 	}
 
-	std::string fullFileName;
-	fullFileName = "../../Lib/";
-	fullFileName += fileName + ".ns";
+
 
 	auto it = vars.m_sImports.find(fileName);
 	if (it != vars.m_sImports.end())
@@ -880,14 +878,23 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return true;
 	}
 
+	std::string fullFileName;
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
 	if (g_NeoLoader)
 	{
-		if(false == g_NeoLoader->Load(fullFileName.c_str(), pFileBuffer, iFileLen))
+		const char* libPath = g_NeoLoader->GetLibPath();
+		if(libPath != nullptr)
 		{
-			//SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), tk2.c_str());
-			//return false;
+			fullFileName = libPath;
+			//fullFileName = "../../Lib/";
+			fullFileName += fileName + ".ns";
+
+			if(false == g_NeoLoader->Load(fullFileName.c_str(), pFileBuffer, iFileLen))
+			{
+				//SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), tk2.c_str());
+				//return false;
+			}
 		}
 	}
 	if(pFileBuffer == nullptr)

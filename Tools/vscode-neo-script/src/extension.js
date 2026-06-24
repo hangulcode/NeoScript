@@ -55,7 +55,8 @@ function getLaunchTemplate() {
     request: "launch",
     name: "Debug Neo Script",
     program: "${file}",
-    cwd: "${workspaceFolder}"
+    cwd: "${workspaceFolder}",
+    libPath: "${workspaceFolder}\\Lib"
   };
 }
 
@@ -87,14 +88,10 @@ async function createLaunchConfig() {
       parsed.configurations = [];
     }
 
-    const alreadyExists = parsed.configurations.some((config) => config && config.type === "neo-script");
-    if (alreadyExists) {
-      vscode.window.showInformationMessage("Neo Script launch config already exists.");
-      await vscode.window.showTextDocument(vscode.Uri.file(launchPath));
-      return;
+    const alreadyExists = parsed.configurations.some((config) => config && config.name === template.name);
+    if (!alreadyExists) {
+      parsed.configurations.push(template);
     }
-
-    parsed.configurations.push(template);
     launch = parsed;
   }
 
@@ -122,6 +119,7 @@ class NeoScriptDebugConfigurationProvider {
 
     config.program = resolveVariables(config.program, folder);
     config.cwd = resolveVariables(config.cwd || "${workspaceFolder}", folder);
+    config.libPath = resolveVariables(config.libPath, folder);
     config.adapterPath = findAdapterPath(this.context, folder, config.adapterPath);
 
     if (!config.program) {
@@ -154,7 +152,9 @@ class NeoScriptDebugAdapterDescriptorFactory {
     const folder = session.workspaceFolder;
     const adapterPath = findAdapterPath(this.context, folder, session.configuration.adapterPath);
     const cwd = resolveVariables(session.configuration.cwd || "${workspaceFolder}", folder) || path.dirname(adapterPath);
-    return new vscode.DebugAdapterExecutable(adapterPath, ["--dap"], { cwd });
+    return new vscode.DebugAdapterExecutable(adapterPath, ["--dap"], {
+      cwd
+    });
   }
 }
 

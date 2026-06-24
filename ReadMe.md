@@ -15,8 +15,48 @@
 ### VS Code extension
 	- Extension source: Tools/vscode-neo-script
 	- Supports .ns syntax highlighting and Debug Adapter Protocol debugging.
+	- The debugger runs the currently selected .ns file as a top-level script.
+	- Put the code you want to debug in the script body. If you want to debug an exported function, call it from top-level script code.
 	- Build Samples/console in x64 Release, then use the "Debug Neo Script" launch configuration.
-	- If the adapter executable is not in the default sample path, set neoScript.debugAdapterPath.
+	- If the adapter executable is not in the default sample path, set neoScript.debugAdapterPath or add adapterPath to launch.json.
+	- Set libPath in launch.json when the Neo Script Lib directory is outside the workspace folder.
+
+#### VS Code debugger setup
+1. Build the debug adapter:
+```powershell
+& "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\amd64\MSBuild.exe" Samples\console\console.sln /p:Configuration=Release /p:Platform=x64 /m
+```
+
+2. Open a folder that contains .ns files in VS Code.
+
+3. Create .vscode/launch.json:
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "neo-script",
+      "request": "launch",
+      "name": "Debug Neo Script",
+      "program": "${file}",
+      "cwd": "${workspaceFolder}",
+      "libPath": "${workspaceFolder}\\Lib"
+    }
+  ]
+}
+```
+
+4. Open a .ns file, set breakpoints, and start "Debug Neo Script".
+
+The VS Code debugger currently supports:
+	- Breakpoints
+	- Continue, pause
+	- Step into, step over, step out
+	- Call stack
+	- Local variables
+	- Watch expressions for visible local variables
+	- print output in the Debug Console
+	- Runtime exception stop and exceptionInfo
 
 ### Performance test results
 CPU : 12th Gen Intel(R) Core(TM) i7-12700F 2.10GHz  
