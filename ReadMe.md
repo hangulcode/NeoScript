@@ -203,7 +203,8 @@ Build : Release Mode 64bit
 #### Neo Script Output Image
 ![](/docs/img/vs002.png)
 
-
+#### Neo Script Debugger Image
+![](/docs/img/code_debugger.png)
 
 ### Neo Script Test Code
 ```cpp
