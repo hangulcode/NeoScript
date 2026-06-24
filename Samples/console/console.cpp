@@ -8,6 +8,7 @@
 #include <iostream>
 #include <fcntl.h>
 #include <io.h>
+#include <set>
 #include <sstream>
 
 using namespace NeoScript;
@@ -702,11 +703,16 @@ public:
 	INeoVMWorker* worker = nullptr;
 	std::string sourcePath;
 	std::vector<int> breakpoints;
+	std::set<int> executableLines;
+	NeoDebugStopReason lastStopReason = NEO_DEBUG_STOP_NONE;
+	NeoDebugLocation lastStopLocation;
 	bool terminated = false;
 	bool initialRunStarted = false;
 
 	virtual void OnNeoDebugStopped(INeoVMWorker* w, const NeoDebugLocation& location, NeoDebugStopReason reason)
 	{
+		lastStopReason = reason;
+		lastStopLocation = location;
 		const char* reasonText = "pause";
 		if (reason == NEO_DEBUG_STOP_BREAKPOINT)
 			reasonText = "breakpoint";
@@ -716,7 +722,10 @@ public:
 			reasonText = "exception";
 		std::ostringstream os;
 		os << "{\"seq\":" << seq++ << ",\"type\":\"event\",\"event\":\"stopped\",\"body\":{\"reason\":\""
-			<< reasonText << "\",\"threadId\":1,\"allThreadsStopped\":true}}";
+			<< reasonText << "\",\"threadId\":1,\"allThreadsStopped\":true";
+		if (reason == NEO_DEBUG_STOP_EXCEPTION && vm && vm->IsLastErrorMsg())
+			os << ",\"description\":\"" << JsonEscape(vm->GetLastErrorMsg()) << "\"";
+		os << "}}";
 		DapSendMessage(os.str());
 	}
 
@@ -745,6 +754,31 @@ public:
 		SendEvent("output", "{\"category\":\"stdout\",\"output\":\"" + JsonEscape(output) + "\"}");
 	}
 
+	void SendErrorOutput(const std::string& output)
+	{
+		if (output.empty())
+			return;
+		SendEvent("output", "{\"category\":\"stderr\",\"output\":\"" + JsonEscape(output) + "\"}");
+	}
+
+	bool IsExecutableLine(int line) const
+	{
+		return executableLines.empty() || executableLines.find(line) != executableLines.end();
+	}
+
+	void ApplyBreakpoints()
+	{
+		if (!worker)
+			return;
+		std::vector<int> activeBreakpoints;
+		for (int line : breakpoints)
+		{
+			if (IsExecutableLine(line))
+				activeBreakpoints.push_back(line);
+		}
+		worker->DebugSetBreakpoints(activeBreakpoints);
+	}
+
 	bool LoadProgram(const std::string& path, std::string& err)
 	{
 		std::ifstream in(path.c_str(), std::ios::binary);
@@ -763,7 +797,14 @@ public:
 			return false;
 		worker = vm->GetMainWorker();
 		worker->DebugSetListener(this);
-		worker->DebugSetBreakpoints(breakpoints);
+		std::vector<int> lines;
+		worker->DebugGetExecutableLines(lines);
+		executableLines.clear();
+		for (int line : lines)
+			executableLines.insert(line);
+		ApplyBreakpoints();
+		lastStopReason = NEO_DEBUG_STOP_NONE;
+		lastStopLocation = NeoDebugLocation();
 		sourcePath = path;
 		return true;
 	}
@@ -808,6 +849,13 @@ public:
 		if (captureOut)
 			fclose(captureOut);
 		SendOutput(capturedOutput);
+		if (worker->DebugIsPaused() && lastStopReason == NEO_DEBUG_STOP_EXCEPTION && vm && vm->IsLastErrorMsg())
+		{
+			std::string error = vm->GetLastErrorMsg();
+			if (!error.empty() && error.back() != '\n')
+				error += "\n";
+			SendErrorOutput(error);
+		}
 		if (!worker->DebugIsPaused() && !terminated)
 		{
 			terminated = true;
@@ -840,14 +888,17 @@ public:
 		else if (command == "setBreakpoints")
 		{
 			breakpoints = JsonBreakpointLines(body);
-			if (worker)
-				worker->DebugSetBreakpoints(breakpoints);
+			ApplyBreakpoints();
 			std::ostringstream os;
 			os << "{\"breakpoints\":[";
 			for (size_t i = 0; i < breakpoints.size(); ++i)
 			{
 				if (i) os << ",";
-				os << "{\"verified\":true,\"line\":" << breakpoints[i] << "}";
+				bool verified = IsExecutableLine(breakpoints[i]);
+				os << "{\"verified\":" << (verified ? "true" : "false") << ",\"line\":" << breakpoints[i];
+				if (!verified)
+					os << ",\"message\":\"No executable Neo Script instruction on this line\"";
+				os << "}";
 			}
 			os << "]}";
 			SendResponse(requestSeq, command, os.str());

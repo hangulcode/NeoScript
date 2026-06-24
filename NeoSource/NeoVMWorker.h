@@ -239,6 +239,7 @@ private:
     virtual NeoDebugLocation DebugGetLocation();
     virtual void DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames);
     virtual void DebugGetFrameVariables(int frameId, std::vector<NeoDebugVariable>& vars);
+    virtual void DebugGetExecutableLines(std::vector<int>& lines);
 
 	bool	IsMainCoroutine(CoroutineInfo* p) { return (&m_sDefault == p); }
 	virtual bool	Setup(int iFunctionID, std::vector<VarInfo>& _args);
@@ -246,7 +247,7 @@ private:
 	virtual bool IsWorking();
 	virtual bool	Run();
 
-	template<typename T>
+	template<typename T, bool DEBUG>
 	bool	RunInternal(T slide, int iBreakingCallStack);
 
 	bool	StopCoroutine(bool doDead = true);

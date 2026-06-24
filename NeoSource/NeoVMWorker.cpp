@@ -881,6 +881,21 @@ void CNeoVMWorker::DebugSetBreakpoints(const std::vector<int>& lines)
 			m_sDebugBreakLines.insert(line);
 	}
 }
+void CNeoVMWorker::DebugGetExecutableLines(std::vector<int>& lines)
+{
+	lines.clear();
+	if (IsDebugInfo() == false)
+		return;
+
+	std::set<int> uniqueLines;
+	for (const debug_info& info : _DebugData)
+	{
+		if (info._lineseq > 0)
+			uniqueLines.insert(info._lineseq);
+	}
+
+	lines.assign(uniqueLines.begin(), uniqueLines.end());
+}
 void CNeoVMWorker::DebugContinue()
 {
 	m_bDebugPaused = false;
@@ -1137,11 +1152,12 @@ bool	CNeoVMWorker::Run()
 	try
 	{
 #endif
-		int breakingCallStack = (m_pDebugListener || m_sDebugBreakLines.empty() == false || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested) ? 0 : (int)m_pCallStack->size();
+		bool debugActive = (m_pDebugListener || m_sDebugBreakLines.empty() == false || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested);
+		int breakingCallStack = debugActive ? 0 : (int)m_pCallStack->size();
 		if(m_iTimeout >= 0)
-			b = RunInternal((int)0, breakingCallStack);
+			b = debugActive ? RunInternal<int, true>((int)0, breakingCallStack) : RunInternal<int, false>((int)0, breakingCallStack);
 		else
-			b = RunInternal("abc", breakingCallStack);
+			b = debugActive ? RunInternal<const char*, true>("abc", breakingCallStack) : RunInternal<const char*, false>("abc", breakingCallStack);
 #ifdef _WIN32
 	}
 	catch (...)
@@ -1181,7 +1197,7 @@ void CNeoVMWorker::JumpAsyncMsg()
 	SetCodePtr(sizeof(SVMOperation));
 	_pCodeCurrent->n23 = dist - int(sizeof(SVMOperation) * 2); // Idle
 }
-template<typename T>
+template<typename T, bool DEBUG>
 bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 {
 	if (false == _isInitialized)
@@ -1229,7 +1245,7 @@ bool	CNeoVMWorker::RunInternal(T slide, int iBreakingCallStack)
 			}
 		}
 
-		if (m_pDebugListener || m_sDebugBreakLines.empty() == false || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
+		if (DEBUG)
 		{
 			int iOPIndex = int((u8*)_pCodeCurrent - _pCodeBegin) / sizeof(SVMOperation);
 			if (CheckDebugStop(iOPIndex))

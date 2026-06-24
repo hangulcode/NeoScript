@@ -229,6 +229,7 @@ public:
 	virtual NeoDebugLocation DebugGetLocation() = 0;
 	virtual void DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames) = 0;
 	virtual void DebugGetFrameVariables(int frameId, std::vector<NeoDebugVariable>& vars) = 0;
+	virtual void DebugGetExecutableLines(std::vector<int>& lines) = 0;
 
 	static void neo_pushcclosureNative(FunctionPtrNative* pOut, Neo_NativeFunction pFun)
 	{
