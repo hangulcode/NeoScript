@@ -192,14 +192,15 @@ MapNode* MapBucket::Find(VarInfo* pKey, u32 hash)
 		break;
 	case VAR_STRING:
 		{
-			std::string& str = pKey->_str->_str;
+			StringInfo* pKeyStr = pKey->_str;
 			while (pCur)
 			{
 				if (pCur->hash == hash)
 				{
 					if (pCur->key.GetType() == VAR_STRING)
 					{
-						if (pCur->key._str->_str == str)
+						StringInfo* pCurStr = pCur->key._str;
+						if (pCurStr == pKeyStr || pCurStr->_str == pKeyStr->_str)
 							return pCur;
 					}
 				}
@@ -540,7 +541,7 @@ VarInfo* MapInfo::Find(const std::string& key)
 	MapNode* pCur = pBucket->pFirst;
 	while (pCur)
 	{
-		if (pCur->key.GetType() == VAR_STRING)
+		if (pCur->hash == hash && pCur->key.GetType() == VAR_STRING)
 		{
 			if (pCur->key._str->_str == key)
 				return &pCur->value;

@@ -1198,8 +1198,6 @@ void CNeoVMImpl::InitLib()
 
 	RegLibrary(pSystem, "sys");*/
 	RegObjLibrary();
-
-	CNeoVMWorker::InitializeDispatchTable();
 }
 
 };

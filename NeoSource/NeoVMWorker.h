@@ -248,8 +248,8 @@ private:
 	virtual bool IsWorking();
 	virtual bool	Run();
 
-	template<typename T, bool DEBUG>
-	bool	RunInternal(T slide, int iBreakingCallStack);
+	template<bool TIMEOUT, bool DEBUG>
+	bool	RunInternal(int iBreakingCallStack);
 
 	bool	StopCoroutine(bool doDead = true);
 	void	DeadCoroutine(CoroutineInfo* pCI);
@@ -492,14 +492,6 @@ public:
 		}
 	}
 
-	// 1. 핸들러 함수 포인터 타입 정의 (반환 타입을 bool로 변경)
-	typedef bool (CNeoVMWorker::* OpcodeHandler)(const SVMOperation& OP);
-
-	// 2. Dispatch Table 선언
-	static OpcodeHandler dispatch_table[NOP_MAX];
-
-	// 3. Dispatch Table 초기화 함수 선언
-	static void InitializeDispatchTable();
 
 #include "NeoVMWorker_Handlers.inl"
 
