@@ -146,6 +146,7 @@ private:
     int m_iDebugSkipLine = -1;
     int m_iDebugSkipOpIndex = -1;
     int m_iDebugStepDepth = -1;
+    int m_iDebugSuppressCount = 0;
 
 
 //	inline void SetCheckTime() { m_op_process = 0; }

@@ -1152,7 +1152,7 @@ bool	CNeoVMWorker::Run()
 	try
 	{
 #endif
-		bool debugActive = (m_pDebugListener || m_sDebugBreakLines.empty() == false || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested);
+		bool debugActive = (m_iDebugSuppressCount == 0) && (m_pDebugListener || m_sDebugBreakLines.empty() == false || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested);
 		int breakingCallStack = debugActive ? 0 : (int)m_pCallStack->size();
 		if(m_iTimeout >= 0)
 			b = debugActive ? RunInternal<int, true>((int)0, breakingCallStack) : RunInternal<int, false>((int)0, breakingCallStack);
@@ -1935,7 +1935,9 @@ VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 	for (; iCur < fun._argsCount; iCur++)
 		Var_Release(&(*m_pVarStack_Base)[1 + _iSP_Vars + iCur]);
 
+	++m_iDebugSuppressCount;
 	Run();
+	--m_iDebugSuppressCount;
 
 //	_read(&(*m_pVarStack)[_iSP_Vars], *r);
 	VarInfo* r = &(*m_pVarStack_Base)[_iSP_Vars];
