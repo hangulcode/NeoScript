@@ -248,14 +248,14 @@ struct SFunctionInfo
 		_code->Write(&a1, sizeof(a1));
 		_code->Write(&a23, sizeof(a23));
 	}
-	void	AddDebugData(CArchiveRdWC& ar)
+	void	AddDebugData(CArchiveRdWC& ar, int iDebugLoopLine = -1)
 	{
 		if (ar._debug == false) return;
 		int iOff = _code->GetBufferOffset() / 8;
 		if ((int)_pDebugData->size() < iOff + 1)
 			_pDebugData->resize(iOff + 1);
 
-		(*_pDebugData)[iOff] = debug_info(ar.CurFile(), ar.CurLine());
+		(*_pDebugData)[iOff] = debug_info(ar.CurFile(), iDebugLoopLine != -1 ? iDebugLoopLine : ar.CurLine());
 	}
 	void	Push_OP(CArchiveRdWC& ar, eNOperation op, short r, short a1, short a2)
 	{
@@ -483,9 +483,9 @@ struct SFunctionInfo
 		//_code->Write(&add, sizeof(add));
 		Push_NoFlag(add, var, 0);
 	}
-	void	Push_JMPTrue(CArchiveRdWC& ar, short var, int destOffset)
+	void	Push_JMPTrue(CArchiveRdWC& ar, short var, int destOffset, int iDebugLoopLine)
 	{
-		AddDebugData(ar);
+		AddDebugData(ar, iDebugLoopLine);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		eNOperation op = NOP_JMP_TRUE;
@@ -496,9 +496,9 @@ struct SFunctionInfo
 		//_code->Write(&add, sizeof(add));
 		Push_NoFlag(add, var, 0);
 	}
-	void	Push_JMPFor(CArchiveRdWC& ar, int destOffset, short table, short key)
+	void	Push_JMPFor(CArchiveRdWC& ar, int destOffset, short table, short key, int iDebugLoopLine)
 	{
-		AddDebugData(ar);
+		AddDebugData(ar, iDebugLoopLine);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		eNOperation op = NOP_JMP_FOR;
@@ -511,9 +511,9 @@ struct SFunctionInfo
 		Push_NoFlag(add, table, key);
 	}
 	// Always Value is Key Next Alloc ID
-	void	Push_JMPForEach(CArchiveRdWC& ar, int destOffset, short table, short key)
+	void	Push_JMPForEach(CArchiveRdWC& ar, int destOffset, short table, short key, int iDebugLoopLine)
 	{
-		AddDebugData(ar);
+		AddDebugData(ar, iDebugLoopLine);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		eNOperation op = NOP_JMP_FOREACH;

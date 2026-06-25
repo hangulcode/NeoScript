@@ -2538,6 +2538,8 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		funs._cur->Push_OP(ar, NOP_CHANGE_INT, i_Begin, 0, 0);
 	}
 
+	int iDebugLoopLine = ar.CurLine();
+
 	iTryValue = -1;
 	if (Try_ParseIntNum(iTryValue, ar, funs, vars, TK_COMMA, TK_R_SMALL) != TK_NONE)
 	{
@@ -2623,7 +2625,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 
 	funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
-	funs._cur->Push_JMPFor(ar, PosLoopTop, iKey, iKey + 2);
+	funs._cur->Push_JMPFor(ar, PosLoopTop, iKey, iKey + 2, iDebugLoopLine);
 
 	funs._cur->ClearLastOP();
 
@@ -2654,6 +2656,8 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	TK_TYPE r;
 
 	SOperand iTempOffset;
+
+	int iDebugLoopLine = ar.CurLine();
 
 	// "foreach(var a, b in table)" 로직 처리
 	tkType1 = GetToken(ar, tk1);
@@ -2797,7 +2801,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 
 	funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
-	funs._cur->Push_JMPForEach(ar, PosLoopTop, iTable, iKey);
+	funs._cur->Push_JMPForEach(ar, PosLoopTop, iTable, iKey, iDebugLoopLine);
 
 	funs._cur->ClearLastOP();
 
@@ -2828,6 +2832,8 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	SOperand iTempOffset;
 	u8 byTempCheck[128 * 8];
 	debug_info DebugCheck[128];
+
+	int iDebugLoopLine = ar.CurLine();
 
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_SMALL) // (
@@ -2904,13 +2910,15 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
 	funs._cur->_code->Write(byTempCheck, iCheckCodeSize);
 	if (false == isCheckOPOpt)
-		funs._cur->Push_JMPTrue(ar, iStackCheckVar, PosLoopTop);
+		funs._cur->Push_JMPTrue(ar, iStackCheckVar, PosLoopTop, iDebugLoopLine);
 	else
 	{
 		int argLen = sizeof(short) * 3;
-		funs._cur->_code->SetPointer(-((int)sizeof(OpType) + argLen), SEEK_CUR); // OP + n1, n2, n3
+		funs._cur->_code->SetPointer(-((int)sizeof(OpType) + (int)sizeof(ArgFlag) + argLen), SEEK_CUR); // OP + n1, n2, n3
 		OpType optype = GetOpTypeFromOp(opOpz);
 		funs._cur->_code->Write(&optype, sizeof(optype));
+		ArgFlag flag = 0;
+		funs._cur->_code->Write(&flag, sizeof(flag));
 		int cur = funs._cur->_code->GetBufferOffset();
 		funs._cur->Set_JumpOffet(SJumpValue(cur, cur + argLen), PosLoopTop);
 		funs._cur->_code->SetPointer(argLen, SEEK_CUR);
