@@ -3,6 +3,8 @@ const fsp = require("fs/promises");
 const path = require("path");
 const vscode = require("vscode");
 
+let diagnosticCollection;
+
 function resolveVariables(value, folder) {
   if (!value || typeof value !== "string") {
     return value;
@@ -158,7 +160,26 @@ class NeoScriptDebugAdapterDescriptorFactory {
   }
 }
 
+function setCompileDiagnostic(body) {
+  if (!diagnosticCollection || !body || !body.source || !body.source.path) {
+    return;
+  }
+
+  const line = Math.max(0, (body.line || 1) - 1);
+  const column = Math.max(0, (body.column || 1) - 1);
+  const message = body.message || body.raw || "Neo Script compile failed.";
+  const uri = vscode.Uri.file(body.source.path);
+  const range = new vscode.Range(line, column, line, column + 1);
+  const diagnostic = new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Error);
+  diagnostic.source = "Neo Script";
+
+  diagnosticCollection.set(uri, [diagnostic]);
+}
+
 function activate(context) {
+  diagnosticCollection = vscode.languages.createDiagnosticCollection("neo-script");
+  context.subscriptions.push(diagnosticCollection);
+
   context.subscriptions.push(
     vscode.debug.registerDebugConfigurationProvider(
       "neo-script",
@@ -179,9 +200,30 @@ function activate(context) {
       vscode.commands.executeCommand("workbench.action.openSettings", "neoScript.debugAdapterPath");
     })
   );
+  context.subscriptions.push(
+    vscode.debug.onDidStartDebugSession((session) => {
+      if (session.type === "neo-script") {
+        diagnosticCollection.clear();
+      }
+    })
+  );
+  context.subscriptions.push(
+    vscode.debug.onDidReceiveDebugSessionCustomEvent((event) => {
+      if (event.session.type !== "neo-script") {
+        return;
+      }
+      if (event.event === "neoScriptCompileError") {
+        setCompileDiagnostic(event.body);
+      }
+    })
+  );
 }
 
-function deactivate() {}
+function deactivate() {
+  if (diagnosticCollection) {
+    diagnosticCollection.dispose();
+  }
+}
 
 module.exports = {
   activate,

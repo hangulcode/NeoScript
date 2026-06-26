@@ -11,8 +11,10 @@
 #include <fcntl.h>
 #include <io.h>
 #include <map>
+#include <mutex>
 #include <set>
 #include <sstream>
+#include <thread>
 
 using namespace NeoScript;
 
@@ -611,6 +613,7 @@ static std::string JsonEscape(const std::string& s)
 }
 
 static FILE* g_DapOutput = stdout;
+static std::mutex g_DapOutputMutex;
 
 static bool DapReadMessage(std::string& body)
 {
@@ -635,6 +638,7 @@ static bool DapReadMessage(std::string& body)
 
 static void DapSendMessage(const std::string& body)
 {
+	std::lock_guard<std::mutex> lock(g_DapOutputMutex);
 	FILE* out = g_DapOutput ? g_DapOutput : stdout;
 	fprintf(out, "Content-Length: %d\r\n\r\n", (int)body.size());
 	fwrite(body.data(), 1, body.size(), out);
@@ -703,6 +707,34 @@ static std::vector<int> JsonBreakpointLines(const std::string& body)
 		++pos;
 	}
 	return lines;
+}
+
+static bool ParseNeoCompileError(const std::string& err, int& line, int& column, std::string& message)
+{
+	const char* prefix = "Error (";
+	size_t pos = err.find(prefix);
+	if (pos == std::string::npos)
+		return false;
+
+	const char* p = err.c_str() + pos + strlen(prefix);
+	line = atoi(p);
+	const char* comma = strchr(p, ',');
+	if (comma == nullptr)
+		return false;
+	column = atoi(comma + 1);
+
+	const char* close = strchr(comma, ')');
+	if (close == nullptr)
+		return false;
+	const char* msg = close + 1;
+	if (*msg == ':')
+		++msg;
+	while (*msg && isspace((unsigned char)*msg))
+		++msg;
+	message = msg;
+	while (!message.empty() && (message.back() == '\r' || message.back() == '\n'))
+		message.pop_back();
+	return line > 0 && column > 0;
 }
 
 class NeoDapSession : public INeoVMDebugListener
@@ -888,10 +920,27 @@ public:
 			return;
 		fflush(stdout);
 		int savedStdout = _dup(_fileno(stdout));
-		FILE* captureOut = nullptr;
-		tmpfile_s(&captureOut);
-		if (savedStdout >= 0 && captureOut)
-			_dup2(_fileno(captureOut), _fileno(stdout));
+		int pipeFd[2] = { -1, -1 };
+		bool captureActive = savedStdout >= 0 && _pipe(pipeFd, 4096, _O_BINARY) == 0;
+		std::ios::fmtflags oldCoutFlags = std::cout.flags();
+		std::thread outputThread;
+		if (captureActive)
+		{
+			_dup2(pipeFd[1], _fileno(stdout));
+			std::cout.setf(std::ios::unitbuf);
+			outputThread = std::thread([this, readFd = pipeFd[0]]()
+			{
+				char buffer[512];
+				for (;;)
+				{
+					int readSize = _read(readFd, buffer, sizeof(buffer));
+					if (readSize <= 0)
+						break;
+					SendOutput(std::string(buffer, buffer + readSize));
+				}
+				_close(readFd);
+			});
+		}
 		if (initial)
 		{
 			vm->PCall(vm->GetMainWorkerID());
@@ -901,27 +950,18 @@ public:
 			worker->Run();
 		}
 		fflush(stdout);
-		std::string capturedOutput;
-		if (captureOut)
+		if (captureActive)
 		{
-			fflush(captureOut);
-			fseek(captureOut, 0, SEEK_END);
-			long size = ftell(captureOut);
-			if (size > 0)
-			{
-				capturedOutput.resize((size_t)size);
-				fseek(captureOut, 0, SEEK_SET);
-				fread(&capturedOutput[0], 1, (size_t)size, captureOut);
-			}
+			_dup2(savedStdout, _fileno(stdout));
+			_close(pipeFd[1]);
+			if (outputThread.joinable())
+				outputThread.join();
+			std::cout.flags(oldCoutFlags);
 		}
 		if (savedStdout >= 0)
 		{
-			_dup2(savedStdout, _fileno(stdout));
 			_close(savedStdout);
 		}
-		if (captureOut)
-			fclose(captureOut);
-		SendOutput(capturedOutput);
 		if (worker->DebugIsPaused() && lastStopReason == NEO_DEBUG_STOP_EXCEPTION && vm && vm->IsLastErrorMsg())
 		{
 			std::string error = vm->GetLastErrorMsg();
@@ -954,7 +994,27 @@ public:
 				loader->SetLibPath(libPath);
 			std::string err;
 			bool ok = LoadProgram(path, err);
-			SendResponse(requestSeq, command, "{}", ok, ok ? "" : err);
+			if (!ok)
+			{
+				std::string out = err;
+				if (!out.empty() && out.back() != '\n')
+					out += "\n";
+				SendErrorOutput(out);
+
+				int line = 0;
+				int column = 0;
+				std::string message;
+				if (ParseNeoCompileError(err, line, column, message))
+				{
+					std::string fullPath = FullPathOrSelf(path);
+					std::ostringstream eventBody;
+					eventBody << "{\"source\":{\"path\":\"" << JsonEscape(fullPath) << "\"},\"line\":" << line
+						<< ",\"column\":" << column << ",\"message\":\"" << JsonEscape(message)
+						<< "\",\"raw\":\"" << JsonEscape(err) << "\"}";
+					SendEvent("neoScriptCompileError", eventBody.str());
+				}
+			}
+			SendResponse(requestSeq, command, "{}", ok, ok ? "" : "Neo Script compile failed. See Debug Console.");
 			if (ok)
 				SendEvent("initialized");
 		}
