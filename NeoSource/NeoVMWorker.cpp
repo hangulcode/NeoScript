@@ -607,7 +607,7 @@ bool CNeoVMWorker::CheckDebugStop(int iOPIndex)
 {
 	if (m_bDebugPaused)
 		return true;
-	if (m_pDebugListener == nullptr && m_sDebugBreakLines.empty() && m_sDebugBreakLocations.empty() && m_eDebugRunMode == DBG_CONTINUE && m_bDebugPauseRequested == false)
+	if (m_pDebugListener == nullptr && m_iDebugBreakCount <= 0 && m_eDebugRunMode == DBG_CONTINUE && m_bDebugPauseRequested == false)
 		return false;
 	if (IsDebugInfo() == false)
 		return false;
@@ -675,9 +675,7 @@ bool CNeoVMWorker::CheckDebugStop(int iOPIndex)
 			return true;
 		}
 	}
-	u32 debugLocationKey = (((u32)(u16)file) << 16) | (u32)(u16)line;
-	if (m_sDebugBreakLocations.find(debugLocationKey) != m_sDebugBreakLocations.end() ||
-		m_sDebugBreakLines.find(line) != m_sDebugBreakLines.end())
+	if (m_iDebugBreakCount > 0 && IsDebugBreakpoint(file, line))
 	{
 		StopDebug(iOPIndex, NEO_DEBUG_STOP_BREAKPOINT);
 		return true;
@@ -795,31 +793,67 @@ void CNeoVMWorker::DebugSetListener(INeoVMDebugListener* listener)
 {
 	m_pDebugListener = listener;
 }
+void CNeoVMWorker::ClearDebugBreakpoints()
+{
+	m_sDebugBreakLineBits.clear();
+	m_sDebugBreakLocationBits.clear();
+	m_iDebugBreakCount = 0;
+}
+void CNeoVMWorker::SetDebugBreakLineBit(std::vector<u8>& bits, int line)
+{
+	if (line <= 0)
+		return;
+	size_t byteIndex = (size_t)line >> 3;
+	u8 mask = (u8)(1 << (line & 7));
+	if (bits.size() <= byteIndex)
+		bits.resize(byteIndex + 1, 0);
+	if ((bits[byteIndex] & mask) == 0)
+	{
+		bits[byteIndex] |= mask;
+		++m_iDebugBreakCount;
+	}
+}
+bool CNeoVMWorker::IsDebugBreakLineBit(const std::vector<u8>& bits, int line) const
+{
+	if (line <= 0)
+		return false;
+	size_t byteIndex = (size_t)line >> 3;
+	if (byteIndex >= bits.size())
+		return false;
+	u8 mask = (u8)(1 << (line & 7));
+	return (bits[byteIndex] & mask) != 0;
+}
+bool CNeoVMWorker::IsDebugBreakpoint(int file, int line) const
+{
+	if (IsDebugBreakLineBit(m_sDebugBreakLineBits, line))
+		return true;
+	if (file < 0 || file >= (int)m_sDebugBreakLocationBits.size())
+		return false;
+	return IsDebugBreakLineBit(m_sDebugBreakLocationBits[file], line);
+}
 void CNeoVMWorker::DebugSetBreakpoints(const std::vector<int>& lines)
 {
-	m_sDebugBreakLines.clear();
-	m_sDebugBreakLocations.clear();
+	ClearDebugBreakpoints();
 	for (int line : lines)
 	{
-		if (line > 0)
-			m_sDebugBreakLines.insert(line);
+		SetDebugBreakLineBit(m_sDebugBreakLineBits, line);
 	}
 }
 void CNeoVMWorker::DebugSetBreakpoints(const std::vector<NeoDebugBreakpoint>& breakpoints)
 {
-	m_sDebugBreakLines.clear();
-	m_sDebugBreakLocations.clear();
+	ClearDebugBreakpoints();
 	for (const NeoDebugBreakpoint& bp : breakpoints)
 	{
 		if (bp.line <= 0)
 			continue;
 		if (bp.file < 0)
 		{
-			m_sDebugBreakLines.insert(bp.line);
+			SetDebugBreakLineBit(m_sDebugBreakLineBits, bp.line);
 			continue;
 		}
-		u32 key = (((u32)(u16)bp.file) << 16) | (u32)(u16)bp.line;
-		m_sDebugBreakLocations.insert(key);
+		if ((int)m_sDebugBreakLocationBits.size() <= bp.file)
+			m_sDebugBreakLocationBits.resize((size_t)bp.file + 1);
+		SetDebugBreakLineBit(m_sDebugBreakLocationBits[bp.file], bp.line);
 	}
 }
 void CNeoVMWorker::DebugGetExecutableLines(std::vector<int>& lines)
@@ -1120,12 +1154,20 @@ bool	CNeoVMWorker::Run()
 	try
 	{
 #endif
-		bool debugActive = (m_iDebugSuppressCount == 0) && (m_pDebugListener || m_sDebugBreakLines.empty() == false || m_sDebugBreakLocations.empty() == false || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested);
+		bool debugActive = (m_iDebugSuppressCount == 0) &&
+			(m_iDebugBreakCount > 0 ||
+			 m_eDebugRunMode != DBG_CONTINUE ||
+			 m_bDebugPauseRequested);
 		int breakingCallStack = debugActive ? 0 : (int)m_pCallStack->size();
 		if(m_iTimeout >= 0)
 			b = debugActive ? RunInternal<true, true>(breakingCallStack) : RunInternal<true, false>(breakingCallStack);
 		else
 			b = debugActive ? RunInternal<false, true>(breakingCallStack) : RunInternal<false, false>(breakingCallStack);
+		if (b == false && m_pDebugListener && _isErrorOPIndex >= 0 && _isErrorOPIndex < (int)_DebugData.size())
+		{
+			StopDebug(_isErrorOPIndex, NEO_DEBUG_STOP_EXCEPTION);
+			b = true;
+		}
 #ifdef _WIN32
 	}
 	catch (...)
@@ -1146,7 +1188,7 @@ bool	CNeoVMWorker::Run()
 #endif
 
 		GetVM()->_sErrorMsgDetail = chMsg;
-		if (m_pDebugListener || m_sDebugBreakLines.empty() == false || m_sDebugBreakLocations.empty() == false || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
+		if (m_pDebugListener || m_iDebugBreakCount > 0 || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
 		{
 			if (_isErrorOPIndex >= 0 && _isErrorOPIndex < (int)_DebugData.size())
 				StopDebug(_isErrorOPIndex, NEO_DEBUG_STOP_EXCEPTION);

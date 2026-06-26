@@ -606,7 +606,18 @@ static std::string JsonEscape(const std::string& s)
 		case '\n': out += "\\n"; break;
 		case '\r': out += "\\r"; break;
 		case '\t': out += "\\t"; break;
-		default: out += c; break;
+		default:
+			if ((unsigned char)c < 0x20)
+			{
+				char buf[7];
+				snprintf(buf, sizeof(buf), "\\u%04x", (unsigned char)c);
+				out += buf;
+			}
+			else
+			{
+				out += c;
+			}
+			break;
 		}
 	}
 	return out;
@@ -658,6 +669,25 @@ static int JsonInt(const std::string& body, const char* key, int defaultValue = 
 	while (pos < body.size() && isspace((unsigned char)body[pos]))
 		++pos;
 	return atoi(body.c_str() + pos);
+}
+
+static bool JsonBool(const std::string& body, const char* key, bool defaultValue = false)
+{
+	std::string pat = std::string("\"") + key + "\"";
+	size_t pos = body.find(pat);
+	if (pos == std::string::npos)
+		return defaultValue;
+	pos = body.find(':', pos + pat.size());
+	if (pos == std::string::npos)
+		return defaultValue;
+	++pos;
+	while (pos < body.size() && isspace((unsigned char)body[pos]))
+		++pos;
+	if (body.compare(pos, 4, "true") == 0)
+		return true;
+	if (body.compare(pos, 5, "false") == 0)
+		return false;
+	return defaultValue;
 }
 
 static std::string JsonString(const std::string& body, const char* key)
@@ -753,6 +783,7 @@ public:
 	NeoDebugLocation lastStopLocation;
 	bool terminated = false;
 	bool initialRunStarted = false;
+	bool noDebugMode = false;
 
 	virtual void OnNeoDebugStopped(INeoVMWorker* w, const NeoDebugLocation& location, NeoDebugStopReason reason)
 	{
@@ -876,7 +907,7 @@ public:
 		worker->DebugSetBreakpoints(activeBreakpoints);
 	}
 
-	bool LoadProgram(const std::string& path, std::string& err)
+	bool LoadProgram(const std::string& path, std::string& err, bool enableDebug)
 	{
 		std::string fullPath = FullPathOrSelf(path);
 		std::ifstream in(fullPath.c_str(), std::ios::binary);
@@ -889,25 +920,31 @@ public:
 		NeoCompilerParam param(src.data(), (int)src.size());
 		param.err = &err;
 		param.putASM = false;
-		param.debug = true;
-		param.debugSourcePath = fullPath.c_str();
-		param.debugSourceFiles = &sourceFiles;
+		param.debug = enableDebug;
+		if (enableDebug)
+		{
+			param.debugSourcePath = fullPath.c_str();
+			param.debugSourceFiles = &sourceFiles;
+		}
 		vm = INeoVM::CompileAndLoadVM(param);
 		if (vm == nullptr)
 			return false;
 		worker = vm->GetMainWorker();
-		worker->DebugSetListener(this);
-		std::vector<int> lines;
-		worker->DebugGetExecutableLines(lines);
 		executableLines.clear();
-		for (int line : lines)
-			executableLines.insert(line);
-		std::vector<NeoDebugLocation> locations;
-		worker->DebugGetExecutableLocations(locations);
 		executableLinesByFile.clear();
-		for (size_t i = 0; i < locations.size(); ++i)
-			executableLinesByFile[locations[i].file].insert(locations[i].line);
-		ApplyBreakpoints();
+		if (enableDebug)
+		{
+			worker->DebugSetListener(this);
+			std::vector<int> lines;
+			worker->DebugGetExecutableLines(lines);
+			for (int line : lines)
+				executableLines.insert(line);
+			std::vector<NeoDebugLocation> locations;
+			worker->DebugGetExecutableLocations(locations);
+			for (size_t i = 0; i < locations.size(); ++i)
+				executableLinesByFile[locations[i].file].insert(locations[i].line);
+			ApplyBreakpoints();
+		}
 		lastStopReason = NEO_DEBUG_STOP_NONE;
 		lastStopLocation = NeoDebugLocation();
 		sourcePath = fullPath;
@@ -918,6 +955,8 @@ public:
 	{
 		if (worker == nullptr || terminated)
 			return;
+		if (initial)
+			SendOutput(noDebugMode ? "\x1b[32m[Neo Script] Run started.\x1b[0m\n" : "\x1b[32m[Neo Script] Debug started.\x1b[0m\n");
 		fflush(stdout);
 		int savedStdout = _dup(_fileno(stdout));
 		int pipeFd[2] = { -1, -1 };
@@ -962,7 +1001,8 @@ public:
 		{
 			_close(savedStdout);
 		}
-		if (worker->DebugIsPaused() && lastStopReason == NEO_DEBUG_STOP_EXCEPTION && vm && vm->IsLastErrorMsg())
+		if (vm && vm->IsLastErrorMsg() &&
+			(worker->DebugIsPaused() == false || lastStopReason == NEO_DEBUG_STOP_EXCEPTION))
 		{
 			std::string error = vm->GetLastErrorMsg();
 			if (!error.empty() && error.back() != '\n')
@@ -971,6 +1011,7 @@ public:
 		}
 		if (!worker->DebugIsPaused() && !terminated)
 		{
+			SendOutput(noDebugMode ? "\x1b[32m[Neo Script] Run finished.\x1b[0m\n" : "\x1b[32m[Neo Script] Debug finished.\x1b[0m\n");
 			terminated = true;
 			SendEvent("terminated");
 		}
@@ -989,11 +1030,13 @@ public:
 			std::string path = JsonString(body, "program");
 			if (path.empty())
 				path = JsonString(body, "path");
+			bool noDebug = JsonBool(body, "noDebug", false);
+			noDebugMode = noDebug;
 			std::string libPath = JsonString(body, "libPath");
 			if (!libPath.empty() && loader)
 				loader->SetLibPath(libPath);
 			std::string err;
-			bool ok = LoadProgram(path, err);
+			bool ok = LoadProgram(path, err, !noDebug);
 			if (!ok)
 			{
 				std::string out = err;
@@ -1015,7 +1058,12 @@ public:
 				}
 			}
 			SendResponse(requestSeq, command, "{}", ok, ok ? "" : "Neo Script compile failed. See Debug Console.");
-			if (ok)
+			if (ok && noDebug)
+			{
+				initialRunStarted = true;
+				RunCurrent(true);
+			}
+			else if (ok)
 				SendEvent("initialized");
 		}
 		else if (command == "setBreakpoints")

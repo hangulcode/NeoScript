@@ -138,8 +138,9 @@ private:
     };
 
     INeoVMDebugListener* m_pDebugListener = nullptr;
-    std::set<int> m_sDebugBreakLines;
-    std::set<u32> m_sDebugBreakLocations;
+    std::vector<u8> m_sDebugBreakLineBits;
+    std::vector<std::vector<u8>> m_sDebugBreakLocationBits;
+    int m_iDebugBreakCount = 0;
     NeoDebugLocation m_sDebugLocation;
     EDebugRunMode m_eDebugRunMode = DBG_CONTINUE;
     bool m_bDebugPauseRequested = false;
@@ -149,6 +150,11 @@ private:
     int m_iDebugSkipOpIndex = -1;
     int m_iDebugStepDepth = -1;
     int m_iDebugSuppressCount = 0;
+
+    void ClearDebugBreakpoints();
+    void SetDebugBreakLineBit(std::vector<u8>& bits, int line);
+    bool IsDebugBreakLineBit(const std::vector<u8>& bits, int line) const;
+    bool IsDebugBreakpoint(int file, int line) const;
 
 
 //	inline void SetCheckTime() { m_op_process = 0; }

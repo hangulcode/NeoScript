@@ -292,7 +292,7 @@ NEOS_FORCEINLINE bool handle_ERROR(const SVMOperation& OP) {
     if (GetVM()->_sErrorMsgDetail.empty())
         GetVM()->_sErrorMsgDetail = chMsg;
 
-    if (m_pDebugListener || m_sDebugBreakLines.empty() == false || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
+    if (m_pDebugListener || m_iDebugBreakCount > 0 || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
     {
         if (idx >= 0 && idx < (int)_DebugData.size())
             StopDebug(idx, NEO_DEBUG_STOP_EXCEPTION);
