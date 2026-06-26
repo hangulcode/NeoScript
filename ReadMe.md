@@ -4,7 +4,7 @@
 
 # Neo Script Documentation
 	- The grammar uses a C-like syntax, but it is somewhat similar to Lua script.
-	- It was developed in Visual Studio Pro 2022 C++.
+	- It was developed in Visual Studio Pro 2026 C++.
 	- After some more features are added, port to C#
 
 ### License
@@ -64,7 +64,7 @@ RAM : 64GB
 OS  : Windows 10 Pro 64bit  
 Build : Release Mode 64bit  
 
-|               |Neo Script 1.0.6| [Lua Script 5.4.2](https://luabinaries.sourceforge.net/)| Visual C++ 2022 |
+|               |Neo Script 1.0.6| [Lua Script 5.4.2](https://luabinaries.sourceforge.net/)| Visual C++ 2026 |
 | :-----------  |:--------------:| :-------------:|:---------------:|
 | Loop Sum (1~N)| 0.256 (12%↑)   | 0.286          | 0.043           |
 | Math          | 1.427 (9%↑)    | 1.55           | 0.135           |
@@ -340,7 +340,7 @@ print("fibonacci:" .. fibonacci_recursive(40))
 print("Time:", os.clock() - start_time)
 ```
 
-### Visual C++ 2022 Test Code
+### Visual C++ 2026 Test Code
 ```cpp
 #include <iostream>
 
