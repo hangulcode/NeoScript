@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "NeoConfig.h"
 
@@ -128,6 +128,8 @@ public:
 	std::string m_sErrorString;
 //	std::set<std::string> m_sImports; // Document Load State
 	std::string	m_sModuleName;
+	u16 m_iFileSeq = 0;
+	std::vector<std::string>* m_pDebugSourceFiles = nullptr;
 
 	CArchiveRdWC()
 	{
@@ -179,7 +181,7 @@ public:
 		m_iCurCol = 1;
 	}
 
-	u16		CurFile() { return 0; }
+	u16		CurFile() { return m_iFileSeq; }
 	u16		CurLine() { return m_iCurLine; }
 	u16		CurCol() { return m_iCurCol; }
 

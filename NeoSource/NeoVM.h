@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "NeoConfig.h"
 #include "NeoVMHash.h"
@@ -171,6 +171,12 @@ struct NeoDebugLocation
 	int callDepth = 0;
 };
 
+struct NeoDebugBreakpoint
+{
+	int file = -1;
+	int line = -1;
+};
+
 struct NeoDebugStackFrame
 {
 	int frameId = 0;
@@ -220,6 +226,7 @@ public:
 	virtual bool ResetVarType(VarInfo* p, VAR_TYPE type, int capa = 0) =0;
 	virtual void DebugSetListener(INeoVMDebugListener* listener) = 0;
 	virtual void DebugSetBreakpoints(const std::vector<int>& lines) = 0;
+	virtual void DebugSetBreakpoints(const std::vector<NeoDebugBreakpoint>& breakpoints) = 0;
 	virtual void DebugContinue() = 0;
 	virtual void DebugStepInto() = 0;
 	virtual void DebugStepOver() = 0;
@@ -230,6 +237,7 @@ public:
 	virtual void DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames) = 0;
 	virtual void DebugGetFrameVariables(int frameId, std::vector<NeoDebugVariable>& vars) = 0;
 	virtual void DebugGetExecutableLines(std::vector<int>& lines) = 0;
+	virtual void DebugGetExecutableLocations(std::vector<NeoDebugLocation>& locations) = 0;
 
 	static void neo_pushcclosureNative(FunctionPtrNative* pOut, Neo_NativeFunction pFun)
 	{
@@ -527,6 +535,8 @@ struct NeoCompilerParam
 	int iStackSize = 50 * 1024;
 
 	std::string* preCompileHeader = nullptr;
+	const char* debugSourcePath = nullptr;
+	std::vector<std::string>* debugSourceFiles = nullptr;
 
 	NeoCompilerParam(const void* pSrc, int SrcLen)
 	{

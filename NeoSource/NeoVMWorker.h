@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <chrono>
 
@@ -139,10 +139,12 @@ private:
 
     INeoVMDebugListener* m_pDebugListener = nullptr;
     std::set<int> m_sDebugBreakLines;
+    std::set<u32> m_sDebugBreakLocations;
     NeoDebugLocation m_sDebugLocation;
     EDebugRunMode m_eDebugRunMode = DBG_CONTINUE;
     bool m_bDebugPauseRequested = false;
     bool m_bDebugPaused = false;
+    int m_iDebugSkipFile = -1;
     int m_iDebugSkipLine = -1;
     int m_iDebugSkipOpIndex = -1;
     int m_iDebugStepDepth = -1;
@@ -231,6 +233,7 @@ private:
 	virtual bool RunFunction(const std::string& funName, std::vector<VarInfo>& _args);
     virtual void DebugSetListener(INeoVMDebugListener* listener);
     virtual void DebugSetBreakpoints(const std::vector<int>& lines);
+    virtual void DebugSetBreakpoints(const std::vector<NeoDebugBreakpoint>& breakpoints);
     virtual void DebugContinue();
     virtual void DebugStepInto();
     virtual void DebugStepOver();
@@ -241,6 +244,7 @@ private:
     virtual void DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames);
     virtual void DebugGetFrameVariables(int frameId, std::vector<NeoDebugVariable>& vars);
     virtual void DebugGetExecutableLines(std::vector<int>& lines);
+    virtual void DebugGetExecutableLocations(std::vector<NeoDebugLocation>& locations);
 
 	bool	IsMainCoroutine(CoroutineInfo* p) { return (&m_sDefault == p); }
 	virtual bool	Setup(int iFunctionID, std::vector<VarInfo>& _args);

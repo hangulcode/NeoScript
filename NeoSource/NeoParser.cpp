@@ -922,6 +922,16 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	ar2._allowGlobalInitLogic = ar._allowGlobalInitLogic;
 	ar2._debug = ar._debug;
 	ar2.m_sModuleName = fileName;
+	ar2.m_pDebugSourceFiles = ar.m_pDebugSourceFiles;
+	if (ar2.m_pDebugSourceFiles != nullptr)
+	{
+		size_t fileSeq = ar2.m_pDebugSourceFiles->size();
+		if (fileSeq <= 0xffff)
+		{
+			ar2.m_iFileSeq = (u16)fileSeq;
+			ar2.m_pDebugSourceFiles->push_back(fullFileName);
+		}
+	}
 
 	SFunctionLayer* pLayerBackup = funs._curModule;
 	funs._curModule = funs.NewLayer();
@@ -3612,6 +3622,12 @@ bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
 	CArchiveRdWC ar2;
 	ar2._allowGlobalInitLogic = param.allowGlobalInitLogic;
 	ar2._debug = param.debug;
+	if (param.debugSourceFiles != nullptr)
+	{
+		param.debugSourceFiles->clear();
+		param.debugSourceFiles->push_back(param.debugSourcePath != nullptr ? param.debugSourcePath : "");
+		ar2.m_pDebugSourceFiles = param.debugSourceFiles;
+	}
 
 	if (param.preCompileHeader && param.preCompileHeader->empty() == false)
 	{

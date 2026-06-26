@@ -1,4 +1,4 @@
-namespace NeoScript
+ï»¿namespace NeoScript
 {
 
 struct neo_DCalllibs
@@ -30,7 +30,7 @@ struct neo_DCalllibs
 
 		return true;
 	}
-	static bool Set_And(CNeoVMWorker* pN, VarInfo* r, VarInfo* v1, VarInfo* v2) // ±³ÁýÇÕ
+	static bool Set_And(CNeoVMWorker* pN, VarInfo* r, VarInfo* v1, VarInfo* v2) // êµì§‘í•©
 	{
 		if (v1->GetType() != VAR_SET) return false;
 		if (v2->GetType() != VAR_SET) return false;
@@ -52,7 +52,7 @@ struct neo_DCalllibs
 		}
 		return true;
 	}
-	static bool Set_Or(CNeoVMWorker* pN, VarInfo* r, VarInfo* v1, VarInfo* v2) // ÇÕÁýÇÕ
+	static bool Set_Or(CNeoVMWorker* pN, VarInfo* r, VarInfo* v1, VarInfo* v2) // í•©ì§‘í•©
 	{
 		if (v1->GetType() != VAR_SET) return false;
 		if (v2->GetType() != VAR_SET) return false;
@@ -81,7 +81,7 @@ struct neo_DCalllibs
 		}
 		return true;
 	}
-	static bool Set_Sub(CNeoVMWorker* pN, VarInfo* r, VarInfo* v1, VarInfo* v2) // Â÷ÁýÇÕ
+	static bool Set_Sub(CNeoVMWorker* pN, VarInfo* r, VarInfo* v1, VarInfo* v2) // ì°¨ì§‘í•©
 	{
 		if (v1->GetType() != VAR_SET) return false;
 		if (v2->GetType() != VAR_SET) return false;

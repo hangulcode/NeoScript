@@ -2,16 +2,27 @@
 #include "console.h"
 #include "../../NeoSource/Neo.h"
 #include <cctype>
+#include <algorithm>
 #include <chrono>
 #include <conio.h>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <fcntl.h>
 #include <io.h>
+#include <map>
 #include <set>
 #include <sstream>
 
 using namespace NeoScript;
+
+static std::string FullPathOrSelf(const std::string& path)
+{
+	char fullPath[_MAX_PATH];
+	if (_fullpath(fullPath, path.c_str(), _MAX_PATH) != nullptr)
+		return fullPath;
+	return path;
+}
 
 class CNeoLoader : public INeoLoader
 {
@@ -21,7 +32,7 @@ public:
 	{
 		if (libPath.empty())
 			return;
-		m_libPath = libPath;
+		m_libPath = FullPathOrSelf(libPath);
 		char last = m_libPath[m_libPath.size() - 1];
 		if (last != '/' && last != '\\')
 			m_libPath += "/";
@@ -702,8 +713,10 @@ public:
 	INeoVM* vm = nullptr;
 	INeoVMWorker* worker = nullptr;
 	std::string sourcePath;
-	std::vector<int> breakpoints;
+	std::vector<std::string> sourceFiles;
+	std::map<int, std::vector<int>> breakpointsByFile;
 	std::set<int> executableLines;
+	std::map<int, std::set<int>> executableLinesByFile;
 	NeoDebugStopReason lastStopReason = NEO_DEBUG_STOP_NONE;
 	NeoDebugLocation lastStopLocation;
 	bool terminated = false;
@@ -761,27 +774,80 @@ public:
 		SendEvent("output", "{\"category\":\"stderr\",\"output\":\"" + JsonEscape(output) + "\"}");
 	}
 
-	bool IsExecutableLine(int line) const
+	static std::string NormalizePathForCompare(std::string path)
 	{
+		std::replace(path.begin(), path.end(), '/', '\\');
+		std::transform(path.begin(), path.end(), path.begin(), [](unsigned char c) { return (char)tolower(c); });
+		return path;
+	}
+
+	int FileIdFromSourcePath(const std::string& path) const
+	{
+		if (path.empty())
+			return 0;
+		std::string needle = NormalizePathForCompare(path);
+		for (int i = 0; i < (int)sourceFiles.size(); ++i)
+		{
+			if (NormalizePathForCompare(sourceFiles[i]) == needle)
+				return i;
+		}
+		if (NormalizePathForCompare(sourcePath) == needle)
+			return 0;
+		return -1;
+	}
+
+	bool IsExecutableLine(int file, int line) const
+	{
+		std::map<int, std::set<int>>::const_iterator itFile = executableLinesByFile.find(file);
+		if (itFile != executableLinesByFile.end())
+			return itFile->second.find(line) != itFile->second.end();
 		return executableLines.empty() || executableLines.find(line) != executableLines.end();
+	}
+
+	std::string SourcePathFromFileId(int fileId) const
+	{
+		if (fileId >= 0 && fileId < (int)sourceFiles.size() && sourceFiles[fileId].empty() == false)
+			return sourceFiles[fileId];
+		return sourcePath;
+	}
+
+	static std::string SourceNameFromPath(const std::string& path)
+	{
+		std::string name = path;
+		size_t slash = name.find_last_of("\\/");
+		if (slash != std::string::npos)
+			name = name.substr(slash + 1);
+		return name;
 	}
 
 	void ApplyBreakpoints()
 	{
 		if (!worker)
 			return;
-		std::vector<int> activeBreakpoints;
-		for (int line : breakpoints)
+		std::vector<NeoDebugBreakpoint> activeBreakpoints;
+		for (std::map<int, std::vector<int>>::const_iterator it = breakpointsByFile.begin(); it != breakpointsByFile.end(); ++it)
 		{
-			if (IsExecutableLine(line))
-				activeBreakpoints.push_back(line);
+			int file = it->first;
+			const std::vector<int>& lines = it->second;
+			for (size_t i = 0; i < lines.size(); ++i)
+			{
+				int line = lines[i];
+				if (IsExecutableLine(file, line))
+				{
+					NeoDebugBreakpoint bp;
+					bp.file = file;
+					bp.line = line;
+					activeBreakpoints.push_back(bp);
+				}
+			}
 		}
 		worker->DebugSetBreakpoints(activeBreakpoints);
 	}
 
 	bool LoadProgram(const std::string& path, std::string& err)
 	{
-		std::ifstream in(path.c_str(), std::ios::binary);
+		std::string fullPath = FullPathOrSelf(path);
+		std::ifstream in(fullPath.c_str(), std::ios::binary);
 		if (!in)
 		{
 			err = "cannot open program";
@@ -792,6 +858,8 @@ public:
 		param.err = &err;
 		param.putASM = false;
 		param.debug = true;
+		param.debugSourcePath = fullPath.c_str();
+		param.debugSourceFiles = &sourceFiles;
 		vm = INeoVM::CompileAndLoadVM(param);
 		if (vm == nullptr)
 			return false;
@@ -802,10 +870,15 @@ public:
 		executableLines.clear();
 		for (int line : lines)
 			executableLines.insert(line);
+		std::vector<NeoDebugLocation> locations;
+		worker->DebugGetExecutableLocations(locations);
+		executableLinesByFile.clear();
+		for (size_t i = 0; i < locations.size(); ++i)
+			executableLinesByFile[locations[i].file].insert(locations[i].line);
 		ApplyBreakpoints();
 		lastStopReason = NEO_DEBUG_STOP_NONE;
 		lastStopLocation = NeoDebugLocation();
-		sourcePath = path;
+		sourcePath = fullPath;
 		return true;
 	}
 
@@ -887,14 +960,18 @@ public:
 		}
 		else if (command == "setBreakpoints")
 		{
-			breakpoints = JsonBreakpointLines(body);
+			std::string bpSourcePath = JsonString(body, "path");
+			int bpFile = FileIdFromSourcePath(bpSourcePath);
+			std::vector<int> breakpoints = JsonBreakpointLines(body);
+			if (bpFile >= 0)
+				breakpointsByFile[bpFile] = breakpoints;
 			ApplyBreakpoints();
 			std::ostringstream os;
 			os << "{\"breakpoints\":[";
 			for (size_t i = 0; i < breakpoints.size(); ++i)
 			{
 				if (i) os << ",";
-				bool verified = IsExecutableLine(breakpoints[i]);
+				bool verified = (bpFile >= 0) && IsExecutableLine(bpFile, breakpoints[i]);
 				os << "{\"verified\":" << (verified ? "true" : "false") << ",\"line\":" << breakpoints[i];
 				if (!verified)
 					os << ",\"message\":\"No executable Neo Script instruction on this line\"";
@@ -944,19 +1021,17 @@ public:
 		{
 			std::vector<NeoDebugStackFrame> frames;
 			if (worker) worker->DebugGetStackTrace(frames);
-			std::string sourceName = sourcePath;
-			size_t slash = sourceName.find_last_of("\\/");
-			if (slash != std::string::npos)
-				sourceName = sourceName.substr(slash + 1);
 			std::ostringstream os;
 			os << "{\"stackFrames\":[";
 			for (size_t i = 0; i < frames.size(); ++i)
 			{
 				if (i) os << ",";
 				std::string name = frames[i].functionName.empty() ? ("function #" + std::to_string(frames[i].functionId)) : frames[i].functionName;
+				std::string frameSourcePath = SourcePathFromFileId(frames[i].file);
+				std::string frameSourceName = SourceNameFromPath(frameSourcePath);
 				os << "{\"id\":" << frames[i].frameId << ",\"name\":\"" << JsonEscape(name)
 					<< "\",\"line\":" << frames[i].line << ",\"column\":1,\"source\":{\"path\":\""
-					<< JsonEscape(sourcePath) << "\",\"name\":\"" << JsonEscape(sourceName) << "\"}}";
+					<< JsonEscape(frameSourcePath) << "\",\"name\":\"" << JsonEscape(frameSourceName) << "\"}}";
 			}
 			os << "],\"totalFrames\":" << frames.size() << "}";
 			SendResponse(requestSeq, command, os.str());

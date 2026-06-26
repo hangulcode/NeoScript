@@ -607,7 +607,7 @@ bool CNeoVMWorker::CheckDebugStop(int iOPIndex)
 {
 	if (m_bDebugPaused)
 		return true;
-	if (m_pDebugListener == nullptr && m_sDebugBreakLines.empty() && m_eDebugRunMode == DBG_CONTINUE && m_bDebugPauseRequested == false)
+	if (m_pDebugListener == nullptr && m_sDebugBreakLines.empty() && m_sDebugBreakLocations.empty() && m_eDebugRunMode == DBG_CONTINUE && m_bDebugPauseRequested == false)
 		return false;
 	if (IsDebugInfo() == false)
 		return false;
@@ -615,6 +615,7 @@ bool CNeoVMWorker::CheckDebugStop(int iOPIndex)
 		return false;
 
 	const debug_info& info = _DebugData[iOPIndex];
+	int file = info._fileseq;
 	int line = info._lineseq;
 	if (line <= 0)
 		return false;
@@ -629,10 +630,22 @@ bool CNeoVMWorker::CheckDebugStop(int iOPIndex)
 
 	if (m_iDebugSkipLine >= 0)
 	{
-		if (line == m_iDebugSkipLine && m_eDebugRunMode != DBG_STEP_INTO && m_bDebugPauseRequested == false)
-			return false;
+		bool sameSourceLine = (line == m_iDebugSkipLine) && (m_iDebugSkipFile < 0 || file == m_iDebugSkipFile);
+		if (sameSourceLine && m_bDebugPauseRequested == false)
+		{
+			if (m_eDebugRunMode == DBG_STEP_INTO)
+			{
+				if (callDepth <= m_iDebugStepDepth)
+					return false;
+			}
+			else
+			{
+				return false;
+			}
+		}
 		if (m_eDebugRunMode == DBG_STEP_OVER && callDepth > m_iDebugStepDepth)
 			return false;
+		m_iDebugSkipFile = -1;
 		m_iDebugSkipLine = -1;
 	}
 
@@ -662,7 +675,9 @@ bool CNeoVMWorker::CheckDebugStop(int iOPIndex)
 			return true;
 		}
 	}
-	if (m_sDebugBreakLines.find(line) != m_sDebugBreakLines.end())
+	u32 debugLocationKey = (((u32)(u16)file) << 16) | (u32)(u16)line;
+	if (m_sDebugBreakLocations.find(debugLocationKey) != m_sDebugBreakLocations.end() ||
+		m_sDebugBreakLines.find(line) != m_sDebugBreakLines.end())
 	{
 		StopDebug(iOPIndex, NEO_DEBUG_STOP_BREAKPOINT);
 		return true;
@@ -783,10 +798,28 @@ void CNeoVMWorker::DebugSetListener(INeoVMDebugListener* listener)
 void CNeoVMWorker::DebugSetBreakpoints(const std::vector<int>& lines)
 {
 	m_sDebugBreakLines.clear();
+	m_sDebugBreakLocations.clear();
 	for (int line : lines)
 	{
 		if (line > 0)
 			m_sDebugBreakLines.insert(line);
+	}
+}
+void CNeoVMWorker::DebugSetBreakpoints(const std::vector<NeoDebugBreakpoint>& breakpoints)
+{
+	m_sDebugBreakLines.clear();
+	m_sDebugBreakLocations.clear();
+	for (const NeoDebugBreakpoint& bp : breakpoints)
+	{
+		if (bp.line <= 0)
+			continue;
+		if (bp.file < 0)
+		{
+			m_sDebugBreakLines.insert(bp.line);
+			continue;
+		}
+		u32 key = (((u32)(u16)bp.file) << 16) | (u32)(u16)bp.line;
+		m_sDebugBreakLocations.insert(key);
 	}
 }
 void CNeoVMWorker::DebugGetExecutableLines(std::vector<int>& lines)
@@ -804,11 +837,35 @@ void CNeoVMWorker::DebugGetExecutableLines(std::vector<int>& lines)
 
 	lines.assign(uniqueLines.begin(), uniqueLines.end());
 }
+void CNeoVMWorker::DebugGetExecutableLocations(std::vector<NeoDebugLocation>& locations)
+{
+	locations.clear();
+	if (IsDebugInfo() == false)
+		return;
+
+	std::set<u32> uniqueLocations;
+	for (int i = 0; i < (int)_DebugData.size(); ++i)
+	{
+		const debug_info& info = _DebugData[i];
+		if (info._lineseq <= 0)
+			continue;
+		u32 key = (((u32)info._fileseq) << 16) | (u32)info._lineseq;
+		if (uniqueLocations.insert(key).second)
+		{
+			NeoDebugLocation location;
+			location.opIndex = i;
+			location.file = info._fileseq;
+			location.line = info._lineseq;
+			locations.push_back(location);
+		}
+	}
+}
 void CNeoVMWorker::DebugContinue()
 {
 	m_bDebugPaused = false;
 	m_bDebugPauseRequested = false;
 	m_eDebugRunMode = DBG_CONTINUE;
+	m_iDebugSkipFile = m_sDebugLocation.file;
 	m_iDebugSkipLine = m_sDebugLocation.line;
 	m_iDebugSkipOpIndex = m_sDebugLocation.opIndex;
 	m_iDebugStepDepth = -1;
@@ -818,7 +875,8 @@ void CNeoVMWorker::DebugStepInto()
 	m_bDebugPaused = false;
 	m_bDebugPauseRequested = false;
 	m_eDebugRunMode = DBG_STEP_INTO;
-	m_iDebugSkipLine = -1;
+	m_iDebugSkipFile = m_sDebugLocation.file;
+	m_iDebugSkipLine = m_sDebugLocation.line;
 	m_iDebugSkipOpIndex = m_sDebugLocation.opIndex;
 	m_iDebugStepDepth = m_sDebugLocation.callDepth;
 }
@@ -827,6 +885,7 @@ void CNeoVMWorker::DebugStepOver()
 	m_bDebugPaused = false;
 	m_bDebugPauseRequested = false;
 	m_eDebugRunMode = DBG_STEP_OVER;
+	m_iDebugSkipFile = m_sDebugLocation.file;
 	m_iDebugSkipLine = m_sDebugLocation.line;
 	m_iDebugSkipOpIndex = m_sDebugLocation.opIndex;
 	m_iDebugStepDepth = m_sDebugLocation.callDepth;
@@ -836,6 +895,7 @@ void CNeoVMWorker::DebugStepOut()
 	m_bDebugPaused = false;
 	m_bDebugPauseRequested = false;
 	m_eDebugRunMode = DBG_STEP_OUT;
+	m_iDebugSkipFile = m_sDebugLocation.file;
 	m_iDebugSkipLine = m_sDebugLocation.line;
 	m_iDebugSkipOpIndex = m_sDebugLocation.opIndex;
 	m_iDebugStepDepth = m_sDebugLocation.callDepth;
@@ -1060,7 +1120,7 @@ bool	CNeoVMWorker::Run()
 	try
 	{
 #endif
-		bool debugActive = (m_iDebugSuppressCount == 0) && (m_pDebugListener || m_sDebugBreakLines.empty() == false || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested);
+		bool debugActive = (m_iDebugSuppressCount == 0) && (m_pDebugListener || m_sDebugBreakLines.empty() == false || m_sDebugBreakLocations.empty() == false || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested);
 		int breakingCallStack = debugActive ? 0 : (int)m_pCallStack->size();
 		if(m_iTimeout >= 0)
 			b = debugActive ? RunInternal<true, true>(breakingCallStack) : RunInternal<true, false>(breakingCallStack);
@@ -1086,7 +1146,7 @@ bool	CNeoVMWorker::Run()
 #endif
 
 		GetVM()->_sErrorMsgDetail = chMsg;
-		if (m_pDebugListener || m_sDebugBreakLines.empty() == false || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
+		if (m_pDebugListener || m_sDebugBreakLines.empty() == false || m_sDebugBreakLocations.empty() == false || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
 		{
 			if (_isErrorOPIndex >= 0 && _isErrorOPIndex < (int)_DebugData.size())
 				StopDebug(_isErrorOPIndex, NEO_DEBUG_STOP_EXCEPTION);
