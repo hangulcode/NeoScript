@@ -1123,6 +1123,10 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 	if (tkType1 == TK_L_SMALL)
 	{
 		int iParamCount = 0;
+		// 각 인자를 평가하되, 호출-인자 슬롯(COMPILE_CALLARG_VAR_BEGIN)으로의 복사는
+		// 모든 인자 평가가 끝난 뒤로 미룬다. 인자식이 그 자체로 함수 호출이면 내부 호출이
+		// 같은 호출-인자 윈도우를 재사용하므로, 즉시 복사할 경우 먼저 평가된 인자가 덮어써진다.
+		std::vector<SOperand> argOperands;
 		while (true)
 		{
 			tkType2 = GetToken(ar, tk2);
@@ -1141,17 +1145,12 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 			{
 				iTempVar.Reset();
 				tkType3 = ParseJob(true, iTempVar, NULL, ar, funs, vars);
-				if(iTempVar.IsFun())
-					funs._cur->Push_OP2(ar, NOP_FMOV1, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTempVar._iVar, false);
-				else if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
-					funs._cur->Push_OP2(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTempVar._iVar, iTempVar.IsShort());
-				else
-					funs._cur->Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, COMPILE_CALLARG_VAR_BEGIN + 1 + iParamCount, iTempVar.IsHaveShort());
 				if (iTempVar.IsInvalidValue())
 				{
 					SetCompileError(ar, "Error (%d, %d): Call Param\n", ar.CurLine(), ar.CurCol());
 					return false;
 				}
+				argOperands.push_back(iTempVar);
 			}
 			iParamCount++;
 
@@ -1163,6 +1162,18 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 			}
 			if (tkType3 == TK_R_SMALL)
 				break;
+		}
+
+		// 모든 인자 평가가 끝난 뒤, CALL 직전에 호출-인자 슬롯으로 복사한다.
+		for (int i = 0; i < iParamCount; i++)
+		{
+			SOperand& arg = argOperands[i];
+			if (arg.IsFun())
+				funs._cur->Push_OP2(ar, NOP_FMOV1, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg._iVar, false);
+			else if (arg._iArrayIndex == INVALID_ERROR_PARSEJOB)
+				funs._cur->Push_OP2(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg._iVar, arg.IsShort());
+			else
+				funs._cur->Push_TableRead(ar, arg._iVar, arg._iArrayIndex, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg.IsHaveShort());
 		}
 		if (pFun != NULL)
 		{
