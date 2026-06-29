@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cstring>
-
 namespace NeoScript
 {
 extern u32 GetHashCode(const std::string& str);
@@ -15,6 +13,7 @@ struct VMString
 	mutable u32	_hash;
 	mutable void* _container;
 	mutable void* _value;
+	mutable int _containerVersion;
 
 	NEOS_FORCEINLINE u32 GetHash() const
 	{
@@ -142,6 +141,7 @@ class VMHash
 	SimpleVector<HNode>* _bucket = nullptr;
 	int _cnt = 0;
 	int _capa = 0;
+	int _version = 1;
 public:
 	VMHash()
 	{
@@ -162,6 +162,7 @@ public:
 		if (newCapa <= 0)
 			newCapa = iBlkSize;
 		_cnt = 0;
+		++_version;
 		for(int i = 0; i < _capa; i++)
 			_bucket[i].clear();
 		if(newCapa != _capa)
@@ -187,6 +188,7 @@ public:
 		n.value = d;
 		_bucket[bkIndex].push_back(n);
 		++_cnt;
+		++_version;
 	}
 	bool TryGetValue(const std::string& key, T* d)
 	{
@@ -209,8 +211,6 @@ public:
 	}
 	bool TryGetValueForce(const VMString* pStr, T* d)
 	{
-		static_assert(sizeof(T) <= sizeof(pStr->_value), "VMHash cached value is too small for T");
-
 		u32 hkey = pStr->GetHash();
 		u32 bkIndex = hkey % _capa;
 		SimpleVector<HNode>& bk = _bucket[bkIndex];
@@ -222,8 +222,8 @@ public:
 				if (pStr->_str == n.key)
 				{
 					pStr->_container = this;
-					pStr->_value = nullptr;
-					memcpy(&pStr->_value, &n.value, sizeof(T));
+					pStr->_containerVersion = _version;
+					pStr->_value = &n;
 
 					*d = n.value;
 					return true;
@@ -235,11 +235,9 @@ public:
 
 	NEOS_FORCEINLINE bool TryGetValue(const VMString* pStr, T* d)
 	{
-		static_assert(sizeof(T) <= sizeof(pStr->_value), "VMHash cached value is too small for T");
-
-		if(pStr->_container == this)
+		if(pStr->_container == this && pStr->_containerVersion == _version && pStr->_value != nullptr)
 		{
-			memcpy(d, &pStr->_value, sizeof(T));
+			*d = ((HNode*)pStr->_value)->value;
 			return true;
 		}
 		return TryGetValueForce(pStr, d);
@@ -263,6 +261,7 @@ public:
 				{
 					bk.RemoveIndex(idx);
 					--_cnt;
+					++_version;
 					return true;
 				}
 			}
