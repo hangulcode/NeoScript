@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstring>
+
 namespace NeoScript
 {
 extern u32 GetHashCode(const std::string& str);
@@ -207,6 +209,8 @@ public:
 	}
 	bool TryGetValueForce(const VMString* pStr, T* d)
 	{
+		static_assert(sizeof(T) <= sizeof(pStr->_value), "VMHash cached value is too small for T");
+
 		u32 hkey = pStr->GetHash();
 		u32 bkIndex = hkey % _capa;
 		SimpleVector<HNode>& bk = _bucket[bkIndex];
@@ -218,8 +222,8 @@ public:
 				if (pStr->_str == n.key)
 				{
 					pStr->_container = this;
-					//pStr->_value = reinterpret_cast<void*>((uintptr_t)n.value);
-					pStr->_value = *((void**)&n.value);
+					pStr->_value = nullptr;
+					memcpy(&pStr->_value, &n.value, sizeof(T));
 
 					*d = n.value;
 					return true;
@@ -231,10 +235,11 @@ public:
 
 	NEOS_FORCEINLINE bool TryGetValue(const VMString* pStr, T* d)
 	{
+		static_assert(sizeof(T) <= sizeof(pStr->_value), "VMHash cached value is too small for T");
+
 		if(pStr->_container == this)
 		{
-			//*d = (T)reinterpret_cast<uintptr_t>(pStr->_value);
-			*d = *((T*)&pStr->_value);
+			memcpy(d, &pStr->_value, sizeof(T));
 			return true;
 		}
 		return TryGetValueForce(pStr, d);
