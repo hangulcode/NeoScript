@@ -1889,6 +1889,37 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		case TK_MINUS:		// -
 			if (blApperOperator == false)
 			{
+				// 단항 +/-. 다음 토큰이 '(' 이면 괄호식을 평가한 뒤 부호를 적용한다.
+				// ParseString은 식별자/숫자만 처리하므로 -(expr) 형태는 여기서 직접 다룬다.
+				std::string tkNext;
+				TK_TYPE tkNextType = GetToken(ar, tkNext);
+				if (tkNextType == TK_L_SMALL)
+				{
+					SOperand a;
+					r = ParseJob(bReqReturn, a, NULL, ar, funs, vars);
+					if (TK_R_SMALL != r)
+					{
+						SetCompileError(ar, "Error (%d, %d): )\n", ar.CurLine(), ar.CurCol());
+						return TK_NONE;
+					}
+					if (tkType1 == TK_MINUS)
+					{
+						if (a.IsArray())
+						{
+							int iRead = funs._cur->AllocLocalTempVar();
+							funs._cur->Push_TableRead(ar, a._iVar, a._iArrayIndex, iRead, a.IsHaveShort());
+							a = SOperand(iRead);
+						}
+						int iNeg = funs._cur->AllocLocalTempVar();
+						funs._cur->Push_OP2(ar, NOP_MOV_MINUS, iNeg, a._iVar, false);
+						a = SOperand(iNeg);
+					}
+					operands.push_back(a);
+					blApperOperator = true;
+					break;
+				}
+				ar.PushToken(tkNextType, tkNext);
+
 				SOperand a;
 				if (false == ParseString(a, tkType1, ar, funs, vars))
 				{
