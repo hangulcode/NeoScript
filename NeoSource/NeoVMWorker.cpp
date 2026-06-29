@@ -134,7 +134,7 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 	{
 	case VAR_INT:
 #ifdef _WIN32
-		sprintf_s(ch, _countof(ch), "%d", v1->_int);
+		snprintf(ch, _countof(ch), "%d", v1->_int);
 #else
 		sprintf(ch, "%d", v1->_int);
 #endif
@@ -142,7 +142,7 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 	case VAR_FLOAT:
 		
 #ifdef _WIN32
-		sprintf_s(ch, _countof(ch), FLOAT_FORMAT, v1->_float);
+		snprintf(ch, _countof(ch), FLOAT_FORMAT, v1->_float);
 #else
 		sprintf(ch, FLOAT_FORMAT, v1->_float);
 #endif
@@ -706,7 +706,7 @@ void CNeoVMWorker::SetErrorUnsupport(const char* pErrMsg, VarInfo* p)
 {
 	char buff[1024];
 #ifdef _WIN32
-	sprintf_s(buff, _countof(buff), pErrMsg, GetDataType(p->GetType()).c_str());
+	snprintf(buff, _countof(buff), pErrMsg, GetDataType(p->GetType()).c_str());
 #else
 	sprintf(buff, pErrMsg, GetDataType(p->GetType()).c_str());
 #endif
@@ -1182,7 +1182,7 @@ bool	CNeoVMWorker::Run()
 		char chMsg[256];
 
 #ifdef _WIN32
-		sprintf_s(chMsg, _countof(chMsg), "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), _isErrorOPIndex, _lineseq);
+		snprintf(chMsg, _countof(chMsg), "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), _isErrorOPIndex, _lineseq);
 #else
 		sprintf(chMsg, "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
 #endif
@@ -1667,7 +1667,7 @@ bool CNeoVMWorker::VerifyType(VarInfo *p, VAR_TYPE t)
 		return true;
 	char ch[256];
 #ifdef _WIN32
-	sprintf_s(ch, _countof(ch), "VerifyType (%s != %s)", GetDataType(p->GetType()).c_str(), GetDataType(t).c_str());
+	snprintf(ch, _countof(ch), "VerifyType (%s != %s)", GetDataType(p->GetType()).c_str(), GetDataType(t).c_str());
 #else
 	sprintf(ch, "VerifyType (%s != %s)", GetDataType(p->GetType()).c_str(), GetDataType(t).c_str());
 #endif
@@ -1691,7 +1691,7 @@ bool CNeoVMWorker::ChangeNumber(VarInfo* p)
 	}
 	char ch[256];
 #ifdef _WIN32
-	sprintf_s(ch, _countof(ch), "ChangeNumber (%s != number)", GetDataType(p->GetType()).c_str());
+	snprintf(ch, _countof(ch), "ChangeNumber (%s != number)", GetDataType(p->GetType()).c_str());
 #else
 	sprintf(ch, "ChangeNumber (%s != number)", GetDataType(p->GetType()).c_str());
 #endif

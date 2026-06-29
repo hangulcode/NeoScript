@@ -773,7 +773,7 @@ int  AddLocalVar(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	SLayerVar* pCurLayer = vars.GetCurrentLayer();
 
 	char name[256];
-	sprintf_s(name, _countof(name), "^_#@_temp_%d", vars._iTempVarNameIndex++);
+	snprintf(name, _countof(name), "^_#@_temp_%d", vars._iTempVarNameIndex++);
 
 	if (pCurLayer->FindVarOnlyCurrentBlock(name) != -1)
 	{
@@ -3455,7 +3455,7 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string&
 		if (funType == FUNT_ANONYMOUS)
 		{
 			char ch[128];
-			sprintf_s(ch, _countof(ch), "#@_%d", funID);
+			snprintf(ch, _countof(ch), "#@_%d", funID);
 			fname = ch;
 		}
 

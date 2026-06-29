@@ -21,7 +21,6 @@ namespace NeoScript
 #ifdef _WIN32
 #else
 #define _countof(a) (sizeof(a)/sizeof(*(a)))
-#define sprintf_s(format, ...) snprintf(format, __VA_ARGS__)
 #endif
 
 bool IsTempVar(int iVar);

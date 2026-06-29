@@ -285,7 +285,7 @@ NEOS_FORCEINLINE bool handle_ERROR(const SVMOperation& OP) {
 
     char chMsg[256];
 #ifdef _WIN32
-    sprintf_s(chMsg, _countof(chMsg), "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
+    snprintf(chMsg, _countof(chMsg), "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
 #else
     sprintf(chMsg, "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
 #endif
