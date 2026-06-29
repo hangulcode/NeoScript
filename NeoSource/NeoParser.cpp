@@ -1436,20 +1436,10 @@ TK_TYPE ParseListDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs,
 		if (tkType1 == TK_R_ARRAY)
 			break;
 	}
+	// 리스트 뒤의 토큰(`;`, `)`, `,` 등)은 소비해서 반환만 하고, 유효성은 호출자가 검증한다.
+	// 문장이면 상위에서 `;`를, 함수 인자면 ParseFunCall이 `)`/`,`를 확인한다. 여기서 `;`를
+	// 강제하면 리스트 리터럴을 함수 인자로 쓸 때(예: x.append([1,2,3])) 잘못된 에러가 난다.
 	tkType1 = GetToken(ar, tk1);
-	if (ar._iTableDeep == 1)
-	{
-		if (tkType1 != TK_SEMICOLON)
-		{
-			SetCompileError(ar, "Error (%d, %d): List ; \n", ar.CurLine(), ar.CurCol());
-			return TK_NONE;
-		}
-	}
-	else
-	{
-		//if (tkType1 != TK_COMMA)
-		//	ar.PushToken(tkType1, tk1);
-	}
 	if (iItemCount > 0)
 	{
 	//	iStaticString = funs.AddStaticString("resize");
@@ -1539,20 +1529,9 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 		if (tkType1 == TK_R_MIDDLE)
 			break;
 	}
+	// 맵/테이블 뒤의 토큰은 소비해서 반환만 하고, 유효성은 호출자가 검증한다(ParseListDef와 동일).
+	// 여기서 `;`를 강제하면 맵 리터럴을 함수 인자로 쓸 때 잘못된 에러가 난다.
 	tkType1 = GetToken(ar, tk1);
-	if (ar._iTableDeep == 1)
-	{
-		if (tkType1 != TK_SEMICOLON)
-		{
-			SetCompileError(ar, "Error (%d, %d): Table ; \n", ar.CurLine(), ar.CurCol());
-			return TK_NONE;
-		}
-	}
-	else
-	{
-		//if(tkType1 != TK_COMMA)
-		//	ar.PushToken(tkType1, tk1);
-	}
 	if (iItemCount > 0)
 	{
 		//iStaticString = funs.AddStaticString("reserve");
