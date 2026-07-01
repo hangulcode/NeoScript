@@ -646,6 +646,40 @@ std::string CNeoVMWorker::FormatStackTrace(int currentOpIndex)
 		trace += "), SP(";
 		trace += std::to_string(stackBase);
 		trace += ")";
+
+		if (functionId >= 0 && functionId < (int)m_sFunctionPtr.size())
+		{
+			SFunctionTable& fun = m_sFunctionPtr[functionId];
+			trace += ", Args[";
+			for (int argIndex = 0; argIndex < fun._argsCount; ++argIndex)
+			{
+				if (argIndex > 0)
+					trace += ", ";
+
+				int varIndex = stackBase + 1 + argIndex;
+				std::string argName;
+				auto itFunNames = m_sDebugVarNames.find(functionId);
+				if (itFunNames != m_sDebugVarNames.end())
+				{
+					auto itName = itFunNames->second.find(1 + argIndex);
+					if (itName != itFunNames->second.end())
+						argName = itName->second;
+				}
+				if (argName.empty())
+				{
+					argName = "arg";
+					argName += std::to_string(argIndex + 1);
+				}
+
+				trace += argName;
+				trace += ":";
+				if (varIndex >= 0 && varIndex < (int)m_pVarStack_Base->size())
+					trace += GetDataType((*m_pVarStack_Base)[varIndex].GetType());
+				else
+					trace += "out_of_range";
+			}
+			trace += "]";
+		}
 	};
 
 	if (currentOpIndex < 0)
