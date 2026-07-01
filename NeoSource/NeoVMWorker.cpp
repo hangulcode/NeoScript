@@ -603,6 +603,68 @@ int CNeoVMWorker::GetFunctionIndexFromCodeOffset(int codeOffset)
 	}
 	return iFind;
 }
+std::string CNeoVMWorker::FormatStackTrace(int currentOpIndex)
+{
+	std::string trace;
+	trace.reserve(512);
+	trace += "\nScript Call Stack:";
+
+	auto appendFrame = [&](int frameIndex, int opIndex, int stackBase)
+	{
+		int functionId = GetFunctionIndexFromCodeOffset(opIndex * (int)sizeof(SVMOperation));
+		std::string functionName;
+		if (functionId >= 0)
+		{
+			auto itName = m_sDebugFunctionNames.find(functionId);
+			if (itName != m_sDebugFunctionNames.end())
+				functionName = itName->second;
+		}
+		if (functionName.empty())
+		{
+			functionName = "function#";
+			functionName += std::to_string(functionId);
+		}
+
+		int file = -1;
+		int line = -1;
+		if (opIndex >= 0 && opIndex < (int)_DebugData.size())
+		{
+			file = _DebugData[opIndex]._fileseq;
+			line = _DebugData[opIndex]._lineseq;
+		}
+
+		trace += "\n  #";
+		trace += std::to_string(frameIndex);
+		trace += " ";
+		trace += functionName;
+		trace += " : IP(";
+		trace += std::to_string(opIndex);
+		trace += "), File(";
+		trace += std::to_string(file);
+		trace += "), Line(";
+		trace += std::to_string(line);
+		trace += "), SP(";
+		trace += std::to_string(stackBase);
+		trace += ")";
+	};
+
+	if (currentOpIndex < 0)
+		currentOpIndex = 0;
+	appendFrame(0, currentOpIndex, _iSP_Vars);
+
+	if (m_pCallStack == nullptr)
+		return trace;
+
+	for (int i = (int)m_pCallStack->size() - 1, frameIndex = 1; i >= 0; --i, ++frameIndex)
+	{
+		SCallStack& cs = (*m_pCallStack)[i];
+		int opIndex = cs._iReturnOffset / (int)sizeof(SVMOperation);
+		if (opIndex > 0)
+			--opIndex;
+		appendFrame(frameIndex, opIndex, cs._iSP_Vars);
+	}
+	return trace;
+}
 bool CNeoVMWorker::CheckDebugStop(int iOPIndex)
 {
 	if (m_bDebugPaused)
@@ -1187,7 +1249,7 @@ bool	CNeoVMWorker::Run()
 		sprintf(chMsg, "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
 #endif
 
-		GetVM()->_sErrorMsgDetail = chMsg;
+		GetVM()->_sErrorMsgDetail = std::string(chMsg) + FormatStackTrace(_isErrorOPIndex);
 		if (m_pDebugListener || m_iDebugBreakCount > 0 || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
 		{
 			if (_isErrorOPIndex >= 0 && _isErrorOPIndex < (int)_DebugData.size())

@@ -289,8 +289,16 @@ NEOS_FORCEINLINE bool handle_ERROR(const SVMOperation& OP) {
 #else
     sprintf(chMsg, "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
 #endif
+
+    std::string detail = chMsg;
+#if 0
     if (GetVM()->_sErrorMsgDetail.empty())
         GetVM()->_sErrorMsgDetail = chMsg;
+#else
+    detail += FormatStackTrace(idx);
+    if (GetVM()->_sErrorMsgDetail.empty())
+        GetVM()->_sErrorMsgDetail = detail;
+#endif
 
     if (m_pDebugListener || m_iDebugBreakCount > 0 || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
     {
@@ -305,7 +313,7 @@ NEOS_FORCEINLINE bool handle_ERROR(const SVMOperation& OP) {
     SetStackPointer(_iSP_Vars);
 
     if (INeoVM::m_pFunError) {
-        INeoVM::m_pFunError(chMsg);
+        INeoVM::m_pFunError(detail.c_str());
     }
     return true; // Exit RunInternal
 }

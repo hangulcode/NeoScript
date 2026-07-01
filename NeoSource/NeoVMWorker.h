@@ -176,6 +176,7 @@ private:
     bool CheckDebugStop(int iOPIndex);
     void StopDebug(int iOPIndex, NeoDebugStopReason reason);
     int GetFunctionIndexFromCodeOffset(int codeOffset);
+	std::string FormatStackTrace(int currentOpIndex);
 	NEOS_FORCEINLINE int GetCodeptr() { return (int)((u8*)_pCodeCurrent - _pCodeBegin); }
 	NEOS_FORCEINLINE void SetCodePtr(int off) { _pCodeCurrent = (SVMOperation*)(_pCodeBegin + off); }
 	NEOS_FORCEINLINE void SetCodeIncPtr(int off) { _pCodeCurrent = (SVMOperation*)((u8*)_pCodeCurrent + off); }
