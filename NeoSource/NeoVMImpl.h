@@ -20,10 +20,12 @@ class CNeoVMImpl : public INeoVM
 private:
 
 
-	std::map<u32, ListInfo*> _sLists;
-	std::map<u32, MapInfo*> _sTables;
-	std::map<u32, SetInfo*> _sSets;
-	std::map<u32, StringInfo*> _sStrings;
+	// 살아있는 List/Map/Set 를 intrusive 이중연결 리스트로 추적 (종료 시 _Bucket 해제용).
+	// 기존 std::map<ID,ptr> 레지스트리 대체 — 할당/해제당 트리 연산 2~3회를 O(1) 링크로 교체.
+	// String 은 CNVMInstPool(소멸자 지원)이라 별도 추적 불필요 → 레지스트리 제거.
+	ListInfo* _sListHead = nullptr;
+	MapInfo* _sTableHead = nullptr;
+	SetInfo* _sSetHead = nullptr;
 	u32 _dwLastIDVMWorker = 0;
 
 

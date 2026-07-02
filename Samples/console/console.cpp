@@ -217,6 +217,28 @@ static int RunBenchmarks()
 
 	const BenchCase cases[] = {
 		{
+			"vec_churn",
+			R"(
+fun V3(var x, var y, var z) { return [x, y, z]; }
+fun AddV3(var a, var b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
+export fun VecChurn(var n)
+{
+	var sum = 0.0;
+	for(var i in 0, n, 1)
+	{
+		var a = V3(i, i + 1.0, i + 2.0);
+		var b = V3(i * 0.5, i * 0.25, i * 0.125);
+		var c = AddV3(a, b);
+		sum = sum + c[0] + c[1] + c[2];
+	}
+	return sum;
+}
+)",
+			"VecChurn",
+			200000,
+			5
+		},
+		{
 			"loop_sum",
 			R"(
 export fun LoopSum(var n)

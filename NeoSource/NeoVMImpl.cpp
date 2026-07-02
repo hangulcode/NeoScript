@@ -15,6 +15,24 @@
 namespace NeoScript
 {
 
+// 살아있는 객체 추적용 intrusive 이중연결 리스트 헬퍼 (List/Map/Set 공용).
+// _liveNext/_livePrev 필드를 가진 타입이면 동작한다.
+template<typename T>
+static NEOS_FORCEINLINE void LiveList_Insert(T*& head, T* p)
+{
+	p->_livePrev = nullptr;
+	p->_liveNext = head;
+	if (head) head->_livePrev = p;
+	head = p;
+}
+template<typename T>
+static NEOS_FORCEINLINE void LiveList_Remove(T*& head, T* p)
+{
+	if (p->_livePrev) p->_livePrev->_liveNext = p->_liveNext;
+	else             head = p->_liveNext;
+	if (p->_liveNext) p->_liveNext->_livePrev = p->_livePrev;
+}
+
 void CNeoVMImpl::Var_SetString(VarInfo *d, const char* str)
 {
 	std::string s(str);
@@ -97,19 +115,8 @@ void CNeoVMImpl::FreeCoroutine(VarInfo *d)
 
 StringInfo* CNeoVMImpl::StringAlloc(const std::string& str)
 {
+	// String 은 CNVMInstPool(소멸자 지원)이라 종료 시 개별 정리가 불필요 → 레지스트리 없음
 	StringInfo* p = m_sPool_String.Receive();// new StringInfo();
-	while (true)
-	{
-		if (++m_sPool_String._dwLastID == 0)
-			m_sPool_String._dwLastID = 1;
-
-		if (_sStrings.end() == _sStrings.find(m_sPool_String._dwLastID))
-		{
-			break;
-		}
-	}
-
-	p->_StringID = m_sPool_String._dwLastID;
 	p->_hash = 0;
 	p->_container = nullptr;
 	p->_containerVersion = 0;
@@ -119,34 +126,16 @@ StringInfo* CNeoVMImpl::StringAlloc(const std::string& str)
 	p->_str = str;
 	p->_StringLen = utf_string::UTF8_LENGTH(str);
 
-	_sStrings[m_sPool_String._dwLastID] = p;
 	return p;
 }
 void CNeoVMImpl::FreeString(VarInfo *d)
 {
-	auto it = _sStrings.find(d->_str->_StringID);
-	if (it == _sStrings.end())
-		return; // Error
-
-	_sStrings.erase(it);
-	//delete d->_str;
 	m_sPool_String.Confer(d->_str);
 }
 MapInfo* CNeoVMImpl::TableAlloc(int cnt)
 {
 	MapInfo* pTable = m_sPool_TableInfo.Receive();
-	while (true)
-	{
-		if (++m_sPool_TableInfo._dwLastID == 0)
-			m_sPool_TableInfo._dwLastID = 1;
-
-		if (_sTables.end() == _sTables.find(m_sPool_TableInfo._dwLastID))
-		{
-			break;
-		}
-	}
 	pTable->_pVM = this;
-	pTable->_TableID = m_sPool_TableInfo._dwLastID;
 	pTable->_refCount = 0;
 	pTable->_itemCount = 0;
 	pTable->_HashBase = 0;
@@ -156,17 +145,13 @@ MapInfo* CNeoVMImpl::TableAlloc(int cnt)
 	pTable->_fun._func = NULL;
 	pTable->_fun._property = NULL;
 
-	_sTables[m_sPool_TableInfo._dwLastID] = pTable;
+	LiveList_Insert(_sTableHead, pTable);
 	if (cnt > 0) pTable->Reserve(cnt);
 	return pTable;
 }
 void CNeoVMImpl::FreeTable(MapInfo* tbl)
 {
-	auto it = _sTables.find(tbl->_TableID);
-	if (it == _sTables.end())
-		return; // Error
-
-	_sTables.erase(it);
+	LiveList_Remove(_sTableHead, tbl);
 
 	if (tbl->_meta)
 	{
@@ -187,35 +172,19 @@ void CNeoVMImpl::FreeTable(MapInfo* tbl)
 ListInfo* CNeoVMImpl::ListAlloc(int cnt)
 {
 	ListInfo* pList = m_sPool_ListInfo.Receive();
-	while (true)
-	{
-		if (++m_sPool_ListInfo._dwLastID == 0)
-			m_sPool_ListInfo._dwLastID = 1;
-
-		if (_sLists.end() == _sLists.find(m_sPool_ListInfo._dwLastID))
-		{
-			break;
-		}
-	}
 	pList->_pVM = this;
-	pList->_ListID = m_sPool_ListInfo._dwLastID;
 	pList->_refCount = 0;
-	pList->_itemCount = 0;
-	pList->_BucketCapa = 0;
 	pList->_pUserData = NULL;
 	pList->_pIndexer = nullptr;
+	pList->InitInlineBucket();   // _Bucket=인라인, capa=4, itemCount=0 (작은 리스트는 힙 할당 없음)
 
-	_sLists[m_sPool_ListInfo._dwLastID] = pList;
+	LiveList_Insert(_sListHead, pList);
 	if (cnt > 0) pList->Resize(cnt);
 	return pList;
 }
 void CNeoVMImpl::FreeList(ListInfo* lst)
 {
-	auto it = _sLists.find(lst->_ListID);
-	if (it == _sLists.end())
-		return; // Error
-
-	_sLists.erase(it);
+	LiveList_Remove(_sListHead, lst);
 	lst->Free();
 
 	//delete tbl;
@@ -224,18 +193,7 @@ void CNeoVMImpl::FreeList(ListInfo* lst)
 SetInfo* CNeoVMImpl::SetAlloc()
 {
 	SetInfo* pSet = m_sPool_SetInfo.Receive();
-	while (true)
-	{
-		if (++m_sPool_SetInfo._dwLastID == 0)
-			m_sPool_SetInfo._dwLastID = 1;
-
-		if (_sSets.end() == _sSets.find(m_sPool_SetInfo._dwLastID))
-		{
-			break;
-		}
-	}
 	pSet->_pVM = this;
-	pSet->_SetID = m_sPool_SetInfo._dwLastID;
 	pSet->_refCount = 0;
 	pSet->_itemCount = 0;
 	pSet->_HashBase = 0;
@@ -245,16 +203,12 @@ SetInfo* CNeoVMImpl::SetAlloc()
 	pSet->_fun._func = NULL;
 	pSet->_fun._property = NULL;
 
-	_sSets[m_sPool_SetInfo._dwLastID] = pSet;
+	LiveList_Insert(_sSetHead, pSet);
 	return pSet;
 }
 void CNeoVMImpl::FreeSet(SetInfo* set)
 {
-	auto it = _sSets.find(set->_SetID);
-	if (it == _sSets.end())
-		return; // Error
-
-	_sSets.erase(it);
+	LiveList_Remove(_sSetHead, set);
 	if (set->_meta)
 	{
 		if (--set->_meta->_refCount <= 0)
@@ -448,31 +402,28 @@ CNeoVMImpl::~CNeoVMImpl()
 	}
 	_sVMWorkers.clear();
 
-	while (_sTables.empty() == false)
+	// 살아남은 List/Map/Set 의 _Bucket 을 해제 (intrusive live 리스트 순회).
+	// String 은 CNVMInstPool 소멸자가 std::str 을 정리하므로 별도 처리 없음.
+	// Free() 는 내부 항목을 Var_Release 하므로 중첩 컬렉션 해제 시 재귀로
+	// LiveList_Remove 가 호출될 수 있다. 먼저 p 를 완전히 언링크한 뒤 Free 한다.
+	while (_sTableHead)
 	{
-		auto it = _sTables.begin();
-		MapInfo* p = (*it).second;
-		_sTables.erase(it);
+		MapInfo* p = _sTableHead;
+		LiveList_Remove(_sTableHead, p);
 		p->Free();
 	}
-
-	while (_sLists.empty() == false)
+	while (_sListHead)
 	{
-		auto it = _sLists.begin();
-		ListInfo* p = (*it).second;
-		_sLists.erase(it);
+		ListInfo* p = _sListHead;
+		LiveList_Remove(_sListHead, p);
 		p->Free();
 	}
-
-	while (_sSets.empty() == false)
+	while (_sSetHead)
 	{
-		auto it = _sSets.begin();
-		SetInfo* p = (*it).second;
-		_sSets.erase(it);
+		SetInfo* p = _sSetHead;
+		LiveList_Remove(_sSetHead, p);
 		p->Free();
 	}
-
-	_sStrings.clear();
 
 	for (auto it = m_sCache_FunPtr.begin(); it != m_sCache_FunPtr.end(); it++)
 		delete (*it).second;

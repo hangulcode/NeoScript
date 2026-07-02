@@ -77,6 +77,10 @@ struct MapInfo : AllocBase
 	FunctionPtrNative _fun;
 	MapInfo*		_meta;
 
+	// 살아있는 객체 추적용 intrusive 이중연결 리스트 (std::map 레지스트리 대체)
+	MapInfo* _liveNext;
+	MapInfo* _livePrev;
+
 	void Free();
 
 	void Reserve(int sz);

@@ -13,15 +13,15 @@ namespace NeoScript
 
 void ListInfo::Free()
 {
-	if (_BucketCapa <= 0)
-		return;
-
 	for (int i = 0; i < _itemCount; i++)
 	{
 		_pVM->Var_Release(&_Bucket[i]);
 	}
 
-	delete[] _Bucket;
+	if (_Bucket != _inlineBucket)   // 힙 버킷만 해제 (인라인 버킷은 struct 일부)
+		delete[] _Bucket;
+
+	_Bucket = _inlineBucket;
 	_BucketCapa = 0;
 	_itemCount = 0;
 }
@@ -63,7 +63,7 @@ void ListInfo::Reserve(int capa)
 		VarInfo* pNew = new VarInfo[capa];
 		if (_itemCount > 0)
 			memcpy(pNew, _Bucket, sizeof(VarInfo) * _itemCount);
-		if (_BucketCapa > 0)
+		if (_BucketCapa > 0 && _Bucket != _inlineBucket)   // 인라인→힙 전환 시 인라인 버킷은 delete 하지 않음
 			delete[] _Bucket;
 
 		_Bucket = pNew;
