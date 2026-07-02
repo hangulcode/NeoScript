@@ -548,6 +548,19 @@ public:
 };
 
 
+// 호스트(게임 엔진)가 컴파일러에 넘기는 네이티브 전역 심볼 하나.
+// 소스 텍스트(preCompileHeader) 주입 대신 구조화 테이블로 전역 변수를 사전 선언한다.
+struct NeoGlobalSymbol
+{
+	const char* name;
+	bool        exported = true;   // true 면 GetVar 로 호스트가 바인딩 가능
+};
+struct NeoGlobalSymbolTable
+{
+	const NeoGlobalSymbol* symbols = nullptr;
+	int                    count = 0;
+};
+
 struct NeoCompilerParam
 {
 	const void* pBufferSrc;
@@ -559,7 +572,7 @@ struct NeoCompilerParam
 	bool allowGlobalInitLogic = true;
 	int iStackSize = 50 * 1024;
 
-	std::string* preCompileHeader = nullptr;
+	const NeoGlobalSymbolTable* globalSymbols = nullptr;
 	const char* debugSourcePath = nullptr;
 	std::vector<std::string>* debugSourceFiles = nullptr;
 	const NeoCompileDefines* defines = nullptr;

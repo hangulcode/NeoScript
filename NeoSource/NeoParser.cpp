@@ -3646,6 +3646,20 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 
 //	funs.AddStaticString("system");
 
+	// 호스트가 넘긴 네이티브 전역 심볼을 본문 파싱 전에 사전 선언한다.
+	// (기존 preCompileHeader "export var X;" 텍스트 주입을 구조화 테이블로 대체)
+	if (ar.m_pGlobalSymbols && ar.m_pGlobalSymbols->symbols)
+	{
+		for (int i = 0; i < ar.m_pGlobalSymbols->count; i++)
+		{
+			const NeoGlobalSymbol& sym = ar.m_pGlobalSymbols->symbols[i];
+			if (sym.name == nullptr || sym.name[0] == 0)
+				continue;
+			if (-1 == AddLocalVarName(ar, funs, vars, sym.exported, sym.name, true))
+				return false; // 중복/예약어 등은 AddLocalVarName 이 에러 세팅
+		}
+	}
+
 	bool r = ParseFunctionBody(ar, funs, vars);
 	if (true == r)
 	{
@@ -3673,8 +3687,6 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	return r;
 }
 
-#define MAX_PRECOMPILE_TEMP_BUFFER	512
-
 bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
 {
 	//CNeoVMImpl::InitLib();
@@ -3683,42 +3695,12 @@ bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
 	ar2._allowGlobalInitLogic = param.allowGlobalInitLogic;
 	ar2._debug = param.debug;
 	ar2.m_pDefines = param.defines;
+	ar2.m_pGlobalSymbols = param.globalSymbols;
 	if (param.debugSourceFiles != nullptr)
 	{
 		param.debugSourceFiles->clear();
 		param.debugSourceFiles->push_back(param.debugSourcePath != nullptr ? param.debugSourcePath : "");
 		ar2.m_pDebugSourceFiles = param.debugSourceFiles;
-	}
-
-	if (param.preCompileHeader && param.preCompileHeader->empty() == false)
-	{
-		u16 tmp[MAX_PRECOMPILE_TEMP_BUFFER + 1];
-		int sz = (int)param.preCompileHeader->size();
-		const char* pSrc = param.preCompileHeader->c_str();
-		u16* pDest;
-		if (sz > MAX_PRECOMPILE_TEMP_BUFFER) pDest = new u16[sz + 1];
-		else	pDest = tmp;
-		for(int i = 0; i < sz; i++)
-			pDest[i] = pSrc[i];
-		pDest[sz] = 0;
-
-		ar2.SetData(pDest, sz);
-		std::list< SToken> preToken;
-		SToken stoken;
-		while(true)
-		{
-			stoken._type = GetToken(ar2, stoken._tk);
-			if(stoken._type == TK_NONE)
-				break;
-			preToken.push_back(stoken);
-		}
-
-		ar2.m_sTokenQueue.swap(preToken);
-
-		ar2.SetData(NULL, 0);
-
-		if (sz > MAX_PRECOMPILE_TEMP_BUFFER) 
-			delete [] pDest;
 	}
 
 	ToArchiveRdWC((const char*)param.pBufferSrc, param.iLenSrc, ar2); // memory alloc

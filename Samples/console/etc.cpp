@@ -3,8 +3,9 @@
 
 using namespace NeoScript;
 
-static std::string preHeader = "export var GameObject;";
 static std::string preObejct = "GameObject";
+static NeoGlobalSymbol g_globalSyms[] = { { "GameObject" } };
+static NeoGlobalSymbolTable g_globalSymTable = { g_globalSyms, (int)_countof(g_globalSyms) };
 static NeoCompileDefines defines;
 
 static void neo_globalinterface(INeoVMWorker* pWorker, void* This)
@@ -31,7 +32,7 @@ int SAMPLE_etc(INeoLoader* pLoader, std::string filename, const char* pFunctionN
 	defines.clear();
 	defines.values["KEY_LEFT"] = { NEO_DEFINE_TOKEN_INT, "37" };
 
-	param.preCompileHeader = &preHeader;
+	param.globalSymbols = &g_globalSymTable;
 	param.defines = &defines;
 	NeoLoadVMParam vparam;
 	vparam.NeoGlobalInterface = neo_globalinterface;
