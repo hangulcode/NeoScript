@@ -58,6 +58,42 @@ The VS Code debugger currently supports:
 	- print output in the Debug Console
 	- Runtime exception stop and exceptionInfo
 
+### Compile-time defines
+Host applications can provide C-style compile-time defines through `NeoCompilerParam::defines`.
+This is useful for engine constants such as keyboard codes.
+
+The define table is token based, so the host can prepare values before compilation.
+During script compilation, identifiers such as `KEY_LEFT` are replaced before normal parsing.
+This does not create a script global variable and has no runtime lookup cost.
+
+```cpp
+NeoScript::NeoCompileDefines defines;
+defines.values["KEY_LEFT"]  = { NeoScript::NEO_DEFINE_TOKEN_INT, "37" };
+defines.values["KEY_RIGHT"] = { NeoScript::NEO_DEFINE_TOKEN_INT, "39" };
+
+NeoScript::NeoCompilerParam param(source, sourceLength);
+param.defines = &defines;
+
+NeoScript::INeoVM* vm = NeoScript::INeoVM::CompileAndLoadRunVM(param);
+```
+
+Script code:
+```cpp
+if (key == KEY_LEFT)
+{
+    print("left");
+}
+```
+
+Supported define token types:
+	- `NEO_DEFINE_TOKEN_IDENTIFIER`
+	- `NEO_DEFINE_TOKEN_INT`
+	- `NEO_DEFINE_TOKEN_FLOAT`
+	- `NEO_DEFINE_TOKEN_STRING`
+	- `NEO_DEFINE_TOKEN_TRUE`
+	- `NEO_DEFINE_TOKEN_FALSE`
+	- `NEO_DEFINE_TOKEN_NULL`
+
 ### Performance test results
 CPU : 12th Gen Intel(R) Core(TM) i7-12700F 2.10GHz  
 RAM : 64GB  
