@@ -5,6 +5,7 @@ using namespace NeoScript;
 
 static std::string preHeader = "export var GameObject;";
 static std::string preObejct = "GameObject";
+static NeoCompileDefines defines;
 
 static void neo_globalinterface(INeoVMWorker* pWorker, void* This)
 {
@@ -27,7 +28,11 @@ int SAMPLE_etc(INeoLoader* pLoader, std::string filename, const char* pFunctionN
 	param.putASM = true;
 	param.debug = true;
 #if true
+	defines.clear();
+	defines.values["KEY_LEFT"] = { NEO_DEFINE_TOKEN_INT, "37" };
+
 	param.preCompileHeader = &preHeader;
+	param.defines = &defines;
 	NeoLoadVMParam vparam;
 	vparam.NeoGlobalInterface = neo_globalinterface;
 	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param, &vparam);

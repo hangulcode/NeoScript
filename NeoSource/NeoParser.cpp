@@ -439,11 +439,49 @@ TK_TYPE CalcStringToken(std::string& tk)
 	return TK_STRING;
 }
 
+TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk);
+
+static TK_TYPE CompileDefineTokenToToken(const NeoCompileDefineToken& defineToken, std::string& tk)
+{
+	tk = defineToken.text;
+	switch (defineToken.type)
+	{
+	case NEO_DEFINE_TOKEN_TRUE:
+//		if (tk.empty()) tk = "true"; // 이렇게 하는것 보다 Define 을 전달하는 곳에서 잘하면 됨.
+		return TK_TRUE;
+	case NEO_DEFINE_TOKEN_FALSE:
+//		if (tk.empty()) tk = "false";
+		return TK_FALSE;
+	case NEO_DEFINE_TOKEN_NULL:
+//		if (tk.empty()) tk = "null";
+		return TK_NULL;
+	case NEO_DEFINE_TOKEN_IDENTIFIER:
+	case NEO_DEFINE_TOKEN_INT:
+	case NEO_DEFINE_TOKEN_FLOAT:
+	case NEO_DEFINE_TOKEN_STRING:
+	default:
+		return TK_STRING;
+	}
+}
+
+static TK_TYPE ApplyCompileDefine(CArchiveRdWC& ar, TK_TYPE tkType, std::string& tk)
+{
+	if (tkType != TK_STRING || ar.m_pDefines == nullptr)
+		return tkType;
+
+	auto it = ar.m_pDefines->values.find(tk);
+	if (it == ar.m_pDefines->values.end())
+		return tkType;
+
+	const NeoCompileDefineToken& f = (*it).second;
+	return CompileDefineTokenToToken(f, tk);
+}
+
 
 TK_TYPE CalcToken(TK_TYPE tkTypeOnySingleChar, CArchiveRdWC& ar, std::string& tk)
 {
 	if (false == tk.empty())
-		return CalcStringToken(tk);
+		return ApplyCompileDefine(ar, CalcStringToken(tk), tk);
 
 	u16 c1 = ar.GetData(true);
 	u16 c2 = ar.GetData(false);
@@ -633,7 +671,7 @@ TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk)
 
 		case '\n':
 			if (false == tk.empty())
-				return CalcStringToken(tk);
+				return ApplyCompileDefine(ar, CalcStringToken(tk), tk);
 			ar.GetData(true);
 			ar.AddLine();
 			break;
@@ -641,7 +679,7 @@ TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk)
 		case '\r':
 		case '\t':
 			if (false == tk.empty())
-				return CalcStringToken(tk);
+				return ApplyCompileDefine(ar, CalcStringToken(tk), tk);
 			ar.GetData(true);
 			break;
 
@@ -921,6 +959,7 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	ToArchiveRdWC((const char*)pFileBuffer, iFileLen, ar2);
 	ar2._allowGlobalInitLogic = ar._allowGlobalInitLogic;
 	ar2._debug = ar._debug;
+	ar2.m_pDefines = ar.m_pDefines;
 	ar2.m_sModuleName = fileName;
 	ar2.m_pDebugSourceFiles = ar.m_pDebugSourceFiles;
 	if (ar2.m_pDebugSourceFiles != nullptr)
@@ -3643,6 +3682,7 @@ bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
 	CArchiveRdWC ar2;
 	ar2._allowGlobalInitLogic = param.allowGlobalInitLogic;
 	ar2._debug = param.debug;
+	ar2.m_pDefines = param.defines;
 	if (param.debugSourceFiles != nullptr)
 	{
 		param.debugSourceFiles->clear();

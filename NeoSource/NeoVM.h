@@ -12,6 +12,31 @@ struct INeoVMWorker;
 struct FunctionPtr;
 struct VarInfo;
 
+enum NeoCompileDefineTokenType
+{
+	NEO_DEFINE_TOKEN_IDENTIFIER,
+	NEO_DEFINE_TOKEN_INT,
+	NEO_DEFINE_TOKEN_FLOAT,
+	NEO_DEFINE_TOKEN_STRING,
+	NEO_DEFINE_TOKEN_TRUE,
+	NEO_DEFINE_TOKEN_FALSE,
+	NEO_DEFINE_TOKEN_NULL,
+};
+
+struct NeoCompileDefineToken
+{
+	NeoCompileDefineTokenType type = NEO_DEFINE_TOKEN_IDENTIFIER;
+	std::string text;
+};
+
+struct NeoCompileDefines
+{
+	std::unordered_map<std::string, NeoCompileDefineToken> values;
+
+	void clear() { values.clear(); }
+	bool empty() const { return values.empty(); }
+};
+
 struct INeoLoader
 {
 	virtual bool Load(const char* pFileName, void*& pBuffer, int& iLen) = 0;
@@ -537,6 +562,7 @@ struct NeoCompilerParam
 	std::string* preCompileHeader = nullptr;
 	const char* debugSourcePath = nullptr;
 	std::vector<std::string>* debugSourceFiles = nullptr;
+	const NeoCompileDefines* defines = nullptr;
 
 	NeoCompilerParam(const void* pSrc, int SrcLen)
 	{
