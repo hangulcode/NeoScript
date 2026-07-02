@@ -177,6 +177,12 @@
 					<key>match</key>
 					<string>\b(true|false|none|null|this)\b</string>
 				</dict>
+				<dict>
+					<key>name</key>
+					<string>constant.other.define.neoscript</string>
+					<key>match</key>
+					<string>\b[A-Z][A-Z0-9_]*\b</string>
+				</dict>
 			</array>
 		</dict>
 		<key>numbers</key>
