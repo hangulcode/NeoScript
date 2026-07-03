@@ -331,4 +331,25 @@ NEOS_FORCEINLINE void Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
 	}
 }
 
+// 문자열 키 전용 fast path.
+// MapBucket::Find(VAR_STRING) 와 동일 의미론이지만 타입 switch / GetHashCode 디스패치를 생략한다.
+NEOS_FORCEINLINE VarInfo* MapInfo::FindString(StringInfo* pKeyStr)
+{
+	if (_BucketCapa <= 0)
+		return NULL;
+	u32 hash = pKeyStr->GetHash();
+	MapNode* pCur = _Bucket[hash & _HashBase].pFirst;
+	while (pCur)
+	{
+		if (pCur->hash == hash && pCur->key.GetType() == VAR_STRING)
+		{
+			StringInfo* pCurStr = pCur->key._str;
+			if (pCurStr == pKeyStr || pCurStr->_str == pKeyStr->_str)
+				return &pCur->value;
+		}
+		pCur = pCur->pNext;
+	}
+	return NULL;
+}
+
 };

@@ -870,6 +870,7 @@ bool	CNeoVMWorker::Setup(int iFunctionID, std::vector<VarInfo>& _args)
 
 	return true;
 }
+
 bool CNeoVMWorker::IsWorking()
 {
 	//return _isInitialized;

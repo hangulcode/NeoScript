@@ -335,6 +335,55 @@ export fun MapStringRead(var n)
 			50000,
 			5
 		},
+		{
+			"add4_only", // 분해측정: map_str_read 에서 read 를 뺀 것 (루프 + add 4회)
+			R"(
+export fun Add4Only(var n)
+{
+	var sum = 0.0;
+	for(var i in 0, n, 1)
+	{
+		sum = sum + 1;
+		sum = sum + 8;
+		sum = sum + 3;
+		sum = sum + 6;
+	}
+	return sum;
+}
+)",
+			"Add4Only",
+			50000,
+			5
+		},
+		{
+			"read4_only", // 분해측정: map read 4회만 (add 없음)
+			R"(
+export fun Read4Only(var n)
+{
+	var m = {};
+	m["alpha"] = 1;
+	m["bravo"] = 2;
+	m["charlie"] = 3;
+	m["delta"] = 4;
+	m["echo"] = 5;
+	m["foxtrot"] = 6;
+	m["golf"] = 7;
+	m["hotel"] = 8;
+	var t = 0;
+	for(var i in 0, n, 1)
+	{
+		t = m["alpha"];
+		t = m["hotel"];
+		t = m["charlie"];
+		t = m["foxtrot"];
+	}
+	return t;
+}
+)",
+			"Read4Only",
+			50000,
+			5
+		},
 	};
 
 	for (const BenchCase& bench : cases)

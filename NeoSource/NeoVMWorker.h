@@ -156,7 +156,6 @@ private:
     bool IsDebugBreakLineBit(const std::vector<u8>& bits, int line) const;
     bool IsDebugBreakpoint(int file, int line) const;
 
-
 //	inline void SetCheckTime() { m_op_process = 0; }
 	void JumpAsyncMsg();
 
