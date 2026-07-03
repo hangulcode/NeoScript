@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 NEOS_FORCEINLINE void CNeoVMWorker::Move(VarInfo* v1, VarInfo* v2)
 {
