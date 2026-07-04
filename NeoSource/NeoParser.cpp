@@ -2963,9 +2963,11 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	funs._cur->_code->Read(byTempCheck, iCheckCodeSize);
 	funs._cur->_code->SetPointer(Pos1, SEEK_SET);
-	for (int i = 0; i < iCheckCodeSize / 8; i++)
-		DebugCheck[i] = (*funs._cur->_pDebugData)[Pos1 / 8 + i];
-
+	if (ar._debug)
+	{
+		for (int i = 0; i < iCheckCodeSize / 8; i++)
+			DebugCheck[i] = (*funs._cur->_pDebugData)[Pos1 / 8 + i];
+	}
 
 
 	//	while {} Process
