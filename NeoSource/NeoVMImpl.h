@@ -128,6 +128,8 @@ public:
 
 	static bool IsGlobalLibFun(std::string& FunName);
 	static const std::list< SystemFun>* GetSystemModule(const std::string& module);
+	static int FindDefaultNativeIndex(const VMString* pStr);
+	static bool CallDefaultNativeByIndex(int nativeIndex, CNeoVMWorker* pWorker, short args);
 	void RegLibrary(VarInfo* pSystem, const char* pLibName);// , SNeoFunLib* pFuns);
 	static void RegObjLibrary();
 	static void InitLib();

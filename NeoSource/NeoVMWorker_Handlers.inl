@@ -140,6 +140,15 @@ NEOS_FORCEINLINE bool handle_PTRCALL2(const SVMOperation& OP) {
     return false;
 }
 
+NEOS_FORCEINLINE bool handle_NATIVECALL(const SVMOperation& OP) {
+    short n2 = OP.n2;
+    CallDefaultNativeByIndex(OP.n1, n2, (OP.argFlag & NEOS_OP_CALL_NORESULT) ? nullptr : GetVarPtr3(OP));
+
+    if (_iSP_Vars_Max2 < _iSP_VarsMax + (1 + n2))
+        _iSP_Vars_Max2 = _iSP_VarsMax + (1 + n2);
+    return false;
+}
+
 NEOS_FORCEINLINE bool handle_RETURN(const SVMOperation& OP) {
     if (m_iBreakingCallStack == (int)m_pCallStack->size())
     {

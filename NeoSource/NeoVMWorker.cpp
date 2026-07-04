@@ -536,6 +536,29 @@ bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, 
 		m_sVarGlobal[i].ClearType();
 	}
 
+	int opCount = header._iCodeSize / (int)sizeof(SVMOperation);
+	SVMOperation* pOps = (SVMOperation*)_pCodeBegin;
+	for (int i = 0; i < opCount; ++i)
+	{
+		SVMOperation& op = pOps[i];
+		if (op.op != NOP_PTRCALL2)
+			continue;
+
+		if (op.argFlag & (1 << 2))
+			continue;
+
+		VarInfo* pFunName = NEOS_GLOBAL_VAR(op.n1);
+		if (pFunName == nullptr || pFunName->GetType() != VAR_STRING)
+			continue;
+
+		int nativeIndex = CNeoVMImpl::FindDefaultNativeIndex(pFunName->_str);
+		if (nativeIndex < 0 || nativeIndex > SHRT_MAX)
+			continue;
+
+		op.op = NOP_NATIVECALL;
+		op.n1 = (short)nativeIndex;
+	}
+
 	if (header.m_iDebugCount > 0)
 	{
 		_DebugData.resize(header.m_iDebugCount);
@@ -1574,6 +1597,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_CALL:          handle_CALL(OP); break;
 		case NOP_PTRCALL:       handle_PTRCALL(OP); break;
 		case NOP_PTRCALL2:      handle_PTRCALL2(OP); break;
+		case NOP_NATIVECALL:    handle_NATIVECALL(OP); break;
 		case NOP_RETURN:
 			if (handle_RETURN(OP)) return true;
 			break;
@@ -1789,6 +1813,68 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 
 	if ((func)(this, pUserData, pStr, n3) == false)
 	{
+		SetError("Ptr Call Error");
+		return false;
+	}
+	if (nullptr != pRet)
+		Move(pRet, m_pVarStack_Pointer);
+
+	int argSP_Vars = _iSP_Vars;
+	_iSP_Vars = iSave;
+	SetStackPointer(_iSP_Vars);
+	if (m_pRegisterActive != NULL)
+	{
+		switch(m_pRegisterActive->_sub_state)
+		{ 
+			case COROUTINE_SUB_START:
+				StartCoroutione(argSP_Vars, n3);
+				break;
+			case COROUTINE_SUB_CLOSE:
+				switch (m_pRegisterActive->_state)
+				{
+					case COROUTINE_STATE_SUSPENDED:
+						DeadCoroutine(m_pRegisterActive);
+						break;
+					case COROUTINE_STATE_RUNNING:
+						if (m_pCur != m_pRegisterActive)SetError("Coroutine Error 1");
+						else							StopCoroutine(true);
+						break;
+					case COROUTINE_STATE_DEAD:
+						break;
+					case COROUTINE_STATE_NORMAL:
+						DeadCoroutine(m_pRegisterActive);
+						for(auto it = m_sCoroutines.begin(); it != m_sCoroutines.end(); it++)
+						{
+							if((*it) == m_pRegisterActive)
+							{
+								m_sCoroutines.erase(it);
+								break;
+							}
+						}
+						break;
+				}
+				m_pRegisterActive = NULL;
+				break;
+			default:
+				SetError("Coroutine Error 1");
+				break;
+		}
+	}
+
+	return true;
+}
+bool CNeoVMWorker::CallDefaultNativeByIndex(int nativeIndex, int n3, VarInfo* pRet)
+{
+	int iSave = _iSP_Vars;
+	_iSP_Vars = _iSP_VarsMax;
+	SetStackPointer(_iSP_Vars);
+	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1 + n3)
+		_iSP_Vars_Max2 = _iSP_VarsMax + 1 + n3;
+
+	if (CNeoVMImpl::CallDefaultNativeByIndex(nativeIndex, this, (short)n3) == false)
+	{
+		_iSP_Vars = iSave;
+		SetStackPointer(_iSP_Vars);
 		SetError("Ptr Call Error");
 		return false;
 	}

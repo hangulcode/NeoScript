@@ -25,6 +25,7 @@ struct SystemFun
 {
 	std::string fname;
 	int			argCount;
+	int			nativeIndex;
 };
 
 
@@ -173,6 +174,7 @@ enum eNOperation : OpType
 
 	NOP_NONE,
 	NOP_ERROR,
+	NOP_NATIVECALL,	// Native Call (patched at LoadVM)
 	NOP_MAX,
 }; // Operation length
 

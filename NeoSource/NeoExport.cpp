@@ -314,6 +314,10 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, &v.n3);
 			break;
+		case NOP_NATIVECALL: // 컴파일에 나오지 않고, LoadVM 에서 NOP_PTRCALL2 인경우 System 함수이름을 찾어서 함수 Index 화
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
+			argFlag |= GetArgIndexToCode(argFlag, nullptr, nullptr, &v.n3);
+			break;
 		case NOP_CALL:
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
 			argFlag |= GetArgIndexToCode(argFlag, nullptr, nullptr, &v.n3);
@@ -875,6 +879,18 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			{
 				OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 				OutAsm("PCA2 %s = %s arg:%d\n", GetLog(td, v, 3).c_str(), GetLog(td, v, 1).c_str(), v.n2);
+			}
+			break;
+		case NOP_NATIVECALL: // 컴파일에 나오지 않고, LoadVM 에서 NOP_PTRCALL2 인경우 System 함수이름을 찾어서 함수 Index 화
+			if (v.argFlag & NEOS_OP_CALL_NORESULT)
+			{
+				OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
+				OutAsm("NCAL native:%d arg:%d\n", v.n1, v.n2);
+			}
+			else
+			{
+				OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+				OutAsm("NCAL %s = native:%d arg:%d\n", GetLog(td, v, 3).c_str(), v.n1, v.n2);
 			}
 			break;
 		case NOP_CALL:

@@ -501,6 +501,27 @@ struct neo_libs
 		pN->ReturnValue(::sqrt(v));
 		return true;
 	}
+	static bool Math_Vector2(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+
+		VarInfo* pRet = pN->GetReturnVar();
+		if (pN->ResetVarType(pRet, VAR_LIST, 2) == false) return false;
+		pRet->ListInsertFloat(0, pN->read<NS_FLOAT>(1));
+		pRet->ListInsertFloat(1, pN->read<NS_FLOAT>(2));
+		return true;
+	}
+	static bool Math_Vector3(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 3) return false;
+
+		VarInfo* pRet = pN->GetReturnVar();
+		if (pN->ResetVarType(pRet, VAR_LIST, 3) == false) return false;
+		pRet->ListInsertFloat(0, pN->read<NS_FLOAT>(1));
+		pRet->ListInsertFloat(1, pN->read<NS_FLOAT>(2));
+		pRet->ListInsertFloat(2, pN->read<NS_FLOAT>(3));
+		return true;
+	}
 	static bool ReadVec3(VarInfo* pVar, NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z)
 	{
 		if (pVar == nullptr || pVar->GetType() != VAR_LIST) return false;
@@ -1087,6 +1108,8 @@ static VMHash<TYPE_NeoLib> g_sNeoFunLib_List;
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_String;
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_Map;
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_Async;
+static std::vector<TYPE_NeoLib> g_sNeoFunLib_DefaultNative;
+static std::map<std::string, int> g_sNeoFunLib_DefaultNativeIndex;
 
 bool CNeoVMImpl::_funInitLib = false;
 FunctionPtrNative CNeoVMImpl::_funLib_Default;
@@ -1140,9 +1163,23 @@ static bool Fun_Async(INeoVMWorker* pN, void* pUserData, const VMString* pStr, s
 std::map<std::string, std::list< SystemFun>> g_sSystemFuns;
 std::string g_sCurrentSystem;
 
+static int AddDefaultNativeFun(const std::string& nativeName, TYPE_NeoLib fun)
+{
+	auto it = g_sNeoFunLib_DefaultNativeIndex.find(nativeName);
+	if (it != g_sNeoFunLib_DefaultNativeIndex.end())
+		return it->second;
+
+	int nativeIndex = (int)g_sNeoFunLib_DefaultNative.size();
+	g_sNeoFunLib_DefaultNative.push_back(fun);
+	g_sNeoFunLib_DefaultNativeIndex[nativeName] = nativeIndex;
+	g_sNeoFunLib_Default.Add(nativeName, fun);
+	return nativeIndex;
+}
+
 static void AddSystemFun(const std::string& fname, TYPE_NeoLib fun, int argcnt)
 {
-	g_sNeoFunLib_Default.Add("#" + fname, fun);
+	const std::string nativeName = "#" + fname;
+	int nativeIndex = AddDefaultNativeFun(nativeName, fun);
 	if(g_sCurrentSystem.empty() == false)
 	{
 		auto it = g_sSystemFuns.find(g_sCurrentSystem);
@@ -1152,6 +1189,7 @@ static void AddSystemFun(const std::string& fname, TYPE_NeoLib fun, int argcnt)
 			SystemFun v;
 			v.fname = fname;
 			v.argCount = argcnt;
+			v.nativeIndex = nativeIndex;
 			lst.push_back(v);
 
 			g_sSystemFuns[g_sCurrentSystem] = lst;
@@ -1162,9 +1200,32 @@ static void AddSystemFun(const std::string& fname, TYPE_NeoLib fun, int argcnt)
 			SystemFun v;
 			v.fname = fname;
 			v.argCount = argcnt;
+			v.nativeIndex = nativeIndex;
 			lst.push_back(v);
 		}
 	}
+}
+
+int CNeoVMImpl::FindDefaultNativeIndex(const VMString* pStr)
+{
+	if (pStr == nullptr)
+		return -1;
+
+	TYPE_NeoLib f;
+	if (g_sNeoFunLib_Default.TryGetValue(pStr, &f) == false)
+		return -1;
+
+	auto it = g_sNeoFunLib_DefaultNativeIndex.find(pStr->_str);
+	if (it == g_sNeoFunLib_DefaultNativeIndex.end())
+		return -1;
+	return it->second;
+}
+
+bool CNeoVMImpl::CallDefaultNativeByIndex(int nativeIndex, CNeoVMWorker* pWorker, short args)
+{
+	if (nativeIndex < 0 || nativeIndex >= (int)g_sNeoFunLib_DefaultNative.size())
+		return false;
+	return (*g_sNeoFunLib_DefaultNative[nativeIndex])(pWorker, nullptr, args);
 }
 
 static void AddGlobalLibFun()
@@ -1172,7 +1233,7 @@ static void AddGlobalLibFun()
 	if (g_sNeoFunLib_Default.empty() == false)
 		return;
 
-	g_sNeoFunLib_Default.Add("print", &neo_libs::io_print);
+	AddDefaultNativeFun("print", &neo_libs::io_print);
 
 	g_sCurrentSystem = "math";
 	AddSystemFun("abs", &neo_libs::Math_abs, 1);
@@ -1190,6 +1251,8 @@ static void AddGlobalLibFun()
 	AddSystemFun("deg", &neo_libs::Math_deg, 1);
 	AddSystemFun("rad", &neo_libs::Math_rad, 1);
 	AddSystemFun("sqrt", &neo_libs::Math_sqrt, 1);
+	AddSystemFun("Vector2", &neo_libs::Math_Vector2, 2);
+	AddSystemFun("Vector3", &neo_libs::Math_Vector3, 3);
 	AddSystemFun("quat_from_basis", &neo_libs::Math_quat_from_basis, 3);
 	AddSystemFun("srand", &neo_libs::Math_srand, 1);
 	AddSystemFun("rand", &neo_libs::Math_rand, 0);
