@@ -160,6 +160,30 @@ static double ElapsedMs(std::chrono::steady_clock::time_point start, std::chrono
 	return std::chrono::duration<double, std::milli>(end - start).count();
 }
 
+class ScopedNeoExecPool
+{
+	NeoExecContextPool* m_pool = nullptr;
+public:
+	ScopedNeoExecPool()
+	{
+		m_pool = NeoExecContextPool_Create();
+	}
+	~ScopedNeoExecPool()
+	{
+		NeoExecContextPool_Destroy(m_pool);
+	}
+	NeoExecContextPool* Get() const
+	{
+		return m_pool;
+	}
+	NeoLoadVMParam MakeLoadParam() const
+	{
+		NeoLoadVMParam vparam;
+		vparam.execPool = m_pool;
+		return vparam;
+	}
+};
+
 static int RunBenchCase(const char* name, const char* source, const char* functionName, int arg, int iterations)
 {
 	std::string src = source;
@@ -170,7 +194,9 @@ static int RunBenchCase(const char* name, const char* source, const char* functi
 	param.debug = false;
 
 	auto compileStart = std::chrono::steady_clock::now();
-	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param);
+	ScopedNeoExecPool execPool;
+	NeoLoadVMParam vparam = execPool.MakeLoadParam();
+	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param, &vparam);
 	auto compileEnd = std::chrono::steady_clock::now();
 	if (pVM == nullptr)
 	{
@@ -423,8 +449,10 @@ static int RunDebugSmoke()
 	param.err = &err;
 	param.putASM = false;
 	param.debug = true;
+	ScopedNeoExecPool execPool;
+	NeoLoadVMParam vparam = execPool.MakeLoadParam();
 
-	INeoVM* pVM = INeoVM::CompileAndLoadVM(param);
+	INeoVM* pVM = INeoVM::CompileAndLoadVM(param, &vparam);
 	if (pVM == nullptr)
 	{
 		printf("[debug-smoke] compile failed: %s\n", err.c_str());
@@ -501,7 +529,7 @@ static int RunDebugSmoke()
 	stepParam.err = &err;
 	stepParam.putASM = false;
 	stepParam.debug = true;
-	pVM = INeoVM::CompileAndLoadVM(stepParam);
+	pVM = INeoVM::CompileAndLoadVM(stepParam, &vparam);
 	if (pVM == nullptr)
 	{
 		printf("[debug-smoke] step compile failed: %s\n", err.c_str());
@@ -535,7 +563,7 @@ static int RunDebugSmoke()
 	INeoVM::ReleaseVM(pVM);
 
 	err.clear();
-	pVM = INeoVM::CompileAndLoadVM(stepParam);
+	pVM = INeoVM::CompileAndLoadVM(stepParam, &vparam);
 	if (pVM == nullptr)
 	{
 		printf("[debug-smoke] step-out compile failed: %s\n", err.c_str());
@@ -582,7 +610,7 @@ static int RunDebugSmoke()
 	exportParam.err = &err;
 	exportParam.putASM = false;
 	exportParam.debug = true;
-	pVM = INeoVM::CompileAndLoadVM(exportParam);
+	pVM = INeoVM::CompileAndLoadVM(exportParam, &vparam);
 	if (pVM == nullptr)
 	{
 		printf("[debug-smoke] export compile failed: %s\n", err.c_str());
@@ -642,7 +670,7 @@ static int RunDebugSmoke()
 	errorParam.err = &err;
 	errorParam.putASM = false;
 	errorParam.debug = true;
-	pVM = INeoVM::CompileAndLoadVM(errorParam);
+	pVM = INeoVM::CompileAndLoadVM(errorParam, &vparam);
 	if (pVM == nullptr)
 	{
 		printf("[debug-smoke] exception compile failed: %s\n", err.c_str());
@@ -845,6 +873,7 @@ public:
 	int seq = 1;
 	INeoVM* vm = nullptr;
 	INeoVMWorker* worker = nullptr;
+	NeoExecContextPool* execPool = nullptr;
 	std::string sourcePath;
 	std::vector<std::string> sourceFiles;
 	std::map<int, std::vector<int>> breakpointsByFile;
@@ -997,7 +1026,11 @@ public:
 			param.debugSourcePath = fullPath.c_str();
 			param.debugSourceFiles = &sourceFiles;
 		}
-		vm = INeoVM::CompileAndLoadVM(param);
+		if (execPool == nullptr)
+			execPool = NeoExecContextPool_Create();
+		NeoLoadVMParam vparam;
+		vparam.execPool = execPool;
+		vm = INeoVM::CompileAndLoadVM(param, &vparam);
 		if (vm == nullptr)
 			return false;
 		worker = vm->GetMainWorker();
@@ -1316,6 +1349,8 @@ static int RunDebugAdapter(CNeoLoader* loader)
 		session.Handle(body);
 	if (session.vm)
 		INeoVM::ReleaseVM(session.vm);
+	if (session.execPool)
+		NeoExecContextPool_Destroy(session.execPool);
 	if (g_DapOutput && g_DapOutput != stdout)
 		fclose(g_DapOutput);
 	g_DapOutput = stdout;

@@ -52,7 +52,10 @@ int main(int argc, const char** argv)
 	//param.putASM = true;
 	//param.debug = true;
 
-	INeoVM* pVM = INeoVM::CompileAndLoadVM(param);
+	NeoExecContextPool* execPool = NeoExecContextPool_Create();
+	NeoLoadVMParam vparam;
+	vparam.execPool = execPool;
+	INeoVM* pVM = INeoVM::CompileAndLoadVM(param, &vparam);
 	if (pVM != NULL)
 	{
 		DWORD dwCallTime = 0;
@@ -65,6 +68,7 @@ int main(int argc, const char** argv)
 
 		INeoVM::ReleaseVM(pVM);
 	}
+	NeoExecContextPool_Destroy(execPool);
 	delete[] pFileBuffer;
 	INeoVM::Shutdown();
 }

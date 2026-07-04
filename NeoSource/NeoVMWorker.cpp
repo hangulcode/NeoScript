@@ -48,25 +48,24 @@ CNeoVMWorker::CNeoVMWorker(INeoVM* pVM, u32 id, int iStackSize)
 	m_pVarGlobal = &m_sVarGlobal;
 	m_pVarGlobal_Pointer = nullptr;
 
-	m_pCur = &m_sDefault;
-	m_pCur->_state = COROUTINE_STATE_RUNNING;
-	m_pVarStack_Base = &m_pCur->m_sVarStack;
-	m_pCallStack = &m_pCur->m_sCallStack;
+	// 실행 스택은 더 이상 워커가 소유하지 않는다. 실행 시 풀에서 컨텍스트를 대여해 바인딩한다.
+	m_pCur = nullptr;
+	m_pMainCtx = nullptr;
+	m_pVarStack_Base = nullptr;
+	m_pCallStack = nullptr;
+	m_pVarStack_Pointer = nullptr;
 
 	ClearSP();
 
-	//_intA1.SetType(VAR_INT);
-	//_intA2.SetType(VAR_INT);
-	//_intA3.SetType(VAR_INT);
 	_funA3.SetType(VAR_FUN);
-
-	if(iStackSize < 100) iStackSize = 100;
-	m_pVarStack_Base->resize(iStackSize);
-	m_pCallStack->reserve(1000);
-	m_pVarStack_Pointer = &(*m_pVarStack_Base)[0];
+	(void)iStackSize;
 }
 CNeoVMWorker::~CNeoVMWorker()
 {
+	// 정지 상태로 남은(retain 된) 최상위 실행 컨텍스트를 풀로 반납.
+	if (m_pMainCtx != nullptr)
+		ReleaseExecution();
+
 	for (int i = 0; i < (int)m_sVarGlobal.size(); i++)
 		Var_Release(&m_sVarGlobal[i]);
 	m_sVarGlobal.clear();
@@ -433,6 +432,12 @@ static u32 ReadCount(CNArchive& ar)
 }
 bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, int iStackSize)
 {
+	// 실행 컨텍스트 풀: 명시 주입 우선, 없으면 VM(임플) 기본 풀 상속(모듈 로드 워커 등).
+	if (vparam != nullptr && vparam->execPool != nullptr)
+		m_pPool = vparam->execPool;
+	else
+		m_pPool = GetVM()->GetExecPool();
+
 	_BytesSize = iSize;
 	CNArchive ar(pBuffer, iSize);
 	SNeoVMHeader header;
@@ -576,7 +581,7 @@ bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, 
 			break;
 		}
 	}
-	if(vparam)
+	if(vparam && vparam->NeoGlobalInterface)
 	{
 		vparam->NeoGlobalInterface(this, vparam->param);
 	}
@@ -835,10 +840,135 @@ bool	CNeoVMWorker::Initialize(int iFunctionID, std::vector<VarInfo>& _args)
 
 bool	CNeoVMWorker::Start(int iFunctionID, std::vector<VarInfo>& _args)
 {
+	if (m_pMainCtx == nullptr)
+		return ExecuteTop(iFunctionID, _args) != NEOEXEC_ERROR;
+
 	if(false == Setup(iFunctionID, _args))
 		return false;
 
 	return Run();
+}
+
+// ─── 실행 컨텍스트(풀) 기반 최상위 실행/재개 ──────────────────────────────
+void CNeoVMWorker::BindContext(CoroutineInfo* ctx)
+{
+	m_pCur = ctx;
+	m_pVarStack_Base = &ctx->m_sVarStack;
+	m_pCallStack = &ctx->m_sCallStack;
+	m_pVarStack_Pointer = &(*m_pVarStack_Base)[0];
+}
+
+// 반납 전, 사용된 스택 슬롯[0..usedMax)의 VarInfo 참조를 정리 (DeadCoroutine 과 동일 패턴).
+void CNeoVMWorker::CleanupContextVars(CoroutineInfo* ctx, int usedMax)
+{
+	std::vector<VarInfo>& s = ctx->m_sVarStack;
+	if (usedMax > (int)s.size()) usedMax = (int)s.size();
+	for (int i = 0; i < usedMax; i++)
+		Var_Release(&s[i]);
+}
+
+// 최상위 실행 종료: 메인 컨텍스트를 풀로 반납한다.
+// (코루틴 컨텍스트는 각자의 VarInfo 가 GC/스택 해제될 때 FreeCoroutine 으로 반납된다.)
+void CNeoVMWorker::ReleaseExecution()
+{
+	if (m_pMainCtx != nullptr && m_pPool != nullptr)
+	{
+		// 정상 완료 시 m_pCur == m_pMainCtx 이며 high-water 는 워커의 _iSP_Vars_Max2.
+		int usedMax = (m_pCur == m_pMainCtx) ? _iSP_Vars_Max2 : m_pMainCtx->_info._iSP_Vars_Max2;
+		CleanupContextVars(m_pMainCtx, usedMax);
+		m_pPool->Release(m_pMainCtx);
+	}
+	m_pCur = nullptr;
+	m_pMainCtx = nullptr;
+	m_pRegisterActive = nullptr;
+	m_sCoroutines.clear();
+	ClearSP();
+	_iRemainSleep = 0;
+	m_pVarStack_Base = nullptr;
+	m_pCallStack = nullptr;
+	m_pVarStack_Pointer = nullptr;
+}
+
+// Run() 실행 후 완료/정지/에러를 판정. 정지가 아니면 컨텍스트를 반납한다.
+int CNeoVMWorker::RunSettle()
+{
+	m_bTopExec = true;
+	bool ok = Run();
+	m_bTopExec = false;
+	if (ok == false)
+	{
+		ReleaseExecution();
+		return NEOEXEC_ERROR;
+	}
+	// 정지(retain) 조건: sleep 대기 또는 디버거 pause.
+	if (_iRemainSleep > 0 || m_bDebugPaused)
+		return NEOEXEC_SUSPENDED;
+
+	ReleaseExecution();
+	return NEOEXEC_COMPLETED;
+}
+
+// 최상위 실행: 풀에서 컨텍스트를 대여해 iFID 를 처음부터 실행.
+int CNeoVMWorker::ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args)
+{
+	if (m_pPool == nullptr)
+		return NEOEXEC_ERROR;
+	if (m_pMainCtx != nullptr)
+		return NEOEXEC_ERROR;   // 이미 정지된 실행이 있음 → ResumeTop 을 써야 함
+
+	m_pMainCtx = m_pPool->Acquire();
+	BindContext(m_pMainCtx);
+	m_pRegisterActive = nullptr;
+	m_sCoroutines.clear();
+	_iSP_Vars = 0;
+	_iSP_VarsMax = 0;
+	_iSP_Vars_Max2 = 0;
+	_iRemainSleep = 0;
+	_isInitialized = true;
+
+	if (Setup(iFunctionID, _args) == false)
+	{
+		ReleaseExecution();
+		return NEOEXEC_ERROR;
+	}
+	return RunSettle();
+}
+
+// 정지된 최상위 실행을 이어서 재개 (retain 된 컨텍스트/레지스터로 계속).
+int CNeoVMWorker::ResumeTop()
+{
+	if (m_pMainCtx == nullptr)
+		return NEOEXEC_COMPLETED;   // 정지 상태 아님
+	return RunSettle();
+}
+
+// 호스트→스크립트 함수 호출(Call/CallN/iCall/iCallN)용 컨텍스트 대여.
+// idle 이면 최상위 컨텍스트를 새로 대여(true), 이미 실행/정지 중이면 중첩으로 보고 재사용(false).
+bool CNeoVMWorker::BeginHostCall()
+{
+	if (m_pMainCtx != nullptr)
+		return false;
+	if (m_pPool == nullptr)
+		return false;
+
+	m_pMainCtx = m_pPool->Acquire();
+	BindContext(m_pMainCtx);
+	m_pRegisterActive = nullptr;
+	m_sCoroutines.clear();
+	_iSP_Vars = 0;
+	_iSP_VarsMax = 0;
+	_iSP_Vars_Max2 = 0;
+	_iRemainSleep = 0;
+	_isInitialized = true;
+	return true;
+}
+void CNeoVMWorker::EndHostCall(bool acquired)
+{
+	if (acquired == false)
+		return;
+	if (_iRemainSleep > 0 || m_bDebugPaused)
+		return;   // 호출이 정지(sleep/브레이크)됐으면 컨텍스트 retain
+	ReleaseExecution();
 }
 
 bool	CNeoVMWorker::Setup(int iFunctionID, std::vector<VarInfo>& _args)
@@ -881,6 +1011,20 @@ bool CNeoVMWorker::BindWorkerFunction(const std::string& funName)
 {
 	int iFID = FindFunction(funName);
 	if (iFID == -1)
+		return false;
+
+	// 시분할 워커(CreateWorker+UpdateWorker) 경로: 실행 컨텍스트를 풀에서 대여해 바인딩한다.
+	// (엔진 스크립트는 ExecuteTop 경로를 쓰고 이 API 는 사용하지 않는다.)
+	if (m_pMainCtx == nullptr && m_pPool != nullptr)
+	{
+		m_pMainCtx = m_pPool->Acquire();
+		BindContext(m_pMainCtx);
+		_iSP_Vars = 0;
+		_iSP_VarsMax = 0;
+		_iSP_Vars_Max2 = 0;
+		_isInitialized = true;
+	}
+	if (m_pMainCtx == nullptr)
 		return false;
 
 	std::vector<VarInfo> _args;
@@ -1255,7 +1399,11 @@ bool	CNeoVMWorker::Run()
 			(m_iDebugBreakCount > 0 ||
 			 m_eDebugRunMode != DBG_CONTINUE ||
 			 m_bDebugPauseRequested);
-		int breakingCallStack = debugActive ? 0 : (int)m_pCallStack->size();
+		// 최상위 실행/재개는 완전 완료(depth 0)까지. 이 플래그는 최외곽 Run 에만 적용되어야 하므로
+		// 즉시 소비(reset)한다 → 실행 중 발생하는 중첩(C++→스크립트) Run 은 현재 깊이에서 복귀.
+		bool topExec = m_bTopExec;
+		m_bTopExec = false;
+		int breakingCallStack = (topExec || debugActive) ? 0 : (int)m_pCallStack->size();
 		if(m_iTimeout >= 0)
 			b = debugActive ? RunInternal<true, true>(breakingCallStack) : RunInternal<true, false>(breakingCallStack);
 		else

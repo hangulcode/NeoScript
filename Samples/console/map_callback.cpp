@@ -133,7 +133,10 @@ int SAMPLE_map_callback(INeoLoader* pLoader, std::string filename)
 	param.putASM = true;
 	param.debug = true;
 
-	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param);
+	NeoExecContextPool* execPool = NeoExecContextPool_Create();
+	NeoLoadVMParam vparam;
+	vparam.execPool = execPool;
+	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param, &vparam);
 	if (pVM != NULL)
 	{
 		CA* pClass = new CA();
@@ -166,6 +169,7 @@ int SAMPLE_map_callback(INeoLoader* pLoader, std::string filename)
 		delete pClass;
 		INeoVM::ReleaseVM(pVM);
 	}
+	NeoExecContextPool_Destroy(execPool);
 	pLoader->Unload(nullptr, pFileBuffer, iFileLen);
 	g_sTablesFunction.clear();
 

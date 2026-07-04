@@ -3732,6 +3732,17 @@ bool	INeoVM::Shutdown()
 
 INeoVM* INeoVM::CompileAndLoadVM(const NeoCompilerParam& param, const NeoLoadVMParam* vparam)
 {
+	if (vparam == nullptr || vparam->execPool == nullptr)
+	{
+		if (param.err != nullptr)
+			*param.err = "NeoExecContextPool is required.\n";
+#ifdef _WIN32
+		if (param.putASM && param.err != nullptr)
+			printf((ANSI_COLOR_RED + *(param.err) + ANSI_RESET_ALL).c_str());
+#endif
+		return NULL;
+	}
+
 	CNArchive arCode;
 
 	if (false == Compile(arCode, param))
@@ -3747,7 +3758,8 @@ INeoVM* INeoVM::CompileAndLoadVM(const NeoCompilerParam& param, const NeoLoadVMP
 	//	SetCompileError(ar, "Comile Success. Code : %d bytes !!\n\n", arCode.GetBufferOffset());
 
 	INeoVM* pVM = INeoVM::CreateVM();
-	if (pVM->LoadVM(vparam, arCode.GetData(), arCode.GetBufferOffset(), param.iStackSize) == NULL)
+	// (실행 스택은 더 이상 워커가 소유하지 않으므로 iStackSize 로 크기를 주지 않는다.)
+	if (pVM->LoadVM(vparam, arCode.GetData(), arCode.GetBufferOffset()) == NULL)
 	{
 		INeoVM::ReleaseVM(pVM);
 		return NULL;

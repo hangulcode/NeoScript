@@ -127,6 +127,7 @@ private:
 	int m_iCheckOpCount = NEO_DEFAULT_CHECKOP;
 	int m_op_process = 0;
 	int m_iBreakingCallStack = 0;
+	bool m_bTopExec = false;   // 최상위 실행/재개 중(=완료까지 실행)인지
 
     enum EDebugRunMode
     {
@@ -228,9 +229,15 @@ private:
 
 	std::list< CoroutineInfo*> m_sCoroutines;
 
-	CoroutineInfo m_sDefault;
+	NeoExecContextPool* m_pPool = nullptr;      // 실행 컨텍스트 풀(로드 시 주입, 실행 시 대여/반납)
+	CoroutineInfo* m_pMainCtx = NULL;           // 현재/정지된 최상위 실행의 컨텍스트. idle 이면 NULL
 	CoroutineInfo* m_pCur = NULL;
 	CoroutineInfo* m_pRegisterActive = NULL;
+
+	void    BindContext(CoroutineInfo* ctx);            // 컨텍스트를 활성 스택으로 바인딩
+	void    CleanupContextVars(CoroutineInfo* ctx, int usedMax);  // 반납 전 VarInfo 참조 정리
+	void    ReleaseExecution();                         // 최상위+코루틴 컨텍스트 전부 풀로 반납
+	int     RunSettle();                                // Run() 후 완료/정지/에러 판정 (NeoExecStatus)
 
 	bool	Initialize(int iFunctionID, std::vector<VarInfo>& _args);
 
@@ -252,11 +259,16 @@ private:
     virtual void DebugGetExecutableLines(std::vector<int>& lines);
     virtual void DebugGetExecutableLocations(std::vector<NeoDebugLocation>& locations);
 
-	bool	IsMainCoroutine(CoroutineInfo* p) { return (&m_sDefault == p); }
+	bool	IsMainCoroutine(CoroutineInfo* p) { return (m_pMainCtx == p); }
 	virtual bool	Setup(int iFunctionID, std::vector<VarInfo>& _args);
 	virtual bool	Start(int iFunctionID, std::vector<VarInfo>& _args);
 	virtual bool IsWorking();
 	virtual bool	Run();
+	virtual int	ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args);
+	virtual int	ResumeTop();
+	virtual bool IsSuspended() { return m_pMainCtx != nullptr; }
+	virtual bool BeginHostCall();
+	virtual void EndHostCall(bool acquired);
 
 	template<bool TIMEOUT, bool DEBUG>
 	bool	RunInternal(int iBreakingCallStack);
@@ -437,10 +449,19 @@ public:
 
 	bool CallN_TL()
 	{
-		if (_iSP_Vars == _iSP_VarsMax)
+		if (m_pMainCtx == nullptr)
 			return true;
+		if (_iSP_Vars == _iSP_VarsMax)
+		{
+			ReleaseExecution();
+			return true;
+		}
 
-		Run();
+		if (Run() == false)
+		{
+			ReleaseExecution();
+			return true;
+		}
 		if (_iSP_Vars != _iSP_VarsMax)
 		{	// yet ... not completed
 			//GC();
@@ -449,6 +470,7 @@ public:
 
 		//GC();
 		//ReturnValue();
+		ReleaseExecution();
 		return true;
 	}
 

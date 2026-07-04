@@ -11,6 +11,20 @@ class CNArchive;
 struct INeoVMWorker;
 struct FunctionPtr;
 struct VarInfo;
+struct NeoExecContextPool;
+
+// 실행 컨텍스트 풀 팩토리. 엔진이 스레드별(thread_local)로 하나 만들어 NeoLoadVMParam::execPool 로 주입한다.
+// varStackSize: 각 컨텍스트의 var 스택 엔트리 수.
+NeoExecContextPool* NeoExecContextPool_Create(int varStackSize = 50 * 1024);
+void                NeoExecContextPool_Destroy(NeoExecContextPool* pool);
+
+// 최상위 실행의 결과 상태.
+enum NeoExecStatus
+{
+	NEOEXEC_COMPLETED = 0,   // 실행이 끝까지 완료됨 → 컨텍스트 반납됨
+	NEOEXEC_SUSPENDED = 1,   // sleep/yield/브레이크로 정지 → 컨텍스트 retain(반납 안 됨), Resume 필요
+	NEOEXEC_ERROR     = 2,   // 에러 → 컨텍스트 반납됨
+};
 
 enum NeoCompileDefineTokenType
 {
@@ -447,6 +461,7 @@ public:
 	template<typename RVal, typename ... Types>
 	bool iCall(RVal& r, int iFID, Types ... args)
 	{
+		bool __acq = BeginHostCall();
 		std::vector<VarInfo> args_;
 		_args = &args_;
 		PushArgs(args...);
@@ -455,17 +470,20 @@ public:
 		if (RunFunction(iFID, args_) == false)
 		{
 			ReleaseArgs(args_);
+			EndHostCall(__acq);
 			return false;
 		}
 		GC();
 		ReleaseArgs(args_);
 		_read(GetReturnVar(), r);
+		EndHostCall(__acq);
 		return true;
 	}
 
 	template<typename ... Types>
 	bool iCallN(int iFID, Types ... args)
 	{
+		bool __acq = BeginHostCall();
 		std::vector<VarInfo> args_;
 		_args = &args_;
 		PushArgs(args...);
@@ -474,17 +492,20 @@ public:
 		if (RunFunction(iFID, args_) == false)
 		{
 			ReleaseArgs(args_);
+			EndHostCall(__acq);
 			return false;
 		}
 		GC();
 		ReleaseArgs(args_);
 		ReturnValue();
+		EndHostCall(__acq);
 		return true;
 	}
 
 	template<typename RVal, typename ... Types>
 	bool Call(RVal& r, const std::string& funName, Types ... args)
 	{
+		bool __acq = BeginHostCall();
 		std::vector<VarInfo> args_;
 		_args = &args_;
 		PushArgs(args...);
@@ -493,17 +514,20 @@ public:
 		if (RunFunction(funName, args_) == false)
 		{
 			ReleaseArgs(args_);
+			EndHostCall(__acq);
 			return false;
 		}
 		GC();
 		ReleaseArgs(args_);
 		_read(GetReturnVar(), r);
+		EndHostCall(__acq);
 		return true;
 	}
 
 	template<typename ... Types>
 	bool CallN(const std::string& funName, Types ... args)
 	{
+		bool __acq = BeginHostCall();
 		std::vector<VarInfo> args_;
 		_args = &args_;
 		PushArgs(args...);
@@ -512,17 +536,26 @@ public:
 		if (RunFunction(funName, args_) == false)
 		{
 			ReleaseArgs(args_);
+			EndHostCall(__acq);
 			return false;
 		}
 		GC();
 		ReleaseArgs(args_);
 		ReturnValue();
+		EndHostCall(__acq);
 		return true;
 	}
 
 	template<typename ... Types>
 	bool Setup_TL(int iFID, Types ... args)
 	{
+		if (IsSuspended())
+			return false;
+
+		bool __acq = BeginHostCall();
+		if (__acq == false)
+			return false;
+
 		std::vector<VarInfo> args_;
 		_args = &args_;
 		PushArgs(args...);
@@ -531,10 +564,26 @@ public:
 		if (false == Setup(iFID, args_))
 		{
 			ReleaseArgs(args_);
+			EndHostCall(__acq);
 			return false;
 		}
 		ReleaseArgs(args_);
 		return true;
+	}
+
+	// 최상위 실행(엔진 이벤트 진입). 풀에서 컨텍스트를 대여해 iFID 를 실행한다.
+	// 반환: NeoExecStatus. SUSPENDED 면 컨텍스트를 retain 하고, 다음엔 ResumeTop() 으로 이어가야 한다.
+	template<typename ... Types>
+	int ExecuteN(int iFID, Types ... args)
+	{
+		std::vector<VarInfo> args_;
+		_args = &args_;
+		PushArgs(args...);
+		_args = NULL;
+
+		int st = ExecuteTop(iFID, args_);
+		ReleaseArgs(args_);
+		return st;
 	}
 
 	virtual int FindFunction(const std::string& name) = 0;
@@ -542,6 +591,14 @@ public:
 	virtual bool	Start(int iFunctionID, std::vector<VarInfo>& _args) = 0;
 	virtual bool IsWorking() = 0;
 	virtual bool	Run() =0;
+	// 최상위 실행/재개 (NeoExecStatus 반환). IsSuspended() 가 true 면 ResumeTop() 을 호출한다.
+	virtual int	ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args) = 0;
+	virtual int	ResumeTop() = 0;
+	virtual bool IsSuspended() = 0;
+	// 호스트→스크립트 함수 호출(Call/CallN/iCall/iCallN)용. idle 이면 최상위 컨텍스트를 대여하고
+	// (반환값=대여했는지), 완료 후 EndHostCall 에서 반납한다. 실행 중(중첩 호출)이면 현재 컨텍스트 재사용.
+	virtual bool BeginHostCall() = 0;
+	virtual void EndHostCall(bool acquired) = 0;
 	virtual void SetTimeout(int iTimeout, int iCheckOpCount) = 0;
 	virtual VarInfo* GetVar(const std::string& name) = 0;
 	virtual bool BindWorkerFunction(const std::string& funName) = 0;
@@ -589,6 +646,7 @@ struct NeoLoadVMParam
 {
 	NEO_GLOBALINTERFACE NeoGlobalInterface = nullptr;
 	void* param = nullptr;
+	NeoExecContextPool* execPool = nullptr;   // 실행 컨텍스트 풀(필수). 워커가 실행 시 여기서 대여/반납한다.
 
 	NeoLoadVMParam()
 	{

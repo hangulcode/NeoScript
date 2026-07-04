@@ -74,7 +74,12 @@ defines.values["KEY_RIGHT"] = { NeoScript::NEO_DEFINE_TOKEN_INT, "39" };
 NeoScript::NeoCompilerParam param(source, sourceLength);
 param.defines = &defines;
 
-NeoScript::INeoVM* vm = NeoScript::INeoVM::CompileAndLoadRunVM(param);
+// An execution context pool is required (see "Execution context pool" below).
+NeoScript::NeoExecContextPool* pool = NeoScript::NeoExecContextPool_Create();
+NeoScript::NeoLoadVMParam vparam;
+vparam.execPool = pool;
+
+NeoScript::INeoVM* vm = NeoScript::INeoVM::CompileAndLoadRunVM(param, &vparam);
 ```
 
 Script code:
@@ -93,6 +98,57 @@ Supported define token types:
 	- `NEO_DEFINE_TOKEN_TRUE`
 	- `NEO_DEFINE_TOKEN_FALSE`
 	- `NEO_DEFINE_TOKEN_NULL`
+
+### Execution context pool
+An **execution context** is one runtime stack set: the operand/local var stack + the call stack + the
+instruction/stack-pointer registers (internally `NeoExecContext`, formerly a per-worker inline `CoroutineInfo`).
+
+Previously every loaded VM/worker owned its own stacks for its whole lifetime, so N objects cost N large
+stacks even while idle. Now a worker does **not** own stacks. It borrows an execution context from a
+caller-owned `NeoExecContextPool` only while it is actually running, and returns it when the run finishes.
+The default (main) execution and coroutines draw from the **same** pool.
+
+Lifecycle — *borrow on execute / return on complete / retain on suspend*:
+- On a top-level run the worker acquires a context from the pool.
+- On normal completion (or error) the context is returned to the pool for reuse.
+- If the run is **suspended** (breakpoint pause; `sleep`/`yield` in time-limited mode) the context is kept
+  (not returned) until the run resumes and completes. A suspended VM therefore holds one context; an idle
+  VM holds none. So pool size tracks *concurrently live executions*, not object count.
+
+The pool is **required** — there is no hidden internal fallback. The host owns it and injects it through
+`NeoLoadVMParam::execPool`. Because a context is only ever touched by one execution at a time, keep one
+pool per thread (e.g. `thread_local`); acquire/release is then lock-free. A VM inherits the pool of the VM
+that created it (e.g. modules loaded by `system.load`/`pcall`), so nested module workers need no separate setup.
+
+```cpp
+// One pool per thread. varStackSize = entries in each context's var stack.
+NeoScript::NeoExecContextPool* pool = NeoScript::NeoExecContextPool_Create(50 * 1024);
+
+NeoScript::NeoLoadVMParam vparam;
+vparam.execPool          = pool;                 // required
+vparam.NeoGlobalInterface = myGlobalBind;        // optional
+
+NeoScript::INeoVM* vm = NeoScript::INeoVM::CompileAndLoadRunVM(param, &vparam);
+// ... use vm ...
+NeoScript::INeoVM::ReleaseVM(vm);
+
+NeoScript::NeoExecContextPool_Destroy(pool);     // after all VMs that used it are released
+```
+
+Host entry points:
+- `INeoVM::CompileAndLoadRunVM` / `CompileAndLoadVM` + `INeoVM::PCall` — run the script body (top level).
+- `INeoVMWorker::ExecuteTop(fid, args)` — run a function as a fresh top-level execution.
+  Returns `NeoExecStatus`: `NEOEXEC_COMPLETED`, `NEOEXEC_SUSPENDED`, or `NEOEXEC_ERROR`.
+- `INeoVMWorker::ResumeTop()` — continue a suspended top-level execution.
+- `INeoVMWorker::IsSuspended()` — a retained (suspended) execution is pending. A per-frame host loop should
+  do `if (w->IsSuspended()) w->ResumeTop(); else w->ExecuteN(fid, args...);` so a breakpoint/sleep resumes
+  instead of restarting.
+- `Call` / `CallN` / `iCall` / `iCallN` (host → script function) auto-acquire a context when the VM is idle
+  and return it when done; when called from inside a running script (native callback) they reuse the current
+  context (nested call).
+
+> Note: `NeoExecContextPool_Create` returns an opaque handle; its full type lives in the internal headers.
+> Only the pointer, the two factory functions, and `NeoLoadVMParam::execPool` are part of the public API.
 
 ### Performance test results
 CPU : 12th Gen Intel(R) Core(TM) i7-12700F 2.10GHz  

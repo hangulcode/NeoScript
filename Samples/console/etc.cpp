@@ -28,7 +28,6 @@ int SAMPLE_etc(INeoLoader* pLoader, std::string filename, const char* pFunctionN
 	param.err = &err;
 	param.putASM = true;
 	param.debug = true;
-#if true
 	defines.clear();
 	defines.values["KEY_LEFT"] = { NEO_DEFINE_TOKEN_INT, "37" };
 
@@ -36,10 +35,9 @@ int SAMPLE_etc(INeoLoader* pLoader, std::string filename, const char* pFunctionN
 	param.defines = &defines;
 	NeoLoadVMParam vparam;
 	vparam.NeoGlobalInterface = neo_globalinterface;
+	NeoExecContextPool* execPool = NeoExecContextPool_Create();
+	vparam.execPool = execPool;
 	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param, &vparam);
-#else
-	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param);
-#endif
 
 	if (pVM != NULL)
 	{
@@ -60,6 +58,7 @@ int SAMPLE_etc(INeoLoader* pLoader, std::string filename, const char* pFunctionN
 
 		INeoVM::ReleaseVM(pVM);
 	}
+	NeoExecContextPool_Destroy(execPool);
 	pLoader->Unload(nullptr, pFileBuffer, iFileLen);
 
     return 0;

@@ -15,6 +15,15 @@
 namespace NeoScript
 {
 
+NeoExecContextPool* NeoExecContextPool_Create(int varStackSize)
+{
+	return new NeoExecContextPool(varStackSize);
+}
+void NeoExecContextPool_Destroy(NeoExecContextPool* pool)
+{
+	delete pool;
+}
+
 // 살아있는 객체 추적용 intrusive 이중연결 리스트 헬퍼 (List/Map/Set 공용).
 // _liveNext/_livePrev 필드를 가진 타입이면 동작한다.
 template<typename T>
@@ -101,16 +110,12 @@ bool CNeoVMImpl::SetFunction(int iFID, FunctionPtr& fun, int argCount) { return 
 
 CoroutineInfo* CNeoVMImpl::CoroutineAlloc()
 {
-	CoroutineInfo* p = m_sPool_Coroutine.Receive();
-	p->_info._pCodeCurrent = NULL;
-	p->m_sCallStack.reserve(1000);
-	p->m_sVarStack.resize(10000);
-	return p;
+	// 코루틴 컨텍스트도 default 실행 컨텍스트와 동일한 공유 풀에서 대여한다.
+	return _pExecPool->Acquire();
 }
 void CNeoVMImpl::FreeCoroutine(VarInfo *d)
 {
-	CoroutineInfo* p = d->_cor;
-	m_sPool_Coroutine.Confer(p);
+	_pExecPool->Release(d->_cor);
 }
 
 StringInfo* CNeoVMImpl::StringAlloc(const std::string& str)
@@ -450,6 +455,14 @@ void CNeoVMImpl::SetError(const std::string& msg)
 
 INeoVMWorker* CNeoVMImpl::LoadVM(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, bool blMainWorker, bool init, int iStackSize)
 {
+	if (vparam != nullptr && vparam->execPool != nullptr)
+		_pExecPool = vparam->execPool;   // 이후 모듈 로드 워커들이 상속할 수 있도록 VM 에 보관
+	if (_pExecPool == nullptr)
+	{
+		SetError("NeoExecContextPool is required.");
+		return NULL;
+	}
+
 	CNeoVMWorker*pWorker = WorkerAlloc(iStackSize);
 	if (false == pWorker->Init(vparam, pBuffer, iSize, iStackSize))
 	{
@@ -461,7 +474,7 @@ INeoVMWorker* CNeoVMImpl::LoadVM(const NeoLoadVMParam* vparam, void* pBuffer, in
 	if(init)
 	{
 		std::vector<VarInfo> _args;
-		pWorker->Initialize(0, _args);
+		pWorker->ExecuteTop(0, _args);
 	}
 	return pWorker;
 }
@@ -473,8 +486,8 @@ bool CNeoVMImpl::PCall(int iModule)
 
 	auto pWorker = (*it).second;
 	std::vector<VarInfo> _args;
-	pWorker->Initialize(0, _args);
-	return true;
+	int st = pWorker->ExecuteTop(0, _args);   // 모듈 본문(함수0)을 풀 컨텍스트로 최상위 실행
+	return st != NEOEXEC_ERROR;
 }
 
 bool CNeoVMImpl::RunFunction(const std::string& funName)
@@ -484,7 +497,7 @@ bool CNeoVMImpl::RunFunction(const std::string& funName)
 		return false;
 
 	std::vector<VarInfo> _args;
-	_pMainWorker->Start(iFID, _args);
+	_pMainWorker->ExecuteTop(iFID, _args);
 	return true;
 }
 u32 CNeoVMImpl::CreateWorker(int iStackSize)

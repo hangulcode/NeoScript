@@ -44,6 +44,9 @@ public:
 	void FreeWorker(CNeoVMWorker *d);
 	CNeoVMWorker* FindWorker(int iModule);
 
+	NeoExecContextPool* _pExecPool = nullptr;             // 이 VM 의 실행 컨텍스트 풀(로드 시 주입)
+	NeoExecContextPool* GetExecPool() { return _pExecPool; }
+
 	CoroutineInfo* CoroutineAlloc();
 	void FreeCoroutine(VarInfo *d);
 
@@ -104,7 +107,7 @@ public:
 
 	CNVMInstPool< AsyncInfo, 32> m_sPool_Async;
 	CNVMInstPool< StringInfo, 32> m_sPool_String;
-	CNVMInstPool< CoroutineInfo, 32> m_sPool_Coroutine;
+	// 코루틴 컨텍스트는 공유 실행 컨텍스트 풀(_pExecPool)로 통합됨 → per-VM 풀 제거.
 
 	std::map<void*, FunctionPtr*> m_sCache_FunPtr;
 
