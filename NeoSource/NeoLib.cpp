@@ -522,12 +522,84 @@ struct neo_libs
 		pRet->ListInsertFloat(2, pN->read<NS_FLOAT>(3));
 		return true;
 	}
+	static NS_FLOAT MathClamp01Value(NS_FLOAT v)
+	{
+		if (v < (NS_FLOAT)0.0) return (NS_FLOAT)0.0;
+		if (v > (NS_FLOAT)1.0) return (NS_FLOAT)1.0;
+		return v;
+	}
+	static NS_FLOAT MathClampValue(NS_FLOAT v, NS_FLOAT minValue, NS_FLOAT maxValue)
+	{
+		if (v < minValue) return minValue;
+		if (v > maxValue) return maxValue;
+		return v;
+	}
+	static bool Math_Clamp01(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1) return false;
+		pN->ReturnValue(MathClamp01Value(pN->read<NS_FLOAT>(1)));
+		return true;
+	}
+	static bool Math_Clamp(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 3) return false;
+		pN->ReturnValue(MathClampValue(pN->read<NS_FLOAT>(1), pN->read<NS_FLOAT>(2), pN->read<NS_FLOAT>(3)));
+		return true;
+	}
+	static bool Math_SmoothStep01(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1) return false;
+		NS_FLOAT x = MathClamp01Value(pN->read<NS_FLOAT>(1));
+		pN->ReturnValue(x * x * ((NS_FLOAT)3.0 - (NS_FLOAT)2.0 * x));
+		return true;
+	}
+	static bool Math_LerpScalar(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 3) return false;
+		NS_FLOAT a = pN->read<NS_FLOAT>(1);
+		NS_FLOAT b = pN->read<NS_FLOAT>(2);
+		NS_FLOAT t = pN->read<NS_FLOAT>(3);
+		pN->ReturnValue(a + (b - a) * t);
+		return true;
+	}
 	static bool ReadVec3(VarInfo* pVar, NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z)
 	{
 		if (pVar == nullptr || pVar->GetType() != VAR_LIST) return false;
 		if (pVar->ListFindFloat(0, x) == false) return false;
 		if (pVar->ListFindFloat(1, y) == false) return false;
 		if (pVar->ListFindFloat(2, z) == false) return false;
+		return true;
+	}
+	static bool Math_LerpV3(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 3) return false;
+
+		NS_FLOAT ax, ay, az;
+		NS_FLOAT bx, by, bz;
+		if (ReadVec3(pN->GetStackVar(1), ax, ay, az) == false) return false;
+		if (ReadVec3(pN->GetStackVar(2), bx, by, bz) == false) return false;
+		NS_FLOAT t = pN->read<NS_FLOAT>(3);
+
+		VarInfo* pRet = pN->GetReturnVar();
+		if (pN->ResetVarType(pRet, VAR_LIST, 3) == false) return false;
+		pRet->ListInsertFloat(0, ax + (bx - ax) * t);
+		pRet->ListInsertFloat(1, ay + (by - ay) * t);
+		pRet->ListInsertFloat(2, az + (bz - az) * t);
+		return true;
+	}
+	static bool Math_DistSqV3(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+
+		NS_FLOAT ax, ay, az;
+		NS_FLOAT bx, by, bz;
+		if (ReadVec3(pN->GetStackVar(1), ax, ay, az) == false) return false;
+		if (ReadVec3(pN->GetStackVar(2), bx, by, bz) == false) return false;
+
+		NS_FLOAT dx = ax - bx;
+		NS_FLOAT dy = ay - by;
+		NS_FLOAT dz = az - bz;
+		pN->ReturnValue(dx * dx + dy * dy + dz * dz);
 		return true;
 	}
 	static bool NormalizeVec3(NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z)
@@ -631,6 +703,44 @@ struct neo_libs
 
 		//pN->ReturnValue((int)::rand());
 		pN->ReturnValue(pN->m_sRand.rnd());
+		return true;
+	}
+	static bool Math_Rand01(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 0) return false;
+		pN->ReturnValue((NS_FLOAT)pN->m_sRand.rnd() / (NS_FLOAT)32767.0);
+		return true;
+	}
+	static bool Math_RandRange(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+		NS_FLOAT a = pN->read<NS_FLOAT>(1);
+		NS_FLOAT b = pN->read<NS_FLOAT>(2);
+		NS_FLOAT t = (NS_FLOAT)pN->m_sRand.rnd() / (NS_FLOAT)32767.0;
+		pN->ReturnValue(a + (b - a) * t);
+		return true;
+	}
+	static bool Math_ColorRGB(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 3) return false;
+		NS_FLOAT r = MathClamp01Value(pN->read<NS_FLOAT>(1));
+		NS_FLOAT g = MathClamp01Value(pN->read<NS_FLOAT>(2));
+		NS_FLOAT b = MathClamp01Value(pN->read<NS_FLOAT>(3));
+		int color = -16777216 + (int)(b * (NS_FLOAT)255.0) * 65536 + (int)(g * (NS_FLOAT)255.0) * 256 + (int)(r * (NS_FLOAT)255.0);
+		pN->ReturnValue(color);
+		return true;
+	}
+	static bool Math_ColorARGB(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 4) return false;
+		NS_FLOAT a = MathClamp01Value(pN->read<NS_FLOAT>(1));
+		NS_FLOAT r = MathClamp01Value(pN->read<NS_FLOAT>(2));
+		NS_FLOAT g = MathClamp01Value(pN->read<NS_FLOAT>(3));
+		NS_FLOAT b = MathClamp01Value(pN->read<NS_FLOAT>(4));
+		int ai = (int)(a * (NS_FLOAT)255.0);
+		int rgb = (int)(b * (NS_FLOAT)255.0) * 65536 + (int)(g * (NS_FLOAT)255.0) * 256 + (int)(r * (NS_FLOAT)255.0);
+		int color = ai < 128 ? ai * 16777216 + rgb : (ai - 256) * 16777216 + rgb;
+		pN->ReturnValue(color);
 		return true;
 	}
 
@@ -1253,9 +1363,19 @@ static void AddGlobalLibFun()
 	AddSystemFun("sqrt", &neo_libs::Math_sqrt, 1);
 	AddSystemFun("Vector2", &neo_libs::Math_Vector2, 2);
 	AddSystemFun("Vector3", &neo_libs::Math_Vector3, 3);
+	AddSystemFun("Clamp01", &neo_libs::Math_Clamp01, 1);
+	AddSystemFun("Clamp", &neo_libs::Math_Clamp, 3);
+	AddSystemFun("SmoothStep01", &neo_libs::Math_SmoothStep01, 1);
+	AddSystemFun("LerpScalar", &neo_libs::Math_LerpScalar, 3);
+	AddSystemFun("LerpV3", &neo_libs::Math_LerpV3, 3);
+	AddSystemFun("DistSqV3", &neo_libs::Math_DistSqV3, 2);
 	AddSystemFun("quat_from_basis", &neo_libs::Math_quat_from_basis, 3);
 	AddSystemFun("srand", &neo_libs::Math_srand, 1);
 	AddSystemFun("rand", &neo_libs::Math_rand, 0);
+	AddSystemFun("Rand01", &neo_libs::Math_Rand01, 0);
+	AddSystemFun("RandRange", &neo_libs::Math_RandRange, 2);
+	AddSystemFun("ColorRGB", &neo_libs::Math_ColorRGB, 3);
+	AddSystemFun("ColorARGB", &neo_libs::Math_ColorARGB, 4);
 
 	g_sCurrentSystem = "system";
 	AddSystemFun("time", &neo_libs::sys_time, 0);
