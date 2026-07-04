@@ -501,6 +501,99 @@ struct neo_libs
 		pN->ReturnValue(::sqrt(v));
 		return true;
 	}
+	static bool ReadVec3(VarInfo* pVar, NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z)
+	{
+		if (pVar == nullptr || pVar->GetType() != VAR_LIST) return false;
+		if (pVar->ListFindFloat(0, x) == false) return false;
+		if (pVar->ListFindFloat(1, y) == false) return false;
+		if (pVar->ListFindFloat(2, z) == false) return false;
+		return true;
+	}
+	static bool NormalizeVec3(NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z)
+	{
+		NS_FLOAT lenSq = x * x + y * y + z * z;
+		if (lenSq < (NS_FLOAT)0.000001) return false;
+		NS_FLOAT invLen = (NS_FLOAT)1.0 / (NS_FLOAT)::sqrt(lenSq);
+		x *= invLen;
+		y *= invLen;
+		z *= invLen;
+		return true;
+	}
+	static bool Math_quat_from_basis(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 3) return false;
+
+		NS_FLOAT rX, rY, rZ;
+		NS_FLOAT uX, uY, uZ;
+		NS_FLOAT fX, fY, fZ;
+		if (ReadVec3(pN->GetStackVar(1), rX, rY, rZ) == false) return false;
+		if (ReadVec3(pN->GetStackVar(2), uX, uY, uZ) == false) return false;
+		if (ReadVec3(pN->GetStackVar(3), fX, fY, fZ) == false) return false;
+		if (NormalizeVec3(rX, rY, rZ) == false) return false;
+		if (NormalizeVec3(uX, uY, uZ) == false) return false;
+		if (NormalizeVec3(fX, fY, fZ) == false) return false;
+
+		NS_FLOAT m00 = rX, m01 = uX, m02 = fX;
+		NS_FLOAT m10 = rY, m11 = uY, m12 = fY;
+		NS_FLOAT m20 = rZ, m21 = uZ, m22 = fZ;
+		NS_FLOAT w, x, y, z;
+		NS_FLOAT trace = m00 + m11 + m22;
+		if (trace > (NS_FLOAT)0.0)
+		{
+			NS_FLOAT s = (NS_FLOAT)::sqrt(trace + (NS_FLOAT)1.0) * (NS_FLOAT)2.0;
+			w = (NS_FLOAT)0.25 * s;
+			x = (m21 - m12) / s;
+			y = (m02 - m20) / s;
+			z = (m10 - m01) / s;
+		}
+		else if (m00 > m11 && m00 > m22)
+		{
+			NS_FLOAT s = (NS_FLOAT)::sqrt((NS_FLOAT)1.0 + m00 - m11 - m22) * (NS_FLOAT)2.0;
+			w = (m21 - m12) / s;
+			x = (NS_FLOAT)0.25 * s;
+			y = (m01 + m10) / s;
+			z = (m02 + m20) / s;
+		}
+		else if (m11 > m22)
+		{
+			NS_FLOAT s = (NS_FLOAT)::sqrt((NS_FLOAT)1.0 + m11 - m00 - m22) * (NS_FLOAT)2.0;
+			w = (m02 - m20) / s;
+			x = (m01 + m10) / s;
+			y = (NS_FLOAT)0.25 * s;
+			z = (m12 + m21) / s;
+		}
+		else
+		{
+			NS_FLOAT s = (NS_FLOAT)::sqrt((NS_FLOAT)1.0 + m22 - m00 - m11) * (NS_FLOAT)2.0;
+			w = (m10 - m01) / s;
+			x = (m02 + m20) / s;
+			y = (m12 + m21) / s;
+			z = (NS_FLOAT)0.25 * s;
+		}
+
+		NS_FLOAT lenSq = w * w + x * x + y * y + z * z;
+		if (lenSq < (NS_FLOAT)0.000001)
+		{
+			w = (NS_FLOAT)1.0;
+			x = y = z = (NS_FLOAT)0.0;
+		}
+		else
+		{
+			NS_FLOAT invLen = (NS_FLOAT)1.0 / (NS_FLOAT)::sqrt(lenSq);
+			w *= invLen;
+			x *= invLen;
+			y *= invLen;
+			z *= invLen;
+		}
+
+		VarInfo* pRet = pN->GetReturnVar();
+		if (pN->ResetVarType(pRet, VAR_LIST, 4) == false) return false;
+		pRet->ListInsertFloat(0, w);
+		pRet->ListInsertFloat(1, x);
+		pRet->ListInsertFloat(2, y);
+		pRet->ListInsertFloat(3, z);
+		return true;
+	}
 	static bool	Math_srand(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1) return false;
@@ -1097,6 +1190,7 @@ static void AddGlobalLibFun()
 	AddSystemFun("deg", &neo_libs::Math_deg, 1);
 	AddSystemFun("rad", &neo_libs::Math_rad, 1);
 	AddSystemFun("sqrt", &neo_libs::Math_sqrt, 1);
+	AddSystemFun("quat_from_basis", &neo_libs::Math_quat_from_basis, 3);
 	AddSystemFun("srand", &neo_libs::Math_srand, 1);
 	AddSystemFun("rand", &neo_libs::Math_rand, 0);
 
