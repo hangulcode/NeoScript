@@ -108,6 +108,22 @@ enum VAR_TYPE : u8
 	VAR_MODULE,
 	VAR_ASYNC,
 };
+
+struct SNeoVMAllocStats
+{
+	int strings = 0;
+	int maps = 0;
+	int lists = 0;
+	int sets = 0;
+	int coroutines = 0;
+	int modules = 0;
+	int asyncs = 0;
+};
+
+struct INeoVM;
+void GetNeoVMAllocStats(SNeoVMAllocStats& outStats);
+bool GetNeoVMAllocStats(INeoVM* pVM, SNeoVMAllocStats& outStats);
+
 struct CoroutineInfo;
 struct StringInfo;
 struct MapInfo;
@@ -116,7 +132,6 @@ struct SetInfo;
 struct AsyncInfo;
 struct MapNode;
 struct SetNode;
-struct INeoVM;
 
 #pragma pack(1)
 struct CollectionIterator

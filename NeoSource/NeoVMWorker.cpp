@@ -857,7 +857,9 @@ bool	CNeoVMWorker::Initialize(int iFunctionID, std::vector<VarInfo>& _args)
 	if (false == Setup(iFunctionID, _args))
 		return false;
 	_isInitialized = true;
-	return Run();
+	bool result = Run();
+	GetVM()->PublishAllocStats();
+	return result;
 }
 
 
@@ -869,7 +871,9 @@ bool	CNeoVMWorker::Start(int iFunctionID, std::vector<VarInfo>& _args)
 	if(false == Setup(iFunctionID, _args))
 		return false;
 
-	return Run();
+	bool result = Run();
+	GetVM()->PublishAllocStats();
+	return result;
 }
 
 // ─── 실행 컨텍스트(풀) 기반 최상위 실행/재개 ──────────────────────────────
@@ -952,9 +956,12 @@ int CNeoVMWorker::ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args)
 	if (Setup(iFunctionID, _args) == false)
 	{
 		ReleaseExecution();
+		GetVM()->PublishAllocStats();
 		return NEOEXEC_ERROR;
 	}
-	return RunSettle();
+	int status = RunSettle();
+	GetVM()->PublishAllocStats();
+	return status;
 }
 
 // 정지된 최상위 실행을 이어서 재개 (retain 된 컨텍스트/레지스터로 계속).
@@ -962,7 +969,9 @@ int CNeoVMWorker::ResumeTop()
 {
 	if (m_pMainCtx == nullptr)
 		return NEOEXEC_COMPLETED;   // 정지 상태 아님
-	return RunSettle();
+	int status = RunSettle();
+	GetVM()->PublishAllocStats();
+	return status;
 }
 
 // 호스트→스크립트 함수 호출(Call/CallN/iCall/iCallN)용 컨텍스트 대여.
@@ -990,8 +999,12 @@ void CNeoVMWorker::EndHostCall(bool acquired)
 	if (acquired == false)
 		return;
 	if (_iRemainSleep > 0 || m_bDebugPaused)
+	{
+		GetVM()->PublishAllocStats();
 		return;   // 호출이 정지(sleep/브레이크)됐으면 컨텍스트 retain
+	}
 	ReleaseExecution();
+	GetVM()->PublishAllocStats();
 }
 
 bool	CNeoVMWorker::Setup(int iFunctionID, std::vector<VarInfo>& _args)

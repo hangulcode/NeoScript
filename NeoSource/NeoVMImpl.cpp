@@ -1,5 +1,6 @@
 ﻿#include <math.h>
 #include <stdlib.h>
+#include <atomic>
 #include "NeoVMImpl.h"
 #include "NeoVMWorker.h"
 #include "NeoArchive.h"
@@ -14,6 +15,55 @@
 
 namespace NeoScript
 {
+
+static std::atomic<int> g_iNeoVMAllocStrings{ 0 };
+static std::atomic<int> g_iNeoVMAllocMaps{ 0 };
+static std::atomic<int> g_iNeoVMAllocLists{ 0 };
+static std::atomic<int> g_iNeoVMAllocSets{ 0 };
+static std::atomic<int> g_iNeoVMAllocCoroutines{ 0 };
+static std::atomic<int> g_iNeoVMAllocModules{ 0 };
+static std::atomic<int> g_iNeoVMAllocAsyncs{ 0 };
+
+static void PublishNeoVMAllocStatValue(std::atomic<int>& target, int& published, int current)
+{
+	int delta = current - published;
+	if (delta != 0)
+	{
+		target.fetch_add(delta, std::memory_order_relaxed);
+		published = current;
+	}
+}
+
+void GetNeoVMAllocStats(SNeoVMAllocStats& outStats)
+{
+	outStats.strings = g_iNeoVMAllocStrings.load(std::memory_order_relaxed);
+	outStats.maps = g_iNeoVMAllocMaps.load(std::memory_order_relaxed);
+	outStats.lists = g_iNeoVMAllocLists.load(std::memory_order_relaxed);
+	outStats.sets = g_iNeoVMAllocSets.load(std::memory_order_relaxed);
+	outStats.coroutines = g_iNeoVMAllocCoroutines.load(std::memory_order_relaxed);
+	outStats.modules = g_iNeoVMAllocModules.load(std::memory_order_relaxed);
+	outStats.asyncs = g_iNeoVMAllocAsyncs.load(std::memory_order_relaxed);
+}
+
+bool GetNeoVMAllocStats(INeoVM* pVM, SNeoVMAllocStats& outStats)
+{
+	if (pVM == nullptr)
+		return false;
+
+	((CNeoVMImpl*)pVM)->GetAllocStats(outStats);
+	return true;
+}
+
+void CNeoVMImpl::PublishAllocStats()
+{
+	PublishNeoVMAllocStatValue(g_iNeoVMAllocStrings, m_sPublishedAllocStats.strings, m_sAllocStats.strings);
+	PublishNeoVMAllocStatValue(g_iNeoVMAllocMaps, m_sPublishedAllocStats.maps, m_sAllocStats.maps);
+	PublishNeoVMAllocStatValue(g_iNeoVMAllocLists, m_sPublishedAllocStats.lists, m_sAllocStats.lists);
+	PublishNeoVMAllocStatValue(g_iNeoVMAllocSets, m_sPublishedAllocStats.sets, m_sAllocStats.sets);
+	PublishNeoVMAllocStatValue(g_iNeoVMAllocCoroutines, m_sPublishedAllocStats.coroutines, m_sAllocStats.coroutines);
+	PublishNeoVMAllocStatValue(g_iNeoVMAllocModules, m_sPublishedAllocStats.modules, m_sAllocStats.modules);
+	PublishNeoVMAllocStatValue(g_iNeoVMAllocAsyncs, m_sPublishedAllocStats.asyncs, m_sAllocStats.asyncs);
+}
 
 NeoExecContextPool* NeoExecContextPool_Create(int varStackSize)
 {
@@ -82,6 +132,7 @@ CNeoVMWorker* CNeoVMImpl::WorkerAlloc(int iStackSize)
 
 	CNeoVMWorker* p = new CNeoVMWorker(this, _dwLastIDVMWorker, iStackSize);
 	p->_refCount = 0;
+	++m_sAllocStats.modules;
 
 	_sVMWorkers[_dwLastIDVMWorker] = p;
 	return p;
@@ -93,6 +144,7 @@ void CNeoVMImpl::FreeWorker(CNeoVMWorker *d)
 		return;
 
 	_sVMWorkers.erase(it);
+	--m_sAllocStats.modules;
 	delete d;
 }
 CNeoVMWorker* CNeoVMImpl::FindWorker(int iModule)
@@ -111,10 +163,13 @@ bool CNeoVMImpl::SetFunction(int iFID, FunctionPtr& fun, int argCount) { return 
 CoroutineInfo* CNeoVMImpl::CoroutineAlloc()
 {
 	// 코루틴 컨텍스트도 default 실행 컨텍스트와 동일한 공유 풀에서 대여한다.
-	return _pExecPool->Acquire();
+	CoroutineInfo* p = _pExecPool->Acquire();
+	++m_sAllocStats.coroutines;
+	return p;
 }
 void CNeoVMImpl::FreeCoroutine(VarInfo *d)
 {
+	--m_sAllocStats.coroutines;
 	_pExecPool->Release(d->_cor);
 }
 
@@ -131,10 +186,12 @@ StringInfo* CNeoVMImpl::StringAlloc(const std::string& str)
 	p->_str = str;
 	p->_StringLen = utf_string::UTF8_LENGTH(str);
 
+	++m_sAllocStats.strings;
 	return p;
 }
 void CNeoVMImpl::FreeString(VarInfo *d)
 {
+	--m_sAllocStats.strings;
 	m_sPool_String.Confer(d->_str);
 }
 MapInfo* CNeoVMImpl::TableAlloc(int cnt)
@@ -152,6 +209,7 @@ MapInfo* CNeoVMImpl::TableAlloc(int cnt)
 
 	LiveList_Insert(_sTableHead, pTable);
 	if (cnt > 0) pTable->Reserve(cnt);
+	++m_sAllocStats.maps;
 	return pTable;
 }
 void CNeoVMImpl::FreeTable(MapInfo* tbl)
@@ -173,6 +231,7 @@ void CNeoVMImpl::FreeTable(MapInfo* tbl)
 
 	//delete tbl;
 	m_sPool_TableInfo.Confer(tbl);
+	--m_sAllocStats.maps;
 }
 ListInfo* CNeoVMImpl::ListAlloc(int cnt)
 {
@@ -185,6 +244,7 @@ ListInfo* CNeoVMImpl::ListAlloc(int cnt)
 
 	LiveList_Insert(_sListHead, pList);
 	if (cnt > 0) pList->Resize(cnt);
+	++m_sAllocStats.lists;
 	return pList;
 }
 void CNeoVMImpl::FreeList(ListInfo* lst)
@@ -194,6 +254,7 @@ void CNeoVMImpl::FreeList(ListInfo* lst)
 
 	//delete tbl;
 	m_sPool_ListInfo.Confer(lst);
+	--m_sAllocStats.lists;
 }
 SetInfo* CNeoVMImpl::SetAlloc()
 {
@@ -209,6 +270,7 @@ SetInfo* CNeoVMImpl::SetAlloc()
 	pSet->_fun._property = NULL;
 
 	LiveList_Insert(_sSetHead, pSet);
+	++m_sAllocStats.sets;
 	return pSet;
 }
 void CNeoVMImpl::FreeSet(SetInfo* set)
@@ -229,16 +291,19 @@ void CNeoVMImpl::FreeSet(SetInfo* set)
 
 	//delete tbl;
 	m_sPool_SetInfo.Confer(set);
+	--m_sAllocStats.sets;
 }
 AsyncInfo* CNeoVMImpl::AsyncAlloc()
 {
 	AsyncInfo* p = m_sPool_Async.Receive();
 	p->_refCount = 0;
 	p->_state = ASYNC_READY;
+	++m_sAllocStats.asyncs;
 	return p;
 }
 void CNeoVMImpl::FreeAsync(VarInfo* d)
 {
+	--m_sAllocStats.asyncs;
 	m_sPool_Async.Confer(d->_async);
 }
 
@@ -403,9 +468,13 @@ CNeoVMImpl::~CNeoVMImpl()
 	for(auto it = _sVMWorkers.begin(); it != _sVMWorkers.end(); it++)
 	{
 		CNeoVMWorker* d = (*it).second;
+		--m_sAllocStats.modules;
 		delete d;
 	}
 	_sVMWorkers.clear();
+
+	for (int i = 0; i < NDF_MAX; i++)
+		Var_Release(&m_sDefaultValue[i]);
 
 	// 살아남은 List/Map/Set 의 _Bucket 을 해제 (intrusive live 리스트 순회).
 	// String 은 CNVMInstPool 소멸자가 std::str 을 정리하므로 별도 처리 없음.
@@ -416,23 +485,27 @@ CNeoVMImpl::~CNeoVMImpl()
 		MapInfo* p = _sTableHead;
 		LiveList_Remove(_sTableHead, p);
 		p->Free();
+		--m_sAllocStats.maps;
 	}
 	while (_sListHead)
 	{
 		ListInfo* p = _sListHead;
 		LiveList_Remove(_sListHead, p);
 		p->Free();
+		--m_sAllocStats.lists;
 	}
 	while (_sSetHead)
 	{
 		SetInfo* p = _sSetHead;
 		LiveList_Remove(_sSetHead, p);
 		p->Free();
+		--m_sAllocStats.sets;
 	}
 
 	for (auto it = m_sCache_FunPtr.begin(); it != m_sCache_FunPtr.end(); it++)
 		delete (*it).second;
 	m_sCache_FunPtr.clear();
+	PublishAllocStats();
 }
 
 void CNeoVMImpl::SetError(const std::string& msg)
@@ -476,6 +549,7 @@ INeoVMWorker* CNeoVMImpl::LoadVM(const NeoLoadVMParam* vparam, void* pBuffer, in
 		std::vector<VarInfo> _args;
 		pWorker->ExecuteTop(0, _args);
 	}
+	PublishAllocStats();
 	return pWorker;
 }
 bool CNeoVMImpl::PCall(int iModule)
@@ -503,6 +577,7 @@ bool CNeoVMImpl::RunFunction(const std::string& funName)
 u32 CNeoVMImpl::CreateWorker(int iStackSize)
 {
 	auto pWorker = WorkerAlloc(iStackSize);
+	PublishAllocStats();
 	return pWorker->GetWorkerID();
 }
 bool CNeoVMImpl::ReleaseWorker(u32 id)
@@ -516,6 +591,7 @@ bool CNeoVMImpl::ReleaseWorker(u32 id)
 
 	if (pWorker == _pMainWorker)
 		_pMainWorker = NULL;
+	PublishAllocStats();
 	return true;
 }
 bool CNeoVMImpl::BindWorkerFunction(u32 id, const std::string& funName)
@@ -563,7 +639,10 @@ bool CNeoVMImpl::UpdateWorker(u32 id)
 	if (it == _sVMWorkers.end())
 		return false;
 	auto pWorker = (*it).second;
-	return pWorker->Run();// iTimeout >= 0, iTimeout, iCheckOpCount);
+	bool result = pWorker->Run();// iTimeout >= 0, iTimeout, iCheckOpCount);
+	PublishAllocStats();
+	return result;
 }
 
 };
+

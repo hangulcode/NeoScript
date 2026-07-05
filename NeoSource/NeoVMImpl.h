@@ -34,7 +34,11 @@ private:
 	NeoThreadSafeQueue<AsyncInfo*> _job_queue;
 	bool						_job_end = false;
 	NeoThreadSafeQueue<AsyncInfo*> _job_completed;
+	SNeoVMAllocStats m_sAllocStats;
+	SNeoVMAllocStats m_sPublishedAllocStats;
 public:
+	void PublishAllocStats();
+	void GetAllocStats(SNeoVMAllocStats& outStats) const { outStats = m_sAllocStats; }
 	void Var_SetString(VarInfo *d, const char* str);
 	void Var_SetStringA(VarInfo *d, const std::string& str);
 	void Var_SetTable(VarInfo *d, MapInfo* p);
