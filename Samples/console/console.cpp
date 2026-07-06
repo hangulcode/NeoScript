@@ -184,6 +184,46 @@ public:
 	}
 };
 
+static int RunFile(CNeoLoader* pLoader, const std::string& filename, bool putASM, bool debug)
+{
+	void* pFileBuffer = nullptr;
+	int iFileLen = 0;
+	if (pLoader->Load(filename.c_str(), pFileBuffer, iFileLen) == false)
+	{
+		printf("file read error: %s\n", filename.c_str());
+		return -1;
+	}
+
+	std::string err;
+	NeoCompilerParam param(pFileBuffer, iFileLen);
+	param.err = &err;
+	param.putASM = putASM;
+	param.debug = debug;
+
+	ScopedNeoExecPool execPool;
+	NeoLoadVMParam vparam = execPool.MakeLoadParam();
+	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param, &vparam);
+	pLoader->Unload(filename.c_str(), pFileBuffer, iFileLen);
+
+	if (pVM == nullptr)
+	{
+		if (err.empty() == false)
+			printf("%s\n", err.c_str());
+		return -1;
+	}
+
+	int exitCode = 0;
+	if (pVM->IsLastErrorMsg())
+	{
+		printf("Error - VM Call : %s\n", pVM->GetLastErrorMsg());
+		pVM->ClearLastErrorMsg();
+		exitCode = -1;
+	}
+
+	INeoVM::ReleaseVM(pVM);
+	return exitCode;
+}
+
 static int RunBenchCase(const char* name, const char* source, const char* functionName, int arg, int iterations)
 {
 	std::string src = source;
@@ -1396,6 +1436,10 @@ int main(int argc, char* argv[])
 		{
 			exitCode = RunSample(pLoader, argv[2]);
 		}
+		else if (command == "--file" && argc >= 3)
+		{
+			exitCode = RunFile(pLoader, argv[2], false, false);
+		}
 		else if (command == "--smoke")
 		{
 			exitCode = RunSmokeSamples(pLoader);
@@ -1414,7 +1458,7 @@ int main(int argc, char* argv[])
 		}
 		else
 		{
-			printf("usage: console.exe [--list | --run <sample> | --smoke | --bench | --debug-smoke | --dap]\n");
+			printf("usage: console.exe [--list | --run <sample> | --file <script.ns> | --smoke | --bench | --debug-smoke | --dap]\n");
 			exitCode = -1;
 		}
 
