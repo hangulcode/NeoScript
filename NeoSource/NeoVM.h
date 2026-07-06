@@ -9,9 +9,15 @@ namespace NeoScript
 class CNArchive;
 
 struct INeoVMWorker;
+struct INeoVM;
+class CNeoVMImpl;
+class CNeoVMWorker;
 struct FunctionPtr;
 struct VarInfo;
 struct NeoExecContextPool;
+struct SFunctionLayer;
+struct SFunctions;
+NEOS_FORCEINLINE void Move_DestNoRelease(VarInfo* v1, VarInfo* v2);
 
 // 실행 컨텍스트 풀 팩토리. 엔진이 스레드별(thread_local)로 하나 만들어 NeoLoadVMParam::execPool 로 주입한다.
 // varStackSize: 각 컨텍스트의 var 스택 엔트리 수.
@@ -150,6 +156,23 @@ struct VarInfo
 {
 private:
 	VAR_TYPE	_type;
+
+	NEOS_FORCEINLINE void SetType(VAR_TYPE t) { _type = t; }
+	NEOS_FORCEINLINE void ClearType()
+	{
+		_type = VAR_NONE;
+	}
+
+	friend struct INeoVMWorker;
+	friend struct INeoVM;
+	friend class CNeoVMImpl;
+	friend class CNeoVMWorker;
+	friend struct MapInfo;
+	friend struct ListInfo;
+	friend struct SetInfo;
+	friend struct SFunctionLayer;
+	friend struct SFunctions;
+	friend void Move_DestNoRelease(VarInfo* v1, VarInfo* v2);
 public:
 	union
 	{
@@ -174,11 +197,6 @@ public:
 	NEOS_FORCEINLINE VarInfo(int v) { _type = VAR_INT; _int = v; }
 
 	NEOS_FORCEINLINE VAR_TYPE GetType() { return _type; }
-	NEOS_FORCEINLINE void SetType(VAR_TYPE t) { _type = t; }
-	NEOS_FORCEINLINE void ClearType()
-	{
-		_type = VAR_NONE;
-	}
 	NEOS_FORCEINLINE bool IsAllocType()
 	{
 		return ((_type >= VAR_STRING));

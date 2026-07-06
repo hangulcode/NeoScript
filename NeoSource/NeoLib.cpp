@@ -816,10 +816,9 @@ struct neo_libs
 		if (pMeta->GetType() != VAR_MAP) return false;
 
 		VarInfo var;
-		var.ClearType();
 		if (pTable->_tbl->_meta)
 		{
-			var.SetType(VAR_MAP);
+			var = VarInfo(VAR_MAP);
 			var._tbl = pTable->_tbl->_meta;
 		}
 
