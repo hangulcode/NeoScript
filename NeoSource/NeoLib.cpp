@@ -428,6 +428,14 @@ struct neo_libs
 		pN->ReturnValue(::floor(v));
 		return true;
 	}
+	static bool Math_round(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1) return false;
+
+		NS_FLOAT v = pN->read<NS_FLOAT>(1);
+		pN->ReturnValue(::round(v));
+		return true;
+	}
 	static bool Math_sin(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1) return false;
@@ -466,6 +474,14 @@ struct neo_libs
 
 		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::log10(v));
+		return true;
+	}
+	static bool Math_exp(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1) return false;
+
+		NS_FLOAT v = pN->read<NS_FLOAT>(1);
+		pN->ReturnValue(::exp(v));
 		return true;
 	}
 	static bool Math_pow(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -1413,11 +1429,13 @@ static void AddGlobalLibFun()
 	AddSystemFun("atan", &neo_libs::Math_atan, 1);
 	AddSystemFun("ceil", &neo_libs::Math_ceil, 1);
 	AddSystemFun("floor", &neo_libs::Math_floor, 1);
+	AddSystemFun("round", &neo_libs::Math_round, 1);
 	AddSystemFun("sin", &neo_libs::Math_sin, 1);
 	AddSystemFun("cos", &neo_libs::Math_cos, 1);
 	AddSystemFun("tan", &neo_libs::Math_tan, 1);
 	AddSystemFun("log", &neo_libs::Math_log, 1);
 	AddSystemFun("log10", &neo_libs::Math_log10, 1);
+	AddSystemFun("exp", &neo_libs::Math_exp, 1);
 	AddSystemFun("pow", &neo_libs::Math_pow, 2);
 	AddSystemFun("deg", &neo_libs::Math_deg, 1);
 	AddSystemFun("rad", &neo_libs::Math_rad, 1);
