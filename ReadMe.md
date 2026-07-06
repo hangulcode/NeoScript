@@ -264,11 +264,13 @@ Build : Release Mode 64bit
 	- atan (x): (c함수과 동일)
 	- ceil (x): (c함수과 동일)
 	- floor (x): (c함수과 동일)
+	- round (x): (c함수과 동일)
 	- sin (x): (c함수과 동일)
 	- cos (x): (c함수과 동일)
 	- tan (x): (c함수과 동일)
 	- log (x): (c함수과 동일)
 	- log10 (x): (c함수과 동일)
+	- exp (x): (c함수과 동일)
 	- pow (x, y): (c함수과 동일)
 	- deg (x): radian 값을 degree 값으로 리턴
 	- radian (x): degree 값을 radian 값으로 리턴
