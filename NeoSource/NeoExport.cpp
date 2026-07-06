@@ -282,6 +282,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 
 		case NOP_MOV:
 		case NOP_MOV_MINUS:
+		case NOP_LOG_NOT:
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			if ((argFlag & (1 << 4)) == 0)
 				argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
@@ -651,6 +652,10 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 		case NOP_XOR2:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("XOR  %s ^= %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			break;
+		case NOP_LOG_NOT:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
+			OutAsm("NOT  %s = !%s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 
 		case NOP_ADD3:

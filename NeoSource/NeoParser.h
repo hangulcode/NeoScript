@@ -324,6 +324,7 @@ struct SFunctionInfo
 				{
 				case NOP_MOV:
 				case NOP_MOV_MINUS:
+				case NOP_LOG_NOT:
 				case NOP_ADD3:
 				case NOP_SUB3:
 				case NOP_MUL3:

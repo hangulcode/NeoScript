@@ -266,6 +266,7 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_MOV, 2);
 	OP_STR1(NOP_MOVI, 3);
 	OP_STR1(NOP_MOV_MINUS, 2);
+	OP_STR1(NOP_LOG_NOT, 2);
 	OP_STR1(NOP_ADD2, 2);
 	OP_STR1(NOP_SUB2, 2);
 	OP_STR1(NOP_MUL2, 2);
@@ -1797,6 +1798,49 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 	return true;
 }
 
+bool ParseLogicNotOperand(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+{
+	std::string tkNext;
+	TK_TYPE tkNextType = GetToken(ar, tkNext);
+	if (tkNextType == TK_LOGIC_NOT)
+	{
+		if (false == ParseLogicNotOperand(operand, ar, funs, vars))
+			return false;
+	}
+	else if (tkNextType == TK_L_SMALL)
+	{
+		TK_TYPE r = ParseJob(true, operand, NULL, ar, funs, vars);
+		if (TK_R_SMALL != r)
+		{
+			SetCompileError(ar, "Error (%d, %d): )\n", ar.CurLine(), ar.CurCol());
+			return false;
+		}
+	}
+	else
+	{
+		ar.PushToken(tkNextType, tkNext);
+		if (false == ParseString(operand, TK_NONE, ar, funs, vars))
+			return false;
+	}
+
+	if (operand.IsInvalidValue())
+	{
+		SetCompileError(ar, "Error (%d, %d): ! operand", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+	if (operand.IsArray())
+	{
+		int iRead = funs._cur->AllocLocalTempVar();
+		funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iRead, operand.IsHaveShort());
+		operand = SOperand(iRead);
+	}
+
+	int iNot = funs._cur->AllocLocalTempVar();
+	funs._cur->Push_OP2(ar, NOP_LOG_NOT, iNot, operand._iVar, operand.IsShort());
+	operand = SOperand(iNot);
+	return true;
+}
+
 bool ParseToType(int& iResultStack, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	std::string tk1;
@@ -1984,6 +2028,18 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			operators.push_back(tkType1);
 			blApperOperator = false;
 			break;
+		case TK_LOGIC_NOT:	// !
+			if (blApperOperator == false)
+			{
+				SOperand a;
+				if (false == ParseLogicNotOperand(a, ar, funs, vars))
+					return TK_NONE;
+				operands.push_back(a);
+				blApperOperator = true;
+				break;
+			}
+			SetCompileError(ar, "Error (%d, %d): Invalide Operator", ar.CurLine(), ar.CurCol());
+			return TK_NONE;
 		case TK_MUL:		// *
 		case TK_DIV:		// /
 		case TK_PERCENT:	// %

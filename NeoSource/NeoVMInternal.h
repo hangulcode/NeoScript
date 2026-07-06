@@ -78,6 +78,7 @@ enum eNOperation : OpType
 	NOP_MOVI,
 
 	NOP_MOV_MINUS,
+	NOP_LOG_NOT,	// !
 	NOP_ADD2,		// +
 	NOP_SUB2,		// -
 	NOP_MUL2,		// *
