@@ -30,6 +30,12 @@ If your Neo Script `Lib` directory lives elsewhere, set `libPath` in `launch.jso
 You can also run `Neo Script: Create Launch Config` from the Command Palette while a workspace is open.
 The debugger runs the selected `.ns` file as a top-level script. Put the code you want to debug in the file body, or call exported functions from that top-level script.
 
+The same console executable can also run a script directly outside the debugger:
+
+```powershell
+Samples\console\x64\Release\console.exe --file path\to\script.ns
+```
+
 Supported debugger actions:
 
 - Breakpoints

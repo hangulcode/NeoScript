@@ -21,6 +21,29 @@
 	- If the adapter executable is not in the default sample path, set neoScript.debugAdapterPath or add adapterPath to launch.json.
 	- Set libPath in launch.json when the Neo Script Lib directory is outside the workspace folder.
 
+### Console runner
+`Samples/console` is the main sample executable. It can run built-in samples, benchmarks, the VS Code debug adapter, or an arbitrary script file.
+
+Build:
+```powershell
+& "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\amd64\MSBuild.exe" Samples\console\console.sln /p:Configuration=Release /p:Platform=x64 /m
+```
+
+Run a script file:
+```powershell
+Samples\console\x64\Release\console.exe --file TestScript\module.ns
+```
+
+Other useful commands:
+```powershell
+Samples\console\x64\Release\console.exe --list
+Samples\console\x64\Release\console.exe --run performance
+Samples\console\x64\Release\console.exe --bench
+Samples\console\x64\Release\console.exe --dap
+```
+
+The old standalone `Samples/Neo` runner has been removed. Use `console.exe --file <script.ns>` for the same simple compile-and-run workflow.
+
 #### VS Code debugger setup
 1. Build the debug adapter:
 ```powershell
