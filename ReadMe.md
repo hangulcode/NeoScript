@@ -179,12 +179,12 @@ RAM : 64GB
 OS  : Windows 10 Pro 64bit  
 Build : Release Mode 64bit  
 
-|               |Neo Script 1.0.6| [Lua Script 5.4.2](https://luabinaries.sourceforge.net/)| Visual C++ 2026 |
+|               |Neo Script 1.0.6| [Lua Script 5.5.0](https://www.lua.org/)| Visual C++ 2026 |
 | :-----------  |:--------------:| :-------------:|:---------------:|
-| Loop Sum (1~N)| 0.256 (12%↑)   | 0.286          | 0.043           |
-| Math          | 1.427 (9%↑)    | 1.55           | 0.135           |
-| Prime Count   | 9.517 (16%↑)   | 11.073         | 2.277           |
-| fibonacci     | 4.629 (8%↑)    | 4.977          | 0.287           |
+| Loop Sum (1~N)| 0.275 (4% faster) | 0.285       | 0.043           |
+| Math          | 1.634 (3% slower) | 1.584       | 0.129           |
+| Prime Count   | 3.784 (13% faster)| 4.278       | 0.867           |
+| fibonacci     | 4.066 (24% faster)| 5.047       | 0.315           |
 
 ### Sample
 	- console / hello: "hello" 문자열 출력
@@ -373,7 +373,7 @@ fun PrimeCount(var num)
 	return cnt;
 }
 start_time = system.clock();
-print("PrimeCount :" .. PrimeCount(10000001));
+print("PrimeCount :" .. PrimeCount(5000001));
 print("Time : " .. (system.clock() - start_time));
 
 fun fibonacci_recursive(var n)
@@ -388,33 +388,33 @@ print("fibonacci :" .. fibonacci_recursive(40));
 print("Time :" .. (system.clock() - start_time));
 ```
 
-### Lua Script Test Code
+### Lua Script 5.5.0 Test Code
 ```lua
 local startTime
 print("Start ...")
 
 function calculateSum(n)
     local sum = 0
-    for i = 0, n do
+    for i = 0, n - 1 do
         sum = sum + i
     end
     return sum
 end
 
 startTime = os.clock()
-print("calculateSum:" .. calculateSum(100000000))
+print("Loop Sum :" .. calculateSum(100000001))
 print("Time:" .. (os.clock() - startTime))
 
 function calculateMath(n)
     local sum = 0
-    for i = 0, n do
+    for i = 0, n - 1 do
         sum = sum + math.sqrt(i)
     end
     return sum
 end
 
 startTime = os.clock()
-print("calculateMath:" .. calculateMath(100000000))
+print("Math :" .. calculateMath(100000001))
 print("Time:" .. (os.clock() - startTime))
 
 function isPrime(num)
@@ -430,7 +430,7 @@ function isPrime(num)
 end
 function PrimeCount(num)
 	local cnt = 0
-	for i = 1, num do
+	for i = 1, num - 1 do
 		if isPrime(i) then
 			cnt = cnt + 1
 		end
@@ -439,7 +439,7 @@ function PrimeCount(num)
 end
 
 startTime = os.clock()
-print("PrimeCount :" .. PrimeCount(10000000));
+print("PrimeCount :" .. PrimeCount(5000001));
 print("Time:" .. (os.clock() - startTime))
 
 function fibonacci_recursive(n)
@@ -486,7 +486,8 @@ bool isPrime(int num)
 	if (num < 2)
 		return false;
 
-	for (int i = 2; i < sqrt(num) + 1; i++)
+	int end = (int)(sqrt(num) + 1);
+	for (int i = 2; i < end; i++)
 	{
 		if (num % i == 0)
 			return false;
@@ -525,7 +526,7 @@ int main()
 
 
 	start_time = Clock();
-	printf("\nPrimeCount : %d", PrimeCount(10000001));
+	printf("\nPrimeCount : %d", PrimeCount(5000001));
 	printf("\nTime : %lf", (Clock() - start_time));
 
 	start_time = Clock();
