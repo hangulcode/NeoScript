@@ -21,6 +21,29 @@
 	- If the adapter executable is not in the default sample path, set neoScript.debugAdapterPath or add adapterPath to launch.json.
 	- Set libPath in launch.json when the Neo Script Lib directory is outside the workspace folder.
 
+### Console runner
+`Samples/console` is the main sample executable. It can run built-in samples, benchmarks, the VS Code debug adapter, or an arbitrary script file.
+
+Build:
+```powershell
+& "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\amd64\MSBuild.exe" Samples\console\console.sln /p:Configuration=Release /p:Platform=x64 /m
+```
+
+Run a script file:
+```powershell
+Samples\console\x64\Release\console.exe --file TestScript\module.ns
+```
+
+Other useful commands:
+```powershell
+Samples\console\x64\Release\console.exe --list
+Samples\console\x64\Release\console.exe --run performance
+Samples\console\x64\Release\console.exe --bench
+Samples\console\x64\Release\console.exe --dap
+```
+
+The old standalone `Samples/Neo` runner has been removed. Use `console.exe --file <script.ns>` for the same simple compile-and-run workflow.
+
 #### VS Code debugger setup
 1. Build the debug adapter:
 ```powershell
@@ -58,18 +81,110 @@ The VS Code debugger currently supports:
 	- print output in the Debug Console
 	- Runtime exception stop and exceptionInfo
 
+### Compile-time defines
+Host applications can provide C-style compile-time defines through `NeoCompilerParam::defines`.
+This is useful for engine constants such as keyboard codes.
+
+The define table is token based, so the host can prepare values before compilation.
+During script compilation, identifiers such as `KEY_LEFT` are replaced before normal parsing.
+This does not create a script global variable and has no runtime lookup cost.
+
+```cpp
+NeoScript::NeoCompileDefines defines;
+defines.values["KEY_LEFT"]  = { NeoScript::NEO_DEFINE_TOKEN_INT, "37" };
+defines.values["KEY_RIGHT"] = { NeoScript::NEO_DEFINE_TOKEN_INT, "39" };
+
+NeoScript::NeoCompilerParam param(source, sourceLength);
+param.defines = &defines;
+
+// An execution context pool is required (see "Execution context pool" below).
+NeoScript::NeoExecContextPool* pool = NeoScript::NeoExecContextPool_Create();
+NeoScript::NeoLoadVMParam vparam;
+vparam.execPool = pool;
+
+NeoScript::INeoVM* vm = NeoScript::INeoVM::CompileAndLoadRunVM(param, &vparam);
+```
+
+Script code:
+```cpp
+if (key == KEY_LEFT)
+{
+    print("left");
+}
+```
+
+Supported define token types:
+	- `NEO_DEFINE_TOKEN_IDENTIFIER`
+	- `NEO_DEFINE_TOKEN_INT`
+	- `NEO_DEFINE_TOKEN_FLOAT`
+	- `NEO_DEFINE_TOKEN_STRING`
+	- `NEO_DEFINE_TOKEN_TRUE`
+	- `NEO_DEFINE_TOKEN_FALSE`
+	- `NEO_DEFINE_TOKEN_NULL`
+
+### Execution context pool
+An **execution context** is one runtime stack set: the operand/local var stack + the call stack + the
+instruction/stack-pointer registers (internally `NeoExecContext`, formerly a per-worker inline `CoroutineInfo`).
+
+Previously every loaded VM/worker owned its own stacks for its whole lifetime, so N objects cost N large
+stacks even while idle. Now a worker does **not** own stacks. It borrows an execution context from a
+caller-owned `NeoExecContextPool` only while it is actually running, and returns it when the run finishes.
+The default (main) execution and coroutines draw from the **same** pool.
+
+Lifecycle — *borrow on execute / return on complete / retain on suspend*:
+- On a top-level run the worker acquires a context from the pool.
+- On normal completion (or error) the context is returned to the pool for reuse.
+- If the run is **suspended** (breakpoint pause; `sleep`/`yield` in time-limited mode) the context is kept
+  (not returned) until the run resumes and completes. A suspended VM therefore holds one context; an idle
+  VM holds none. So pool size tracks *concurrently live executions*, not object count.
+
+The pool is **required** — there is no hidden internal fallback. The host owns it and injects it through
+`NeoLoadVMParam::execPool`. Because a context is only ever touched by one execution at a time, keep one
+pool per thread (e.g. `thread_local`); acquire/release is then lock-free. A VM inherits the pool of the VM
+that created it (e.g. modules loaded by `system.load`/`pcall`), so nested module workers need no separate setup.
+
+```cpp
+// One pool per thread. varStackSize = entries in each context's var stack.
+NeoScript::NeoExecContextPool* pool = NeoScript::NeoExecContextPool_Create(50 * 1024);
+
+NeoScript::NeoLoadVMParam vparam;
+vparam.execPool          = pool;                 // required
+vparam.NeoGlobalInterface = myGlobalBind;        // optional
+
+NeoScript::INeoVM* vm = NeoScript::INeoVM::CompileAndLoadRunVM(param, &vparam);
+// ... use vm ...
+NeoScript::INeoVM::ReleaseVM(vm);
+
+NeoScript::NeoExecContextPool_Destroy(pool);     // after all VMs that used it are released
+```
+
+Host entry points:
+- `INeoVM::CompileAndLoadRunVM` / `CompileAndLoadVM` + `INeoVM::PCall` — run the script body (top level).
+- `INeoVMWorker::ExecuteTop(fid, args)` — run a function as a fresh top-level execution.
+  Returns `NeoExecStatus`: `NEOEXEC_COMPLETED`, `NEOEXEC_SUSPENDED`, or `NEOEXEC_ERROR`.
+- `INeoVMWorker::ResumeTop()` — continue a suspended top-level execution.
+- `INeoVMWorker::IsSuspended()` — a retained (suspended) execution is pending. A per-frame host loop should
+  do `if (w->IsSuspended()) w->ResumeTop(); else w->ExecuteN(fid, args...);` so a breakpoint/sleep resumes
+  instead of restarting.
+- `Call` / `CallN` / `iCall` / `iCallN` (host → script function) auto-acquire a context when the VM is idle
+  and return it when done; when called from inside a running script (native callback) they reuse the current
+  context (nested call).
+
+> Note: `NeoExecContextPool_Create` returns an opaque handle; its full type lives in the internal headers.
+> Only the pointer, the two factory functions, and `NeoLoadVMParam::execPool` are part of the public API.
+
 ### Performance test results
 CPU : 12th Gen Intel(R) Core(TM) i7-12700F 2.10GHz  
 RAM : 64GB  
 OS  : Windows 10 Pro 64bit  
 Build : Release Mode 64bit  
 
-|               |Neo Script 1.0.6| [Lua Script 5.4.2](https://luabinaries.sourceforge.net/)| Visual C++ 2026 |
+|               |Neo Script 1.0.6| [Lua Script 5.5.0](https://www.lua.org/)| Visual C++ 2026 |
 | :-----------  |:--------------:| :-------------:|:---------------:|
-| Loop Sum (1~N)| 0.256 (12%↑)   | 0.286          | 0.043           |
-| Math          | 1.427 (9%↑)    | 1.55           | 0.135           |
-| Prime Count   | 9.517 (16%↑)   | 11.073         | 2.277           |
-| fibonacci     | 4.629 (8%↑)    | 4.977          | 0.287           |
+| Loop Sum (1~N)| 0.275 (4% faster) | 0.285       | 0.043           |
+| Math          | 1.634 (3% slower) | 1.584       | 0.129           |
+| Prime Count   | 3.784 (13% faster)| 4.278       | 0.867           |
+| fibonacci     | 4.066 (24% faster)| 5.047       | 0.315           |
 
 ### Sample
 	- console / hello: "hello" 문자열 출력
@@ -149,11 +264,13 @@ Build : Release Mode 64bit
 	- atan (x): (c함수과 동일)
 	- ceil (x): (c함수과 동일)
 	- floor (x): (c함수과 동일)
+	- round (x): (c함수과 동일)
 	- sin (x): (c함수과 동일)
 	- cos (x): (c함수과 동일)
 	- tan (x): (c함수과 동일)
 	- log (x): (c함수과 동일)
 	- log10 (x): (c함수과 동일)
+	- exp (x): (c함수과 동일)
 	- pow (x, y): (c함수과 동일)
 	- deg (x): radian 값을 degree 값으로 리턴
 	- radian (x): degree 값을 radian 값으로 리턴
@@ -258,7 +375,7 @@ fun PrimeCount(var num)
 	return cnt;
 }
 start_time = system.clock();
-print("PrimeCount :" .. PrimeCount(10000001));
+print("PrimeCount :" .. PrimeCount(5000001));
 print("Time : " .. (system.clock() - start_time));
 
 fun fibonacci_recursive(var n)
@@ -273,33 +390,33 @@ print("fibonacci :" .. fibonacci_recursive(40));
 print("Time :" .. (system.clock() - start_time));
 ```
 
-### Lua Script Test Code
+### Lua Script 5.5.0 Test Code
 ```lua
 local startTime
 print("Start ...")
 
 function calculateSum(n)
     local sum = 0
-    for i = 0, n do
+    for i = 0, n - 1 do
         sum = sum + i
     end
     return sum
 end
 
 startTime = os.clock()
-print("calculateSum:" .. calculateSum(100000000))
+print("Loop Sum :" .. calculateSum(100000001))
 print("Time:" .. (os.clock() - startTime))
 
 function calculateMath(n)
     local sum = 0
-    for i = 0, n do
+    for i = 0, n - 1 do
         sum = sum + math.sqrt(i)
     end
     return sum
 end
 
 startTime = os.clock()
-print("calculateMath:" .. calculateMath(100000000))
+print("Math :" .. calculateMath(100000001))
 print("Time:" .. (os.clock() - startTime))
 
 function isPrime(num)
@@ -315,7 +432,7 @@ function isPrime(num)
 end
 function PrimeCount(num)
 	local cnt = 0
-	for i = 1, num do
+	for i = 1, num - 1 do
 		if isPrime(i) then
 			cnt = cnt + 1
 		end
@@ -324,7 +441,7 @@ function PrimeCount(num)
 end
 
 startTime = os.clock()
-print("PrimeCount :" .. PrimeCount(10000000));
+print("PrimeCount :" .. PrimeCount(5000001));
 print("Time:" .. (os.clock() - startTime))
 
 function fibonacci_recursive(n)
@@ -371,7 +488,8 @@ bool isPrime(int num)
 	if (num < 2)
 		return false;
 
-	for (int i = 2; i < sqrt(num) + 1; i++)
+	int end = (int)(sqrt(num) + 1);
+	for (int i = 2; i < end; i++)
 	{
 		if (num % i == 0)
 			return false;
@@ -410,7 +528,7 @@ int main()
 
 
 	start_time = Clock();
-	printf("\nPrimeCount : %d", PrimeCount(10000001));
+	printf("\nPrimeCount : %d", PrimeCount(5000001));
 	printf("\nTime : %lf", (Clock() - start_time));
 
 	start_time = Clock();

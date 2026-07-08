@@ -1,5 +1,6 @@
 ﻿#include <math.h>
 #include <stdlib.h>
+#include <atomic>
 #include "NeoVMImpl.h"
 #include "NeoVMWorker.h"
 #include "NeoArchive.h"
@@ -14,6 +15,82 @@
 
 namespace NeoScript
 {
+
+static std::atomic<int> g_iNeoVMAllocStrings{ 0 };
+static std::atomic<int> g_iNeoVMAllocMaps{ 0 };
+static std::atomic<int> g_iNeoVMAllocLists{ 0 };
+static std::atomic<int> g_iNeoVMAllocSets{ 0 };
+static std::atomic<int> g_iNeoVMAllocCoroutines{ 0 };
+static std::atomic<int> g_iNeoVMAllocModules{ 0 };
+static std::atomic<int> g_iNeoVMAllocAsyncs{ 0 };
+
+static void PublishNeoVMAllocStatValue(std::atomic<int>& target, int& published, int current)
+{
+	int delta = current - published;
+	if (delta != 0)
+	{
+		target.fetch_add(delta, std::memory_order_relaxed);
+		published = current;
+	}
+}
+
+void GetNeoVMAllocStats(SNeoVMAllocStats& outStats)
+{
+	outStats.strings = g_iNeoVMAllocStrings.load(std::memory_order_relaxed);
+	outStats.maps = g_iNeoVMAllocMaps.load(std::memory_order_relaxed);
+	outStats.lists = g_iNeoVMAllocLists.load(std::memory_order_relaxed);
+	outStats.sets = g_iNeoVMAllocSets.load(std::memory_order_relaxed);
+	outStats.coroutines = g_iNeoVMAllocCoroutines.load(std::memory_order_relaxed);
+	outStats.modules = g_iNeoVMAllocModules.load(std::memory_order_relaxed);
+	outStats.asyncs = g_iNeoVMAllocAsyncs.load(std::memory_order_relaxed);
+}
+
+bool GetNeoVMAllocStats(INeoVM* pVM, SNeoVMAllocStats& outStats)
+{
+	if (pVM == nullptr)
+		return false;
+
+	((CNeoVMImpl*)pVM)->GetAllocStats(outStats);
+	return true;
+}
+
+void CNeoVMImpl::PublishAllocStats()
+{
+	PublishNeoVMAllocStatValue(g_iNeoVMAllocStrings, m_sPublishedAllocStats.strings, m_sAllocStats.strings);
+	PublishNeoVMAllocStatValue(g_iNeoVMAllocMaps, m_sPublishedAllocStats.maps, m_sAllocStats.maps);
+	PublishNeoVMAllocStatValue(g_iNeoVMAllocLists, m_sPublishedAllocStats.lists, m_sAllocStats.lists);
+	PublishNeoVMAllocStatValue(g_iNeoVMAllocSets, m_sPublishedAllocStats.sets, m_sAllocStats.sets);
+	PublishNeoVMAllocStatValue(g_iNeoVMAllocCoroutines, m_sPublishedAllocStats.coroutines, m_sAllocStats.coroutines);
+	PublishNeoVMAllocStatValue(g_iNeoVMAllocModules, m_sPublishedAllocStats.modules, m_sAllocStats.modules);
+	PublishNeoVMAllocStatValue(g_iNeoVMAllocAsyncs, m_sPublishedAllocStats.asyncs, m_sAllocStats.asyncs);
+}
+
+NeoExecContextPool* NeoExecContextPool_Create(int varStackSize)
+{
+	return new NeoExecContextPool(varStackSize);
+}
+void NeoExecContextPool_Destroy(NeoExecContextPool* pool)
+{
+	delete pool;
+}
+
+// 살아있는 객체 추적용 intrusive 이중연결 리스트 헬퍼 (List/Map/Set 공용).
+// _liveNext/_livePrev 필드를 가진 타입이면 동작한다.
+template<typename T>
+static NEOS_FORCEINLINE void LiveList_Insert(T*& head, T* p)
+{
+	p->_livePrev = nullptr;
+	p->_liveNext = head;
+	if (head) head->_livePrev = p;
+	head = p;
+}
+template<typename T>
+static NEOS_FORCEINLINE void LiveList_Remove(T*& head, T* p)
+{
+	if (p->_livePrev) p->_livePrev->_liveNext = p->_liveNext;
+	else             head = p->_liveNext;
+	if (p->_liveNext) p->_liveNext->_livePrev = p->_livePrev;
+}
 
 void CNeoVMImpl::Var_SetString(VarInfo *d, const char* str)
 {
@@ -55,6 +132,7 @@ CNeoVMWorker* CNeoVMImpl::WorkerAlloc(int iStackSize)
 
 	CNeoVMWorker* p = new CNeoVMWorker(this, _dwLastIDVMWorker, iStackSize);
 	p->_refCount = 0;
+	++m_sAllocStats.modules;
 
 	_sVMWorkers[_dwLastIDVMWorker] = p;
 	return p;
@@ -66,6 +144,7 @@ void CNeoVMImpl::FreeWorker(CNeoVMWorker *d)
 		return;
 
 	_sVMWorkers.erase(it);
+	--m_sAllocStats.modules;
 	delete d;
 }
 CNeoVMWorker* CNeoVMImpl::FindWorker(int iModule)
@@ -83,33 +162,21 @@ bool CNeoVMImpl::SetFunction(int iFID, FunctionPtr& fun, int argCount) { return 
 
 CoroutineInfo* CNeoVMImpl::CoroutineAlloc()
 {
-	CoroutineInfo* p = m_sPool_Coroutine.Receive();
-	p->_info._pCodeCurrent = NULL;
-	p->m_sCallStack.reserve(1000);
-	p->m_sVarStack.resize(10000);
+	// 코루틴 컨텍스트도 default 실행 컨텍스트와 동일한 공유 풀에서 대여한다.
+	CoroutineInfo* p = _pExecPool->Acquire();
+	++m_sAllocStats.coroutines;
 	return p;
 }
 void CNeoVMImpl::FreeCoroutine(VarInfo *d)
 {
-	CoroutineInfo* p = d->_cor;
-	m_sPool_Coroutine.Confer(p);
+	--m_sAllocStats.coroutines;
+	_pExecPool->Release(d->_cor);
 }
 
 StringInfo* CNeoVMImpl::StringAlloc(const std::string& str)
 {
+	// String 은 CNVMInstPool(소멸자 지원)이라 종료 시 개별 정리가 불필요 → 레지스트리 없음
 	StringInfo* p = m_sPool_String.Receive();// new StringInfo();
-	while (true)
-	{
-		if (++m_sPool_String._dwLastID == 0)
-			m_sPool_String._dwLastID = 1;
-
-		if (_sStrings.end() == _sStrings.find(m_sPool_String._dwLastID))
-		{
-			break;
-		}
-	}
-
-	p->_StringID = m_sPool_String._dwLastID;
 	p->_hash = 0;
 	p->_container = nullptr;
 	p->_containerVersion = 0;
@@ -119,34 +186,18 @@ StringInfo* CNeoVMImpl::StringAlloc(const std::string& str)
 	p->_str = str;
 	p->_StringLen = utf_string::UTF8_LENGTH(str);
 
-	_sStrings[m_sPool_String._dwLastID] = p;
+	++m_sAllocStats.strings;
 	return p;
 }
 void CNeoVMImpl::FreeString(VarInfo *d)
 {
-	auto it = _sStrings.find(d->_str->_StringID);
-	if (it == _sStrings.end())
-		return; // Error
-
-	_sStrings.erase(it);
-	//delete d->_str;
+	--m_sAllocStats.strings;
 	m_sPool_String.Confer(d->_str);
 }
 MapInfo* CNeoVMImpl::TableAlloc(int cnt)
 {
 	MapInfo* pTable = m_sPool_TableInfo.Receive();
-	while (true)
-	{
-		if (++m_sPool_TableInfo._dwLastID == 0)
-			m_sPool_TableInfo._dwLastID = 1;
-
-		if (_sTables.end() == _sTables.find(m_sPool_TableInfo._dwLastID))
-		{
-			break;
-		}
-	}
 	pTable->_pVM = this;
-	pTable->_TableID = m_sPool_TableInfo._dwLastID;
 	pTable->_refCount = 0;
 	pTable->_itemCount = 0;
 	pTable->_HashBase = 0;
@@ -156,17 +207,14 @@ MapInfo* CNeoVMImpl::TableAlloc(int cnt)
 	pTable->_fun._func = NULL;
 	pTable->_fun._property = NULL;
 
-	_sTables[m_sPool_TableInfo._dwLastID] = pTable;
+	LiveList_Insert(_sTableHead, pTable);
 	if (cnt > 0) pTable->Reserve(cnt);
+	++m_sAllocStats.maps;
 	return pTable;
 }
 void CNeoVMImpl::FreeTable(MapInfo* tbl)
 {
-	auto it = _sTables.find(tbl->_TableID);
-	if (it == _sTables.end())
-		return; // Error
-
-	_sTables.erase(it);
+	LiveList_Remove(_sTableHead, tbl);
 
 	if (tbl->_meta)
 	{
@@ -183,59 +231,35 @@ void CNeoVMImpl::FreeTable(MapInfo* tbl)
 
 	//delete tbl;
 	m_sPool_TableInfo.Confer(tbl);
+	--m_sAllocStats.maps;
 }
 ListInfo* CNeoVMImpl::ListAlloc(int cnt)
 {
 	ListInfo* pList = m_sPool_ListInfo.Receive();
-	while (true)
-	{
-		if (++m_sPool_ListInfo._dwLastID == 0)
-			m_sPool_ListInfo._dwLastID = 1;
-
-		if (_sLists.end() == _sLists.find(m_sPool_ListInfo._dwLastID))
-		{
-			break;
-		}
-	}
 	pList->_pVM = this;
-	pList->_ListID = m_sPool_ListInfo._dwLastID;
 	pList->_refCount = 0;
-	pList->_itemCount = 0;
-	pList->_BucketCapa = 0;
 	pList->_pUserData = NULL;
 	pList->_pIndexer = nullptr;
+	pList->InitInlineBucket();   // _Bucket=인라인, capa=4, itemCount=0 (작은 리스트는 힙 할당 없음)
 
-	_sLists[m_sPool_ListInfo._dwLastID] = pList;
+	LiveList_Insert(_sListHead, pList);
 	if (cnt > 0) pList->Resize(cnt);
+	++m_sAllocStats.lists;
 	return pList;
 }
 void CNeoVMImpl::FreeList(ListInfo* lst)
 {
-	auto it = _sLists.find(lst->_ListID);
-	if (it == _sLists.end())
-		return; // Error
-
-	_sLists.erase(it);
+	LiveList_Remove(_sListHead, lst);
 	lst->Free();
 
 	//delete tbl;
 	m_sPool_ListInfo.Confer(lst);
+	--m_sAllocStats.lists;
 }
 SetInfo* CNeoVMImpl::SetAlloc()
 {
 	SetInfo* pSet = m_sPool_SetInfo.Receive();
-	while (true)
-	{
-		if (++m_sPool_SetInfo._dwLastID == 0)
-			m_sPool_SetInfo._dwLastID = 1;
-
-		if (_sSets.end() == _sSets.find(m_sPool_SetInfo._dwLastID))
-		{
-			break;
-		}
-	}
 	pSet->_pVM = this;
-	pSet->_SetID = m_sPool_SetInfo._dwLastID;
 	pSet->_refCount = 0;
 	pSet->_itemCount = 0;
 	pSet->_HashBase = 0;
@@ -245,16 +269,13 @@ SetInfo* CNeoVMImpl::SetAlloc()
 	pSet->_fun._func = NULL;
 	pSet->_fun._property = NULL;
 
-	_sSets[m_sPool_SetInfo._dwLastID] = pSet;
+	LiveList_Insert(_sSetHead, pSet);
+	++m_sAllocStats.sets;
 	return pSet;
 }
 void CNeoVMImpl::FreeSet(SetInfo* set)
 {
-	auto it = _sSets.find(set->_SetID);
-	if (it == _sSets.end())
-		return; // Error
-
-	_sSets.erase(it);
+	LiveList_Remove(_sSetHead, set);
 	if (set->_meta)
 	{
 		if (--set->_meta->_refCount <= 0)
@@ -270,16 +291,19 @@ void CNeoVMImpl::FreeSet(SetInfo* set)
 
 	//delete tbl;
 	m_sPool_SetInfo.Confer(set);
+	--m_sAllocStats.sets;
 }
 AsyncInfo* CNeoVMImpl::AsyncAlloc()
 {
 	AsyncInfo* p = m_sPool_Async.Receive();
 	p->_refCount = 0;
 	p->_state = ASYNC_READY;
+	++m_sAllocStats.asyncs;
 	return p;
 }
 void CNeoVMImpl::FreeAsync(VarInfo* d)
 {
+	--m_sAllocStats.asyncs;
 	m_sPool_Async.Confer(d->_async);
 }
 
@@ -444,39 +468,44 @@ CNeoVMImpl::~CNeoVMImpl()
 	for(auto it = _sVMWorkers.begin(); it != _sVMWorkers.end(); it++)
 	{
 		CNeoVMWorker* d = (*it).second;
+		--m_sAllocStats.modules;
 		delete d;
 	}
 	_sVMWorkers.clear();
 
-	while (_sTables.empty() == false)
-	{
-		auto it = _sTables.begin();
-		MapInfo* p = (*it).second;
-		_sTables.erase(it);
-		p->Free();
-	}
+	for (int i = 0; i < NDF_MAX; i++)
+		Var_Release(&m_sDefaultValue[i]);
 
-	while (_sLists.empty() == false)
+	// 살아남은 List/Map/Set 의 _Bucket 을 해제 (intrusive live 리스트 순회).
+	// String 은 CNVMInstPool 소멸자가 std::str 을 정리하므로 별도 처리 없음.
+	// Free() 는 내부 항목을 Var_Release 하므로 중첩 컬렉션 해제 시 재귀로
+	// LiveList_Remove 가 호출될 수 있다. 먼저 p 를 완전히 언링크한 뒤 Free 한다.
+	while (_sTableHead)
 	{
-		auto it = _sLists.begin();
-		ListInfo* p = (*it).second;
-		_sLists.erase(it);
+		MapInfo* p = _sTableHead;
+		LiveList_Remove(_sTableHead, p);
 		p->Free();
+		--m_sAllocStats.maps;
 	}
-
-	while (_sSets.empty() == false)
+	while (_sListHead)
 	{
-		auto it = _sSets.begin();
-		SetInfo* p = (*it).second;
-		_sSets.erase(it);
+		ListInfo* p = _sListHead;
+		LiveList_Remove(_sListHead, p);
 		p->Free();
+		--m_sAllocStats.lists;
 	}
-
-	_sStrings.clear();
+	while (_sSetHead)
+	{
+		SetInfo* p = _sSetHead;
+		LiveList_Remove(_sSetHead, p);
+		p->Free();
+		--m_sAllocStats.sets;
+	}
 
 	for (auto it = m_sCache_FunPtr.begin(); it != m_sCache_FunPtr.end(); it++)
 		delete (*it).second;
 	m_sCache_FunPtr.clear();
+	PublishAllocStats();
 }
 
 void CNeoVMImpl::SetError(const std::string& msg)
@@ -499,6 +528,14 @@ void CNeoVMImpl::SetError(const std::string& msg)
 
 INeoVMWorker* CNeoVMImpl::LoadVM(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, bool blMainWorker, bool init, int iStackSize)
 {
+	if (vparam != nullptr && vparam->execPool != nullptr)
+		_pExecPool = vparam->execPool;   // 이후 모듈 로드 워커들이 상속할 수 있도록 VM 에 보관
+	if (_pExecPool == nullptr)
+	{
+		SetError("NeoExecContextPool is required.");
+		return NULL;
+	}
+
 	CNeoVMWorker*pWorker = WorkerAlloc(iStackSize);
 	if (false == pWorker->Init(vparam, pBuffer, iSize, iStackSize))
 	{
@@ -510,8 +547,9 @@ INeoVMWorker* CNeoVMImpl::LoadVM(const NeoLoadVMParam* vparam, void* pBuffer, in
 	if(init)
 	{
 		std::vector<VarInfo> _args;
-		pWorker->Initialize(0, _args);
+		pWorker->ExecuteTop(0, _args);
 	}
+	PublishAllocStats();
 	return pWorker;
 }
 bool CNeoVMImpl::PCall(int iModule)
@@ -522,8 +560,8 @@ bool CNeoVMImpl::PCall(int iModule)
 
 	auto pWorker = (*it).second;
 	std::vector<VarInfo> _args;
-	pWorker->Initialize(0, _args);
-	return true;
+	int st = pWorker->ExecuteTop(0, _args);   // 모듈 본문(함수0)을 풀 컨텍스트로 최상위 실행
+	return st != NEOEXEC_ERROR;
 }
 
 bool CNeoVMImpl::RunFunction(const std::string& funName)
@@ -533,12 +571,13 @@ bool CNeoVMImpl::RunFunction(const std::string& funName)
 		return false;
 
 	std::vector<VarInfo> _args;
-	_pMainWorker->Start(iFID, _args);
+	_pMainWorker->ExecuteTop(iFID, _args);
 	return true;
 }
 u32 CNeoVMImpl::CreateWorker(int iStackSize)
 {
 	auto pWorker = WorkerAlloc(iStackSize);
+	PublishAllocStats();
 	return pWorker->GetWorkerID();
 }
 bool CNeoVMImpl::ReleaseWorker(u32 id)
@@ -552,6 +591,7 @@ bool CNeoVMImpl::ReleaseWorker(u32 id)
 
 	if (pWorker == _pMainWorker)
 		_pMainWorker = NULL;
+	PublishAllocStats();
 	return true;
 }
 bool CNeoVMImpl::BindWorkerFunction(u32 id, const std::string& funName)
@@ -599,7 +639,10 @@ bool CNeoVMImpl::UpdateWorker(u32 id)
 	if (it == _sVMWorkers.end())
 		return false;
 	auto pWorker = (*it).second;
-	return pWorker->Run();// iTimeout >= 0, iTimeout, iCheckOpCount);
+	bool result = pWorker->Run();// iTimeout >= 0, iTimeout, iCheckOpCount);
+	PublishAllocStats();
+	return result;
 }
 
 };
+

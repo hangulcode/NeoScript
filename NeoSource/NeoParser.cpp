@@ -266,6 +266,7 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_MOV, 2);
 	OP_STR1(NOP_MOVI, 3);
 	OP_STR1(NOP_MOV_MINUS, 2);
+	OP_STR1(NOP_LOG_NOT, 2);
 	OP_STR1(NOP_ADD2, 2);
 	OP_STR1(NOP_SUB2, 2);
 	OP_STR1(NOP_MUL2, 2);
@@ -339,6 +340,7 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_CALL, 3);
 	OP_STR1(NOP_PTRCALL, 3);
 	OP_STR1(NOP_PTRCALL2, 3);
+	OP_STR1(NOP_NATIVECALL, 3);
 	OP_STR1(NOP_RETURN, 1);
 //	OP_STR1(NOP_FUNEND, 0);
 
@@ -439,11 +441,49 @@ TK_TYPE CalcStringToken(std::string& tk)
 	return TK_STRING;
 }
 
+TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk);
+
+static TK_TYPE CompileDefineTokenToToken(const NeoCompileDefineToken& defineToken, std::string& tk)
+{
+	tk = defineToken.text;
+	switch (defineToken.type)
+	{
+	case NEO_DEFINE_TOKEN_TRUE:
+//		if (tk.empty()) tk = "true"; // 이렇게 하는것 보다 Define 을 전달하는 곳에서 잘하면 됨.
+		return TK_TRUE;
+	case NEO_DEFINE_TOKEN_FALSE:
+//		if (tk.empty()) tk = "false";
+		return TK_FALSE;
+	case NEO_DEFINE_TOKEN_NULL:
+//		if (tk.empty()) tk = "null";
+		return TK_NULL;
+	case NEO_DEFINE_TOKEN_IDENTIFIER:
+	case NEO_DEFINE_TOKEN_INT:
+	case NEO_DEFINE_TOKEN_FLOAT:
+	case NEO_DEFINE_TOKEN_STRING:
+	default:
+		return TK_STRING;
+	}
+}
+
+static TK_TYPE ApplyCompileDefine(CArchiveRdWC& ar, TK_TYPE tkType, std::string& tk)
+{
+	if (tkType != TK_STRING || ar.m_pDefines == nullptr)
+		return tkType;
+
+	auto it = ar.m_pDefines->values.find(tk);
+	if (it == ar.m_pDefines->values.end())
+		return tkType;
+
+	const NeoCompileDefineToken& f = (*it).second;
+	return CompileDefineTokenToToken(f, tk);
+}
+
 
 TK_TYPE CalcToken(TK_TYPE tkTypeOnySingleChar, CArchiveRdWC& ar, std::string& tk)
 {
 	if (false == tk.empty())
-		return CalcStringToken(tk);
+		return ApplyCompileDefine(ar, CalcStringToken(tk), tk);
 
 	u16 c1 = ar.GetData(true);
 	u16 c2 = ar.GetData(false);
@@ -633,7 +673,7 @@ TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk)
 
 		case '\n':
 			if (false == tk.empty())
-				return CalcStringToken(tk);
+				return ApplyCompileDefine(ar, CalcStringToken(tk), tk);
 			ar.GetData(true);
 			ar.AddLine();
 			break;
@@ -641,7 +681,7 @@ TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk)
 		case '\r':
 		case '\t':
 			if (false == tk.empty())
-				return CalcStringToken(tk);
+				return ApplyCompileDefine(ar, CalcStringToken(tk), tk);
 			ar.GetData(true);
 			break;
 
@@ -773,7 +813,7 @@ int  AddLocalVar(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	SLayerVar* pCurLayer = vars.GetCurrentLayer();
 
 	char name[256];
-	sprintf_s(name, _countof(name), "^_#@_temp_%d", vars._iTempVarNameIndex++);
+	snprintf(name, _countof(name), "^_#@_temp_%d", vars._iTempVarNameIndex++);
 
 	if (pCurLayer->FindVarOnlyCurrentBlock(name) != -1)
 	{
@@ -921,6 +961,7 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	ToArchiveRdWC((const char*)pFileBuffer, iFileLen, ar2);
 	ar2._allowGlobalInitLogic = ar._allowGlobalInitLogic;
 	ar2._debug = ar._debug;
+	ar2.m_pDefines = ar.m_pDefines;
 	ar2.m_sModuleName = fileName;
 	ar2.m_pDebugSourceFiles = ar.m_pDebugSourceFiles;
 	if (ar2.m_pDebugSourceFiles != nullptr)
@@ -1424,6 +1465,13 @@ TK_TYPE ParseListDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs,
 		else
 #endif
 		{
+			if (iTempOffsetValue.IsArray())
+			{
+				int iTempOffsetRead = funs._cur->AllocLocalTempVar();
+				funs._cur->Push_TableRead(ar, iTempOffsetValue._iVar, iTempOffsetValue._iArrayIndex, iTempOffsetRead, iTempOffsetValue.IsHaveShort());
+				iTempOffsetValue = SOperand(iTempOffsetRead);
+			}
+
 			int iTempOffsetKey = funs.AddStaticInt(iItemCount);
 			funs._cur->Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey, iTempOffsetValue._iVar, false, false, iTempOffsetValue.IsShort());
 		}
@@ -1436,20 +1484,10 @@ TK_TYPE ParseListDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs,
 		if (tkType1 == TK_R_ARRAY)
 			break;
 	}
+	// 리스트 뒤의 토큰(`;`, `)`, `,` 등)은 소비해서 반환만 하고, 유효성은 호출자가 검증한다.
+	// 문장이면 상위에서 `;`를, 함수 인자면 ParseFunCall이 `)`/`,`를 확인한다. 여기서 `;`를
+	// 강제하면 리스트 리터럴을 함수 인자로 쓸 때(예: x.append([1,2,3])) 잘못된 에러가 난다.
 	tkType1 = GetToken(ar, tk1);
-	if (ar._iTableDeep == 1)
-	{
-		if (tkType1 != TK_SEMICOLON)
-		{
-			SetCompileError(ar, "Error (%d, %d): List ; \n", ar.CurLine(), ar.CurCol());
-			return TK_NONE;
-		}
-	}
-	else
-	{
-		//if (tkType1 != TK_COMMA)
-		//	ar.PushToken(tkType1, tk1);
-	}
 	if (iItemCount > 0)
 	{
 	//	iStaticString = funs.AddStaticString("resize");
@@ -1539,20 +1577,9 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 		if (tkType1 == TK_R_MIDDLE)
 			break;
 	}
+	// 맵/테이블 뒤의 토큰은 소비해서 반환만 하고, 유효성은 호출자가 검증한다(ParseListDef와 동일).
+	// 여기서 `;`를 강제하면 맵 리터럴을 함수 인자로 쓸 때 잘못된 에러가 난다.
 	tkType1 = GetToken(ar, tk1);
-	if (ar._iTableDeep == 1)
-	{
-		if (tkType1 != TK_SEMICOLON)
-		{
-			SetCompileError(ar, "Error (%d, %d): Table ; \n", ar.CurLine(), ar.CurCol());
-			return TK_NONE;
-		}
-	}
-	else
-	{
-		//if(tkType1 != TK_COMMA)
-		//	ar.PushToken(tkType1, tk1);
-	}
 	if (iItemCount > 0)
 	{
 		//iStaticString = funs.AddStaticString("reserve");
@@ -1778,6 +1805,49 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 	return true;
 }
 
+bool ParseLogicNotOperand(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+{
+	std::string tkNext;
+	TK_TYPE tkNextType = GetToken(ar, tkNext);
+	if (tkNextType == TK_LOGIC_NOT)
+	{
+		if (false == ParseLogicNotOperand(operand, ar, funs, vars))
+			return false;
+	}
+	else if (tkNextType == TK_L_SMALL)
+	{
+		TK_TYPE r = ParseJob(true, operand, NULL, ar, funs, vars);
+		if (TK_R_SMALL != r)
+		{
+			SetCompileError(ar, "Error (%d, %d): )\n", ar.CurLine(), ar.CurCol());
+			return false;
+		}
+	}
+	else
+	{
+		ar.PushToken(tkNextType, tkNext);
+		if (false == ParseString(operand, TK_NONE, ar, funs, vars))
+			return false;
+	}
+
+	if (operand.IsInvalidValue())
+	{
+		SetCompileError(ar, "Error (%d, %d): ! operand", ar.CurLine(), ar.CurCol());
+		return false;
+	}
+	if (operand.IsArray())
+	{
+		int iRead = funs._cur->AllocLocalTempVar();
+		funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iRead, operand.IsHaveShort());
+		operand = SOperand(iRead);
+	}
+
+	int iNot = funs._cur->AllocLocalTempVar();
+	funs._cur->Push_OP2(ar, NOP_LOG_NOT, iNot, operand._iVar, operand.IsShort());
+	operand = SOperand(iNot);
+	return true;
+}
+
 bool ParseToType(int& iResultStack, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	std::string tk1;
@@ -1865,8 +1935,19 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				SetCompileError(ar, "Error (%d, %d): return", ar.CurLine(), ar.CurCol());
 				return TK_NONE;
 			}
-			if(iTempOffset.IsInvalidValue() == false) 
-				funs._cur->Push_RETURN(ar, iTempOffset._iVar, iTempOffset.IsShort());
+			if(iTempOffset.IsInvalidValue() == false)
+			{
+				if (iTempOffset.IsArray())
+				{
+					int iTempOffset2 = funs._cur->AllocLocalTempVar();
+					funs._cur->Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iTempOffset2, iTempOffset.IsHaveShort());
+					funs._cur->Push_RETURN(ar, iTempOffset2, false);
+				}
+				else
+				{
+					funs._cur->Push_RETURN(ar, iTempOffset._iVar, iTempOffset.IsShort());
+				}
+			}
 			else 
 				funs._cur->Push_RETURN(ar, 0, true);
 			blEnd = true;
@@ -1910,6 +1991,37 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		case TK_MINUS:		// -
 			if (blApperOperator == false)
 			{
+				// 단항 +/-. 다음 토큰이 '(' 이면 괄호식을 평가한 뒤 부호를 적용한다.
+				// ParseString은 식별자/숫자만 처리하므로 -(expr) 형태는 여기서 직접 다룬다.
+				std::string tkNext;
+				TK_TYPE tkNextType = GetToken(ar, tkNext);
+				if (tkNextType == TK_L_SMALL)
+				{
+					SOperand a;
+					r = ParseJob(bReqReturn, a, NULL, ar, funs, vars);
+					if (TK_R_SMALL != r)
+					{
+						SetCompileError(ar, "Error (%d, %d): )\n", ar.CurLine(), ar.CurCol());
+						return TK_NONE;
+					}
+					if (tkType1 == TK_MINUS)
+					{
+						if (a.IsArray())
+						{
+							int iRead = funs._cur->AllocLocalTempVar();
+							funs._cur->Push_TableRead(ar, a._iVar, a._iArrayIndex, iRead, a.IsHaveShort());
+							a = SOperand(iRead);
+						}
+						int iNeg = funs._cur->AllocLocalTempVar();
+						funs._cur->Push_OP2(ar, NOP_MOV_MINUS, iNeg, a._iVar, false);
+						a = SOperand(iNeg);
+					}
+					operands.push_back(a);
+					blApperOperator = true;
+					break;
+				}
+				ar.PushToken(tkNextType, tkNext);
+
 				SOperand a;
 				if (false == ParseString(a, tkType1, ar, funs, vars))
 				{
@@ -1923,6 +2035,18 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			operators.push_back(tkType1);
 			blApperOperator = false;
 			break;
+		case TK_LOGIC_NOT:	// !
+			if (blApperOperator == false)
+			{
+				SOperand a;
+				if (false == ParseLogicNotOperand(a, ar, funs, vars))
+					return TK_NONE;
+				operands.push_back(a);
+				blApperOperator = true;
+				break;
+			}
+			SetCompileError(ar, "Error (%d, %d): Invalide Operator", ar.CurLine(), ar.CurCol());
+			return TK_NONE;
 		case TK_MUL:		// *
 		case TK_DIV:		// /
 		case TK_PERCENT:	// %
@@ -2902,9 +3026,11 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	funs._cur->_code->Read(byTempCheck, iCheckCodeSize);
 	funs._cur->_code->SetPointer(Pos1, SEEK_SET);
-	for (int i = 0; i < iCheckCodeSize / 8; i++)
-		DebugCheck[i] = (*funs._cur->_pDebugData)[Pos1 / 8 + i];
-
+	if (ar._debug)
+	{
+		for (int i = 0; i < iCheckCodeSize / 8; i++)
+			DebugCheck[i] = (*funs._cur->_pDebugData)[Pos1 / 8 + i];
+	}
 
 
 	//	while {} Process
@@ -3476,7 +3602,7 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string&
 		if (funType == FUNT_ANONYMOUS)
 		{
 			char ch[128];
-			sprintf_s(ch, _countof(ch), "#@_%d", funID);
+			snprintf(ch, _countof(ch), "#@_%d", funID);
 			fname = ch;
 		}
 
@@ -3597,6 +3723,20 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 
 //	funs.AddStaticString("system");
 
+	// 호스트가 넘긴 네이티브 전역 심볼을 본문 파싱 전에 사전 선언한다.
+	// (기존 preCompileHeader "export var X;" 텍스트 주입을 구조화 테이블로 대체)
+	if (ar.m_pGlobalSymbols && ar.m_pGlobalSymbols->symbols)
+	{
+		for (int i = 0; i < ar.m_pGlobalSymbols->count; i++)
+		{
+			const NeoGlobalSymbol& sym = ar.m_pGlobalSymbols->symbols[i];
+			if (sym.name == nullptr || sym.name[0] == 0)
+				continue;
+			if (-1 == AddLocalVarName(ar, funs, vars, sym.exported, sym.name, true))
+				return false; // 중복/예약어 등은 AddLocalVarName 이 에러 세팅
+		}
+	}
+
 	bool r = ParseFunctionBody(ar, funs, vars);
 	if (true == r)
 	{
@@ -3624,8 +3764,6 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	return r;
 }
 
-#define MAX_PRECOMPILE_TEMP_BUFFER	512
-
 bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
 {
 	//CNeoVMImpl::InitLib();
@@ -3633,42 +3771,13 @@ bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
 	CArchiveRdWC ar2;
 	ar2._allowGlobalInitLogic = param.allowGlobalInitLogic;
 	ar2._debug = param.debug;
+	ar2.m_pDefines = param.defines;
+	ar2.m_pGlobalSymbols = param.globalSymbols;
 	if (param.debugSourceFiles != nullptr)
 	{
 		param.debugSourceFiles->clear();
 		param.debugSourceFiles->push_back(param.debugSourcePath != nullptr ? param.debugSourcePath : "");
 		ar2.m_pDebugSourceFiles = param.debugSourceFiles;
-	}
-
-	if (param.preCompileHeader && param.preCompileHeader->empty() == false)
-	{
-		u16 tmp[MAX_PRECOMPILE_TEMP_BUFFER + 1];
-		int sz = (int)param.preCompileHeader->size();
-		const char* pSrc = param.preCompileHeader->c_str();
-		u16* pDest;
-		if (sz > MAX_PRECOMPILE_TEMP_BUFFER) pDest = new u16[sz + 1];
-		else	pDest = tmp;
-		for(int i = 0; i < sz; i++)
-			pDest[i] = pSrc[i];
-		pDest[sz] = 0;
-
-		ar2.SetData(pDest, sz);
-		std::list< SToken> preToken;
-		SToken stoken;
-		while(true)
-		{
-			stoken._type = GetToken(ar2, stoken._tk);
-			if(stoken._type == TK_NONE)
-				break;
-			preToken.push_back(stoken);
-		}
-
-		ar2.m_sTokenQueue.swap(preToken);
-
-		ar2.SetData(NULL, 0);
-
-		if (sz > MAX_PRECOMPILE_TEMP_BUFFER) 
-			delete [] pDest;
 	}
 
 	ToArchiveRdWC((const char*)param.pBufferSrc, param.iLenSrc, ar2); // memory alloc
@@ -3700,6 +3809,17 @@ bool	INeoVM::Shutdown()
 
 INeoVM* INeoVM::CompileAndLoadVM(const NeoCompilerParam& param, const NeoLoadVMParam* vparam)
 {
+	if (vparam == nullptr || vparam->execPool == nullptr)
+	{
+		if (param.err != nullptr)
+			*param.err = "NeoExecContextPool is required.\n";
+#ifdef _WIN32
+		if (param.putASM && param.err != nullptr)
+			printf((ANSI_COLOR_RED + *(param.err) + ANSI_RESET_ALL).c_str());
+#endif
+		return NULL;
+	}
+
 	CNArchive arCode;
 
 	if (false == Compile(arCode, param))
@@ -3715,7 +3835,8 @@ INeoVM* INeoVM::CompileAndLoadVM(const NeoCompilerParam& param, const NeoLoadVMP
 	//	SetCompileError(ar, "Comile Success. Code : %d bytes !!\n\n", arCode.GetBufferOffset());
 
 	INeoVM* pVM = INeoVM::CreateVM();
-	if (pVM->LoadVM(vparam, arCode.GetData(), arCode.GetBufferOffset(), param.iStackSize) == NULL)
+	// (실행 스택은 더 이상 워커가 소유하지 않으므로 iStackSize 로 크기를 주지 않는다.)
+	if (pVM->LoadVM(vparam, arCode.GetData(), arCode.GetBufferOffset()) == NULL)
 	{
 		INeoVM::ReleaseVM(pVM);
 		return NULL;

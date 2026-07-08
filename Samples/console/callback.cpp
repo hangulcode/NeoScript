@@ -34,7 +34,10 @@ int SAMPLE_callback(INeoLoader* pLoader, std::string filename)
 	param.putASM = true;
 	param.debug = true;
 
-	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param);
+	NeoExecContextPool* execPool = NeoExecContextPool_Create();
+	NeoLoadVMParam vparam;
+	vparam.execPool = execPool;
+	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param, &vparam);
 	if (pVM != NULL)
 	{
 //		pVM->CallN("Set", NeoHelper::Fun(Mul), NeoHelper::Fun(Sample1));
@@ -58,6 +61,7 @@ int SAMPLE_callback(INeoLoader* pLoader, std::string filename)
 
 		INeoVM::ReleaseVM(pVM);
 	}
+	NeoExecContextPool_Destroy(execPool);
 	pLoader->Unload(nullptr, pFileBuffer, iFileLen);
 
     return 0;

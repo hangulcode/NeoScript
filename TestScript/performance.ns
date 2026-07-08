@@ -48,7 +48,7 @@ fun PrimeCount(var num)
 	return cnt;
 }
 start_time = system.clock();
-print("PrimeCount :" .. PrimeCount(10000001));
+print("PrimeCount :" .. PrimeCount(5000001));
 print("Time : " .. (system.clock() - start_time));
 
 fun fibonacci_recursive(var n)

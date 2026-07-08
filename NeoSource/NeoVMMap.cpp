@@ -519,6 +519,8 @@ void MapInfo::Remove(VarInfo* pKey)
 
 VarInfo* MapInfo::Find(VarInfo *pKey)
 {
+	if (pKey->GetType() == VAR_STRING)
+		return FindString(pKey->_str);
 	if (_BucketCapa <= 0)
 		return NULL;
 	u32 hash = GetHashCode(pKey);

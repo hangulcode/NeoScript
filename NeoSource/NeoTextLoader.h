@@ -5,6 +5,9 @@
 namespace NeoScript
 {
 
+struct NeoCompileDefines;
+struct NeoGlobalSymbolTable;
+
 #define FILE_UNICODE_HEADER_LE	u16(0xFEFF)
 #define FILE_UNICODE_HEADER_BE	u16(0xFFFE)
 #define FILE_UTF8_HEADER		u16(0xBBEF)
@@ -130,6 +133,8 @@ public:
 	std::string	m_sModuleName;
 	u16 m_iFileSeq = 0;
 	std::vector<std::string>* m_pDebugSourceFiles = nullptr;
+	const NeoCompileDefines* m_pDefines = nullptr;
+	const NeoGlobalSymbolTable* m_pGlobalSymbols = nullptr;
 
 	CArchiveRdWC()
 	{

@@ -48,25 +48,24 @@ CNeoVMWorker::CNeoVMWorker(INeoVM* pVM, u32 id, int iStackSize)
 	m_pVarGlobal = &m_sVarGlobal;
 	m_pVarGlobal_Pointer = nullptr;
 
-	m_pCur = &m_sDefault;
-	m_pCur->_state = COROUTINE_STATE_RUNNING;
-	m_pVarStack_Base = &m_pCur->m_sVarStack;
-	m_pCallStack = &m_pCur->m_sCallStack;
+	// 실행 스택은 더 이상 워커가 소유하지 않는다. 실행 시 풀에서 컨텍스트를 대여해 바인딩한다.
+	m_pCur = nullptr;
+	m_pMainCtx = nullptr;
+	m_pVarStack_Base = nullptr;
+	m_pCallStack = nullptr;
+	m_pVarStack_Pointer = nullptr;
 
 	ClearSP();
 
-	//_intA1.SetType(VAR_INT);
-	//_intA2.SetType(VAR_INT);
-	//_intA3.SetType(VAR_INT);
 	_funA3.SetType(VAR_FUN);
-
-	if(iStackSize < 100) iStackSize = 100;
-	m_pVarStack_Base->resize(iStackSize);
-	m_pCallStack->reserve(1000);
-	m_pVarStack_Pointer = &(*m_pVarStack_Base)[0];
+	(void)iStackSize;
 }
 CNeoVMWorker::~CNeoVMWorker()
 {
+	// 정지 상태로 남은(retain 된) 최상위 실행 컨텍스트를 풀로 반납.
+	if (m_pMainCtx != nullptr)
+		ReleaseExecution();
+
 	for (int i = 0; i < (int)m_sVarGlobal.size(); i++)
 		Var_Release(&m_sVarGlobal[i]);
 	m_sVarGlobal.clear();
@@ -134,7 +133,7 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 	{
 	case VAR_INT:
 #ifdef _WIN32
-		sprintf_s(ch, _countof(ch), "%d", v1->_int);
+		snprintf(ch, _countof(ch), "%d", v1->_int);
 #else
 		sprintf(ch, "%d", v1->_int);
 #endif
@@ -142,7 +141,7 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 	case VAR_FLOAT:
 		
 #ifdef _WIN32
-		sprintf_s(ch, _countof(ch), FLOAT_FORMAT, v1->_float);
+		snprintf(ch, _countof(ch), FLOAT_FORMAT, v1->_float);
 #else
 		sprintf(ch, FLOAT_FORMAT, v1->_float);
 #endif
@@ -433,6 +432,12 @@ static u32 ReadCount(CNArchive& ar)
 }
 bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, int iStackSize)
 {
+	// 실행 컨텍스트 풀: 명시 주입 우선, 없으면 VM(임플) 기본 풀 상속(모듈 로드 워커 등).
+	if (vparam != nullptr && vparam->execPool != nullptr)
+		m_pPool = vparam->execPool;
+	else
+		m_pPool = GetVM()->GetExecPool();
+
 	_BytesSize = iSize;
 	CNArchive ar(pBuffer, iSize);
 	SNeoVMHeader header;
@@ -531,6 +536,29 @@ bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, 
 		m_sVarGlobal[i].ClearType();
 	}
 
+	int opCount = header._iCodeSize / (int)sizeof(SVMOperation);
+	SVMOperation* pOps = (SVMOperation*)_pCodeBegin;
+	for (int i = 0; i < opCount; ++i)
+	{
+		SVMOperation& op = pOps[i];
+		if (op.op != NOP_PTRCALL2)
+			continue;
+
+		if (op.argFlag & (1 << 2))
+			continue;
+
+		VarInfo* pFunName = NEOS_GLOBAL_VAR(op.n1);
+		if (pFunName == nullptr || pFunName->GetType() != VAR_STRING)
+			continue;
+
+		int nativeIndex = CNeoVMImpl::FindDefaultNativeIndex(pFunName->_str);
+		if (nativeIndex < 0 || nativeIndex > SHRT_MAX)
+			continue;
+
+		op.op = NOP_NATIVECALL;
+		op.n1 = (short)nativeIndex;
+	}
+
 	if (header.m_iDebugCount > 0)
 	{
 		_DebugData.resize(header.m_iDebugCount);
@@ -576,7 +604,7 @@ bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, 
 			break;
 		}
 	}
-	if(vparam)
+	if(vparam && vparam->NeoGlobalInterface)
 	{
 		vparam->NeoGlobalInterface(this, vparam->param);
 	}
@@ -602,6 +630,102 @@ int CNeoVMWorker::GetFunctionIndexFromCodeOffset(int codeOffset)
 		}
 	}
 	return iFind;
+}
+std::string CNeoVMWorker::FormatStackTrace(int currentOpIndex)
+{
+	std::string trace;
+	trace.reserve(512);
+	trace += "\nScript Call Stack:";
+
+	auto appendFrame = [&](int frameIndex, int opIndex, int stackBase)
+	{
+		int functionId = GetFunctionIndexFromCodeOffset(opIndex * (int)sizeof(SVMOperation));
+		std::string functionName;
+		if (functionId >= 0)
+		{
+			auto itName = m_sDebugFunctionNames.find(functionId);
+			if (itName != m_sDebugFunctionNames.end())
+				functionName = itName->second;
+		}
+		if (functionName.empty())
+		{
+			functionName = "function#";
+			functionName += std::to_string(functionId);
+		}
+
+		int file = -1;
+		int line = -1;
+		if (opIndex >= 0 && opIndex < (int)_DebugData.size())
+		{
+			file = _DebugData[opIndex]._fileseq;
+			line = _DebugData[opIndex]._lineseq;
+		}
+
+		trace += "\n  #";
+		trace += std::to_string(frameIndex);
+		trace += " ";
+		trace += functionName;
+		trace += " : IP(";
+		trace += std::to_string(opIndex);
+		trace += "), File(";
+		trace += std::to_string(file);
+		trace += "), Line(";
+		trace += std::to_string(line);
+		trace += "), SP(";
+		trace += std::to_string(stackBase);
+		trace += ")";
+
+		if (functionId >= 0 && functionId < (int)m_sFunctionPtr.size())
+		{
+			SFunctionTable& fun = m_sFunctionPtr[functionId];
+			trace += ", Args[";
+			for (int argIndex = 0; argIndex < fun._argsCount; ++argIndex)
+			{
+				if (argIndex > 0)
+					trace += ", ";
+
+				int varIndex = stackBase + 1 + argIndex;
+				std::string argName;
+				auto itFunNames = m_sDebugVarNames.find(functionId);
+				if (itFunNames != m_sDebugVarNames.end())
+				{
+					auto itName = itFunNames->second.find(1 + argIndex);
+					if (itName != itFunNames->second.end())
+						argName = itName->second;
+				}
+				if (argName.empty())
+				{
+					argName = "arg";
+					argName += std::to_string(argIndex + 1);
+				}
+
+				trace += argName;
+				trace += ":";
+				if (varIndex >= 0 && varIndex < (int)m_pVarStack_Base->size())
+					trace += GetDataType((*m_pVarStack_Base)[varIndex].GetType());
+				else
+					trace += "out_of_range";
+			}
+			trace += "]";
+		}
+	};
+
+	if (currentOpIndex < 0)
+		currentOpIndex = 0;
+	appendFrame(0, currentOpIndex, _iSP_Vars);
+
+	if (m_pCallStack == nullptr)
+		return trace;
+
+	for (int i = (int)m_pCallStack->size() - 1, frameIndex = 1; i >= 0; --i, ++frameIndex)
+	{
+		SCallStack& cs = (*m_pCallStack)[i];
+		int opIndex = cs._iReturnOffset / (int)sizeof(SVMOperation);
+		if (opIndex > 0)
+			--opIndex;
+		appendFrame(frameIndex, opIndex, cs._iSP_Vars);
+	}
+	return trace;
 }
 bool CNeoVMWorker::CheckDebugStop(int iOPIndex)
 {
@@ -706,7 +830,7 @@ void CNeoVMWorker::SetErrorUnsupport(const char* pErrMsg, VarInfo* p)
 {
 	char buff[1024];
 #ifdef _WIN32
-	sprintf_s(buff, _countof(buff), pErrMsg, GetDataType(p->GetType()).c_str());
+	snprintf(buff, _countof(buff), pErrMsg, GetDataType(p->GetType()).c_str());
 #else
 	sprintf(buff, pErrMsg, GetDataType(p->GetType()).c_str());
 #endif
@@ -733,16 +857,154 @@ bool	CNeoVMWorker::Initialize(int iFunctionID, std::vector<VarInfo>& _args)
 	if (false == Setup(iFunctionID, _args))
 		return false;
 	_isInitialized = true;
-	return Run();
+	bool result = Run();
+	GetVM()->PublishAllocStats();
+	return result;
 }
 
 
 bool	CNeoVMWorker::Start(int iFunctionID, std::vector<VarInfo>& _args)
 {
+	if (m_pMainCtx == nullptr)
+		return ExecuteTop(iFunctionID, _args) != NEOEXEC_ERROR;
+
 	if(false == Setup(iFunctionID, _args))
 		return false;
 
-	return Run();
+	bool result = Run();
+	GetVM()->PublishAllocStats();
+	return result;
+}
+
+// ─── 실행 컨텍스트(풀) 기반 최상위 실행/재개 ──────────────────────────────
+void CNeoVMWorker::BindContext(CoroutineInfo* ctx)
+{
+	m_pCur = ctx;
+	m_pVarStack_Base = &ctx->m_sVarStack;
+	m_pCallStack = &ctx->m_sCallStack;
+	m_pVarStack_Pointer = &(*m_pVarStack_Base)[0];
+}
+
+// 반납 전, 사용된 스택 슬롯[0..usedMax)의 VarInfo 참조를 정리 (DeadCoroutine 과 동일 패턴).
+void CNeoVMWorker::CleanupContextVars(CoroutineInfo* ctx, int usedMax)
+{
+	std::vector<VarInfo>& s = ctx->m_sVarStack;
+	if (usedMax > (int)s.size()) usedMax = (int)s.size();
+	for (int i = 0; i < usedMax; i++)
+		Var_Release(&s[i]);
+}
+
+// 최상위 실행 종료: 메인 컨텍스트를 풀로 반납한다.
+// (코루틴 컨텍스트는 각자의 VarInfo 가 GC/스택 해제될 때 FreeCoroutine 으로 반납된다.)
+void CNeoVMWorker::ReleaseExecution()
+{
+	if (m_pMainCtx != nullptr && m_pPool != nullptr)
+	{
+		// 정상 완료 시 m_pCur == m_pMainCtx 이며 high-water 는 워커의 _iSP_Vars_Max2.
+		int usedMax = (m_pCur == m_pMainCtx) ? _iSP_Vars_Max2 : m_pMainCtx->_info._iSP_Vars_Max2;
+		CleanupContextVars(m_pMainCtx, usedMax);
+		m_pPool->Release(m_pMainCtx);
+	}
+	m_pCur = nullptr;
+	m_pMainCtx = nullptr;
+	m_pRegisterActive = nullptr;
+	m_sCoroutines.clear();
+	ClearSP();
+	_iRemainSleep = 0;
+	m_pVarStack_Base = nullptr;
+	m_pCallStack = nullptr;
+	m_pVarStack_Pointer = nullptr;
+}
+
+// Run() 실행 후 완료/정지/에러를 판정. 정지가 아니면 컨텍스트를 반납한다.
+int CNeoVMWorker::RunSettle()
+{
+	m_bTopExec = true;
+	bool ok = Run();
+	m_bTopExec = false;
+	if (ok == false)
+	{
+		ReleaseExecution();
+		return NEOEXEC_ERROR;
+	}
+	// 정지(retain) 조건: sleep 대기 또는 디버거 pause.
+	if (_iRemainSleep > 0 || m_bDebugPaused)
+		return NEOEXEC_SUSPENDED;
+
+	ReleaseExecution();
+	return NEOEXEC_COMPLETED;
+}
+
+// 최상위 실행: 풀에서 컨텍스트를 대여해 iFID 를 처음부터 실행.
+int CNeoVMWorker::ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args)
+{
+	if (m_pPool == nullptr)
+		return NEOEXEC_ERROR;
+	if (m_pMainCtx != nullptr)
+		return NEOEXEC_ERROR;   // 이미 정지된 실행이 있음 → ResumeTop 을 써야 함
+
+	m_pMainCtx = m_pPool->Acquire();
+	BindContext(m_pMainCtx);
+	m_pRegisterActive = nullptr;
+	m_sCoroutines.clear();
+	_iSP_Vars = 0;
+	_iSP_VarsMax = 0;
+	_iSP_Vars_Max2 = 0;
+	_iRemainSleep = 0;
+	_isInitialized = true;
+
+	if (Setup(iFunctionID, _args) == false)
+	{
+		ReleaseExecution();
+		GetVM()->PublishAllocStats();
+		return NEOEXEC_ERROR;
+	}
+	int status = RunSettle();
+	GetVM()->PublishAllocStats();
+	return status;
+}
+
+// 정지된 최상위 실행을 이어서 재개 (retain 된 컨텍스트/레지스터로 계속).
+int CNeoVMWorker::ResumeTop()
+{
+	if (m_pMainCtx == nullptr)
+		return NEOEXEC_COMPLETED;   // 정지 상태 아님
+	int status = RunSettle();
+	GetVM()->PublishAllocStats();
+	return status;
+}
+
+// 호스트→스크립트 함수 호출(Call/CallN/iCall/iCallN)용 컨텍스트 대여.
+// idle 이면 최상위 컨텍스트를 새로 대여(true), 이미 실행/정지 중이면 중첩으로 보고 재사용(false).
+bool CNeoVMWorker::BeginHostCall()
+{
+	if (m_pMainCtx != nullptr)
+		return false;
+	if (m_pPool == nullptr)
+		return false;
+
+	m_pMainCtx = m_pPool->Acquire();
+	BindContext(m_pMainCtx);
+	m_pRegisterActive = nullptr;
+	m_sCoroutines.clear();
+	_iSP_Vars = 0;
+	_iSP_VarsMax = 0;
+	_iSP_Vars_Max2 = 0;
+	_iRemainSleep = 0;
+	_isInitialized = true;
+	return true;
+}
+void CNeoVMWorker::EndHostCall(bool acquired)
+{
+	if (acquired == false)
+		return;
+	if (_iRemainSleep > 0 || m_bDebugPaused)
+	{
+		GetVM()->PublishAllocStats();
+		return;   // 호출이 정지(sleep/브레이크)됐으면 컨텍스트 retain
+	}
+	ReleaseExecution();
+	GetVM()->PublishAllocStats();
 }
 
 bool	CNeoVMWorker::Setup(int iFunctionID, std::vector<VarInfo>& _args)
@@ -774,6 +1036,7 @@ bool	CNeoVMWorker::Setup(int iFunctionID, std::vector<VarInfo>& _args)
 
 	return true;
 }
+
 bool CNeoVMWorker::IsWorking()
 {
 	//return _isInitialized;
@@ -784,6 +1047,20 @@ bool CNeoVMWorker::BindWorkerFunction(const std::string& funName)
 {
 	int iFID = FindFunction(funName);
 	if (iFID == -1)
+		return false;
+
+	// 시분할 워커(CreateWorker+UpdateWorker) 경로: 실행 컨텍스트를 풀에서 대여해 바인딩한다.
+	// (엔진 스크립트는 ExecuteTop 경로를 쓰고 이 API 는 사용하지 않는다.)
+	if (m_pMainCtx == nullptr && m_pPool != nullptr)
+	{
+		m_pMainCtx = m_pPool->Acquire();
+		BindContext(m_pMainCtx);
+		_iSP_Vars = 0;
+		_iSP_VarsMax = 0;
+		_iSP_Vars_Max2 = 0;
+		_isInitialized = true;
+	}
+	if (m_pMainCtx == nullptr)
 		return false;
 
 	std::vector<VarInfo> _args;
@@ -1158,7 +1435,11 @@ bool	CNeoVMWorker::Run()
 			(m_iDebugBreakCount > 0 ||
 			 m_eDebugRunMode != DBG_CONTINUE ||
 			 m_bDebugPauseRequested);
-		int breakingCallStack = debugActive ? 0 : (int)m_pCallStack->size();
+		// 최상위 실행/재개는 완전 완료(depth 0)까지. 이 플래그는 최외곽 Run 에만 적용되어야 하므로
+		// 즉시 소비(reset)한다 → 실행 중 발생하는 중첩(C++→스크립트) Run 은 현재 깊이에서 복귀.
+		bool topExec = m_bTopExec;
+		m_bTopExec = false;
+		int breakingCallStack = (topExec || debugActive) ? 0 : (int)m_pCallStack->size();
 		if(m_iTimeout >= 0)
 			b = debugActive ? RunInternal<true, true>(breakingCallStack) : RunInternal<true, false>(breakingCallStack);
 		else
@@ -1182,12 +1463,12 @@ bool	CNeoVMWorker::Run()
 		char chMsg[256];
 
 #ifdef _WIN32
-		sprintf_s(chMsg, _countof(chMsg), "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), _isErrorOPIndex, _lineseq);
+		snprintf(chMsg, _countof(chMsg), "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), _isErrorOPIndex, _lineseq);
 #else
 		sprintf(chMsg, "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
 #endif
 
-		GetVM()->_sErrorMsgDetail = chMsg;
+		GetVM()->_sErrorMsgDetail = std::string(chMsg) + FormatStackTrace(_isErrorOPIndex);
 		if (m_pDebugListener || m_iDebugBreakCount > 0 || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
 		{
 			if (_isErrorOPIndex >= 0 && _isErrorOPIndex < (int)_DebugData.size())
@@ -1267,6 +1548,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_MOV:           Move(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
 		case NOP_MOVI:          MoveI(GetVarPtrF1(OP), OP.n23); break;
 		case NOP_MOV_MINUS:     MoveMinus(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
+		case NOP_LOG_NOT:       Var_SetBool(GetVarPtrF1(OP), !GetVarPtr2(OP)->IsTrue()); break;
 		case NOP_ADD2:          Add2(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
 		case NOP_SUB2:          Sub2(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
 		case NOP_MUL2:          Mul2(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
@@ -1329,6 +1611,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_CALL:          handle_CALL(OP); break;
 		case NOP_PTRCALL:       handle_PTRCALL(OP); break;
 		case NOP_PTRCALL2:      handle_PTRCALL2(OP); break;
+		case NOP_NATIVECALL:    handle_NATIVECALL(OP); break;
 		case NOP_RETURN:
 			if (handle_RETURN(OP)) return true;
 			break;
@@ -1594,6 +1877,68 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 
 	return true;
 }
+bool CNeoVMWorker::CallDefaultNativeByIndex(int nativeIndex, int n3, VarInfo* pRet)
+{
+	int iSave = _iSP_Vars;
+	_iSP_Vars = _iSP_VarsMax;
+	SetStackPointer(_iSP_Vars);
+	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1 + n3)
+		_iSP_Vars_Max2 = _iSP_VarsMax + 1 + n3;
+
+	if (CNeoVMImpl::CallDefaultNativeByIndex(nativeIndex, this, (short)n3) == false)
+	{
+		_iSP_Vars = iSave;
+		SetStackPointer(_iSP_Vars);
+		SetError("Ptr Call Error");
+		return false;
+	}
+	if (nullptr != pRet)
+		Move(pRet, m_pVarStack_Pointer);
+
+	int argSP_Vars = _iSP_Vars;
+	_iSP_Vars = iSave;
+	SetStackPointer(_iSP_Vars);
+	if (m_pRegisterActive != NULL)
+	{
+		switch(m_pRegisterActive->_sub_state)
+		{ 
+			case COROUTINE_SUB_START:
+				StartCoroutione(argSP_Vars, n3);
+				break;
+			case COROUTINE_SUB_CLOSE:
+				switch (m_pRegisterActive->_state)
+				{
+					case COROUTINE_STATE_SUSPENDED:
+						DeadCoroutine(m_pRegisterActive);
+						break;
+					case COROUTINE_STATE_RUNNING:
+						if (m_pCur != m_pRegisterActive)SetError("Coroutine Error 1");
+						else							StopCoroutine(true);
+						break;
+					case COROUTINE_STATE_DEAD:
+						break;
+					case COROUTINE_STATE_NORMAL:
+						DeadCoroutine(m_pRegisterActive);
+						for(auto it = m_sCoroutines.begin(); it != m_sCoroutines.end(); it++)
+						{
+							if((*it) == m_pRegisterActive)
+							{
+								m_sCoroutines.erase(it);
+								break;
+							}
+						}
+						break;
+				}
+				m_pRegisterActive = NULL;
+				break;
+			default:
+				SetError("Coroutine Error 1");
+				break;
+		}
+	}
+
+	return true;
+}
 bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUserData, StringInfo* pStr, VarInfo* pRet, bool get)
 {
 	Neo_NativeProperty func = functionPtrNative._property;
@@ -1667,7 +2012,7 @@ bool CNeoVMWorker::VerifyType(VarInfo *p, VAR_TYPE t)
 		return true;
 	char ch[256];
 #ifdef _WIN32
-	sprintf_s(ch, _countof(ch), "VerifyType (%s != %s)", GetDataType(p->GetType()).c_str(), GetDataType(t).c_str());
+	snprintf(ch, _countof(ch), "VerifyType (%s != %s)", GetDataType(p->GetType()).c_str(), GetDataType(t).c_str());
 #else
 	sprintf(ch, "VerifyType (%s != %s)", GetDataType(p->GetType()).c_str(), GetDataType(t).c_str());
 #endif
@@ -1691,7 +2036,7 @@ bool CNeoVMWorker::ChangeNumber(VarInfo* p)
 	}
 	char ch[256];
 #ifdef _WIN32
-	sprintf_s(ch, _countof(ch), "ChangeNumber (%s != number)", GetDataType(p->GetType()).c_str());
+	snprintf(ch, _countof(ch), "ChangeNumber (%s != number)", GetDataType(p->GetType()).c_str());
 #else
 	sprintf(ch, "ChangeNumber (%s != number)", GetDataType(p->GetType()).c_str());
 #endif

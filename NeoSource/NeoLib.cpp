@@ -428,6 +428,14 @@ struct neo_libs
 		pN->ReturnValue(::floor(v));
 		return true;
 	}
+	static bool Math_round(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1) return false;
+
+		NS_FLOAT v = pN->read<NS_FLOAT>(1);
+		pN->ReturnValue(::round(v));
+		return true;
+	}
 	static bool Math_sin(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1) return false;
@@ -468,6 +476,14 @@ struct neo_libs
 		pN->ReturnValue(::log10(v));
 		return true;
 	}
+	static bool Math_exp(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1) return false;
+
+		NS_FLOAT v = pN->read<NS_FLOAT>(1);
+		pN->ReturnValue(::exp(v));
+		return true;
+	}
 	static bool Math_pow(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 2) return false;
@@ -501,6 +517,316 @@ struct neo_libs
 		pN->ReturnValue(::sqrt(v));
 		return true;
 	}
+	static bool Math_Vector2(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+
+		VarInfo* pRet = pN->GetReturnVar();
+		if (pN->ResetVarType(pRet, VAR_LIST, 2) == false) return false;
+		pRet->ListInsertFloat(0, pN->read<NS_FLOAT>(1));
+		pRet->ListInsertFloat(1, pN->read<NS_FLOAT>(2));
+		return true;
+	}
+	static bool Math_Vector3(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 3) return false;
+
+		VarInfo* pRet = pN->GetReturnVar();
+		if (pN->ResetVarType(pRet, VAR_LIST, 3) == false) return false;
+		pRet->ListInsertFloat(0, pN->read<NS_FLOAT>(1));
+		pRet->ListInsertFloat(1, pN->read<NS_FLOAT>(2));
+		pRet->ListInsertFloat(2, pN->read<NS_FLOAT>(3));
+		return true;
+	}
+	static NS_FLOAT MathClamp01Value(NS_FLOAT v)
+	{
+		if (v < (NS_FLOAT)0.0) return (NS_FLOAT)0.0;
+		if (v > (NS_FLOAT)1.0) return (NS_FLOAT)1.0;
+		return v;
+	}
+	static NS_FLOAT MathClampValue(NS_FLOAT v, NS_FLOAT minValue, NS_FLOAT maxValue)
+	{
+		if (v < minValue) return minValue;
+		if (v > maxValue) return maxValue;
+		return v;
+	}
+	static bool Math_Clamp01(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1) return false;
+		pN->ReturnValue(MathClamp01Value(pN->read<NS_FLOAT>(1)));
+		return true;
+	}
+	static bool Math_Clamp(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 3) return false;
+		pN->ReturnValue(MathClampValue(pN->read<NS_FLOAT>(1), pN->read<NS_FLOAT>(2), pN->read<NS_FLOAT>(3)));
+		return true;
+	}
+	static bool Math_SmoothStep01(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1) return false;
+		NS_FLOAT x = MathClamp01Value(pN->read<NS_FLOAT>(1));
+		pN->ReturnValue(x * x * ((NS_FLOAT)3.0 - (NS_FLOAT)2.0 * x));
+		return true;
+	}
+	static bool Math_Lerp(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 3) return false;
+		NS_FLOAT a = pN->read<NS_FLOAT>(1);
+		NS_FLOAT b = pN->read<NS_FLOAT>(2);
+		NS_FLOAT t = pN->read<NS_FLOAT>(3);
+		pN->ReturnValue(a + (b - a) * t);
+		return true;
+	}
+	static bool ReadVec3(VarInfo* pVar, NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z)
+	{
+		if (pVar == nullptr || pVar->GetType() != VAR_LIST) return false;
+		if (pVar->ListFindFloat(0, x) == false) return false;
+		if (pVar->ListFindFloat(1, y) == false) return false;
+		if (pVar->ListFindFloat(2, z) == false) return false;
+		return true;
+	}
+	static bool WriteVec3(CNeoVMWorker* pN, NS_FLOAT x, NS_FLOAT y, NS_FLOAT z)
+	{
+		VarInfo* pRet = pN->GetReturnVar();
+		if (pN->ResetVarType(pRet, VAR_LIST, 3) == false) return false;
+		pRet->ListInsertFloat(0, x);
+		pRet->ListInsertFloat(1, y);
+		pRet->ListInsertFloat(2, z);
+		return true;
+	}
+	static bool ReadQuat(VarInfo* pVar, NS_FLOAT& w, NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z)
+	{
+		if (pVar == nullptr || pVar->GetType() != VAR_LIST) return false;
+		if (pVar->ListFindFloat(0, w) == false) return false;
+		if (pVar->ListFindFloat(1, x) == false) return false;
+		if (pVar->ListFindFloat(2, y) == false) return false;
+		if (pVar->ListFindFloat(3, z) == false) return false;
+		return true;
+	}
+	static bool WriteQuat(CNeoVMWorker* pN, NS_FLOAT w, NS_FLOAT x, NS_FLOAT y, NS_FLOAT z)
+	{
+		NS_FLOAT lenSq = w * w + x * x + y * y + z * z;
+		if (lenSq < (NS_FLOAT)0.000001)
+		{
+			w = (NS_FLOAT)1.0;
+			x = y = z = (NS_FLOAT)0.0;
+		}
+		else
+		{
+			NS_FLOAT invLen = (NS_FLOAT)1.0 / (NS_FLOAT)::sqrt(lenSq);
+			w *= invLen;
+			x *= invLen;
+			y *= invLen;
+			z *= invLen;
+		}
+
+		VarInfo* pRet = pN->GetReturnVar();
+		if (pN->ResetVarType(pRet, VAR_LIST, 4) == false) return false;
+		pRet->ListInsertFloat(0, w);
+		pRet->ListInsertFloat(1, x);
+		pRet->ListInsertFloat(2, y);
+		pRet->ListInsertFloat(3, z);
+		return true;
+	}
+	static bool Math_Lerp3(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 3) return false;
+
+		NS_FLOAT ax, ay, az;
+		NS_FLOAT bx, by, bz;
+		if (ReadVec3(pN->GetStackVar(1), ax, ay, az) == false) return false;
+		if (ReadVec3(pN->GetStackVar(2), bx, by, bz) == false) return false;
+		NS_FLOAT t = pN->read<NS_FLOAT>(3);
+
+		return WriteVec3(pN,
+			ax + (bx - ax) * t,
+			ay + (by - ay) * t,
+			az + (bz - az) * t);
+	}
+	static bool Math_DistanceSquared3(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+
+		NS_FLOAT ax, ay, az;
+		NS_FLOAT bx, by, bz;
+		if (ReadVec3(pN->GetStackVar(1), ax, ay, az) == false) return false;
+		if (ReadVec3(pN->GetStackVar(2), bx, by, bz) == false) return false;
+
+		NS_FLOAT dx = ax - bx;
+		NS_FLOAT dy = ay - by;
+		NS_FLOAT dz = az - bz;
+		pN->ReturnValue(dx * dx + dy * dy + dz * dz);
+		return true;
+	}
+	static bool Math_Normalize3(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 6) return false;
+
+		NS_FLOAT x = pN->read<NS_FLOAT>(1);
+		NS_FLOAT y = pN->read<NS_FLOAT>(2);
+		NS_FLOAT z = pN->read<NS_FLOAT>(3);
+		NS_FLOAT fallbackX = pN->read<NS_FLOAT>(4);
+		NS_FLOAT fallbackY = pN->read<NS_FLOAT>(5);
+		NS_FLOAT fallbackZ = pN->read<NS_FLOAT>(6);
+		NS_FLOAT lenSq = x * x + y * y + z * z;
+		if (lenSq < (NS_FLOAT)0.00000001)
+			return WriteVec3(pN, fallbackX, fallbackY, fallbackZ);
+
+		NS_FLOAT invLen = (NS_FLOAT)1.0 / (NS_FLOAT)::sqrt(lenSq);
+		return WriteVec3(pN, x * invLen, y * invLen, z * invLen);
+	}
+	static bool Math_Cross3(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 6) return false;
+
+		NS_FLOAT ax = pN->read<NS_FLOAT>(1);
+		NS_FLOAT ay = pN->read<NS_FLOAT>(2);
+		NS_FLOAT az = pN->read<NS_FLOAT>(3);
+		NS_FLOAT bx = pN->read<NS_FLOAT>(4);
+		NS_FLOAT by = pN->read<NS_FLOAT>(5);
+		NS_FLOAT bz = pN->read<NS_FLOAT>(6);
+		return WriteVec3(pN,
+			ay * bz - az * by,
+			az * bx - ax * bz,
+			ax * by - ay * bx);
+	}
+	static bool Math_RotateVectorByQuat(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 4) return false;
+
+		VarInfo* q = pN->GetStackVar(1);
+		NS_FLOAT qw, qx, qy, qz;
+		if (q == nullptr || q->GetType() != VAR_LIST) return false;
+		if (q->ListFindFloat(0, qw) == false) return false;
+		if (q->ListFindFloat(1, qx) == false) return false;
+		if (q->ListFindFloat(2, qy) == false) return false;
+		if (q->ListFindFloat(3, qz) == false) return false;
+
+		NS_FLOAT x = pN->read<NS_FLOAT>(2);
+		NS_FLOAT y = pN->read<NS_FLOAT>(3);
+		NS_FLOAT z = pN->read<NS_FLOAT>(4);
+		NS_FLOAT tx = (NS_FLOAT)2.0 * (qy * z - qz * y);
+		NS_FLOAT ty = (NS_FLOAT)2.0 * (qz * x - qx * z);
+		NS_FLOAT tz = (NS_FLOAT)2.0 * (qx * y - qy * x);
+		return WriteVec3(pN,
+			x + qw * tx + (qy * tz - qz * ty),
+			y + qw * ty + (qz * tx - qx * tz),
+			z + qw * tz + (qx * ty - qy * tx));
+	}
+	static bool NormalizeVec3(NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z)
+	{
+		NS_FLOAT lenSq = x * x + y * y + z * z;
+		if (lenSq < (NS_FLOAT)0.000001) return false;
+		NS_FLOAT invLen = (NS_FLOAT)1.0 / (NS_FLOAT)::sqrt(lenSq);
+		x *= invLen;
+		y *= invLen;
+		z *= invLen;
+		return true;
+	}
+	static bool Math_quat_from_basis(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 3) return false;
+
+		NS_FLOAT rX, rY, rZ;
+		NS_FLOAT uX, uY, uZ;
+		NS_FLOAT fX, fY, fZ;
+		if (ReadVec3(pN->GetStackVar(1), rX, rY, rZ) == false) return false;
+		if (ReadVec3(pN->GetStackVar(2), uX, uY, uZ) == false) return false;
+		if (ReadVec3(pN->GetStackVar(3), fX, fY, fZ) == false) return false;
+		if (NormalizeVec3(rX, rY, rZ) == false) return false;
+		if (NormalizeVec3(uX, uY, uZ) == false) return false;
+		if (NormalizeVec3(fX, fY, fZ) == false) return false;
+
+		NS_FLOAT m00 = rX, m01 = uX, m02 = fX;
+		NS_FLOAT m10 = rY, m11 = uY, m12 = fY;
+		NS_FLOAT m20 = rZ, m21 = uZ, m22 = fZ;
+		NS_FLOAT w, x, y, z;
+		NS_FLOAT trace = m00 + m11 + m22;
+		if (trace > (NS_FLOAT)0.0)
+		{
+			NS_FLOAT s = (NS_FLOAT)::sqrt(trace + (NS_FLOAT)1.0) * (NS_FLOAT)2.0;
+			w = (NS_FLOAT)0.25 * s;
+			x = (m21 - m12) / s;
+			y = (m02 - m20) / s;
+			z = (m10 - m01) / s;
+		}
+		else if (m00 > m11 && m00 > m22)
+		{
+			NS_FLOAT s = (NS_FLOAT)::sqrt((NS_FLOAT)1.0 + m00 - m11 - m22) * (NS_FLOAT)2.0;
+			w = (m21 - m12) / s;
+			x = (NS_FLOAT)0.25 * s;
+			y = (m01 + m10) / s;
+			z = (m02 + m20) / s;
+		}
+		else if (m11 > m22)
+		{
+			NS_FLOAT s = (NS_FLOAT)::sqrt((NS_FLOAT)1.0 + m11 - m00 - m22) * (NS_FLOAT)2.0;
+			w = (m02 - m20) / s;
+			x = (m01 + m10) / s;
+			y = (NS_FLOAT)0.25 * s;
+			z = (m12 + m21) / s;
+		}
+		else
+		{
+			NS_FLOAT s = (NS_FLOAT)::sqrt((NS_FLOAT)1.0 + m22 - m00 - m11) * (NS_FLOAT)2.0;
+			w = (m10 - m01) / s;
+			x = (m02 + m20) / s;
+			y = (m12 + m21) / s;
+			z = (NS_FLOAT)0.25 * s;
+		}
+
+		return WriteQuat(pN, w, x, y, z);
+	}
+	static bool Math_quat_slerp(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 3) return false;
+
+		NS_FLOAT aw, ax, ay, az;
+		NS_FLOAT bw, bx, by, bz;
+		if (ReadQuat(pN->GetStackVar(1), aw, ax, ay, az) == false) return false;
+		if (ReadQuat(pN->GetStackVar(2), bw, bx, by, bz) == false) return false;
+		NS_FLOAT t = MathClamp01Value(pN->read<NS_FLOAT>(3));
+
+		NS_FLOAT dot = aw * bw + ax * bx + ay * by + az * bz;
+		if (dot < (NS_FLOAT)0.0)
+		{
+			dot = -dot;
+			bw = -bw;
+			bx = -bx;
+			by = -by;
+			bz = -bz;
+		}
+
+		NS_FLOAT scaleA;
+		NS_FLOAT scaleB;
+		if (dot > (NS_FLOAT)0.9995)
+		{
+			scaleA = (NS_FLOAT)1.0 - t;
+			scaleB = t;
+		}
+		else
+		{
+			NS_FLOAT theta = (NS_FLOAT)::acos(MathClampValue(dot, (NS_FLOAT)-1.0, (NS_FLOAT)1.0));
+			NS_FLOAT sinTheta = (NS_FLOAT)::sin(theta);
+			if (::fabs(sinTheta) < (NS_FLOAT)0.000001)
+			{
+				scaleA = (NS_FLOAT)1.0 - t;
+				scaleB = t;
+			}
+			else
+			{
+				scaleA = (NS_FLOAT)::sin(((NS_FLOAT)1.0 - t) * theta) / sinTheta;
+				scaleB = (NS_FLOAT)::sin(t * theta) / sinTheta;
+			}
+		}
+
+		return WriteQuat(pN,
+			aw * scaleA + bw * scaleB,
+			ax * scaleA + bx * scaleB,
+			ay * scaleA + by * scaleB,
+			az * scaleA + bz * scaleB);
+	}
 	static bool	Math_srand(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1) return false;
@@ -519,6 +845,44 @@ struct neo_libs
 		pN->ReturnValue(pN->m_sRand.rnd());
 		return true;
 	}
+	static bool Math_Rand01(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 0) return false;
+		pN->ReturnValue((NS_FLOAT)pN->m_sRand.rnd() / (NS_FLOAT)32767.0);
+		return true;
+	}
+	static bool Math_RandRange(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+		NS_FLOAT a = pN->read<NS_FLOAT>(1);
+		NS_FLOAT b = pN->read<NS_FLOAT>(2);
+		NS_FLOAT t = (NS_FLOAT)pN->m_sRand.rnd() / (NS_FLOAT)32767.0;
+		pN->ReturnValue(a + (b - a) * t);
+		return true;
+	}
+	static bool Math_ColorRGB(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 3) return false;
+		NS_FLOAT r = MathClamp01Value(pN->read<NS_FLOAT>(1));
+		NS_FLOAT g = MathClamp01Value(pN->read<NS_FLOAT>(2));
+		NS_FLOAT b = MathClamp01Value(pN->read<NS_FLOAT>(3));
+		int color = -16777216 + (int)(b * (NS_FLOAT)255.0) * 65536 + (int)(g * (NS_FLOAT)255.0) * 256 + (int)(r * (NS_FLOAT)255.0);
+		pN->ReturnValue(color);
+		return true;
+	}
+	static bool Math_ColorARGB(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 4) return false;
+		NS_FLOAT a = MathClamp01Value(pN->read<NS_FLOAT>(1));
+		NS_FLOAT r = MathClamp01Value(pN->read<NS_FLOAT>(2));
+		NS_FLOAT g = MathClamp01Value(pN->read<NS_FLOAT>(3));
+		NS_FLOAT b = MathClamp01Value(pN->read<NS_FLOAT>(4));
+		int ai = (int)(a * (NS_FLOAT)255.0);
+		int rgb = (int)(b * (NS_FLOAT)255.0) * 65536 + (int)(g * (NS_FLOAT)255.0) * 256 + (int)(r * (NS_FLOAT)255.0);
+		int color = ai < 128 ? ai * 16777216 + rgb : (ai - 256) * 16777216 + rgb;
+		pN->ReturnValue(color);
+		return true;
+	}
 
 	static bool sys_meta(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
@@ -530,10 +894,9 @@ struct neo_libs
 		if (pMeta->GetType() != VAR_MAP) return false;
 
 		VarInfo var;
-		var.ClearType();
 		if (pTable->_tbl->_meta)
 		{
-			var.SetType(VAR_MAP);
+			var = VarInfo(VAR_MAP);
 			var._tbl = pTable->_tbl->_meta;
 		}
 
@@ -827,8 +1190,6 @@ struct neo_libs
 		param.putASM = false;
 		param.debug = false;
 
-		INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param);
-
 		if (false == INeoVM::Compile(arCode, param))
 		{
 			return false;
@@ -996,6 +1357,8 @@ static VMHash<TYPE_NeoLib> g_sNeoFunLib_List;
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_String;
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_Map;
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_Async;
+static std::vector<TYPE_NeoLib> g_sNeoFunLib_DefaultNative;
+static std::map<std::string, int> g_sNeoFunLib_DefaultNativeIndex;
 
 bool CNeoVMImpl::_funInitLib = false;
 FunctionPtrNative CNeoVMImpl::_funLib_Default;
@@ -1049,9 +1412,23 @@ static bool Fun_Async(INeoVMWorker* pN, void* pUserData, const VMString* pStr, s
 std::map<std::string, std::list< SystemFun>> g_sSystemFuns;
 std::string g_sCurrentSystem;
 
+static int AddDefaultNativeFun(const std::string& nativeName, TYPE_NeoLib fun)
+{
+	auto it = g_sNeoFunLib_DefaultNativeIndex.find(nativeName);
+	if (it != g_sNeoFunLib_DefaultNativeIndex.end())
+		return it->second;
+
+	int nativeIndex = (int)g_sNeoFunLib_DefaultNative.size();
+	g_sNeoFunLib_DefaultNative.push_back(fun);
+	g_sNeoFunLib_DefaultNativeIndex[nativeName] = nativeIndex;
+	g_sNeoFunLib_Default.Add(nativeName, fun);
+	return nativeIndex;
+}
+
 static void AddSystemFun(const std::string& fname, TYPE_NeoLib fun, int argcnt)
 {
-	g_sNeoFunLib_Default.Add("#" + fname, fun);
+	const std::string nativeName = "#" + fname;
+	int nativeIndex = AddDefaultNativeFun(nativeName, fun);
 	if(g_sCurrentSystem.empty() == false)
 	{
 		auto it = g_sSystemFuns.find(g_sCurrentSystem);
@@ -1061,6 +1438,7 @@ static void AddSystemFun(const std::string& fname, TYPE_NeoLib fun, int argcnt)
 			SystemFun v;
 			v.fname = fname;
 			v.argCount = argcnt;
+			v.nativeIndex = nativeIndex;
 			lst.push_back(v);
 
 			g_sSystemFuns[g_sCurrentSystem] = lst;
@@ -1071,9 +1449,32 @@ static void AddSystemFun(const std::string& fname, TYPE_NeoLib fun, int argcnt)
 			SystemFun v;
 			v.fname = fname;
 			v.argCount = argcnt;
+			v.nativeIndex = nativeIndex;
 			lst.push_back(v);
 		}
 	}
+}
+
+int CNeoVMImpl::FindDefaultNativeIndex(const VMString* pStr)
+{
+	if (pStr == nullptr)
+		return -1;
+
+	TYPE_NeoLib f;
+	if (g_sNeoFunLib_Default.TryGetValue(pStr, &f) == false)
+		return -1;
+
+	auto it = g_sNeoFunLib_DefaultNativeIndex.find(pStr->_str);
+	if (it == g_sNeoFunLib_DefaultNativeIndex.end())
+		return -1;
+	return it->second;
+}
+
+bool CNeoVMImpl::CallDefaultNativeByIndex(int nativeIndex, CNeoVMWorker* pWorker, short args)
+{
+	if (nativeIndex < 0 || nativeIndex >= (int)g_sNeoFunLib_DefaultNative.size())
+		return false;
+	return (*g_sNeoFunLib_DefaultNative[nativeIndex])(pWorker, nullptr, args);
 }
 
 static void AddGlobalLibFun()
@@ -1081,7 +1482,7 @@ static void AddGlobalLibFun()
 	if (g_sNeoFunLib_Default.empty() == false)
 		return;
 
-	g_sNeoFunLib_Default.Add("print", &neo_libs::io_print);
+	AddDefaultNativeFun("print", &neo_libs::io_print);
 
 	g_sCurrentSystem = "math";
 	AddSystemFun("abs", &neo_libs::Math_abs, 1);
@@ -1090,17 +1491,36 @@ static void AddGlobalLibFun()
 	AddSystemFun("atan", &neo_libs::Math_atan, 1);
 	AddSystemFun("ceil", &neo_libs::Math_ceil, 1);
 	AddSystemFun("floor", &neo_libs::Math_floor, 1);
+	AddSystemFun("round", &neo_libs::Math_round, 1);
 	AddSystemFun("sin", &neo_libs::Math_sin, 1);
 	AddSystemFun("cos", &neo_libs::Math_cos, 1);
 	AddSystemFun("tan", &neo_libs::Math_tan, 1);
 	AddSystemFun("log", &neo_libs::Math_log, 1);
 	AddSystemFun("log10", &neo_libs::Math_log10, 1);
+	AddSystemFun("exp", &neo_libs::Math_exp, 1);
 	AddSystemFun("pow", &neo_libs::Math_pow, 2);
 	AddSystemFun("deg", &neo_libs::Math_deg, 1);
 	AddSystemFun("rad", &neo_libs::Math_rad, 1);
 	AddSystemFun("sqrt", &neo_libs::Math_sqrt, 1);
+	AddSystemFun("Vector2", &neo_libs::Math_Vector2, 2);
+	AddSystemFun("Vector3", &neo_libs::Math_Vector3, 3);
+	AddSystemFun("Clamp01", &neo_libs::Math_Clamp01, 1);
+	AddSystemFun("Clamp", &neo_libs::Math_Clamp, 3);
+	AddSystemFun("SmoothStep01", &neo_libs::Math_SmoothStep01, 1);
+	AddSystemFun("Lerp", &neo_libs::Math_Lerp, 3);
+	AddSystemFun("Lerp3", &neo_libs::Math_Lerp3, 3);
+	AddSystemFun("DistanceSquared3", &neo_libs::Math_DistanceSquared3, 2);
+	AddSystemFun("Normalize3", &neo_libs::Math_Normalize3, 6);
+	AddSystemFun("Cross3", &neo_libs::Math_Cross3, 6);
+	AddSystemFun("RotateVectorByQuat", &neo_libs::Math_RotateVectorByQuat, 4);
+	AddSystemFun("quat_from_basis", &neo_libs::Math_quat_from_basis, 3);
+	AddSystemFun("quat_slerp", &neo_libs::Math_quat_slerp, 3);
 	AddSystemFun("srand", &neo_libs::Math_srand, 1);
 	AddSystemFun("rand", &neo_libs::Math_rand, 0);
+	AddSystemFun("Rand01", &neo_libs::Math_Rand01, 0);
+	AddSystemFun("RandRange", &neo_libs::Math_RandRange, 2);
+	AddSystemFun("ColorRGB", &neo_libs::Math_ColorRGB, 3);
+	AddSystemFun("ColorARGB", &neo_libs::Math_ColorARGB, 4);
 
 	g_sCurrentSystem = "system";
 	AddSystemFun("time", &neo_libs::sys_time, 0);

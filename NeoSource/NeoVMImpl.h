@@ -20,10 +20,12 @@ class CNeoVMImpl : public INeoVM
 private:
 
 
-	std::map<u32, ListInfo*> _sLists;
-	std::map<u32, MapInfo*> _sTables;
-	std::map<u32, SetInfo*> _sSets;
-	std::map<u32, StringInfo*> _sStrings;
+	// 살아있는 List/Map/Set 를 intrusive 이중연결 리스트로 추적 (종료 시 _Bucket 해제용).
+	// 기존 std::map<ID,ptr> 레지스트리 대체 — 할당/해제당 트리 연산 2~3회를 O(1) 링크로 교체.
+	// String 은 CNVMInstPool(소멸자 지원)이라 별도 추적 불필요 → 레지스트리 제거.
+	ListInfo* _sListHead = nullptr;
+	MapInfo* _sTableHead = nullptr;
+	SetInfo* _sSetHead = nullptr;
 	u32 _dwLastIDVMWorker = 0;
 
 
@@ -32,7 +34,11 @@ private:
 	NeoThreadSafeQueue<AsyncInfo*> _job_queue;
 	bool						_job_end = false;
 	NeoThreadSafeQueue<AsyncInfo*> _job_completed;
+	SNeoVMAllocStats m_sAllocStats;
+	SNeoVMAllocStats m_sPublishedAllocStats;
 public:
+	void PublishAllocStats();
+	void GetAllocStats(SNeoVMAllocStats& outStats) const { outStats = m_sAllocStats; }
 	void Var_SetString(VarInfo *d, const char* str);
 	void Var_SetStringA(VarInfo *d, const std::string& str);
 	void Var_SetTable(VarInfo *d, MapInfo* p);
@@ -41,6 +47,9 @@ public:
 	CNeoVMWorker* WorkerAlloc(int iStackSize);
 	void FreeWorker(CNeoVMWorker *d);
 	CNeoVMWorker* FindWorker(int iModule);
+
+	NeoExecContextPool* _pExecPool = nullptr;             // 이 VM 의 실행 컨텍스트 풀(로드 시 주입)
+	NeoExecContextPool* GetExecPool() { return _pExecPool; }
 
 	CoroutineInfo* CoroutineAlloc();
 	void FreeCoroutine(VarInfo *d);
@@ -102,7 +111,7 @@ public:
 
 	CNVMInstPool< AsyncInfo, 32> m_sPool_Async;
 	CNVMInstPool< StringInfo, 32> m_sPool_String;
-	CNVMInstPool< CoroutineInfo, 32> m_sPool_Coroutine;
+	// 코루틴 컨텍스트는 공유 실행 컨텍스트 풀(_pExecPool)로 통합됨 → per-VM 풀 제거.
 
 	std::map<void*, FunctionPtr*> m_sCache_FunPtr;
 
@@ -123,6 +132,8 @@ public:
 
 	static bool IsGlobalLibFun(std::string& FunName);
 	static const std::list< SystemFun>* GetSystemModule(const std::string& module);
+	static int FindDefaultNativeIndex(const VMString* pStr);
+	static bool CallDefaultNativeByIndex(int nativeIndex, CNeoVMWorker* pWorker, short args);
 	void RegLibrary(VarInfo* pSystem, const char* pLibName);// , SNeoFunLib* pFuns);
 	static void RegObjLibrary();
 	static void InitLib();

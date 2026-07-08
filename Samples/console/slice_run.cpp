@@ -20,7 +20,11 @@ int SAMPLE_slice_run(INeoLoader* pLoader, std::string filename)
 	param.putASM = true;
 	param.debug = true;
 
-	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param);
+	int result = 0;
+	NeoExecContextPool* execPool = NeoExecContextPool_Create();
+	NeoLoadVMParam vparam;
+	vparam.execPool = execPool;
+	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param, &vparam);
 	if (pVM != NULL)
 	{
 		// Alloc Worker Stack
@@ -28,7 +32,8 @@ int SAMPLE_slice_run(INeoLoader* pLoader, std::string filename)
 		if (id == 0)
 		{
 			printf("Error - GetMainWorkerID %s", "slice_fun\n");
-			return - 1;
+			result = -1;
+			goto cleanup;
 		}
 
 		// Worker & NeoFunction Bind
@@ -37,7 +42,8 @@ int SAMPLE_slice_run(INeoLoader* pLoader, std::string filename)
 			if (false == pVM->BindWorkerFunction(id, "slice_fun"))
 			{
 				printf("Error - BindWorkerFunction %s\n", "slice_fun");
-				return -1;
+				result = -1;
+				goto cleanup;
 			}
 		}
 
@@ -70,9 +76,14 @@ int SAMPLE_slice_run(INeoLoader* pLoader, std::string filename)
 		}
 		pVM->ReleaseWorker(id);
 		INeoVM::ReleaseVM(pVM);
+		pVM = NULL;
 	}
+cleanup:
+	if (pVM != NULL)
+		INeoVM::ReleaseVM(pVM);
+	NeoExecContextPool_Destroy(execPool);
 	pLoader->Unload(nullptr, pFileBuffer, iFileLen);
 
-    return 0;
+    return result;
 }
 

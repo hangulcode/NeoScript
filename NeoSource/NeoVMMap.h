@@ -77,6 +77,10 @@ struct MapInfo : AllocBase
 	FunctionPtrNative _fun;
 	MapInfo*		_meta;
 
+	// 살아있는 객체 추적용 intrusive 이중연결 리스트 (std::map 레지스트리 대체)
+	MapInfo* _liveNext;
+	MapInfo* _livePrev;
+
 	void Free();
 
 	void Reserve(int sz);
@@ -90,6 +94,7 @@ struct MapInfo : AllocBase
 	void Remove(VarInfo* pKey);
 	VarInfo* Find(VarInfo *pKey);
 	VarInfo* Find(const std::string& key);
+	VarInfo* FindString(StringInfo* pKeyStr); // 문자열 키 전용 fast path (NeoVMInternal.h 에 인라인 정의)
 
 	CollectionIterator FirstNode();
 	bool NextNode(CollectionIterator&);

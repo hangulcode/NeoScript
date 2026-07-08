@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <thread>
 #include <time.h>
@@ -25,6 +25,7 @@ struct SystemFun
 {
 	std::string fname;
 	int			argCount;
+	int			nativeIndex;
 };
 
 
@@ -77,6 +78,7 @@ enum eNOperation : OpType
 	NOP_MOVI,
 
 	NOP_MOV_MINUS,
+	NOP_LOG_NOT,	// !
 	NOP_ADD2,		// +
 	NOP_SUB2,		// -
 	NOP_MUL2,		// *
@@ -173,6 +175,7 @@ enum eNOperation : OpType
 
 	NOP_NONE,
 	NOP_ERROR,
+	NOP_NATIVECALL,	// Native Call (patched at LoadVM)
 	NOP_MAX,
 }; // Operation length
 
@@ -275,6 +278,38 @@ struct CoroutineInfo : AllocBase
 	SimpleVector<SCallStack>	m_sCallStack;
 };
 
+// 실행 컨텍스트(파이버) = var 스택 + 콜 스택 + SP/IP 레지스터.
+// default(메인) 실행과 코루틴이 동일 타입·동일 풀을 공유한다.
+typedef CoroutineInfo NeoExecContext;
+
+// 실행 컨텍스트 풀. 호스트(엔진)가 스레드별로 소유(thread_local)하고 VM 로드 시 주입한다.
+// 스레드별 사용 전제라 내부 락이 없다. Acquire/Release 는 free-list pop/push.
+struct NeoExecContextPool
+{
+	CNVMInstPool<CoroutineInfo, 32> _pool;
+	int _varStackSize;
+
+	NeoExecContextPool(int varStackSize = 50 * 1024) : _varStackSize(varStackSize < 100 ? 100 : varStackSize) {}
+
+	NeoExecContext* Acquire()
+	{
+		NeoExecContext* p = _pool.Receive();
+		p->_info._pCodeCurrent = NULL;
+		p->_info.ClearSP();
+		p->_state = COROUTINE_STATE_RUNNING;
+		p->_sub_state = COROUTINE_SUB_NORMAL;
+		p->m_sCallStack.reserve(1000);
+		p->m_sCallStack.clear();
+		p->m_sVarStack.resize(_varStackSize);
+		return p;
+	}
+	// 반납 전 사용 슬롯의 VarInfo 참조 정리는 호출측(워커)이 수행한다(Var_Release 가 워커 멤버라서).
+	void Release(NeoExecContext* p)
+	{
+		_pool.Confer(p);
+	}
+};
+
 struct StringInfo : AllocBase, VMString
 {
 };
@@ -329,6 +364,27 @@ NEOS_FORCEINLINE void Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
 	case VAR_ASYNC: v1->_async = v2->_async; ++v1->_async->_refCount; break;
 	default: break;
 	}
+}
+
+// 문자열 키 전용 fast path.
+// MapBucket::Find(VAR_STRING) 와 동일 의미론이지만 타입 switch / GetHashCode 디스패치를 생략한다.
+NEOS_FORCEINLINE VarInfo* MapInfo::FindString(StringInfo* pKeyStr)
+{
+	if (_BucketCapa <= 0)
+		return NULL;
+	u32 hash = pKeyStr->GetHash();
+	MapNode* pCur = _Bucket[hash & _HashBase].pFirst;
+	while (pCur)
+	{
+		if (pCur->hash == hash && pCur->key.GetType() == VAR_STRING)
+		{
+			StringInfo* pCurStr = pCur->key._str;
+			if (pCurStr == pKeyStr || pCurStr->_str == pKeyStr->_str)
+				return &pCur->value;
+		}
+		pCur = pCur->pNext;
+	}
+	return NULL;
 }
 
 };

@@ -348,7 +348,7 @@ void SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...)
 	va_list arg_ptr;
 	va_start(arg_ptr, lpszString);
 #ifdef _WIN32
-	vsprintf_s(buff, _countof(buff), lpszString, arg_ptr);
+	vsnprintf(buff, _countof(buff), lpszString, arg_ptr);
 #else
 	vsnprintf(buff, 8, lpszString, arg_ptr);
 #endif
@@ -367,7 +367,7 @@ void OutAsm(const char*	lpszString, ...)
 	va_list arg_ptr;
 	va_start(arg_ptr, lpszString);
 #ifdef _WIN32
-	vsprintf_s(buff, _countof(buff), lpszString, arg_ptr);
+	vsnprintf(buff, _countof(buff), lpszString, arg_ptr);
 #else
 	vsnprintf(buff, 8, lpszString, arg_ptr);
 #endif
@@ -394,9 +394,9 @@ void OutBytes(const u8*	pBuffer, int iCount, int iMaxCount)
 	for (int i = 0; i < iMaxCount; i++)
 	{
 		if(i < iCount)
-			sprintf_s(buff + i * 3, 4, "%02X ", pBuffer[i]);
+			snprintf(buff + i * 3, 4, "%02X ", pBuffer[i]);
 		else
-			sprintf_s(buff + i * 3, 4, "   ");
+			snprintf(buff + i * 3, 4, "   ");
 	}
 #else
 	for (int i = 0; i < iMaxCount; i++)

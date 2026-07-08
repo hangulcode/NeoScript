@@ -140,6 +140,15 @@ NEOS_FORCEINLINE bool handle_PTRCALL2(const SVMOperation& OP) {
     return false;
 }
 
+NEOS_FORCEINLINE bool handle_NATIVECALL(const SVMOperation& OP) {
+    short n2 = OP.n2;
+    CallDefaultNativeByIndex(OP.n1, n2, (OP.argFlag & NEOS_OP_CALL_NORESULT) ? nullptr : GetVarPtr3(OP));
+
+    if (_iSP_Vars_Max2 < _iSP_VarsMax + (1 + n2))
+        _iSP_Vars_Max2 = _iSP_VarsMax + (1 + n2);
+    return false;
+}
+
 NEOS_FORCEINLINE bool handle_RETURN(const SVMOperation& OP) {
     if (m_iBreakingCallStack == (int)m_pCallStack->size())
     {
@@ -285,12 +294,20 @@ NEOS_FORCEINLINE bool handle_ERROR(const SVMOperation& OP) {
 
     char chMsg[256];
 #ifdef _WIN32
-    sprintf_s(chMsg, _countof(chMsg), "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
+    snprintf(chMsg, _countof(chMsg), "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
 #else
     sprintf(chMsg, "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
 #endif
+
+    std::string detail = chMsg;
+#if 0
     if (GetVM()->_sErrorMsgDetail.empty())
         GetVM()->_sErrorMsgDetail = chMsg;
+#else
+    detail += FormatStackTrace(idx);
+    if (GetVM()->_sErrorMsgDetail.empty())
+        GetVM()->_sErrorMsgDetail = detail;
+#endif
 
     if (m_pDebugListener || m_iDebugBreakCount > 0 || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
     {
@@ -305,7 +322,7 @@ NEOS_FORCEINLINE bool handle_ERROR(const SVMOperation& OP) {
     SetStackPointer(_iSP_Vars);
 
     if (INeoVM::m_pFunError) {
-        INeoVM::m_pFunError(chMsg);
+        INeoVM::m_pFunError(detail.c_str());
     }
     return true; // Exit RunInternal
 }

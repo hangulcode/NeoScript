@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 NEOS_FORCEINLINE void CNeoVMWorker::Move(VarInfo* v1, VarInfo* v2)
 {
@@ -171,7 +171,11 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 			}
 			else
 			{
-				pFind = GetTableItem(pClt, pKey);
+				// 문자열 키는 타입 디스패치를 생략하는 전용 경로로 직행
+				if (pKey->GetType() == VAR_STRING)
+					pFind = tbl->FindString(pKey->_str);
+				else
+					pFind = GetTableItem(pClt, pKey);
 				if (pFind)
 					Move(pValue, pFind);
 				else

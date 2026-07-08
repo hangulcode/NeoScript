@@ -20,6 +20,7 @@
 		<dict><key>include</key><string>#keywords</string></dict>
 		<dict><key>include</key><string>#constants</string></dict>
 		<dict><key>include</key><string>#numbers</string></dict>
+		<dict><key>include</key><string>#builtins</string></dict>
 		<dict><key>include</key><string>#function-calls</string></dict>
 		<dict><key>include</key><string>#operators</string></dict>
 	</array>
@@ -138,7 +139,7 @@
 					<key>name</key>
 					<string>keyword.control.conditional.neoscript</string>
 					<key>match</key>
-					<string>\b(if|elseif|else|switch|case|default)\b</string>
+					<string>\b(if|elif|elseif|else|switch|case|default)\b</string>
 				</dict>
 				<dict>
 					<key>name</key>
@@ -150,7 +151,7 @@
 					<key>name</key>
 					<string>keyword.control.neoscript</string>
 					<key>match</key>
-					<string>\b(return|import|export|delegate|async|await)\b</string>
+					<string>\b(return|import|as|export|delegate|async|await)\b</string>
 				</dict>
 				<dict>
 					<key>name</key>
@@ -176,6 +177,12 @@
 					<key>match</key>
 					<string>\b(true|false|none|null|this)\b</string>
 				</dict>
+				<dict>
+					<key>name</key>
+					<string>constant.other.define.neoscript</string>
+					<key>match</key>
+					<string>\b[A-Z][A-Z0-9_]*\b</string>
+				</dict>
 			</array>
 		</dict>
 		<key>numbers</key>
@@ -183,7 +190,14 @@
 			<key>name</key>
 			<string>constant.numeric.neoscript</string>
 			<key>match</key>
-			<string>\b(?:0x[0-9A-Fa-f]+|\d+(?:\.\d+)?)\b</string>
+			<string>\b(?:0x[0-9A-Fa-f]+|\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)\b</string>
+		</dict>
+		<key>builtins</key>
+		<dict>
+			<key>name</key>
+			<string>support.function.builtin.neoscript</string>
+			<key>match</key>
+			<string>\b(print|tostring|toint|tofloat|tosize|totype|sleep)\b(?=\s*\()</string>
 		</dict>
 		<key>function-calls</key>
 		<dict>
@@ -202,7 +216,7 @@
 			<key>name</key>
 			<string>keyword.operator.neoscript</string>
 			<key>match</key>
-			<string>(\.\.|==|!=|&lt;=|&gt;=|&amp;&amp;|\|\||[+\-*/%=&lt;&gt;!])</string>
+			<string>(\.\.|\+\+|--|==|!=|\+=|-=|\*=|/=|%=|&lt;=|&gt;=|&amp;&amp;|\|\||[+\-*/%=&lt;&gt;!|&amp;?:])</string>
 		</dict>
 	</dict>
 </dict>

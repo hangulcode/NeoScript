@@ -282,6 +282,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 
 		case NOP_MOV:
 		case NOP_MOV_MINUS:
+		case NOP_LOG_NOT:
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			if ((argFlag & (1 << 4)) == 0)
 				argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
@@ -313,6 +314,10 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, &v.n3);
+			break;
+		case NOP_NATIVECALL: // 컴파일에 나오지 않고, LoadVM 에서 NOP_PTRCALL2 인경우 System 함수이름을 찾어서 함수 Index 화
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
+			argFlag |= GetArgIndexToCode(argFlag, nullptr, nullptr, &v.n3);
 			break;
 		case NOP_CALL:
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
@@ -435,32 +440,32 @@ std::string GetValueString(VarInfo& vi, std::map<int, std::string>* pFunTable = 
 	switch (vi.GetType())
 	{
 	case VAR_INT:
-		sprintf_s(ch, _countof(ch), "%d", vi._int);
+		snprintf(ch, _countof(ch), "%d", vi._int);
 		break;
 	case VAR_FLOAT:
-		sprintf_s(ch, _countof(ch), FLOAT_FORMAT, vi._float); // double ?
+		snprintf(ch, _countof(ch), FLOAT_FORMAT, vi._float); // double ?
 		break;
 	case VAR_BOOL:
-		sprintf_s(ch, _countof(ch), "'%s'", vi._bl ? "true" : "false");
+		snprintf(ch, _countof(ch), "'%s'", vi._bl ? "true" : "false");
 		break;
 	case VAR_STRING:
-		sprintf_s(ch, _countof(ch), "'%s'", ToPtringString(vi._str->_str).c_str());
+		snprintf(ch, _countof(ch), "'%s'", ToPtringString(vi._str->_str).c_str());
 		break;
 	case VAR_FUN:
-		//sprintf_s(ch, _countof(ch), "%s", mapFun[vi._fun_index].c_str());
+		//snprintf(ch, _countof(ch), "%s", mapFun[vi._fun_index].c_str());
 		if(pFunTable == NULL)
-			sprintf_s(ch, _countof(ch), "%d:fun", vi._fun_index);
+			snprintf(ch, _countof(ch), "%d:fun", vi._fun_index);
 		else
 		{
 			auto it = pFunTable->find(vi._fun_index);
 			if(it != pFunTable->end())
-				sprintf_s(ch, _countof(ch), "%d:'%s'", vi._fun_index, (*it).second.c_str());
+				snprintf(ch, _countof(ch), "%d:'%s'", vi._fun_index, (*it).second.c_str());
 			else
-				sprintf_s(ch, _countof(ch), "%d:fun", vi._fun_index);
+				snprintf(ch, _countof(ch), "%d:fun", vi._fun_index);
 		}
 		break;
 	default:
-		sprintf_s(ch, _countof(ch), "unknown type (%d)", vi.GetType());
+		snprintf(ch, _countof(ch), "unknown type (%d)", vi.GetType());
 		break;
 	}
 	return ch;
@@ -487,21 +492,21 @@ std::string GetLog(STempDebug& td, SVMOperation& op, int argIndex)
 	if (c[0] == 'G')
 	{
 		if(v < (int)td._staticVars.size())
-			sprintf_s(ch, _countof(ch), "[%s%d %s]", c, v, GetValueString(td._staticVars[v]).c_str());
+			snprintf(ch, _countof(ch), "[%s%d %s]", c, v, GetValueString(td._staticVars[v]).c_str());
 		else
 		{
 			if(v - (int)td._staticVars.size() < (int)td._globalVars.size())
-				sprintf_s(ch, _countof(ch), "[%s%d %s]", c, v, td._globalVars[v - (int)td._staticVars.size()].c_str());
+				snprintf(ch, _countof(ch), "[%s%d %s]", c, v, td._globalVars[v - (int)td._staticVars.size()].c_str());
 			else
-				sprintf_s(ch, _countof(ch), "[%s%d ???]", c, v);
+				snprintf(ch, _countof(ch), "[%s%d ???]", c, v);
 		}
 	}
 	else
 	{
 		if(isNum)
-			sprintf_s(ch, _countof(ch), "%d", v);
+			snprintf(ch, _countof(ch), "%d", v);
 		else
-			sprintf_s(ch, _countof(ch), "[%s%d]", c, v);
+			snprintf(ch, _countof(ch), "[%s%d]", c, v);
 	}
 	return ch;
 }
@@ -512,7 +517,7 @@ std::string GetFunName(SFunctions& funs, int id)
 	if(pFun == NULL)
 	{
 		char ch[128];
-		sprintf_s(ch, _countof(ch), "fun(%d)'", id);
+		snprintf(ch, _countof(ch), "fun(%d)'", id);
 		return ch;
 	}
 	return pFun->_name;
@@ -525,7 +530,7 @@ std::string JumpMark(std::map<int, int>& sJumpMark, int off)
 	if (it == sJumpMark.end())
 		return r;
 	char ch[128];
-	sprintf_s(ch, _countof(ch), " 'go_%d'", (*it).second);
+	snprintf(ch, _countof(ch), " 'go_%d'", (*it).second);
 	r = ch;
 	return r;
 }
@@ -647,6 +652,10 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 		case NOP_XOR2:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
 			OutAsm("XOR  %s ^= %s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
+			break;
+		case NOP_LOG_NOT:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
+			OutAsm("NOT  %s = !%s\n", GetLog(td, v, 1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 
 		case NOP_ADD3:
@@ -875,6 +884,18 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			{
 				OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 				OutAsm("PCA2 %s = %s arg:%d\n", GetLog(td, v, 3).c_str(), GetLog(td, v, 1).c_str(), v.n2);
+			}
+			break;
+		case NOP_NATIVECALL: // 컴파일에 나오지 않고, LoadVM 에서 NOP_PTRCALL2 인경우 System 함수이름을 찾어서 함수 Index 화
+			if (v.argFlag & NEOS_OP_CALL_NORESULT)
+			{
+				OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
+				OutAsm("NCAL native:%d arg:%d\n", v.n1, v.n2);
+			}
+			else
+			{
+				OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
+				OutAsm("NCAL %s = native:%d arg:%d\n", GetLog(td, v, 3).c_str(), v.n1, v.n2);
 			}
 			break;
 		case NOP_CALL:

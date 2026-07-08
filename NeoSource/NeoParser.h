@@ -21,7 +21,6 @@ namespace NeoScript
 #ifdef _WIN32
 #else
 #define _countof(a) (sizeof(a)/sizeof(*(a)))
-#define sprintf_s(format, ...) snprintf(format, __VA_ARGS__)
 #endif
 
 bool IsTempVar(int iVar);
@@ -325,6 +324,7 @@ struct SFunctionInfo
 				{
 				case NOP_MOV:
 				case NOP_MOV_MINUS:
+				case NOP_LOG_NOT:
 				case NOP_ADD3:
 				case NOP_SUB3:
 				case NOP_MUL3:
