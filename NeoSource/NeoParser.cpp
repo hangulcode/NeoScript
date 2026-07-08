@@ -1465,6 +1465,13 @@ TK_TYPE ParseListDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs,
 		else
 #endif
 		{
+			if (iTempOffsetValue.IsArray())
+			{
+				int iTempOffsetRead = funs._cur->AllocLocalTempVar();
+				funs._cur->Push_TableRead(ar, iTempOffsetValue._iVar, iTempOffsetValue._iArrayIndex, iTempOffsetRead, iTempOffsetValue.IsHaveShort());
+				iTempOffsetValue = SOperand(iTempOffsetRead);
+			}
+
 			int iTempOffsetKey = funs.AddStaticInt(iItemCount);
 			funs._cur->Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey, iTempOffsetValue._iVar, false, false, iTempOffsetValue.IsShort());
 		}
