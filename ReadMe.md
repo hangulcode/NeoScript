@@ -230,6 +230,7 @@ Build : Release Mode 64bit
 	- sleep (x): x 시간 만큼 일시 정지 (1 second for 1000)
 	- return [x]: 진행 중인 함수를 리턴, x 가 있으면 x 변수를 리턴
 	- break: 실행중인 루프문을 빠져 나옴
+	- continue: 실행중인 루프문의 다음 반복으로 진행
 	- if (x) / else / elif: 조건 문이 true 이면 if 다음을 false 이면 else 다음을 처리
 	- for : for (var a in 1, 100, 1) 순서는 초기값, 최종값, 증가값
 	- foreach : map, list, set 자료구조에 사용. Must be foreach (var a[, b] in map)

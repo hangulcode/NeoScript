@@ -119,9 +119,9 @@ std::map<std::string, TK_TYPE> g_sStringToToken;
 #define TOKEN_STR2(key, str) g_sTokenToString[key] = STokenValue(str, 20, NOP_NONE); g_sStringToToken[str] = key
 #define TOKEN_STR3(key, str, pri, op) g_sTokenToString[key] = STokenValue(str, pri, op); g_sStringToToken[str] = key
 
-TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef = false, TK_TYPE tkEnd1 = TK_SEMICOLON, TK_TYPE tkEnd2 = TK_COMMA, TK_TYPE tkEnd3 = TK_R_SMALL, TK_TYPE tkEnd4 = TK_R_ARRAY);
+TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef = false, TK_TYPE tkEnd1 = TK_SEMICOLON, TK_TYPE tkEnd2 = TK_COMMA, TK_TYPE tkEnd3 = TK_R_SMALL, TK_TYPE tkEnd4 = TK_R_ARRAY, std::vector<SJumpValue>* pContinueJumps = NULL);
 bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport);
-bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn = NULL);
+bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn = NULL, std::vector<SJumpValue>* pContinueJumps = NULL);
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool addOPFunEnd = true);
 
 eNOperation GetOpTypeFromOp(eNOperation op)
@@ -192,6 +192,7 @@ int InitDefaultTokenString()
 
 	TOKEN_STR2(TK_RETURN, "return");
 	TOKEN_STR2(TK_BREAK, "break");
+	TOKEN_STR2(TK_CONTINUE, "continue");
 	TOKEN_STR2(TK_IF, "if");
 	TOKEN_STR2(TK_ELSE, "else");
 	TOKEN_STR2(TK_ELSEIF, "elif");
@@ -1890,7 +1891,7 @@ bool ParseToType(int& iResultStack, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 //case TK_R_SMALL:	// )
 //case TK_R_ARRAY:	// ]
 TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef,
-	TK_TYPE tkEnd1, TK_TYPE tkEnd2, TK_TYPE tkEnd3, TK_TYPE tkEnd4)
+	TK_TYPE tkEnd1, TK_TYPE tkEnd2, TK_TYPE tkEnd3, TK_TYPE tkEnd4, std::vector<SJumpValue>* pContinueJumps)
 {
 	std::string tk1, tk2;
 	TK_TYPE tkType1, tkType2;
@@ -2121,7 +2122,16 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				return TK_NONE;
 			}
 			funs._cur->Push_JMP(ar, 0);
-			pJumps->push_back(SJumpValue(funs._cur->_code->GetBufferOffset() - 2, funs._cur->_code->GetBufferOffset()));
+			pJumps->push_back(SJumpValue(funs._cur->_code->GetBufferOffset() - (sizeof(short) * 3), funs._cur->_code->GetBufferOffset()));
+			break;
+		case TK_CONTINUE:
+			if (pContinueJumps == NULL)
+			{
+				SetCompileError(ar, "Error (%d, %d): continue error\n", ar.CurLine(), ar.CurCol());
+				return TK_NONE;
+			}
+			funs._cur->Push_JMP(ar, 0);
+			pContinueJumps->push_back(SJumpValue(funs._cur->_code->GetBufferOffset() - (sizeof(short) * 3), funs._cur->_code->GetBufferOffset()));
 			break;
 		case TK_L_MIDDLE:
 			iTempOffset.Reset();
@@ -2523,12 +2533,13 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	//	for {} Process
 	std::vector<SJumpValue> sJumps;
+	std::vector<SJumpValue> sContinueJumps;
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_MIDDLE) // {
 	{
 		ar.PushToken(tkType1, tk1);
 		iTempOffset = INVALID_ERROR_PARSEJOB;
-		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars);
+		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, &sContinueJumps);
 		if (TK_SEMICOLON != r)
 		{
 			SetCompileError(ar, "Error (%d, %d): ;", ar.CurLine(), ar.CurCol());
@@ -2538,11 +2549,16 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	else
 	{
-		if (false == ParseMiddleArea(&sJumps, ar, funs, vars))
+		if (false == ParseMiddleArea(&sJumps, ar, funs, vars, NULL, &sContinueJumps))
 			return false;
 	}
 
 	// Write Inc Code
+	int continuePos = funs._cur->_code->GetBufferOffset();
+	for (int i = 0; i < (int)sContinueJumps.size(); i++)
+	{
+		funs._cur->Set_JumpOffet(sContinueJumps[i], continuePos);
+	}
 	funs._cur->_code->Write(byTempInc, iIncCodeSize);
 
 	funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
@@ -2750,12 +2766,13 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	//	for {} Process
 	std::vector<SJumpValue> sJumps;
+	std::vector<SJumpValue> sContinueJumps;
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_MIDDLE) // {
 	{
 		ar.PushToken(tkType1, tk1);
 		iTempVar = INVALID_ERROR_PARSEJOB;
-		r = ParseJob(false, iTempVar, &sJumps, ar, funs, vars);
+		r = ParseJob(false, iTempVar, &sJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, &sContinueJumps);
 		if (TK_SEMICOLON != r)
 		{
 			SetCompileError(ar, "Error (%d, %d): ;", ar.CurLine(), ar.CurCol());
@@ -2765,11 +2782,16 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	else
 	{
-		if (false == ParseMiddleArea(&sJumps, ar, funs, vars))
+		if (false == ParseMiddleArea(&sJumps, ar, funs, vars, NULL, &sContinueJumps))
 			return false;
 	}
 
 	funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
+	int continuePos = funs._cur->_code->GetBufferOffset();
+	for (int i = 0; i < (int)sContinueJumps.size(); i++)
+	{
+		funs._cur->Set_JumpOffet(sContinueJumps[i], continuePos);
+	}
 	funs._cur->Push_JMPFor(ar, PosLoopTop, iKey, iKey + 2, iDebugLoopLine);
 
 	funs._cur->ClearLastOP();
@@ -2926,12 +2948,13 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	//	foreach {} Process
 	std::vector<SJumpValue> sJumps;
+	std::vector<SJumpValue> sContinueJumps;
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_MIDDLE) // {
 	{
 		ar.PushToken(tkType1, tk1);
 		iTempOffset = INVALID_ERROR_PARSEJOB;
-		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars);
+		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, &sContinueJumps);
 		if (TK_SEMICOLON != r)
 		{
 			SetCompileError(ar, "Error (%d, %d): ;", ar.CurLine(), ar.CurCol());
@@ -2941,11 +2964,16 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	else
 	{
-		if (false == ParseMiddleArea(&sJumps, ar, funs, vars))
+		if (false == ParseMiddleArea(&sJumps, ar, funs, vars, NULL, &sContinueJumps))
 			return false;
 	}
 
 	funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
+	int continuePos = funs._cur->_code->GetBufferOffset();
+	for (int i = 0; i < (int)sContinueJumps.size(); i++)
+	{
+		funs._cur->Set_JumpOffet(sContinueJumps[i], continuePos);
+	}
 	funs._cur->Push_JMPForEach(ar, PosLoopTop, iTable, iKey, iDebugLoopLine);
 
 	funs._cur->ClearLastOP();
@@ -3035,12 +3063,13 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	//	while {} Process
 	std::vector<SJumpValue> sJumps;
+	std::vector<SJumpValue> sContinueJumps;
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_MIDDLE) // {
 	{
 		ar.PushToken(tkType1, tk1);
 		iTempOffset = INVALID_ERROR_PARSEJOB;
-		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars);
+		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, &sContinueJumps);
 		if (TK_SEMICOLON != r)
 		{
 			SetCompileError(ar, "Error (%d, %d): ;", ar.CurLine(), ar.CurCol());
@@ -3050,11 +3079,16 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	else
 	{
-		if (false == ParseMiddleArea(&sJumps, ar, funs, vars))
+		if (false == ParseMiddleArea(&sJumps, ar, funs, vars, NULL, &sContinueJumps))
 			return false;
 	}
 
 	funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
+	int continuePos = funs._cur->_code->GetBufferOffset();
+	for (int i = 0; i < (int)sContinueJumps.size(); i++)
+	{
+		funs._cur->Set_JumpOffet(sContinueJumps[i], continuePos);
+	}
 	funs._cur->_code->Write(byTempCheck, iCheckCodeSize);
 	if (false == isCheckOPOpt)
 		funs._cur->Push_JMPTrue(ar, iStackCheckVar, PosLoopTop, iDebugLoopLine);
@@ -3093,7 +3127,7 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	return true;
 }
-bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn)
+bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn, std::vector<SJumpValue>* pContinueJumps = NULL)
 {
 	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
@@ -3117,7 +3151,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 
 	//==> if( xxx )
 	iTempOffset.Reset();
-	r = ParseJob(true, iTempOffset, pJumps, ar, funs, vars, true);
+	r = ParseJob(true, iTempOffset, pJumps, ar, funs, vars, true, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, pContinueJumps);
 	if (TK_R_SMALL != r) // )
 	{
 		SetCompileError(ar, "Error (%d, %d): for Init", ar.CurLine(), ar.CurCol());
@@ -3166,7 +3200,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	{
 		AddLocalVar(vars.GetCurrentLayer());
 
-		if (false == ParseMiddleArea(pJumps, ar, funs, vars))
+		if (false == ParseMiddleArea(pJumps, ar, funs, vars, NULL, pContinueJumps))
 			return false;
 
 		DelLocalVar(vars.GetCurrentLayer());
@@ -3175,7 +3209,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	{
 		ar.PushToken(tkType1, tk1);
 		iTempOffset = INVALID_ERROR_PARSEJOB;
-		r = ParseJob(false, iTempOffset, pJumps, ar, funs, vars);
+		r = ParseJob(false, iTempOffset, pJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, pContinueJumps);
 
 		if (TK_SEMICOLON != r)
 		{
@@ -3199,7 +3233,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 
 		funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
 
-		if (false == ParseIF(pJumps, ar, funs, vars, lastOPReturn))
+		if (false == ParseIF(pJumps, ar, funs, vars, lastOPReturn, pContinueJumps))
 			return false;
 
 		ClearTempVars(funs);
@@ -3220,14 +3254,14 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 		tkType1 = GetToken(ar, tk1);
 		/*if (tkType1 == TK_IF)
 		{
-			if (false == ParseIF(pJumps, ar, funs, vars))
+			if (false == ParseIF(pJumps, ar, funs, vars, NULL, pContinueJumps))
 				return false;
 		}
 		else*/ if (tkType1 == TK_L_MIDDLE)
 		{
 			AddLocalVar(vars.GetCurrentLayer());
 
-			if (false == ParseMiddleArea(pJumps, ar, funs, vars))
+			if (false == ParseMiddleArea(pJumps, ar, funs, vars, NULL, pContinueJumps))
 				return false;
 
 			DelLocalVar(vars.GetCurrentLayer());
@@ -3236,7 +3270,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 		{
 			ar.PushToken(tkType1, tk1);
 			iTempOffset = INVALID_ERROR_PARSEJOB;
-			r = ParseJob(false, iTempOffset, pJumps, ar, funs, vars);
+			r = ParseJob(false, iTempOffset, pJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, pContinueJumps);
 
 			if (TK_SEMICOLON != r)
 			{
@@ -3383,7 +3417,7 @@ bool ParseSleep(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 
 
-bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn)
+bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn, std::vector<SJumpValue>* pContinueJumps)
 {
 	std::string tk1, tk2;
 	TK_TYPE tkType1, tkType2;
@@ -3415,7 +3449,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 		case TK_L_MIDDLE:
 			AddLocalVar(vars.GetCurrentLayer());
 
-			if (false == ParseMiddleArea(pJumps, ar, funs, vars))
+			if (false == ParseMiddleArea(pJumps, ar, funs, vars, NULL, pContinueJumps))
 				return false;
 
 			DelLocalVar(vars.GetCurrentLayer());
@@ -3457,7 +3491,29 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				return TK_NONE;
 			}
 			funs._cur->Push_JMP(ar, 0);
-			pJumps->push_back(SJumpValue(funs._cur->_code->GetBufferOffset() - 2, funs._cur->_code->GetBufferOffset()));
+			pJumps->push_back(SJumpValue(funs._cur->_code->GetBufferOffset() - (sizeof(short) * 3), funs._cur->_code->GetBufferOffset()));
+			tkType2 = GetToken(ar, tk2);
+			if (tkType2 != TK_SEMICOLON)
+			{
+				SetCompileError(ar, "Error (%d, %d): break end is ;\n", ar.CurLine(), ar.CurCol());
+				return false;
+			}
+			if (lastOPReturn) *lastOPReturn = false;
+			break;
+		case TK_CONTINUE:
+			if (pContinueJumps == NULL)
+			{
+				SetCompileError(ar, "Error (%d, %d): continue error\n", ar.CurLine(), ar.CurCol());
+				return TK_NONE;
+			}
+			funs._cur->Push_JMP(ar, 0);
+			pContinueJumps->push_back(SJumpValue(funs._cur->_code->GetBufferOffset() - (sizeof(short) * 3), funs._cur->_code->GetBufferOffset()));
+			tkType2 = GetToken(ar, tk2);
+			if (tkType2 != TK_SEMICOLON)
+			{
+				SetCompileError(ar, "Error (%d, %d): continue end is ;\n", ar.CurLine(), ar.CurCol());
+				return false;
+			}
 			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_IMPORT:
@@ -3509,7 +3565,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 		case TK_IF:
 			bGlobalLocal = funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME;
 			if(bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME "IF";
-			if (false == ParseIF(pJumps, ar, funs, vars, lastOPReturn))
+			if (false == ParseIF(pJumps, ar, funs, vars, lastOPReturn, pContinueJumps))
 				return false;
 			if (bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME;
 			break;
