@@ -278,9 +278,9 @@ struct SFunctionInfo
 
 		Push_NoFlag(r, a1, a2);
 	}
-	void	Push_Call(CArchiveRdWC& ar, eNOperation op, short fun, short args, short res)
+	void	Push_Call(CArchiveRdWC& ar, eNOperation op, short fun, short args, short res, int iDebugLine = -1)
 	{
-		AddDebugData(ar);
+		AddDebugData(ar, iDebugLine);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(op);
@@ -289,9 +289,9 @@ struct SFunctionInfo
 		//_code->Write(&args, sizeof(args));
 		Push_NoFlag(fun, args, res);
 	}
-	void	Push_CallPtr(CArchiveRdWC& ar, short table, short index, short args, bool isRet = false)
+	void	Push_CallPtr(CArchiveRdWC& ar, short table, short index, short args, bool isRet = false, int iDebugLine = -1)
 	{
-		AddDebugData(ar);
+		AddDebugData(ar, iDebugLine);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(NOP_PTRCALL);
@@ -301,9 +301,9 @@ struct SFunctionInfo
 		//_code->Write(&args, sizeof(args));
 		Push_Flag(isRet ? NEOS_OP_CALL_NORESULT : 0,table, index, args);
 	}
-	void	Push_CallPtr2(CArchiveRdWC& ar, short index, short args, short res)
+	void	Push_CallPtr2(CArchiveRdWC& ar, short index, short args, short res, int iDebugLine = -1)
 	{
-		AddDebugData(ar);
+		AddDebugData(ar, iDebugLine);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(NOP_PTRCALL2);
@@ -313,7 +313,7 @@ struct SFunctionInfo
 		//_code->Write(&args, sizeof(args));
 		Push_NoFlag(index, args, res);
 	}
-	void	Push_OP2(CArchiveRdWC& ar, eNOperation op, short r, short s, bool b2)
+	void	Push_OP2(CArchiveRdWC& ar, eNOperation op, short r, short s, bool b2, int iDebugLine = -1)
 	{
 		if (op == NOP_MOV)
 		{
@@ -367,7 +367,7 @@ struct SFunctionInfo
 			}
 		}
 
-		AddDebugData(ar);
+		AddDebugData(ar, iDebugLine);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(op);

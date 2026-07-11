@@ -1241,6 +1241,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 == TK_L_SMALL)
 	{
+		int iCallLine = ar.CurLine();
 		int iParamCount = 0;
 		// 각 인자를 평가하되, 호출-인자 슬롯(COMPILE_CALLARG_VAR_BEGIN)으로의 복사는
 		// 모든 인자 평가가 끝난 뒤로 미룬다. 인자식이 그 자체로 함수 호출이면 내부 호출이
@@ -1288,9 +1289,9 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 		{
 			SOperand& arg = argOperands[i];
 			if (arg.IsFun())
-				funs._cur->Push_OP2(ar, NOP_FMOV1, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg._iVar, false);
+				funs._cur->Push_OP2(ar, NOP_FMOV1, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg._iVar, false, iCallLine);
 			else if (arg._iArrayIndex == INVALID_ERROR_PARSEJOB)
-				funs._cur->Push_OP2(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg._iVar, arg.IsShort());
+				funs._cur->Push_OP2(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg._iVar, arg.IsShort(), iCallLine);
 			else
 				funs._cur->Push_TableRead(ar, arg._iVar, arg._iArrayIndex, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg.IsHaveShort());
 		}
@@ -1309,7 +1310,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 				//SetCompileError(ar, "Error (%d, %d):  Built-In", ar.CurLine(), ar.CurCol());
 				int iArrayIndex = funs.AddStaticString(pFun->_name);
 				iResultStack = funs._cur->AllocLocalTempVar();
-				funs._cur->Push_CallPtr2(ar, iArrayIndex, iParamCount, iResultStack._iVar);
+				funs._cur->Push_CallPtr2(ar, iArrayIndex, iParamCount, iResultStack._iVar, iCallLine);
 				//funs._cur->Push_OP2(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
 				if (tkTypePre == TK_MINUS)
 					funs._cur->Push_OP2(ar, NOP_MOV_MINUS, iResultStack._iVar, iResultStack._iVar, false);
@@ -1324,7 +1325,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 				}
 
 				iResultStack = funs._cur->AllocLocalTempVar();
-				funs._cur->Push_Call(ar, NOP_CALL, pFun->_funID, iParamCount, iResultStack._iVar);
+				funs._cur->Push_Call(ar, NOP_CALL, pFun->_funID, iParamCount, iResultStack._iVar, iCallLine);
 			}
 			if (tkTypePre == TK_MINUS)
 				funs._cur->Push_OP2(ar, NOP_MOV_MINUS, iResultStack._iVar, iResultStack._iVar, false);
@@ -1334,13 +1335,13 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 		{
 			if(iResultStack._iArrayIndex != -1)
 			{
-				funs._cur->Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
+				funs._cur->Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount, false, iCallLine);
 				iResultStack = funs._cur->AllocLocalTempVar();
 				funs._cur->Push_OP2(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
 			}
 			else
 			{	// TODO
-				funs._cur->Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
+				funs._cur->Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount, false, iCallLine);
 				iResultStack = funs._cur->AllocLocalTempVar();
 				funs._cur->Push_OP2(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
 			}
@@ -1349,7 +1350,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 		{
 			int iArrayIndex = iResultStack._iArrayIndex;
 			iResultStack = funs._cur->AllocLocalTempVar();
-			funs._cur->Push_CallPtr2(ar, iArrayIndex, iParamCount, iResultStack._iVar);
+			funs._cur->Push_CallPtr2(ar, iArrayIndex, iParamCount, iResultStack._iVar, iCallLine);
 //			funs._cur->Push_OP2(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
 			if (tkTypePre == TK_MINUS)
 				funs._cur->Push_OP2(ar, NOP_MOV_MINUS, iResultStack._iVar, iResultStack._iVar, false);
