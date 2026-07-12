@@ -58,6 +58,11 @@ void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 	X(PCE_INVALID_STATEMENT_END, "Error (%d, %d): expected ';' at the end of the statement") \
 	X(PCE_INVALID_FUNCTION_NAME, "Error (%d, %d): invalid function name '%s'") \
 	X(PCE_UNEXPECTED_TOKEN, "Error (%d, %d): unexpected token '%s' in function '%s'") \
+	X(PCE_CONST_NOT_GLOBAL, "Error (%d, %d): 'const' is only allowed at the global scope") \
+	X(PCE_CONST_DUPLICATE, "Error (%d, %d): const name '%s' is already defined (const, define, variable or function)") \
+	X(PCE_CONST_INVALID_VALUE, "Error (%d, %d): const expression must be a compile-time constant, near '%s'") \
+	X(PCE_CONST_INVALID_OP, "Error (%d, %d): invalid operation in const expression near '%s'") \
+	X(PCE_CONST_DIV_ZERO, "Error (%d, %d): division by zero in const expression") \
 	X(PCE_VM_NOT_INITIALIZED, "Please call NeoScript::INeoVM::Initialize() before compiling scripts")
 
 enum EParserCompileError
@@ -255,6 +260,7 @@ int InitDefaultTokenString()
 	TOKEN_STR1(TK_STRING, "string token");
 
 	TOKEN_STR2(TK_VAR, "var");
+	TOKEN_STR2(TK_CONST, "const");
 	TOKEN_STR2(TK_FUN, "fun");
 	TOKEN_STR2(TK_CLASS, "class");
 	TOKEN_STR2(TK_IMPORT, "import");
@@ -535,10 +541,11 @@ static TK_TYPE CompileDefineTokenToToken(const NeoCompileDefineToken& defineToke
 	case NEO_DEFINE_TOKEN_NULL:
 //		if (tk.empty()) tk = "null";
 		return TK_NULL;
+	case NEO_DEFINE_TOKEN_STRING:
+		return TK_STRING_LITERAL; // 완성된 문자열 리터럴 (따옴표 재파싱 없이 tk 가 곧 내용)
 	case NEO_DEFINE_TOKEN_IDENTIFIER:
 	case NEO_DEFINE_TOKEN_INT:
 	case NEO_DEFINE_TOKEN_FLOAT:
-	case NEO_DEFINE_TOKEN_STRING:
 	default:
 		return TK_STRING;
 	}
@@ -546,7 +553,15 @@ static TK_TYPE CompileDefineTokenToToken(const NeoCompileDefineToken& defineToke
 
 static TK_TYPE ApplyCompileDefine(CArchiveRdWC& ar, TK_TYPE tkType, std::string& tk)
 {
-	if (tkType != TK_STRING || ar.m_pDefines == nullptr)
+	if (tkType != TK_STRING || ar.m_bSuppressDefines)
+		return tkType;
+
+	// 스크립트 const (모듈-로컬) 우선 조회 — 호스트 define 과의 충돌은 선언 시점에 에러 처리됨
+	auto its = ar.m_sScriptDefines.values.find(tk);
+	if (its != ar.m_sScriptDefines.values.end())
+		return CompileDefineTokenToToken((*its).second, tk);
+
+	if (ar.m_pDefines == nullptr)
 		return tkType;
 
 	auto it = ar.m_pDefines->values.find(tk);
@@ -1491,6 +1506,11 @@ bool ParseStringOrNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tk
 		iResultStack = funs.AddStaticString(str);
 		return true;
 	}
+	else if (tkTypePre == TK_STRING_LITERAL) // define/const 치환으로 완성된 문자열
+	{
+		iResultStack = funs.AddStaticString(tkPre);
+		return true;
+	}
 	else if (tkTypePre == TK_STRING)
 	{
 		if (false == ParseNum(iResultStack, TK_NONE, tkPre, ar, funs, vars))
@@ -2066,6 +2086,11 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			blApperOperator = true;
 			break;
 		}
+		case TK_STRING_LITERAL: // define/const 치환으로 완성된 문자열
+			iTempOffset = funs.AddStaticString(tk1);
+			operands.push_back(SOperand(iTempOffset));
+			blApperOperator = true;
+			break;
 		case TK_PLUS:		// +
 		case TK_MINUS:		// -
 			if (blApperOperator == false)
@@ -2263,6 +2288,11 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				{
 					return TK_NONE;
 				}
+				if (a._iVar >= COMPILE_STATIC_VAR_BEGIN && a._iVar < COMPILE_CALLARG_VAR_BEGIN)
+				{	// 상수 풀(리터럴/const) 증감 불가
+					SetParserCompileError(ar, PCE_INVALID_INCREMENT_TARGET, tk1.c_str());
+					return TK_NONE;
+				}
 				a._operandType = Increment_Prefix;
 				funs._cur->Push_OP1(ar, tkType1 == TK_PLUS2 ? NOP_INC : NOP_DEC, a._iVar);
 
@@ -2282,8 +2312,9 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 					SetParserCompileError(ar, PCE_TABLE_VAR_UNSUPPORTED, tk1.c_str());
 					return TK_NONE;
 				}
-				if (a.IsConst())
-				{
+				if (a.IsConst() ||
+					(a._iVar >= COMPILE_STATIC_VAR_BEGIN && a._iVar < COMPILE_CALLARG_VAR_BEGIN))
+				{	// 상수 풀(리터럴/const) 증감 불가
 					SetParserCompileError(ar, PCE_INVALID_INCREMENT_TARGET, tk1.c_str());
 					return TK_NONE;
 				}
@@ -2394,6 +2425,12 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			if (a.IsArray() == false)
 			{
 				if (IsTempVar(a._iVar))
+				{
+					SetParserCompileError(ar, PCE_EXPECTED_LVALUE);
+					return TK_NONE;
+				}
+				// 상수 풀(리터럴/const 치환 결과)에 쓰면 같은 값을 쓰는 모든 코드가 오염된다
+				if (a._iVar >= COMPILE_STATIC_VAR_BEGIN && a._iVar < COMPILE_CALLARG_VAR_BEGIN)
 				{
 					SetParserCompileError(ar, PCE_EXPECTED_LVALUE);
 					return TK_NONE;
@@ -3406,6 +3443,288 @@ bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport)
 	return true;
 }
 
+// ---------------- 스크립트 const (컴파일타임 상수 선언) ----------------
+// const NAME = <상수 표현식>;  →  모듈-로컬 define 으로 등록되어 이후 토큰 치환.
+// 표현식은 컴파일 타임에 평가 (리터럴, 기존 define/const, 산술/비트 연산, 괄호).
+struct SConstValue
+{
+	NeoCompileDefineTokenType type = NEO_DEFINE_TOKEN_NULL;
+	int i = 0;
+	double f = 0;
+	std::string s;
+
+	bool IsNum() const { return type == NEO_DEFINE_TOKEN_INT || type == NEO_DEFINE_TOKEN_FLOAT; }
+	double Num() const { return type == NEO_DEFINE_TOKEN_INT ? (double)i : f; }
+};
+
+static bool ParseConstExpr(SConstValue& out, int minPrec, CArchiveRdWC& ar);
+
+static bool ParseConstPrimary(SConstValue& out, CArchiveRdWC& ar)
+{
+	std::string tk;
+	TK_TYPE tkType = GetToken(ar, tk);
+
+	switch (tkType)
+	{
+	case TK_PLUS:
+		if (false == ParseConstPrimary(out, ar))
+			return false;
+		if (false == out.IsNum())
+		{
+			SetParserCompileError(ar, PCE_CONST_INVALID_OP, "+");
+			return false;
+		}
+		return true;
+	case TK_MINUS:
+		if (false == ParseConstPrimary(out, ar))
+			return false;
+		if (out.type == NEO_DEFINE_TOKEN_INT) { out.i = -out.i; return true; }
+		if (out.type == NEO_DEFINE_TOKEN_FLOAT) { out.f = -out.f; return true; }
+		SetParserCompileError(ar, PCE_CONST_INVALID_OP, "-");
+		return false;
+	case TK_NOT: // ~
+		if (false == ParseConstPrimary(out, ar))
+			return false;
+		if (out.type != NEO_DEFINE_TOKEN_INT)
+		{
+			SetParserCompileError(ar, PCE_CONST_INVALID_OP, "~");
+			return false;
+		}
+		out.i = ~out.i;
+		return true;
+	case TK_L_SMALL:
+		if (false == ParseConstExpr(out, 0, ar))
+			return false;
+		tkType = GetToken(ar, tk);
+		if (tkType != TK_R_SMALL)
+		{
+			SetParserCompileError(ar, PCE_EXPECTED_RIGHT_PAREN);
+			return false;
+		}
+		return true;
+	case TK_QUOTE2:
+	case TK_QUOTE1:
+		if (false == GetQuotationString(ar, out.s, tkType == TK_QUOTE2 ? '"' : '\''))
+		{
+			SetParserCompileError(ar, PCE_UNTERMINATED_STRING);
+			return false;
+		}
+		out.type = NEO_DEFINE_TOKEN_STRING;
+		return true;
+	case TK_STRING_LITERAL: // define/const 치환으로 완성된 문자열
+		out.type = NEO_DEFINE_TOKEN_STRING;
+		out.s = tk;
+		return true;
+	case TK_TRUE:  out.type = NEO_DEFINE_TOKEN_TRUE;  return true;
+	case TK_FALSE: out.type = NEO_DEFINE_TOKEN_FALSE; return true;
+	case TK_NULL:  out.type = NEO_DEFINE_TOKEN_NULL;  return true;
+	case TK_STRING:
+	{
+		double num;
+		if (false == StringToDouble(num, tk.c_str()))
+		{
+			// define/const 로 치환되지 않은 식별자 → 컴파일 타임 상수가 아님
+			SetParserCompileError(ar, PCE_CONST_INVALID_VALUE, tk.c_str());
+			return false;
+		}
+		bool isHex = (tk.size() > 1 && tk[0] == '0' && (tk[1] == 'x' || tk[1] == 'X'));
+		bool isFloat = (tk.find('.') != std::string::npos);
+		if (false == isFloat && false == isHex &&
+			(tk.find('e') != std::string::npos || tk.find('E') != std::string::npos))
+			isFloat = true; // 치환으로 통째로 들어온 지수 표기 ("1e+20" 등)
+		if (false == isFloat && ar.GetData(false) == '.')
+		{
+			// 토크나이저는 "1.5" 를 "1" '.' "5" 로 쪼갠다 (ParseNum 과 동일 처리)
+			ar.GetData(true);
+			std::string tk2;
+			GetToken(ar, tk2);
+			double num2 = 0;
+			if (false == StringToDoubleLow(num2, tk2.c_str()))
+			{
+				SetParserCompileError(ar, PCE_INVALID_NUMBER_LITERAL);
+				return false;
+			}
+			num += num2;
+			isFloat = true;
+		}
+		if (isFloat) { out.type = NEO_DEFINE_TOKEN_FLOAT; out.f = num; }
+		else         { out.type = NEO_DEFINE_TOKEN_INT;   out.i = (int)num; }
+		return true;
+	}
+	default:
+		SetParserCompileError(ar, PCE_CONST_INVALID_VALUE, tk.c_str());
+		return false;
+	}
+}
+
+static int ConstBinOpPrec(TK_TYPE t)
+{
+	switch (t)
+	{
+	case TK_MUL: case TK_DIV: case TK_PERCENT: return 6;
+	case TK_PLUS: case TK_MINUS: return 5;
+	case TK_LSHIFT: case TK_RSHIFT: return 4;
+	case TK_AND: return 3;
+	case TK_XOR: return 2;
+	case TK_OR: return 1;
+	default: return 0;
+	}
+}
+
+static bool EvalConstBinOp(SConstValue& a, TK_TYPE op, const SConstValue& b, CArchiveRdWC& ar)
+{
+	if (false == a.IsNum() || false == b.IsNum())
+	{
+		SetParserCompileError(ar, PCE_CONST_INVALID_OP, GetTokenString(op).c_str());
+		return false;
+	}
+	bool bothInt = (a.type == NEO_DEFINE_TOKEN_INT && b.type == NEO_DEFINE_TOKEN_INT);
+	switch (op)
+	{
+	case TK_PLUS:
+	case TK_MINUS:
+	case TK_MUL:
+		if (bothInt)
+			a.i = (op == TK_PLUS) ? (a.i + b.i) : (op == TK_MINUS) ? (a.i - b.i) : (a.i * b.i);
+		else
+		{
+			double x = a.Num(), y = b.Num();
+			a.type = NEO_DEFINE_TOKEN_FLOAT;
+			a.f = (op == TK_PLUS) ? (x + y) : (op == TK_MINUS) ? (x - y) : (x * y);
+		}
+		return true;
+	case TK_DIV:
+	case TK_PERCENT:
+		if ((bothInt && b.i == 0) || (false == bothInt && b.Num() == 0))
+		{
+			SetParserCompileError(ar, PCE_CONST_DIV_ZERO);
+			return false;
+		}
+		if (bothInt)
+			a.i = (op == TK_DIV) ? (a.i / b.i) : (a.i % b.i);
+		else
+		{
+			double x = a.Num(), y = b.Num();
+			a.type = NEO_DEFINE_TOKEN_FLOAT;
+			a.f = (op == TK_DIV) ? (x / y) : fmod(x, y);
+		}
+		return true;
+	case TK_LSHIFT: case TK_RSHIFT: case TK_AND: case TK_XOR: case TK_OR:
+		if (false == bothInt)
+		{
+			SetParserCompileError(ar, PCE_CONST_INVALID_OP, GetTokenString(op).c_str());
+			return false;
+		}
+		switch (op)
+		{
+		case TK_LSHIFT: a.i <<= b.i; break;
+		case TK_RSHIFT: a.i >>= b.i; break;
+		case TK_AND:    a.i &= b.i;  break;
+		case TK_XOR:    a.i ^= b.i;  break;
+		default:        a.i |= b.i;  break;
+		}
+		return true;
+	default:
+		SetParserCompileError(ar, PCE_CONST_INVALID_OP, GetTokenString(op).c_str());
+		return false;
+	}
+}
+
+static bool ParseConstExpr(SConstValue& out, int minPrec, CArchiveRdWC& ar)
+{
+	if (false == ParseConstPrimary(out, ar))
+		return false;
+
+	while (true)
+	{
+		std::string tk;
+		TK_TYPE tkType = GetToken(ar, tk);
+		int prec = ConstBinOpPrec(tkType);
+		if (prec == 0 || prec < minPrec)
+		{
+			ar.PushToken(tkType, tk); // 종결자(';', ')')는 호출자가 소비
+			return true;
+		}
+		SConstValue rhs;
+		if (false == ParseConstExpr(rhs, prec + 1, ar))
+			return false;
+		if (false == EvalConstBinOp(out, tkType, rhs, ar))
+			return false;
+	}
+}
+
+bool ParseConstDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+{
+	std::string name, tk;
+	TK_TYPE tkType;
+
+	ar.m_bSuppressDefines = true; // 이름은 치환 없이 raw 로 읽는다 (중복 선언 감지)
+	tkType = GetToken(ar, name);
+	ar.m_bSuppressDefines = false;
+
+	if (tkType != TK_STRING || false == AbleName(name))
+	{
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "const name", name.c_str());
+		return false;
+	}
+	if (ar.m_sScriptDefines.values.find(name) != ar.m_sScriptDefines.values.end() ||
+		(ar.m_pDefines != nullptr && ar.m_pDefines->values.find(name) != ar.m_pDefines->values.end()) ||
+		vars.FindVar(name) != -1 ||
+		funs.FindFun(name) != NULL)
+	{
+		SetParserCompileError(ar, PCE_CONST_DUPLICATE, name.c_str());
+		return false;
+	}
+
+	tkType = GetToken(ar, tk);
+	if (tkType != TK_EQUAL)
+	{
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'=' after const name", tk.c_str());
+		return false;
+	}
+
+	SConstValue v;
+	if (false == ParseConstExpr(v, 0, ar))
+		return false;
+
+	tkType = GetToken(ar, tk);
+	if (tkType != TK_SEMICOLON)
+	{
+		SetParserCompileError(ar, PCE_INVALID_STATEMENT_END);
+		return false;
+	}
+
+	NeoCompileDefineToken d;
+	switch (v.type)
+	{
+	case NEO_DEFINE_TOKEN_INT:
+		d.type = NEO_DEFINE_TOKEN_INT;
+		d.text = std::to_string(v.i);
+		break;
+	case NEO_DEFINE_TOKEN_FLOAT:
+	{
+		char buf[64];
+		snprintf(buf, sizeof(buf), "%.17g", v.f);
+		d.type = NEO_DEFINE_TOKEN_FLOAT;
+		d.text = buf;
+		// "2" 처럼 정수 형태로 떨어지면 int 로 재해석되지 않게 소수점을 보존
+		if (d.text.find('.') == std::string::npos &&
+			d.text.find('e') == std::string::npos && d.text.find('E') == std::string::npos)
+			d.text += ".0";
+		break;
+	}
+	case NEO_DEFINE_TOKEN_STRING:
+		d.type = NEO_DEFINE_TOKEN_STRING;
+		d.text = v.s;
+		break;
+	case NEO_DEFINE_TOKEN_TRUE:  d.type = NEO_DEFINE_TOKEN_TRUE;  d.text = "true";  break;
+	case NEO_DEFINE_TOKEN_FALSE: d.type = NEO_DEFINE_TOKEN_FALSE; d.text = "false"; break;
+	default:                     d.type = NEO_DEFINE_TOKEN_NULL;  d.text = "null";  break;
+	}
+	ar.m_sScriptDefines.values[name] = d;
+	return true;
+}
+
 bool ParseClass(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	std::string tk1;
@@ -3555,6 +3874,16 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			break;
 		case TK_VAR:
 			if (false == ParseVarDef(ar, funs, vars, funType == FUNT_EXPORT))
+				return false;
+			if (lastOPReturn) *lastOPReturn = false;
+			break;
+		case TK_CONST:
+			if (funs.GetCurFunName() != GLOBAL_INIT_FUN_NAME)
+			{
+				SetParserCompileError(ar, PCE_CONST_NOT_GLOBAL);
+				return false;
+			}
+			if (false == ParseConstDef(ar, funs, vars))
 				return false;
 			if (lastOPReturn) *lastOPReturn = false;
 			break;

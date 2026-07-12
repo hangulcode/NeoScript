@@ -122,6 +122,32 @@ Supported define token types:
 	- `NEO_DEFINE_TOKEN_FALSE`
 	- `NEO_DEFINE_TOKEN_NULL`
 
+### Script `const` (compile-time constants)
+Scripts can declare their own compile-time constants with `const`.
+Like host defines, a `const` is resolved during tokenization: it creates no runtime
+variable, costs nothing at runtime, and participates in constant folding.
+Because the name is replaced at compile time, a `const` can never be modified.
+
+```cpp
+const BTN_START_GAME = 10;
+const GREETING = "Hello";
+const HALF = 1.5;
+const MY_KEY = KEY_SPACE;                       // alias of a host define
+const ATTACK_MASK = GAMEPAD_A | GAMEPAD_B;      // constant expressions are evaluated at compile time
+
+GameObject.AddEvent("OnButtonClick", BTN_START_GAME, StartNewGame);
+```
+
+Rules:
+	- Allowed only at the global scope (top level of a script).
+	- Value must be a compile-time constant expression: literals (`int`, `float`,
+	  `string`, `true`, `false`, `null`), other defines/consts, unary `-` `~`,
+	  binary `+ - * / % << >> & ^ |`, and parentheses.
+	- A `const` is local to the script file that declares it; it is not visible
+	  in imported modules (host defines are visible everywhere).
+	- Redeclaring a name that is already a const, host define, global variable,
+	  or function is a compile error.
+
 ### Execution context pool
 An **execution context** is one runtime stack set: the operand/local var stack + the call stack + the
 instruction/stack-pointer registers (internally `NeoExecContext`, formerly a per-worker inline `CoroutineInfo`).
