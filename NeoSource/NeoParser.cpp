@@ -11,6 +11,88 @@ namespace NeoScript
 
 void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 
+#define PARSER_COMPILE_ERROR_LIST(X) \
+	X(PCE_INVALID_LOCAL_NAME, "Error (%d, %d): invalid local variable name in function '%s': '%s'") \
+	X(PCE_DUPLICATE_LOCAL_NAME, "Error (%d, %d): local variable '%s' is already defined in function '%s'") \
+	X(PCE_INVALID_EXPORT_SCOPE, "Error (%d, %d): export is only allowed at the global scope. Current function: '%s', name: '%s'") \
+	X(PCE_IMPORT_FAILED, "Error (%d, %d): failed to import module '%s'") \
+	X(PCE_DUPLICATE_FUNCTION_ARGUMENT, "Error (%d, %d): duplicate function argument '%s'") \
+	X(PCE_EXPECTED_FUNCTION_ARGUMENT, "Error (%d, %d): expected a function argument name, but found '%s'") \
+	X(PCE_EXPECTED_COMMA_BETWEEN_ARGUMENTS, "Error (%d, %d): expected ',' between function arguments") \
+	X(PCE_INVALID_CALL_ARGUMENT, "Error (%d, %d): invalid function call argument") \
+	X(PCE_ARGUMENT_COUNT_MISMATCH, "Error (%d, %d): function argument count mismatch. Expected %d, got %d") \
+	X(PCE_EXPECTED_LEFT_PAREN, "Error (%d, %d): expected '('") \
+	X(PCE_EXPECTED_RIGHT_PAREN, "Error (%d, %d): expected ')'") \
+	X(PCE_EXPECTED_RIGHT_BRACKET, "Error (%d, %d): expected ']'") \
+	X(PCE_INVALID_NUMBER_LITERAL, "Error (%d, %d): invalid numeric literal") \
+	X(PCE_UNKNOWN_IDENTIFIER, "Error (%d, %d): unknown identifier '%s'") \
+	X(PCE_UNTERMINATED_STRING, "Error (%d, %d): unterminated string literal") \
+	X(PCE_EXPECTED_MEMBER_NAME, "Error (%d, %d): expected a member name after '.'") \
+	X(PCE_GLOBAL_CALL_NOT_ALLOWED, "Error (%d, %d): function calls are not allowed in global variable initializers") \
+	X(PCE_INVALID_FUNCTION_CALL, "Error (%d, %d): invalid function call") \
+	X(PCE_EXPECTED_LOGIC_NOT_OPERAND, "Error (%d, %d): expected an expression after '!'") \
+	X(PCE_EXPECTED_TYPE_LEFT_PAREN, "Error (%d, %d): expected '(' after type conversion") \
+	X(PCE_EXPECTED_TYPE_RIGHT_PAREN, "Error (%d, %d): expected ')' after type conversion") \
+	X(PCE_UNEXPECTED_FUNCTION_END, "Error (%d, %d): unexpected end of function '%s'") \
+	X(PCE_UNEXPECTED_GLOBAL_BLOCK_END, "Error (%d, %d): unexpected '}' in global initialization") \
+	X(PCE_INVALID_RETURN_STATEMENT, "Error (%d, %d): invalid return statement") \
+	X(PCE_INVALID_ASSIGNMENT, "Error (%d, %d): expected an assignment value after '='") \
+	X(PCE_VAR_DECLARATION_NOT_ALLOWED, "Error (%d, %d): variable declarations are not allowed here") \
+	X(PCE_BREAK_OUTSIDE_LOOP, "Error (%d, %d): 'break' can only be used inside a loop") \
+	X(PCE_CONTINUE_OUTSIDE_LOOP, "Error (%d, %d): 'continue' can only be used inside a loop") \
+	X(PCE_EXPECTED_BREAK_SEMICOLON, "Error (%d, %d): expected ';' after 'break'") \
+	X(PCE_EXPECTED_CONTINUE_SEMICOLON, "Error (%d, %d): expected ';' after 'continue'") \
+	X(PCE_TEMP_VAR_UNSUPPORTED, "Error (%d, %d): temporary variables do not support '%s'") \
+	X(PCE_TABLE_VAR_UNSUPPORTED, "Error (%d, %d): table values do not support '%s'") \
+	X(PCE_INVALID_INCREMENT_TARGET, "Error (%d, %d): invalid target for '++' or '--': '%s'") \
+	X(PCE_INVALID_OPERATOR, "Error (%d, %d): invalid operator near '%s'") \
+	X(PCE_SYNTAX_ERROR, "Error (%d, %d): syntax error near '%s'") \
+	X(PCE_EXPECTED_LVALUE, "Error (%d, %d): assignment target must be writable") \
+	X(PCE_LOGIC_NOT_ALLOWED_GLOBAL, "Error (%d, %d): '%s' is not allowed in global initialization") \
+	X(PCE_EXPECTED_TOKEN, "Error (%d, %d): expected %s, but found '%s'") \
+	X(PCE_CODE_BLOCK_TOO_LARGE, "Error (%d, %d): generated %s code is too large (%d bytes)") \
+	X(PCE_INVALID_FOR_INIT, "Error (%d, %d): invalid for-loop initializer") \
+	X(PCE_INVALID_FOR_CONDITION, "Error (%d, %d): invalid for-loop condition") \
+	X(PCE_INVALID_FOR_INCREMENT, "Error (%d, %d): invalid for-loop increment expression") \
+	X(PCE_INVALID_LOOP_VARIABLE_LAYOUT, "Error (%d, %d): internal loop variable layout error") \
+	X(PCE_INVALID_STATEMENT_END, "Error (%d, %d): expected ';' at the end of the statement") \
+	X(PCE_INVALID_FUNCTION_NAME, "Error (%d, %d): invalid function name '%s'") \
+	X(PCE_UNEXPECTED_TOKEN, "Error (%d, %d): unexpected token '%s' in function '%s'") \
+	X(PCE_CONST_NOT_GLOBAL, "Error (%d, %d): 'const' is only allowed at the global scope") \
+	X(PCE_CONST_DUPLICATE, "Error (%d, %d): const name '%s' is already defined (const, define, variable or function)") \
+	X(PCE_CONST_INVALID_VALUE, "Error (%d, %d): const expression must be a compile-time constant, near '%s'") \
+	X(PCE_CONST_INVALID_OP, "Error (%d, %d): invalid operation in const expression near '%s'") \
+	X(PCE_CONST_DIV_ZERO, "Error (%d, %d): division by zero in const expression") \
+	X(PCE_VM_NOT_INITIALIZED, "Please call NeoScript::INeoVM::Initialize() before compiling scripts")
+
+enum EParserCompileError
+{
+#define X(name, message) name,
+	PARSER_COMPILE_ERROR_LIST(X)
+#undef X
+	PCE_COUNT
+};
+
+static const char* g_sParserCompileErrors[PCE_COUNT] =
+{
+#define X(name, message) message,
+	PARSER_COMPILE_ERROR_LIST(X)
+#undef X
+};
+
+static_assert(sizeof(g_sParserCompileErrors) / sizeof(g_sParserCompileErrors[0]) == PCE_COUNT, "Parser compile error table mismatch");
+
+template<typename... Args>
+static void SetParserCompileError(CArchiveRdWC& ar, EParserCompileError error, Args... args)
+{
+	SetCompileError(ar, g_sParserCompileErrors[error], ar.CurLine(), ar.CurCol(), args...);
+}
+
+static void SetParserCompileError(CArchiveRdWC& ar, EParserCompileError error)
+{
+	SetCompileError(ar, g_sParserCompileErrors[error], ar.CurLine(), ar.CurCol());
+}
+
 #if 0
 inline bool	IsShort(int v) { return (-32768 <= v && v <= 32767) ? true : false; }
 #endif
@@ -119,9 +201,9 @@ std::map<std::string, TK_TYPE> g_sStringToToken;
 #define TOKEN_STR2(key, str) g_sTokenToString[key] = STokenValue(str, 20, NOP_NONE); g_sStringToToken[str] = key
 #define TOKEN_STR3(key, str, pri, op) g_sTokenToString[key] = STokenValue(str, pri, op); g_sStringToToken[str] = key
 
-TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef = false, TK_TYPE tkEnd1 = TK_SEMICOLON, TK_TYPE tkEnd2 = TK_COMMA, TK_TYPE tkEnd3 = TK_R_SMALL, TK_TYPE tkEnd4 = TK_R_ARRAY);
+TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef = false, TK_TYPE tkEnd1 = TK_SEMICOLON, TK_TYPE tkEnd2 = TK_COMMA, TK_TYPE tkEnd3 = TK_R_SMALL, TK_TYPE tkEnd4 = TK_R_ARRAY, std::vector<SJumpValue>* pContinueJumps = NULL);
 bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport);
-bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn = NULL);
+bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn = NULL, std::vector<SJumpValue>* pContinueJumps = NULL);
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool addOPFunEnd = true);
 
 eNOperation GetOpTypeFromOp(eNOperation op)
@@ -178,6 +260,7 @@ int InitDefaultTokenString()
 	TOKEN_STR1(TK_STRING, "string token");
 
 	TOKEN_STR2(TK_VAR, "var");
+	TOKEN_STR2(TK_CONST, "const");
 	TOKEN_STR2(TK_FUN, "fun");
 	TOKEN_STR2(TK_CLASS, "class");
 	TOKEN_STR2(TK_IMPORT, "import");
@@ -192,6 +275,7 @@ int InitDefaultTokenString()
 
 	TOKEN_STR2(TK_RETURN, "return");
 	TOKEN_STR2(TK_BREAK, "break");
+	TOKEN_STR2(TK_CONTINUE, "continue");
 	TOKEN_STR2(TK_IF, "if");
 	TOKEN_STR2(TK_ELSE, "else");
 	TOKEN_STR2(TK_ELSEIF, "elif");
@@ -457,10 +541,11 @@ static TK_TYPE CompileDefineTokenToToken(const NeoCompileDefineToken& defineToke
 	case NEO_DEFINE_TOKEN_NULL:
 //		if (tk.empty()) tk = "null";
 		return TK_NULL;
+	case NEO_DEFINE_TOKEN_STRING:
+		return TK_STRING_LITERAL; // 완성된 문자열 리터럴 (따옴표 재파싱 없이 tk 가 곧 내용)
 	case NEO_DEFINE_TOKEN_IDENTIFIER:
 	case NEO_DEFINE_TOKEN_INT:
 	case NEO_DEFINE_TOKEN_FLOAT:
-	case NEO_DEFINE_TOKEN_STRING:
 	default:
 		return TK_STRING;
 	}
@@ -468,7 +553,15 @@ static TK_TYPE CompileDefineTokenToToken(const NeoCompileDefineToken& defineToke
 
 static TK_TYPE ApplyCompileDefine(CArchiveRdWC& ar, TK_TYPE tkType, std::string& tk)
 {
-	if (tkType != TK_STRING || ar.m_pDefines == nullptr)
+	if (tkType != TK_STRING || ar.m_bSuppressDefines)
+		return tkType;
+
+	// 스크립트 const (모듈-로컬) 우선 조회 — 호스트 define 과의 충돌은 선언 시점에 에러 처리됨
+	auto its = ar.m_sScriptDefines.values.find(tk);
+	if (its != ar.m_sScriptDefines.values.end())
+		return CompileDefineTokenToToken((*its).second, tk);
+
+	if (ar.m_pDefines == nullptr)
 		return tkType;
 
 	auto it = ar.m_pDefines->values.find(tk);
@@ -770,14 +863,14 @@ bool UseableName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, const std::str
 {
 	if (checkName && false == AbleName(name))
 	{
-		SetCompileError(ar, "Error (%d, %d): Function Local Var Unable (%s) %s", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), name.c_str());
+		SetParserCompileError(ar, PCE_INVALID_LOCAL_NAME, funs.GetCurFunName().c_str(), name.c_str());
 		return false;
 	}
 	SLayerVar* pCurLayer = vars.GetCurrentLayer();
 
 	if (pCurLayer->FindVarOnlyCurrentBlock(name) != -1)
 	{
-		SetCompileError(ar, "Error (%d, %d): Function Local Var Already (%s) %s", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), name.c_str());
+		SetParserCompileError(ar, PCE_DUPLICATE_LOCAL_NAME, name.c_str(), funs.GetCurFunName().c_str());
 		return false;
 	}
 	return true;
@@ -802,7 +895,7 @@ int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExp
 			vars._varsExport.push_back(name);
 		else
 		{
-			SetCompileError(ar, "Error (%d, %d): Export Invalid (%s) %s", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), name.c_str());
+			SetParserCompileError(ar, PCE_INVALID_EXPORT_SCOPE, funs.GetCurFunName().c_str(), name.c_str());
 			return -1;
 		}
 	}
@@ -817,7 +910,7 @@ int  AddLocalVar(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	if (pCurLayer->FindVarOnlyCurrentBlock(name) != -1)
 	{
-		SetCompileError(ar, "Error (%d, %d): Function Local Var Already (%s) %s", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), name);
+		SetParserCompileError(ar, PCE_DUPLICATE_LOCAL_NAME, name, funs.GetCurFunName().c_str());
 		return -1;
 	}
 	int iLocalVar;
@@ -881,7 +974,7 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	tkType1 = GetToken(ar, fileName);
 	if (tkType1 != TK_STRING)
 	{
-		SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), fileName.c_str());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "module name after 'import'", fileName.c_str());
 		return false;
 	}
 	std::string defName = fileName; // default equal
@@ -899,13 +992,13 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	if (tkType2 != TK_SEMICOLON)
 	{
-		SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), tk2.c_str());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "';' after import statement", tk2.c_str());
 		return false;
 	}
 
 	if(AbleName(defName) == false)
 	{
-		SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), tk2.c_str());
+		SetParserCompileError(ar, PCE_INVALID_LOCAL_NAME, funs.GetCurFunName().c_str(), defName.c_str());
 		return false;
 	}
 
@@ -953,7 +1046,7 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			funs._curModule = pLayerBackup;
 			return true;
 		}
-		SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), tk2.c_str());
+		SetParserCompileError(ar, PCE_IMPORT_FAILED, fileName.c_str());
 		return false;
 	}
 
@@ -1013,7 +1106,7 @@ bool ParseFunctionArg(CArchiveRdWC& ar, SFunctions& funs, SLayerVar* pCurLayer)
 				auto it = funs._cur->_args.find(tk2);
 				if (it != funs._cur->_args.end())
 				{
-					SetCompileError(ar, "Error (%d, %d): Already Function Arg (%s)", ar.CurLine(), ar.CurCol(), tk2.c_str());
+					SetParserCompileError(ar, PCE_DUPLICATE_FUNCTION_ARGUMENT, tk2.c_str());
 					return false;
 				}
 				int iArg = 1 + (int)funs._cur->_args.size();
@@ -1024,14 +1117,14 @@ bool ParseFunctionArg(CArchiveRdWC& ar, SFunctions& funs, SLayerVar* pCurLayer)
 			}
 			else
 			{
-				SetCompileError(ar, "Error (%d, %d): Function Arg (%d)", ar.CurLine(), ar.CurCol(), tk1.c_str());
+				SetParserCompileError(ar, PCE_EXPECTED_FUNCTION_ARGUMENT, tk1.c_str());
 				return false;
 			}
 			break;
 		case TK_R_SMALL:
 			if (bPreviusComa)
 			{
-				SetCompileError(ar, "Error (%d, %d): Function Arg (Coma)", ar.CurLine(), ar.CurCol());
+				SetParserCompileError(ar, PCE_EXPECTED_FUNCTION_ARGUMENT, ")");
 				return false;
 			}
 			blEnd = true;
@@ -1039,13 +1132,13 @@ bool ParseFunctionArg(CArchiveRdWC& ar, SFunctions& funs, SLayerVar* pCurLayer)
 		case TK_COMMA:
 			if (funs._cur->_args.size() == 0 || bPreviusComa)
 			{
-				SetCompileError(ar, "Error (%d, %d): Function Arg (Coma)", ar.CurLine(), ar.CurCol());
+				SetParserCompileError(ar, PCE_EXPECTED_COMMA_BETWEEN_ARGUMENTS);
 				return false;
 			}
 			bPreviusComa = !bPreviusComa;
 			break;
 		default:
-			SetCompileError(ar, "Error (%d, %d): Function Arg (%s)", ar.CurLine(), ar.CurCol(), tk1.c_str());
+			SetParserCompileError(ar, PCE_EXPECTED_FUNCTION_ARGUMENT, tk1.c_str());
 			return false;
 		}
 	}
@@ -1103,6 +1196,18 @@ bool IsTempVar(int iVar)
 
 	return false;
 }
+// 토큰 텍스트 자체가 float 형태인가.
+// 소스의 "1.5" 는 토크나이저가 '.' 에서 쪼개므로 여기 안 걸리고, define/const 치환으로
+// 통째로 들어온 "3.0", "0.5", "1e+20" 같은 토큰을 잡는다. (없으면 (int) 캐스팅으로 강등됨)
+static bool IsFloatNumberToken(const std::string& tk)
+{
+	if (tk.find('.') != std::string::npos)
+		return true;
+	if (tk.size() > 1 && tk[0] == '0' && (tk[1] == 'x' || tk[1] == 'X'))
+		return tk.find('p') != std::string::npos || tk.find('P') != std::string::npos; // hex 지수
+	return tk.find('e') != std::string::npos || tk.find('E') != std::string::npos;
+}
+
 // This Function No Error Because Try Only
 // return TK_NONE : error
 TK_TYPE Try_ParseIntNum(int& iResultInt, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, TK_TYPE tkTypeEnd1 = TK_UNUSED, TK_TYPE tkTypeEnd2 = TK_UNUSED, TK_TYPE tkTypeEnd3 = TK_UNUSED)
@@ -1117,7 +1222,7 @@ TK_TYPE Try_ParseIntNum(int& iResultInt, CArchiveRdWC& ar, SFunctions& funs, SVa
 	if (true == StringToDouble(num, tk1.c_str()))
 	{
 		u16 c = ar.GetData(false);
-		if (c == '.')
+		if (c == '.' || IsFloatNumberToken(tk1))
 		{
 			ar.PushToken(tkType1, tk1);
 			return TK_NONE; // float or double is not int
@@ -1163,11 +1268,14 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 == TK_L_SMALL)
 	{
+		int iCallLine = ar.CurLine();
 		int iParamCount = 0;
 		// 각 인자를 평가하되, 호출-인자 슬롯(COMPILE_CALLARG_VAR_BEGIN)으로의 복사는
 		// 모든 인자 평가가 끝난 뒤로 미룬다. 인자식이 그 자체로 함수 호출이면 내부 호출이
 		// 같은 호출-인자 윈도우를 재사용하므로, 즉시 복사할 경우 먼저 평가된 인자가 덮어써진다.
 		std::vector<SOperand> argOperands;
+		std::vector<int> argDefOffsets;  // 인자 결과를 만든 단일 op 의 오프셋 (융합 불가면 -1)
+		std::vector<int> argCallCounts;  // 이 인자 평가 완료 시점의 call emit 카운트
 		while (true)
 		{
 			tkType2 = GetToken(ar, tk2);
@@ -1184,21 +1292,37 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 			//}
 			//else
 			{
+				int iCodeOffBefore = funs._cur->_code->GetBufferOffset();
 				iTempVar.Reset();
 				tkType3 = ParseJob(true, iTempVar, NULL, ar, funs, vars);
 				if (iTempVar.IsInvalidValue())
 				{
-					SetCompileError(ar, "Error (%d, %d): Call Param\n", ar.CurLine(), ar.CurCol());
+					SetParserCompileError(ar, PCE_INVALID_CALL_ARGUMENT);
 					return false;
 				}
 				argOperands.push_back(iTempVar);
+
+				// 인자 식 전체가 "임시변수에 쓰는 단일 op" 로 끝났으면 나중에
+				// dest 를 호출-인자 슬롯으로 직접 패치할 수 있게 오프셋을 기억한다.
+				int iDefOffset = -1;
+				if (funs._cur->_iLastOPOffset == iCodeOffBefore &&
+					false == iTempVar.IsFun() &&
+					iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB &&
+					IsTempVar(iTempVar._iVar) &&
+					funs._cur->GetN(iCodeOffBefore, 0) == iTempVar._iVar &&
+					SFunctionInfo::IsRetargetableProducerOP(funs._cur->GetOP(iCodeOffBefore)))
+				{
+					iDefOffset = iCodeOffBefore;
+				}
+				argDefOffsets.push_back(iDefOffset);
+				argCallCounts.push_back(funs._cur->_callOpEmitCount);
 			}
 			iParamCount++;
 
 
 			if (tkType3 != TK_R_SMALL && tkType3 != TK_COMMA)
 			{
-				SetCompileError(ar, "Error (%d, %d): Call Param\n", ar.CurLine(), ar.CurCol());
+				SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "',' or ')' after function argument", tk2.c_str());
 				return false;
 			}
 			if (tkType3 == TK_R_SMALL)
@@ -1206,13 +1330,22 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 		}
 
 		// 모든 인자 평가가 끝난 뒤, CALL 직전에 호출-인자 슬롯으로 복사한다.
+		int iFinalCallCount = funs._cur->_callOpEmitCount;
 		for (int i = 0; i < iParamCount; i++)
 		{
 			SOperand& arg = argOperands[i];
+			// 융합: 인자 producer 의 dest 를 호출-인자 슬롯으로 직접 패치하고 MOV 생략.
+			// 조건: 이후 인자들의 평가에 함수 호출이 없어야 함 — 호출은 같은 인자
+			// 윈도우를 재사용하므로 일찍 쓴 슬롯이 덮어써진다 (지연 복사의 이유).
+			if (argDefOffsets[i] != -1 && argCallCounts[i] == iFinalCallCount)
+			{
+				funs._cur->SetN(argDefOffsets[i], 0, (s16)(COMPILE_CALLARG_VAR_BEGIN + 1 + i));
+				continue;
+			}
 			if (arg.IsFun())
-				funs._cur->Push_OP2(ar, NOP_FMOV1, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg._iVar, false);
+				funs._cur->Push_OP2(ar, NOP_FMOV1, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg._iVar, false, iCallLine);
 			else if (arg._iArrayIndex == INVALID_ERROR_PARSEJOB)
-				funs._cur->Push_OP2(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg._iVar, arg.IsShort());
+				funs._cur->Push_OP2(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg._iVar, arg.IsShort(), iCallLine);
 			else
 				funs._cur->Push_TableRead(ar, arg._iVar, arg._iArrayIndex, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg.IsHaveShort());
 		}
@@ -1224,14 +1357,14 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 				{
 					if (pFun->_built_in_arg_c != iParamCount)
 					{
-						SetCompileError(ar, "Error (%d, %d): Arg Count Invalid (%d != %d)", ar.CurLine(), ar.CurCol(), (int)pFun->_args.size(), iParamCount);
+						SetParserCompileError(ar, PCE_ARGUMENT_COUNT_MISMATCH, pFun->_built_in_arg_c, iParamCount);
 						return false;
 					}
 				}
 				//SetCompileError(ar, "Error (%d, %d):  Built-In", ar.CurLine(), ar.CurCol());
 				int iArrayIndex = funs.AddStaticString(pFun->_name);
 				iResultStack = funs._cur->AllocLocalTempVar();
-				funs._cur->Push_CallPtr2(ar, iArrayIndex, iParamCount, iResultStack._iVar);
+				funs._cur->Push_CallPtr2(ar, iArrayIndex, iParamCount, iResultStack._iVar, iCallLine);
 				//funs._cur->Push_OP2(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
 				if (tkTypePre == TK_MINUS)
 					funs._cur->Push_OP2(ar, NOP_MOV_MINUS, iResultStack._iVar, iResultStack._iVar, false);
@@ -1241,12 +1374,12 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 			{
 				if ((int)pFun->_args.size() != iParamCount)
 				{
-					SetCompileError(ar, "Error (%d, %d): Arg Count Invalid (%d != %d)", ar.CurLine(), ar.CurCol(), (int)pFun->_args.size(), iParamCount);
+					SetParserCompileError(ar, PCE_ARGUMENT_COUNT_MISMATCH, (int)pFun->_args.size(), iParamCount);
 					return false;
 				}
 
 				iResultStack = funs._cur->AllocLocalTempVar();
-				funs._cur->Push_Call(ar, NOP_CALL, pFun->_funID, iParamCount, iResultStack._iVar);
+				funs._cur->Push_Call(ar, NOP_CALL, pFun->_funID, iParamCount, iResultStack._iVar, iCallLine);
 			}
 			if (tkTypePre == TK_MINUS)
 				funs._cur->Push_OP2(ar, NOP_MOV_MINUS, iResultStack._iVar, iResultStack._iVar, false);
@@ -1256,13 +1389,13 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 		{
 			if(iResultStack._iArrayIndex != -1)
 			{
-				funs._cur->Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
+				funs._cur->Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount, false, iCallLine);
 				iResultStack = funs._cur->AllocLocalTempVar();
 				funs._cur->Push_OP2(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
 			}
 			else
 			{	// TODO
-				funs._cur->Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount);
+				funs._cur->Push_CallPtr(ar, iResultStack._iVar, iResultStack._iArrayIndex, iParamCount, false, iCallLine);
 				iResultStack = funs._cur->AllocLocalTempVar();
 				funs._cur->Push_OP2(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
 			}
@@ -1271,7 +1404,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 		{
 			int iArrayIndex = iResultStack._iArrayIndex;
 			iResultStack = funs._cur->AllocLocalTempVar();
-			funs._cur->Push_CallPtr2(ar, iArrayIndex, iParamCount, iResultStack._iVar);
+			funs._cur->Push_CallPtr2(ar, iArrayIndex, iParamCount, iResultStack._iVar, iCallLine);
 //			funs._cur->Push_OP2(ar, tkTypePre != TK_MINUS ? NOP_MOV : NOP_MOV_MINUS, iResultStack._iVar, STACK_POS_RETURN, false);
 			if (tkTypePre == TK_MINUS)
 				funs._cur->Push_OP2(ar, NOP_MOV_MINUS, iResultStack._iVar, iResultStack._iVar, false);
@@ -1285,7 +1418,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 	}
 	else
 	{
-		SetCompileError(ar, "Error (%d, %d): ( Not Found\n", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_EXPECTED_LEFT_PAREN);
 		return false;
 	}
 	return true;
@@ -1307,7 +1440,13 @@ bool ParseNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArch
 	if (true == StringToDouble(num, tk1.c_str()))
 	{
 		u16 c = ar.GetData(false);
-		if (c == '.')
+		if (IsFloatNumberToken(tk1)) // define/const 치환으로 통째로 들어온 float
+		{
+			if (tkTypePre == TK_MINUS)
+				num = -num;
+			iResultStack = funs.AddStaticNum(num);
+		}
+		else if (c == '.')
 		{
 			ar.GetData(true);
 
@@ -1319,7 +1458,7 @@ bool ParseNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArch
 			}
 			else
 			{
-				SetCompileError(ar, "Error (%d, %d): num data invalid\n", ar.CurLine(), ar.CurCol());
+				SetParserCompileError(ar, PCE_INVALID_NUMBER_LITERAL);
 				return TK_NONE;
 			}
 			if (tkTypePre == TK_MINUS)
@@ -1344,7 +1483,7 @@ bool ParseNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArch
 	}
 	else
 	{
-		SetCompileError(ar, "Error (%d, %d): Unknown String (%s)\n", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		SetParserCompileError(ar, PCE_UNKNOWN_IDENTIFIER, tk1.c_str());
 		return false;
 	}
 	return true;
@@ -1364,7 +1503,13 @@ bool ParseNum2(int& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArchiveR
 	if (true == StringToDouble(num, tk1.c_str()))
 	{
 		u16 c = ar.GetData(false);
-		if (c == '.')
+		if (IsFloatNumberToken(tk1)) // define/const 치환으로 통째로 들어온 float
+		{
+			if (tkTypePre == TK_MINUS)
+				num = -num;
+			iResultStack = funs.AddStaticNum(num);
+		}
+		else if (c == '.')
 		{
 			ar.GetData(true);
 
@@ -1376,7 +1521,7 @@ bool ParseNum2(int& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArchiveR
 			}
 			else
 			{
-				SetCompileError(ar, "Error (%d, %d): num data invalid\n", ar.CurLine(), ar.CurCol());
+				SetParserCompileError(ar, PCE_INVALID_NUMBER_LITERAL);
 				return TK_NONE;
 			}
 			if (tkTypePre == TK_MINUS)
@@ -1393,7 +1538,7 @@ bool ParseNum2(int& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArchiveR
 	}
 	else
 	{
-		SetCompileError(ar, "Error (%d, %d): Unknown String (%s)\n", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		SetParserCompileError(ar, PCE_UNKNOWN_IDENTIFIER, tk1.c_str());
 		return false;
 	}
 	return true;
@@ -1406,10 +1551,15 @@ bool ParseStringOrNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tk
 		std::string str;
 		if (false == GetQuotationString(ar, str, tkTypePre == TK_QUOTE2 ? '"' : '\''))
 		{
-			SetCompileError(ar, "Error (%d, %d): String End Not Found\n", ar.CurLine(), ar.CurCol());
+			SetParserCompileError(ar, PCE_UNTERMINATED_STRING);
 			return false;
 		}
 		iResultStack = funs.AddStaticString(str);
+		return true;
+	}
+	else if (tkTypePre == TK_STRING_LITERAL) // define/const 치환으로 완성된 문자열
+	{
+		iResultStack = funs.AddStaticString(tkPre);
 		return true;
 	}
 	else if (tkTypePre == TK_STRING)
@@ -1602,7 +1752,7 @@ TK_TYPE ParseTable(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs, SVars&
 	r = ParseJob(true, op, NULL, ar, funs, vars);
 	if (r != TK_R_ARRAY)
 	{
-		SetCompileError(ar, "Error (%d, %d): Table ] \n", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_EXPECTED_RIGHT_BRACKET);
 		return TK_NONE;
 	}
 
@@ -1626,7 +1776,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_STRING)
 	{
-		SetCompileError(ar, "Error (%d, %d): %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		SetParserCompileError(ar, PCE_UNKNOWN_IDENTIFIER, tk1.c_str());
 		return false;
 	}
 
@@ -1637,7 +1787,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 		tkType2 = GetToken(ar, tk2);
 		if(tkType2 != TK_DOT)
 		{
-			SetCompileError(ar, "Error (%d, %d): %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+			SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'.' after module name", tk2.c_str());
 			return false;
 		}
 		tkType2 = GetToken(ar, tk2);
@@ -1687,7 +1837,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 				std::string str;
 				if (false == GetDotString(ar, str))
 				{
-					SetCompileError(ar, "Error (%d, %d): . string", ar.CurLine(), ar.CurCol());
+					SetParserCompileError(ar, PCE_EXPECTED_MEMBER_NAME);
 					return false;
 				}
 				iTempOffset2 = funs.AddStaticString(str);
@@ -1695,7 +1845,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 
 			if (iTempOffset2.IsArray())
 			{
-				SetCompileError(ar, "Error (%d, %d): . string", ar.CurLine(), ar.CurCol());
+				SetParserCompileError(ar, PCE_EXPECTED_MEMBER_NAME);
 				return false;
 				//int iTempOffset2 = funs._cur->AllocLocalTempVar();
 				//funs._cur->Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iTempOffset2);
@@ -1726,7 +1876,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 					}
 					else
 					{
-						SetCompileError(ar, "Error (%d, %d): . string", ar.CurLine(), ar.CurCol());
+						SetParserCompileError(ar, PCE_EXPECTED_MEMBER_NAME);
 						return false;
 					}
 				}
@@ -1760,7 +1910,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 		{
 			if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 			{
-				SetCompileError(ar, "Error (%d, %d): Call is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
+				SetParserCompileError(ar, PCE_GLOBAL_CALL_NOT_ALLOWED);
 				return false;
 			}
 
@@ -1791,7 +1941,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 			}
 			else
 			{
-				SetCompileError(ar, "Error (%d, %d): function call invalid\n", ar.CurLine(), ar.CurCol());
+				SetParserCompileError(ar, PCE_INVALID_FUNCTION_CALL);
 				return false;
 			}
 		}
@@ -1819,7 +1969,7 @@ bool ParseLogicNotOperand(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs,
 		TK_TYPE r = ParseJob(true, operand, NULL, ar, funs, vars);
 		if (TK_R_SMALL != r)
 		{
-			SetCompileError(ar, "Error (%d, %d): )\n", ar.CurLine(), ar.CurCol());
+			SetParserCompileError(ar, PCE_EXPECTED_RIGHT_PAREN);
 			return false;
 		}
 	}
@@ -1832,7 +1982,7 @@ bool ParseLogicNotOperand(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs,
 
 	if (operand.IsInvalidValue())
 	{
-		SetCompileError(ar, "Error (%d, %d): ! operand", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_EXPECTED_LOGIC_NOT_OPERAND);
 		return false;
 	}
 	if (operand.IsArray())
@@ -1857,7 +2007,7 @@ bool ParseToType(int& iResultStack, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_SMALL)
 	{
-		SetCompileError(ar, "Error (%d, %d): type begin (", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_EXPECTED_TYPE_LEFT_PAREN);
 		return false;
 	}
 
@@ -1865,7 +2015,7 @@ bool ParseToType(int& iResultStack, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 	r = ParseJob(true, operand, NULL, ar, funs, vars);
 	if (r != TK_R_SMALL)
 	{
-		SetCompileError(ar, "Error (%d, %d): type end )", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_EXPECTED_TYPE_RIGHT_PAREN);
 		return TK_NONE;
 	}
 
@@ -1890,7 +2040,7 @@ bool ParseToType(int& iResultStack, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 //case TK_R_SMALL:	// )
 //case TK_R_ARRAY:	// ]
 TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef,
-	TK_TYPE tkEnd1, TK_TYPE tkEnd2, TK_TYPE tkEnd3, TK_TYPE tkEnd4)
+	TK_TYPE tkEnd1, TK_TYPE tkEnd2, TK_TYPE tkEnd3, TK_TYPE tkEnd4, std::vector<SJumpValue>* pContinueJumps)
 {
 	std::string tk1, tk2;
 	TK_TYPE tkType1, tkType2;
@@ -1920,19 +2070,19 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		switch (tkType1)
 		{
 		case TK_NONE:
-			SetCompileError(ar, "Error (%d, %d): Function End (%s)\n", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str());
+			SetParserCompileError(ar, PCE_UNEXPECTED_FUNCTION_END, funs.GetCurFunName().c_str());
 			return TK_NONE;
 		case TK_RETURN:
 			if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME)
 			{
-				SetCompileError(ar, "Error (%d, %d): Global Init (%s) %d", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), tk1.c_str());
+				SetParserCompileError(ar, PCE_UNEXPECTED_GLOBAL_BLOCK_END);
 				return TK_NONE;
 			}
 			iTempOffset.Reset();
 			r = ParseJob(true, iTempOffset, NULL, ar, funs, vars);
 			if (r != TK_SEMICOLON)
 			{
-				SetCompileError(ar, "Error (%d, %d): return", ar.CurLine(), ar.CurCol());
+				SetParserCompileError(ar, PCE_INVALID_RETURN_STATEMENT);
 				return TK_NONE;
 			}
 			if(iTempOffset.IsInvalidValue() == false)
@@ -1957,7 +2107,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			r = ParseJob(bReqReturn, iTempOffset, NULL, ar, funs, vars);
 			if (TK_R_SMALL != r)
 			{
-				SetCompileError(ar, "Error (%d, %d): )\n", ar.CurLine(), ar.CurCol());
+				SetParserCompileError(ar, PCE_EXPECTED_RIGHT_PAREN);
 				return TK_NONE;
 			}
 			operands.push_back(SOperand(iTempOffset));
@@ -1979,7 +2129,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			std::string str;
 			if (false == GetQuotationString(ar, str, tkType1 == TK_QUOTE2 ? '"' : '\''))
 			{
-				SetCompileError(ar, "Error (%d, %d): String End Not Found\n", ar.CurLine(), ar.CurCol());
+				SetParserCompileError(ar, PCE_UNTERMINATED_STRING);
 				return TK_NONE;
 			}
 			iTempOffset = funs.AddStaticString(str);
@@ -1987,6 +2137,11 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			blApperOperator = true;
 			break;
 		}
+		case TK_STRING_LITERAL: // define/const 치환으로 완성된 문자열
+			iTempOffset = funs.AddStaticString(tk1);
+			operands.push_back(SOperand(iTempOffset));
+			blApperOperator = true;
+			break;
 		case TK_PLUS:		// +
 		case TK_MINUS:		// -
 			if (blApperOperator == false)
@@ -2001,7 +2156,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 					r = ParseJob(bReqReturn, a, NULL, ar, funs, vars);
 					if (TK_R_SMALL != r)
 					{
-						SetCompileError(ar, "Error (%d, %d): )\n", ar.CurLine(), ar.CurCol());
+						SetParserCompileError(ar, PCE_EXPECTED_RIGHT_PAREN);
 						return TK_NONE;
 					}
 					if (tkType1 == TK_MINUS)
@@ -2045,7 +2200,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				blApperOperator = true;
 				break;
 			}
-			SetCompileError(ar, "Error (%d, %d): Invalide Operator", ar.CurLine(), ar.CurCol());
+			SetParserCompileError(ar, PCE_INVALID_OPERATOR, tk1.c_str());
 			return TK_NONE;
 		case TK_MUL:		// *
 		case TK_DIV:		// /
@@ -2066,7 +2221,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		{
 			if (blApperOperator == false)
 			{
-				SetCompileError(ar, "Error (%d, %d): Invalide Operator", ar.CurLine(), ar.CurCol());
+				SetParserCompileError(ar, PCE_INVALID_OPERATOR, tk1.c_str());
 				return TK_NONE;
 			}
 			operators.push_back(tkType1);
@@ -2091,7 +2246,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				return TK_NONE;
 			if (iTempVar._iVar == INVALID_ERROR_PARSEJOB)
 			{
-				SetCompileError(ar, "Error (%d, %d): = \n", ar.CurLine(), ar.CurCol());
+				SetParserCompileError(ar, PCE_INVALID_ASSIGNMENT);
 				return TK_NONE;
 			}
 			operators.push_back(tkType1);
@@ -2110,18 +2265,27 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			}
 			else
 			{
-				SetCompileError(ar, "Error (%d, %d): Syntex Var Def Error\n", ar.CurLine(), ar.CurCol());
+				SetParserCompileError(ar, PCE_VAR_DECLARATION_NOT_ALLOWED);
 				return TK_NONE;
 			}
 			break;
 		case TK_BREAK:
 			if(pJumps == NULL)
 			{
-				SetCompileError(ar, "Error (%d, %d): break error\n", ar.CurLine(), ar.CurCol());
+				SetParserCompileError(ar, PCE_BREAK_OUTSIDE_LOOP);
 				return TK_NONE;
 			}
 			funs._cur->Push_JMP(ar, 0);
-			pJumps->push_back(SJumpValue(funs._cur->_code->GetBufferOffset() - 2, funs._cur->_code->GetBufferOffset()));
+			pJumps->push_back(SJumpValue(funs._cur->_code->GetBufferOffset() - (sizeof(short) * 3), funs._cur->_code->GetBufferOffset()));
+			break;
+		case TK_CONTINUE:
+			if (pContinueJumps == NULL)
+			{
+				SetParserCompileError(ar, PCE_CONTINUE_OUTSIDE_LOOP);
+				return TK_NONE;
+			}
+			funs._cur->Push_JMP(ar, 0);
+			pContinueJumps->push_back(SJumpValue(funs._cur->_code->GetBufferOffset() - (sizeof(short) * 3), funs._cur->_code->GetBufferOffset()));
 			break;
 		case TK_L_MIDDLE:
 			iTempOffset.Reset();
@@ -2175,6 +2339,11 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				{
 					return TK_NONE;
 				}
+				if (a._iVar >= COMPILE_STATIC_VAR_BEGIN && a._iVar < COMPILE_CALLARG_VAR_BEGIN)
+				{	// 상수 풀(리터럴/const) 증감 불가
+					SetParserCompileError(ar, PCE_INVALID_INCREMENT_TARGET, tk1.c_str());
+					return TK_NONE;
+				}
 				a._operandType = Increment_Prefix;
 				funs._cur->Push_OP1(ar, tkType1 == TK_PLUS2 ? NOP_INC : NOP_DEC, a._iVar);
 
@@ -2186,17 +2355,18 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				SOperand& a = operands[operands.size() - 1];
 				if (IsTempVar(a._iVar))
 				{
-					SetCompileError(ar, "Error (%d, %d): Temp Var not Support (%s)\n", ar.CurLine(), ar.CurCol(), tk1.c_str());
+					SetParserCompileError(ar, PCE_TEMP_VAR_UNSUPPORTED, tk1.c_str());
 					return TK_NONE;
 				}
 				if (a._iArrayIndex != INVALID_ERROR_PARSEJOB)
 				{
-					SetCompileError(ar, "Error (%d, %d): Table Var not Support (%s)\n", ar.CurLine(), ar.CurCol(), tk1.c_str());
+					SetParserCompileError(ar, PCE_TABLE_VAR_UNSUPPORTED, tk1.c_str());
 					return TK_NONE;
 				}
-				if (a.IsConst())
-				{
-					SetCompileError(ar, "Error (%d, %d): ++/-- invalid (%s)\n", ar.CurLine(), ar.CurCol(), tk1.c_str());
+				if (a.IsConst() ||
+					(a._iVar >= COMPILE_STATIC_VAR_BEGIN && a._iVar < COMPILE_CALLARG_VAR_BEGIN))
+				{	// 상수 풀(리터럴/const) 증감 불가
+					SetParserCompileError(ar, PCE_INVALID_INCREMENT_TARGET, tk1.c_str());
 					return TK_NONE;
 				}
 				int iTempOffset2;
@@ -2227,7 +2397,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		{
 			if(operands.empty() == false || operators.empty() == false)
 			{
-				SetCompileError(ar, "Error (%d, %d): Invalid Operator", ar.CurLine(), ar.CurCol(), tk1.c_str());
+				SetParserCompileError(ar, PCE_INVALID_OPERATOR, tk1.c_str());
 				return TK_NONE;
 			}
 			blEnd = true;
@@ -2242,7 +2412,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			tkType2 = GetToken(ar, tk2);
 			if (tkType2 != TK_SEMICOLON)
 			{
-				SetCompileError(ar, "Error (%d, %d): Invalid Operator", ar.CurLine(), ar.CurCol(), tk1.c_str());
+				SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "';' after 'yield'", tk2.c_str());
 				return TK_NONE;
 			}
 
@@ -2251,7 +2421,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			break;
 		}
 		default:
-			SetCompileError(ar, "Error (%d, %d): Syntex (%s)\n", ar.CurLine(), ar.CurCol(), tk1.c_str());
+			SetParserCompileError(ar, PCE_SYNTAX_ERROR, tk1.c_str());
 			return TK_NONE;
 		}
 	}
@@ -2260,7 +2430,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 
 	if (operands.size() != operators.size() + 1)
 	{
-		SetCompileError(ar, "Error (%d, %d): Invalid Operator", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		SetParserCompileError(ar, PCE_INVALID_OPERATOR, tk1.c_str());
 		return TK_NONE;
 	}
 	while (operators.empty() == false)
@@ -2297,7 +2467,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			}
 			else
 			{
-				SetCompileError(ar, "Error (%d, %d): = lvalue \n", ar.CurLine(), ar.CurCol());
+				SetParserCompileError(ar, PCE_EXPECTED_LVALUE);
 				return TK_NONE;
 			}
 		}
@@ -2307,7 +2477,13 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			{
 				if (IsTempVar(a._iVar))
 				{
-					SetCompileError(ar, "Error (%d, %d): = lvalue \n", ar.CurLine(), ar.CurCol());
+					SetParserCompileError(ar, PCE_EXPECTED_LVALUE);
+					return TK_NONE;
+				}
+				// 상수 풀(리터럴/const 치환 결과)에 쓰면 같은 값을 쓰는 모든 코드가 오염된다
+				if (a._iVar >= COMPILE_STATIC_VAR_BEGIN && a._iVar < COMPILE_CALLARG_VAR_BEGIN)
+				{
+					SetParserCompileError(ar, PCE_EXPECTED_LVALUE);
 					return TK_NONE;
 				}
 			}
@@ -2428,7 +2604,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
-		SetCompileError(ar, "Error (%d, %d): \"for\" is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_LOGIC_NOT_ALLOWED_GLOBAL, "for");
 		return false;
 	}
 
@@ -2446,7 +2622,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_SMALL) // (
 	{
-		SetCompileError(ar, "Error (%d, %d): for '(' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'(' after 'for'", tk1.c_str());
 		return false;
 	}
 
@@ -2457,7 +2633,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	r = ParseJob(false, iTempOffset, NULL, ar, funs, vars, true);
 	if (TK_SEMICOLON != r) // 초기화
 	{
-		SetCompileError(ar, "Error (%d, %d): for Init", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_INVALID_FOR_INIT);
 		return false;
 	}
 
@@ -2472,7 +2648,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	r = ParseJob(true, iTempOffset, NULL, ar, funs, vars);
 	if (TK_SEMICOLON != r)
 	{
-		SetCompileError(ar, "Error (%d, %d): for Check", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_INVALID_FOR_CONDITION);
 		return false;
 	}
 	int iStackCheckVar = iTempOffset._iVar;
@@ -2492,7 +2668,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	int iCheckCodeSize = Pos2 - Pos1;
 	if (iCheckCodeSize > sizeof(byTempCheck))
 	{
-		SetCompileError(ar, "Error (%d, %d): Check Size Over %d", ar.CurLine(), ar.CurCol(), iCheckCodeSize);
+		SetParserCompileError(ar, PCE_CODE_BLOCK_TOO_LARGE, "for condition", iCheckCodeSize);
 		return false;
 	}
 	funs._cur->_code->Read(byTempCheck, iCheckCodeSize);
@@ -2505,7 +2681,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	r = ParseJob(false, iTempOffset, NULL, ar, funs, vars); // 증감
 	if (TK_R_SMALL != r)
 	{
-		SetCompileError(ar, "Error (%d, %d): for Inc", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_INVALID_FOR_INCREMENT);
 		return false;
 	}
 	Pos2 = funs._cur->_code->GetBufferOffset();
@@ -2513,7 +2689,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	int iIncCodeSize = Pos2 - Pos1;
 	if (iIncCodeSize > sizeof(byTempInc))
 	{
-		SetCompileError(ar, "Error (%d, %d): Inc Size Over %d", ar.CurLine(), ar.CurCol(), iIncCodeSize);
+		SetParserCompileError(ar, PCE_CODE_BLOCK_TOO_LARGE, "for increment", iIncCodeSize);
 		return false;
 	}
 	funs._cur->_code->Read(byTempInc, iIncCodeSize);
@@ -2523,26 +2699,32 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	//	for {} Process
 	std::vector<SJumpValue> sJumps;
+	std::vector<SJumpValue> sContinueJumps;
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_MIDDLE) // {
 	{
 		ar.PushToken(tkType1, tk1);
 		iTempOffset = INVALID_ERROR_PARSEJOB;
-		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars);
+		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, &sContinueJumps);
 		if (TK_SEMICOLON != r)
 		{
-			SetCompileError(ar, "Error (%d, %d): ;", ar.CurLine(), ar.CurCol());
+			SetParserCompileError(ar, PCE_INVALID_STATEMENT_END);
 			return false;
 		}
 		ClearTempVars(funs);
 	}
 	else
 	{
-		if (false == ParseMiddleArea(&sJumps, ar, funs, vars))
+		if (false == ParseMiddleArea(&sJumps, ar, funs, vars, NULL, &sContinueJumps))
 			return false;
 	}
 
 	// Write Inc Code
+	int continuePos = funs._cur->_code->GetBufferOffset();
+	for (int i = 0; i < (int)sContinueJumps.size(); i++)
+	{
+		funs._cur->Set_JumpOffet(sContinueJumps[i], continuePos);
+	}
 	funs._cur->_code->Write(byTempInc, iIncCodeSize);
 
 	funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
@@ -2591,7 +2773,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
-		SetCompileError(ar, "Error (%d, %d): \"for\" is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_LOGIC_NOT_ALLOWED_GLOBAL, "for");
 		return false;
 	}
 
@@ -2605,7 +2787,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_SMALL) // (
 	{
-		SetCompileError(ar, "Error (%d, %d): for '(' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'(' after 'for'", tk1.c_str());
 		return false;
 	}
 
@@ -2614,14 +2796,14 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_VAR) // var
 	{
-		SetCompileError(ar, "Error (%d, %d): foreach 'var' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'var' in for-loop variable declaration", tk1.c_str());
 		return false;
 	}
 
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_STRING) // key
 	{
-		SetCompileError(ar, "Error (%d, %d): for 'key' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "loop variable name", tk1.c_str());
 		return false;
 	}
 	int iKey = AddLocalVarName(ar, funs, vars, false, tk1);
@@ -2645,14 +2827,14 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	//if (iKey + 1 != iIterator1)
 	if (iKey + 1 != i_Begin)
 	{
-		SetCompileError(ar, "Error (%d, %d): for key / Value Var Alloc Error", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_INVALID_LOOP_VARIABLE_LAYOUT);
 		return false;
 	}
 
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_STRING || tk1 != "in") // in
 	{
-		SetCompileError(ar, "Error (%d, %d): for 'in' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'in' in for-loop", tk1.c_str());
 		return false;
 	}
 
@@ -2672,7 +2854,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		r = ParseJob(true, iTempVar, NULL, ar, funs, vars, true); // begin value
 		if (TK_COMMA != r)
 		{
-			SetCompileError(ar, "Error (%d, %d): for Init", ar.CurLine(), ar.CurCol());
+			SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "',' after for-loop begin value", tk1.c_str());
 			return false;
 		}
 		if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
@@ -2701,7 +2883,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		r = ParseJob(true, iTempVar, NULL, ar, funs, vars, true); // end value
 		if (TK_COMMA != r)
 		{
-			SetCompileError(ar, "Error (%d, %d): for Init", ar.CurLine(), ar.CurCol());
+			SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "',' after for-loop end value", tk1.c_str());
 			return false;
 		}
 		if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
@@ -2728,7 +2910,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		r = ParseJob(true, iTempVar, NULL, ar, funs, vars, true); // increase value
 		if (TK_R_SMALL != r)
 		{
-			SetCompileError(ar, "Error (%d, %d): for Init", ar.CurLine(), ar.CurCol());
+			SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "')' after for-loop step value", tk1.c_str());
 			return false;
 		}
 		if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
@@ -2750,26 +2932,32 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	//	for {} Process
 	std::vector<SJumpValue> sJumps;
+	std::vector<SJumpValue> sContinueJumps;
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_MIDDLE) // {
 	{
 		ar.PushToken(tkType1, tk1);
 		iTempVar = INVALID_ERROR_PARSEJOB;
-		r = ParseJob(false, iTempVar, &sJumps, ar, funs, vars);
+		r = ParseJob(false, iTempVar, &sJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, &sContinueJumps);
 		if (TK_SEMICOLON != r)
 		{
-			SetCompileError(ar, "Error (%d, %d): ;", ar.CurLine(), ar.CurCol());
+			SetParserCompileError(ar, PCE_INVALID_STATEMENT_END);
 			return false;
 		}
 		ClearTempVars(funs);
 	}
 	else
 	{
-		if (false == ParseMiddleArea(&sJumps, ar, funs, vars))
+		if (false == ParseMiddleArea(&sJumps, ar, funs, vars, NULL, &sContinueJumps))
 			return false;
 	}
 
 	funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
+	int continuePos = funs._cur->_code->GetBufferOffset();
+	for (int i = 0; i < (int)sContinueJumps.size(); i++)
+	{
+		funs._cur->Set_JumpOffet(sContinueJumps[i], continuePos);
+	}
 	funs._cur->Push_JMPFor(ar, PosLoopTop, iKey, iKey + 2, iDebugLoopLine);
 
 	funs._cur->ClearLastOP();
@@ -2792,7 +2980,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
-		SetCompileError(ar, "Error (%d, %d): \"foreach\" is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_LOGIC_NOT_ALLOWED_GLOBAL, "foreach");
 		return false;
 	}
 
@@ -2808,7 +2996,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_SMALL) // (
 	{
-		SetCompileError(ar, "Error (%d, %d): foreach '(' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'(' after 'foreach'", tk1.c_str());
 		return false;
 	}
 
@@ -2817,14 +3005,14 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_VAR) // var
 	{
-		SetCompileError(ar, "Error (%d, %d): foreach 'var' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'var' in foreach variable declaration", tk1.c_str());
 		return false;
 	}
 
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_STRING) // key
 	{
-		SetCompileError(ar, "Error (%d, %d): foreach 'key' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "foreach key variable name", tk1.c_str());
 		return false;
 	}
 	int iKey = AddLocalVarName(ar, funs, vars, false, tk1);
@@ -2842,7 +3030,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		}
 		else
 		{
-			SetCompileError(ar, "Error (%d, %d): foreach 'comma' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+			SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "',' or 'in' in foreach declaration", tk1.c_str());
 			return false;
 		}
 	}
@@ -2851,7 +3039,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		tkType1 = GetToken(ar, tk1);
 		if (tkType1 != TK_STRING) // value
 		{
-			SetCompileError(ar, "Error (%d, %d): foreach 'value' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+			SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "foreach value variable name", tk1.c_str());
 			return false;
 		}
 		iValue = AddLocalVarName(ar, funs, vars, false, tk1);
@@ -2861,7 +3049,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	if (iKey + 1 != iValue)
 	{
-		SetCompileError(ar, "Error (%d, %d): foreach key / Value Var Alloc Error", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_INVALID_LOOP_VARIABLE_LAYOUT);
 		return false;
 	}
 
@@ -2872,14 +3060,14 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	if (iKey + 2 != iIterator)
 	{
-		SetCompileError(ar, "Error (%d, %d): foreach key / Value Var Alloc Error", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_INVALID_LOOP_VARIABLE_LAYOUT);
 		return false;
 	}
 
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_STRING || tk1 != "in") // in
 	{
-		SetCompileError(ar, "Error (%d, %d): foreach 'in' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'in' in foreach declaration", tk1.c_str());
 		return false;
 	}
 	/*
@@ -2911,7 +3099,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	//tkType1 = GetToken(ar, tk1);
 	if (r != TK_R_SMALL) // )
 	{
-		SetCompileError(ar, "Error (%d, %d): foreach ')' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "')' after foreach source expression", tk1.c_str());
 		return false;
 	}
 
@@ -2926,26 +3114,32 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	//	foreach {} Process
 	std::vector<SJumpValue> sJumps;
+	std::vector<SJumpValue> sContinueJumps;
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_MIDDLE) // {
 	{
 		ar.PushToken(tkType1, tk1);
 		iTempOffset = INVALID_ERROR_PARSEJOB;
-		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars);
+		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, &sContinueJumps);
 		if (TK_SEMICOLON != r)
 		{
-			SetCompileError(ar, "Error (%d, %d): ;", ar.CurLine(), ar.CurCol());
+			SetParserCompileError(ar, PCE_INVALID_STATEMENT_END);
 			return false;
 		}
 		ClearTempVars(funs);
 	}
 	else
 	{
-		if (false == ParseMiddleArea(&sJumps, ar, funs, vars))
+		if (false == ParseMiddleArea(&sJumps, ar, funs, vars, NULL, &sContinueJumps))
 			return false;
 	}
 
 	funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
+	int continuePos = funs._cur->_code->GetBufferOffset();
+	for (int i = 0; i < (int)sContinueJumps.size(); i++)
+	{
+		funs._cur->Set_JumpOffet(sContinueJumps[i], continuePos);
+	}
 	funs._cur->Push_JMPForEach(ar, PosLoopTop, iTable, iKey, iDebugLoopLine);
 
 	funs._cur->ClearLastOP();
@@ -2966,7 +3160,7 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
-		SetCompileError(ar, "Error (%d, %d): \"while\" is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_LOGIC_NOT_ALLOWED_GLOBAL, "while");
 		return false;
 	}
 
@@ -2983,7 +3177,7 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_SMALL) // (
 	{
-		SetCompileError(ar, "Error (%d, %d): while '(' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'(' after 'while'", tk1.c_str());
 		return false;
 	}
 
@@ -3001,7 +3195,7 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	r = ParseJob(true, iTempOffset, NULL, ar, funs, vars);
 	if (TK_R_SMALL != r)
 	{
-		SetCompileError(ar, "Error (%d, %d): while Check", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "')' after while condition", tk1.c_str());
 		return false;
 	}
 	int iStackCheckVar = iTempOffset._iVar;
@@ -3021,7 +3215,7 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	int iCheckCodeSize = (int)Pos2 - Pos1;
 	if (iCheckCodeSize > (int)sizeof(byTempCheck))
 	{
-		SetCompileError(ar, "Error (%d, %d): Check Size Over %d", ar.CurLine(), ar.CurCol(), iCheckCodeSize);
+		SetParserCompileError(ar, PCE_CODE_BLOCK_TOO_LARGE, "while condition", iCheckCodeSize);
 		return false;
 	}
 	funs._cur->_code->Read(byTempCheck, iCheckCodeSize);
@@ -3035,26 +3229,32 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	//	while {} Process
 	std::vector<SJumpValue> sJumps;
+	std::vector<SJumpValue> sContinueJumps;
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_MIDDLE) // {
 	{
 		ar.PushToken(tkType1, tk1);
 		iTempOffset = INVALID_ERROR_PARSEJOB;
-		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars);
+		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, &sContinueJumps);
 		if (TK_SEMICOLON != r)
 		{
-			SetCompileError(ar, "Error (%d, %d): ;", ar.CurLine(), ar.CurCol());
+			SetParserCompileError(ar, PCE_INVALID_STATEMENT_END);
 			return false;
 		}
 		ClearTempVars(funs);
 	}
 	else
 	{
-		if (false == ParseMiddleArea(&sJumps, ar, funs, vars))
+		if (false == ParseMiddleArea(&sJumps, ar, funs, vars, NULL, &sContinueJumps))
 			return false;
 	}
 
 	funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
+	int continuePos = funs._cur->_code->GetBufferOffset();
+	for (int i = 0; i < (int)sContinueJumps.size(); i++)
+	{
+		funs._cur->Set_JumpOffet(sContinueJumps[i], continuePos);
+	}
 	funs._cur->_code->Write(byTempCheck, iCheckCodeSize);
 	if (false == isCheckOPOpt)
 		funs._cur->Push_JMPTrue(ar, iStackCheckVar, PosLoopTop, iDebugLoopLine);
@@ -3093,11 +3293,11 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	return true;
 }
-bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn)
+bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn, std::vector<SJumpValue>* pContinueJumps = NULL)
 {
 	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
-		SetCompileError(ar, "Error (%d, %d): \"if\" is Not Allow From Global Var", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_LOGIC_NOT_ALLOWED_GLOBAL, "if");
 		return false;
 	}
 	if(lastOPReturn) *lastOPReturn = false;
@@ -3111,16 +3311,16 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_SMALL) // (
 	{
-		SetCompileError(ar, "Error (%d, %d): for '(' != %s", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'(' after 'if'", tk1.c_str());
 		return false;
 	}
 
 	//==> if( xxx )
 	iTempOffset.Reset();
-	r = ParseJob(true, iTempOffset, pJumps, ar, funs, vars, true);
+	r = ParseJob(true, iTempOffset, pJumps, ar, funs, vars, true, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, pContinueJumps);
 	if (TK_R_SMALL != r) // )
 	{
-		SetCompileError(ar, "Error (%d, %d): for Init", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "')' after if condition", tk1.c_str());
 		return false;
 	}
 
@@ -3166,7 +3366,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	{
 		AddLocalVar(vars.GetCurrentLayer());
 
-		if (false == ParseMiddleArea(pJumps, ar, funs, vars))
+		if (false == ParseMiddleArea(pJumps, ar, funs, vars, NULL, pContinueJumps))
 			return false;
 
 		DelLocalVar(vars.GetCurrentLayer());
@@ -3175,11 +3375,11 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	{
 		ar.PushToken(tkType1, tk1);
 		iTempOffset = INVALID_ERROR_PARSEJOB;
-		r = ParseJob(false, iTempOffset, pJumps, ar, funs, vars);
+		r = ParseJob(false, iTempOffset, pJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, pContinueJumps);
 
 		if (TK_SEMICOLON != r)
 		{
-			SetCompileError(ar, "Error (%d, %d): if ;", ar.CurLine(), ar.CurCol());
+			SetParserCompileError(ar, PCE_INVALID_STATEMENT_END);
 			return false;
 		}
 	}
@@ -3199,7 +3399,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 
 		funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
 
-		if (false == ParseIF(pJumps, ar, funs, vars, lastOPReturn))
+		if (false == ParseIF(pJumps, ar, funs, vars, lastOPReturn, pContinueJumps))
 			return false;
 
 		ClearTempVars(funs);
@@ -3220,14 +3420,14 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 		tkType1 = GetToken(ar, tk1);
 		/*if (tkType1 == TK_IF)
 		{
-			if (false == ParseIF(pJumps, ar, funs, vars))
+			if (false == ParseIF(pJumps, ar, funs, vars, NULL, pContinueJumps))
 				return false;
 		}
 		else*/ if (tkType1 == TK_L_MIDDLE)
 		{
 			AddLocalVar(vars.GetCurrentLayer());
 
-			if (false == ParseMiddleArea(pJumps, ar, funs, vars))
+			if (false == ParseMiddleArea(pJumps, ar, funs, vars, NULL, pContinueJumps))
 				return false;
 
 			DelLocalVar(vars.GetCurrentLayer());
@@ -3236,11 +3436,11 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 		{
 			ar.PushToken(tkType1, tk1);
 			iTempOffset = INVALID_ERROR_PARSEJOB;
-			r = ParseJob(false, iTempOffset, pJumps, ar, funs, vars);
+			r = ParseJob(false, iTempOffset, pJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, pContinueJumps);
 
 			if (TK_SEMICOLON != r)
 			{
-				SetCompileError(ar, "Error (%d, %d): else ;", ar.CurLine(), ar.CurCol());
+				SetParserCompileError(ar, PCE_INVALID_STATEMENT_END);
 				return false;
 			}
 		}
@@ -3288,9 +3488,287 @@ bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport)
 	}
 	else
 	{
-		SetCompileError(ar, "Error (%d, %d): Function Local Var (%s) %d", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), tk1.c_str());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "variable name after 'var'", tk1.c_str());
 		return false;
 	}
+	return true;
+}
+
+// ---------------- 스크립트 const (컴파일타임 상수 선언) ----------------
+// const NAME = <상수 표현식>;  →  모듈-로컬 define 으로 등록되어 이후 토큰 치환.
+// 표현식은 컴파일 타임에 평가 (리터럴, 기존 define/const, 산술/비트 연산, 괄호).
+struct SConstValue
+{
+	NeoCompileDefineTokenType type = NEO_DEFINE_TOKEN_NULL;
+	int i = 0;
+	double f = 0;
+	std::string s;
+
+	bool IsNum() const { return type == NEO_DEFINE_TOKEN_INT || type == NEO_DEFINE_TOKEN_FLOAT; }
+	double Num() const { return type == NEO_DEFINE_TOKEN_INT ? (double)i : f; }
+};
+
+static bool ParseConstExpr(SConstValue& out, int minPrec, CArchiveRdWC& ar);
+
+static bool ParseConstPrimary(SConstValue& out, CArchiveRdWC& ar)
+{
+	std::string tk;
+	TK_TYPE tkType = GetToken(ar, tk);
+
+	switch (tkType)
+	{
+	case TK_PLUS:
+		if (false == ParseConstPrimary(out, ar))
+			return false;
+		if (false == out.IsNum())
+		{
+			SetParserCompileError(ar, PCE_CONST_INVALID_OP, "+");
+			return false;
+		}
+		return true;
+	case TK_MINUS:
+		if (false == ParseConstPrimary(out, ar))
+			return false;
+		if (out.type == NEO_DEFINE_TOKEN_INT) { out.i = -out.i; return true; }
+		if (out.type == NEO_DEFINE_TOKEN_FLOAT) { out.f = -out.f; return true; }
+		SetParserCompileError(ar, PCE_CONST_INVALID_OP, "-");
+		return false;
+	case TK_NOT: // ~
+		if (false == ParseConstPrimary(out, ar))
+			return false;
+		if (out.type != NEO_DEFINE_TOKEN_INT)
+		{
+			SetParserCompileError(ar, PCE_CONST_INVALID_OP, "~");
+			return false;
+		}
+		out.i = ~out.i;
+		return true;
+	case TK_L_SMALL:
+		if (false == ParseConstExpr(out, 0, ar))
+			return false;
+		tkType = GetToken(ar, tk);
+		if (tkType != TK_R_SMALL)
+		{
+			SetParserCompileError(ar, PCE_EXPECTED_RIGHT_PAREN);
+			return false;
+		}
+		return true;
+	case TK_QUOTE2:
+	case TK_QUOTE1:
+		if (false == GetQuotationString(ar, out.s, tkType == TK_QUOTE2 ? '"' : '\''))
+		{
+			SetParserCompileError(ar, PCE_UNTERMINATED_STRING);
+			return false;
+		}
+		out.type = NEO_DEFINE_TOKEN_STRING;
+		return true;
+	case TK_STRING_LITERAL: // define/const 치환으로 완성된 문자열
+		out.type = NEO_DEFINE_TOKEN_STRING;
+		out.s = tk;
+		return true;
+	case TK_TRUE:  out.type = NEO_DEFINE_TOKEN_TRUE;  return true;
+	case TK_FALSE: out.type = NEO_DEFINE_TOKEN_FALSE; return true;
+	case TK_NULL:  out.type = NEO_DEFINE_TOKEN_NULL;  return true;
+	case TK_STRING:
+	{
+		double num;
+		if (false == StringToDouble(num, tk.c_str()))
+		{
+			// define/const 로 치환되지 않은 식별자 → 컴파일 타임 상수가 아님
+			SetParserCompileError(ar, PCE_CONST_INVALID_VALUE, tk.c_str());
+			return false;
+		}
+		bool isFloat = IsFloatNumberToken(tk); // 치환으로 통째로 들어온 "1.5", "1e+20" 등
+		if (false == isFloat && ar.GetData(false) == '.')
+		{
+			// 토크나이저는 "1.5" 를 "1" '.' "5" 로 쪼갠다 (ParseNum 과 동일 처리)
+			ar.GetData(true);
+			std::string tk2;
+			GetToken(ar, tk2);
+			double num2 = 0;
+			if (false == StringToDoubleLow(num2, tk2.c_str()))
+			{
+				SetParserCompileError(ar, PCE_INVALID_NUMBER_LITERAL);
+				return false;
+			}
+			num += num2;
+			isFloat = true;
+		}
+		if (isFloat) { out.type = NEO_DEFINE_TOKEN_FLOAT; out.f = num; }
+		else         { out.type = NEO_DEFINE_TOKEN_INT;   out.i = (int)num; }
+		return true;
+	}
+	default:
+		SetParserCompileError(ar, PCE_CONST_INVALID_VALUE, tk.c_str());
+		return false;
+	}
+}
+
+static int ConstBinOpPrec(TK_TYPE t)
+{
+	switch (t)
+	{
+	case TK_MUL: case TK_DIV: case TK_PERCENT: return 6;
+	case TK_PLUS: case TK_MINUS: return 5;
+	case TK_LSHIFT: case TK_RSHIFT: return 4;
+	case TK_AND: return 3;
+	case TK_XOR: return 2;
+	case TK_OR: return 1;
+	default: return 0;
+	}
+}
+
+static bool EvalConstBinOp(SConstValue& a, TK_TYPE op, const SConstValue& b, CArchiveRdWC& ar)
+{
+	if (false == a.IsNum() || false == b.IsNum())
+	{
+		SetParserCompileError(ar, PCE_CONST_INVALID_OP, GetTokenString(op).c_str());
+		return false;
+	}
+	bool bothInt = (a.type == NEO_DEFINE_TOKEN_INT && b.type == NEO_DEFINE_TOKEN_INT);
+	switch (op)
+	{
+	case TK_PLUS:
+	case TK_MINUS:
+	case TK_MUL:
+		if (bothInt)
+			a.i = (op == TK_PLUS) ? (a.i + b.i) : (op == TK_MINUS) ? (a.i - b.i) : (a.i * b.i);
+		else
+		{
+			double x = a.Num(), y = b.Num();
+			a.type = NEO_DEFINE_TOKEN_FLOAT;
+			a.f = (op == TK_PLUS) ? (x + y) : (op == TK_MINUS) ? (x - y) : (x * y);
+		}
+		return true;
+	case TK_DIV:
+	case TK_PERCENT:
+		if ((bothInt && b.i == 0) || (false == bothInt && b.Num() == 0))
+		{
+			SetParserCompileError(ar, PCE_CONST_DIV_ZERO);
+			return false;
+		}
+		if (bothInt)
+			a.i = (op == TK_DIV) ? (a.i / b.i) : (a.i % b.i);
+		else
+		{
+			double x = a.Num(), y = b.Num();
+			a.type = NEO_DEFINE_TOKEN_FLOAT;
+			a.f = (op == TK_DIV) ? (x / y) : fmod(x, y);
+		}
+		return true;
+	case TK_LSHIFT: case TK_RSHIFT: case TK_AND: case TK_XOR: case TK_OR:
+		if (false == bothInt)
+		{
+			SetParserCompileError(ar, PCE_CONST_INVALID_OP, GetTokenString(op).c_str());
+			return false;
+		}
+		switch (op)
+		{
+		case TK_LSHIFT: a.i <<= b.i; break;
+		case TK_RSHIFT: a.i >>= b.i; break;
+		case TK_AND:    a.i &= b.i;  break;
+		case TK_XOR:    a.i ^= b.i;  break;
+		default:        a.i |= b.i;  break;
+		}
+		return true;
+	default:
+		SetParserCompileError(ar, PCE_CONST_INVALID_OP, GetTokenString(op).c_str());
+		return false;
+	}
+}
+
+static bool ParseConstExpr(SConstValue& out, int minPrec, CArchiveRdWC& ar)
+{
+	if (false == ParseConstPrimary(out, ar))
+		return false;
+
+	while (true)
+	{
+		std::string tk;
+		TK_TYPE tkType = GetToken(ar, tk);
+		int prec = ConstBinOpPrec(tkType);
+		if (prec == 0 || prec < minPrec)
+		{
+			ar.PushToken(tkType, tk); // 종결자(';', ')')는 호출자가 소비
+			return true;
+		}
+		SConstValue rhs;
+		if (false == ParseConstExpr(rhs, prec + 1, ar))
+			return false;
+		if (false == EvalConstBinOp(out, tkType, rhs, ar))
+			return false;
+	}
+}
+
+bool ParseConstDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+{
+	std::string name, tk;
+	TK_TYPE tkType;
+
+	ar.m_bSuppressDefines = true; // 이름은 치환 없이 raw 로 읽는다 (중복 선언 감지)
+	tkType = GetToken(ar, name);
+	ar.m_bSuppressDefines = false;
+
+	if (tkType != TK_STRING || false == AbleName(name))
+	{
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "const name", name.c_str());
+		return false;
+	}
+	if (ar.m_sScriptDefines.values.find(name) != ar.m_sScriptDefines.values.end() ||
+		(ar.m_pDefines != nullptr && ar.m_pDefines->values.find(name) != ar.m_pDefines->values.end()) ||
+		vars.FindVar(name) != -1 ||
+		funs.FindFun(name) != NULL)
+	{
+		SetParserCompileError(ar, PCE_CONST_DUPLICATE, name.c_str());
+		return false;
+	}
+
+	tkType = GetToken(ar, tk);
+	if (tkType != TK_EQUAL)
+	{
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'=' after const name", tk.c_str());
+		return false;
+	}
+
+	SConstValue v;
+	if (false == ParseConstExpr(v, 0, ar))
+		return false;
+
+	tkType = GetToken(ar, tk);
+	if (tkType != TK_SEMICOLON)
+	{
+		SetParserCompileError(ar, PCE_INVALID_STATEMENT_END);
+		return false;
+	}
+
+	NeoCompileDefineToken d;
+	switch (v.type)
+	{
+	case NEO_DEFINE_TOKEN_INT:
+		d.type = NEO_DEFINE_TOKEN_INT;
+		d.text = std::to_string(v.i);
+		break;
+	case NEO_DEFINE_TOKEN_FLOAT:
+	{
+		char buf[64];
+		snprintf(buf, sizeof(buf), "%.17g", v.f);
+		d.type = NEO_DEFINE_TOKEN_FLOAT;
+		d.text = buf;
+		// "2" 처럼 정수 형태로 떨어지면 int 로 재해석되지 않게 소수점을 보존
+		if (d.text.find('.') == std::string::npos &&
+			d.text.find('e') == std::string::npos && d.text.find('E') == std::string::npos)
+			d.text += ".0";
+		break;
+	}
+	case NEO_DEFINE_TOKEN_STRING:
+		d.type = NEO_DEFINE_TOKEN_STRING;
+		d.text = v.s;
+		break;
+	case NEO_DEFINE_TOKEN_TRUE:  d.type = NEO_DEFINE_TOKEN_TRUE;  d.text = "true";  break;
+	case NEO_DEFINE_TOKEN_FALSE: d.type = NEO_DEFINE_TOKEN_FALSE; d.text = "false"; break;
+	default:                     d.type = NEO_DEFINE_TOKEN_NULL;  d.text = "null";  break;
+	}
+	ar.m_sScriptDefines.values[name] = d;
 	return true;
 }
 
@@ -3303,7 +3781,7 @@ bool ParseClass(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_STRING)
 	{
-		SetCompileError(ar, "Error (%d, %d): Ununable Class Name (%s)", ar.CurLine(), ar.CurCol(), tk1.c_str());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "class name", tk1.c_str());
 		return false;
 	}
 	if (false == UseableName(ar, funs, vars, tk1, true))
@@ -3347,21 +3825,21 @@ bool ParseSleep(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_SMALL)
 	{
-		SetCompileError(ar, "Error (%d, %d): '('", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_EXPECTED_LEFT_PAREN);
 		return false;
 	}
 	SOperand operand;
 	r = ParseJob(true, operand, NULL, ar, funs, vars);
 	if (TK_R_SMALL != r)
 	{
-		SetCompileError(ar, "Error (%d, %d): ')'", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_EXPECTED_RIGHT_PAREN);
 		return false;
 	}
 
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_SEMICOLON)
 	{
-		SetCompileError(ar, "Error (%d, %d): ';'", ar.CurLine(), ar.CurCol());
+		SetParserCompileError(ar, PCE_INVALID_STATEMENT_END);
 		return false;
 	}
 
@@ -3383,7 +3861,7 @@ bool ParseSleep(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 
 
-bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn)
+bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn, std::vector<SJumpValue>* pContinueJumps)
 {
 	std::string tk1, tk2;
 	TK_TYPE tkType1, tkType2;
@@ -3407,7 +3885,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 		case TK_NONE:
 			if (funs.GetCurFunName() != GLOBAL_INIT_FUN_NAME)
 			{
-				SetCompileError(ar, "Error (%d, %d): Function End (%s)", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str());
+				SetParserCompileError(ar, PCE_UNEXPECTED_FUNCTION_END, funs.GetCurFunName().c_str());
 				return false;
 			}
 			blEnd = true;
@@ -3415,7 +3893,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 		case TK_L_MIDDLE:
 			AddLocalVar(vars.GetCurrentLayer());
 
-			if (false == ParseMiddleArea(pJumps, ar, funs, vars))
+			if (false == ParseMiddleArea(pJumps, ar, funs, vars, NULL, pContinueJumps))
 				return false;
 
 			DelLocalVar(vars.GetCurrentLayer());
@@ -3424,7 +3902,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 		case TK_R_MIDDLE:
 			if (ar._allowGlobalInitLogic == false && funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME)
 			{
-				SetCompileError(ar, "Error (%d, %d): Global Init (%s) %d", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), tk1.c_str());
+				SetParserCompileError(ar, PCE_UNEXPECTED_GLOBAL_BLOCK_END);
 				return false;
 			}
 			blEnd = true;
@@ -3436,13 +3914,23 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			r = ParseJob(false, iTempOffset, NULL, ar, funs, vars);
 			if (TK_SEMICOLON != r)
 			{
-				SetCompileError(ar, "Error (%d, %d): return end is ;", ar.CurLine(), ar.CurCol());
+				SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "';' after 'return'", tk1.c_str());
 				return false;
 			}
 			if (lastOPReturn) *lastOPReturn = true;
 			break;
 		case TK_VAR:
 			if (false == ParseVarDef(ar, funs, vars, funType == FUNT_EXPORT))
+				return false;
+			if (lastOPReturn) *lastOPReturn = false;
+			break;
+		case TK_CONST:
+			if (funs.GetCurFunName() != GLOBAL_INIT_FUN_NAME)
+			{
+				SetParserCompileError(ar, PCE_CONST_NOT_GLOBAL);
+				return false;
+			}
+			if (false == ParseConstDef(ar, funs, vars))
 				return false;
 			if (lastOPReturn) *lastOPReturn = false;
 			break;
@@ -3453,11 +3941,33 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 		case TK_BREAK:
 			if (pJumps == NULL)
 			{
-				SetCompileError(ar, "Error (%d, %d): break error\n", ar.CurLine(), ar.CurCol());
+				SetParserCompileError(ar, PCE_BREAK_OUTSIDE_LOOP);
 				return TK_NONE;
 			}
 			funs._cur->Push_JMP(ar, 0);
-			pJumps->push_back(SJumpValue(funs._cur->_code->GetBufferOffset() - 2, funs._cur->_code->GetBufferOffset()));
+			pJumps->push_back(SJumpValue(funs._cur->_code->GetBufferOffset() - (sizeof(short) * 3), funs._cur->_code->GetBufferOffset()));
+			tkType2 = GetToken(ar, tk2);
+			if (tkType2 != TK_SEMICOLON)
+			{
+				SetParserCompileError(ar, PCE_EXPECTED_BREAK_SEMICOLON);
+				return false;
+			}
+			if (lastOPReturn) *lastOPReturn = false;
+			break;
+		case TK_CONTINUE:
+			if (pContinueJumps == NULL)
+			{
+				SetParserCompileError(ar, PCE_CONTINUE_OUTSIDE_LOOP);
+				return TK_NONE;
+			}
+			funs._cur->Push_JMP(ar, 0);
+			pContinueJumps->push_back(SJumpValue(funs._cur->_code->GetBufferOffset() - (sizeof(short) * 3), funs._cur->_code->GetBufferOffset()));
+			tkType2 = GetToken(ar, tk2);
+			if (tkType2 != TK_SEMICOLON)
+			{
+				SetParserCompileError(ar, PCE_EXPECTED_CONTINUE_SEMICOLON);
+				return false;
+			}
 			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_IMPORT:
@@ -3472,7 +3982,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			tkType2 = GetToken(ar, tk2);
 			if (false == AbleName(tk2))
 			{
-				SetCompileError(ar, "Error (%d, %d): Unable Fun Name %s\n", ar.CurLine(), ar.CurCol(), tk2.c_str());
+				SetParserCompileError(ar, PCE_INVALID_FUNCTION_NAME, tk2.c_str());
 				return false;
 			}
 			if (tkType2 == TK_STRING)
@@ -3482,7 +3992,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			}
 			else
 			{
-				SetCompileError(ar, "Error (%d, %d): Function Name (%d) '%s'\n", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), tk2.c_str());
+				SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "function name", tk2.c_str());
 				return false;
 			}
 			if (lastOPReturn) *lastOPReturn = false;
@@ -3509,7 +4019,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 		case TK_IF:
 			bGlobalLocal = funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME;
 			if(bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME "IF";
-			if (false == ParseIF(pJumps, ar, funs, vars, lastOPReturn))
+			if (false == ParseIF(pJumps, ar, funs, vars, lastOPReturn, pContinueJumps))
 				return false;
 			if (bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME;
 			break;
@@ -3538,7 +4048,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		default:
-			SetCompileError(ar, "Error (%d, %d): Function Name (%s) '%s'\n", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), tk1.c_str());
+			SetParserCompileError(ar, PCE_UNEXPECTED_TOKEN, tk1.c_str(), funs.GetCurFunName().c_str());
 			return false;
 			break;
 		}
@@ -3639,7 +4149,7 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string&
 	{
 		if (funs._cur->_funType == FUNT_ANONYMOUS)
 		{
-			SetCompileError(ar, "Error (%d, %d): anonymous function body (%s) %d\n", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), tk1.c_str());
+			SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'{' to start anonymous function body", tk1.c_str());
 			return false;
 		}
 		if (tkType1 == TK_SEMICOLON)
@@ -3650,7 +4160,7 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string&
 //			*pF = funs._cur;
 			return true;
 		}
-		SetCompileError(ar, "Error (%d, %d): Function Start (%s) %d\n", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), tk1.c_str());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'{' to start function body", tk1.c_str());
 		return false;
 	}
 
@@ -3691,7 +4201,7 @@ int ParseFunctionBase(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::stri
 	}
 	else
 	{
-		SetCompileError(ar, "Error (%d, %d): Unknow Token(%d,%d) '%s'\n", ar.CurLine(), ar.CurCol(), fname.c_str(), tkType3, fname.c_str());
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'(' after function name", tk3.c_str());
 	}
 	return -1;
 }
@@ -3699,7 +4209,7 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 {
 	if(g_bInitVM == false)
 	{
-		SetCompileError(ar, "Please call NeoScript::INeoVM::Initialize()");
+		SetCompileError(ar, g_sParserCompileErrors[PCE_VM_NOT_INITIALIZED]);
 		return false;
 	}
 //	ar.m_sTokenQueue.clear();

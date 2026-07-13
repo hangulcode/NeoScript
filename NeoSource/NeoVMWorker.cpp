@@ -1223,7 +1223,10 @@ NeoDebugLocation CNeoVMWorker::DebugGetLocation()
 {
 	return m_sDebugLocation;
 }
-static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out)
+static const int NEO_DEBUG_MAX_COLLECTION_DEPTH = 4;
+static const int NEO_DEBUG_MAX_COLLECTION_ITEMS = 64;
+
+static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collectionDepth = 0)
 {
 	char buf[128];
 	switch (pVar->GetType())
@@ -1270,7 +1273,34 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out)
 		break;
 	case VAR_LIST:
 		out.type = "list";
-		snprintf(buf, sizeof(buf), "list(%d)", pVar->_lst ? pVar->_lst->GetCount() : 0);
+		{
+			const int count = pVar->_lst ? pVar->_lst->GetCount() : 0;
+			snprintf(buf, sizeof(buf), "list(%d)", count);
+			if (pVar->_lst != nullptr && collectionDepth < NEO_DEBUG_MAX_COLLECTION_DEPTH)
+			{
+				const int childCount = count < NEO_DEBUG_MAX_COLLECTION_ITEMS ? count : NEO_DEBUG_MAX_COLLECTION_ITEMS;
+				out.children.reserve(childCount + (count > childCount ? 1 : 0));
+				for (int i = 0; i < childCount; ++i)
+				{
+					VarInfo* pChildValue = pVar->_lst->GetValue(i);
+					if (pChildValue == nullptr)
+						continue;
+
+					NeoDebugVariable child;
+					child.name = "[" + std::to_string(i) + "]";
+					NeoDebugFormatValue(pChildValue, child, collectionDepth + 1);
+					out.children.push_back(std::move(child));
+				}
+				if (count > childCount)
+				{
+					NeoDebugVariable more;
+					more.name = "...";
+					more.type = "list";
+					more.value = std::to_string(count - childCount) + " more items";
+					out.children.push_back(std::move(more));
+				}
+			}
+		}
 		out.value = buf;
 		break;
 	case VAR_SET:

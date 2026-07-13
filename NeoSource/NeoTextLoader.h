@@ -1,11 +1,11 @@
 ﻿#pragma once
 
 #include "NeoConfig.h"
+#include "NeoVM.h" // NeoCompileDefines (스크립트 const 테이블 소유용)
 
 namespace NeoScript
 {
 
-struct NeoCompileDefines;
 struct NeoGlobalSymbolTable;
 
 #define FILE_UNICODE_HEADER_LE	u16(0xFEFF)
@@ -36,6 +36,7 @@ enum TK_TYPE
 
 	TK_RETURN,
 	TK_BREAK,
+	TK_CONTINUE,
 	TK_IF,
 	TK_ELSE,
 	TK_ELSEIF,
@@ -103,6 +104,9 @@ enum TK_TYPE
 
 	TK_YIELD,
 
+	TK_CONST,			// const (스크립트 컴파일타임 상수 선언)
+	TK_STRING_LITERAL,	// define/const 치환으로 만들어진 완성된 문자열 리터럴 (tk = 내용)
+
 	TK_MAX
 };
 
@@ -134,6 +138,8 @@ public:
 	u16 m_iFileSeq = 0;
 	std::vector<std::string>* m_pDebugSourceFiles = nullptr;
 	const NeoCompileDefines* m_pDefines = nullptr;
+	NeoCompileDefines m_sScriptDefines;      // 스크립트 내부 const 선언 (모듈-로컬, import 시 전파 안 함)
+	bool m_bSuppressDefines = false;         // const 이름 토큰을 raw 로 읽기 위한 치환 억제 플래그
 	const NeoGlobalSymbolTable* m_pGlobalSymbols = nullptr;
 
 	CArchiveRdWC()

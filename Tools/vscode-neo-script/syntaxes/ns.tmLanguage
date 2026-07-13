@@ -17,6 +17,7 @@
 		<dict><key>include</key><string>#function-declarations</string></dict>
 		<dict><key>include</key><string>#class-declarations</string></dict>
 		<dict><key>include</key><string>#variable-declarations</string></dict>
+		<dict><key>include</key><string>#const-declarations</string></dict>
 		<dict><key>include</key><string>#keywords</string></dict>
 		<dict><key>include</key><string>#constants</string></dict>
 		<dict><key>include</key><string>#numbers</string></dict>
@@ -131,6 +132,20 @@
 				<dict><key>name</key><string>variable.other.neoscript</string></dict>
 			</dict>
 		</dict>
+		<key>const-declarations</key>
+		<dict>
+			<key>name</key>
+			<string>meta.const.neoscript</string>
+			<key>match</key>
+			<string>\b(const)\s+([A-Za-z_][A-Za-z0-9_]*)</string>
+			<key>captures</key>
+			<dict>
+				<key>1</key>
+				<dict><key>name</key><string>storage.type.const.neoscript</string></dict>
+				<key>2</key>
+				<dict><key>name</key><string>constant.other.define.neoscript</string></dict>
+			</dict>
+		</dict>
 		<key>keywords</key>
 		<dict>
 			<key>patterns</key>
@@ -164,6 +179,12 @@
 					<string>storage.type.variable.neoscript</string>
 					<key>match</key>
 					<string>\b(var)\b</string>
+				</dict>
+				<dict>
+					<key>name</key>
+					<string>storage.type.const.neoscript</string>
+					<key>match</key>
+					<string>\b(const)\b</string>
 				</dict>
 			</array>
 		</dict>

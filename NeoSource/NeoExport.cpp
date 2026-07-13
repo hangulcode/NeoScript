@@ -9,6 +9,23 @@ namespace NeoScript
 
 void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 
+enum EExportCompileError
+{
+	ECE_INVALID_OPCODE,
+	ECE_INVALID_YIELD_SUBTYPE,
+	ECE_FUNCTION_COUNT_MISMATCH,
+	ECE_INVALID_VARIABLE_TYPE,
+	ECE_COUNT,
+};
+
+static const char* g_sExportCompileErrors[ECE_COUNT] =
+{
+	"Invalid opcode while writing bytecode (%d)",
+	"Invalid yield subtype while disassembling bytecode (%d)",
+	"Function count mismatch while writing bytecode",
+	"Invalid variable type while writing bytecode (%d)",
+};
+
 u8 GetArgIndexToCode(u8 flag, short* n1, short* n2, short* n3)
 {
 /*	u8 r = 0;
@@ -399,7 +416,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_ERROR:
 			break;
 		default:
-			SetCompileError(arText, "Error OP Type Error (%d)", v.op);
+			SetCompileError(arText, g_sExportCompileErrors[ECE_INVALID_OPCODE], v.op);
 			argFlag |= GetArgIndexToCode(argFlag, nullptr, nullptr, nullptr);
 			break;
 		}
@@ -979,13 +996,13 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			if(v.n1 == YILED_RETURN)
 				OutAsm("yield return\n");
 			else
-				SetCompileError(arText, "Error Yield Sub Type Error (%d)", v.n1);
+				SetCompileError(arText, g_sExportCompileErrors[ECE_INVALID_YIELD_SUBTYPE], v.n1);
 			break;
 		case NOP_ERROR:
 			OutAsm("Begin\n");
 			break;
 		default:
-			SetCompileError(arText, "Error OP Type Error (%d)", v.op);
+			SetCompileError(arText, g_sExportCompileErrors[ECE_INVALID_OPCODE], v.op);
 			break;
 		}
 	}
@@ -1099,7 +1116,7 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	// 함수 포인터 저장
 	if ((int)funPos.size() != header._iFunctionCount)
 	{
-		SetCompileError(arText, "Function Count Miss");
+		SetCompileError(arText, g_sExportCompileErrors[ECE_FUNCTION_COUNT_MISMATCH]);
 		return false;
 	}
 
@@ -1154,7 +1171,7 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 		//	ar << vi._fun_index;
 		//	break;
 		default:
-			SetCompileError(arText, "Error VAR Type Error (%d)", vi.GetType());
+			SetCompileError(arText, g_sExportCompileErrors[ECE_INVALID_VARIABLE_TYPE], vi.GetType());
 			return false;
 		}
 	}

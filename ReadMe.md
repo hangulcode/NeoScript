@@ -122,6 +122,32 @@ Supported define token types:
 	- `NEO_DEFINE_TOKEN_FALSE`
 	- `NEO_DEFINE_TOKEN_NULL`
 
+### Script `const` (compile-time constants)
+Scripts can declare their own compile-time constants with `const`.
+Like host defines, a `const` is resolved during tokenization: it creates no runtime
+variable, costs nothing at runtime, and participates in constant folding.
+Because the name is replaced at compile time, a `const` can never be modified.
+
+```cpp
+const BTN_START_GAME = 10;
+const GREETING = "Hello";
+const HALF = 1.5;
+const MY_KEY = KEY_SPACE;                       // alias of a host define
+const ATTACK_MASK = GAMEPAD_A | GAMEPAD_B;      // constant expressions are evaluated at compile time
+
+GameObject.AddEvent("OnButtonClick", BTN_START_GAME, StartNewGame);
+```
+
+Rules:
+	- Allowed only at the global scope (top level of a script).
+	- Value must be a compile-time constant expression: literals (`int`, `float`,
+	  `string`, `true`, `false`, `null`), other defines/consts, unary `-` `~`,
+	  binary `+ - * / % << >> & ^ |`, and parentheses.
+	- A `const` is local to the script file that declares it; it is not visible
+	  in imported modules (host defines are visible everywhere).
+	- Redeclaring a name that is already a const, host define, global variable,
+	  or function is a compile error.
+
 ### Execution context pool
 An **execution context** is one runtime stack set: the operand/local var stack + the call stack + the
 instruction/stack-pointer registers (internally `NeoExecContext`, formerly a per-worker inline `CoroutineInfo`).
@@ -179,7 +205,7 @@ RAM : 64GB
 OS  : Windows 10 Pro 64bit  
 Build : Release Mode 64bit  
 
-|               |Neo Script 1.0.6| [Lua Script 5.5.0](https://www.lua.org/)| Visual C++ 2026 |
+|               |Neo Script 1.0.9| [Lua Script 5.5.0](https://www.lua.org/)| Visual C++ 2026 |
 | :-----------  |:--------------:| :-------------:|:---------------:|
 | Loop Sum (1~N)| 0.275 (4% faster) | 0.285       | 0.043           |
 | Math          | 1.634 (3% slower) | 1.584       | 0.129           |
@@ -230,6 +256,7 @@ Build : Release Mode 64bit
 	- sleep (x): x 시간 만큼 일시 정지 (1 second for 1000)
 	- return [x]: 진행 중인 함수를 리턴, x 가 있으면 x 변수를 리턴
 	- break: 실행중인 루프문을 빠져 나옴
+	- continue: 실행중인 루프문의 다음 반복으로 진행
 	- if (x) / else / elif: 조건 문이 true 이면 if 다음을 false 이면 else 다음을 처리
 	- for : for (var a in 1, 100, 1) 순서는 초기값, 최종값, 증가값
 	- foreach : map, list, set 자료구조에 사용. Must be foreach (var a[, b] in map)
