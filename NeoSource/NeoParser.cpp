@@ -1196,6 +1196,18 @@ bool IsTempVar(int iVar)
 
 	return false;
 }
+// 토큰 텍스트 자체가 float 형태인가.
+// 소스의 "1.5" 는 토크나이저가 '.' 에서 쪼개므로 여기 안 걸리고, define/const 치환으로
+// 통째로 들어온 "3.0", "0.5", "1e+20" 같은 토큰을 잡는다. (없으면 (int) 캐스팅으로 강등됨)
+static bool IsFloatNumberToken(const std::string& tk)
+{
+	if (tk.find('.') != std::string::npos)
+		return true;
+	if (tk.size() > 1 && tk[0] == '0' && (tk[1] == 'x' || tk[1] == 'X'))
+		return tk.find('p') != std::string::npos || tk.find('P') != std::string::npos; // hex 지수
+	return tk.find('e') != std::string::npos || tk.find('E') != std::string::npos;
+}
+
 // This Function No Error Because Try Only
 // return TK_NONE : error
 TK_TYPE Try_ParseIntNum(int& iResultInt, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, TK_TYPE tkTypeEnd1 = TK_UNUSED, TK_TYPE tkTypeEnd2 = TK_UNUSED, TK_TYPE tkTypeEnd3 = TK_UNUSED)
@@ -1210,7 +1222,7 @@ TK_TYPE Try_ParseIntNum(int& iResultInt, CArchiveRdWC& ar, SFunctions& funs, SVa
 	if (true == StringToDouble(num, tk1.c_str()))
 	{
 		u16 c = ar.GetData(false);
-		if (c == '.')
+		if (c == '.' || IsFloatNumberToken(tk1))
 		{
 			ar.PushToken(tkType1, tk1);
 			return TK_NONE; // float or double is not int
@@ -1428,7 +1440,13 @@ bool ParseNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArch
 	if (true == StringToDouble(num, tk1.c_str()))
 	{
 		u16 c = ar.GetData(false);
-		if (c == '.')
+		if (IsFloatNumberToken(tk1)) // define/const 치환으로 통째로 들어온 float
+		{
+			if (tkTypePre == TK_MINUS)
+				num = -num;
+			iResultStack = funs.AddStaticNum(num);
+		}
+		else if (c == '.')
 		{
 			ar.GetData(true);
 
@@ -1485,7 +1503,13 @@ bool ParseNum2(int& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArchiveR
 	if (true == StringToDouble(num, tk1.c_str()))
 	{
 		u16 c = ar.GetData(false);
-		if (c == '.')
+		if (IsFloatNumberToken(tk1)) // define/const 치환으로 통째로 들어온 float
+		{
+			if (tkTypePre == TK_MINUS)
+				num = -num;
+			iResultStack = funs.AddStaticNum(num);
+		}
+		else if (c == '.')
 		{
 			ar.GetData(true);
 
@@ -3554,11 +3578,7 @@ static bool ParseConstPrimary(SConstValue& out, CArchiveRdWC& ar)
 			SetParserCompileError(ar, PCE_CONST_INVALID_VALUE, tk.c_str());
 			return false;
 		}
-		bool isHex = (tk.size() > 1 && tk[0] == '0' && (tk[1] == 'x' || tk[1] == 'X'));
-		bool isFloat = (tk.find('.') != std::string::npos);
-		if (false == isFloat && false == isHex &&
-			(tk.find('e') != std::string::npos || tk.find('E') != std::string::npos))
-			isFloat = true; // 치환으로 통째로 들어온 지수 표기 ("1e+20" 등)
+		bool isFloat = IsFloatNumberToken(tk); // 치환으로 통째로 들어온 "1.5", "1e+20" 등
 		if (false == isFloat && ar.GetData(false) == '.')
 		{
 			// 토크나이저는 "1.5" 를 "1" '.' "5" 로 쪼갠다 (ParseNum 과 동일 처리)
