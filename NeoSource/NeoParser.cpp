@@ -306,7 +306,7 @@ int InitDefaultTokenString()
 	TOKEN_STR3(TK_RSHIFT_EQ, ">>=", 15, NOP_RSHIFT2);
 
 	TOKEN_STR2(TK_NOT, "~");
-	TOKEN_STR3(TK_XOR, "^", 9, NOP_XOR3);
+	TOKEN_STR3(TK_XOR, "^", 10, NOP_XOR3); // C 우선순위: & (9) > ^ (10) > | (11)
 	TOKEN_STR3(TK_XOR_EQ, "^=", 15, NOP_XOR2);
 	TOKEN_STR3(TK_EQUAL, "=", 15, NOP_MOV);
 	TOKEN_STR3(TK_EQUAL_EQ, "==", 8, NOP_EQUAL2);
@@ -2214,6 +2214,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		case TK_EQUAL_EQ:	// ==
 		case TK_EQUAL_NOT:	// !=
 		case TK_AND:		// &
+		case TK_XOR:		// ^
 		case TK_OR:			// |
 		case TK_AND2:		// &&
 		case TK_OR2:		// ||
