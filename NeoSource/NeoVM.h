@@ -269,6 +269,7 @@ struct NeoDebugVariable
 	std::string type;
 	std::string value;
 	int stackIndex = -1;
+	std::vector<NeoDebugVariable> children;
 };
 
 struct INeoVMDebugListener
