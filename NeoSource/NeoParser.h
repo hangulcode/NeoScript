@@ -201,9 +201,50 @@ struct SFunctionInfo
 
 
 	int _iLastOPOffset = -1;
+	int _callOpEmitCount = 0; // CALL/PTRCALL/PTRCALL2 emit 횟수 (인자 융합 안전성 판정용)
 	void ClearLastOP()
 	{
 		_iLastOPOffset = -1;
+	}
+	// n1(dest) 을 다른 슬롯으로 바꿔도 의미가 보존되는 단일-결과 op 인가.
+	// Push_OP2 의 인접 peephole 과 함수 호출 인자 융합(지연 복사 패치)이 공유한다.
+	static bool IsRetargetableProducerOP(eNOperation op)
+	{
+		switch (op)
+		{
+		case NOP_MOV:
+		case NOP_MOV_MINUS:
+		case NOP_LOG_NOT:
+		case NOP_ADD3:
+		case NOP_SUB3:
+		case NOP_MUL3:
+		case NOP_DIV3:
+		case NOP_PERSENT3:
+		case NOP_LSHIFT3:
+		case NOP_RSHIFT3:
+		case NOP_TOSTRING:
+		case NOP_TOINT:
+		case NOP_TOFLOAT:
+		case NOP_TOSIZE:
+		case NOP_GETTYPE:
+
+		case NOP_TABLE_ALLOC:
+		case NOP_STR_ADD:
+
+		case NOP_VAR_CLEAR:
+
+		case NOP_GREAT:		// >
+		case NOP_GREAT_EQ:	// >=
+		case NOP_LESS:		// <
+		case NOP_LESS_EQ:	// <=
+		case NOP_EQUAL2:	// ==
+		case NOP_NEQUAL:	// !=
+		case NOP_LOG_AND:	// &&
+		case NOP_LOG_OR:	// ||
+			return true;
+		default:
+			return false;
+		}
 	}
 	eNOperation GetLastOP()
 	{
@@ -224,6 +265,11 @@ struct SFunctionInfo
 	{
 		s16* pN = (s16*)((u8*)_code->GetData() + iOffsetOP + sizeof(OpType) + sizeof(ArgFlag));
 		return pN[n];
+	}
+	void SetN(int iOffsetOP, int n, s16 v)
+	{
+		s16* pN = (s16*)((u8*)_code->GetData() + iOffsetOP + sizeof(OpType) + sizeof(ArgFlag));
+		pN[n] = v;
 	}
 	void    Push_Flag(ArgFlag arg, short a1, short a2, short a3)
 	{
@@ -282,6 +328,7 @@ struct SFunctionInfo
 	{
 		AddDebugData(ar, iDebugLine);
 		_iLastOPOffset = _code->GetBufferOffset();
+		++_callOpEmitCount;
 
 		OpType optype = GetOpTypeFromOp(op);
 		_code->Write(&optype, sizeof(optype));
@@ -293,6 +340,7 @@ struct SFunctionInfo
 	{
 		AddDebugData(ar, iDebugLine);
 		_iLastOPOffset = _code->GetBufferOffset();
+		++_callOpEmitCount;
 
 		OpType optype = GetOpTypeFromOp(NOP_PTRCALL);
 		_code->Write(&optype, sizeof(optype));
@@ -305,6 +353,7 @@ struct SFunctionInfo
 	{
 		AddDebugData(ar, iDebugLine);
 		_iLastOPOffset = _code->GetBufferOffset();
+		++_callOpEmitCount;
 
 		OpType optype = GetOpTypeFromOp(NOP_PTRCALL2);
 		_code->Write(&optype, sizeof(optype));
@@ -319,38 +368,7 @@ struct SFunctionInfo
 		{
 			if (b2 == false && IsTempVar(s))
 			{
-				eNOperation preOP = GetLastOP();
-				switch (preOP)
-				{
-				case NOP_MOV:
-				case NOP_MOV_MINUS:
-				case NOP_LOG_NOT:
-				case NOP_ADD3:
-				case NOP_SUB3:
-				case NOP_MUL3:
-				case NOP_DIV3:
-				case NOP_PERSENT3:
-				case NOP_LSHIFT3:
-				case NOP_RSHIFT3:
-				case NOP_TOSTRING:
-				case NOP_TOINT:
-				case NOP_TOFLOAT:
-				case NOP_TOSIZE:
-				case NOP_GETTYPE:
-
-				case NOP_TABLE_ALLOC:
-				case NOP_STR_ADD:
-
-				case NOP_VAR_CLEAR:
-
-				case NOP_GREAT:		// >
-				case NOP_GREAT_EQ:	// >=
-				case NOP_LESS:		// <
-				case NOP_LESS_EQ:	// <=
-				case NOP_EQUAL2:	// ==
-				case NOP_NEQUAL:	// !=
-				case NOP_LOG_AND:		// &&
-				case NOP_LOG_OR:		// ||
+				if (IsRetargetableProducerOP(GetLastOP()))
 				{
 					u8 *pre = (u8*)_code->GetData() + sizeof(OpType) + sizeof(ArgFlag) + _iLastOPOffset;
 					short* preDest = (short*)pre;
@@ -359,10 +377,6 @@ struct SFunctionInfo
 						*preDest = r;
 						return;
 					}
-					break;
-				}
-				default:
-					break;
 				}
 			}
 		}

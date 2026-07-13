@@ -1262,6 +1262,8 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 		// 모든 인자 평가가 끝난 뒤로 미룬다. 인자식이 그 자체로 함수 호출이면 내부 호출이
 		// 같은 호출-인자 윈도우를 재사용하므로, 즉시 복사할 경우 먼저 평가된 인자가 덮어써진다.
 		std::vector<SOperand> argOperands;
+		std::vector<int> argDefOffsets;  // 인자 결과를 만든 단일 op 의 오프셋 (융합 불가면 -1)
+		std::vector<int> argCallCounts;  // 이 인자 평가 완료 시점의 call emit 카운트
 		while (true)
 		{
 			tkType2 = GetToken(ar, tk2);
@@ -1278,6 +1280,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 			//}
 			//else
 			{
+				int iCodeOffBefore = funs._cur->_code->GetBufferOffset();
 				iTempVar.Reset();
 				tkType3 = ParseJob(true, iTempVar, NULL, ar, funs, vars);
 				if (iTempVar.IsInvalidValue())
@@ -1286,6 +1289,21 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 					return false;
 				}
 				argOperands.push_back(iTempVar);
+
+				// 인자 식 전체가 "임시변수에 쓰는 단일 op" 로 끝났으면 나중에
+				// dest 를 호출-인자 슬롯으로 직접 패치할 수 있게 오프셋을 기억한다.
+				int iDefOffset = -1;
+				if (funs._cur->_iLastOPOffset == iCodeOffBefore &&
+					false == iTempVar.IsFun() &&
+					iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB &&
+					IsTempVar(iTempVar._iVar) &&
+					funs._cur->GetN(iCodeOffBefore, 0) == iTempVar._iVar &&
+					SFunctionInfo::IsRetargetableProducerOP(funs._cur->GetOP(iCodeOffBefore)))
+				{
+					iDefOffset = iCodeOffBefore;
+				}
+				argDefOffsets.push_back(iDefOffset);
+				argCallCounts.push_back(funs._cur->_callOpEmitCount);
 			}
 			iParamCount++;
 
@@ -1300,9 +1318,18 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 		}
 
 		// 모든 인자 평가가 끝난 뒤, CALL 직전에 호출-인자 슬롯으로 복사한다.
+		int iFinalCallCount = funs._cur->_callOpEmitCount;
 		for (int i = 0; i < iParamCount; i++)
 		{
 			SOperand& arg = argOperands[i];
+			// 융합: 인자 producer 의 dest 를 호출-인자 슬롯으로 직접 패치하고 MOV 생략.
+			// 조건: 이후 인자들의 평가에 함수 호출이 없어야 함 — 호출은 같은 인자
+			// 윈도우를 재사용하므로 일찍 쓴 슬롯이 덮어써진다 (지연 복사의 이유).
+			if (argDefOffsets[i] != -1 && argCallCounts[i] == iFinalCallCount)
+			{
+				funs._cur->SetN(argDefOffsets[i], 0, (s16)(COMPILE_CALLARG_VAR_BEGIN + 1 + i));
+				continue;
+			}
 			if (arg.IsFun())
 				funs._cur->Push_OP2(ar, NOP_FMOV1, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg._iVar, false, iCallLine);
 			else if (arg._iArrayIndex == INVALID_ERROR_PARSEJOB)

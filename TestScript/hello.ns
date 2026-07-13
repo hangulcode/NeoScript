@@ -2,13 +2,13 @@
 const ANSWER = 40 + 2;
 const ATTACK_MASK = 0x1000 | 0x2000;
 const HALF_STEP = 1.5 * 2;
-const MY_KEY = KEY_LEFT;
+//const MY_KEY = KEY_LEFT;
 const NEG = -10;
 
 print(GREETING);
 print(ANSWER);
 print(ATTACK_MASK);
 print(HALF_STEP);
-print(MY_KEY);
+//print(MY_KEY);
 print(NEG);
-print(KEY_LEFT);
+//print(KEY_LEFT);
