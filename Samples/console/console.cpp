@@ -729,6 +729,53 @@ static int RunDebugSmoke()
 		return -1;
 	}
 	INeoVM::ReleaseVM(pVM);
+
+	const char* shortCircuitSource =
+		"export fun ShortCircuitTest()\n"
+		"{\n"
+		"    var target = null;\n"
+		"    var state = 0;\n"
+		"    if (target == null || target[4] < 10) state = 1;\n"
+		"    if (target != null && target[4] < 10) state = 2;\n"
+		"    var values = [3];\n"
+		"    if (target == null || (values[0] == 3 && target[4] < 10)) state = 3;\n"
+		"    var c = (target == null || target[4] < 0.3);\n"
+		"    if (c) state = 4;\n"
+		"    var loop = 0;\n"
+		"    while (target != null && target[4] < 10) loop = loop + 1;\n"
+		"    if (loop == 0) state = 5;\n"
+		"    return state;\n"
+		"}\n"
+		"export fun ShortCircuitReturn()\n"
+		"{\n"
+		"    var a = null;\n"
+		"    return a == null || a[4] < 0.3;\n"
+		"}\n";
+	err.clear();
+	NeoCompilerParam shortCircuitParam(shortCircuitSource, (int)strlen(shortCircuitSource));
+	shortCircuitParam.err = &err;
+	shortCircuitParam.putASM = false;
+	shortCircuitParam.debug = false;
+	pVM = INeoVM::CompileAndLoadVM(shortCircuitParam, &vparam);
+	int shortCircuitResult = 0;
+	bool shortCircuitReturn = false;
+	if (pVM == nullptr ||
+		pVM->Call(&shortCircuitResult, "ShortCircuitTest") == false ||
+		pVM->Call(&shortCircuitReturn, "ShortCircuitReturn") == false ||
+		pVM->IsLastErrorMsg())
+	{
+		printf("[short-circuit] execution failed: %s\n", err.c_str());
+		if (pVM != nullptr)
+			INeoVM::ReleaseVM(pVM);
+		return -1;
+	}
+	if (shortCircuitResult != 5 || shortCircuitReturn == false)
+	{
+		printf("[short-circuit] invalid result=%d return=%d\n", shortCircuitResult, shortCircuitReturn ? 1 : 0);
+		INeoVM::ReleaseVM(pVM);
+		return -1;
+	}
+	INeoVM::ReleaseVM(pVM);
 	return 0;
 }
 
