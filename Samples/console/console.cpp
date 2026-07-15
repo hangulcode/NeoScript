@@ -764,6 +764,16 @@ static int RunDebugSmoke()
 		"{\n"
 		"    var a = null;\n"
 		"    return a == null || a[4] < 0.3;\n"
+		"}\n"
+		"export fun ForeachIndexed()\n"
+		"{\n"
+		"    var groups = [[1, 2], [3, 4]];\n"
+		"    var sum = 0;\n"
+		"    foreach(var value in groups[1])\n"
+		"    {\n"
+		"        sum += value;\n"
+		"    }\n"
+		"    return sum;\n"
 		"}\n";
 	err.clear();
 	NeoCompilerParam shortCircuitParam(shortCircuitSource, (int)strlen(shortCircuitSource));
@@ -773,23 +783,45 @@ static int RunDebugSmoke()
 	pVM = INeoVM::CompileAndLoadVM(shortCircuitParam, &vparam);
 	int shortCircuitResult = 0;
 	bool shortCircuitReturn = false;
+	int foreachIndexedResult = 0;
 	if (pVM == nullptr ||
 		pVM->Call(&shortCircuitResult, "ShortCircuitTest") == false ||
 		pVM->Call(&shortCircuitReturn, "ShortCircuitReturn") == false ||
+		pVM->Call(&foreachIndexedResult, "ForeachIndexed") == false ||
 		pVM->IsLastErrorMsg())
 	{
-		printf("[short-circuit] execution failed: %s\n", err.c_str());
+		printf("[short-circuit] execution failed: %s\n", pVM != nullptr && pVM->IsLastErrorMsg() ? pVM->GetLastErrorMsg() : err.c_str());
 		if (pVM != nullptr)
 			INeoVM::ReleaseVM(pVM);
 		return -1;
 	}
-	if (shortCircuitResult != 7 || shortCircuitReturn == false)
+	if (shortCircuitResult != 7 || shortCircuitReturn == false || foreachIndexedResult != 7)
 	{
-		printf("[short-circuit] invalid result=%d return=%d\n", shortCircuitResult, shortCircuitReturn ? 1 : 0);
+		printf("[short-circuit] invalid result=%d return=%d foreach=%d\n", shortCircuitResult, shortCircuitReturn ? 1 : 0, foreachIndexedResult);
 		INeoVM::ReleaseVM(pVM);
 		return -1;
 	}
 	INeoVM::ReleaseVM(pVM);
+
+	const char* invalidConditionSources[] =
+	{
+		"fun InvalidIf() { if () {} }",
+		"fun InvalidWhile() { while () {} }"
+	};
+	for (const char* invalidSource : invalidConditionSources)
+	{
+		err.clear();
+		NeoCompilerParam invalidParam(invalidSource, (int)strlen(invalidSource));
+		invalidParam.err = &err;
+		pVM = INeoVM::CompileAndLoadVM(invalidParam, &vparam);
+		if (pVM != nullptr || err.find("expected an expression") == std::string::npos)
+		{
+			printf("[parser] empty condition was accepted: %s\n", err.c_str());
+			if (pVM != nullptr)
+				INeoVM::ReleaseVM(pVM);
+			return -1;
+		}
+	}
 	return 0;
 }
 

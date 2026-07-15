@@ -24,6 +24,7 @@ void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 	X(PCE_EXPECTED_LEFT_PAREN, "Error (%d, %d): expected '('") \
 	X(PCE_EXPECTED_RIGHT_PAREN, "Error (%d, %d): expected ')'") \
 	X(PCE_EXPECTED_RIGHT_BRACKET, "Error (%d, %d): expected ']'") \
+	X(PCE_EXPECTED_EXPRESSION, "Error (%d, %d): expected an expression") \
 	X(PCE_INVALID_NUMBER_LITERAL, "Error (%d, %d): invalid numeric literal") \
 	X(PCE_UNKNOWN_IDENTIFIER, "Error (%d, %d): unknown identifier '%s'") \
 	X(PCE_UNTERMINATED_STRING, "Error (%d, %d): unterminated string literal") \
@@ -3196,21 +3197,23 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	int iTable = -1;
 	SOperand operand;
 	r = ParseShortCircuitLogic(true, operand, ar, funs, vars);
-	if (iTempOffset._iArrayIndex != INVALID_ERROR_PARSEJOB)
+	if (r != TK_R_SMALL) // )
+	{
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "')' after foreach source expression", tk1.c_str());
+		return false;
+	}
+	if (operand.IsInvalidValue())
+	{
+		SetParserCompileError(ar, PCE_EXPECTED_EXPRESSION);
+		return false;
+	}
+	if (operand.IsArray())
 	{
 		iTable = AddLocalVar(ar, funs, vars);
 		funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iTable, operand.IsHaveShort());
 	}
 	else
 		iTable = operand._iVar;
-
-
-	//tkType1 = GetToken(ar, tk1);
-	if (r != TK_R_SMALL) // )
-	{
-		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "')' after foreach source expression", tk1.c_str());
-		return false;
-	}
 
 
 	funs._cur->Push_OP1(ar, NOP_VAR_CLEAR, iKey);
@@ -3303,6 +3306,11 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	iTempOffset.Reset();
 	if (TK_R_SMALL != ParseShortCircuitLogic(true, iTempOffset, ar, funs, vars))
 	{
+		return false;
+	}
+	if (iTempOffset.IsInvalidValue())
+	{
+		SetParserCompileError(ar, PCE_EXPECTED_EXPRESSION);
 		return false;
 	}
 	int iStackCheckVar = iTempOffset._iVar;
@@ -3426,6 +3434,11 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	iTempOffset.Reset();
 	if (TK_R_SMALL != ParseShortCircuitLogic(true, iTempOffset, ar, funs, vars))
 	{
+		return false;
+	}
+	if (iTempOffset.IsInvalidValue())
+	{
+		SetParserCompileError(ar, PCE_EXPECTED_EXPRESSION);
 		return false;
 	}
 
