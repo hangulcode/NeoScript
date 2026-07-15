@@ -158,6 +158,7 @@ enum eNOperation : OpType
 	NOP_CALL,
 	NOP_PTRCALL,	// Multiple Call
 	NOP_PTRCALL2,	// Native Call
+	NOP_NATIVECALL,	// Native Call (patched at LoadVM)
 	NOP_RETURN,
 	//	NOP_FUNEND,
 
@@ -182,7 +183,6 @@ enum eNOperation : OpType
 
 	NOP_NONE,
 	NOP_ERROR,
-	NOP_NATIVECALL,	// Native Call (patched at LoadVM)
 	NOP_MAX,
 }; // Operation length
 
