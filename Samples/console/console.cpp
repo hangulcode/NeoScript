@@ -731,6 +731,10 @@ static int RunDebugSmoke()
 	INeoVM::ReleaseVM(pVM);
 
 	const char* shortCircuitSource =
+		"fun ShortCircuitEcho(var value)\n"
+		"{\n"
+		"    return value;\n"
+		"}\n"
 		"export fun ShortCircuitTest()\n"
 		"{\n"
 		"    var target = null;\n"
@@ -739,11 +743,21 @@ static int RunDebugSmoke()
 		"    if (target != null && target[4] < 10) state = 2;\n"
 		"    var values = [3];\n"
 		"    if (target == null || (values[0] == 3 && target[4] < 10)) state = 3;\n"
-		"    var c = (target == null || target[4] < 0.3);\n"
+		"    var c = target == null || target[4] < 0.3;\n"
+		"    var arg = ShortCircuitEcho(target == null || target[4] < 0.3);\n"
+		"    var list = [target == null || target[4] < 0.3];\n"
+		"    var map = { \"safe\": target == null || target[4] < 0.3 };\n"
+		"    var emptyList = [];\n"
+		"    var emptyMap = {};\n"
+		"    var shared = { \"items\": [], \"requests\": [] };\n"
+		"    var indexList = [10, 20];\n"
+		"    var indexed = indexList[toint(target == null || target[4] < 0.3)];\n"
 		"    if (c) state = 4;\n"
+		"    if (arg && list[0] && map[\"safe\"] && indexed == 20) state = 5;\n"
+		"    if (emptyList.len() == 0 && emptyMap.len() == 0) state = 6;\n"
 		"    var loop = 0;\n"
 		"    while (target != null && target[4] < 10) loop = loop + 1;\n"
-		"    if (loop == 0) state = 5;\n"
+		"    if (loop == 0) state = 7;\n"
 		"    return state;\n"
 		"}\n"
 		"export fun ShortCircuitReturn()\n"
@@ -769,7 +783,7 @@ static int RunDebugSmoke()
 			INeoVM::ReleaseVM(pVM);
 		return -1;
 	}
-	if (shortCircuitResult != 5 || shortCircuitReturn == false)
+	if (shortCircuitResult != 7 || shortCircuitReturn == false)
 	{
 		printf("[short-circuit] invalid result=%d return=%d\n", shortCircuitResult, shortCircuitReturn ? 1 : 0);
 		INeoVM::ReleaseVM(pVM);
