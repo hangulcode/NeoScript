@@ -1,0 +1,219 @@
+// Compiler and VM regression suite.
+// Run from Samples/console with: console.exe --run regression
+
+const REG_CONST = 6 * 7;
+
+var regressionTotal = 0;
+var regressionPassed = 0;
+var regressionFailed = 0;
+
+export var RegressionShared =
+{
+    "ResetSerial": 0,
+    "WebHitSerial": 0,
+    "WebSlowdownTime": 0.0,
+    "EnemyTargets": [],
+    "EnemyDestroyRequests": []
+};
+
+fun Check(var ok)
+{
+    regressionTotal += 1;
+    if (ok)
+        regressionPassed += 1;
+    else
+    {
+        regressionFailed += 1;
+        print("Compiler regression failure #" .. regressionTotal);
+    }
+}
+
+fun Add3(var a, var b, var c)
+{
+    return a + b + c;
+}
+
+fun Identity(var value)
+{
+    return value;
+}
+
+fun MakePair(var a, var b)
+{
+    return [a, b];
+}
+
+fun Fibonacci(var n)
+{
+    if (n < 2)
+        return n;
+    return Fibonacci(n - 1) + Fibonacci(n - 2);
+}
+
+fun SafeNullAccess(var target)
+{
+    return target == null || target[4] < 0.3;
+}
+
+fun TestExpressions()
+{
+    var a = 10;
+    a = a + 3;
+    Check(a == 13);
+    a += 7;
+    Check(a == 20);
+    a -= 5;
+    Check(a == 15);
+    Check(1 + 2 * 3 == 7);
+    Check((1 + 2) * 3 == 9);
+    Check(17 % 5 == 2);
+    Check((3 << 2) == 12);
+    Check((12 >> 2) == 3);
+    Check((5 & 3) == 1);
+    Check((5 | 2) == 7);
+    Check((5 ^ 3) == 6);
+    Check(!(1 == 2));
+    Check(!(a == 14));
+    Check(REG_CONST == 42);
+    Check(tostring(123) == "123");
+    Check(toint(3.9) == 3);
+    Check(tofloat(3) == 3.0);
+    Check(tosize("neo") == 3);
+    Check("Neo" .. "Script" == "NeoScript");
+}
+
+fun TestShortCircuit()
+{
+    var target = null;
+    Check(target == null || target[4] < 0.3);
+    Check(!(target != null && target[4] < 0.3));
+
+    var direct = target == null || target[4] < 0.3;
+    Check(direct);
+    Check(Identity(target == null || target[4] < 0.3));
+
+    var values = [target == null || target[4] < 0.3];
+    Check(values[0]);
+    var table = { "safe": target == null || target[4] < 0.3 };
+    Check(table["safe"]);
+
+    var indexValues = [10, 20];
+    Check(indexValues[toint(target == null || target[4] < 0.3)] == 20);
+    Check(SafeNullAccess(target));
+}
+
+fun TestContainers()
+{
+    var emptyList = [];
+    var emptyMap = {};
+    Check(emptyList.len() == 0);
+    Check(emptyMap.len() == 0);
+    Check(RegressionShared["EnemyTargets"].len() == 0);
+    Check(RegressionShared["EnemyDestroyRequests"].len() == 0);
+
+    var matrix = [[1, 2], [3, 4], [5, 6]];
+    Check(matrix[0][1] == 2);
+    Check(matrix[2][1] == 6);
+    matrix[1][0] = 30;
+    Check(matrix[1][0] == 30);
+
+    var pair = MakePair(11, 22);
+    Check(pair[0] == 11 && pair[1] == 22);
+
+    var map = { "alpha": 1, "nested": { "value": 7 }, "list": [9, 10] };
+    Check(map["alpha"] == 1);
+    Check(map["nested"]["value"] == 7);
+    Check(map["list"][0] + map["list"][1] == 19);
+}
+
+fun TestLoops()
+{
+    var sum = 0;
+    for(var i in 1, 5, 1)
+        sum += i;
+    Check(sum == 10);
+
+    sum = 0;
+    for(var i in 1, 20, 1)
+    {
+        if (i % 2 == 1)
+            continue;
+        sum += i;
+    }
+    Check(sum == 90);
+
+    sum = 0;
+    for(var i in 1, 100, 1)
+    {
+        if (i == 10)
+            break;
+        sum += i;
+    }
+    Check(sum == 45);
+
+    var whileIndex = 0;
+    sum = 0;
+    while (whileIndex < 50)
+    {
+        sum += whileIndex;
+        whileIndex += 1;
+    }
+    Check(sum == 1225);
+
+    var groups = [[1, 2], [3, 4]];
+    sum = 0;
+    foreach(var value in groups[1])
+        sum += value;
+    Check(sum == 7);
+}
+
+fun TestBulk()
+{
+    var list = [];
+    var map = {};
+    var listSum = 0;
+
+    for(var i in 1, 512, 1)
+    {
+        var value = i * 17 + 3;
+        Check(value - 3 == i * 17);
+        Check(value > i && value >= i);
+        Check(value % 7 >= 0 && value % 7 < 7);
+
+        list.append(i);
+        map[i] = i * i;
+    }
+
+    for(var i in 1, 512, 1)
+    {
+        Check(list[i - 1] == i);
+        Check(map[i] == i * i);
+    }
+
+    foreach(var value in list)
+        listSum += value;
+    Check(listSum == 130816);
+
+    var mapSum = 0;
+    foreach(var key, value in map)
+        mapSum += value;
+    Check(mapSum == 44608256);
+}
+
+fun RegressionRun()
+{
+    TestExpressions();
+    TestShortCircuit();
+    TestContainers();
+    TestLoops();
+    TestBulk();
+    Check(Add3(10, 20, 30) == 60);
+    Check(Fibonacci(12) == 144);
+
+    if (regressionFailed == 0)
+        print("Compiler regression PASS : " .. regressionPassed .. "/" .. regressionTotal);
+    else
+        print("Compiler regression FAIL : " .. regressionFailed .. "/" .. regressionTotal);
+}
+
+RegressionRun();

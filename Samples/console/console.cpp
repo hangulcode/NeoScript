@@ -114,6 +114,7 @@ static void PrintSampleList()
 	printf("module\n");
 	printf("http\n");
 	printf("class\n");
+	printf("regression\n");
 }
 
 static std::string s_path = "../../TestScript/";
@@ -137,6 +138,7 @@ static int RunSample(INeoLoader* pLoader, const std::string& key)
 	if (key == "15" || key == "module") return SAMPLE_etc(pLoader, s_path + "module.ns", nullptr);
 	if (key == "16" || key == "http") return SAMPLE_etc(pLoader, s_path + "http.ns", nullptr);
 	if (key == "17" || key == "class") return SAMPLE_etc(pLoader, s_path + "class.ns", nullptr);
+	if (key == "18" || key == "regression") return SAMPLE_etc(pLoader, s_path + "compiler_regression.ns", nullptr);
 
 	printf("unknown sample: %s\n", key.c_str());
 	return -1;
@@ -144,7 +146,7 @@ static int RunSample(INeoLoader* pLoader, const std::string& key)
 
 static int RunSmokeSamples(INeoLoader* pLoader)
 {
-	const char* samples[] = { "hello", "string", "list", "map", "delegate", "meta", "coroutine" };
+	const char* samples[] = { "hello", "string", "list", "map", "delegate", "meta", "coroutine", "regression" };
 	for (const char* sample : samples)
 	{
 		printf("\n[smoke] %s\n", sample);
