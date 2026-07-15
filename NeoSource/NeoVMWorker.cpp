@@ -544,7 +544,7 @@ bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, 
 		if (op.op != NOP_PTRCALL2)
 			continue;
 
-		if (op.argFlag & (1 << 2))
+		if (op.argFlag & NEOS_ARG_N1_LOCAL)
 			continue;
 
 		VarInfo* pFunName = NEOS_GLOBAL_VAR(op.n1);

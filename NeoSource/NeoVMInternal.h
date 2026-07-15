@@ -58,6 +58,13 @@ enum eNeoDefaultString
 typedef u8	OpType;
 typedef u8	ArgFlag;
 
+#define NEOS_ARG_N1_IMMEDIATE	(1 << 5)
+#define NEOS_ARG_N2_IMMEDIATE	(1 << 4)
+#define NEOS_ARG_N3_IMMEDIATE	(1 << 3)
+#define NEOS_ARG_N1_LOCAL		(1 << 2)
+#define NEOS_ARG_N2_LOCAL		(1 << 1)
+#define NEOS_ARG_N3_LOCAL		(1 << 0)
+
 enum eNOperationSub : u8
 {
 	eOP_ADD,
