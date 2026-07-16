@@ -2,12 +2,13 @@
 // Run from Samples/console with: console.exe --run regression
 
 const REG_CONST = 6 * 7;
+const REG_MASK = 0x10 | 0x04;
 
 var regressionTotal = 0;
 var regressionPassed = 0;
 var regressionFailed = 0;
 
-export var RegressionShared =
+var RegressionShared =
 {
     "ResetSerial": 0,
     "WebHitSerial": 0,
@@ -55,6 +56,16 @@ fun SafeNullAccess(var target)
     return target == null || target[4] < 0.3;
 }
 
+fun Increment(var value)
+{
+    return value + 1;
+}
+
+fun Apply(var value, var callback)
+{
+    return callback(value);
+}
+
 fun TestExpressions()
 {
     var a = 10;
@@ -72,6 +83,8 @@ fun TestExpressions()
     Check((5 & 3) == 1);
     Check((5 | 2) == 7);
     Check((5 ^ 3) == 6);
+    Check(-5 + 10 == 5);
+    Check(REG_MASK == 20);
     Check(!(1 == 2));
     Check(!(a == 14));
     Check(REG_CONST == 42);
@@ -80,6 +93,84 @@ fun TestExpressions()
     Check(tofloat(3) == 3.0);
     Check(tosize("neo") == 3);
     Check("Neo" .. "Script" == "NeoScript");
+}
+
+fun TestAssignmentsAndBranches()
+{
+    var value = 20;
+    value *= 3;
+    Check(value == 60);
+    value /= 4;
+    Check(value == 15);
+    value %= 4;
+    Check(value == 3);
+    value <<= 3;
+    Check(value == 24);
+    value >>= 2;
+    Check(value == 6);
+    value &= 5;
+    Check(value == 4);
+    value |= 2;
+    Check(value == 6);
+    value ^= 3;
+    Check(value == 5);
+    value++;
+    Check(value == 6);
+    value--;
+    Check(value == 5);
+
+    var selected = 0;
+    if (value < 0)
+        selected = 1;
+    elif (value == 5)
+        selected = 2;
+    else
+        selected = 3;
+    Check(selected == 2);
+
+    var nested = 0;
+    if (true)
+    {
+        if (false)
+            nested = 1;
+        else
+            nested = 7;
+    }
+    Check(nested == 7);
+    Check(true && true);
+    Check(true && false == false);
+    Check(false || true);
+    Check((false || true) && true);
+
+    /* The lexer must preserve surrounding statement boundaries. */
+    Check(value == 5);
+}
+
+fun TestStrings()
+{
+    var text = "Neo Script";
+    Check(text.len() == 10);
+    Check(text.find("Script") == 4);
+    Check(text.sub(4, 6) == "Script");
+    Check(text.upper() == "NEO SCRIPT");
+    Check(text.lower() == "neo script");
+
+    var padded = "  Neo  ";
+    Check(padded.trim() == "Neo");
+    Check(padded.ltrim() == "Neo  ");
+    Check(padded.rtrim() == "  Neo");
+    Check(text.replace("Script", "VM") == "Neo VM");
+
+    var csv = "alpha,beta,gamma";
+    var words = csv.split(",");
+    Check(words.len() == 3);
+    Check(words[0] == "alpha" && words[2] == "gamma");
+
+    var copied = "";
+    var characters = "abc";
+    foreach(var ch in characters)
+        copied = copied .. ch;
+    Check(copied == "abc");
 }
 
 fun TestShortCircuit()
@@ -124,6 +215,61 @@ fun TestContainers()
     Check(map["alpha"] == 1);
     Check(map["nested"]["value"] == 7);
     Check(map["list"][0] + map["list"][1] == 19);
+}
+
+fun TestContainerOperations()
+{
+    var values = [1, 2, 3];
+    values.append(4);
+    values.append(9, 1);
+    Check(values.len() == 5);
+    Check(values[0] == 1 && values[1] == 9 && values[2] == 2 && values[4] == 4);
+
+    var combined = values + [5, 6];
+    Check(combined.len() == 7);
+    Check(combined[5] == 5 && combined[6] == 6);
+
+    var map = {};
+    map[4] = 16;
+    map["name"] = "neo";
+    map.extra = 7;
+    Check(map[4] == 16 && map["name"] == "neo" && map.extra == 7);
+    map["name"] = null;
+    Check(map.len() == 2);
+
+    var keyCount = 0;
+    var valueSum = 0;
+    foreach(var key, value in map)
+    {
+        keyCount += 1;
+        valueSum += value;
+    }
+    Check(keyCount == 2 && valueSum == 23);
+
+    var valuesTotal = 0;
+    foreach(var value in map.values())
+        valuesTotal += value;
+    Check(valuesTotal == 23);
+
+    var keyTotal = 0;
+    foreach(var key, value in map.keys())
+        keyTotal += 1;
+    Check(keyTotal == 2);
+}
+
+fun TestFunctionValues()
+{
+    var callback = Increment;
+    Check(callback(41) == 42);
+    Check(Apply(41, callback) == 42);
+
+    var triple = fun(var value) { return value * 3; };
+    Check(triple(14) == 42);
+
+    var holder = {};
+    holder.callback = Increment;
+    Check(holder.callback(41) == 42);
+
 }
 
 fun TestLoops()
@@ -203,8 +349,12 @@ fun TestBulk()
 fun RegressionRun()
 {
     TestExpressions();
+    TestAssignmentsAndBranches();
+    TestStrings();
     TestShortCircuit();
     TestContainers();
+    TestContainerOperations();
+    TestFunctionValues();
     TestLoops();
     TestBulk();
     Check(Add3(10, 20, 30) == 60);

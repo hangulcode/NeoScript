@@ -848,8 +848,15 @@ TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk)
 				ar.GetData(true);
 				SkipMultiLine(ar);
 			}
+			else if (c2 == '=')
+			{
+				ar.GetData(true);
+				tk = GetTokenString(TK_DIV_EQ);
+				return TK_DIV_EQ;
+			}
 			else
 			{
+				tk = GetTokenString(TK_DIV);
 				return TK_DIV;
 			}
 			break;

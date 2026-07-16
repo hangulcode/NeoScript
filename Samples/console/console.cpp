@@ -1585,6 +1585,7 @@ int main(int argc, char* argv[])
 		printf("%d module\n", idx++);
 		printf("%d http\n", idx++);
 		printf("%d class (In development)\n", idx++);
+		printf("%d regression\n", idx++);
 
 		printf("\nESC press to exit\n");
 		printf("press the number and enter ...\n");
