@@ -29,26 +29,26 @@ static const char* g_sExportCompileErrors[ECE_COUNT] =
 u8 GetArgIndexToCode(u8 flag, short* n1, short* n2, short* n3)
 {
 /*	u8 r = 0;
-	if ((flag & (1 << 5)) == 0)
+	if ((flag & NEOS_ARG_N1_IMMEDIATE) == 0)
 	{
 		if (n1 == nullptr || *n1 >= 0)
-			r |= (1 << 2);
+			r |= NEOS_ARG_N1_LOCAL;
 		else
 			*n1 = -*n1 - 1;
 	}
 
-	if ((flag & (1 << 4)) == 0)
+	if ((flag & NEOS_ARG_N2_IMMEDIATE) == 0)
 	{
 		if (n2 == nullptr || *n2 >= 0)
-			r |= (1 << 1);
+			r |= NEOS_ARG_N2_LOCAL;
 		else
 			*n2 = -*n2 - 1;
 	}
 
-	if ((flag & (1 << 3)) == 0)
+	if ((flag & NEOS_ARG_N3_IMMEDIATE) == 0)
 	{
 		if (n3 == nullptr || *n3 >= 0)
-			r |= (1 << 0);
+			r |= NEOS_ARG_N3_LOCAL;
 		else
 			*n3 = -*n3 - 1;
 	}
@@ -59,9 +59,9 @@ u8 GetArgIndexToCode(u8 flag, short* n1, short* n2, short* n3)
 u8 ChangeIndex(int staticCount, int localCount, int curFunStatkSize, SVMOperation& op, int argIndex)
 {
 	short* n = nullptr;
-	if (argIndex == 1)		{ if (op.argFlag & (1 << 5)) return 0; n = &op.n1; }
-	else if (argIndex == 2) { if (op.argFlag & (1 << 4)) return 0; n = &op.n2; }
-	else if (argIndex == 3) { if (op.argFlag & (1 << 3)) return 0; n = &op.n3; }
+	if (argIndex == 1)		{ if (op.argFlag & NEOS_ARG_N1_IMMEDIATE) return 0; n = &op.n1; }
+	else if (argIndex == 2) { if (op.argFlag & NEOS_ARG_N2_IMMEDIATE) return 0; n = &op.n2; }
+	else if (argIndex == 3) { if (op.argFlag & NEOS_ARG_N3_IMMEDIATE) return 0; n = &op.n3; }
 
 	if (*n == -1)
 		return 0;
@@ -69,9 +69,9 @@ u8 ChangeIndex(int staticCount, int localCount, int curFunStatkSize, SVMOperatio
 	if (*n == STACK_POS_RETURN)
 	{
 		*n = curFunStatkSize;
-		if (argIndex == 1) return (1 << 2);
-		else if (argIndex == 2) return (1 << 1);
-		else if (argIndex == 3) return (1 << 0);
+		if (argIndex == 1) return NEOS_ARG_N1_LOCAL;
+		else if (argIndex == 2) return NEOS_ARG_N2_LOCAL;
+		else if (argIndex == 3) return NEOS_ARG_N3_LOCAL;
 	}
 	if(*n <= COMPILE_GLOBAL_VAR_BEGIN)
 	{
@@ -86,21 +86,21 @@ u8 ChangeIndex(int staticCount, int localCount, int curFunStatkSize, SVMOperatio
 			if (*n >= COMPILE_CALLARG_VAR_BEGIN)
 			{
 				*n = (*n - COMPILE_CALLARG_VAR_BEGIN) + curFunStatkSize;
-				if (argIndex == 1) return (1 << 2);
-				else if (argIndex == 2) return (1 << 1);
-				else if (argIndex == 3) return (1 << 0);
+				if (argIndex == 1) return NEOS_ARG_N1_LOCAL;
+				else if (argIndex == 2) return NEOS_ARG_N2_LOCAL;
+				else if (argIndex == 3) return NEOS_ARG_N3_LOCAL;
 			}
 			*n = (*n - COMPILE_STATIC_VAR_BEGIN);
 			return 0;
 		}
 		*n = *n - COMPILE_LOCALTMP_VAR_BEGIN + localCount;
-		if (argIndex == 1) return (1 << 2);
-		else if (argIndex == 2) return (1 << 1);
-		else if (argIndex == 3) return (1 << 0);
+		if (argIndex == 1) return NEOS_ARG_N1_LOCAL;
+		else if (argIndex == 2) return NEOS_ARG_N2_LOCAL;
+		else if (argIndex == 3) return NEOS_ARG_N3_LOCAL;
 	}
-	if (argIndex == 1) return (1 << 2);
-	else if (argIndex == 2) return (1 << 1);
-	else if (argIndex == 3) return (1 << 0);
+	if (argIndex == 1) return NEOS_ARG_N1_LOCAL;
+	else if (argIndex == 2) return NEOS_ARG_N2_LOCAL;
+	else if (argIndex == 3) return NEOS_ARG_N3_LOCAL;
 	return 0;
 }
 struct STempDebug
@@ -301,7 +301,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_MOV_MINUS:
 		case NOP_LOG_NOT:
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
-			if ((argFlag & (1 << 4)) == 0)
+			if ((argFlag & NEOS_ARG_N2_IMMEDIATE) == 0)
 				argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, nullptr);
 			break;
@@ -317,7 +317,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			break;
 		case NOP_FMOV2:
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
-			if ((argFlag & (1 << 4)) == 0)
+			if ((argFlag & NEOS_ARG_N2_IMMEDIATE) == 0)
 				argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, nullptr);
 			break;
@@ -343,7 +343,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_RETURN:
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
-			if((argFlag & (1 << 2)) && v.n1 == 0)
+			if((argFlag & NEOS_ARG_N1_LOCAL) && v.n1 == 0)
 				argFlag |= NEOS_OP_CALL_NORESULT;
 			break;
 		//case NOP_FUNEND:
@@ -362,11 +362,11 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		case NOP_TABLE_MUL2:
 		case NOP_TABLE_DIV2:
 		case NOP_TABLE_PERSENT2:
-			if ((argFlag & (1 << 5)) == 0)
+			if ((argFlag & NEOS_ARG_N1_IMMEDIATE) == 0)
 				argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
-			if ((argFlag & (1 << 4)) == 0)
+			if ((argFlag & NEOS_ARG_N2_IMMEDIATE) == 0)
 				argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
-			if ((argFlag & (1 << 3)) == 0)
+			if ((argFlag & NEOS_ARG_N3_IMMEDIATE) == 0)
 				argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
 
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, &v.n3);
@@ -495,15 +495,15 @@ std::string GetLog(STempDebug& td, SVMOperation& op, int argIndex)
 	const char* c = ""; // N.
 	bool isNum = false;
 
-	if (argIndex == 1) { v = op.n1; isNum = (op.argFlag & (1 << 5)); }
-	if (argIndex == 2) { v = op.n2; isNum = (op.argFlag & (1 << 4)); }
-	if (argIndex == 3) { v = op.n3; isNum = (op.argFlag & (1 << 3)); }
+	if (argIndex == 1) { v = op.n1; isNum = (op.argFlag & NEOS_ARG_N1_IMMEDIATE); }
+	if (argIndex == 2) { v = op.n2; isNum = (op.argFlag & NEOS_ARG_N2_IMMEDIATE); }
+	if (argIndex == 3) { v = op.n3; isNum = (op.argFlag & NEOS_ARG_N3_IMMEDIATE); }
 
 	if (false == isNum)
 	{
-		if (argIndex == 1) { c = (op.argFlag & (1 << 2)) ? "S." : "G."; }
-		if (argIndex == 2) { c = (op.argFlag & (1 << 1)) ? "S." : "G."; }
-		if (argIndex == 3) { c = (op.argFlag & (1 << 0)) ? "S." : "G."; }
+		if (argIndex == 1) { c = (op.argFlag & NEOS_ARG_N1_LOCAL) ? "S." : "G."; }
+		if (argIndex == 2) { c = (op.argFlag & NEOS_ARG_N2_LOCAL) ? "S." : "G."; }
+		if (argIndex == 3) { c = (op.argFlag & NEOS_ARG_N3_LOCAL) ? "S." : "G."; }
 	}
 
 	if (c[0] == 'G')

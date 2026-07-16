@@ -406,6 +406,7 @@ VarInfo* MapInfo::Insert(VarInfo* pKey)
 	if (pFindNode == NULL)
 	{
 		_itemCount++;
+		++_mutationVersion;
 
 		MapNode* pNew = _pVM->m_sPool_TableNode.Receive();
 		Move_DestNoRelease(&pNew->key, pKey);
@@ -515,6 +516,7 @@ void MapInfo::Remove(VarInfo* pKey)
 	_pVM->m_sPool_TableNode.Confer(pCur);
 
 	_itemCount--;
+	++_mutationVersion;
 }
 
 VarInfo* MapInfo::Find(VarInfo *pKey)

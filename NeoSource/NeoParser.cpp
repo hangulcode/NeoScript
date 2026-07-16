@@ -24,6 +24,7 @@ void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 	X(PCE_EXPECTED_LEFT_PAREN, "Error (%d, %d): expected '('") \
 	X(PCE_EXPECTED_RIGHT_PAREN, "Error (%d, %d): expected ')'") \
 	X(PCE_EXPECTED_RIGHT_BRACKET, "Error (%d, %d): expected ']'") \
+	X(PCE_EXPECTED_EXPRESSION, "Error (%d, %d): expected an expression") \
 	X(PCE_INVALID_NUMBER_LITERAL, "Error (%d, %d): invalid numeric literal") \
 	X(PCE_UNKNOWN_IDENTIFIER, "Error (%d, %d): unknown identifier '%s'") \
 	X(PCE_UNTERMINATED_STRING, "Error (%d, %d): unterminated string literal") \
@@ -201,7 +202,10 @@ std::map<std::string, TK_TYPE> g_sStringToToken;
 #define TOKEN_STR2(key, str) g_sTokenToString[key] = STokenValue(str, 20, NOP_NONE); g_sStringToToken[str] = key
 #define TOKEN_STR3(key, str, pri, op) g_sTokenToString[key] = STokenValue(str, pri, op); g_sStringToToken[str] = key
 
-TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef = false, TK_TYPE tkEnd1 = TK_SEMICOLON, TK_TYPE tkEnd2 = TK_COMMA, TK_TYPE tkEnd3 = TK_R_SMALL, TK_TYPE tkEnd4 = TK_R_ARRAY, std::vector<SJumpValue>* pContinueJumps = NULL);
+TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef = false, TK_TYPE tkEnd1 = TK_SEMICOLON, TK_TYPE tkEnd2 = TK_COMMA, TK_TYPE tkEnd3 = TK_R_SMALL, TK_TYPE tkEnd4 = TK_R_ARRAY, std::vector<SJumpValue>* pContinueJumps = NULL, TK_TYPE tkEnd5 = TK_UNUSED, TK_TYPE tkEnd6 = TK_UNUSED);
+// ParseJob 과 동일한 계약(종결 토큰 반환, 에러 시 TK_NONE)의 단락 평가 래퍼.
+// 값을 소비하는 모든 식 진입점은 ParseJob 대신 이 함수를 거쳐야 한다.
+TK_TYPE ParseShortCircuitLogic(bool bReqReturn, SOperand& sResultStack, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, TK_TYPE tkEnd1 = TK_SEMICOLON, TK_TYPE tkEnd2 = TK_COMMA, TK_TYPE tkEnd3 = TK_R_SMALL, TK_TYPE tkEnd4 = TK_R_ARRAY);
 bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport);
 bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn = NULL, std::vector<SJumpValue>* pContinueJumps = NULL);
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool addOPFunEnd = true);
@@ -285,6 +289,7 @@ int InitDefaultTokenString()
 	TOKEN_STR2(TK_TRUE, "true");
 	TOKEN_STR2(TK_FALSE, "false");
 	TOKEN_STR2(TK_NULL, "null");
+	TOKEN_STR2(TK_SOURCE_LINE, "__LINE__");
 
 	TOKEN_STR3(TK_PLUS2, "++", 1, NOP_INC);
 	TOKEN_STR3(TK_MINUS2, "--", 1, NOP_DEC);
@@ -306,7 +311,7 @@ int InitDefaultTokenString()
 	TOKEN_STR3(TK_RSHIFT_EQ, ">>=", 15, NOP_RSHIFT2);
 
 	TOKEN_STR2(TK_NOT, "~");
-	TOKEN_STR3(TK_XOR, "^", 9, NOP_XOR3);
+	TOKEN_STR3(TK_XOR, "^", 10, NOP_XOR3); // C 우선순위: & (9) > ^ (10) > | (11)
 	TOKEN_STR3(TK_XOR_EQ, "^=", 15, NOP_XOR2);
 	TOKEN_STR3(TK_EQUAL, "=", 15, NOP_MOV);
 	TOKEN_STR3(TK_EQUAL_EQ, "==", 8, NOP_EQUAL2);
@@ -844,8 +849,15 @@ TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk)
 				ar.GetData(true);
 				SkipMultiLine(ar);
 			}
+			else if (c2 == '=')
+			{
+				ar.GetData(true);
+				tk = GetTokenString(TK_DIV_EQ);
+				return TK_DIV_EQ;
+			}
 			else
 			{
+				tk = GetTokenString(TK_DIV);
 				return TK_DIV;
 			}
 			break;
@@ -1294,7 +1306,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 			{
 				int iCodeOffBefore = funs._cur->_code->GetBufferOffset();
 				iTempVar.Reset();
-				tkType3 = ParseJob(true, iTempVar, NULL, ar, funs, vars);
+				tkType3 = ParseShortCircuitLogic(true, iTempVar, ar, funs, vars);
 				if (iTempVar.IsInvalidValue())
 				{
 					SetParserCompileError(ar, PCE_INVALID_CALL_ARGUMENT);
@@ -1601,9 +1613,15 @@ TK_TYPE ParseListDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs,
 	bool blEnd = false;
 	while (blEnd == false)
 	{
+		// 빈 리스트 또는 마지막 쉼표 뒤의 종료 토큰은 식으로 파싱하지 않는다.
+		tkType1 = GetToken(ar, tk1);
+		if (tkType1 == TK_R_ARRAY)
+			break;
+		ar.PushToken(tkType1, tk1);
+
 		iTempOffsetValue = INVALID_ERROR_PARSEJOB;
 
-		tkType1 = ParseJob(false, iTempOffsetValue, NULL, ar, funs, vars, false, TK_COMMA, TK_R_ARRAY, TK_NONE, TK_NONE);
+		tkType1 = ParseShortCircuitLogic(false, iTempOffsetValue, ar, funs, vars, TK_COMMA, TK_R_ARRAY, TK_NONE, TK_NONE);
 
 		if (iTempOffsetValue.IsNone() == true)
 		{
@@ -1615,6 +1633,13 @@ TK_TYPE ParseListDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs,
 		else
 #endif
 		{
+			if (iTempOffsetValue.IsFun())
+			{
+				int iTempFunction = funs._cur->AllocLocalTempVar();
+				funs._cur->Push_OP2(ar, NOP_FMOV1, iTempFunction, iTempOffsetValue._iVar, false);
+				iTempOffsetValue = SOperand(iTempFunction);
+			}
+
 			if (iTempOffsetValue.IsArray())
 			{
 				int iTempOffsetRead = funs._cur->AllocLocalTempVar();
@@ -1684,9 +1709,15 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 	bool blEnd = false;
 	while (blEnd == false)
 	{
+		// 빈 맵 또는 마지막 쉼표 뒤의 종료 토큰은 식으로 파싱하지 않는다.
+		tkType1 = GetToken(ar, tk1);
+		if (tkType1 == TK_R_MIDDLE)
+			break;
+		ar.PushToken(tkType1, tk1);
+
 		iTempOffsetKey = iTempOffsetValue = INVALID_ERROR_PARSEJOB;
 
-		tkType1 = ParseJob(false, iTempOffsetKey, NULL, ar, funs, vars, false, TK_COLON, TK_COMMA, TK_R_MIDDLE, TK_NONE);
+		tkType1 = ParseShortCircuitLogic(false, iTempOffsetKey, ar, funs, vars, TK_COLON, TK_COMMA, TK_R_MIDDLE, TK_NONE);
 
 		if (iTempOffsetKey.IsNone() == true)
 		{
@@ -1695,10 +1726,16 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 
 		if (tkType1 == TK_COLON)
 		{
-			tkType2 = ParseJob(false, iTempOffsetValue, NULL, ar, funs, vars, false, TK_COMMA, TK_R_MIDDLE, TK_NONE, TK_NONE);
+			tkType2 = ParseShortCircuitLogic(false, iTempOffsetValue, ar, funs, vars, TK_COMMA, TK_R_MIDDLE, TK_NONE, TK_NONE);
 			if (tkType2 == TK_NONE)
 			{
 				return TK_NONE;
+			}
+			if (iTempOffsetValue.IsFun())
+			{
+				int iTempFunction = funs._cur->AllocLocalTempVar();
+				funs._cur->Push_OP2(ar, NOP_FMOV1, iTempFunction, iTempOffsetValue._iVar, false);
+				iTempOffsetValue = SOperand(iTempFunction);
 			}
 			funs._cur->Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey._iVar, iTempOffsetValue._iVar, false, iTempOffsetKey.IsShort(), iTempOffsetValue.IsShort());
 			tkType1 = tkType2;
@@ -1707,6 +1744,12 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 		else
 		{
 			iTempOffsetValue = iTempOffsetKey;
+			if (iTempOffsetValue.IsFun())
+			{
+				int iTempFunction = funs._cur->AllocLocalTempVar();
+				funs._cur->Push_OP2(ar, NOP_FMOV1, iTempFunction, iTempOffsetValue._iVar, false);
+				iTempOffsetValue = SOperand(iTempFunction);
+			}
 			++iCurArrayOffset;
 #if 0
 			if(IsShort(iCurArrayOffset))
@@ -1749,7 +1792,7 @@ TK_TYPE ParseTable(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs, SVars&
 	TK_TYPE r = TK_NONE;
 
 	SOperand op;
-	r = ParseJob(true, op, NULL, ar, funs, vars);
+	r = ParseShortCircuitLogic(true, op, ar, funs, vars);
 	if (r != TK_R_ARRAY)
 	{
 		SetParserCompileError(ar, PCE_EXPECTED_RIGHT_BRACKET);
@@ -1798,6 +1841,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 
 	SOperand iTempOffset;
 	SOperand iTempOffset2;
+	bool lastSelectorWasDot = false;
 	//SOperand iArrayIndex = INVALID_ERROR_PARSEJOB;
 	if(pOtherModule == nullptr)
 		iTempOffset._iVar = vars.FindVar(tk1);
@@ -1813,6 +1857,14 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 			else if (tkType2 == TK_L_SMALL)
 			{
 				ar.PushToken(tkType2, tk2);
+				if (false == lastSelectorWasDot && iTempOffset.IsArray())
+				{
+					// list[index]() / table[key](): PTRCALL은 컨테이너 메서드 호출용이므로
+					// 인덱스 결과의 함수값을 먼저 임시 슬롯으로 읽어 직접 호출한다.
+					int iCallable = funs._cur->AllocLocalTempVar();
+					funs._cur->Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iCallable, iTempOffset.IsHaveShort());
+					iTempOffset = SOperand(iCallable);
+				}
 
 				//iTempOffset._iArrayIndex = iArrayIndex._iVar;
 				//iArrayIndex = INVALID_ERROR_PARSEJOB;
@@ -1881,6 +1933,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 					}
 				}
 			}
+			lastSelectorWasDot = (tkType2 == TK_DOT);
 
 		}
 		if (tkTypePre == TK_MINUS)
@@ -1920,6 +1973,52 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 				ar.PushToken(tkType2, tk2);
 				if (false == ParseFunCall(iTempOffset, tkTypePre, pFun, ar, funs, vars))
 					return false;
+
+				// 함수 반환값도 컨테이너일 수 있으므로 MakeMatrix()[1][0]처럼
+				// 호출 뒤에 이어지는 인덱스 선택자를 일반 변수와 동일하게 처리한다.
+				while (true)
+				{
+					tkType2 = GetToken(ar, tk2);
+					if (tkType2 == TK_L_SMALL)
+					{
+						ar.PushToken(tkType2, tk2);
+						if (iTempOffset.IsArray())
+						{
+							int iCallable = funs._cur->AllocLocalTempVar();
+							funs._cur->Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iCallable, iTempOffset.IsHaveShort());
+							iTempOffset = SOperand(iCallable);
+						}
+						if (false == ParseFunCall(iTempOffset, tkTypePre, NULL, ar, funs, vars))
+							return false;
+						continue;
+					}
+					if (tkType2 != TK_L_ARRAY)
+					{
+						ar.PushToken(tkType2, tk2);
+						break;
+					}
+
+					SOperand iArrayIndex = INVALID_ERROR_PARSEJOB;
+					if (false == ParseTable(iArrayIndex, ar, funs, vars) || iArrayIndex.IsArray())
+					{
+						SetParserCompileError(ar, PCE_EXPECTED_MEMBER_NAME);
+						return false;
+					}
+
+					if (iTempOffset._iArrayIndex == INVALID_ERROR_PARSEJOB)
+					{
+						iTempOffset._iArrayIndex = iArrayIndex._iVar;
+						iTempOffset._operandType = iArrayIndex.IsShort() ? Data_TS : Data_TR;
+					}
+					else
+					{
+						int iValue = funs._cur->AllocLocalTempVar();
+						funs._cur->Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iValue, iTempOffset.IsHaveShort());
+						iTempOffset._iVar = iValue;
+						iTempOffset._iArrayIndex = iArrayIndex._iVar;
+						iTempOffset._operandType = iArrayIndex.IsShort() ? Data_TS : Data_TR;
+					}
+				}
 			}
 			else
 			{
@@ -1966,10 +2065,8 @@ bool ParseLogicNotOperand(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs,
 	}
 	else if (tkNextType == TK_L_SMALL)
 	{
-		TK_TYPE r = ParseJob(true, operand, NULL, ar, funs, vars);
-		if (TK_R_SMALL != r)
+		if (TK_R_SMALL != ParseShortCircuitLogic(true, operand, ar, funs, vars))
 		{
-			SetParserCompileError(ar, PCE_EXPECTED_RIGHT_PAREN);
 			return false;
 		}
 	}
@@ -2012,7 +2109,7 @@ bool ParseToType(int& iResultStack, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 	}
 
 	SOperand operand;
-	r = ParseJob(true, operand, NULL, ar, funs, vars);
+	r = ParseShortCircuitLogic(true, operand, ar, funs, vars);
 	if (r != TK_R_SMALL)
 	{
 		SetParserCompileError(ar, PCE_EXPECTED_TYPE_RIGHT_PAREN);
@@ -2040,7 +2137,7 @@ bool ParseToType(int& iResultStack, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 //case TK_R_SMALL:	// )
 //case TK_R_ARRAY:	// ]
 TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef,
-	TK_TYPE tkEnd1, TK_TYPE tkEnd2, TK_TYPE tkEnd3, TK_TYPE tkEnd4, std::vector<SJumpValue>* pContinueJumps)
+	TK_TYPE tkEnd1, TK_TYPE tkEnd2, TK_TYPE tkEnd3, TK_TYPE tkEnd4, std::vector<SJumpValue>* pContinueJumps, TK_TYPE tkEnd5, TK_TYPE tkEnd6)
 {
 	std::string tk1, tk2;
 	TK_TYPE tkType1, tkType2;
@@ -2061,7 +2158,9 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		iArrayIndex = INVALID_ERROR_PARSEJOB;
 
 		tkType1 = GetToken(ar, tk1);
-		if (tkType1 == tkEnd1 || tkType1 == tkEnd2 || tkType1 == tkEnd3 || tkType1 == tkEnd4)
+		if (tkType1 == tkEnd1 || tkType1 == tkEnd2 || tkType1 == tkEnd3 || tkType1 == tkEnd4 ||
+			(tkEnd5 != TK_UNUSED && tkType1 == tkEnd5) ||
+			(tkEnd6 != TK_UNUSED && tkType1 == tkEnd6))
 		{
 			r = tkType1;
 			blEnd = true;
@@ -2079,8 +2178,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				return TK_NONE;
 			}
 			iTempOffset.Reset();
-			r = ParseJob(true, iTempOffset, NULL, ar, funs, vars);
-			if (r != TK_SEMICOLON)
+			if (TK_SEMICOLON != ParseShortCircuitLogic(true, iTempOffset, ar, funs, vars, TK_SEMICOLON, TK_NONE, TK_NONE, TK_NONE))
 			{
 				SetParserCompileError(ar, PCE_INVALID_RETURN_STATEMENT);
 				return TK_NONE;
@@ -2100,16 +2198,20 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			}
 			else 
 				funs._cur->Push_RETURN(ar, 0, true);
+			r = TK_SEMICOLON;
 			blEnd = true;
 			break;
 		case TK_L_SMALL:
 			iTempOffset = INVALID_ERROR_PARSEJOB;
-			r = ParseJob(bReqReturn, iTempOffset, NULL, ar, funs, vars);
-			if (TK_R_SMALL != r)
+			if (TK_R_SMALL != ParseShortCircuitLogic(bReqReturn, iTempOffset, ar, funs, vars))
 			{
-				SetParserCompileError(ar, PCE_EXPECTED_RIGHT_PAREN);
 				return TK_NONE;
 			}
+			operands.push_back(SOperand(iTempOffset));
+			blApperOperator = true;
+			break;
+		case TK_SOURCE_LINE:
+			iTempOffset = funs.AddStaticInt((int)ar.CurLine());
 			operands.push_back(SOperand(iTempOffset));
 			blApperOperator = true;
 			break;
@@ -2153,10 +2255,8 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				if (tkNextType == TK_L_SMALL)
 				{
 					SOperand a;
-					r = ParseJob(bReqReturn, a, NULL, ar, funs, vars);
-					if (TK_R_SMALL != r)
+					if (TK_R_SMALL != ParseShortCircuitLogic(bReqReturn, a, ar, funs, vars))
 					{
-						SetParserCompileError(ar, PCE_EXPECTED_RIGHT_PAREN);
 						return TK_NONE;
 					}
 					if (tkType1 == TK_MINUS)
@@ -2214,9 +2314,8 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		case TK_EQUAL_EQ:	// ==
 		case TK_EQUAL_NOT:	// !=
 		case TK_AND:		// &
+		case TK_XOR:		// ^
 		case TK_OR:			// |
-		case TK_AND2:		// &&
-		case TK_OR2:		// ||
 		case TK_DOT2:		// ..
 		{
 			if (blApperOperator == false)
@@ -2241,7 +2340,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		case TK_XOR_EQ:		// ^=
 		{
 			SOperand iTempVar;
-			r = ParseJob(true, iTempVar, NULL, ar, funs, vars);
+			r = ParseShortCircuitLogic(true, iTempVar, ar, funs, vars, tkEnd1, tkEnd2, tkEnd3, tkEnd4);
 			if (TK_NONE == r)
 				return TK_NONE;
 			if (iTempVar._iVar == INVALID_ERROR_PARSEJOB)
@@ -2501,7 +2600,20 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			else
 			{
 				if (a.IsArray() == false)
-					funs._cur->Push_TableRead(ar, b._iVar, b._iArrayIndex, a._iVar, b.IsHaveShort());
+				{
+					if (op == NOP_MOV)
+					{
+						funs._cur->Push_TableRead(ar, b._iVar, b._iArrayIndex, a._iVar, b.IsHaveShort());
+					}
+					else
+					{
+						// 복합 대입은 우변 컨테이너 값을 목적 변수에 바로 읽으면
+						// 기존 값이 소실된다. 임시값을 거쳐 a += table[key] 등을 계산한다.
+						int iTempOffset2 = funs._cur->AllocLocalTempVar();
+						funs._cur->Push_TableRead(ar, b._iVar, b._iArrayIndex, iTempOffset2, b.IsHaveShort());
+						funs._cur->Push_OP2(ar, op, a._iVar, iTempOffset2, false);
+					}
+				}
 				else
 				{
 					int iTempOffset2 = funs._cur->AllocLocalTempVar();
@@ -2538,8 +2650,107 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		RemoveAt<SOperand>(operands, iFindOffset + 1);
 	}
 
+	// 빈 리스트/맵의 첫 원소처럼 종결 토큰을 바로 만난 경우에는 값이 없다.
+	// operands[0] 접근은 UB이며, 호출자가 빈 컨테이너를 정상 종료로 처리할 수 있게 한다.
+	if (operands.empty())
+	{
+		sResultStack = SOperand(INVALID_ERROR_PARSEJOB);
+		return r;
+	}
+
 	sResultStack = operands[0];
 	return r;
+}
+
+// 논리 연산은 우측 피연산자의 코드가 실행되기 전에 분기한다.
+// 따라서 "a == null || a.member"에서 a가 null이면 member 접근 자체를 건너뛴다.
+// ParseJob 과 동일한 계약: 실제로 만난 종결 토큰을 반환, 에러는 TK_NONE.
+// 논리 연산자가 없는 식은 emit 없이 그대로 통과한다 (기존 fused jump 최적화 유지).
+TK_TYPE ParseShortCircuitLogic(bool bReqReturn, SOperand& sResultStack, CArchiveRdWC& ar, SFunctions& funs, SVars& vars,
+	TK_TYPE tkEnd1, TK_TYPE tkEnd2, TK_TYPE tkEnd3, TK_TYPE tkEnd4)
+{
+	std::vector<SJumpValue> trueJumps;
+	std::vector<SJumpValue> andFalseJumps;
+	SOperand operand;
+	bool hasLogicOperator = false;
+	TK_TYPE endToken;
+
+	for (;;)
+	{
+		operand.Reset();
+		endToken = ParseJob(bReqReturn, operand, NULL, ar, funs, vars, false,
+			tkEnd1, tkEnd2, tkEnd3, tkEnd4, NULL, TK_AND2, TK_OR2);
+		if (endToken == TK_NONE)
+			return TK_NONE; // 에러는 ParseJob 이 설정 (TK_NONE 을 종결로 쓰는 곳도 EOF=오류 상황)
+
+		if (endToken != TK_AND2 && endToken != TK_OR2)
+		{
+			if (false == hasLogicOperator)
+			{
+				sResultStack = operand;
+				return endToken;
+			}
+			break; // 마지막 그룹
+		}
+
+		hasLogicOperator = true;
+
+		// 그룹 결과가 배열 접근(m[k])이면 값을 읽어와야 진리값 검사가 가능하다
+		if (operand.IsArray())
+		{
+			int iRead = funs._cur->AllocLocalTempVar();
+			funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iRead, operand.IsHaveShort());
+			operand = SOperand(iRead);
+		}
+
+		if (endToken == TK_AND2)
+		{
+			funs._cur->Push_JMPFalse(ar, operand._iVar, 0);
+			andFalseJumps.emplace_back(funs._cur->_code->GetBufferOffset() - (int)(sizeof(short) * 3), funs._cur->_code->GetBufferOffset());
+			continue;
+		}
+
+		// TK_OR2
+		funs._cur->Push_JMPTrue(ar, operand._iVar, 0, ar.CurLine());
+		trueJumps.emplace_back(funs._cur->_code->GetBufferOffset() - (int)(sizeof(short) * 3), funs._cur->_code->GetBufferOffset());
+
+		const int nextOrGroup = funs._cur->_code->GetBufferOffset();
+		for (const SJumpValue& jump : andFalseJumps)
+			funs._cur->Set_JumpOffet(jump, nextOrGroup);
+		andFalseJumps.clear();
+	}
+
+	// 마지막 그룹: false 분기는 false 값 생성으로 연결한다.
+	if (operand.IsArray())
+	{
+		int iRead = funs._cur->AllocLocalTempVar();
+		funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iRead, operand.IsHaveShort());
+		operand = SOperand(iRead);
+	}
+	funs._cur->Push_JMPFalse(ar, operand._iVar, 0);
+	andFalseJumps.emplace_back(funs._cur->_code->GetBufferOffset() - (int)(sizeof(short) * 3), funs._cur->_code->GetBufferOffset());
+
+	const int result = funs._cur->AllocLocalTempVar();
+	const int trueValue = funs.AddStaticBool(true);
+	const int falseValue = funs.AddStaticBool(false);
+	const int truePos = funs._cur->_code->GetBufferOffset();
+	funs._cur->Push_OP2(ar, NOP_MOV, result, trueValue, false);
+	funs._cur->Push_JMP(ar, 0);
+	const SJumpValue endJump(funs._cur->_code->GetBufferOffset() - (int)(sizeof(short) * 3), funs._cur->_code->GetBufferOffset());
+
+	const int falsePos = funs._cur->_code->GetBufferOffset();
+	for (const SJumpValue& jump : trueJumps)
+		funs._cur->Set_JumpOffet(jump, truePos);
+	for (const SJumpValue& jump : andFalseJumps)
+		funs._cur->Set_JumpOffet(jump, falsePos);
+	funs._cur->Push_OP2(ar, NOP_MOV, result, falseValue, false);
+	funs._cur->Set_JumpOffet(endJump, funs._cur->_code->GetBufferOffset());
+
+	sResultStack = SOperand(result);
+	// 마지막 MOV는 false 경로 전용이다. 이후 return peephole이 이를 반환값으로 바꾸면
+	// true 경로가 잘못된 위치로 빠지므로, 이 분기 블록에서는 마지막 OP 최적화를 막는다.
+	funs._cur->ClearLastOP();
+	return endToken;
 }
 
 eNOperation ConvertCheckOPToOptimize(eNOperation n)
@@ -2645,7 +2856,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	// For Check
 	int Pos1 = PosLoopTop;
 	iTempOffset.Reset();
-	r = ParseJob(true, iTempOffset, NULL, ar, funs, vars);
+	r = ParseShortCircuitLogic(true, iTempOffset, ar, funs, vars, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY);
 	if (TK_SEMICOLON != r)
 	{
 		SetParserCompileError(ar, PCE_INVALID_FOR_CONDITION);
@@ -2851,7 +3062,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	else
 	{
 		iTempVar.Reset();
-		r = ParseJob(true, iTempVar, NULL, ar, funs, vars, true); // begin value
+		r = ParseShortCircuitLogic(true, iTempVar, ar, funs, vars); // begin value
 		if (TK_COMMA != r)
 		{
 			SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "',' after for-loop begin value", tk1.c_str());
@@ -2880,7 +3091,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	else
 	{
 		iTempVar.Reset();
-		r = ParseJob(true, iTempVar, NULL, ar, funs, vars, true); // end value
+		r = ParseShortCircuitLogic(true, iTempVar, ar, funs, vars); // end value
 		if (TK_COMMA != r)
 		{
 			SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "',' after for-loop end value", tk1.c_str());
@@ -2907,7 +3118,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	else
 	{
 		iTempVar.Reset();
-		r = ParseJob(true, iTempVar, NULL, ar, funs, vars, true); // increase value
+		r = ParseShortCircuitLogic(true, iTempVar, ar, funs, vars); // increase value
 		if (TK_R_SMALL != r)
 		{
 			SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "')' after for-loop step value", tk1.c_str());
@@ -3063,6 +3274,14 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		SetParserCompileError(ar, PCE_INVALID_LOOP_VARIABLE_LAYOUT);
 		return false;
 	}
+	// foreach의 구조 변경 감지용 숨김 로컬. key/value/iterator 뒤에 연속 배치되어
+	// VM은 OP 크기 변경 없이 key 슬롯 + 3으로 버전 슬롯을 찾는다.
+	int iMutationVersion = AddLocalVar(ar, funs, vars);
+	if (iMutationVersion == -1 || iKey + 3 != iMutationVersion)
+	{
+		SetParserCompileError(ar, PCE_INVALID_LOOP_VARIABLE_LAYOUT);
+		return false;
+	}
 
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_STRING || tk1 != "in") // in
@@ -3086,22 +3305,24 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	*/
 	int iTable = -1;
 	SOperand operand;
-	r = ParseJob(true, operand, NULL, ar, funs, vars);
-	if (iTempOffset._iArrayIndex != INVALID_ERROR_PARSEJOB)
+	r = ParseShortCircuitLogic(true, operand, ar, funs, vars);
+	if (r != TK_R_SMALL) // )
+	{
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "')' after foreach source expression", tk1.c_str());
+		return false;
+	}
+	if (operand.IsInvalidValue())
+	{
+		SetParserCompileError(ar, PCE_EXPECTED_EXPRESSION);
+		return false;
+	}
+	if (operand.IsArray())
 	{
 		iTable = AddLocalVar(ar, funs, vars);
 		funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iTable, operand.IsHaveShort());
 	}
 	else
 		iTable = operand._iVar;
-
-
-	//tkType1 = GetToken(ar, tk1);
-	if (r != TK_R_SMALL) // )
-	{
-		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "')' after foreach source expression", tk1.c_str());
-		return false;
-	}
 
 
 	funs._cur->Push_OP1(ar, NOP_VAR_CLEAR, iKey);
@@ -3192,10 +3413,13 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	// While Check
 	int Pos1 = PosLoopTop;
 	iTempOffset.Reset();
-	r = ParseJob(true, iTempOffset, NULL, ar, funs, vars);
-	if (TK_R_SMALL != r)
+	if (TK_R_SMALL != ParseShortCircuitLogic(true, iTempOffset, ar, funs, vars))
 	{
-		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "')' after while condition", tk1.c_str());
+		return false;
+	}
+	if (iTempOffset.IsInvalidValue())
+	{
+		SetParserCompileError(ar, PCE_EXPECTED_EXPRESSION);
 		return false;
 	}
 	int iStackCheckVar = iTempOffset._iVar;
@@ -3317,10 +3541,13 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 
 	//==> if( xxx )
 	iTempOffset.Reset();
-	r = ParseJob(true, iTempOffset, pJumps, ar, funs, vars, true, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, pContinueJumps);
-	if (TK_R_SMALL != r) // )
+	if (TK_R_SMALL != ParseShortCircuitLogic(true, iTempOffset, ar, funs, vars))
 	{
-		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "')' after if condition", tk1.c_str());
+		return false;
+	}
+	if (iTempOffset.IsInvalidValue())
+	{
+		SetParserCompileError(ar, PCE_EXPECTED_EXPRESSION);
 		return false;
 	}
 
@@ -3569,6 +3796,10 @@ static bool ParseConstPrimary(SConstValue& out, CArchiveRdWC& ar)
 	case TK_TRUE:  out.type = NEO_DEFINE_TOKEN_TRUE;  return true;
 	case TK_FALSE: out.type = NEO_DEFINE_TOKEN_FALSE; return true;
 	case TK_NULL:  out.type = NEO_DEFINE_TOKEN_NULL;  return true;
+	case TK_SOURCE_LINE:
+		out.type = NEO_DEFINE_TOKEN_INT;
+		out.i = (int)ar.CurLine();
+		return true;
 	case TK_STRING:
 	{
 		double num;
@@ -3829,7 +4060,7 @@ bool ParseSleep(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 	}
 	SOperand operand;
-	r = ParseJob(true, operand, NULL, ar, funs, vars);
+	r = ParseShortCircuitLogic(true, operand, ar, funs, vars);
 	if (TK_R_SMALL != r)
 	{
 		SetParserCompileError(ar, PCE_EXPECTED_RIGHT_PAREN);

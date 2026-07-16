@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <iostream>
 #include <algorithm>
+#include <cstdint>
 
 #include "NeoVMImpl.h"
 #include "NeoVMWorker.h"
@@ -77,7 +78,7 @@ struct neo_libs
 		char* p2 = pN->read<char*>(1);
 		if (p2 == NULL) return false;
 
-		int iFind = (int)p->find(*p2);
+		int iFind = (int)p->find(p2);
 		iFind = utf_string::UTF8_INDEX2OFFSET(*p, iFind);
 		pN->ReturnValue((int)iFind);
 		return true;
@@ -860,6 +861,20 @@ struct neo_libs
 		pN->ReturnValue(a + (b - a) * t);
 		return true;
 	}
+	static bool Math_Hash32(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1) return false;
+
+		// Keep the exact unsigned 32-bit overflow behavior used by native gameplay code.
+		std::uint32_t value = static_cast<std::uint32_t>(pN->read<int>(1));
+		value ^= value >> 16;
+		value *= 0x7feb352du;
+		value ^= value >> 15;
+		value *= 0x846ca68bu;
+		value ^= value >> 16;
+		pN->ReturnValue(static_cast<int>(value));
+		return true;
+	}
 	static bool Math_ColorRGB(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 3) return false;
@@ -1519,6 +1534,7 @@ static void AddGlobalLibFun()
 	AddSystemFun("rand", &neo_libs::Math_rand, 0);
 	AddSystemFun("Rand01", &neo_libs::Math_Rand01, 0);
 	AddSystemFun("RandRange", &neo_libs::Math_RandRange, 2);
+	AddSystemFun("Hash32", &neo_libs::Math_Hash32, 1);
 	AddSystemFun("ColorRGB", &neo_libs::Math_ColorRGB, 3);
 	AddSystemFun("ColorARGB", &neo_libs::Math_ColorARGB, 4);
 

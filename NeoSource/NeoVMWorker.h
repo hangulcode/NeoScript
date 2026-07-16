@@ -282,17 +282,17 @@ private:
 
 	NEOS_FORCEINLINE VarInfo* GetVarPtrF1(const SVMOperation& OP)
 	{
-		if (OP.argFlag & (1 << 2)) return m_pVarStack_Pointer + OP.n1;
+		if (OP.argFlag & NEOS_ARG_N1_LOCAL) return GetVarPtr_L(OP.n1);
 		return NEOS_GLOBAL_VAR(OP.n1);
 	}
 	NEOS_FORCEINLINE VarInfo* GetVarPtr2(const SVMOperation& OP)
 	{
-		if (OP.argFlag & (1 << 1)) return m_pVarStack_Pointer + OP.n2;
+		if (OP.argFlag & NEOS_ARG_N2_LOCAL) return GetVarPtr_L(OP.n2);
 		return NEOS_GLOBAL_VAR(OP.n2);
 	}
 	NEOS_FORCEINLINE VarInfo* GetVarPtr3(const SVMOperation& OP)
 	{
-		if (OP.argFlag & (1 << 0)) return m_pVarStack_Pointer + OP.n3;
+		if (OP.argFlag & NEOS_ARG_N3_LOCAL) return GetVarPtr_L(OP.n3);
 		return NEOS_GLOBAL_VAR(OP.n3);
 	}
 	NEOS_FORCEINLINE VarInfo* GetVarPtr_L(short n) { return m_pVarStack_Pointer + n; }

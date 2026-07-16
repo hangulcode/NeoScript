@@ -15,6 +15,7 @@ static void neo_globalinterface(INeoVMWorker* pWorker, void* This)
 
 int SAMPLE_etc(INeoLoader* pLoader, std::string filename, const char* pFunctionName)
 {
+	int result = -1;
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
 	if (false == pLoader->Load(filename.c_str(), pFileBuffer, iFileLen))
@@ -41,26 +42,31 @@ int SAMPLE_etc(INeoLoader* pLoader, std::string filename, const char* pFunctionN
 
 	if (pVM != NULL)
 	{
+		result = 0;
 		DWORD dwCallTime = 0;
 		if (pFunctionName != NULL)
 		{
 			DWORD t1 = GetTickCount();
-			pVM->CallN(pFunctionName);
+			if (false == pVM->CallN(pFunctionName))
+				result = -1;
 			dwCallTime = GetTickCount() - t1;
 		}
 		if (pVM->IsLastErrorMsg())
 		{
 			printf("Error - VM Call : %s\n(Elapse:%d)\n", pVM->GetLastErrorMsg(), dwCallTime);
 			pVM->ClearLastErrorMsg();
+			result = -1;
 		}
 		else
 			printf("(Elapse:%d)\n", dwCallTime);
 
 		INeoVM::ReleaseVM(pVM);
 	}
+	else
+		printf("Error - compile failed : %s\n", err.c_str());
 	NeoExecContextPool_Destroy(execPool);
 	pLoader->Unload(nullptr, pFileBuffer, iFileLen);
 
-    return 0;
+	return result;
 }
 

@@ -441,8 +441,8 @@ struct SFunctionInfo
 					*(OpType*)((u8*)_code->GetData() + _iLastOPOffset) = optype;
 					*preDest = *preSrc;
 					*preSrc = 0;
-					if(*preArgFlag & (1 << 4)) // const short  value ?
-						*preArgFlag = (1 << 5);
+					if(*preArgFlag & NEOS_ARG_N2_IMMEDIATE) // const short  value ?
+						*preArgFlag = NEOS_ARG_N1_IMMEDIATE;
 					else
 						*preArgFlag = 0;
 					return;

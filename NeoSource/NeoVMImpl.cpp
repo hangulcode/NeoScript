@@ -200,6 +200,7 @@ MapInfo* CNeoVMImpl::TableAlloc(int cnt)
 	pTable->_pVM = this;
 	pTable->_refCount = 0;
 	pTable->_itemCount = 0;
+	pTable->_mutationVersion = 0;
 	pTable->_HashBase = 0;
 	pTable->_BucketCapa = 0;
 	pTable->_pUserData = NULL;
@@ -238,6 +239,7 @@ ListInfo* CNeoVMImpl::ListAlloc(int cnt)
 	ListInfo* pList = m_sPool_ListInfo.Receive();
 	pList->_pVM = this;
 	pList->_refCount = 0;
+	pList->_mutationVersion = 0;
 	pList->_pUserData = NULL;
 	pList->_pIndexer = nullptr;
 	pList->InitInlineBucket();   // _Bucket=인라인, capa=4, itemCount=0 (작은 리스트는 힙 할당 없음)
@@ -262,6 +264,7 @@ SetInfo* CNeoVMImpl::SetAlloc()
 	pSet->_pVM = this;
 	pSet->_refCount = 0;
 	pSet->_itemCount = 0;
+	pSet->_mutationVersion = 0;
 	pSet->_HashBase = 0;
 	pSet->_BucketCapa = 0;
 	pSet->_pUserData = NULL;

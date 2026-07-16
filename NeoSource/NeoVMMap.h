@@ -72,6 +72,7 @@ struct MapInfo : AllocBase
 
 	int	_TableID;
 	int _itemCount;
+	u32 _mutationVersion = 0;
 	void* _pUserData;
 
 	FunctionPtrNative _fun;
