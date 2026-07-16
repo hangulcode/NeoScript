@@ -46,6 +46,7 @@ enum TK_TYPE
 	TK_TRUE,
 	TK_FALSE,
 	TK_NULL,
+	TK_SOURCE_LINE, // __LINE__
 
 	TK_PLUS2, // ++
 	TK_MINUS2, // --

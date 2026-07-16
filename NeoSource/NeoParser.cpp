@@ -289,6 +289,7 @@ int InitDefaultTokenString()
 	TOKEN_STR2(TK_TRUE, "true");
 	TOKEN_STR2(TK_FALSE, "false");
 	TOKEN_STR2(TK_NULL, "null");
+	TOKEN_STR2(TK_SOURCE_LINE, "__LINE__");
 
 	TOKEN_STR3(TK_PLUS2, "++", 1, NOP_INC);
 	TOKEN_STR3(TK_MINUS2, "--", 1, NOP_DEC);
@@ -2134,6 +2135,11 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			operands.push_back(SOperand(iTempOffset));
 			blApperOperator = true;
 			break;
+		case TK_SOURCE_LINE:
+			iTempOffset = funs.AddStaticInt((int)ar.CurLine());
+			operands.push_back(SOperand(iTempOffset));
+			blApperOperator = true;
+			break;
 		case TK_STRING:
 			ar.PushToken(tkType1, tk1);
 			if (false == ParseString(iTempOffset, TK_NONE, ar, funs, vars))
@@ -3694,6 +3700,10 @@ static bool ParseConstPrimary(SConstValue& out, CArchiveRdWC& ar)
 	case TK_TRUE:  out.type = NEO_DEFINE_TOKEN_TRUE;  return true;
 	case TK_FALSE: out.type = NEO_DEFINE_TOKEN_FALSE; return true;
 	case TK_NULL:  out.type = NEO_DEFINE_TOKEN_NULL;  return true;
+	case TK_SOURCE_LINE:
+		out.type = NEO_DEFINE_TOKEN_INT;
+		out.i = (int)ar.CurLine();
+		return true;
 	case TK_STRING:
 	{
 		double num;
