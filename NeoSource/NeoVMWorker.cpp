@@ -1268,7 +1268,40 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 		break;
 	case VAR_MAP:
 		out.type = "map";
-		snprintf(buf, sizeof(buf), "map(%d)", pVar->_tbl ? pVar->_tbl->GetCount() : 0);
+		{
+			const int count = pVar->_tbl ? pVar->_tbl->GetCount() : 0;
+			snprintf(buf, sizeof(buf), "map(%d)", count);
+			if (pVar->_tbl != nullptr && collectionDepth < NEO_DEBUG_MAX_COLLECTION_DEPTH)
+			{
+				const int childCount = count < NEO_DEBUG_MAX_COLLECTION_ITEMS ? count : NEO_DEBUG_MAX_COLLECTION_ITEMS;
+				out.children.reserve(childCount + (count > childCount ? 1 : 0));
+				CollectionIterator iterator = pVar->_tbl->FirstNode();
+				for (int i = 0; i < childCount && iterator._pTableNode != nullptr; ++i)
+				{
+					MapNode* node = iterator._pTableNode;
+					NeoDebugVariable child;
+					if (node->key.GetType() == VAR_STRING && node->key._str != nullptr)
+						child.name = "[\"" + node->key._str->_str + "\"]";
+					else
+					{
+						NeoDebugVariable key;
+						NeoDebugFormatValue(&node->key, key, collectionDepth + 1);
+						child.name = "[" + key.value + "]";
+					}
+					NeoDebugFormatValue(&node->value, child, collectionDepth + 1);
+					out.children.push_back(std::move(child));
+					pVar->_tbl->NextNode(iterator);
+				}
+				if (count > childCount)
+				{
+					NeoDebugVariable more;
+					more.name = "...";
+					more.type = "map";
+					more.value = std::to_string(count - childCount) + " more items";
+					out.children.push_back(std::move(more));
+				}
+			}
+		}
 		out.value = buf;
 		break;
 	case VAR_LIST:

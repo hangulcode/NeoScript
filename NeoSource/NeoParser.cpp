@@ -1633,6 +1633,13 @@ TK_TYPE ParseListDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs,
 		else
 #endif
 		{
+			if (iTempOffsetValue.IsFun())
+			{
+				int iTempFunction = funs._cur->AllocLocalTempVar();
+				funs._cur->Push_OP2(ar, NOP_FMOV1, iTempFunction, iTempOffsetValue._iVar, false);
+				iTempOffsetValue = SOperand(iTempFunction);
+			}
+
 			if (iTempOffsetValue.IsArray())
 			{
 				int iTempOffsetRead = funs._cur->AllocLocalTempVar();
@@ -1724,6 +1731,12 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 			{
 				return TK_NONE;
 			}
+			if (iTempOffsetValue.IsFun())
+			{
+				int iTempFunction = funs._cur->AllocLocalTempVar();
+				funs._cur->Push_OP2(ar, NOP_FMOV1, iTempFunction, iTempOffsetValue._iVar, false);
+				iTempOffsetValue = SOperand(iTempFunction);
+			}
 			funs._cur->Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey._iVar, iTempOffsetValue._iVar, false, iTempOffsetKey.IsShort(), iTempOffsetValue.IsShort());
 			tkType1 = tkType2;
 			iItemCount++;
@@ -1731,6 +1744,12 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 		else
 		{
 			iTempOffsetValue = iTempOffsetKey;
+			if (iTempOffsetValue.IsFun())
+			{
+				int iTempFunction = funs._cur->AllocLocalTempVar();
+				funs._cur->Push_OP2(ar, NOP_FMOV1, iTempFunction, iTempOffsetValue._iVar, false);
+				iTempOffsetValue = SOperand(iTempFunction);
+			}
 			++iCurArrayOffset;
 #if 0
 			if(IsShort(iCurArrayOffset))
@@ -1822,6 +1841,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 
 	SOperand iTempOffset;
 	SOperand iTempOffset2;
+	bool lastSelectorWasDot = false;
 	//SOperand iArrayIndex = INVALID_ERROR_PARSEJOB;
 	if(pOtherModule == nullptr)
 		iTempOffset._iVar = vars.FindVar(tk1);
@@ -1837,6 +1857,14 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 			else if (tkType2 == TK_L_SMALL)
 			{
 				ar.PushToken(tkType2, tk2);
+				if (false == lastSelectorWasDot && iTempOffset.IsArray())
+				{
+					// list[index]() / table[key](): PTRCALL은 컨테이너 메서드 호출용이므로
+					// 인덱스 결과의 함수값을 먼저 임시 슬롯으로 읽어 직접 호출한다.
+					int iCallable = funs._cur->AllocLocalTempVar();
+					funs._cur->Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iCallable, iTempOffset.IsHaveShort());
+					iTempOffset = SOperand(iCallable);
+				}
 
 				//iTempOffset._iArrayIndex = iArrayIndex._iVar;
 				//iArrayIndex = INVALID_ERROR_PARSEJOB;
@@ -1905,6 +1933,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 					}
 				}
 			}
+			lastSelectorWasDot = (tkType2 == TK_DOT);
 
 		}
 		if (tkTypePre == TK_MINUS)
@@ -1944,6 +1973,52 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 				ar.PushToken(tkType2, tk2);
 				if (false == ParseFunCall(iTempOffset, tkTypePre, pFun, ar, funs, vars))
 					return false;
+
+				// 함수 반환값도 컨테이너일 수 있으므로 MakeMatrix()[1][0]처럼
+				// 호출 뒤에 이어지는 인덱스 선택자를 일반 변수와 동일하게 처리한다.
+				while (true)
+				{
+					tkType2 = GetToken(ar, tk2);
+					if (tkType2 == TK_L_SMALL)
+					{
+						ar.PushToken(tkType2, tk2);
+						if (iTempOffset.IsArray())
+						{
+							int iCallable = funs._cur->AllocLocalTempVar();
+							funs._cur->Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iCallable, iTempOffset.IsHaveShort());
+							iTempOffset = SOperand(iCallable);
+						}
+						if (false == ParseFunCall(iTempOffset, tkTypePre, NULL, ar, funs, vars))
+							return false;
+						continue;
+					}
+					if (tkType2 != TK_L_ARRAY)
+					{
+						ar.PushToken(tkType2, tk2);
+						break;
+					}
+
+					SOperand iArrayIndex = INVALID_ERROR_PARSEJOB;
+					if (false == ParseTable(iArrayIndex, ar, funs, vars) || iArrayIndex.IsArray())
+					{
+						SetParserCompileError(ar, PCE_EXPECTED_MEMBER_NAME);
+						return false;
+					}
+
+					if (iTempOffset._iArrayIndex == INVALID_ERROR_PARSEJOB)
+					{
+						iTempOffset._iArrayIndex = iArrayIndex._iVar;
+						iTempOffset._operandType = iArrayIndex.IsShort() ? Data_TS : Data_TR;
+					}
+					else
+					{
+						int iValue = funs._cur->AllocLocalTempVar();
+						funs._cur->Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iValue, iTempOffset.IsHaveShort());
+						iTempOffset._iVar = iValue;
+						iTempOffset._iArrayIndex = iArrayIndex._iVar;
+						iTempOffset._operandType = iArrayIndex.IsShort() ? Data_TS : Data_TR;
+					}
+				}
 			}
 			else
 			{
@@ -2525,7 +2600,20 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			else
 			{
 				if (a.IsArray() == false)
-					funs._cur->Push_TableRead(ar, b._iVar, b._iArrayIndex, a._iVar, b.IsHaveShort());
+				{
+					if (op == NOP_MOV)
+					{
+						funs._cur->Push_TableRead(ar, b._iVar, b._iArrayIndex, a._iVar, b.IsHaveShort());
+					}
+					else
+					{
+						// 복합 대입은 우변 컨테이너 값을 목적 변수에 바로 읽으면
+						// 기존 값이 소실된다. 임시값을 거쳐 a += table[key] 등을 계산한다.
+						int iTempOffset2 = funs._cur->AllocLocalTempVar();
+						funs._cur->Push_TableRead(ar, b._iVar, b._iArrayIndex, iTempOffset2, b.IsHaveShort());
+						funs._cur->Push_OP2(ar, op, a._iVar, iTempOffset2, false);
+					}
+				}
 				else
 				{
 					int iTempOffset2 = funs._cur->AllocLocalTempVar();
@@ -3182,6 +3270,14 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 
 	if (iKey + 2 != iIterator)
+	{
+		SetParserCompileError(ar, PCE_INVALID_LOOP_VARIABLE_LAYOUT);
+		return false;
+	}
+	// foreach의 구조 변경 감지용 숨김 로컬. key/value/iterator 뒤에 연속 배치되어
+	// VM은 OP 크기 변경 없이 key 슬롯 + 3으로 버전 슬롯을 찾는다.
+	int iMutationVersion = AddLocalVar(ar, funs, vars);
+	if (iMutationVersion == -1 || iKey + 3 != iMutationVersion)
 	{
 		SetParserCompileError(ar, PCE_INVALID_LOOP_VARIABLE_LAYOUT);
 		return false;

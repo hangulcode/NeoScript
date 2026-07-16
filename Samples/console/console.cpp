@@ -502,6 +502,15 @@ static int RunDebugSmoke()
 	}
 
 	INeoVMWorker* worker = pVM->GetMainWorker();
+	std::vector<int> executableLines;
+	worker->DebugGetExecutableLines(executableLines);
+	if (std::find(executableLines.begin(), executableLines.end(), 1) == executableLines.end() ||
+		std::find(executableLines.begin(), executableLines.end(), 4) == executableLines.end())
+	{
+		printf("[debug-smoke] executable line metadata failed\n");
+		INeoVM::ReleaseVM(pVM);
+		return -1;
+	}
 	DebugSmokeListener listener;
 	worker->DebugSetListener(&listener);
 	worker->DebugSetBreakpoints(std::vector<int>{ 3 });
@@ -556,6 +565,64 @@ static int RunDebugSmoke()
 		return -1;
 	}
 
+	INeoVM::ReleaseVM(pVM);
+
+	const char* collectionSource =
+		"var data = { \"name\": \"Neo\", \"items\": [1, 2] };\n"
+		"var marker = 1;\n";
+	err.clear();
+	NeoCompilerParam collectionParam(collectionSource, (int)strlen(collectionSource));
+	collectionParam.err = &err;
+	collectionParam.putASM = false;
+	collectionParam.debug = true;
+	pVM = INeoVM::CompileAndLoadVM(collectionParam, &vparam);
+	if (pVM == nullptr)
+	{
+		printf("[debug-smoke] collection compile failed: %s\n", err.c_str());
+		return -1;
+	}
+
+	worker = pVM->GetMainWorker();
+	DebugSmokeListener collectionListener;
+	worker->DebugSetListener(&collectionListener);
+	worker->DebugSetBreakpoints(std::vector<int>{ 2 });
+	pVM->PCall(pVM->GetMainWorkerID());
+	std::vector<NeoDebugVariable> collectionVars;
+	worker->DebugGetFrameVariables(0, collectionVars);
+	const NeoDebugVariable* data = nullptr;
+	for (const NeoDebugVariable& var : collectionVars)
+	{
+		if (var.name == "data")
+		{
+			data = &var;
+			break;
+		}
+	}
+	bool foundName = false;
+	bool foundItems = false;
+	bool itemsExpanded = false;
+	if (data != nullptr)
+	{
+		for (const NeoDebugVariable& child : data->children)
+		{
+			if (child.name == "[\"name\"]" && child.value == "Neo")
+				foundName = true;
+			if (child.name == "[\"items\"]")
+			{
+				foundItems = true;
+				itemsExpanded = child.children.size() == 2;
+			}
+		}
+	}
+	if (worker->DebugIsPaused() == false || data == nullptr || !foundName || !foundItems || !itemsExpanded)
+	{
+		printf("[debug-smoke] collection variables failed paused=%d data=%d name=%d items=%d expanded=%d\n",
+			worker->DebugIsPaused() ? 1 : 0, data ? 1 : 0, foundName ? 1 : 0, foundItems ? 1 : 0, itemsExpanded ? 1 : 0);
+		INeoVM::ReleaseVM(pVM);
+		return -1;
+	}
+	worker->DebugContinue();
+	worker->Run();
 	INeoVM::ReleaseVM(pVM);
 
 	const char* stepSource =
@@ -827,6 +894,75 @@ static int RunDebugSmoke()
 	return 0;
 }
 
+static int RunCompilerErrorRegression()
+{
+	struct ErrorCase
+	{
+		const char* name;
+		const char* source;
+		const char* expected;
+	};
+	const ErrorCase cases[] =
+	{
+		{ "continue-semicolon", "for(var i in 0, 1, 1) { continue }", "';' after 'continue'" },
+		{ "indexed-increment", "var values = [1]; values[0]++;", "table values do not support '++'" },
+		{ "argument-count", "fun F(var value) {} F();", "argument" },
+		{ "empty-if", "fun F() { if () {} }", "expected an expression" },
+		{ "empty-while", "fun F() { while () {} }", "expected an expression" },
+	};
+
+	int passed = 0;
+	for (const ErrorCase& test : cases)
+	{
+		std::string source = test.source;
+		std::string err;
+		NeoCompilerParam param(source.data(), (int)source.size());
+		param.err = &err;
+		ScopedNeoExecPool execPool;
+		NeoLoadVMParam vparam = execPool.MakeLoadParam();
+		INeoVM* vm = INeoVM::CompileAndLoadRunVM(param, &vparam);
+		bool rejected = vm == nullptr;
+		if (vm != nullptr)
+			INeoVM::ReleaseVM(vm);
+		if (rejected && err.find(test.expected) != std::string::npos)
+		{
+			++passed;
+			continue;
+		}
+		printf("[compiler-error] %s failed: %s\n", test.name, err.c_str());
+	}
+
+	const ErrorCase mutationCases[] =
+	{
+		{ "list-append-during-foreach", "var values = [1]; foreach(var value in values) values.append(2);", "collection modified during foreach" },
+		{ "map-insert-during-foreach", "var values = { \"a\": 1 }; foreach(var key, value in values) values[\"b\"] = 2;", "collection modified during foreach" },
+		{ "map-remove-during-foreach", "var values = { \"a\": 1 }; foreach(var key, value in values) values[key] = null;", "collection modified during foreach" },
+	};
+	for (const ErrorCase& test : mutationCases)
+	{
+		std::string source = test.source;
+		std::string err;
+		NeoCompilerParam param(source.data(), (int)source.size());
+		param.err = &err;
+		ScopedNeoExecPool execPool;
+		NeoLoadVMParam vparam = execPool.MakeLoadParam();
+		INeoVM* vm = INeoVM::CompileAndLoadRunVM(param, &vparam);
+		bool rejected = vm != nullptr && vm->IsLastErrorMsg() && std::string(vm->GetLastErrorMsg()).find(test.expected) != std::string::npos;
+		if (vm != nullptr)
+			INeoVM::ReleaseVM(vm);
+		if (rejected)
+		{
+			++passed;
+			continue;
+		}
+		printf("[foreach-mutation] %s failed: %s\n", test.name, err.c_str());
+	}
+
+	const int total = _countof(cases) + _countof(mutationCases);
+	printf("Compiler error regression %s : %d/%d\n", passed == total ? "PASS" : "FAIL", passed, total);
+	return passed == total ? 0 : -1;
+}
+
 static std::string JsonEscape(const std::string& s)
 {
 	std::string out;
@@ -1019,9 +1155,40 @@ public:
 	bool terminated = false;
 	bool initialRunStarted = false;
 	bool noDebugMode = false;
+	int nextVariableReference = 1000000;
+	std::map<int, std::vector<NeoDebugVariable>> variableReferences;
+
+	void ClearVariableReferences()
+	{
+		variableReferences.clear();
+		nextVariableReference = 1000000;
+	}
+
+	int StoreVariableChildren(const std::vector<NeoDebugVariable>& children)
+	{
+		if (children.empty())
+			return 0;
+		const int reference = nextVariableReference++;
+		variableReferences[reference] = children;
+		return reference;
+	}
+
+	void WriteVariables(std::ostringstream& os, const std::vector<NeoDebugVariable>& vars)
+	{
+		os << "{\"variables\":[";
+		for (size_t i = 0; i < vars.size(); ++i)
+		{
+			if (i) os << ",";
+			const int reference = StoreVariableChildren(vars[i].children);
+			os << "{\"name\":\"" << JsonEscape(vars[i].name) << "\",\"type\":\"" << JsonEscape(vars[i].type)
+				<< "\",\"value\":\"" << JsonEscape(vars[i].value) << "\",\"variablesReference\":" << reference << "}";
+		}
+		os << "]}";
+	}
 
 	virtual void OnNeoDebugStopped(INeoVMWorker* w, const NeoDebugLocation& location, NeoDebugStopReason reason)
 	{
+		ClearVariableReferences();
 		lastStopReason = reason;
 		lastStopLocation = location;
 		const char* reasonText = "pause";
@@ -1394,16 +1561,13 @@ public:
 		{
 			int ref = JsonInt(body, "variablesReference", 1000);
 			std::vector<NeoDebugVariable> vars;
-			if (worker) worker->DebugGetFrameVariables(ref - 1000, vars);
+			std::map<int, std::vector<NeoDebugVariable>>::const_iterator childIt = variableReferences.find(ref);
+			if (childIt != variableReferences.end())
+				vars = childIt->second;
+			else if (worker && ref >= 1000 && ref < 1000000)
+				worker->DebugGetFrameVariables(ref - 1000, vars);
 			std::ostringstream os;
-			os << "{\"variables\":[";
-			for (size_t i = 0; i < vars.size(); ++i)
-			{
-				if (i) os << ",";
-				os << "{\"name\":\"" << JsonEscape(vars[i].name) << "\",\"type\":\"" << JsonEscape(vars[i].type)
-					<< "\",\"value\":\"" << JsonEscape(vars[i].value) << "\",\"variablesReference\":0}";
-			}
-			os << "]}";
+			WriteVariables(os, vars);
 			SendResponse(requestSeq, command, os.str());
 		}
 		else if (command == "evaluate")
@@ -1430,8 +1594,9 @@ public:
 			std::ostringstream os;
 			if (found)
 			{
+				const int reference = StoreVariableChildren(found->children);
 				os << "{\"result\":\"" << JsonEscape(found->value) << "\",\"type\":\""
-					<< JsonEscape(found->type) << "\",\"variablesReference\":0}";
+					<< JsonEscape(found->type) << "\",\"variablesReference\":" << reference << "}";
 			}
 			else
 			{
@@ -1545,7 +1710,11 @@ int main(int argc, char* argv[])
 		}
 		else if (command == "--debug-smoke")
 		{
-			exitCode = RunDebugSmoke();
+			 exitCode = RunDebugSmoke();
+		}
+		else if (command == "--compiler-error-regression")
+		{
+			exitCode = RunCompilerErrorRegression();
 		}
 		else if (command == "--dap")
 		{
@@ -1553,7 +1722,7 @@ int main(int argc, char* argv[])
 		}
 		else
 		{
-			printf("usage: console.exe [--list | --run <sample> | --file <script.ns> | --smoke | --bench | --debug-smoke | --dap]\n");
+			printf("usage: console.exe [--list | --run <sample> | --file <script.ns> | --smoke | --bench | --debug-smoke | --compiler-error-regression | --dap]\n");
 			exitCode = -1;
 		}
 

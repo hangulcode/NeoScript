@@ -8,6 +8,7 @@ const REG_SOURCE_LINE = __LINE__;
 var regressionTotal = 0;
 var regressionPassed = 0;
 var regressionFailed = 0;
+var shortCircuitCalls = 0;
 
 var RegressionShared =
 {
@@ -45,6 +46,23 @@ fun MakePair(var a, var b)
     return [a, b];
 }
 
+fun MakeMatrix()
+{
+    return [[10, 11], [20, 21]];
+}
+
+fun BuildNested(var depth)
+{
+    if (depth == 0)
+        return [0];
+    return [depth, BuildNested(depth - 1)];
+}
+
+fun ReturnMatrixCell(var matrix, var row, var column)
+{
+    return matrix[row][column];
+}
+
 fun Fibonacci(var n)
 {
     if (n < 2)
@@ -62,10 +80,45 @@ fun Increment(var value)
     return value + 1;
 }
 
+fun MakeFunctionList()
+{
+    return [Increment, fun(var value) { return value * 2; }];
+}
+
+fun MakeCallbackHolder()
+{
+    return { "callback": Increment, "value": 41 };
+}
+
+fun ReturnCallback(var callback)
+{
+    return callback;
+}
+
+fun MarkShortCircuitCall()
+{
+    shortCircuitCalls += 1;
+    return true;
+}
+
 fun Apply(var value, var callback)
 {
     return callback(value);
 }
+
+fun ReturnFromBranch(var value)
+{
+    if (value < 0)
+        return value * -1;
+    elif (value == 0)
+        return 100;
+    return value + 10;
+}
+
+var RegressionGlobalValue = REG_CONST;
+var RegressionGlobalTable = { "value": RegressionGlobalValue, "pair": [1, 2] };
+var RegressionGlobalCallback = Increment;
+var RegressionGlobalComposite = { "callback": RegressionGlobalCallback, "nested": [RegressionGlobalValue, 84] };
 
 fun TestExpressions()
 {
@@ -167,6 +220,26 @@ fun TestStrings()
     foreach(var ch in characters)
         copied = copied .. ch;
     Check(copied == "abc", __LINE__);
+
+    var empty = "";
+    Check(empty.len() == 0, __LINE__);
+    Check(text.find("missing") == -1, __LINE__);
+    var single = empty.split(",");
+    Check(single.len() == 1 && single[0] == "", __LINE__);
+    var escaped = "first\nsecond\tend";
+    Check(escaped.find("second") == 6, __LINE__);
+    Check(text.replace("Neo", "Neo") == "Neo Script", __LINE__);
+    var repeated = "";
+    for(var i in 0, 64, 1)
+        repeated = repeated .. "x";
+    Check(repeated.len() == 64 && repeated.find("xxxx") == 0, __LINE__);
+    var utf8 = "Neo한글";
+    Check(utf8.len() == 5, __LINE__);
+    Check(utf8.find("글") == 4 && utf8.sub(3, 2) == "한글", __LINE__);
+    var utf8Count = 0;
+    foreach(var character in utf8)
+        utf8Count += 1;
+    Check(utf8Count == 5, __LINE__);
 }
 
 fun TestShortCircuit()
@@ -184,6 +257,18 @@ fun TestShortCircuit()
     var indexValues = [10, 20];
     Check(indexValues[toint(target == null || target[4] < 0.3)] == 20, __LINE__);
     Check(SafeNullAccess(target), __LINE__);
+    shortCircuitCalls = 0;
+    Check((false && MarkShortCircuitCall()) == false, __LINE__);
+    Check(true || MarkShortCircuitCall(), __LINE__);
+    Check(shortCircuitCalls == 0, __LINE__);
+    Check(true && MarkShortCircuitCall(), __LINE__);
+    Check(false || MarkShortCircuitCall(), __LINE__);
+    Check(shortCircuitCalls == 2, __LINE__);
+    shortCircuitCalls = 0;
+    Check(false || true && MarkShortCircuitCall(), __LINE__);
+    Check((false || true) && MarkShortCircuitCall(), __LINE__);
+    Check((false || false && MarkShortCircuitCall()) == false, __LINE__);
+    Check(shortCircuitCalls == 2, __LINE__);
 }
 
 fun TestContainers()
@@ -205,6 +290,14 @@ fun TestContainers()
     Check(map["alpha"] == 1, __LINE__);
     Check(map["nested"]["value"] == 7, __LINE__);
     Check(map["list"][0] + map["list"][1] == 19, __LINE__);
+    var emptyCount = 0;
+    foreach(var value in emptyList)
+        emptyCount += 1;
+    foreach(var key, value in emptyMap)
+        emptyCount += 1;
+    foreach(var character in "")
+        emptyCount += 1;
+    Check(emptyCount == 0, __LINE__);
 }
 
 fun TestContainerOperations()
@@ -224,6 +317,10 @@ fun TestContainerOperations()
     Check(map[4] == 16 && map["name"] == "neo" && map.extra == 7, __LINE__);
     map["name"] = null;
     Check(map.len() == 2, __LINE__);
+    map["name"] = "restored";
+    Check(map.len() == 3 && map["name"] == "restored", __LINE__);
+    map["name"] = null;
+    Check(map.len() == 2, __LINE__);
     var keyCount = 0;
     var valueSum = 0;
     foreach(var key, value in map)
@@ -240,6 +337,201 @@ fun TestContainerOperations()
     foreach(var key, value in map.keys())
         keyTotal += 1;
     Check(keyTotal == 2, __LINE__);
+}
+
+fun TestIndexedAssignments()
+{
+    var values = [2, 3, 4];
+    var index = 1;
+    values[index] += 7;
+    Check(values[1] == 10, __LINE__);
+    values[index] *= 2;
+    Check(values[1] == 20, __LINE__);
+    values[index] /= 4;
+    Check(values[1] == 5, __LINE__);
+    values[index] %= 3;
+    Check(values[1] == 2, __LINE__);
+    var table = { "counter": 2, "nested": { "value": 4 }, "rows": [[1, 2], [3, 4]] };
+    table["counter"] += 5;
+    Check(table["counter"] == 7, __LINE__);
+    table.nested["value"] *= 3;
+    Check(table.nested["value"] == 12, __LINE__);
+    table["rows"][1][0] += 8;
+    Check(table["rows"][1][0] == 11, __LINE__);
+}
+
+fun TestScopesAndReturns()
+{
+    var value = 1;
+    {
+        var inner = value + 4;
+        value = inner * 2;
+        Check(value == 10, __LINE__);
+    }
+    Check(value == 10, __LINE__);
+
+    var total = 0;
+    for(var i in 0, 5, 1)
+    {
+        var loopValue = i * 3;
+        total += loopValue;
+    }
+    Check(total == 30, __LINE__);
+    Check(ReturnFromBranch(-7) == 7, __LINE__);
+    Check(ReturnFromBranch(0) == 100, __LINE__);
+    Check(ReturnFromBranch(32) == 42, __LINE__);
+    Check(Add3(ReturnFromBranch(-1), ReturnFromBranch(0), ReturnFromBranch(1)) == 112, __LINE__);
+    Check(RegressionGlobalValue == 42 && RegressionGlobalTable["pair"][1] == 2, __LINE__);
+    Check(RegressionGlobalCallback(41) == 42, __LINE__);
+    Check(RegressionGlobalComposite["callback"](41) == 42, __LINE__);
+    Check(RegressionGlobalComposite.nested[1] == 84, __LINE__);
+}
+
+fun TestNestedControlFlow()
+{
+    var sum = 0;
+    for(var i in 0, 4, 1)
+    {
+        for(var j in 0, 4, 1)
+        {
+            if (j == 1)
+                continue;
+            if (j == 3)
+                break;
+            sum += i * 10 + j;
+        }
+    }
+    Check(sum == 128, __LINE__);
+
+    sum = 0;
+    for(var i in 0, 6, 1)
+    {
+        if (i == 2)
+            continue;
+        for(var j in 0, 3, 1)
+        {
+            if (j == 1)
+                break;
+            sum += i;
+        }
+    }
+    Check(sum == 13, __LINE__);
+
+    var target = null;
+    var count = 0;
+    while (count < 3 && (target == null || target[0] < 1))
+        count += 1;
+    Check(count == 3, __LINE__);
+
+    var map = {};
+    map["safe"] = target == null || target[0] < 1;
+    Check(map["safe"], __LINE__);
+}
+
+fun TestContainerAliases()
+{
+    var originalList = [1, 2];
+    var aliasList = originalList;
+    aliasList[0] = 9;
+    Check(originalList[0] == 9, __LINE__);
+    originalList = originalList;
+    Check(originalList[0] == 9 && originalList.len() == 2, __LINE__);
+
+    var originalMap = { "value": 3 };
+    var aliasMap = originalMap;
+    aliasMap["value"] += 4;
+    Check(originalMap["value"] == 7, __LINE__);
+    originalMap = originalMap;
+    Check(originalMap["value"] == 7, __LINE__);
+
+    var functions = [Increment, fun(var value) { return value * 2; }];
+    Check(functions[0](41) == 42, __LINE__);
+    Check(functions[1](21) == 42, __LINE__);
+
+    var dispatch = { "add": Add3, "increment": Increment };
+    Check(dispatch["add"](10, 20, 12) == 42, __LINE__);
+    Check(dispatch.increment(41) == 42, __LINE__);
+
+}
+
+fun TestComplexAccess()
+{
+    var matrix = [[1, 2], [3, 4], [5, 6]];
+    Check(ReturnMatrixCell(matrix, 2, 1) == 6, __LINE__);
+    Check(MakeMatrix()[1][0] == 20, __LINE__);
+    Check(MakeFunctionList()[0](41) == 42, __LINE__);
+    Check(MakeFunctionList()[1](21) == 42, __LINE__);
+    Check(MakeCallbackHolder()["callback"](MakeCallbackHolder()["value"]) == 42, __LINE__);
+    Check(ReturnCallback(MakeFunctionList()[0])(41) == 42, __LINE__);
+    Check(BuildNested(3)[1][1][1][0] == 0, __LINE__);
+
+    var tree =
+    {
+        "node":
+        {
+            "values": [10, 20, 30],
+            "callback": Increment,
+            "dispatch": { "add": Add3 }
+        }
+    };
+    Check(tree["node"].values[1] == 20, __LINE__);
+    Check(tree["node"]["callback"](41) == 42, __LINE__);
+    Check(tree.node.dispatch["add"](10, 20, 12) == 42, __LINE__);
+
+    Check(Add3(Increment(1), Add3(2, 3, 4), Fibonacci(5)) == 16, __LINE__);
+
+    var dynamic = {};
+    for(var i in 0, 16, 1)
+    {
+        var key = "item_" .. i;
+        dynamic[key] = i * i;
+    }
+    var lookup = "item_" .. 9;
+    Check(dynamic[lookup] == 81, __LINE__);
+    Check(dynamic["item_" .. 15] == 225, __LINE__);
+
+    var indexed = [10, 20, 30];
+    var index = 0;
+    Check(indexed[index += 1] == 20 && index == 1, __LINE__);
+
+    var operands = [8, 2, 3, 5];
+    var accumulator = 1;
+    accumulator += operands[0];
+    Check(accumulator == 9, __LINE__);
+    accumulator -= operands[1];
+    Check(accumulator == 7, __LINE__);
+    accumulator *= operands[2];
+    Check(accumulator == 21, __LINE__);
+    accumulator /= operands[3];
+    Check(accumulator == 4, __LINE__);
+    var remainder = 23;
+    remainder %= operands[3];
+    Check(remainder == 3, __LINE__);
+    var floatAccumulator = 21.0;
+    floatAccumulator /= operands[3];
+    Check(floatAccumulator == 4.2, __LINE__);
+}
+
+fun TestAllocationLifetime()
+{
+    var last = null;
+    var sum = 0;
+    for(var i in 0, 128, 1)
+    {
+        last = { "index": i, "pair": [i, i + 1], "text": "value_" .. i };
+        sum += last["pair"][1];
+    }
+    Check(sum == 8256, __LINE__);
+    Check(last["index"] == 127 && last["text"] == "value_127", __LINE__);
+
+    var text = "Neo";
+    text = text;
+    Check(text == "Neo", __LINE__);
+
+    var map = { "a": 1, "b": 2, "c": 3 };
+    foreach(var key, value in map)
+        map[key] = value * 10;
+    Check(map["a"] == 10 && map["b"] == 20 && map["c"] == 30, __LINE__);
 }
 
 fun TestFunctionValues()
@@ -330,6 +622,12 @@ fun RegressionRun()
     TestShortCircuit();
     TestContainers();
     TestContainerOperations();
+    TestIndexedAssignments();
+    TestScopesAndReturns();
+    TestNestedControlFlow();
+    TestContainerAliases();
+    TestComplexAccess();
+    TestAllocationLifetime();
     TestFunctionValues();
     TestLoops();
     TestBulk();

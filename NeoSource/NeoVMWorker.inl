@@ -1370,6 +1370,8 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 {
 	VarInfo* pValue = pKey + 1;
 	VarInfo* pIterator = pKey + 2;
+	// 컴파일러가 foreach마다 key/value/iterator/version 슬롯을 연속 배치한다.
+	VarInfo* pMutationVersion = pKey + 3;
 
 	switch (pClt->GetType())
 	{
@@ -1437,12 +1439,21 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 			{
 				pIterator->_it = tbl->FirstNode();
 				pIterator->SetType(VAR_ITERATOR);
+				Var_SetInt(pMutationVersion, (int)tbl->_mutationVersion);
 			}
 			else
 				return false;
 		}
 		else
+		{
+			if (pMutationVersion->GetType() != VAR_INT || (u32)pMutationVersion->_int != tbl->_mutationVersion)
+			{
+				pIterator->ClearType();
+				SetError("error : collection modified during foreach");
+				return false;
+			}
 			tbl->NextNode(pIterator->_it);
+		}
 
 		MapNode* n = pIterator->_it._pTableNode;
 		if (n)
@@ -1468,12 +1479,21 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 			{
 				pIterator->_it._iListOffset = 0;
 				pIterator->SetType(VAR_ITERATOR);
+				Var_SetInt(pMutationVersion, (int)lst->_mutationVersion);
 			}
 			else
 				return false;
 		}
 		else
+		{
+			if (pMutationVersion->GetType() != VAR_INT || (u32)pMutationVersion->_int != lst->_mutationVersion)
+			{
+				pIterator->ClearType();
+				SetError("error : collection modified during foreach");
+				return false;
+			}
 			++pIterator->_it._iListOffset;
+		}
 
 		if (pIterator->_it._iListOffset < lst->GetCount())
 		{
@@ -1498,12 +1518,21 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 			{
 				pIterator->_it = set->FirstNode();
 				pIterator->SetType(VAR_ITERATOR);
+				Var_SetInt(pMutationVersion, (int)set->_mutationVersion);
 			}
 			else
 				return false;
 		}
 		else
+		{
+			if (pMutationVersion->GetType() != VAR_INT || (u32)pMutationVersion->_int != set->_mutationVersion)
+			{
+				pIterator->ClearType();
+				SetError("error : collection modified during foreach");
+				return false;
+			}
 			set->NextNode(pIterator->_it);
+		}
 
 		SetNode* n = pIterator->_it._pSetNode;
 		if (n)

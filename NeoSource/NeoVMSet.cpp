@@ -460,6 +460,7 @@ bool SetInfo::Insert(VarInfo* pKey)
 	if (pFindNode == NULL)
 	{
 		_itemCount++;
+		++_mutationVersion;
 
 		SetNode* pNew = _pVM->m_sPool_SetNode.Receive();
 		Move_DestNoRelease(&pNew->key, pKey);
@@ -514,6 +515,7 @@ void SetInfo::Remove(VarInfo* pKey)
 	_pVM->m_sPool_SetNode.Confer(pCur);
 
 	_itemCount--;
+	++_mutationVersion;
 }
 
 

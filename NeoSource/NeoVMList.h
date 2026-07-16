@@ -24,6 +24,7 @@ struct ListInfo : AllocBase
 
 	int	_ListID;
 	int _itemCount;
+	u32 _mutationVersion = 0;
 	void* _pUserData;
 
 	int _BucketCapa;

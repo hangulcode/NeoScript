@@ -64,21 +64,10 @@ bool		ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar)
 		}
 		else
 		{
-//			std::vector<char> bytes;
-//			bytes.resize(iBufferSize);
-//			memcpy((void*)&*bytes.begin(), pBuffer, iBufferSize);
-#if 0
-			std::wstring wstr = std::wstring(ansi_str.begin(), ansi_str.end());
-#else
-			std::locale utf8Locale(std::locale(), new std::codecvt_utf8<wchar_t>);
-
-			std::wstring_convert<MyCodecvt<wchar_t, char, std::mbstate_t>> converter;
-			std::wstring wstr = converter.from_bytes(pBuffer, pBuffer + iBufferSize);
-
-
-//			std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
-//			std::wstring wstr = converter.from_bytes(ansi_str);
-#endif
+			// Neo Script source is UTF-8 whether or not an editor wrote a BOM.
+			// The old locale-dependent conversion decoded BOM-less UTF-8 as bytes.
+			std::wstring wstr;
+			utf_string::UTF8_UNICODE(pBuffer, iBufferSize, wstr);
 			size_toUni = (int)wstr.length();
 			pWBuffer = new u16[size_toUni + 1];
 			memcpy(pWBuffer, wstr.c_str(), sizeof(u16) * (size_toUni));

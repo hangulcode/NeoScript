@@ -29,6 +29,8 @@ void ListInfo::Free()
 void ListInfo::Resize(int size)
 {
 	if (size < 0) size = 0;
+	if (size != _itemCount)
+		++_mutationVersion;
 	for (int i = size; i < _itemCount; i++)
 		_pVM->Var_Release(&_Bucket[i]);
 	Reserve(size);
@@ -136,6 +138,7 @@ bool ListInfo::InsertLast(VarInfo* pValue)
 		Reserve(_BucketCapa == 0 ? 2 : _BucketCapa * 2);
 	}
 	_pVM->Move(&_Bucket[_itemCount++], pValue);
+	++_mutationVersion;
 	return true;
 }
 bool ListInfo::InsertLast(const std::string& str)
@@ -145,6 +148,7 @@ bool ListInfo::InsertLast(const std::string& str)
 		Reserve(_BucketCapa == 0 ? 2 : _BucketCapa * 2);
 	}
 	_pVM->Var_SetStringA(&_Bucket[_itemCount++], str);
+	++_mutationVersion;
 	return true;
 }
 

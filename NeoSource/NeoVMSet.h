@@ -47,6 +47,7 @@ struct SetInfo : AllocBase
 
 	int	_SetID;
 	int _itemCount;
+	u32 _mutationVersion = 0;
 	void* _pUserData;
 
 	FunctionPtrNative _fun;

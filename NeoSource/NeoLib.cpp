@@ -78,7 +78,7 @@ struct neo_libs
 		char* p2 = pN->read<char*>(1);
 		if (p2 == NULL) return false;
 
-		int iFind = (int)p->find(*p2);
+		int iFind = (int)p->find(p2);
 		iFind = utf_string::UTF8_INDEX2OFFSET(*p, iFind);
 		pN->ReturnValue((int)iFind);
 		return true;
