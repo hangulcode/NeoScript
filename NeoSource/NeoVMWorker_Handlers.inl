@@ -272,6 +272,13 @@ NEOS_FORCEINLINE bool handle_IDLE(const SVMOperation& OP) {
     {
         AsyncInfo* p = GetVM()->Pop_AsyncInfo();
         if (p == nullptr) break;
+        if (!EnsureStackRange(_iSP_VarsMax, 2))
+        {
+            GetVM()->Var_Release(&p->_LockReferance);
+			// EnsureStackRange redirected execution to the error opcode.
+			// Continue the loop so RunInternal reports the VM error.
+            return false;
+        }
         Var_SetBool(GetStackFromBase(_iSP_VarsMax + 1), p->_success);
         Var_SetStringA(GetStackFromBase(_iSP_VarsMax + 2), p->_resultValue);
         Call(p->_fun_index, 2);

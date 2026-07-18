@@ -170,7 +170,17 @@ CoroutineInfo* CNeoVMImpl::CoroutineAlloc()
 void CNeoVMImpl::FreeCoroutine(VarInfo *d)
 {
 	--m_sAllocStats.coroutines;
-	_pExecPool->Release(d->_cor);
+	CoroutineInfo* pCI = d->_cor;
+	// 공유 풀로 반납하기 전에 컨텍스트의 스택 참조를 정리한다.
+	// 완료(DeadCoroutine)를 거친 코루틴은 _iSP_Vars_Max2 가 0 이라 무해하지만,
+	// yield 된 채 버려진 코루틴은 live ref 가 남아있어 정리하지 않으면 다른 VM 재사용 시 손상된다.
+	int n = pCI->_info._iSP_Vars_Max2;
+	std::vector<VarInfo>& s = pCI->m_sVarStack;
+	if (n > (int)s.size()) n = (int)s.size();
+	for (int i = 0; i < n; i++)
+		Var_Release(&s[i]);
+	pCI->_info.ClearSP();
+	_pExecPool->Release(pCI);
 }
 
 StringInfo* CNeoVMImpl::StringAlloc(const std::string& str)

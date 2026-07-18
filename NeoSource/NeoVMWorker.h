@@ -299,6 +299,8 @@ private:
 	NEOS_FORCEINLINE VarInfo* GetVarPtr_G(short n) { return NEOS_GLOBAL_VAR(n); }
 
 	NEOS_FORCEINLINE void SetStackPointer(int n) { m_pVarStack_Pointer = &(*m_pVarStack_Base)[n]; }
+	// base부터 lastOffset까지(반환값 슬롯은 offset 0) 접근 가능한지 확인한다.
+	bool EnsureStackRange(int base, int lastOffset);
 public:
 	NEOS_FORCEINLINE CNeoVMImpl* GetVM() { return (CNeoVMImpl*)_pVM;  }
 	virtual void SetTimeout(int iTimeout, int iCheckOpCount) {

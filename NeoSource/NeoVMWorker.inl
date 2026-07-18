@@ -1,5 +1,17 @@
 ﻿#pragma once
 
+NEOS_FORCEINLINE bool CNeoVMWorker::EnsureStackRange(int base, int lastOffset)
+{
+	const int stackSize = (int)m_pVarStack_Base->size();
+	if (base > stackSize - 1 - lastOffset)
+	{
+		SetError("Call Stack Overflow");
+		return false;
+	}
+	return true;
+}
+
+
 NEOS_FORCEINLINE void CNeoVMWorker::Move(VarInfo* v1, VarInfo* v2)
 {
 	if (v1->IsAllocType())

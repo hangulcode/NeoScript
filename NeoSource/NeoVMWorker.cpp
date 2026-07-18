@@ -283,14 +283,10 @@ VarInfo* CNeoVMWorker::GetType(VarInfo* v1)
 	}
 	return &GetVM()->m_sDefaultValue[NDF_NULL];
 }
-
 void CNeoVMWorker::Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue)
 {
-	if (_iSP_VarsMax + n2 >= (int)m_pVarStack_Base->size())
-	{
-		SetError("Call Stack Overflow");
+	if (!EnsureStackRange(_iSP_VarsMax, n2))
 		return;
-	}
 
 	if (_iSP_Vars_Max2 < _iSP_VarsMax + (1 + n2))
 		_iSP_Vars_Max2 = _iSP_VarsMax + (1 + n2);
@@ -309,6 +305,11 @@ void CNeoVMWorker::Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue)
 
 	if ((*fun->_fn)(this, fun, n2) < 0)
 	{
+		// SetError 는 오류 opcode로 점프시키므로 코드 포인터는 복구하지 않는다.
+		// 다만 native 호출 프레임으로 옮긴 스택 레지스터는 부모 프레임으로 되돌려야 한다.
+		_iSP_Vars = iSave_SP_Vars;
+		_iSP_VarsMax = iSave_SP_VarsMax;
+		SetStackPointer(_iSP_Vars);
 		SetError("Ptr Call Argument Count Error");
 		return;
 	}
@@ -322,6 +323,9 @@ void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 {
 	SFunctionTable& fun = m_sFunctionPtr[n1];
 	// n2 is Arg Count not use
+	// 호출 스택을 push하거나 현재 프레임을 변경하기 전에 새 프레임 전체를 검증한다.
+	if (!EnsureStackRange(_iSP_VarsMax, fun._localAddCount - 1))
+		return;
 #if _DEBUG
 	SCallStack callStack;
 	callStack._iReturnOffset = GetCodeptr();
@@ -344,12 +348,6 @@ void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 	if (_iSP_Vars_Max2 < _iSP_VarsMax)
 		_iSP_Vars_Max2 = _iSP_VarsMax;
 
-	if (_iSP_VarsMax >= (int)m_pVarStack_Base->size())
-	{
-		SetCodePtr(callStack._iReturnOffset); // Error Line Finder
-		SetError("Call Stack Overflow");
-		return;
-	}
 }
 
 bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo* r, VarInfo* a, VarInfo* b)
@@ -363,11 +361,8 @@ bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo
 		return false;
 
 	int n3 = 2;
-	if (_iSP_VarsMax + n3 >= (int)m_pVarStack_Base->size())
-	{
-		SetError("Call Stack Overflow");
+	if (!EnsureStackRange(_iSP_VarsMax, n3))
 		return false;
-	}
 
 	Move(&(*m_pVarStack_Base)[_iSP_VarsMax + 1], a);
 	Move(&(*m_pVarStack_Base)[_iSP_VarsMax + 2], b);
@@ -393,11 +388,8 @@ bool CNeoVMWorker::Call_MetaTable2(VarInfo* pTable, std::string& funName, VarInf
 		return false;
 
 	int n3 = 2;
-	if (_iSP_VarsMax + n3 >= (int)m_pVarStack_Base->size())
-	{
-		SetError("Call Stack Overflow");
+	if (!EnsureStackRange(_iSP_VarsMax, n3))
 		return false;
-	}
 
 	Move(&(*m_pVarStack_Base)[_iSP_VarsMax + 1], r);
 	Move(&(*m_pVarStack_Base)[_iSP_VarsMax + 2], b);
@@ -901,7 +893,19 @@ void CNeoVMWorker::ReleaseExecution()
 	if (m_pMainCtx != nullptr && m_pPool != nullptr)
 	{
 		// 정상 완료 시 m_pCur == m_pMainCtx 이며 high-water 는 워커의 _iSP_Vars_Max2.
-		int usedMax = (m_pCur == m_pMainCtx) ? _iSP_Vars_Max2 : m_pMainCtx->_info._iSP_Vars_Max2;
+		int usedMax;
+		if (m_pCur == m_pMainCtx)
+		{
+			usedMax = _iSP_Vars_Max2;
+			// 호스트콜(Call/iCall)은 GC() 가 _iSP_Vars_Max2 를 _iSP_Vars 로 줄이고 리턴 슬롯[_iSP_Vars]을
+			// 남긴다. GC 는 그 위를 이미 해제했으므로 리턴 슬롯까지 포함해 정리하면 컨텍스트가 완전히 clean.
+			if (usedMax < _iSP_Vars + 1)
+				usedMax = _iSP_Vars + 1;
+		}
+		else
+		{
+			usedMax = m_pMainCtx->_info._iSP_Vars_Max2;
+		}
 		CleanupContextVars(m_pMainCtx, usedMax);
 		m_pPool->Release(m_pMainCtx);
 	}
@@ -1015,6 +1019,8 @@ bool	CNeoVMWorker::Setup(int iFunctionID, std::vector<VarInfo>& _args)
 	SFunctionTable& fun = m_sFunctionPtr[iFunctionID];
 	int iArgs = (int)_args.size();
 	if (iArgs != fun._argsCount)
+		return false;
+	if (!EnsureStackRange(_iSP_Vars, fun._localAddCount - 1))
 		return false;
 
 	SetCodePtr(fun._codePtr);
@@ -1800,6 +1806,8 @@ bool CNeoVMWorker::StartCoroutione(int argSP_Vars, int n3)
 		{
 			int iResumeParamCount = n3 - 1;
 			SFunctionTable& fun = m_sFunctionPtr[m_pCur->_fun_index];
+			if (!EnsureStackRange(0, fun._localAddCount - 1))
+				return false;
 			for (int i = 0; i < fun._argsCount; i++)
 			{
 				if (i < iResumeParamCount)
@@ -1831,6 +1839,8 @@ VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 
 	SFunctionTable& fun = m_sFunctionPtr[iFID];
 	if (argc != fun._argsCount)
+		return NULL;
+	if (!EnsureStackRange(_iSP_VarsMax, fun._localAddCount - 1))
 		return NULL;
 
 	int save_Code = GetCodeptr();
@@ -1882,6 +1892,8 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 		SetError("Ptr Call Error");
 		return false;
 	}
+	if (!EnsureStackRange(_iSP_VarsMax, n3))
+		return false;
 	int iSave = _iSP_Vars;
 	_iSP_Vars = _iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);
@@ -1890,6 +1902,8 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 
 	if ((func)(this, pUserData, pStr, n3) == false)
 	{
+		_iSP_Vars = iSave;
+		SetStackPointer(_iSP_Vars);
 		SetError("Ptr Call Error");
 		return false;
 	}
@@ -1904,7 +1918,8 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 		switch(m_pRegisterActive->_sub_state)
 		{ 
 			case COROUTINE_SUB_START:
-				StartCoroutione(argSP_Vars, n3);
+				if (!StartCoroutione(argSP_Vars, n3))
+					return false;
 				break;
 			case COROUTINE_SUB_CLOSE:
 				switch (m_pRegisterActive->_state)
@@ -1942,6 +1957,8 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 }
 bool CNeoVMWorker::CallDefaultNativeByIndex(int nativeIndex, int n3, VarInfo* pRet)
 {
+	if (!EnsureStackRange(_iSP_VarsMax, n3))
+		return false;
 	int iSave = _iSP_Vars;
 	_iSP_Vars = _iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);
@@ -1966,7 +1983,8 @@ bool CNeoVMWorker::CallDefaultNativeByIndex(int nativeIndex, int n3, VarInfo* pR
 		switch(m_pRegisterActive->_sub_state)
 		{ 
 			case COROUTINE_SUB_START:
-				StartCoroutione(argSP_Vars, n3);
+				if (!StartCoroutione(argSP_Vars, n3))
+					return false;
 				break;
 			case COROUTINE_SUB_CLOSE:
 				switch (m_pRegisterActive->_state)
@@ -2010,6 +2028,8 @@ bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUs
 		SetError("Ptr Call Error");
 		return false;
 	}
+	if (!EnsureStackRange(_iSP_VarsMax, 0))
+		return false;
 	int iSave = _iSP_Vars;
 	_iSP_Vars = _iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);
@@ -2018,6 +2038,8 @@ bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUs
 
 	if ((func)(this, pUserData, pStr, pRet, get) == false)
 	{
+		_iSP_Vars = iSave;
+		SetStackPointer(_iSP_Vars);
 		SetError("Ptr Call Error");
 		return false;
 	}
@@ -2032,7 +2054,8 @@ bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUs
 		switch (m_pRegisterActive->_sub_state)
 		{
 		case COROUTINE_SUB_START:
-			StartCoroutione(argSP_Vars, 0);
+			if (!StartCoroutione(argSP_Vars, 0))
+				return false;
 			break;
 		case COROUTINE_SUB_CLOSE:
 			switch (m_pRegisterActive->_state)
