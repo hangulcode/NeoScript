@@ -146,6 +146,7 @@ private:
     EDebugRunMode m_eDebugRunMode = DBG_CONTINUE;
     bool m_bDebugPauseRequested = false;
     bool m_bDebugPaused = false;
+	bool m_bDebugFaulted = false;
     int m_iDebugSkipFile = -1;
     int m_iDebugSkipLine = -1;
     int m_iDebugSkipOpIndex = -1;
@@ -175,6 +176,7 @@ private:
 	int GetDebugLine(int iOPIndex);
     bool CheckDebugStop(int iOPIndex);
     void StopDebug(int iOPIndex, NeoDebugStopReason reason);
+	void ResetFaultStateForNewExecution();
     int GetFunctionIndexFromCodeOffset(int codeOffset);
 	std::string FormatStackTrace(int currentOpIndex);
 	NEOS_FORCEINLINE int GetCodeptr() { return (int)((u8*)_pCodeCurrent - _pCodeBegin); }

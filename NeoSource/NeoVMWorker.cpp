@@ -806,10 +806,19 @@ void CNeoVMWorker::StopDebug(int iOPIndex, NeoDebugStopReason reason)
 	m_sDebugLocation.line = info._lineseq;
 	m_sDebugLocation.callDepth = m_pCallStack ? (int)m_pCallStack->size() : 0;
 	m_bDebugPaused = true;
+	m_bDebugFaulted = (reason == NEO_DEBUG_STOP_EXCEPTION);
 	m_bDebugPauseRequested = false;
 	m_eDebugRunMode = DBG_PAUSED;
 	if (m_pDebugListener)
 		m_pDebugListener->OnNeoDebugStopped(this, m_sDebugLocation, reason);
+}
+void CNeoVMWorker::ResetFaultStateForNewExecution()
+{
+	if (m_bDebugFaulted == false)
+		return;
+
+	m_bDebugFaulted = false;
+	_isErrorOPIndex = 0;
 }
 void CNeoVMWorker::SetError(const char* pErrMsg)
 {
@@ -951,6 +960,7 @@ int CNeoVMWorker::ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args)
 	BindContext(m_pMainCtx);
 	m_pRegisterActive = nullptr;
 	m_sCoroutines.clear();
+	ResetFaultStateForNewExecution();
 	_iSP_Vars = 0;
 	_iSP_VarsMax = 0;
 	_iSP_Vars_Max2 = 0;
@@ -991,6 +1001,7 @@ bool CNeoVMWorker::BeginHostCall()
 	BindContext(m_pMainCtx);
 	m_pRegisterActive = nullptr;
 	m_sCoroutines.clear();
+	ResetFaultStateForNewExecution();
 	_iSP_Vars = 0;
 	_iSP_VarsMax = 0;
 	_iSP_Vars_Max2 = 0;
@@ -1002,6 +1013,14 @@ void CNeoVMWorker::EndHostCall(bool acquired)
 {
 	if (acquired == false)
 		return;
+	// An error can also be reported as a debugger pause.  It is inspect-only:
+	// never retain the failed execution context for a later F5/F10/F11 resume.
+	if (m_bDebugFaulted)
+	{
+		ReleaseExecution();
+		GetVM()->PublishAllocStats();
+		return;
+	}
 	if (_iRemainSleep > 0 || m_bDebugPaused)
 	{
 		GetVM()->PublishAllocStats();
@@ -1061,6 +1080,7 @@ bool CNeoVMWorker::BindWorkerFunction(const std::string& funName)
 	{
 		m_pMainCtx = m_pPool->Acquire();
 		BindContext(m_pMainCtx);
+		ResetFaultStateForNewExecution();
 		_iSP_Vars = 0;
 		_iSP_VarsMax = 0;
 		_iSP_Vars_Max2 = 0;
@@ -1513,11 +1533,8 @@ bool	CNeoVMWorker::Run()
 			b = debugActive ? RunInternal<true, true>(breakingCallStack) : RunInternal<true, false>(breakingCallStack);
 		else
 			b = debugActive ? RunInternal<false, true>(breakingCallStack) : RunInternal<false, false>(breakingCallStack);
-		if (b == false && m_pDebugListener && _isErrorOPIndex >= 0 && _isErrorOPIndex < (int)_DebugData.size())
-		{
-			StopDebug(_isErrorOPIndex, NEO_DEBUG_STOP_EXCEPTION);
-			b = true;
-		}
+		// handle_ERROR reports the source location to the debugger, but the VM result
+		// must remain an error so RunSettle releases this failed execution context.
 #ifdef _WIN32
 	}
 	catch (...)
@@ -1542,7 +1559,7 @@ bool	CNeoVMWorker::Run()
 		{
 			if (_isErrorOPIndex >= 0 && _isErrorOPIndex < (int)_DebugData.size())
 				StopDebug(_isErrorOPIndex, NEO_DEBUG_STOP_EXCEPTION);
-			return true;
+			return false;
 		}
 		return false;
 	}
