@@ -172,6 +172,9 @@ struct SFunctionInfo
 	int							_iCode_Begin = 0;
 	int							_iCode_Size = 0;
 	std::vector<debug_info>*	_pDebugData = nullptr;
+	// Byte offsets in _code that can be entered by a previously emitted jump.
+	// Used only while compiling this function to preserve control-flow joins.
+	std::set<int>					_jumpTargetOffsets;
 
 	void Clear()
 	{
@@ -182,6 +185,7 @@ struct SFunctionInfo
 
 		_iCode_Begin = 0;
 		_iCode_Size = 0;
+		_jumpTargetOffsets.clear();
 	}
 
 	std::string	GetFullName() { if(_moduleName.empty() == true) return _name; return _moduleName + "." + _name; }
@@ -436,7 +440,11 @@ struct SFunctionInfo
 				ArgFlag* preArgFlag = (ArgFlag*)((u8*)_code->GetData() + sizeof(OpType) + _iLastOPOffset);
 				short* preDest = (short*)((u8*)_code->GetData() + sizeof(OpType) + sizeof(ArgFlag) + _iLastOPOffset);
 				short* preSrc = preDest + 1;
-				if (*preDest == r)
+				// A jump can land at the current write position. Replacing the
+				// preceding MOV in place would make that jump skip the new RET.
+				const bool isControlFlowJoin =
+					_jumpTargetOffsets.find(_code->GetBufferOffset()) != _jumpTargetOffsets.end();
+				if (*preDest == r && isControlFlowJoin == false)
 				{
 					*(OpType*)((u8*)_code->GetData() + _iLastOPOffset) = optype;
 					*preDest = *preSrc;
@@ -542,6 +550,7 @@ struct SFunctionInfo
 	void	Set_JumpOffet(SJumpValue sJmp, int destOffset)
 	{
 		*((short*)((u8*)_code->GetData() + sJmp._iCodePosOffset)) = (short)(destOffset - sJmp._iBaseJmpOffset);
+		_jumpTargetOffsets.insert(destOffset);
 	}
 	void	Push_ListAlloc(CArchiveRdWC& ar, short r)
 	{
