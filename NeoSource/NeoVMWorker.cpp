@@ -1451,6 +1451,11 @@ void CNeoVMWorker::DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames)
 void CNeoVMWorker::DebugGetFrameVariables(int frameId, std::vector<NeoDebugVariable>& vars)
 {
 	vars.clear();
+	// Worker가 실행 컨텍스트에 바인딩되기 전에는 변수 스택이 없다.
+	// 이 시점의 디버그 UI 조회는 빈 변수 목록으로 처리한다.
+	if (m_pVarStack_Base == nullptr)
+		return;
+
 	std::vector<NeoDebugStackFrame> frames;
 	DebugGetStackTrace(frames);
 	if (frameId < 0 || frameId >= (int)frames.size())
