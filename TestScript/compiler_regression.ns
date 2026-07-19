@@ -110,7 +110,7 @@ fun ReturnFromBranch(var value)
 {
     if (value < 0)
         return value * -1;
-    elif (value == 0)
+    else if (value == 0)
         return 100;
     return value + 10;
 }
@@ -176,7 +176,7 @@ fun TestAssignmentsAndBranches()
     var selected = 0;
     if (value < 0)
         selected = 1;
-    elif (value == 5)
+    else if (value == 5)
         selected = 2;
     else
         selected = 3;

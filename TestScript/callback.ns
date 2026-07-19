@@ -10,7 +10,7 @@ fun Sum2(var a, var b)
 {
 	if(true)
 		return 1;
-	elif(true)
+	else if(true)
 		return 0;
 	else
 		return 1;

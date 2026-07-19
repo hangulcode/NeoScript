@@ -64,6 +64,7 @@ void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 	X(PCE_CONST_INVALID_VALUE, "Error (%d, %d): const expression must be a compile-time constant, near '%s'") \
 	X(PCE_CONST_INVALID_OP, "Error (%d, %d): invalid operation in const expression near '%s'") \
 	X(PCE_CONST_DIV_ZERO, "Error (%d, %d): division by zero in const expression") \
+	X(PCE_ELIF_DEPRECATED, "Error (%d, %d): 'elif' is no longer supported. Use 'else if' instead") \
 	X(PCE_VM_NOT_INITIALIZED, "Please call NeoScript::INeoVM::Initialize() before compiling scripts")
 
 enum EParserCompileError
@@ -3616,6 +3617,22 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 == TK_ELSEIF)
 	{
+		SetParserCompileError(ar, PCE_ELIF_DEPRECATED);
+		return false;
+	}
+	// C 스타일 else if: else 바로 뒤에 if 가 오면 elif 처럼 체인으로 처리
+	bool blElseIf = false;
+	if (tkType1 == TK_ELSE)
+	{
+		std::string tkNext;
+		TK_TYPE tkNextType = GetToken(ar, tkNext);
+		if (tkNextType == TK_IF)
+			blElseIf = true;
+		else
+			ar.PushToken(tkNextType, tkNext);
+	}
+	if (blElseIf)
+	{
 		if (funs._cur->GetLastOP() == NOP_RETURN) // Code Size OPT TODO !!
 			blJmp2 = false;
 		if (blJmp2)
@@ -3632,7 +3649,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 		ClearTempVars(funs);
 		if (blJmp2) // Code Size OPT TODO !!
 			funs._cur->Set_JumpOffet(jmp2, funs._cur->_code->GetBufferOffset());
-	}	
+	}
 	else if (tkType1 == TK_ELSE)
 	{
 		if (funs._cur->GetLastOP() == NOP_RETURN) // Code Size OPT TODO !!
@@ -3645,12 +3662,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 		funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
 
 		tkType1 = GetToken(ar, tk1);
-		/*if (tkType1 == TK_IF)
-		{
-			if (false == ParseIF(pJumps, ar, funs, vars, NULL, pContinueJumps))
-				return false;
-		}
-		else*/ if (tkType1 == TK_L_MIDDLE)
+		if (tkType1 == TK_L_MIDDLE)
 		{
 			AddLocalVar(vars.GetCurrentLayer());
 

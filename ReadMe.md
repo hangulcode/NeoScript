@@ -257,7 +257,7 @@ Build : Release Mode 64bit
 	- return [x]: 진행 중인 함수를 리턴, x 가 있으면 x 변수를 리턴
 	- break: 실행중인 루프문을 빠져 나옴
 	- continue: 실행중인 루프문의 다음 반복으로 진행
-	- if (x) / else / elif: 조건 문이 true 이면 if 다음을 false 이면 else 다음을 처리
+	- if (x) / else / else if: 조건 문이 true 이면 if 다음을 false 이면 else 다음을 처리 (C 스타일 else if 체인 지원, 구 elif 는 폐기됨)
 	- for : for (var a in 1, 100, 1) 순서는 초기값, 최종값, 증가값
 	- foreach : map, list, set 자료구조에 사용. Must be foreach (var a[, b] in map)
 	- true / false: bool 타입 변수에 저장되는 값

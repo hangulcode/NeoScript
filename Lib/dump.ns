@@ -22,7 +22,7 @@ fun object(var o)
         }
         return s .. "}";
 	}
-    elif(t == "list")
+    else if(t == "list")
 	{
         var s = "[";
         foreach(var v in o)
@@ -37,7 +37,7 @@ fun object(var o)
         }
         return s .. "]";
 	}
-    elif(t == "set")
+    else if(t == "set")
 	{
         var s = "(";
         foreach(var k in o)
