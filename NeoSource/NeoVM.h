@@ -41,6 +41,17 @@ enum class NeoExecutionState : u8
 	SuspendedDebugger,
 };
 
+// 호스트가 Script 함수를 시작하려 할 때의 컨텍스트 상태.
+// Nested는 실행 중인 Script의 native callback에서만 현재 컨텍스트를 재사용한다.
+enum class NeoHostCallBegin : u8
+{
+	Acquired,
+	Nested,
+	Suspended,
+	NoPool,
+	InvalidState,
+};
+
 enum NeoCompileDefineTokenType
 {
 	NEO_DEFINE_TOKEN_IDENTIFIER,
@@ -523,8 +534,10 @@ public:
 	template<typename RVal, typename ... Types>
 	bool iCall(RVal& r, int iFID, Types ... args)
 	{
-		bool __acq = BeginHostCall();
-		ScopedNestedScriptCall nestedScriptCall(this, __acq == false);
+		NeoHostCallBegin begin = BeginHostCall();
+		if (begin != NeoHostCallBegin::Acquired && begin != NeoHostCallBegin::Nested)
+			return false;
+		ScopedNestedScriptCall nestedScriptCall(this, begin == NeoHostCallBegin::Nested);
 		std::vector<VarInfo> args_;
 		_args = &args_;
 		PushArgs(args...);
@@ -533,21 +546,23 @@ public:
 		if (RunFunction(iFID, args_) == false)
 		{
 			ReleaseArgs(args_);
-			EndHostCall(__acq);
+			EndHostCall(begin);
 			return false;
 		}
 		GC();
 		ReleaseArgs(args_);
 		_read(GetReturnVar(), r);
-		EndHostCall(__acq);
+		EndHostCall(begin);
 		return true;
 	}
 
 	template<typename ... Types>
 	bool iCallN(int iFID, Types ... args)
 	{
-		bool __acq = BeginHostCall();
-		ScopedNestedScriptCall nestedScriptCall(this, __acq == false);
+		NeoHostCallBegin begin = BeginHostCall();
+		if (begin != NeoHostCallBegin::Acquired && begin != NeoHostCallBegin::Nested)
+			return false;
+		ScopedNestedScriptCall nestedScriptCall(this, begin == NeoHostCallBegin::Nested);
 		std::vector<VarInfo> args_;
 		_args = &args_;
 		PushArgs(args...);
@@ -556,21 +571,23 @@ public:
 		if (RunFunction(iFID, args_) == false)
 		{
 			ReleaseArgs(args_);
-			EndHostCall(__acq);
+			EndHostCall(begin);
 			return false;
 		}
 		GC();
 		ReleaseArgs(args_);
 		ReturnValue();
-		EndHostCall(__acq);
+		EndHostCall(begin);
 		return true;
 	}
 
 	template<typename RVal, typename ... Types>
 	bool Call(RVal& r, const std::string& funName, Types ... args)
 	{
-		bool __acq = BeginHostCall();
-		ScopedNestedScriptCall nestedScriptCall(this, __acq == false);
+		NeoHostCallBegin begin = BeginHostCall();
+		if (begin != NeoHostCallBegin::Acquired && begin != NeoHostCallBegin::Nested)
+			return false;
+		ScopedNestedScriptCall nestedScriptCall(this, begin == NeoHostCallBegin::Nested);
 		std::vector<VarInfo> args_;
 		_args = &args_;
 		PushArgs(args...);
@@ -579,21 +596,23 @@ public:
 		if (RunFunction(funName, args_) == false)
 		{
 			ReleaseArgs(args_);
-			EndHostCall(__acq);
+			EndHostCall(begin);
 			return false;
 		}
 		GC();
 		ReleaseArgs(args_);
 		_read(GetReturnVar(), r);
-		EndHostCall(__acq);
+		EndHostCall(begin);
 		return true;
 	}
 
 	template<typename ... Types>
 	bool CallN(const std::string& funName, Types ... args)
 	{
-		bool __acq = BeginHostCall();
-		ScopedNestedScriptCall nestedScriptCall(this, __acq == false);
+		NeoHostCallBegin begin = BeginHostCall();
+		if (begin != NeoHostCallBegin::Acquired && begin != NeoHostCallBegin::Nested)
+			return false;
+		ScopedNestedScriptCall nestedScriptCall(this, begin == NeoHostCallBegin::Nested);
 		std::vector<VarInfo> args_;
 		_args = &args_;
 		PushArgs(args...);
@@ -602,13 +621,13 @@ public:
 		if (RunFunction(funName, args_) == false)
 		{
 			ReleaseArgs(args_);
-			EndHostCall(__acq);
+			EndHostCall(begin);
 			return false;
 		}
 		GC();
 		ReleaseArgs(args_);
 		ReturnValue();
-		EndHostCall(__acq);
+		EndHostCall(begin);
 		return true;
 	}
 
@@ -618,8 +637,8 @@ public:
 		if (IsSuspended())
 			return false;
 
-		bool __acq = BeginHostCall();
-		if (__acq == false)
+		NeoHostCallBegin begin = BeginHostCall();
+		if (begin != NeoHostCallBegin::Acquired)
 			return false;
 
 		std::vector<VarInfo> args_;
@@ -630,7 +649,7 @@ public:
 		if (false == Setup(iFID, args_))
 		{
 			ReleaseArgs(args_);
-			EndHostCall(__acq);
+			EndHostCall(begin);
 			return false;
 		}
 		ReleaseArgs(args_);
@@ -665,8 +684,8 @@ public:
 	virtual bool IsSuspended() = 0;
 	// 호스트→스크립트 함수 호출(Call/CallN/iCall/iCallN)용. idle 이면 최상위 컨텍스트를 대여하고
 	// (반환값=대여했는지), 완료 후 EndHostCall 에서 반납한다. 실행 중(중첩 호출)이면 현재 컨텍스트 재사용.
-	virtual bool BeginHostCall() = 0;
-	virtual void EndHostCall(bool acquired) = 0;
+	virtual NeoHostCallBegin BeginHostCall() = 0;
+	virtual void EndHostCall(NeoHostCallBegin begin) = 0;
 	virtual void BeginNestedScriptCall() = 0;
 	virtual void EndNestedScriptCall() = 0;
 	virtual void SetTimeout(int iTimeout, int iCheckOpCount) = 0;

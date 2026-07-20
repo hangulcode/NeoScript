@@ -873,10 +873,16 @@ bool	CNeoVMWorker::Start(int iFunctionID, std::vector<VarInfo>& _args)
 	if (m_pMainCtx == nullptr)
 		return ExecuteTop(iFunctionID, _args) != NEOEXEC_ERROR;
 
+	// Script A -> native API -> Script B는 동일한 코드 버퍼를 공유한다.
+	// Script B가 정상 반환하면 Script A의 다음 opcode부터 계속 실행해야 한다.
+	const bool isNestedScriptCall = (m_iNativeScriptCallDepth > 0);
+	const int returnCodePtr = isNestedScriptCall ? GetCodeptr() : 0;
 	if(false == Setup(iFunctionID, _args))
 		return false;
 
 	bool result = Run();
+	if (result && isNestedScriptCall)
+		SetCodePtr(returnCodePtr);
 	GetVM()->PublishAllocStats();
 	return result;
 }
@@ -1010,13 +1016,23 @@ bool CNeoVMWorker::IsSuspended()
 }
 
 // 호스트→스크립트 함수 호출(Call/CallN/iCall/iCallN)용 컨텍스트 대여.
-// idle 이면 최상위 컨텍스트를 새로 대여(true), 이미 실행/정지 중이면 중첩으로 보고 재사용(false).
-bool CNeoVMWorker::BeginHostCall()
+NeoHostCallBegin CNeoVMWorker::BeginHostCall()
 {
 	if (m_pMainCtx != nullptr)
-		return false;
+	{
+		switch (GetExecutionState())
+		{
+		case NeoExecutionState::Running:
+			return NeoHostCallBegin::Nested;
+		case NeoExecutionState::SuspendedSleep:
+		case NeoExecutionState::SuspendedDebugger:
+			return NeoHostCallBegin::Suspended;
+		default:
+			return NeoHostCallBegin::InvalidState;
+		}
+	}
 	if (m_pPool == nullptr)
-		return false;
+		return NeoHostCallBegin::NoPool;
 
 	m_pMainCtx = m_pPool->Acquire();
 	BindContext(m_pMainCtx);
@@ -1028,11 +1044,11 @@ bool CNeoVMWorker::BeginHostCall()
 	_iSP_Vars_Max2 = 0;
 	_iRemainSleep = 0;
 	_isInitialized = true;
-	return true;
+	return NeoHostCallBegin::Acquired;
 }
-void CNeoVMWorker::EndHostCall(bool acquired)
+void CNeoVMWorker::EndHostCall(NeoHostCallBegin begin)
 {
-	if (acquired == false)
+	if (begin != NeoHostCallBegin::Acquired)
 		return;
 	// An error can also be reported as a debugger pause.  It is inspect-only:
 	// never retain the failed execution context for a later F5/F10/F11 resume.

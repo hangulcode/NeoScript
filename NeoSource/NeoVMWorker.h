@@ -271,8 +271,8 @@ private:
 	virtual int	ResumeTop();
 	virtual NeoExecutionState GetExecutionState();
 	virtual bool IsSuspended();
-	virtual bool BeginHostCall();
-	virtual void EndHostCall(bool acquired);
+	virtual NeoHostCallBegin BeginHostCall();
+	virtual void EndHostCall(NeoHostCallBegin begin);
 	virtual void BeginNestedScriptCall();
 	virtual void EndNestedScriptCall();
 
