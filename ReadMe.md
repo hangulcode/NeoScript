@@ -165,9 +165,10 @@ Lifecycle — *borrow on execute / return on complete / retain on suspend*:
   VM holds none. So pool size tracks *concurrently live executions*, not object count.
 
 The pool is **required** — there is no hidden internal fallback. The host owns it and injects it through
-`NeoLoadVMParam::execPool`. Because a context is only ever touched by one execution at a time, keep one
-pool per thread (e.g. `thread_local`); acquire/release is then lock-free. A VM inherits the pool of the VM
-that created it (e.g. modules loaded by `system.load`/`pcall`), so nested module workers need no separate setup.
+`NeoLoadVMParam::execPool`. A pool is thread-confined and has no internal synchronization, so create and use
+one pool per thread (e.g. `thread_local`). Reusing an already allocated context takes the no-lock fast path;
+growing the pool may allocate memory. A VM inherits the pool of the VM that created it (e.g. modules loaded by
+`system.load`/`pcall`), so nested module workers need no separate setup.
 
 ```cpp
 // One pool per thread. varStackSize = entries in each context's var stack.
@@ -185,6 +186,9 @@ NeoScript::NeoExecContextPool_Destroy(pool);     // after all VMs that used it a
 ```
 
 Host entry points:
+- `INeoVMWorker::GetExecutionState()` returns `Idle`, `Running`, `SuspendedSleep`, or
+  `SuspendedDebugger`. It is derived from the live worker context, so it cannot drift from the actual
+  execution state.
 - `INeoVM::CompileAndLoadRunVM` / `CompileAndLoadVM` + `INeoVM::PCall` — run the script body (top level).
 - `INeoVMWorker::ExecuteTop(fid, args)` — run a function as a fresh top-level execution.
   Returns `NeoExecStatus`: `NEOEXEC_COMPLETED`, `NEOEXEC_SUSPENDED`, or `NEOEXEC_ERROR`.
@@ -195,6 +199,19 @@ Host entry points:
 - `Call` / `CallN` / `iCall` / `iCallN` (host → script function) auto-acquire a context when the VM is idle
   and return it when done; when called from inside a running script (native callback) they reuse the current
   context (nested call).
+
+#### Synchronous native-to-script callbacks
+
+`Script A -> native API -> Script B` is a **synchronous nested call**. The native API must receive Script B's
+result before it can return to Script A, so Script B does not own a resumable execution context.
+
+- Breakpoints, stepping, and a requested debugger pause are suppressed while Script B is running. Debug Script A
+  before the native call, or debug Script B through a top-level entry point instead.
+- `sleep(...)` and `yield` are rejected with a runtime error in Script B. They would otherwise leave Script B
+  suspended after its native caller has already returned to Script A.
+- The same restriction applies to a module body started synchronously by `system.pcall(...)`.
+- A synchronous callback may call ordinary functions and return values normally. For delayed work, have the native
+  API schedule a new top-level `ExecuteTop`/`ResumeTop` execution instead of invoking Script B synchronously.
 
 > Note: `NeoExecContextPool_Create` returns an opaque handle; its full type lives in the internal headers.
 > Only the pointer, the two factory functions, and `NeoLoadVMParam::execPool` are part of the public API.

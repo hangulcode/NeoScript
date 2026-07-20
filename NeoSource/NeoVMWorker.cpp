@@ -14,6 +14,16 @@ namespace NeoScript
 
 void	SetCompileError(const char*	lpszString, ...);
 
+namespace
+{
+	struct ScopedCounter
+	{
+		int& value;
+		explicit ScopedCounter(int& value) : value(value) { ++value; }
+		~ScopedCounter() { --value; }
+	};
+}
+
 void SVarWrapper::SetNone() { _vmw->Var_SetNone(_var); }
 void SVarWrapper::SetInt(int v) { _vmw->Var_SetInt(_var, v); }
 void SVarWrapper::SetFloat(NS_FLOAT v) { _vmw->Var_SetFloat(_var, v); }
@@ -299,24 +309,31 @@ void CNeoVMWorker::Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue)
 	int op = GetCodeptr();
 	int iSave_SP_Vars = _iSP_Vars;
 	int iSave_SP_VarsMax = _iSP_VarsMax;
+	int iSaveBreakingCallStack = m_iBreakingCallStack;
 
 	_iSP_Vars = _iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);
 
+	ScopedCounter nativeCallbackScope(m_iNativeCallbackDepth);
 	if ((*fun->_fn)(this, fun, n2) < 0)
 	{
 		// SetError 는 오류 opcode로 점프시키므로 코드 포인터는 복구하지 않는다.
 		// 다만 native 호출 프레임으로 옮긴 스택 레지스터는 부모 프레임으로 되돌려야 한다.
 		_iSP_Vars = iSave_SP_Vars;
 		_iSP_VarsMax = iSave_SP_VarsMax;
+		m_iBreakingCallStack = iSaveBreakingCallStack;
 		SetStackPointer(_iSP_Vars);
-		SetError("Ptr Call Argument Count Error");
+		if (GetVM()->IsLastErrorMsg())
+			SetCodePtr(0);
+		else
+			SetError("Ptr Call Argument Count Error");
 		return;
 	}
 	_iSP_Vars = iSave_SP_Vars;
 	SetStackPointer(_iSP_Vars);
 	SetCodePtr(op);
 	_iSP_VarsMax = iSave_SP_VarsMax;
+	m_iBreakingCallStack = iSaveBreakingCallStack;
 }
 
 void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
@@ -721,7 +738,7 @@ std::string CNeoVMWorker::FormatStackTrace(int currentOpIndex)
 }
 bool CNeoVMWorker::CheckDebugStop(int iOPIndex)
 {
-	if (m_bDebugPaused)
+	if (m_eDebugRunMode == DBG_PAUSED)
 		return true;
 	if (m_pDebugListener == nullptr && m_iDebugBreakCount <= 0 && m_eDebugRunMode == DBG_CONTINUE && m_bDebugPauseRequested == false)
 		return false;
@@ -805,7 +822,6 @@ void CNeoVMWorker::StopDebug(int iOPIndex, NeoDebugStopReason reason)
 	m_sDebugLocation.file = info._fileseq;
 	m_sDebugLocation.line = info._lineseq;
 	m_sDebugLocation.callDepth = m_pCallStack ? (int)m_pCallStack->size() : 0;
-	m_bDebugPaused = true;
 	m_bDebugFaulted = (reason == NEO_DEBUG_STOP_EXCEPTION);
 	m_bDebugPauseRequested = false;
 	m_eDebugRunMode = DBG_PAUSED;
@@ -941,7 +957,7 @@ int CNeoVMWorker::RunSettle()
 		return NEOEXEC_ERROR;
 	}
 	// 정지(retain) 조건: sleep 대기 또는 디버거 pause.
-	if (_iRemainSleep > 0 || m_bDebugPaused)
+	if (IsSuspended())
 		return NEOEXEC_SUSPENDED;
 
 	ReleaseExecution();
@@ -988,6 +1004,23 @@ int CNeoVMWorker::ResumeTop()
 	return status;
 }
 
+NeoExecutionState CNeoVMWorker::GetExecutionState()
+{
+	if (m_pMainCtx == nullptr)
+		return NeoExecutionState::Idle;
+	if (m_eDebugRunMode == DBG_PAUSED)
+		return NeoExecutionState::SuspendedDebugger;
+	if (_iRemainSleep > 0)
+		return NeoExecutionState::SuspendedSleep;
+	return NeoExecutionState::Running;
+}
+
+bool CNeoVMWorker::IsSuspended()
+{
+	NeoExecutionState state = GetExecutionState();
+	return state == NeoExecutionState::SuspendedSleep || state == NeoExecutionState::SuspendedDebugger;
+}
+
 // 호스트→스크립트 함수 호출(Call/CallN/iCall/iCallN)용 컨텍스트 대여.
 // idle 이면 최상위 컨텍스트를 새로 대여(true), 이미 실행/정지 중이면 중첩으로 보고 재사용(false).
 bool CNeoVMWorker::BeginHostCall()
@@ -1021,7 +1054,7 @@ void CNeoVMWorker::EndHostCall(bool acquired)
 		GetVM()->PublishAllocStats();
 		return;
 	}
-	if (_iRemainSleep > 0 || m_bDebugPaused)
+	if (IsSuspended())
 	{
 		GetVM()->PublishAllocStats();
 		return;   // 호출이 정지(sleep/브레이크)됐으면 컨텍스트 retain
@@ -1199,7 +1232,6 @@ void CNeoVMWorker::DebugGetExecutableLocations(std::vector<NeoDebugLocation>& lo
 }
 void CNeoVMWorker::DebugContinue()
 {
-	m_bDebugPaused = false;
 	m_bDebugPauseRequested = false;
 	m_eDebugRunMode = DBG_CONTINUE;
 	m_iDebugSkipFile = m_sDebugLocation.file;
@@ -1209,7 +1241,6 @@ void CNeoVMWorker::DebugContinue()
 }
 void CNeoVMWorker::DebugStepInto()
 {
-	m_bDebugPaused = false;
 	m_bDebugPauseRequested = false;
 	m_eDebugRunMode = DBG_STEP_INTO;
 	m_iDebugSkipFile = m_sDebugLocation.file;
@@ -1219,7 +1250,6 @@ void CNeoVMWorker::DebugStepInto()
 }
 void CNeoVMWorker::DebugStepOver()
 {
-	m_bDebugPaused = false;
 	m_bDebugPauseRequested = false;
 	m_eDebugRunMode = DBG_STEP_OVER;
 	m_iDebugSkipFile = m_sDebugLocation.file;
@@ -1229,7 +1259,6 @@ void CNeoVMWorker::DebugStepOver()
 }
 void CNeoVMWorker::DebugStepOut()
 {
-	m_bDebugPaused = false;
 	m_bDebugPauseRequested = false;
 	m_eDebugRunMode = DBG_STEP_OUT;
 	m_iDebugSkipFile = m_sDebugLocation.file;
@@ -1243,7 +1272,7 @@ void CNeoVMWorker::DebugPause()
 }
 bool CNeoVMWorker::DebugIsPaused()
 {
-	return m_bDebugPaused;
+	return GetExecutionState() == NeoExecutionState::SuspendedDebugger;
 }
 NeoDebugLocation CNeoVMWorker::DebugGetLocation()
 {
@@ -1393,7 +1422,7 @@ void CNeoVMWorker::DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames)
 {
 	frames.clear();
 
-	int codeOffset = m_bDebugPaused ? m_sDebugLocation.opIndex * (int)sizeof(SVMOperation) : GetCodeptr();
+	int codeOffset = DebugIsPaused() ? m_sDebugLocation.opIndex * (int)sizeof(SVMOperation) : GetCodeptr();
 	if (codeOffset < 0)
 		codeOffset = 0;
 
@@ -1526,6 +1555,7 @@ bool	CNeoVMWorker::Run()
 	{
 #endif
 		bool debugActive = (m_iDebugSuppressCount == 0) &&
+			(m_iNativeCallbackDepth == 0) &&
 			(m_iDebugBreakCount > 0 ||
 			 m_eDebugRunMode != DBG_CONTINUE ||
 			 m_bDebugPauseRequested);
@@ -1916,17 +1946,30 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 	}
 	if (!EnsureStackRange(_iSP_VarsMax, n3))
 		return false;
+	int op = GetCodeptr();
 	int iSave = _iSP_Vars;
+	int iSave_SP_VarsMax = _iSP_VarsMax;
+	int iSaveBreakingCallStack = m_iBreakingCallStack;
 	_iSP_Vars = _iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);
 	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1 + n3) // ??????? 이렇게 하면 맞나? 흠...
 		_iSP_Vars_Max2 = _iSP_VarsMax + 1 + n3;
 
-	if ((func)(this, pUserData, pStr, n3) == false)
+	bool nativeResult;
+	{
+		ScopedCounter nativeCallbackScope(m_iNativeCallbackDepth);
+		nativeResult = (func)(this, pUserData, pStr, n3);
+	}
+	if (nativeResult == false)
 	{
 		_iSP_Vars = iSave;
 		SetStackPointer(_iSP_Vars);
-		SetError("Ptr Call Error");
+		_iSP_VarsMax = iSave_SP_VarsMax;
+		m_iBreakingCallStack = iSaveBreakingCallStack;
+		if (GetVM()->IsLastErrorMsg())
+			SetCodePtr(0);
+		else
+			SetError("Ptr Call Error");
 		return false;
 	}
 	if (nullptr != pRet)
@@ -1935,6 +1978,9 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 	int argSP_Vars = _iSP_Vars;
 	_iSP_Vars = iSave;
 	SetStackPointer(_iSP_Vars);
+	SetCodePtr(op);
+	_iSP_VarsMax = iSave_SP_VarsMax;
+	m_iBreakingCallStack = iSaveBreakingCallStack;
 	if (m_pRegisterActive != NULL)
 	{
 		switch(m_pRegisterActive->_sub_state)
@@ -1981,17 +2027,30 @@ bool CNeoVMWorker::CallDefaultNativeByIndex(int nativeIndex, int n3, VarInfo* pR
 {
 	if (!EnsureStackRange(_iSP_VarsMax, n3))
 		return false;
+	int op = GetCodeptr();
 	int iSave = _iSP_Vars;
+	int iSave_SP_VarsMax = _iSP_VarsMax;
+	int iSaveBreakingCallStack = m_iBreakingCallStack;
 	_iSP_Vars = _iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);
 	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1 + n3)
 		_iSP_Vars_Max2 = _iSP_VarsMax + 1 + n3;
 
-	if (CNeoVMImpl::CallDefaultNativeByIndex(nativeIndex, this, (short)n3) == false)
+	bool nativeResult;
+	{
+		ScopedCounter nativeCallbackScope(m_iNativeCallbackDepth);
+		nativeResult = CNeoVMImpl::CallDefaultNativeByIndex(nativeIndex, this, (short)n3);
+	}
+	if (nativeResult == false)
 	{
 		_iSP_Vars = iSave;
 		SetStackPointer(_iSP_Vars);
-		SetError("Ptr Call Error");
+		_iSP_VarsMax = iSave_SP_VarsMax;
+		m_iBreakingCallStack = iSaveBreakingCallStack;
+		if (GetVM()->IsLastErrorMsg())
+			SetCodePtr(0);
+		else
+			SetError("Ptr Call Error");
 		return false;
 	}
 	if (nullptr != pRet)
@@ -2000,6 +2059,9 @@ bool CNeoVMWorker::CallDefaultNativeByIndex(int nativeIndex, int n3, VarInfo* pR
 	int argSP_Vars = _iSP_Vars;
 	_iSP_Vars = iSave;
 	SetStackPointer(_iSP_Vars);
+	SetCodePtr(op);
+	_iSP_VarsMax = iSave_SP_VarsMax;
+	m_iBreakingCallStack = iSaveBreakingCallStack;
 	if (m_pRegisterActive != NULL)
 	{
 		switch(m_pRegisterActive->_sub_state)
@@ -2052,17 +2114,30 @@ bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUs
 	}
 	if (!EnsureStackRange(_iSP_VarsMax, 0))
 		return false;
+	int op = GetCodeptr();
 	int iSave = _iSP_Vars;
+	int iSave_SP_VarsMax = _iSP_VarsMax;
+	int iSaveBreakingCallStack = m_iBreakingCallStack;
 	_iSP_Vars = _iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);
 	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1)
 		_iSP_Vars_Max2 = _iSP_VarsMax + 1;
 
-	if ((func)(this, pUserData, pStr, pRet, get) == false)
+	bool nativeResult;
+	{
+		ScopedCounter nativeCallbackScope(m_iNativeCallbackDepth);
+		nativeResult = (func)(this, pUserData, pStr, pRet, get);
+	}
+	if (nativeResult == false)
 	{
 		_iSP_Vars = iSave;
 		SetStackPointer(_iSP_Vars);
-		SetError("Ptr Call Error");
+		_iSP_VarsMax = iSave_SP_VarsMax;
+		m_iBreakingCallStack = iSaveBreakingCallStack;
+		if (GetVM()->IsLastErrorMsg())
+			SetCodePtr(0);
+		else
+			SetError("Ptr Call Error");
 		return false;
 	}
 
@@ -2071,6 +2146,9 @@ bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUs
 	int argSP_Vars = _iSP_Vars;
 	_iSP_Vars = iSave;
 	SetStackPointer(_iSP_Vars);
+	SetCodePtr(op);
+	_iSP_VarsMax = iSave_SP_VarsMax;
+	m_iBreakingCallStack = iSaveBreakingCallStack;
 	if (m_pRegisterActive != NULL)
 	{
 		switch (m_pRegisterActive->_sub_state)

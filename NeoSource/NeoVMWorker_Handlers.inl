@@ -36,6 +36,10 @@ NEOS_FORCEINLINE bool handle_GETTYPE(const SVMOperation& OP) {
 }
 
 NEOS_FORCEINLINE bool handle_SLEEP(const SVMOperation& OP) {
+	if (m_iNativeCallbackDepth > 0) {
+		SetError("sleep is not allowed in a synchronous native-to-script call");
+		return false;
+	}
     int r = Sleep(m_iTimeout, GetVarPtr2(OP));
     if (r == 0) {
         return true; // Exit RunInternal
@@ -261,6 +265,10 @@ NEOS_FORCEINLINE bool handle_CHANGE_INT(const SVMOperation& OP) {
 }
 
 NEOS_FORCEINLINE bool handle_YIELD(const SVMOperation& OP) {
+	if (m_iNativeCallbackDepth > 0) {
+		SetError("yield is not allowed in a synchronous native-to-script call");
+		return false;
+	}
     if (StopCoroutine(false) == false)
         return true; // Exit RunInternal
     return false; // Continue RunInternal

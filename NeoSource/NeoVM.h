@@ -19,7 +19,7 @@ struct SFunctionLayer;
 struct SFunctions;
 NEOS_FORCEINLINE void Move_DestNoRelease(VarInfo* v1, VarInfo* v2);
 
-// 실행 컨텍스트 풀 팩토리. 엔진이 스레드별(thread_local)로 하나 만들어 NeoLoadVMParam::execPool 로 주입한다.
+// 실행 컨텍스트 풀 팩토리. 내부 동기화가 없으므로 엔진이 스레드별(thread_local)로 하나 만들어 주입한다.
 // varStackSize: 각 컨텍스트의 var 스택 엔트리 수.
 NeoExecContextPool* NeoExecContextPool_Create(int varStackSize = 50 * 1024);
 void                NeoExecContextPool_Destroy(NeoExecContextPool* pool);
@@ -30,6 +30,15 @@ enum NeoExecStatus
 	NEOEXEC_COMPLETED = 0,   // 실행이 끝까지 완료됨 → 컨텍스트 반납됨
 	NEOEXEC_SUSPENDED = 1,   // sleep/yield/브레이크로 정지 → 컨텍스트 retain(반납 안 됨), Resume 필요
 	NEOEXEC_ERROR     = 2,   // 에러 → 컨텍스트 반납됨
+};
+
+// 워커의 현재 실행 상태. 별도 플래그를 저장하지 않고 워커의 실제 컨텍스트/정지 상태에서 계산한다.
+enum class NeoExecutionState : u8
+{
+	Idle,
+	Running,
+	SuspendedSleep,
+	SuspendedDebugger,
 };
 
 enum NeoCompileDefineTokenType
@@ -628,6 +637,8 @@ public:
 	// 최상위 실행/재개 (NeoExecStatus 반환). IsSuspended() 가 true 면 ResumeTop() 을 호출한다.
 	virtual int	ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args) = 0;
 	virtual int	ResumeTop() = 0;
+	virtual NeoExecutionState GetExecutionState() = 0;
+	// SuspendedSleep 또는 SuspendedDebugger일 때만 true. Running 상태는 포함하지 않는다.
 	virtual bool IsSuspended() = 0;
 	// 호스트→스크립트 함수 호출(Call/CallN/iCall/iCallN)용. idle 이면 최상위 컨텍스트를 대여하고
 	// (반환값=대여했는지), 완료 후 EndHostCall 에서 반납한다. 실행 중(중첩 호출)이면 현재 컨텍스트 재사용.

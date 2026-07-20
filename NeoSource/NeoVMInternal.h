@@ -290,7 +290,7 @@ struct CoroutineInfo : AllocBase
 typedef CoroutineInfo NeoExecContext;
 
 // 실행 컨텍스트 풀. 호스트(엔진)가 스레드별로 소유(thread_local)하고 VM 로드 시 주입한다.
-// 스레드별 사용 전제라 내부 락이 없다. Acquire/Release 는 free-list pop/push.
+// 스레드 귀속 사용 전제라 내부 동기화가 없다. 재사용 fast path는 free-list pop/push이며, 확장은 할당할 수 있다.
 struct NeoExecContextPool
 {
 	CNVMInstPool<CoroutineInfo, 32> _pool;

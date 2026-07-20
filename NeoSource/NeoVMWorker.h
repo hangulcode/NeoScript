@@ -145,13 +145,14 @@ private:
     NeoDebugLocation m_sDebugLocation;
     EDebugRunMode m_eDebugRunMode = DBG_CONTINUE;
     bool m_bDebugPauseRequested = false;
-    bool m_bDebugPaused = false;
 	bool m_bDebugFaulted = false;
     int m_iDebugSkipFile = -1;
     int m_iDebugSkipLine = -1;
     int m_iDebugSkipOpIndex = -1;
     int m_iDebugStepDepth = -1;
     int m_iDebugSuppressCount = 0;
+    // Native callback 또는 동기 module pcall 중에는 Script 재진입을 중단/재개할 수 없다.
+    int m_iNativeCallbackDepth = 0;
 
     void ClearDebugBreakpoints();
     void SetDebugBreakLineBit(std::vector<u8>& bits, int line);
@@ -268,7 +269,8 @@ private:
 	virtual bool	Run();
 	virtual int	ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args);
 	virtual int	ResumeTop();
-	virtual bool IsSuspended() { return m_pMainCtx != nullptr; }
+	virtual NeoExecutionState GetExecutionState();
+	virtual bool IsSuspended();
 	virtual bool BeginHostCall();
 	virtual void EndHostCall(bool acquired);
 
