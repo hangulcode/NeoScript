@@ -573,9 +573,7 @@ bool CNeoVMImpl::PCall(int iModule)
 
 	auto pWorker = (*it).second;
 	std::vector<VarInfo> _args;
-	++pWorker->m_iNativeCallbackDepth;
 	int st = pWorker->ExecuteTop(0, _args);   // 모듈 본문(함수0)을 풀 컨텍스트로 최상위 실행
-	--pWorker->m_iNativeCallbackDepth;
 	return st != NEOEXEC_ERROR;
 }
 

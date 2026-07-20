@@ -1008,6 +1008,11 @@ struct neo_libs
 
 	static bool async_get(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
+		if (pN->IsNativeScriptCallActive())
+		{
+			pN->SetError("async.get is not allowed in a synchronous native-to-script call");
+			return false;
+		}
 		if (args != 3) return false;
 		if (pVar->GetType() != VAR_ASYNC) return false;
 		AsyncInfo* pAsync = pVar->_async;
@@ -1039,6 +1044,11 @@ struct neo_libs
 	}
 	static bool async_post(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
+		if (pN->IsNativeScriptCallActive())
+		{
+			pN->SetError("async.post is not allowed in a synchronous native-to-script call");
+			return false;
+		}
 		if (args != 4) return false;
 		if (pVar->GetType() != VAR_ASYNC) return false;
 		AsyncInfo* pAsync = pVar->_async;
@@ -1096,6 +1106,11 @@ struct neo_libs
 	}
 	static bool async_wait(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
+		if (pN->IsNativeScriptCallActive())
+		{
+			pN->SetError("async.wait is not allowed in a synchronous native-to-script call");
+			return false;
+		}
 		if (args != 0) return false;
 		if (pVar->GetType() != VAR_ASYNC) return false;
 		AsyncInfo* pAsync = pVar->_async;

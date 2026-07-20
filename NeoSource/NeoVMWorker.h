@@ -151,8 +151,8 @@ private:
     int m_iDebugSkipOpIndex = -1;
     int m_iDebugStepDepth = -1;
     int m_iDebugSuppressCount = 0;
-    // Native callback 또는 동기 module pcall 중에는 Script 재진입을 중단/재개할 수 없다.
-    int m_iNativeCallbackDepth = 0;
+    // Script A -> native API -> Script B 동기 재진입 범위에서만 증가한다.
+    int m_iNativeScriptCallDepth = 0;
 
     void ClearDebugBreakpoints();
     void SetDebugBreakLineBit(std::vector<u8>& bits, int line);
@@ -273,6 +273,8 @@ private:
 	virtual bool IsSuspended();
 	virtual bool BeginHostCall();
 	virtual void EndHostCall(bool acquired);
+	virtual void BeginNestedScriptCall();
+	virtual void EndNestedScriptCall();
 
 	template<bool TIMEOUT, bool DEBUG>
 	bool	RunInternal(int iBreakingCallStack);
@@ -307,6 +309,7 @@ private:
 	bool EnsureStackRange(int base, int lastOffset);
 public:
 	NEOS_FORCEINLINE CNeoVMImpl* GetVM() { return (CNeoVMImpl*)_pVM;  }
+	bool IsNativeScriptCallActive() const { return m_iNativeScriptCallDepth > 0; }
 	virtual void SetTimeout(int iTimeout, int iCheckOpCount) {
 		m_iTimeout = iTimeout;
 		m_iCheckOpCount = iCheckOpCount;

@@ -501,10 +501,30 @@ public:
 			Var_Release(&arg);
 	}
 
+	class ScopedNestedScriptCall
+	{
+		INeoVMWorker* m_pWorker = nullptr;
+	public:
+		ScopedNestedScriptCall(INeoVMWorker* worker, bool active)
+		{
+			if (active)
+			{
+				m_pWorker = worker;
+				m_pWorker->BeginNestedScriptCall();
+			}
+		}
+		~ScopedNestedScriptCall()
+		{
+			if (m_pWorker != nullptr)
+				m_pWorker->EndNestedScriptCall();
+		}
+	};
+
 	template<typename RVal, typename ... Types>
 	bool iCall(RVal& r, int iFID, Types ... args)
 	{
 		bool __acq = BeginHostCall();
+		ScopedNestedScriptCall nestedScriptCall(this, __acq == false);
 		std::vector<VarInfo> args_;
 		_args = &args_;
 		PushArgs(args...);
@@ -527,6 +547,7 @@ public:
 	bool iCallN(int iFID, Types ... args)
 	{
 		bool __acq = BeginHostCall();
+		ScopedNestedScriptCall nestedScriptCall(this, __acq == false);
 		std::vector<VarInfo> args_;
 		_args = &args_;
 		PushArgs(args...);
@@ -549,6 +570,7 @@ public:
 	bool Call(RVal& r, const std::string& funName, Types ... args)
 	{
 		bool __acq = BeginHostCall();
+		ScopedNestedScriptCall nestedScriptCall(this, __acq == false);
 		std::vector<VarInfo> args_;
 		_args = &args_;
 		PushArgs(args...);
@@ -571,6 +593,7 @@ public:
 	bool CallN(const std::string& funName, Types ... args)
 	{
 		bool __acq = BeginHostCall();
+		ScopedNestedScriptCall nestedScriptCall(this, __acq == false);
 		std::vector<VarInfo> args_;
 		_args = &args_;
 		PushArgs(args...);
@@ -644,6 +667,8 @@ public:
 	// (반환값=대여했는지), 완료 후 EndHostCall 에서 반납한다. 실행 중(중첩 호출)이면 현재 컨텍스트 재사용.
 	virtual bool BeginHostCall() = 0;
 	virtual void EndHostCall(bool acquired) = 0;
+	virtual void BeginNestedScriptCall() = 0;
+	virtual void EndNestedScriptCall() = 0;
 	virtual void SetTimeout(int iTimeout, int iCheckOpCount) = 0;
 	virtual VarInfo* GetVar(const std::string& name) = 0;
 	virtual bool BindWorkerFunction(const std::string& funName) = 0;

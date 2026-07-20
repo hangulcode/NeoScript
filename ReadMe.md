@@ -207,9 +207,8 @@ result before it can return to Script A, so Script B does not own a resumable ex
 
 - Breakpoints, stepping, and a requested debugger pause are suppressed while Script B is running. Debug Script A
   before the native call, or debug Script B through a top-level entry point instead.
-- `sleep(...)` and `yield` are rejected with a runtime error in Script B. They would otherwise leave Script B
-  suspended after its native caller has already returned to Script A.
-- The same restriction applies to a module body started synchronously by `system.pcall(...)`.
+- `sleep(...)`, `yield`, `async.get(...)`, `async.post(...)`, and `async.wait()` are rejected with a runtime error
+  in Script B. They would otherwise leave Script B suspended after its native caller has already returned to Script A.
 - A synchronous callback may call ordinary functions and return values normally. For delayed work, have the native
   API schedule a new top-level `ExecuteTop`/`ResumeTop` execution instead of invoking Script B synchronously.
 
