@@ -247,6 +247,18 @@ public:
 		T d;
 		return TryGetValue(key, &d);
 	}
+
+	// 등록된 모든 (key, value) 를 순회한다 (자동완성/리플렉션용, 순서 미보장).
+	template<typename FN>
+	void Enumerate(FN fn)
+	{
+		for (int b = 0; b < _capa; b++)
+		{
+			SimpleVector<HNode>& bk = _bucket[b];
+			for (int i = 0; i < bk.size(); i++)
+				fn(bk[i].key, bk[i].value);
+		}
+	}
 	bool Remove(const std::string& key)
 	{
 		u32 hkey = GetHashCode(key);

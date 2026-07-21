@@ -32,6 +32,15 @@ enum NeoExecStatus
 	NEOEXEC_ERROR     = 2,   // 에러 → 컨텍스트 반납됨
 };
 
+// 등록된 빌트인 함수 1개의 정보 (자동완성/코드어시스트용 리플렉션).
+// 원천은 AddSystemFun / g_sNeoFunLib_* 등록 그 자체이므로 손 유지가 필요없다.
+struct NeoBuiltinInfo
+{
+	std::string module;    // "math","system","coroutine" (namespaced) 또는 "string","list","map" (타입 메서드)
+	std::string name;      // 함수/메서드 이름
+	int         argCount = -1;  // 인자 수. -1 = 가변/미상(타입 메서드)
+};
+
 // 워커의 현재 실행 상태. 별도 플래그를 저장하지 않고 워커의 실제 컨텍스트/정지 상태에서 계산한다.
 enum class NeoExecutionState : u8
 {
@@ -823,6 +832,10 @@ public:
 
 	static bool		Initialize(INeoLoader* loader = nullptr);
 	static bool		Shutdown();
+
+	// 등록된 빌트인(math/system/coroutine 및 string/list/map 메서드) 전체를 열거한다.
+	// Initialize() 이후 유효. 코드어시스트가 이 목록을 당겨 자동완성 소스로 쓴다(하드코딩 불필요).
+	static void		GetBuiltins(std::vector<NeoBuiltinInfo>& out);
 
 	static INeoVM*	CompileAndLoadVM(const NeoCompilerParam& param, const NeoLoadVMParam* vparam = nullptr);
 	static INeoVM*  CompileAndLoadRunVM(const NeoCompilerParam& param, const NeoLoadVMParam* vparam = nullptr);

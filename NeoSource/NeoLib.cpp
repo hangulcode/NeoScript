@@ -1651,4 +1651,41 @@ void CNeoVMImpl::InitLib()
 	RegObjLibrary();
 }
 
+// 등록된 빌트인 전체 열거 — 완성 데이터의 단일 진실원천은 위 등록 코드 그 자체.
+// AddSystemFun / g_sNeoFunLib_*.Add 한 줄만 추가하면 여기 열거에 자동 반영된다.
+void INeoVM::GetBuiltins(std::vector<NeoBuiltinInfo>& out)
+{
+	out.clear();
+
+	// 1) namespaced module 함수 (math / system / coroutine …) — argCount 포함
+	for (auto& mod : g_sSystemFuns)
+	{
+		for (auto& f : mod.second)
+		{
+			NeoBuiltinInfo info;
+			info.module = mod.first;
+			info.name = f.fname;
+			info.argCount = f.argCount;
+			out.push_back(info);
+		}
+	}
+
+	// 2) 타입 메서드 테이블 (string / list / map / async) — 이름만(argCount 미상)
+	auto emitTable = [&out](const char* module, VMHash<TYPE_NeoLib>& tbl)
+	{
+		tbl.Enumerate([&out, module](const std::string& key, TYPE_NeoLib)
+		{
+			NeoBuiltinInfo info;
+			info.module = module;
+			info.name = key;
+			info.argCount = -1;
+			out.push_back(info);
+		});
+	};
+	emitTable("string", g_sNeoFunLib_String);
+	emitTable("list", g_sNeoFunLib_List);
+	emitTable("map", g_sNeoFunLib_Map);
+	emitTable("async", g_sNeoFunLib_Async);
+}
+
 };
