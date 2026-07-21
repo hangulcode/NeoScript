@@ -207,8 +207,9 @@ result before it can return to Script A, so Script B does not own a resumable ex
 
 - Breakpoints, stepping, and a requested debugger pause are suppressed while Script B is running. Debug Script A
   before the native call, or debug Script B through a top-level entry point instead.
-- `sleep(...)`, `yield`, `async.get(...)`, `async.post(...)`, and `async.wait()` are rejected with a runtime error
-  in Script B. They would otherwise leave Script B suspended after its native caller has already returned to Script A.
+- `sleep(...)`, `yield`, `async.get(...)`, `async.post(...)`, and `async.wait()` are rejected with a runtime error in
+  Script B. A worker configured for time-limited execution cannot start Script B at all. These restrictions prevent
+  Script B from being suspended after its native caller has already returned to Script A.
 - A synchronous callback may call ordinary functions and return values normally. For delayed work, have the native
   API schedule a new top-level `ExecuteTop`/`ResumeTop` execution instead of invoking Script B synchronously.
 
@@ -229,132 +230,119 @@ Build : Release Mode 64bit
 | fibonacci     | 4.066 (24% faster)| 5.047       | 0.315           |
 
 ### Sample
-	- console / hello: "hello" 문자열 출력
-	- console / callback: C++ 와 Neo scripts 사이에 함수 호출
-	- console / map_callback: map 자료구조를 통해서 script 에서 c++ 함수 호출, 변수 가져오기
-	- console / 9_times: 구구단 1단 부터 9단 까지 출력
-	- console / string: string 기능 예제
-	- console / list: list 자료구제 예제 (행렬 예제)
-	- console / map: map 자료구조 예제
-	- console / contailer: list/set/map 자료구제 예제
-	- console / slice_run: 스크립트를 정해진 시간동안 실행하고, 이후에 이어서 실행을 진행
-	- console / time_limit: 스크립트를 정해진 시간동안 실행하고, 이후에 이어서 실행을 진행
-	- console / divide_by_zero: 0으로 나눗셈을 할 경우 예외 처리
-	- console / delegate: 함수 포인터 예제
-	- console / meta: meta 함수 예제
-	- console / coroutine: coroutine 예제
-	- console / mudule: mudule 임포트 및 사용 방법
+	- console / hello: prints "hello"
+	- console / callback: calls functions between C++ and Neo Script
+	- console / map_callback: invokes C++ functions and reads variables through a map
+	- console / 9_times: prints multiplication tables from 1 through 9
+	- console / string: string feature examples
+	- console / list: list examples, including matrix operations
+	- console / map: map feature examples
+	- console / contailer: list, set, and map examples
+	- console / slice_run: executes a script for a fixed slice and resumes it later
+	- console / time_limit: executes a script for a fixed time budget and resumes it later
+	- console / divide_by_zero: divide-by-zero exception handling
+	- console / delegate: function pointer examples
+	- console / meta: meta function examples
+	- console / coroutine: coroutine examples
+	- console / module: module import and usage
 
 ### var data structure
-	- null: 변수에 아무 값이 없을 경우 사용, 초기화 하지 않으면 null 상태가 됨
-	- bool: 참(true) / 거짓(false) 상태를 저장
-	- int: 4byte 정수를 저장
-	- double: 8-byte or 4-byte 부동 소수점을 저장(NS_SINGLE_PRECISION 에 의해서 정의됨)
-	- string : 문자열 저장
-	- list : 배열(Array)형태의 자료구조
-	- map : Key / Value 형태의 자료구조
-	- set : Key 형태의 자료구조
+	- null: represents no value; uninitialized variables are null
+	- bool: stores true or false
+	- int: stores a 4-byte integer
+	- double: stores an 8-byte or 4-byte floating-point value, depending on `NS_SINGLE_PRECISION`
+	- string: stores text
+	- list: an array-like container
+	- map: a key/value container
+	- set: a key-only container
 
 
 ### Neo Script reserved words
-	- var: 변수를 선언
-	- fun: 함수의 시작을 선언
-	- import: Lib 폴더에서 module 임포트
-	- export: var / fun 앞에 사용가능 하며, 변수 또는 함수를 c++ 에서 참조가 가능하게 됨
-	- tostring (x): x 변수를 문자열로 변환한 변수를 리턴
-	- toint (x): x 변수를 정수로 변환한 변수를 리턴
-	- tofloat (x): x 변수를 부동소수점으로 변환한 변수를 리턴
+	- var: declares a variable
+	- fun: declares a function
+	- import: imports a module from the Lib directory
+	- export: makes a variable or function available to C++
+	- tostring (x): converts x to a string
+	- toint (x): converts x to an integer
+	- tofloat (x): converts x to a floating-point value
 	- tosize (x): 
-		x  문자열일 경우 : 문자열 길이 리턴
-		x  가 list / map /set 일 경우 : 자료구조 Count를 리턴
-		기타 : 0을  리턴
-	- totype (x): x 변수의 자료구조 타입의 문자열을 리턴
-	- sleep (x): x 시간 만큼 일시 정지 (1 second for 1000)
-	- return [x]: 진행 중인 함수를 리턴, x 가 있으면 x 변수를 리턴
-	- break: 실행중인 루프문을 빠져 나옴
-	- continue: 실행중인 루프문의 다음 반복으로 진행
-	- if (x) / else / else if: 조건 문이 true 이면 if 다음을 false 이면 else 다음을 처리 (C 스타일 else if 체인 지원, 구 elif 는 폐기됨)
-	- for : for (var a in 1, 100, 1) 순서는 초기값, 최종값, 증가값
-	- foreach : map, list, set 자료구조에 사용. Must be foreach (var a[, b] in map)
-	- true / false: bool 타입 변수에 저장되는 값
-	- null: 아무 값이 없음
-	- ++ / -- : 변수 값을 1증가 또는 1감소
-	- && / || : 논리 연산자 (c문법과 동일)
-	- > / < / >= / <= : 논리 연산자 (c문법과 동일)
-	- x..y: x와 y를 문자열해서 합친 문자열을 리턴
+		x is a string: returns its length
+		x is a list, map, or set: returns its element count
+		otherwise: returns 0
+	- totype (x): returns the container type of x as a string
+	- sleep (x): pauses execution for x milliseconds; 1000 is one second
+	- return [x]: returns from the current function, optionally with x
+	- break: exits the current loop
+	- continue: starts the next loop iteration
+	- if (x) / else / else if: C-style conditional chain; the legacy `elif` syntax is removed
+	- for: `for (var a in 1, 100, 1)` specifies start, end, and increment values
+	- foreach: iterates a map, list, or set; use `foreach (var a[, b] in map)`
+	- true / false: boolean values
+	- null: no value
+	- ++ / --: increments or decrements a variable by one
+	- && / ||: logical operators, equivalent to C semantics
+	- > / < / >= / <=: comparison operators, equivalent to C semantics
+	- x..y: converts x and y to strings and concatenates them
 
 ### Built-in system function use system.
 	## Basic
-	- print (x): x를 문자열로 출력
+	- print (x): prints x as a string
 
 	## system
-	- clock ():  현재 시간 리턴
-	- load ():  스크립트를 로드 (컴파일 과정을 진행함)해서 모듈로 리턴
-	- pcall (x) : x 모듈을 실행
-	- meta(x,y) : bx 변수에 y meta 함수를 바인딩
-	- set(x) : list 를 set 으로 변환해서 리턴
+	- clock (): returns the current time
+	- load (): compiles and loads a script, then returns it as a module
+	- pcall (x): executes module x
+	- meta(x, y): binds meta function y to variable x
+	- set(x): converts list x to a set
 	
 	## coroutine
-	- create (): 코루틴을 생성해서 리턴 (suspended mode 로 생성)
-	- resume (x): 코루틴을 Active 시킴
-	- status (x): 코루틴 상태를 문자열로 리턴
-	- close ([x]): 코루틴 Close
+	- create (): creates and returns a coroutine in suspended mode
+	- resume (x): activates coroutine x
+	- status (x): returns the coroutine status as a string
+	- close ([x]): closes a coroutine
 
 	## math
-	- abs (x): x 의 양수를 리턴 (c함수과 동일)
-	- acos (x): (c함수과 동일)
-	- asin (x): (c함수과 동일)
-	- atan (x): (c함수과 동일)
-	- ceil (x): (c함수과 동일)
-	- floor (x): (c함수과 동일)
-	- round (x): (c함수과 동일)
-	- sin (x): (c함수과 동일)
-	- cos (x): (c함수과 동일)
-	- tan (x): (c함수과 동일)
-	- log (x): (c함수과 동일)
-	- log10 (x): (c함수과 동일)
-	- exp (x): (c함수과 동일)
-	- pow (x, y): (c함수과 동일)
-	- deg (x): radian 값을 degree 값으로 리턴
-	- radian (x): degree 값을 radian 값으로 리턴
-	- sqrt (x): (c함수과 동일)
-	- srand (x): (c함수과 동일)
-	- rand (): (c함수과 동일)
+	- abs (x): returns the absolute value of x
+	- acos (x), asin (x), atan (x), ceil (x), floor (x), round (x)
+	- sin (x), cos (x), tan (x), log (x), log10 (x), exp (x)
+	- pow (x, y), sqrt (x), srand (x), rand (): equivalent to their C library counterparts
+	- deg (x): converts radians to degrees
+	- radian (x): converts degrees to radians
 
-    ## string
-	- len (): 문자열 길이 리턴
-	- find (x): 문자열을 찾아서 위치 인덱스를 리턴 (stl 함수과 동일)
-	- sub (x, y): x 위치에서 부터 y 갯수만큼의 문자열을 리턴 (stl 함수과 동일)
-	- upper () : 영문 소문자를 대문자로 변경해서 리턴
-	- lower () : 영문 대문자를 소문자로 변경해서 리턴
-	- trim () : 문자열 left / right 끝에 있는 공백을 모두 제거한 결과를 리턴
-	- ltrim () : 문자열 left 끝에 있는 공백을 모두 제거한 결과를 리턴
-	- rtrim () : 문자열 right 끝에 있는 공백을 모두 제거한 결과를 리턴
-	- replace (x, y) : x 문자열을 y문자열로 치환해서 리턴
-	- split (x) : x 문자열을 기준으로 문자열을 split 하고 list 형태로 리턴
+	## string
+	- len (): returns the string length
+	- find (x): returns the index of string x
+	- sub (x, y): returns y characters beginning at index x
+	- upper (): converts lowercase English letters to uppercase
+	- lower (): converts uppercase English letters to lowercase
+	- trim (): removes whitespace from both ends of a string
+	- ltrim (): removes leading whitespace
+	- rtrim (): removes trailing whitespace
+	- replace (x, y): replaces x with y
+	- split (x): splits on x and returns a list
 
 	## list
-	- len () : 리스트 아이템 갯수를 리턴
-	- resize (x) : 리스트 아이템 갯수 변경
-	- append (x, [y]) : 리스트에 아이템을 추가 (y 는 위치)
-	- broadcast (x) : 두 행렬의 각각의 원소 위치의 값을 더한(+) 행렬을 리턴
-	- multiply (x) : 두 행렬의 곱셈을한 행렬을 리턴
-	- dot (x) : 두 행렬에 대해서 각각의 row 부분 전체를 dot product 한 결과를 list에 넣어서 리턴
-	- sum () : 행렬에 대해서 각각 원소의 총합을 리턴
+	- len (): returns the number of list items
+	- resize (x): changes the list item count
+	- append (x, [y]): appends x; y optionally specifies the position
+	- broadcast (x): returns the element-wise sum of two matrices
+	- multiply (x): returns the matrix product of two matrices
+	- dot (x): returns per-row dot products as a list
+	- sum (): returns the sum of all matrix elements
 
 	## map
-	- len () : map 아이템 갯수를 리턴
-	- reserve (x) : 메모리를 x 갯수만큼 할당 (아이템 갯수는 증가하지 않음)
-	- sort () : map 의 value를 정렬
-	- keys() : map 의 key 들을 list 자료구조에 담아서 리턴
-	- values() : map 의 value 들을 list 자료구조에 담아서 리턴
+	- len (): returns the number of map items
+	- reserve (x): reserves capacity for x items without changing the item count
+	- sort (): sorts map values
+	- keys(): returns map keys in a list
+	- values(): returns map values in a list
 
 	## set
-	- len () : set 의 아이템 갯수를 리턴
+	- len (): returns the number of set items
 
 ### Comment
-	- //    : 한줄 주석
-	- /* */ : 여러줄 주석
+	- //: single-line comment
+	- /* */: multi-line comment
 
 
 #### Neo Script Code Image

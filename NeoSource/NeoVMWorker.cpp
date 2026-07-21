@@ -876,6 +876,11 @@ bool	CNeoVMWorker::Start(int iFunctionID, std::vector<VarInfo>& _args)
 	// Script A -> native API -> Script B는 동일한 코드 버퍼를 공유한다.
 	// Script B가 정상 반환하면 Script A의 다음 opcode부터 계속 실행해야 한다.
 	const bool isNestedScriptCall = (m_iNativeScriptCallDepth > 0);
+	if (isNestedScriptCall && m_iTimeout >= 0)
+	{
+		SetError("time-limited execution is not allowed in a synchronous native-to-script call");
+		return false;
+	}
 	const int returnCodePtr = isNestedScriptCall ? GetCodeptr() : 0;
 	if(false == Setup(iFunctionID, _args))
 		return false;
