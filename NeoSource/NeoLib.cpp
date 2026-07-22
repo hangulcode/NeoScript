@@ -663,14 +663,12 @@ struct neo_libs
 	}
 	static bool Math_Normalize3(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 6) return false;
+		if (args != 2) return false;
 
-		NS_FLOAT x = pN->read<NS_FLOAT>(1);
-		NS_FLOAT y = pN->read<NS_FLOAT>(2);
-		NS_FLOAT z = pN->read<NS_FLOAT>(3);
-		NS_FLOAT fallbackX = pN->read<NS_FLOAT>(4);
-		NS_FLOAT fallbackY = pN->read<NS_FLOAT>(5);
-		NS_FLOAT fallbackZ = pN->read<NS_FLOAT>(6);
+		NS_FLOAT x, y, z;
+		NS_FLOAT fallbackX, fallbackY, fallbackZ;
+		if (ReadVec3(pN->GetStackVar(1), x, y, z) == false) return false;
+		if (ReadVec3(pN->GetStackVar(2), fallbackX, fallbackY, fallbackZ) == false) return false;
 		NS_FLOAT lenSq = x * x + y * y + z * z;
 		if (lenSq < (NS_FLOAT)0.00000001)
 			return WriteVec3(pN, fallbackX, fallbackY, fallbackZ);
@@ -680,14 +678,12 @@ struct neo_libs
 	}
 	static bool Math_Cross3(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 6) return false;
+		if (args != 2) return false;
 
-		NS_FLOAT ax = pN->read<NS_FLOAT>(1);
-		NS_FLOAT ay = pN->read<NS_FLOAT>(2);
-		NS_FLOAT az = pN->read<NS_FLOAT>(3);
-		NS_FLOAT bx = pN->read<NS_FLOAT>(4);
-		NS_FLOAT by = pN->read<NS_FLOAT>(5);
-		NS_FLOAT bz = pN->read<NS_FLOAT>(6);
+		NS_FLOAT ax, ay, az;
+		NS_FLOAT bx, by, bz;
+		if (ReadVec3(pN->GetStackVar(1), ax, ay, az) == false) return false;
+		if (ReadVec3(pN->GetStackVar(2), bx, by, bz) == false) return false;
 		return WriteVec3(pN,
 			ay * bz - az * by,
 			az * bx - ax * bz,
@@ -695,7 +691,7 @@ struct neo_libs
 	}
 	static bool Math_RotateVectorByQuat(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 4) return false;
+		if (args != 2) return false;
 
 		VarInfo* q = pN->GetStackVar(1);
 		NS_FLOAT qw, qx, qy, qz;
@@ -705,9 +701,8 @@ struct neo_libs
 		if (q->ListFindFloat(2, qy) == false) return false;
 		if (q->ListFindFloat(3, qz) == false) return false;
 
-		NS_FLOAT x = pN->read<NS_FLOAT>(2);
-		NS_FLOAT y = pN->read<NS_FLOAT>(3);
-		NS_FLOAT z = pN->read<NS_FLOAT>(4);
+		NS_FLOAT x, y, z;
+		if (ReadVec3(pN->GetStackVar(2), x, y, z) == false) return false;
 		NS_FLOAT tx = (NS_FLOAT)2.0 * (qy * z - qz * y);
 		NS_FLOAT ty = (NS_FLOAT)2.0 * (qz * x - qx * z);
 		NS_FLOAT tz = (NS_FLOAT)2.0 * (qx * y - qy * x);
@@ -1555,19 +1550,19 @@ static void AddGlobalLibFun()
 	AddSystemFun("deg", &neo_libs::Math_deg, "float", "float radian");
 	AddSystemFun("rad", &neo_libs::Math_rad, "float", "float degree");
 	AddSystemFun("sqrt", &neo_libs::Math_sqrt, "float", "float x");
-	AddSystemFun("Vector2", &neo_libs::Math_Vector2, "list", "float x", "float y");
-	AddSystemFun("Vector3", &neo_libs::Math_Vector3, "list", "float x", "float y", "float z");
+	AddSystemFun("Vector2", &neo_libs::Math_Vector2, "Vector2", "float x", "float y");
+	AddSystemFun("Vector3", &neo_libs::Math_Vector3, "Vector3", "float x", "float y", "float z");
 	AddSystemFun("Clamp01", &neo_libs::Math_Clamp01, "float", "float x");
 	AddSystemFun("Clamp", &neo_libs::Math_Clamp, "float", "float x", "float min", "float max");
 	AddSystemFun("SmoothStep01", &neo_libs::Math_SmoothStep01, "float", "float t");
 	AddSystemFun("Lerp", &neo_libs::Math_Lerp, "float", "float a", "float b", "float t");
-	AddSystemFun("Lerp3", &neo_libs::Math_Lerp3, "list", "list a", "list b", "float t");
-	AddSystemFun("DistanceSquared3", &neo_libs::Math_DistanceSquared3, "float", "list a", "list b");
-	AddSystemFun("Normalize3", &neo_libs::Math_Normalize3, "list", "float x", "float y", "float z", "float fallbackX", "float fallbackY", "float fallbackZ");
-	AddSystemFun("Cross3", &neo_libs::Math_Cross3, "list", "float ax", "float ay", "float az", "float bx", "float by", "float bz");
-	AddSystemFun("RotateVectorByQuat", &neo_libs::Math_RotateVectorByQuat, "list", "list quat", "float x", "float y", "float z");
-	AddSystemFun("quat_from_basis", &neo_libs::Math_quat_from_basis, "list", "list right", "list up", "list forward");
-	AddSystemFun("quat_slerp", &neo_libs::Math_quat_slerp, "list", "list a", "list b", "float t");
+	AddSystemFun("Lerp3", &neo_libs::Math_Lerp3, "Vector3", "Vector3 a", "Vector3 b", "float t");
+	AddSystemFun("DistanceSquared3", &neo_libs::Math_DistanceSquared3, "float", "Vector3 a", "Vector3 b");
+	AddSystemFun("Normalize3", &neo_libs::Math_Normalize3, "Vector3", "Vector3 v", "Vector3 fallback");
+	AddSystemFun("Cross3", &neo_libs::Math_Cross3, "Vector3", "Vector3 a", "Vector3 b");
+	AddSystemFun("RotateVectorByQuat", &neo_libs::Math_RotateVectorByQuat, "Vector3", "Quaternion quat", "Vector3 v");
+	AddSystemFun("quat_from_basis", &neo_libs::Math_quat_from_basis, "Quaternion", "Vector3 right", "Vector3 up", "Vector3 forward");
+	AddSystemFun("quat_slerp", &neo_libs::Math_quat_slerp, "Quaternion", "Quaternion a", "Quaternion b", "float t");
 	AddSystemFun("srand", &neo_libs::Math_srand, "void", "int seed");
 	AddSystemFun("rand", &neo_libs::Math_rand, "int");
 	AddSystemFun("Rand01", &neo_libs::Math_Rand01, "float");
