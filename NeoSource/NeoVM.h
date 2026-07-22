@@ -38,7 +38,8 @@ struct NeoBuiltinInfo
 {
 	std::string module;    // "math","system","coroutine" (namespaced) 또는 "string","list","map" (타입 메서드)
 	std::string name;      // 함수/메서드 이름
-	int         argCount = -1;  // 인자 수. -1 = 가변/미상(타입 메서드)
+	int         argCount = -1;  // 인자 수. -1 = 가변("..." 포함)/미상(타입 메서드)
+	std::vector<std::string> params;  // "float x" 형태의 타입+이름 목록(등록 나열 그대로). 마지막이 "..." 이면 가변.
 };
 
 // 워커의 현재 실행 상태. 별도 플래그를 저장하지 않고 워커의 실제 컨텍스트/정지 상태에서 계산한다.

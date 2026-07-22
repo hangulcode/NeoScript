@@ -3,6 +3,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 
 #include "NeoVMImpl.h"
 #include "NeoVMWorker.h"
@@ -1455,34 +1456,46 @@ static int AddDefaultNativeFun(const std::string& nativeName, TYPE_NeoLib fun)
 	return nativeIndex;
 }
 
-static void AddSystemFun(const std::string& fname, TYPE_NeoLib fun, int argcnt)
+// 파라미터를 "타입 이름" 문자열로 하나씩 나열한다. 인자 수는 나열 개수에서 유도된다(별도 count 없음).
+// 마지막에 "..." 을 넣으면 가변 인자(컴파일 타임 인자 수 검사 안 함 = argCount -1).
+// 예) AddSystemFun("pow", &Math_pow, "float base", "float exp");
+//     AddSystemFun("rand", &Math_rand);                                  // 인자 0개
+//     AddSystemFun("resume", &coroutine_resume, "coroutine co", "...");  // 가변
+static void AddSystemFunImpl(const std::string& fname, TYPE_NeoLib fun, std::initializer_list<const char*> params)
 {
 	const std::string nativeName = "#" + fname;
 	int nativeIndex = AddDefaultNativeFun(nativeName, fun);
-	if(g_sCurrentSystem.empty() == false)
-	{
-		auto it = g_sSystemFuns.find(g_sCurrentSystem);
-		if(it == g_sSystemFuns.end())
-		{
-			std::list< SystemFun> lst;
-			SystemFun v;
-			v.fname = fname;
-			v.argCount = argcnt;
-			v.nativeIndex = nativeIndex;
-			lst.push_back(v);
+	if (g_sCurrentSystem.empty())
+		return;
 
-			g_sSystemFuns[g_sCurrentSystem] = lst;
-		}
-		else
-		{
-			std::list< SystemFun>& lst = (*it).second;
-			SystemFun v;
-			v.fname = fname;
-			v.argCount = argcnt;
-			v.nativeIndex = nativeIndex;
-			lst.push_back(v);
-		}
+	SystemFun v;
+	v.fname = fname;
+	v.nativeIndex = nativeIndex;
+	bool variadic = false;
+	for (const char* p : params)
+	{
+		if (p != nullptr && strcmp(p, "...") == 0)
+			variadic = true;                 // 표시용으로도 넣고, 인자 수 검사는 끈다
+		v.params.push_back(p);
 	}
+	v.argCount = variadic ? -1 : (int)v.params.size();
+
+	auto it = g_sSystemFuns.find(g_sCurrentSystem);
+	if (it == g_sSystemFuns.end())
+	{
+		std::list<SystemFun> lst;
+		lst.push_back(v);
+		g_sSystemFuns[g_sCurrentSystem] = lst;
+	}
+	else
+	{
+		(*it).second.push_back(v);
+	}
+}
+template<typename... TParams>
+static void AddSystemFun(const std::string& fname, TYPE_NeoLib fun, TParams... params)
+{
+	AddSystemFunImpl(fname, fun, { params... });
 }
 
 int CNeoVMImpl::FindDefaultNativeIndex(const VMString* pStr)
@@ -1515,60 +1528,60 @@ static void AddGlobalLibFun()
 	AddDefaultNativeFun("print", &neo_libs::io_print);
 
 	g_sCurrentSystem = "math";
-	AddSystemFun("abs", &neo_libs::Math_abs, 1);
-	AddSystemFun("acos", &neo_libs::Math_acos, 1);
-	AddSystemFun("asin", &neo_libs::Math_asin, 1);
-	AddSystemFun("atan", &neo_libs::Math_atan, 1);
-	AddSystemFun("ceil", &neo_libs::Math_ceil, 1);
-	AddSystemFun("floor", &neo_libs::Math_floor, 1);
-	AddSystemFun("round", &neo_libs::Math_round, 1);
-	AddSystemFun("sin", &neo_libs::Math_sin, 1);
-	AddSystemFun("cos", &neo_libs::Math_cos, 1);
-	AddSystemFun("tan", &neo_libs::Math_tan, 1);
-	AddSystemFun("log", &neo_libs::Math_log, 1);
-	AddSystemFun("log10", &neo_libs::Math_log10, 1);
-	AddSystemFun("exp", &neo_libs::Math_exp, 1);
-	AddSystemFun("pow", &neo_libs::Math_pow, 2);
-	AddSystemFun("deg", &neo_libs::Math_deg, 1);
-	AddSystemFun("rad", &neo_libs::Math_rad, 1);
-	AddSystemFun("sqrt", &neo_libs::Math_sqrt, 1);
-	AddSystemFun("Vector2", &neo_libs::Math_Vector2, 2);
-	AddSystemFun("Vector3", &neo_libs::Math_Vector3, 3);
-	AddSystemFun("Clamp01", &neo_libs::Math_Clamp01, 1);
-	AddSystemFun("Clamp", &neo_libs::Math_Clamp, 3);
-	AddSystemFun("SmoothStep01", &neo_libs::Math_SmoothStep01, 1);
-	AddSystemFun("Lerp", &neo_libs::Math_Lerp, 3);
-	AddSystemFun("Lerp3", &neo_libs::Math_Lerp3, 3);
-	AddSystemFun("DistanceSquared3", &neo_libs::Math_DistanceSquared3, 2);
-	AddSystemFun("Normalize3", &neo_libs::Math_Normalize3, 6);
-	AddSystemFun("Cross3", &neo_libs::Math_Cross3, 6);
-	AddSystemFun("RotateVectorByQuat", &neo_libs::Math_RotateVectorByQuat, 4);
-	AddSystemFun("quat_from_basis", &neo_libs::Math_quat_from_basis, 3);
-	AddSystemFun("quat_slerp", &neo_libs::Math_quat_slerp, 3);
-	AddSystemFun("srand", &neo_libs::Math_srand, 1);
-	AddSystemFun("rand", &neo_libs::Math_rand, 0);
-	AddSystemFun("Rand01", &neo_libs::Math_Rand01, 0);
-	AddSystemFun("RandRange", &neo_libs::Math_RandRange, 2);
-	AddSystemFun("Hash32", &neo_libs::Math_Hash32, 1);
-	AddSystemFun("ColorRGB", &neo_libs::Math_ColorRGB, 3);
-	AddSystemFun("ColorARGB", &neo_libs::Math_ColorARGB, 4);
+	AddSystemFun("abs", &neo_libs::Math_abs, "float x");
+	AddSystemFun("acos", &neo_libs::Math_acos, "float x");
+	AddSystemFun("asin", &neo_libs::Math_asin, "float x");
+	AddSystemFun("atan", &neo_libs::Math_atan, "float x");
+	AddSystemFun("ceil", &neo_libs::Math_ceil, "float x");
+	AddSystemFun("floor", &neo_libs::Math_floor, "float x");
+	AddSystemFun("round", &neo_libs::Math_round, "float x");
+	AddSystemFun("sin", &neo_libs::Math_sin, "float radian");
+	AddSystemFun("cos", &neo_libs::Math_cos, "float radian");
+	AddSystemFun("tan", &neo_libs::Math_tan, "float radian");
+	AddSystemFun("log", &neo_libs::Math_log, "float x");
+	AddSystemFun("log10", &neo_libs::Math_log10, "float x");
+	AddSystemFun("exp", &neo_libs::Math_exp, "float x");
+	AddSystemFun("pow", &neo_libs::Math_pow, "float base", "float exp");
+	AddSystemFun("deg", &neo_libs::Math_deg, "float radian");
+	AddSystemFun("rad", &neo_libs::Math_rad, "float degree");
+	AddSystemFun("sqrt", &neo_libs::Math_sqrt, "float x");
+	AddSystemFun("Vector2", &neo_libs::Math_Vector2, "float x", "float y");
+	AddSystemFun("Vector3", &neo_libs::Math_Vector3, "float x", "float y", "float z");
+	AddSystemFun("Clamp01", &neo_libs::Math_Clamp01, "float x");
+	AddSystemFun("Clamp", &neo_libs::Math_Clamp, "float x", "float min", "float max");
+	AddSystemFun("SmoothStep01", &neo_libs::Math_SmoothStep01, "float t");
+	AddSystemFun("Lerp", &neo_libs::Math_Lerp, "float a", "float b", "float t");
+	AddSystemFun("Lerp3", &neo_libs::Math_Lerp3, "list a", "list b", "float t");
+	AddSystemFun("DistanceSquared3", &neo_libs::Math_DistanceSquared3, "list a", "list b");
+	AddSystemFun("Normalize3", &neo_libs::Math_Normalize3, "float x", "float y", "float z", "float fallbackX", "float fallbackY", "float fallbackZ");
+	AddSystemFun("Cross3", &neo_libs::Math_Cross3, "float ax", "float ay", "float az", "float bx", "float by", "float bz");
+	AddSystemFun("RotateVectorByQuat", &neo_libs::Math_RotateVectorByQuat, "list quat", "float x", "float y", "float z");
+	AddSystemFun("quat_from_basis", &neo_libs::Math_quat_from_basis, "list right", "list up", "list forward");
+	AddSystemFun("quat_slerp", &neo_libs::Math_quat_slerp, "list a", "list b", "float t");
+	AddSystemFun("srand", &neo_libs::Math_srand, "int seed");
+	AddSystemFun("rand", &neo_libs::Math_rand);
+	AddSystemFun("Rand01", &neo_libs::Math_Rand01);
+	AddSystemFun("RandRange", &neo_libs::Math_RandRange, "float min", "float max");
+	AddSystemFun("Hash32", &neo_libs::Math_Hash32, "int value");
+	AddSystemFun("ColorRGB", &neo_libs::Math_ColorRGB, "int r", "int g", "int b");
+	AddSystemFun("ColorARGB", &neo_libs::Math_ColorARGB, "int a", "int r", "int g", "int b");
 
 	g_sCurrentSystem = "system";
-	AddSystemFun("time", &neo_libs::sys_time, 0);
-	AddSystemFun("date", &neo_libs::sys_date, 2);
-	AddSystemFun("clock", &neo_libs::sys_clock, 0);
-	AddSystemFun("meta", &neo_libs::sys_meta, 2);
-	AddSystemFun("load", &neo_libs::sys_load, 2);
-	AddSystemFun("pcall", &neo_libs::sys_pcall, 1);
-	AddSystemFun("aysnc_create", &neo_libs::sys_aysnc_create, 0);
-	AddSystemFun("set", &neo_libs::sys_set, 1);
+	AddSystemFun("time", &neo_libs::sys_time);
+	AddSystemFun("date", &neo_libs::sys_date, "string format", "int time");
+	AddSystemFun("clock", &neo_libs::sys_clock);
+	AddSystemFun("meta", &neo_libs::sys_meta, "map table", "map meta");
+	AddSystemFun("load", &neo_libs::sys_load, "string name", "string source");
+	AddSystemFun("pcall", &neo_libs::sys_pcall, "module m");
+	AddSystemFun("aysnc_create", &neo_libs::sys_aysnc_create);
+	AddSystemFun("set", &neo_libs::sys_set, "list l");
 
 
 	g_sCurrentSystem = "coroutine";
-	AddSystemFun("create", &neo_libs::coroutine_create, 1);
-	AddSystemFun("resume", &neo_libs::coroutine_resume, -1);
-	AddSystemFun("status", &neo_libs::coroutine_status, 1);
-	AddSystemFun("close", &neo_libs::coroutine_close, -1);
+	AddSystemFun("create", &neo_libs::coroutine_create, "fun f");
+	AddSystemFun("resume", &neo_libs::coroutine_resume, "coroutine co", "...");
+	AddSystemFun("status", &neo_libs::coroutine_status, "coroutine co");
+	AddSystemFun("close", &neo_libs::coroutine_close, "...");
 
 	g_sCurrentSystem.clear();
 }
@@ -1657,7 +1670,7 @@ void INeoVM::GetBuiltins(std::vector<NeoBuiltinInfo>& out)
 {
 	out.clear();
 
-	// 1) namespaced module 함수 (math / system / coroutine …) — argCount 포함
+	// 1) namespaced module 함수 (math / system / coroutine …) — argCount/타입+이름 파라미터 포함
 	for (auto& mod : g_sSystemFuns)
 	{
 		for (auto& f : mod.second)
@@ -1666,6 +1679,7 @@ void INeoVM::GetBuiltins(std::vector<NeoBuiltinInfo>& out)
 			info.module = mod.first;
 			info.name = f.fname;
 			info.argCount = f.argCount;
+			info.params = f.params;   // "float x" 목록 그대로
 			out.push_back(info);
 		}
 	}

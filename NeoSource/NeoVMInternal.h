@@ -24,8 +24,9 @@ class CNeoVMWorker;
 struct SystemFun
 {
 	std::string fname;
-	int			argCount;
+	int			argCount;    // 파라미터 개수에서 유도. -1 = 가변("..." 포함 시)
 	int			nativeIndex;
+	std::vector<std::string> params;   // "float x" 형태의 타입+이름. 개수가 곧 인자 수
 };
 
 
