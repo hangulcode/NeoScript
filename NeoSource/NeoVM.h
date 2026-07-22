@@ -39,6 +39,7 @@ struct NeoBuiltinInfo
 	std::string module;    // "math","system","coroutine" (namespaced) 또는 "string","list","map" (타입 메서드)
 	std::string name;      // 함수/메서드 이름
 	int         argCount = -1;  // 인자 수. -1 = 가변("..." 포함)/미상(타입 메서드)
+	std::string ret;       // 리턴 타입("void","float","list" …). 비어있으면 미상(타입 메서드)
 	std::vector<std::string> params;  // "float x" 형태의 타입+이름 목록(등록 나열 그대로). 마지막이 "..." 이면 가변.
 };
 
