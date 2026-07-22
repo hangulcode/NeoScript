@@ -145,6 +145,11 @@
           "type": "string",
           "default": "",
           "description": "Path to console.exe or NeoDebugAdapter.exe. If empty, the extension tries common repo build paths."
+        },
+        "neoScript.languageServerPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to console.exe used for Neo Script completion. If empty, the extension tries common console build paths."
         }
       }
     }

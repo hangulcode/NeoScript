@@ -1,6 +1,6 @@
 # Neo Script VS Code Extension
 
-This extension adds `.ns` language support and a Debug Adapter Protocol client for Neo Script.
+This extension adds `.ns` language support, IntelliSense, and a Debug Adapter Protocol client for Neo Script.
 
 ## Debugging
 
@@ -47,7 +47,17 @@ Supported debugger actions:
 
 ## Editing
 
-The extension includes TextMate highlighting and snippets for common Neo Script patterns:
+The extension includes TextMate highlighting, snippets, and completion for common Neo Script patterns.
+
+Completion and signature help are provided by `console.exe --lsp` and use the engine's `INeoVM::GetBuiltins()` reflection data. The extension suggests registered module functions with return types and parameter details, shows parameter hints after `(` and `,`, suggests type methods after `.` when the receiver type is not known, and completes language keywords, modules, and functions declared in the current document.
+
+Set `neoScript.languageServerPath` when `console.exe` is not found automatically. It may point to the same executable as `neoScript.debugAdapterPath`; no debug session is required for completion.
+
+```json
+"neoScript.languageServerPath": "${workspaceFolder}\\..\\Samples\\console\\x64\\Release\\console.exe"
+```
+
+Common snippets include:
 
 - `fun`
 - `var`

@@ -14,12 +14,14 @@
 
 ### VS Code extension
 	- Extension source: Tools/vscode-neo-script
-	- Supports .ns syntax highlighting and Debug Adapter Protocol debugging.
+	- Supports .ns syntax highlighting, IntelliSense completion and signature help, and Debug Adapter Protocol debugging.
 	- The debugger runs the currently selected .ns file as a top-level script.
 	- Put the code you want to debug in the script body. If you want to debug an exported function, call it from top-level script code.
 	- Build Samples/console in x64 Release, then use the "Debug Neo Script" launch configuration.
 	- If the adapter executable is not in the default sample path, set neoScript.debugAdapterPath or add adapterPath to launch.json.
 	- Set libPath in launch.json when the Neo Script Lib directory is outside the workspace folder.
+	- IntelliSense is served by console.exe --lsp. Set neoScript.languageServerPath to that executable when it is not found automatically; it may use the same console.exe as the debugger.
+	  Example: "neoScript.languageServerPath": "${workspaceFolder}\\..\\Samples\\console\\x64\\Release\\console.exe"
 
 ### Console runner
 `Samples/console` is the main sample executable. It can run built-in samples, benchmarks, the VS Code debug adapter, or an arbitrary script file.

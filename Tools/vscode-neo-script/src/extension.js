@@ -1,9 +1,11 @@
 const fs = require("fs");
 const fsp = require("fs/promises");
 const path = require("path");
+const { spawn } = require("child_process");
 const vscode = require("vscode");
 
 let diagnosticCollection;
+let languageClient;
 
 function resolveVariables(value, folder) {
   if (!value || typeof value !== "string") {
@@ -160,6 +162,260 @@ class NeoScriptDebugAdapterDescriptorFactory {
   }
 }
 
+class NeoScriptLanguageClient {
+  constructor(executablePath, cwd) {
+    this.executablePath = executablePath;
+    this.cwd = cwd;
+    this.process = undefined;
+    this.buffer = Buffer.alloc(0);
+    this.nextRequestId = 1;
+    this.pendingRequests = new Map();
+  }
+
+  start() {
+    if (this.process) {
+      return true;
+    }
+
+    try {
+      this.process = spawn(this.executablePath, ["--lsp"], {
+        cwd: this.cwd,
+        stdio: ["pipe", "pipe", "ignore"],
+        windowsHide: true
+      });
+    } catch (_) {
+      this.process = undefined;
+      return false;
+    }
+
+    this.process.stdout.on("data", (data) => this.onData(data));
+    this.process.on("exit", () => this.onExit());
+    this.process.on("error", () => this.onExit());
+    this.request("initialize", { processId: process.pid, rootUri: null, capabilities: {} })
+      .then(() => this.notify("initialized", {}));
+    return true;
+  }
+
+  onExit() {
+    this.process = undefined;
+    for (const resolve of this.pendingRequests.values()) {
+      resolve(undefined);
+    }
+    this.pendingRequests.clear();
+  }
+
+  onData(data) {
+    this.buffer = Buffer.concat([this.buffer, data]);
+    while (true) {
+      const headerEnd = this.buffer.indexOf("\r\n\r\n");
+      if (headerEnd < 0) {
+        return;
+      }
+
+      const header = this.buffer.subarray(0, headerEnd).toString("ascii");
+      const match = /Content-Length:\s*(\d+)/i.exec(header);
+      if (!match) {
+        this.buffer = Buffer.alloc(0);
+        return;
+      }
+
+      const contentLength = Number(match[1]);
+      const messageEnd = headerEnd + 4 + contentLength;
+      if (this.buffer.length < messageEnd) {
+        return;
+      }
+
+      const text = this.buffer.subarray(headerEnd + 4, messageEnd).toString("utf8");
+      this.buffer = this.buffer.subarray(messageEnd);
+      try {
+        const message = JSON.parse(text);
+        if (message && Object.prototype.hasOwnProperty.call(message, "id")) {
+          const resolve = this.pendingRequests.get(message.id);
+          if (resolve) {
+            this.pendingRequests.delete(message.id);
+            resolve(message.result);
+          }
+        }
+      } catch (_) {
+        // Ignore malformed server output and keep the editor responsive.
+      }
+    }
+  }
+
+  send(message) {
+    if (!this.process || !this.process.stdin.writable) {
+      return false;
+    }
+
+    const body = Buffer.from(JSON.stringify(message), "utf8");
+    this.process.stdin.write(`Content-Length: ${body.length}\r\n\r\n`);
+    this.process.stdin.write(body);
+    return true;
+  }
+
+  notify(method, params) {
+    return this.send({ jsonrpc: "2.0", method, params });
+  }
+
+  request(method, params) {
+    if (!this.process) {
+      return Promise.resolve(undefined);
+    }
+
+    const id = this.nextRequestId++;
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        if (this.pendingRequests.delete(id)) {
+          resolve(undefined);
+        }
+      }, 1000);
+      this.pendingRequests.set(id, (result) => {
+        clearTimeout(timeout);
+        resolve(result);
+      });
+      if (!this.send({ jsonrpc: "2.0", id, method, params })) {
+        this.pendingRequests.delete(id);
+        clearTimeout(timeout);
+        resolve(undefined);
+      }
+    });
+  }
+
+  openDocument(document) {
+    this.notify("textDocument/didOpen", {
+      textDocument: {
+        uri: document.uri.toString(),
+        languageId: document.languageId,
+        version: document.version,
+        text: document.getText()
+      }
+    });
+  }
+
+  changeDocument(document) {
+    this.notify("textDocument/didChange", {
+      textDocument: { uri: document.uri.toString(), version: document.version },
+      contentChanges: [{ text: document.getText() }]
+    });
+  }
+
+  closeDocument(document) {
+    this.notify("textDocument/didClose", {
+      textDocument: { uri: document.uri.toString() }
+    });
+  }
+
+  async completion(document, position) {
+    const result = await this.request("textDocument/completion", {
+      textDocument: { uri: document.uri.toString() },
+      position: { line: position.line, character: position.character }
+    });
+    return result && Array.isArray(result.items) ? result.items : [];
+  }
+
+  signatureHelp(document, position) {
+    return this.request("textDocument/signatureHelp", {
+      textDocument: { uri: document.uri.toString() },
+      position: { line: position.line, character: position.character }
+    });
+  }
+
+  dispose() {
+    if (!this.process) {
+      return;
+    }
+    this.request("shutdown", {}).finally(() => {
+      this.notify("exit", {});
+      if (this.process) {
+        this.process.kill();
+      }
+    });
+  }
+}
+
+function isNeoScriptDocument(document) {
+  return document && document.languageId === "neoscript";
+}
+
+function findLanguageServerPath(context, folder) {
+  const configuredPath = resolveVariables(
+    vscode.workspace.getConfiguration("neoScript").get("languageServerPath"),
+    folder
+  );
+  if (configuredPath && fs.existsSync(configuredPath)) {
+    return configuredPath;
+  }
+
+  const workspaceFolder = folder ? folder.uri.fsPath : undefined;
+  const candidates = [
+    workspaceFolder && path.join(workspaceFolder, "Samples", "console", "x64", "Release", "console.exe"),
+    workspaceFolder && path.join(workspaceFolder, "Samples", "console", "x64", "Debug", "console.exe"),
+    workspaceFolder && path.resolve(workspaceFolder, "..", "Samples", "console", "x64", "Release", "console.exe"),
+    workspaceFolder && path.resolve(workspaceFolder, "..", "Samples", "console", "x64", "Debug", "console.exe"),
+    path.join(context.extensionPath, "bin", "console.exe")
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return configuredPath || candidates[0];
+}
+
+function startLanguageClient(context) {
+  if (languageClient && languageClient.process) {
+    return languageClient;
+  }
+
+  const folder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
+  const executablePath = findLanguageServerPath(context, folder);
+  if (!executablePath || !fs.existsSync(executablePath)) {
+    return undefined;
+  }
+
+  const cwd = folder ? folder.uri.fsPath : path.dirname(executablePath);
+  languageClient = new NeoScriptLanguageClient(executablePath, cwd);
+  if (!languageClient.start()) {
+    languageClient = undefined;
+    return undefined;
+  }
+
+  for (const document of vscode.workspace.textDocuments) {
+    if (isNeoScriptDocument(document)) {
+      languageClient.openDocument(document);
+    }
+  }
+  return languageClient;
+}
+
+function toCompletionItem(item) {
+  const completion = new vscode.CompletionItem(item.label, item.kind || vscode.CompletionItemKind.Text);
+  completion.detail = item.detail;
+  completion.documentation = item.documentation;
+  completion.insertText = item.insertText || item.label;
+  return completion;
+}
+
+function toSignatureHelp(result) {
+  if (!result || !Array.isArray(result.signatures) || result.signatures.length === 0) {
+    return undefined;
+  }
+
+  const help = new vscode.SignatureHelp();
+  help.activeSignature = result.activeSignature || 0;
+  help.activeParameter = result.activeParameter || 0;
+  help.signatures = result.signatures.map((signature) => {
+    const information = new vscode.SignatureInformation(signature.label, signature.documentation);
+    information.parameters = (signature.parameters || []).map(
+      (parameter) => new vscode.ParameterInformation(parameter.label, parameter.documentation)
+    );
+    return information;
+  });
+  return help;
+}
+
 function setCompileDiagnostic(body) {
   if (!diagnosticCollection || !body || !body.source || !body.source.path) {
     return;
@@ -193,6 +449,58 @@ function activate(context) {
     )
   );
   context.subscriptions.push(
+    vscode.languages.registerCompletionItemProvider(
+      "neoscript",
+      {
+        async provideCompletionItems(document, position) {
+          const client = startLanguageClient(context);
+          if (!client) {
+            return [];
+          }
+          return (await client.completion(document, position)).map(toCompletionItem);
+        }
+      },
+      "."
+    )
+  );
+  context.subscriptions.push(
+    vscode.languages.registerSignatureHelpProvider(
+      "neoscript",
+      {
+        async provideSignatureHelp(document, position) {
+          const client = startLanguageClient(context);
+          if (!client) {
+            return undefined;
+          }
+          return toSignatureHelp(await client.signatureHelp(document, position));
+        }
+      },
+      "(",
+      ","
+    )
+  );
+  context.subscriptions.push(
+    vscode.workspace.onDidOpenTextDocument((document) => {
+      if (isNeoScriptDocument(document) && languageClient) {
+        languageClient.openDocument(document);
+      }
+    })
+  );
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeTextDocument((event) => {
+      if (isNeoScriptDocument(event.document) && languageClient) {
+        languageClient.changeDocument(event.document);
+      }
+    })
+  );
+  context.subscriptions.push(
+    vscode.workspace.onDidCloseTextDocument((document) => {
+      if (isNeoScriptDocument(document) && languageClient) {
+        languageClient.closeDocument(document);
+      }
+    })
+  );
+  context.subscriptions.push(
     vscode.commands.registerCommand("neoScript.createLaunchConfig", createLaunchConfig)
   );
   context.subscriptions.push(
@@ -220,6 +528,10 @@ function activate(context) {
 }
 
 function deactivate() {
+  if (languageClient) {
+    languageClient.dispose();
+    languageClient = undefined;
+  }
   if (diagnosticCollection) {
     diagnosticCollection.dispose();
   }

@@ -15,6 +15,7 @@
 #include <set>
 #include <sstream>
 #include <thread>
+#include <unordered_map>
 
 using namespace NeoScript;
 
@@ -1657,6 +1658,314 @@ static int RunDebugAdapter(CNeoLoader* loader)
 	return 0;
 }
 
+static bool IsNeoIdentifierChar(char c)
+{
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+		(c >= '0' && c <= '9') || c == '_';
+}
+
+static std::string GetLspLinePrefix(const std::string& source, int line, int character)
+{
+	if (line < 0 || character < 0)
+		return "";
+
+	size_t begin = 0;
+	for (int currentLine = 0; currentLine < line; ++currentLine)
+	{
+		begin = source.find('\n', begin);
+		if (begin == std::string::npos)
+			return "";
+		++begin;
+	}
+
+	size_t end = source.find('\n', begin);
+	if (end == std::string::npos)
+		end = source.size();
+	const size_t requestedCursor = begin + (size_t)character;
+	const size_t cursor = requestedCursor < end ? requestedCursor : end;
+	return source.substr(begin, cursor - begin);
+}
+
+static void GetLspCompletionContext(const std::string& linePrefix, std::string& module, std::string& prefix)
+{
+	module.clear();
+	prefix.clear();
+
+	size_t end = linePrefix.size();
+	while (end > 0 && IsNeoIdentifierChar(linePrefix[end - 1]))
+		--end;
+	prefix = linePrefix.substr(end);
+	if (end == 0 || linePrefix[end - 1] != '.')
+		return;
+
+	size_t moduleEnd = end - 1;
+	size_t moduleBegin = moduleEnd;
+	while (moduleBegin > 0 && IsNeoIdentifierChar(linePrefix[moduleBegin - 1]))
+		--moduleBegin;
+	module = linePrefix.substr(moduleBegin, moduleEnd - moduleBegin);
+}
+
+static const NeoBuiltinInfo* FindLspSignature(const std::vector<NeoBuiltinInfo>& builtins,
+	const std::string& linePrefix, int& activeParameter)
+{
+	activeParameter = 0;
+	const size_t openParen = linePrefix.rfind('(');
+	if (openParen == std::string::npos)
+		return nullptr;
+
+	for (size_t i = openParen + 1; i < linePrefix.size(); ++i)
+	{
+		if (linePrefix[i] == ',')
+			++activeParameter;
+	}
+
+	size_t nameEnd = openParen;
+	while (nameEnd > 0 && isspace((unsigned char)linePrefix[nameEnd - 1]))
+		--nameEnd;
+	size_t nameBegin = nameEnd;
+	while (nameBegin > 0 && IsNeoIdentifierChar(linePrefix[nameBegin - 1]))
+		--nameBegin;
+	if (nameBegin == nameEnd)
+		return nullptr;
+	const std::string name = linePrefix.substr(nameBegin, nameEnd - nameBegin);
+
+	std::string module;
+	if (nameBegin > 0 && linePrefix[nameBegin - 1] == '.')
+	{
+		size_t moduleEnd = nameBegin - 1;
+		size_t moduleBegin = moduleEnd;
+		while (moduleBegin > 0 && IsNeoIdentifierChar(linePrefix[moduleBegin - 1]))
+			--moduleBegin;
+		module = linePrefix.substr(moduleBegin, moduleEnd - moduleBegin);
+	}
+
+	for (const NeoBuiltinInfo& info : builtins)
+	{
+		if (info.name == name && info.module == module && !info.params.empty())
+			return &info;
+	}
+	return nullptr;
+}
+
+static bool LspStartsWith(const std::string& value, const std::string& prefix)
+{
+	return value.size() >= prefix.size() && value.compare(0, prefix.size(), prefix) == 0;
+}
+
+static std::string BuildLspFunctionDetail(const NeoBuiltinInfo& info)
+{
+	std::ostringstream detail;
+	if (!info.ret.empty())
+		detail << info.ret << " ";
+	if (!info.module.empty())
+		detail << info.module << ".";
+	detail << info.name << "(";
+	for (size_t i = 0; i < info.params.size(); ++i)
+	{
+		if (i > 0)
+			detail << ", ";
+		detail << info.params[i];
+	}
+	detail << ")";
+	return detail.str();
+}
+
+static void AppendLspCompletionItem(std::ostringstream& os, bool& first, std::set<std::string>& emitted,
+	const std::string& label, int kind, const std::string& detail, const std::string& documentation = "")
+{
+	if (!emitted.insert(label).second)
+		return;
+	if (!first)
+		os << ",";
+	first = false;
+	os << "{\"label\":\"" << JsonEscape(label) << "\",\"kind\":" << kind
+		<< ",\"detail\":\"" << JsonEscape(detail) << "\",\"insertText\":\"" << JsonEscape(label) << "\"";
+	if (!documentation.empty())
+		os << ",\"documentation\":\"" << JsonEscape(documentation) << "\"";
+	os << "}";
+}
+
+static void CollectDocumentFunctions(const std::string& source, std::vector<std::string>& functions)
+{
+	functions.clear();
+	for (size_t pos = 0; (pos = source.find("fun", pos)) != std::string::npos; pos += 3)
+	{
+		if ((pos > 0 && IsNeoIdentifierChar(source[pos - 1])) ||
+			(pos + 3 < source.size() && IsNeoIdentifierChar(source[pos + 3])))
+			continue;
+		size_t nameBegin = pos + 3;
+		while (nameBegin < source.size() && isspace((unsigned char)source[nameBegin]))
+			++nameBegin;
+		size_t nameEnd = nameBegin;
+		while (nameEnd < source.size() && IsNeoIdentifierChar(source[nameEnd]))
+			++nameEnd;
+		if (nameEnd > nameBegin)
+			functions.push_back(source.substr(nameBegin, nameEnd - nameBegin));
+	}
+}
+
+class NeoLspSession
+{
+public:
+	std::unordered_map<std::string, std::string> documents;
+	std::vector<NeoBuiltinInfo> builtins;
+	bool terminated = false;
+
+	NeoLspSession()
+	{
+		INeoVM::GetBuiltins(builtins);
+	}
+
+	void SendResponse(int id, const std::string& result)
+	{
+		std::ostringstream os;
+		os << "{\"jsonrpc\":\"2.0\",\"id\":" << id << ",\"result\":" << result << "}";
+		DapSendMessage(os.str());
+	}
+
+	std::string BuildCompletionResult(const std::string& uri, int line, int character)
+	{
+		std::string source;
+		auto document = documents.find(uri);
+		if (document != documents.end())
+			source = document->second;
+
+		std::string module;
+		std::string prefix;
+		GetLspCompletionContext(GetLspLinePrefix(source, line, character), module, prefix);
+
+		std::ostringstream os;
+		os << "{\"isIncomplete\":false,\"items\":[";
+		bool first = true;
+		std::set<std::string> emitted;
+		if (!module.empty())
+		{
+			for (const NeoBuiltinInfo& info : builtins)
+			{
+				if (info.module == module && LspStartsWith(info.name, prefix))
+					AppendLspCompletionItem(os, first, emitted, info.name, 3, BuildLspFunctionDetail(info));
+			}
+
+			if (emitted.empty())
+			{
+				for (const NeoBuiltinInfo& info : builtins)
+				{
+					if ((info.module == "string" || info.module == "list" || info.module == "map" || info.module == "async") &&
+						LspStartsWith(info.name, prefix))
+						AppendLspCompletionItem(os, first, emitted, info.name, 2, BuildLspFunctionDetail(info));
+				}
+			}
+		}
+		else
+		{
+			static const char* keywords[] = {
+				"var", "fun", "export", "if", "else", "while", "for", "foreach", "in", "continue", "break", "return",
+				"true", "false", "null", "import", "class", "yield", "sleep"
+			};
+			for (const char* keyword : keywords)
+			{
+				if (LspStartsWith(keyword, prefix))
+					AppendLspCompletionItem(os, first, emitted, keyword, 14, "Neo Script keyword");
+			}
+
+			std::set<std::string> modules;
+			for (const NeoBuiltinInfo& info : builtins)
+			{
+				if (info.module != "string" && info.module != "list" && info.module != "map" && info.module != "async")
+					modules.insert(info.module);
+			}
+			for (const std::string& builtinModule : modules)
+			{
+				if (LspStartsWith(builtinModule, prefix))
+					AppendLspCompletionItem(os, first, emitted, builtinModule, 9, "Neo Script module");
+			}
+
+			std::vector<std::string> functions;
+			CollectDocumentFunctions(source, functions);
+			for (const std::string& function : functions)
+			{
+				if (LspStartsWith(function, prefix))
+					AppendLspCompletionItem(os, first, emitted, function, 3, "Neo Script function");
+			}
+		}
+		os << "]}";
+		return os.str();
+	}
+
+	std::string BuildSignatureHelpResult(const std::string& uri, int line, int character)
+	{
+		std::string source;
+		auto document = documents.find(uri);
+		if (document != documents.end())
+			source = document->second;
+
+		int activeParameter = 0;
+		const NeoBuiltinInfo* info = FindLspSignature(builtins, GetLspLinePrefix(source, line, character), activeParameter);
+		if (info == nullptr)
+			return "null";
+
+		std::ostringstream os;
+		os << "{\"signatures\":[{\"label\":\"" << JsonEscape(BuildLspFunctionDetail(*info)) << "\",\"parameters\":[";
+		for (size_t i = 0; i < info->params.size(); ++i)
+		{
+			if (i > 0)
+				os << ",";
+			os << "{\"label\":\"" << JsonEscape(info->params[i]) << "\"}";
+		}
+		os << "]}],\"activeSignature\":0,\"activeParameter\":" << activeParameter << "}";
+		return os.str();
+	}
+
+	void Handle(const std::string& body)
+	{
+		const std::string method = JsonString(body, "method");
+		const int id = JsonInt(body, "id", -1);
+		if (method == "initialize")
+		{
+			SendResponse(id, "{\"capabilities\":{\"textDocumentSync\":1,\"completionProvider\":{\"triggerCharacters\":[\".\"]}}}");
+		}
+		else if (method == "textDocument/didOpen" || method == "textDocument/didChange")
+		{
+			const std::string uri = JsonString(body, "uri");
+			if (!uri.empty())
+				documents[uri] = JsonString(body, "text");
+		}
+		else if (method == "textDocument/didClose")
+		{
+			documents.erase(JsonString(body, "uri"));
+		}
+		else if (method == "textDocument/completion")
+		{
+			SendResponse(id, BuildCompletionResult(JsonString(body, "uri"), JsonInt(body, "line"), JsonInt(body, "character")));
+		}
+		else if (method == "textDocument/signatureHelp")
+		{
+			SendResponse(id, BuildSignatureHelpResult(JsonString(body, "uri"), JsonInt(body, "line"), JsonInt(body, "character")));
+		}
+		else if (method == "shutdown")
+		{
+			SendResponse(id, "null");
+		}
+		else if (method == "exit")
+		{
+			terminated = true;
+		}
+	}
+};
+
+static int RunLanguageServer()
+{
+#ifdef _WIN32
+	_setmode(_fileno(stdin), _O_BINARY);
+	_setmode(_fileno(stdout), _O_BINARY);
+#endif
+	NeoLspSession session;
+	std::string body;
+	while (!session.terminated && DapReadMessage(body))
+		session.Handle(body);
+	return 0;
+}
+
 #ifdef _WIN32
 #include <windows.h>
 
@@ -1720,9 +2029,13 @@ int main(int argc, char* argv[])
 		{
 			exitCode = RunDebugAdapter(pLoader);
 		}
+		else if (command == "--lsp")
+		{
+			exitCode = RunLanguageServer();
+		}
 		else
 		{
-			printf("usage: console.exe [--list | --run <sample> | --file <script.ns> | --smoke | --bench | --debug-smoke | --compiler-error-regression | --dap]\n");
+			printf("usage: console.exe [--list | --run <sample> | --file <script.ns> | --smoke | --bench | --debug-smoke | --compiler-error-regression | --dap | --lsp]\n");
 			exitCode = -1;
 		}
 
