@@ -62,6 +62,15 @@ struct SUtf8One
 #define NEOS_FORCEINLINE inline
 #endif
 
+// 콜드 핸들러 out-of-line 강제용. RunInternal 이 L1I(32KB) 를 넘지 않게 덩치 큰/드문 op 를 분리.
+#if defined(_MSC_VER)
+#define NEOS_NOINLINE __declspec(noinline)
+#elif defined(__GNUC__)
+#define NEOS_NOINLINE __attribute__((noinline))
+#else
+#define NEOS_NOINLINE
+#endif
+
 };
 
 #include <vector>

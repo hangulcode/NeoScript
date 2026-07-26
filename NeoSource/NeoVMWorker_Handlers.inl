@@ -5,7 +5,7 @@
 // --- Instruction Handlers ---
 // Return 'true' to exit the RunInternal loop, 'false' to continue.
 
-NEOS_FORCEINLINE bool handle_STR_ADD(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_STR_ADD(const SVMOperation& OP) {
     Var_SetStringA(GetVarPtrF1(OP), ToString(GetVarPtr2(OP)) + ToString(GetVarPtr3(OP)));
     return false;
 }
@@ -35,7 +35,7 @@ NEOS_FORCEINLINE bool handle_GETTYPE(const SVMOperation& OP) {
     return false;
 }
 
-NEOS_FORCEINLINE bool handle_SLEEP(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_SLEEP(const SVMOperation& OP) {
 	if (m_iNativeScriptCallDepth > 0) {
 		SetError("sleep is not allowed in a synchronous native-to-script call");
 		return false;
@@ -204,7 +204,7 @@ NEOS_FORCEINLINE bool handle_CLT_READ(const SVMOperation& OP) {
     return false;
 }
 
-NEOS_FORCEINLINE bool handle_TABLE_REMOVE(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_TABLE_REMOVE(const SVMOperation& OP) {
     TableRemove(GetVarPtrF1(OP), GetVarPtr2(OP));
     return false;
 }
@@ -214,31 +214,31 @@ NEOS_FORCEINLINE bool handle_CLT_MOV(const SVMOperation& OP) {
     return false;
 }
 
-NEOS_FORCEINLINE bool handle_TABLE_ADD2(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_TABLE_ADD2(const SVMOperation& OP) {
     VarInfo* pVarTemp = GetTableItemValid(GetVarPtrF1(OP), GetVarPtr2(OP));
     if (pVarTemp) Add2(pVarTemp, GetVarPtr3(OP));
     return false;
 }
 
-NEOS_FORCEINLINE bool handle_TABLE_SUB2(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_TABLE_SUB2(const SVMOperation& OP) {
     VarInfo* pVarTemp = GetTableItemValid(GetVarPtrF1(OP), GetVarPtr2(OP));
     if (pVarTemp) Sub2(pVarTemp, GetVarPtr3(OP));
     return false;
 }
 
-NEOS_FORCEINLINE bool handle_TABLE_MUL2(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_TABLE_MUL2(const SVMOperation& OP) {
     VarInfo* pVarTemp = GetTableItemValid(GetVarPtrF1(OP), GetVarPtr2(OP));
     if (pVarTemp) Mul2(pVarTemp, GetVarPtr3(OP));
     return false;
 }
 
-NEOS_FORCEINLINE bool handle_TABLE_DIV2(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_TABLE_DIV2(const SVMOperation& OP) {
     VarInfo* pVarTemp = GetTableItemValid(GetVarPtrF1(OP), GetVarPtr2(OP));
     if (pVarTemp) Div2(pVarTemp, GetVarPtr3(OP));
     return false;
 }
 
-NEOS_FORCEINLINE bool handle_TABLE_PERSENT2(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_TABLE_PERSENT2(const SVMOperation& OP) {
     VarInfo* pVarTemp = GetTableItemValid(GetVarPtrF1(OP), GetVarPtr2(OP));
     if (pVarTemp) Per2(pVarTemp, GetVarPtr3(OP));
     return false;
@@ -249,7 +249,7 @@ NEOS_FORCEINLINE bool handle_LIST_ALLOC(const SVMOperation& OP) {
     return false;
 }
 
-NEOS_FORCEINLINE bool handle_LIST_REMOVE(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_LIST_REMOVE(const SVMOperation& OP) {
     TableRemove(GetVarPtrF1(OP), GetVarPtr2(OP));
     return false;
 }
@@ -264,7 +264,7 @@ NEOS_FORCEINLINE bool handle_CHANGE_INT(const SVMOperation& OP) {
     return false;
 }
 
-NEOS_FORCEINLINE bool handle_YIELD(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_YIELD(const SVMOperation& OP) {
 	if (m_iNativeScriptCallDepth > 0) {
 		SetError("yield is not allowed in a synchronous native-to-script call");
 		return false;
@@ -274,7 +274,7 @@ NEOS_FORCEINLINE bool handle_YIELD(const SVMOperation& OP) {
     return false; // Continue RunInternal
 }
 
-NEOS_FORCEINLINE bool handle_IDLE(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_IDLE(const SVMOperation& OP) {
     SetCodeIncPtr(OP.n23);
     while (true)
     {
@@ -341,7 +341,7 @@ NEOS_FORCEINLINE bool handle_NONE(const SVMOperation& OP) {
     return false;
 }
 
-NEOS_FORCEINLINE bool handle_ERROR(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_ERROR(const SVMOperation& OP) {
     int idx = _isErrorOPIndex;
     bool blDebugInfo = IsDebugInfo();
     int _lineseq = -1;
