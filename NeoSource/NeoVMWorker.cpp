@@ -35,6 +35,32 @@ static std::string g_meta_Per2 = "%=";
 
 #include "NeoVMWorker.inl"
 
+// 벡터 값타입 세터 (native 호출 내부에서만 쓰이므로 non-inline. NeoLib.cpp 에서 링크됨)
+void INeoVMWorker::Var_SetVec2(VarInfo* d, float x, float y)
+{
+	if (d->IsAllocType()) Var_Release(d);
+	d->SetType(VAR_VEC2);
+	d->_vec[0] = x; d->_vec[1] = y;
+}
+void INeoVMWorker::Var_SetVec3(VarInfo* d, float x, float y, float z)
+{
+	if (d->IsAllocType()) Var_Release(d);
+	d->SetType(VAR_VEC3);
+	d->_vec[0] = x; d->_vec[1] = y; d->_vec[2] = z;
+}
+void INeoVMWorker::Var_SetVec4(VarInfo* d, float x, float y, float z, float w)
+{
+	if (d->IsAllocType()) Var_Release(d);
+	d->SetType(VAR_VEC4);
+	d->_vec[0] = x; d->_vec[1] = y; d->_vec[2] = z; d->_vec[3] = w;
+}
+void INeoVMWorker::Var_SetQuat(VarInfo* d, float x, float y, float z, float w)
+{
+	if (d->IsAllocType()) Var_Release(d);
+	d->SetType(VAR_QUAT);
+	d->_vec[0] = x; d->_vec[1] = y; d->_vec[2] = z; d->_vec[3] = w;
+}
+
 int& GetModuleRefCount(VarInfo* p)
 {
 	return ((CNeoVMWorker*)(p->_module))->_refCount;
@@ -154,6 +180,16 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 		return std::string(v1->_c.c);
 	case VAR_STRING:
 		return v1->_str->_str;
+	case VAR_VEC2:
+		snprintf(ch, _countof(ch), "(%g, %g)", v1->_vec[0], v1->_vec[1]);
+		return ch;
+	case VAR_VEC3:
+		snprintf(ch, _countof(ch), "(%g, %g, %g)", v1->_vec[0], v1->_vec[1], v1->_vec[2]);
+		return ch;
+	case VAR_VEC4:
+	case VAR_QUAT:
+		snprintf(ch, _countof(ch), "(%g, %g, %g, %g)", v1->_vec[0], v1->_vec[1], v1->_vec[2], v1->_vec[3]);
+		return ch;
 	case VAR_MAP:
 		return "map";
 	case VAR_LIST:
@@ -239,6 +275,11 @@ int CNeoVMWorker::ToSize(VarInfo* v1)
 		return (int)v1->_lst->_itemCount;
 	case VAR_SET:
 		return (int)v1->_set->_itemCount;
+	case VAR_VEC2:
+	case VAR_VEC3:
+	case VAR_VEC4:
+	case VAR_QUAT:
+		return v1->VectorComponentCount();
 	default:
 		break;
 	}
@@ -256,6 +297,14 @@ VarInfo* CNeoVMWorker::GetType(VarInfo* v1)
 		return &GetVM()->m_sDefaultValue[NDF_BOOL];
 	case VAR_NONE:
 		return &GetVM()->m_sDefaultValue[NDF_NULL];
+	case VAR_VEC2:
+		return &GetVM()->m_sDefaultValue[NDF_VEC2];
+	case VAR_VEC3:
+		return &GetVM()->m_sDefaultValue[NDF_VEC3];
+	case VAR_VEC4:
+		return &GetVM()->m_sDefaultValue[NDF_VEC4];
+	case VAR_QUAT:
+		return &GetVM()->m_sDefaultValue[NDF_QUAT];
 	case VAR_FUN:
 		return &GetVM()->m_sDefaultValue[NDF_FUNCTION];
 	case VAR_ITERATOR:

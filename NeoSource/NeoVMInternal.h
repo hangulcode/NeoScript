@@ -54,6 +54,11 @@ enum eNeoDefaultString
 	NDF_DEAD,
 	NDF_NORMAL,
 
+	NDF_VEC2,
+	NDF_VEC3,
+	NDF_VEC4,
+	NDF_QUAT,
+
 	NDF_MAX
 };
 
@@ -363,6 +368,18 @@ NEOS_FORCEINLINE void Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
 	case VAR_FUN: v1->_fun_index = v2->_fun_index; break;
 	case VAR_FUN_NATIVE: v1->_funPtr = v2->_funPtr; break;
 	case VAR_CHAR: v1->_c = v2->_c; break;
+
+	// 벡터 값타입: refcount 없이 성분 값복사. switch 가 타입별로 갈리므로 각 케이스는
+	case VAR_VEC2:
+		memcpy(v1->_vec, v2->_vec, sizeof(float) * 2);
+		break;
+	case VAR_VEC3:
+		memcpy(v1->_vec, v2->_vec, sizeof(float) * 3);
+		break;
+	case VAR_VEC4:
+	case VAR_QUAT:
+		memcpy(v1->_vec, v2->_vec, sizeof(float) * 4);
+		break;
 
 	case VAR_STRING: v1->_str = v2->_str; ++v1->_str->_refCount; break;
 	case VAR_MAP: v1->_tbl = v2->_tbl; ++v1->_tbl->_refCount; break;

@@ -74,6 +74,22 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 		if(pClt->_lst->SetValue(pKey->_int, pValue))
 			return;
 		break;
+	case VAR_VEC2:
+	case VAR_VEC3:
+	case VAR_VEC4:
+	case VAR_QUAT:
+		// 가변 성분 쓰기: v[i] = x. 값타입이라 이 VarInfo 인스턴스에만 반영된다.
+		if (pKey->GetType() == VAR_INT && pValue->IsNumber())
+		{
+			unsigned idx = (unsigned)pKey->_int;
+			if (idx < (unsigned)pClt->VectorComponentCount())
+			{
+				pClt->_vec[idx] = (float)pValue->GetFloatNumber();
+				return;
+			}
+		}
+		SetError("Vector Insert Index Error");
+		return;
 	default:
 		break;
 	}
@@ -213,6 +229,21 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 		if (true == pClt->_lst->GetValue(pKey->_int, pValue))
 			return;
 		break;
+	case VAR_VEC2:
+	case VAR_VEC3:
+	case VAR_VEC4:
+	case VAR_QUAT:
+		if (pKey->GetType() == VAR_INT)
+		{
+			unsigned idx = (unsigned)pKey->_int;
+			if (idx < (unsigned)pClt->VectorComponentCount())
+			{
+				Var_SetFloat(pValue, pClt->_vec[idx]);
+				return;
+			}
+		}
+		SetError("Vector Read Index Error");
+		return;
 	default:
 		break;
 	}

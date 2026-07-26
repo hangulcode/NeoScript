@@ -462,6 +462,10 @@ CNeoVMImpl::CNeoVMImpl()
 		case NDF_RUNNING: Var_SetStringA(&m_sDefaultValue[i], "running"); break;
 		case NDF_DEAD: Var_SetStringA(&m_sDefaultValue[i], "dead"); break;
 		case NDF_NORMAL: Var_SetStringA(&m_sDefaultValue[i], "normal"); break;
+		case NDF_VEC2: Var_SetStringA(&m_sDefaultValue[i], "Vector2"); break;
+		case NDF_VEC3: Var_SetStringA(&m_sDefaultValue[i], "Vector3"); break;
+		case NDF_VEC4: Var_SetStringA(&m_sDefaultValue[i], "Vector4"); break;
+		case NDF_QUAT: Var_SetStringA(&m_sDefaultValue[i], "Quaternion"); break;
 		default:
 			SetError("unknown Default Value");
 			break;

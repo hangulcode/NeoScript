@@ -242,4 +242,57 @@ bool VarInfo::SetListIndexer(VMHash<int>* pIndexer)
 	return true;
 }
 
+// ---- 벡터 값타입 Get/Set ----
+// Get: 벡터 값타입(VAR_VEC*) 전용. 리스트 폴백 없음 — 벡터 인자는 값타입이어야 한다.
+bool VarInfo::GetVec2(NS_FLOAT& x, NS_FLOAT& y)
+{
+	if (IsVector() && VectorComponentCount() >= 2) { x = _vec[0]; y = _vec[1]; return true; }
+	return false;
+}
+bool VarInfo::GetVec3(NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z)
+{
+	if (IsVector() && VectorComponentCount() >= 3) { x = _vec[0]; y = _vec[1]; z = _vec[2]; return true; }
+	return false;
+}
+bool VarInfo::GetVec4(NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z, NS_FLOAT& w)
+{
+	if (IsVector() && VectorComponentCount() >= 4) { x = _vec[0]; y = _vec[1]; z = _vec[2]; w = _vec[3]; return true; }
+	return false;
+}
+bool VarInfo::GetQuat(NS_FLOAT& w, NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z)
+{
+	// wxyz 순서 (엔진 컨벤션). 저장은 _vec[0]=w,[1]=x,[2]=y,[3]=z.
+	if (IsVector() && VectorComponentCount() >= 4) { w = _vec[0]; x = _vec[1]; y = _vec[2]; z = _vec[3]; return true; }
+	return false;
+}
+// Set: non-alloc 슬롯에만 세팅(참조값 leak 방지). 워커의 Var_SetVec* 는 release 까지 처리한다.
+bool VarInfo::SetVec2(NS_FLOAT x, NS_FLOAT y)
+{
+	if (IsAllocType()) return false;
+	SetType(VAR_VEC2);
+	_vec[0] = (float)x; _vec[1] = (float)y;
+	return true;
+}
+bool VarInfo::SetVec3(NS_FLOAT x, NS_FLOAT y, NS_FLOAT z)
+{
+	if (IsAllocType()) return false;
+	SetType(VAR_VEC3);
+	_vec[0] = (float)x; _vec[1] = (float)y; _vec[2] = (float)z;
+	return true;
+}
+bool VarInfo::SetVec4(NS_FLOAT x, NS_FLOAT y, NS_FLOAT z, NS_FLOAT w)
+{
+	if (IsAllocType()) return false;
+	SetType(VAR_VEC4);
+	_vec[0] = (float)x; _vec[1] = (float)y; _vec[2] = (float)z; _vec[3] = (float)w;
+	return true;
+}
+bool VarInfo::SetQuat(NS_FLOAT w, NS_FLOAT x, NS_FLOAT y, NS_FLOAT z)
+{
+	if (IsAllocType()) return false;
+	SetType(VAR_QUAT);
+	_vec[0] = (float)w; _vec[1] = (float)x; _vec[2] = (float)y; _vec[3] = (float)z;
+	return true;
+}
+
 };

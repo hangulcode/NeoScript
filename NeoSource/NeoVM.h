@@ -137,6 +137,13 @@ enum VAR_TYPE : u8
 
 	VAR_CHAR,
 
+	// 인라인 벡터 값타입 (non-alloc: refcount/힙 없음, VarInfo._vec 에 성분 인라인).
+	// IsAllocType 경계(VAR_STRING) 앞에 둬서 값복사 경로를 타게 한다. For Game_Engine
+	VAR_VEC2,
+	VAR_VEC3,
+	VAR_VEC4,
+	VAR_QUAT,
+
 	VAR_STRING,	// Alloc
 	VAR_MAP,
 	VAR_LIST,
@@ -221,6 +228,7 @@ public:
 		INeoVMWorker* _module;
 		AsyncInfo*	_async;
 		CollectionIterator	_it;
+		float		_vec[4]; // VAR_VEC2/VEC3/VEC4/QUAT 성분 인라인 For Game_Engine (유효 성분 수는 태그로 결정) 
 	};
 
 	NEOS_FORCEINLINE VarInfo() { _type = VAR_NONE; }
@@ -242,6 +250,21 @@ public:
 	{
 		return (VAR_INT == _type || VAR_FLOAT == _type);
 	}
+	NEOS_FORCEINLINE bool IsVector()
+	{
+		return (_type >= VAR_VEC2 && _type <= VAR_QUAT);
+	}
+	NEOS_FORCEINLINE int VectorComponentCount()
+	{
+		switch (_type)
+		{
+		case VAR_VEC2: return 2;
+		case VAR_VEC3: return 3;
+		case VAR_VEC4:
+		case VAR_QUAT: return 4;
+		default: return 0;
+		}
+	}
 	NEOS_FORCEINLINE NS_FLOAT GetFloatNumber()
 	{
 		if (VAR_INT == _type) return (NS_FLOAT)_int;
@@ -255,7 +278,22 @@ public:
 	bool ListInsertFloat(int idx, NS_FLOAT value);
 	bool ListFindFloat(int idx, NS_FLOAT& value);
 	bool SetListIndexer(VMHash<int>* pIndexer);
+
+	// 벡터 값타입 Get/Set (호스트/엔진용). Get 은 벡터 값타입(VAR_VEC*) 전용 — 리스트 폴백 없음.
+	// Set 은 대상 VarInfo 가 non-alloc 일 때만 세팅한다(참조값 leak 방지) — alloc 이면 false.
+	// Quaternion 은 엔진 컨벤션대로 wxyz 순서, Vector4 는 xyzw.
+	bool GetVec2(NS_FLOAT& x, NS_FLOAT& y);
+	bool GetVec3(NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z);
+	bool GetVec4(NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z, NS_FLOAT& w);
+	bool GetQuat(NS_FLOAT& w, NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z);
+	bool SetVec2(NS_FLOAT x, NS_FLOAT y);
+	bool SetVec3(NS_FLOAT x, NS_FLOAT y, NS_FLOAT z);
+	bool SetVec4(NS_FLOAT x, NS_FLOAT y, NS_FLOAT z, NS_FLOAT w);
+	bool SetQuat(NS_FLOAT w, NS_FLOAT x, NS_FLOAT y, NS_FLOAT z);
 };
+
+// 벡터 값타입(float[4] union)이 들어가면서 16 → 24 바이트. 의도치 않은 크기 변화 감지.
+static_assert(sizeof(VarInfo) == 24, "VarInfo expected to be 24 bytes with inline vector value type");
 
 enum NeoDebugStopReason
 {
@@ -480,6 +518,10 @@ public:
 	void Var_SetInt(VarInfo* d, int v);
 	void Var_SetFloat(VarInfo* d, NS_FLOAT v);
 	void Var_SetBool(VarInfo* d, bool v);
+	void Var_SetVec2(VarInfo* d, float x, float y);
+	void Var_SetVec3(VarInfo* d, float x, float y, float z);
+	void Var_SetVec4(VarInfo* d, float x, float y, float z, float w);
+	void Var_SetQuat(VarInfo* d, float x, float y, float z, float w);
 	void Var_SetCoroutine(VarInfo* d, CoroutineInfo* p);
 	void Var_SetString(VarInfo* d, const char* str);
 	void Var_SetString(VarInfo* d, SUtf8One c);

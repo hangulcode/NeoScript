@@ -308,6 +308,31 @@ export fun VecChurn(var n)
 			5
 		},
 		{
+			// vec_churn 과 동일하지만 힙 리스트 대신 math.Vector3 인라인 값타입 사용.
+			// 값타입 할당 제거 효과의 실측 (vec_churn 대비 배율 = 값타입 이득).
+			"vec_churn_vt",
+			R"(
+import math;
+fun V3(var x, var y, var z) { return math.Vector3(x, y, z); }
+fun AddV3(var a, var b) { return math.Vector3(a[0] + b[0], a[1] + b[1], a[2] + b[2]); }
+export fun VecChurnVT(var n)
+{
+	var sum = 0.0;
+	for(var i in 0, n, 1)
+	{
+		var a = V3(i, i + 1.0, i + 2.0);
+		var b = V3(i * 0.5, i * 0.25, i * 0.125);
+		var c = AddV3(a, b);
+		sum = sum + c[0] + c[1] + c[2];
+	}
+	return sum;
+}
+)",
+			"VecChurnVT",
+			200000,
+			5
+		},
+		{
 			"loop_sum",
 			R"(
 export fun LoopSum(var n)
