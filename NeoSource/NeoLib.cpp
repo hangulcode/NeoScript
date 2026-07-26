@@ -1372,6 +1372,7 @@ static VMHash<TYPE_NeoLib> g_sNeoFunLib_String;
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_Map;
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_Async;
 static std::vector<TYPE_NeoLib> g_sNeoFunLib_DefaultNative;
+static std::vector<u8> g_sNeoFunLib_DefaultIntrinsic; // native index 별 intrinsic opcode (기본 NOP_NONE)
 static std::map<std::string, int> g_sNeoFunLib_DefaultNativeIndex;
 
 bool CNeoVMImpl::_funInitLib = false;
@@ -1434,9 +1435,17 @@ static int AddDefaultNativeFun(const std::string& nativeName, TYPE_NeoLib fun)
 
 	int nativeIndex = (int)g_sNeoFunLib_DefaultNative.size();
 	g_sNeoFunLib_DefaultNative.push_back(fun);
+	g_sNeoFunLib_DefaultIntrinsic.push_back(NOP_NONE);
 	g_sNeoFunLib_DefaultNativeIndex[nativeName] = nativeIndex;
 	g_sNeoFunLib_Default.Add(nativeName, fun);
 	return nativeIndex;
+}
+// 특정 native 함수를 로드 시 전용 opcode 로 대체하도록 표시 (문자열 하드코딩 대신 등록부에 명시).
+static void SetSystemFunIntrinsic(const std::string& fname, eNOperation op)
+{
+	auto it = g_sNeoFunLib_DefaultNativeIndex.find("#" + fname);
+	if (it != g_sNeoFunLib_DefaultNativeIndex.end())
+		g_sNeoFunLib_DefaultIntrinsic[it->second] = (u8)op;
 }
 
 // 첫 항목 = 리턴 타입(필수, 없으면 "void"), 이후 파라미터를 "타입 이름" 문자열로 하나씩 나열.
@@ -1512,6 +1521,13 @@ bool CNeoVMImpl::CallDefaultNativeByIndex(int nativeIndex, CNeoVMWorker* pWorker
 		return false;
 	return (*g_sNeoFunLib_DefaultNative[nativeIndex])(pWorker, nullptr, args);
 }
+// 로드 시 PTRCALL2 를 대체할 intrinsic opcode. 없으면 NOP_NONE.
+int CNeoVMImpl::GetDefaultNativeIntrinsic(int nativeIndex)
+{
+	if (nativeIndex < 0 || nativeIndex >= (int)g_sNeoFunLib_DefaultIntrinsic.size())
+		return NOP_NONE;
+	return g_sNeoFunLib_DefaultIntrinsic[nativeIndex];
+}
 
 static void AddGlobalLibFun()
 {
@@ -1542,6 +1558,11 @@ static void AddGlobalLibFun()
 	AddSystemFun("Vector3", &neo_libs::Math_Vector3, "Vector3", "float x", "float y", "float z");
 	AddSystemFun("Vector4", &neo_libs::Math_Vector4, "Vector4", "float x", "float y", "float z", "float w");
 	AddSystemFun("Quaternion", &neo_libs::Math_Quaternion, "Quaternion", "float w", "float x", "float y", "float z");
+	// 벡터 생성자는 LoadVM 에서 전용 opcode 로 대체 (native 호출 오버헤드 제거). native 구현은 폴백으로 유지.
+	SetSystemFunIntrinsic("Vector2", NOP_VEC2_MAKE);
+	SetSystemFunIntrinsic("Vector3", NOP_VEC3_MAKE);
+	SetSystemFunIntrinsic("Vector4", NOP_VEC4_MAKE);
+	SetSystemFunIntrinsic("Quaternion", NOP_QUAT_MAKE);
 	AddSystemFun("Clamp01", &neo_libs::Math_Clamp01, "float", "float x");
 	AddSystemFun("Clamp", &neo_libs::Math_Clamp, "float", "float x", "float min", "float max");
 	AddSystemFun("SmoothStep01", &neo_libs::Math_SmoothStep01, "float", "float t");

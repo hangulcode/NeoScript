@@ -295,6 +295,47 @@ NEOS_FORCEINLINE bool handle_IDLE(const SVMOperation& OP) {
     return false;
 }
 
+// 벡터 생성 intrinsic (LoadVM 에서 PTRCALL2(#Vector*) 패치). native 호출 프레임 없이
+// 인자 슬롯(_iSP_VarsMax+1..N)을 직접 읽어 값타입 세팅. n3=결과 슬롯.
+NEOS_FORCEINLINE bool handle_VEC2_MAKE(const SVMOperation& OP) {
+    if (OP.argFlag & NEOS_OP_CALL_NORESULT) return false;
+    Var_SetVec2(GetVarPtr3(OP),
+        (float)GetStackFromBase(_iSP_VarsMax + 1)->GetFloatNumber(),
+        (float)GetStackFromBase(_iSP_VarsMax + 2)->GetFloatNumber());
+    if (_iSP_Vars_Max2 < _iSP_VarsMax + 3) _iSP_Vars_Max2 = _iSP_VarsMax + 3;
+    return false;
+}
+NEOS_FORCEINLINE bool handle_VEC3_MAKE(const SVMOperation& OP) {
+    if (OP.argFlag & NEOS_OP_CALL_NORESULT) return false;
+    Var_SetVec3(GetVarPtr3(OP),
+        (float)GetStackFromBase(_iSP_VarsMax + 1)->GetFloatNumber(),
+        (float)GetStackFromBase(_iSP_VarsMax + 2)->GetFloatNumber(),
+        (float)GetStackFromBase(_iSP_VarsMax + 3)->GetFloatNumber());
+    if (_iSP_Vars_Max2 < _iSP_VarsMax + 4) _iSP_Vars_Max2 = _iSP_VarsMax + 4;
+    return false;
+}
+NEOS_FORCEINLINE bool handle_VEC4_MAKE(const SVMOperation& OP) {
+    if (OP.argFlag & NEOS_OP_CALL_NORESULT) return false;
+    Var_SetVec4(GetVarPtr3(OP),
+        (float)GetStackFromBase(_iSP_VarsMax + 1)->GetFloatNumber(),
+        (float)GetStackFromBase(_iSP_VarsMax + 2)->GetFloatNumber(),
+        (float)GetStackFromBase(_iSP_VarsMax + 3)->GetFloatNumber(),
+        (float)GetStackFromBase(_iSP_VarsMax + 4)->GetFloatNumber());
+    if (_iSP_Vars_Max2 < _iSP_VarsMax + 5) _iSP_Vars_Max2 = _iSP_VarsMax + 5;
+    return false;
+}
+NEOS_FORCEINLINE bool handle_QUAT_MAKE(const SVMOperation& OP) {
+    if (OP.argFlag & NEOS_OP_CALL_NORESULT) return false;
+    // wxyz 순서 (등록 "w,x,y,z" = 인자 1..4)
+    Var_SetQuat(GetVarPtr3(OP),
+        (float)GetStackFromBase(_iSP_VarsMax + 1)->GetFloatNumber(),
+        (float)GetStackFromBase(_iSP_VarsMax + 2)->GetFloatNumber(),
+        (float)GetStackFromBase(_iSP_VarsMax + 3)->GetFloatNumber(),
+        (float)GetStackFromBase(_iSP_VarsMax + 4)->GetFloatNumber());
+    if (_iSP_Vars_Max2 < _iSP_VarsMax + 5) _iSP_Vars_Max2 = _iSP_VarsMax + 5;
+    return false;
+}
+
 NEOS_FORCEINLINE bool handle_NONE(const SVMOperation& OP) {
     // No operation
     return false;

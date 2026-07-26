@@ -188,6 +188,13 @@ enum eNOperation : OpType
 	NOP_YIELD,
 	NOP_IDLE,
 
+	// math.Vector2/3/4/Quaternion 생성 intrinsic. LoadVM 에서 PTRCALL2(#Vector*) 를 패치.
+	// native 호출 프레임 없이 인자 슬롯에서 직접 Var_SetVec (n2=인자수, n3=결과).
+	NOP_VEC2_MAKE,
+	NOP_VEC3_MAKE,
+	NOP_VEC4_MAKE,
+	NOP_QUAT_MAKE,
+
 	NOP_NONE,
 	NOP_ERROR,
 	NOP_MAX,

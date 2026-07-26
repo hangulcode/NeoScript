@@ -601,6 +601,14 @@ bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, 
 		if (nativeIndex < 0 || nativeIndex > SHRT_MAX)
 			continue;
 
+		// intrinsic 이 지정된 native(벡터 생성 등)는 전용 opcode 로 패치 (n2=인자수, n3=결과 유지).
+		eNOperation intrinsic = (eNOperation)CNeoVMImpl::GetDefaultNativeIntrinsic(nativeIndex);
+		if (intrinsic != NOP_NONE)
+		{
+			op.op = intrinsic;
+			continue;
+		}
+
 		op.op = NOP_NATIVECALL;
 		op.n1 = (short)nativeIndex;
 	}
@@ -1841,6 +1849,10 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 			if (handle_YIELD(OP)) return true;
 			break;
 		case NOP_IDLE:          handle_IDLE(OP); break;
+		case NOP_VEC2_MAKE:     handle_VEC2_MAKE(OP); break;
+		case NOP_VEC3_MAKE:     handle_VEC3_MAKE(OP); break;
+		case NOP_VEC4_MAKE:     handle_VEC4_MAKE(OP); break;
+		case NOP_QUAT_MAKE:     handle_QUAT_MAKE(OP); break;
 		case NOP_NONE:          handle_NONE(OP); break;
 		case NOP_ERROR:
 			handle_ERROR(OP);
