@@ -181,14 +181,14 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 	case VAR_STRING:
 		return v1->_str->_str;
 	case VAR_VEC2:
-		snprintf(ch, _countof(ch), "(%g, %g)", v1->_vec[0], v1->_vec[1]);
+		snprintf(ch, sizeof(ch), "(%g, %g)", v1->_vec[0], v1->_vec[1]);
 		return ch;
 	case VAR_VEC3:
-		snprintf(ch, _countof(ch), "(%g, %g, %g)", v1->_vec[0], v1->_vec[1], v1->_vec[2]);
+		snprintf(ch, sizeof(ch), "(%g, %g, %g)", v1->_vec[0], v1->_vec[1], v1->_vec[2]);
 		return ch;
 	case VAR_VEC4:
 	case VAR_QUAT:
-		snprintf(ch, _countof(ch), "(%g, %g, %g, %g)", v1->_vec[0], v1->_vec[1], v1->_vec[2], v1->_vec[3]);
+		snprintf(ch, sizeof(ch), "(%g, %g, %g, %g)", v1->_vec[0], v1->_vec[1], v1->_vec[2], v1->_vec[3]);
 		return ch;
 	case VAR_MAP:
 		return "map";
