@@ -403,6 +403,39 @@ NEOS_FORCEINLINE void CNeoVMWorker::Or(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	}
 	SetError("| Error");
 }
+NEOS_FORCEINLINE bool CNeoVMWorker::VecArith(VarInfo* r, VarInfo* v1, VarInfo* v2, int op)
+{
+	VAR_TYPE vt = v1->GetType();
+	if (vt == VAR_QUAT) return false; // Quat 산술은 미지원 (회전은 RotateVectorByQuat)
+	int n = v1->VectorComponentCount();
+	float tmp[4] = { 0, 0, 0, 0 };
+	if (v2->GetType() == vt)
+	{
+		// Vec op Vec : 성분별
+		for (int i = 0; i < n; i++)
+		{
+			float a = v1->_vec[i], b = v2->_vec[i];
+			tmp[i] = (op == 0) ? a + b : (op == 1) ? a - b : (op == 2) ? a * b : a / b;
+		}
+	}
+	else if ((op == 2 || op == 3) && v2->IsNumber())
+	{
+		// Vec * scalar, Vec / scalar
+		float s = (float)v2->GetFloatNumber();
+		for (int i = 0; i < n; i++)
+			tmp[i] = (op == 2) ? v1->_vec[i] * s : v1->_vec[i] / s;
+	}
+	else
+		return false;
+	// tmp 로 먼저 계산했으므로 r == v1 (a = a + b) 도 안전
+	switch (vt)
+	{
+	case VAR_VEC2: Var_SetVec2(r, tmp[0], tmp[1]); return true;
+	case VAR_VEC3: Var_SetVec3(r, tmp[0], tmp[1], tmp[2]); return true;
+	case VAR_VEC4: Var_SetVec4(r, tmp[0], tmp[1], tmp[2], tmp[3]); return true;
+	default: return false;
+	}
+}
 NEOS_FORCEINLINE void CNeoVMWorker::Add3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
@@ -455,8 +488,13 @@ NEOS_FORCEINLINE void CNeoVMWorker::Add3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			return;
 		}
 		break;
+	case VAR_VEC2:
+	case VAR_VEC3:
+	case VAR_VEC4:
+		if (VecArith(r, v1, v2, 0)) return;
+		break;
 	case VAR_MAP:
-		if (Call_MetaTable(v1, g_meta_Add3, r, v1, v2)) 
+		if (Call_MetaTable(v1, g_meta_Add3, r, v1, v2))
 			return;
 		break;
 	case VAR_LIST:
@@ -502,8 +540,13 @@ NEOS_FORCEINLINE void CNeoVMWorker::Sub3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		break;
 	case VAR_STRING:
 		break;
+	case VAR_VEC2:
+	case VAR_VEC3:
+	case VAR_VEC4:
+		if (VecArith(r, v1, v2, 1)) return;
+		break;
 	case VAR_MAP:
-		if (Call_MetaTable(v1, g_meta_Sub3, r, v1, v2)) 
+		if (Call_MetaTable(v1, g_meta_Sub3, r, v1, v2))
 			return;
 		break;
 	case VAR_LIST:
@@ -549,8 +592,13 @@ NEOS_FORCEINLINE void CNeoVMWorker::Mul3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		break;
 	case VAR_STRING:
 		break;
+	case VAR_VEC2:
+	case VAR_VEC3:
+	case VAR_VEC4:
+		if (VecArith(r, v1, v2, 2)) return;
+		break;
 	case VAR_MAP:
-		if (Call_MetaTable(v1, g_meta_Mul3, r, v1, v2)) 
+		if (Call_MetaTable(v1, g_meta_Mul3, r, v1, v2))
 			return;
 		break;
 	case VAR_LIST:
@@ -594,8 +642,13 @@ NEOS_FORCEINLINE void CNeoVMWorker::Div3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		break;
 	case VAR_STRING:
 		break;
+	case VAR_VEC2:
+	case VAR_VEC3:
+	case VAR_VEC4:
+		if (VecArith(r, v1, v2, 3)) return;
+		break;
 	case VAR_MAP:
-		if (Call_MetaTable(v1, g_meta_Div3, r, v1, v2)) 
+		if (Call_MetaTable(v1, g_meta_Div3, r, v1, v2))
 			return;
 		break;
 	case VAR_LIST:

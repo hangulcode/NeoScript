@@ -314,7 +314,7 @@ export fun VecChurn(var n)
 			R"(
 import math;
 fun V3(var x, var y, var z) { return math.Vector3(x, y, z); }
-fun AddV3(var a, var b) { return math.Vector3(a[0] + b[0], a[1] + b[1], a[2] + b[2]); }
+fun AddV3(var a, var b) { return a + b; }
 export fun VecChurnVT(var n)
 {
 	var sum = 0.0;
