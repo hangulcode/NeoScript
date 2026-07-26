@@ -1,6 +1,8 @@
 // Compiler and VM regression suite.
 // Run from Samples/console with: console.exe --run regression
 
+import math;
+
 const REG_CONST = 6 * 7;
 const REG_MASK = 0x10 | 0x04;
 const REG_SOURCE_LINE = __LINE__;
@@ -614,6 +616,36 @@ fun TestBulk()
     Check(mapSum == 44608256, __LINE__);
 }
 
+fun TestVectorValueTypes()
+{
+    var a = math.Vector3(1.0, 2.0, 3.0);
+    var b = math.Vector3(4.0, 5.0, 6.0);
+    Check(type(a) == "Vector3", __LINE__);
+    Check(tosize(a) == 3, __LINE__);
+    Check(a[0] == 1.0 && a[1] == 2.0 && a[2] == 3.0, __LINE__);
+
+    var copy = a;
+    copy[0] = 9.0;
+    Check(a[0] == 1.0 && copy[0] == 9.0, __LINE__);
+    Check(a == math.Vector3(1.0, 2.0, 3.0), __LINE__);
+    Check(a != b, __LINE__);
+
+    var sum = a + b;
+    var scaled = sum * 0.5;
+    Check(sum[0] == 5.0 && sum[1] == 7.0 && sum[2] == 9.0, __LINE__);
+    Check(scaled[0] == 2.5 && scaled[1] == 3.5 && scaled[2] == 4.5, __LINE__);
+    Check(math.DistanceSquared3(a, b) == 27.0, __LINE__);
+
+    var lerped = math.Lerp3(a, b, 0.5);
+    Check(lerped == math.Vector3(2.5, 3.5, 4.5), __LINE__);
+    var normalized = math.Normalize3(math.Vector3(0.0, 0.0, 0.0), math.Vector3(0.0, 1.0, 0.0));
+    Check(normalized == math.Vector3(0.0, 1.0, 0.0), __LINE__);
+
+    var q = math.Quaternion(1.0, 0.0, 0.0, 0.0);
+    Check(type(q) == "Quaternion" && q[0] == 1.0 && q[3] == 0.0, __LINE__);
+    Check(math.RotateVectorByQuat(q, a) == a, __LINE__);
+}
+
 fun RegressionRun()
 {
     TestExpressions();
@@ -631,6 +663,7 @@ fun RegressionRun()
     TestFunctionValues();
     TestLoops();
     TestBulk();
+	TestVectorValueTypes();
     Check(Add3(10, 20, 30) == 60, __LINE__);
     Check(Fibonacci(12) == 144, __LINE__);
     if (regressionFailed == 0)

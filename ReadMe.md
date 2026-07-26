@@ -93,6 +93,27 @@ numeric results of scripts and the memory layout of numeric values, so pick one 
 per build. (Previously the default was `double`, opted into `float` via `NS_SINGLE_PRECISION`;
 the default is now reversed.)
 
+### Vector value types
+`math.Vector2`, `math.Vector3`, `math.Vector4`, and `math.Quaternion` create dedicated
+value types. They are not Lists and are passed directly to native engine APIs that read
+vectors through `VarInfo::GetVec*`.
+
+```cpp
+var position = math.Vector3(1.0, 2.0, 3.0);
+var direction = math.Normalize3(position, math.Vector3(0.0, 1.0, 0.0));
+var moved = position + direction * 2.0;
+```
+
+- Components can be read and written with indexing (`position[0]`, `position[1] = 5.0`).
+- Vector assignment is a value copy; assigning `b = a` does not alias `a`.
+- Vector arithmetic supports component-wise `+`, `-`, `*`, `/` and scalar multiplication/division.
+- `tosize(vector)` returns the component count. List-only operations such as `append`,
+  `insert`, `len`, and `foreach` are not supported for vector values.
+- Vector math APIs (`Lerp3`, `Normalize3`, `Cross3`, `DistanceSquared3`,
+  `RotateVectorByQuat`, and quaternion helpers) require vector value types, not `[x, y, z]`
+  List literals.
+- Quaternion component order is `w, x, y, z`: `math.Quaternion(w, x, y, z)`.
+
 ### Compile-time defines
 Host applications can provide C-style compile-time defines through `NeoCompilerParam::defines`.
 This is useful for engine constants such as keyboard codes.

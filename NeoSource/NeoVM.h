@@ -292,8 +292,8 @@ public:
 	bool SetQuat(NS_FLOAT w, NS_FLOAT x, NS_FLOAT y, NS_FLOAT z);
 };
 
-// 벡터 값타입(float[4] union)이 들어가면서 16 → 24 바이트. 의도치 않은 크기 변화 감지.
-static_assert(sizeof(VarInfo) == 24, "VarInfo expected to be 24 bytes with inline vector value type");
+// 벡터 값타입(float[4] union)이 들어가면서 x64는 24바이트, Win32는 20바이트가 된다.
+static_assert(sizeof(VarInfo) == (sizeof(void*) == 8 ? 24 : 20), "Unexpected VarInfo size with inline vector value type");
 
 enum NeoDebugStopReason
 {
@@ -521,7 +521,7 @@ public:
 	void Var_SetVec2(VarInfo* d, float x, float y);
 	void Var_SetVec3(VarInfo* d, float x, float y, float z);
 	void Var_SetVec4(VarInfo* d, float x, float y, float z, float w);
-	void Var_SetQuat(VarInfo* d, float x, float y, float z, float w);
+	void Var_SetQuat(VarInfo* d, float w, float x, float y, float z);
 	void Var_SetCoroutine(VarInfo* d, CoroutineInfo* p);
 	void Var_SetString(VarInfo* d, const char* str);
 	void Var_SetString(VarInfo* d, SUtf8One c);

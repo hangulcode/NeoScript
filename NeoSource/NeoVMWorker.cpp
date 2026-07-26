@@ -54,11 +54,11 @@ void INeoVMWorker::Var_SetVec4(VarInfo* d, float x, float y, float z, float w)
 	d->SetType(VAR_VEC4);
 	d->_vec[0] = x; d->_vec[1] = y; d->_vec[2] = z; d->_vec[3] = w;
 }
-void INeoVMWorker::Var_SetQuat(VarInfo* d, float x, float y, float z, float w)
+void INeoVMWorker::Var_SetQuat(VarInfo* d, float w, float x, float y, float z)
 {
 	if (d->IsAllocType()) Var_Release(d);
 	d->SetType(VAR_QUAT);
-	d->_vec[0] = x; d->_vec[1] = y; d->_vec[2] = z; d->_vec[3] = w;
+	d->_vec[0] = w; d->_vec[1] = x; d->_vec[2] = y; d->_vec[3] = z;
 }
 
 int& GetModuleRefCount(VarInfo* p)
