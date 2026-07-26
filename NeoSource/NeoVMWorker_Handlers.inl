@@ -1,4 +1,4 @@
-// NeoVMWorker_Handlers.inl
+﻿// NeoVMWorker_Handlers.inl
 
 #pragma once
 
