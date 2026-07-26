@@ -1389,6 +1389,26 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 		out.type = "string";
 		out.value = pVar->_str ? pVar->_str->_str : "";
 		break;
+	case VAR_VEC2:
+		out.type = "Vector2";
+		snprintf(buf, sizeof(buf), "(%g, %g)", pVar->_vec[0], pVar->_vec[1]);
+		out.value = buf;
+		break;
+	case VAR_VEC3:
+		out.type = "Vector3";
+		snprintf(buf, sizeof(buf), "(%g, %g, %g)", pVar->_vec[0], pVar->_vec[1], pVar->_vec[2]);
+		out.value = buf;
+		break;
+	case VAR_VEC4:
+		out.type = "Vector4";
+		snprintf(buf, sizeof(buf), "(%g, %g, %g, %g)", pVar->_vec[0], pVar->_vec[1], pVar->_vec[2], pVar->_vec[3]);
+		out.value = buf;
+		break;
+	case VAR_QUAT:
+		out.type = "Quaternion";
+		snprintf(buf, sizeof(buf), "(%g, %g, %g, %g)", pVar->_vec[0], pVar->_vec[1], pVar->_vec[2], pVar->_vec[3]);
+		out.value = buf;
+		break;
 	case VAR_MAP:
 		out.type = "map";
 		{

@@ -973,6 +973,19 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
 		else if (v2->GetType() == VAR_STRING)
 			return v1->_str->_str == v2->_str->_str;
 		break;
+	case VAR_VEC2:
+	case VAR_VEC3:
+	case VAR_VEC4:
+	case VAR_QUAT:
+		// 같은 벡터 타입 + 모든 성분 정확 일치
+		if (v1->GetType() == v2->GetType())
+		{
+			int n = v1->VectorComponentCount();
+			for (int i = 0; i < n; i++)
+				if (v1->_vec[i] != v2->_vec[i]) return false;
+			return true;
+		}
+		break;
 	default:
 		break;
 	}
