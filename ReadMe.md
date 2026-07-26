@@ -83,6 +83,16 @@ The VS Code debugger currently supports:
 	- print output in the Debug Console
 	- Runtime exception stop and exceptionInfo
 
+### Numeric precision
+The scalar float type `NS_FLOAT` is **`float` (32-bit) by default**, matching the game
+engine's native `float3`/`float4` layout. This lets vector value types (Vec2/Vec3/Vec4/
+Quaternion) be stored inline and marshalled to the engine without per-component conversion.
+
+Define `NS_DOUBLE_PRECISION` at build time to use `double` instead. Note this changes the
+numeric results of scripts and the memory layout of numeric values, so pick one precision
+per build. (Previously the default was `double`, opted into `float` via `NS_SINGLE_PRECISION`;
+the default is now reversed.)
+
 ### Compile-time defines
 Host applications can provide C-style compile-time defines through `NeoCompilerParam::defines`.
 This is useful for engine constants such as keyboard codes.

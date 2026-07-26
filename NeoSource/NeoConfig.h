@@ -11,10 +11,11 @@ typedef short			s16;
 typedef unsigned int	u32;
 typedef int				s32;
 
-#ifdef NS_SINGLE_PRECISION
-	typedef float		NS_FLOAT;
-#else
+// 기본은 float (게임 엔진 정렬 + 벡터 값타입 인라인). double 이 필요하면 NS_DOUBLE_PRECISION 정의.
+#ifdef NS_DOUBLE_PRECISION
 	typedef double		NS_FLOAT;
+#else
+	typedef float		NS_FLOAT;
 #endif
 
 
