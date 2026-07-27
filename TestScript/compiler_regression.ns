@@ -336,7 +336,7 @@ fun TestContainerOperations()
         valuesTotal += value;
     Check(valuesTotal == 23, __LINE__);
     var keyTotal = 0;
-    foreach(var key, value in map.keys())
+    foreach(var key in map.keys())
         keyTotal += 1;
     Check(keyTotal == 2, __LINE__);
 }

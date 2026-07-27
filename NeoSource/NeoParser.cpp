@@ -3232,6 +3232,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 
 	int iValue = -1;
+	bool bTwoVar = false; // foreach(var k, v in ...) 형태인지 (value 이름이 선언됐는지)
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_COMMA) // ,
 	{
@@ -3255,6 +3256,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			return false;
 		}
 		iValue = AddLocalVarName(ar, funs, vars, false, tk1);
+		bTwoVar = true;
 	}
 	if (iValue == -1)
 		return false;
@@ -3362,7 +3364,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	{
 		funs._cur->Set_JumpOffet(sContinueJumps[i], continuePos);
 	}
-	funs._cur->Push_JMPForEach(ar, PosLoopTop, iTable, iKey, iDebugLoopLine);
+	funs._cur->Push_JMPForEach(ar, PosLoopTop, iTable, iKey, iDebugLoopLine, bTwoVar);
 
 	funs._cur->ClearLastOP();
 

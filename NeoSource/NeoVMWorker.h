@@ -75,6 +75,9 @@ struct SVarWrapper
 
 
 #define NEOS_OP_CALL_NORESULT	(1 << 7) // 0x80
+// JMP_FOREACH 전용: foreach(var k, v in ...) 2변수 형태. 대상이 list 인지는 런타임에만 알 수
+// 있으므로, 컴파일러가 이 플래그만 실어 보내고 미지원 판정/에러는 ForEach 런타임에서 한다.
+#define NEOS_OP_FOREACH_TWOVAR	(1 << 6) // 0x40
 
 
 #ifdef _DEBUG
@@ -182,7 +185,8 @@ private:
 	std::string FormatStackTrace(int currentOpIndex);
 	NEOS_FORCEINLINE int GetCodeptr() { return (int)((u8*)_pCodeCurrent - _pCodeBegin); }
 	NEOS_FORCEINLINE void SetCodePtr(int off) { _pCodeCurrent = (SVMOperation*)(_pCodeBegin + off); }
-	NEOS_FORCEINLINE void SetCodeIncPtr(int off) { _pCodeCurrent = (SVMOperation*)((u8*)_pCodeCurrent + off); }
+	// 점프 offset 은 op(SVMOperation) 단위. SVMOperation* 포인터 산술로 op 수만큼 이동.
+	NEOS_FORCEINLINE void SetCodeIncPtr(int opOff) { _pCodeCurrent += opOff; }
 
 	SNeoVMHeader			_header;
 //	u8 *					_pCodePtr = NULL;
@@ -374,7 +378,9 @@ private:
 	bool CompareGR(VarInfo* v1, VarInfo* v2);
 	bool CompareGE(VarInfo* v1, VarInfo* v2);
 	bool For(VarInfo* v1);
-	bool ForEach(VarInfo* v1, VarInfo* v2);
+	// bTwoVar: foreach(var k, v in ...) 형태(컴파일러가 op argFlag 로 전달).
+	// list 는 2변수 순회를 지원하지 않으므로 런타임에 여기서 에러를 낸다.
+	bool ForEach(VarInfo* v1, VarInfo* v2, bool bTwoVar);
 	int Sleep(int iTimeout, VarInfo* v1);
 	void Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue = NULL);
 	void Call(int n1, int n2, VarInfo* pReturnValue = NULL);

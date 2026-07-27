@@ -33,19 +33,19 @@ fun Fun_Set()
 
 	print("Set | : ", " ");
 	var Set2 = system.set(List1) | system.set(List2);
-	foreach(var i,v in Set2)
+	foreach(var i in Set2)
 		print(i, " ");
 	print("");
 
 	print("Set & : ", " ");
 	var Set3 = system.set(List1) & system.set(List2);
-	foreach(var i,v in Set3)
+	foreach(var i in Set3)
 		print(i, " ");
 	print("");
 
 	print("Set - : ", " ");
 	var Set4 = system.set(List1) - system.set(List2);
-	foreach(var i,v in Set4)
+	foreach(var i in Set4)
 		print(i, " ");
 	print(""); 
 }
@@ -61,17 +61,17 @@ fun Fun_Map()
 	print("");
 
 	print("Map Keys : ", " ");
-	foreach(var i,v in Map1.keys())
+	foreach(var i in Map1.keys())
 		print(i, " ");
 	print("");
 
 	print("Map Values : ", " ");
-	foreach(var i,v in Map1.values())
+	foreach(var i in Map1.values())
 		print(i, " ");
 	print("");
 
 	print("Map To Set | : ", " ");
-	foreach(var i,v in system.set(Map1.values()) | system.set(Map2.values()))
+	foreach(var i in system.set(Map1.values()) | system.set(Map2.values()))
 		print(i, " ");
 	print("");
 }

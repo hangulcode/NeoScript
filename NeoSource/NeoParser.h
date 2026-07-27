@@ -487,7 +487,7 @@ struct SFunctionInfo
 
 		eNOperation op = NOP_JMP;
 		OpType optype = GetOpTypeFromOp(op);
-		short add = destOffset - (_code->GetBufferOffset() + GetOpLength(op));
+		short add = (short)((destOffset - (_code->GetBufferOffset() + GetOpLength(op))) / (int)sizeof(SVMOperation));
 		_code->Write(&optype, sizeof(optype));
 		//_code->Write(&add, sizeof(add));
 		Push_NoFlag(add, 0, 0);
@@ -499,7 +499,7 @@ struct SFunctionInfo
 
 		eNOperation op = NOP_JMP_FALSE;
 		OpType optype = GetOpTypeFromOp(op);
-		short add = destOffset - (_code->GetBufferOffset() + GetOpLength(op));
+		short add = (short)((destOffset - (_code->GetBufferOffset() + GetOpLength(op))) / (int)sizeof(SVMOperation));
 		_code->Write(&optype, sizeof(optype));
 		//_code->Write(&var, sizeof(var));
 		//_code->Write(&add, sizeof(add));
@@ -512,7 +512,7 @@ struct SFunctionInfo
 
 		eNOperation op = NOP_JMP_TRUE;
 		OpType optype = GetOpTypeFromOp(op);
-		short add = destOffset - (_code->GetBufferOffset() + GetOpLength(op));
+		short add = (short)((destOffset - (_code->GetBufferOffset() + GetOpLength(op))) / (int)sizeof(SVMOperation));
 		_code->Write(&optype, sizeof(optype));
 		//_code->Write(&var, sizeof(var));
 		//_code->Write(&add, sizeof(add));
@@ -525,7 +525,7 @@ struct SFunctionInfo
 
 		eNOperation op = NOP_JMP_FOR;
 		OpType optype = GetOpTypeFromOp(op);
-		short add = destOffset - (_code->GetBufferOffset() + GetOpLength(op));
+		short add = (short)((destOffset - (_code->GetBufferOffset() + GetOpLength(op))) / (int)sizeof(SVMOperation));
 		_code->Write(&optype, sizeof(optype));
 		//_code->Write(&add, sizeof(add));
 		//_code->Write(&table, sizeof(table));
@@ -533,23 +533,26 @@ struct SFunctionInfo
 		Push_NoFlag(add, table, key);
 	}
 	// Always Value is Key Next Alloc ID
-	void	Push_JMPForEach(CArchiveRdWC& ar, int destOffset, short table, short key, int iDebugLoopLine)
+	// bTwoVar: foreach(var k, v in ...) 2변수 형태. 대상 타입은 런타임에만 알 수 있어
+	// 플래그만 실어 보내고, list + 2변수 미지원 판정은 ForEach 런타임이 한다.
+	void	Push_JMPForEach(CArchiveRdWC& ar, int destOffset, short table, short key, int iDebugLoopLine, bool bTwoVar)
 	{
 		AddDebugData(ar, iDebugLoopLine);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		eNOperation op = NOP_JMP_FOREACH;
 		OpType optype = GetOpTypeFromOp(op);
-		short add = destOffset - (_code->GetBufferOffset() + GetOpLength(op));
+		short add = (short)((destOffset - (_code->GetBufferOffset() + GetOpLength(op))) / (int)sizeof(SVMOperation));
 		_code->Write(&optype, sizeof(optype));
 		//_code->Write(&add, sizeof(add));
 		//_code->Write(&table, sizeof(table));
 		//_code->Write(&key, sizeof(key));
-		Push_NoFlag(add, table, key);
+		Push_Flag(bTwoVar ? NEOS_OP_FOREACH_TWOVAR : 0, add, table, key);
 	}
 	void	Set_JumpOffet(SJumpValue sJmp, int destOffset)
 	{
-		*((short*)((u8*)_code->GetData() + sJmp._iCodePosOffset)) = (short)(destOffset - sJmp._iBaseJmpOffset);
+		// offset 은 op(SVMOperation) 단위. dest/base 는 바이트 버퍼 위치라 차이를 op 크기로 나눈다.
+		*((short*)((u8*)_code->GetData() + sJmp._iCodePosOffset)) = (short)((destOffset - sJmp._iBaseJmpOffset) / (int)sizeof(SVMOperation));
 		_jumpTargetOffsets.insert(destOffset);
 	}
 	void	Push_ListAlloc(CArchiveRdWC& ar, short r)

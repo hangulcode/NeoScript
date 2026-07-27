@@ -540,10 +540,11 @@ std::string GetFunName(SFunctions& funs, int id)
 	return pFun->_name;
 }
 
-std::string JumpMark(std::map<int, int>& sJumpMark, int off)
+// opIndex: 점프 대상의 op 인덱스 (= 현재 op 인덱스 + 1 + n1).
+std::string JumpMark(std::map<int, int>& sJumpMark, int opIndex)
 {
 	std::string r;
-	auto it = sJumpMark.find(off + 8);
+	auto it = sJumpMark.find(opIndex);
 	if (it == sJumpMark.end())
 		return r;
 	char ch[128];
@@ -594,7 +595,8 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 		case NOP_JMP_NOR:	// !(||)
 		case NOP_JMP_FOR:	// for
 		case NOP_JMP_FOREACH:	// foreach
-			sJumpMark[off + 8 + v.n1] = 0;
+			// op 인덱스로 기록 (다음 op = off/8 + 1, 거기에 op 단위 상대 offset n1)
+			sJumpMark[off / (int)sizeof(SVMOperation) + 1 + v.n1] = 0;
 			break;
 		default:
 			break;
@@ -611,7 +613,7 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 	while (arRead.GetBufferOffset() < arRead.GetBufferSize())
 	{
 		int off = arRead.GetBufferOffset();
-		auto it = sJumpMark.find(off);
+		auto it = sJumpMark.find(off / (int)sizeof(SVMOperation));
 		if (it != sJumpMark.end())
 		{
 			OutAsm("\t\t\t\t\tgo_%d:\n", (*it).second);
@@ -777,64 +779,64 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 
 		case NOP_JMP:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
-			OutAsm("JMP  %d%s\n", v.n1, JumpMark(sJumpMark, off+v.n1).c_str());
+			OutAsm("JMP  %d%s\n", v.n1, JumpMark(sJumpMark, off / (int)sizeof(SVMOperation) + 1 + v.n1).c_str());
 			break;
 		case NOP_JMP_FALSE:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("JMP  %d%s %s is False\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str());
+			OutAsm("JF   %d%s %s is False\n", v.n1, JumpMark(sJumpMark, off / (int)sizeof(SVMOperation) + 1 + v.n1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 		case NOP_JMP_TRUE:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
-			OutAsm("JMP  %d%s %s is True\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str());
+			OutAsm("JT   %d%s %s is True\n", v.n1, JumpMark(sJumpMark, off / (int)sizeof(SVMOperation) + 1 + v.n1).c_str(), GetLog(td, v, 2).c_str());
 			break;
 
 		case NOP_JMP_GREAT:		// >
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JGR  %d%s,  %s > %s\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JGR  %d%s,  %s > %s\n", v.n1, JumpMark(sJumpMark, off / (int)sizeof(SVMOperation) + 1 + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_GREAT_EQ:	// >=
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JGE  %d%s,  %s >= %s\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JGE  %d%s,  %s >= %s\n", v.n1, JumpMark(sJumpMark, off / (int)sizeof(SVMOperation) + 1 + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_LESS:		// <
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JLS  %d%s,  %s < %s\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JLS  %d%s,  %s < %s\n", v.n1, JumpMark(sJumpMark, off / (int)sizeof(SVMOperation) + 1 + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_LESS_EQ:	// <=
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JLE  %d%s,  %s <= %s\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JLE  %d%s,  %s <= %s\n", v.n1, JumpMark(sJumpMark, off / (int)sizeof(SVMOperation) + 1 + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_EQUAL2:	// ==
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JEQ  %d%s,  %s == %s\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JEQ  %d%s,  %s == %s\n", v.n1, JumpMark(sJumpMark, off / (int)sizeof(SVMOperation) + 1 + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_NEQUAL:	// !=
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JNE  %d%s,  %s != %s\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JNE  %d%s,  %s != %s\n", v.n1, JumpMark(sJumpMark, off / (int)sizeof(SVMOperation) + 1 + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_AND:	// &&
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JAND %d%s,  %s && %s\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JAND %d%s,  %s && %s\n", v.n1, JumpMark(sJumpMark, off / (int)sizeof(SVMOperation) + 1 + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_OR:		// ||
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JOR  %d%s,  %s || %s\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JOR  %d%s,  %s || %s\n", v.n1, JumpMark(sJumpMark, off / (int)sizeof(SVMOperation) + 1 + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_NAND:	// !(&&)
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JNAND %d%s,  !(%s && %s)\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JNAND %d%s,  !(%s && %s)\n", v.n1, JumpMark(sJumpMark, off / (int)sizeof(SVMOperation) + 1 + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_NOR:	// !(||)
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JNOR %d%s,  !(%s || %s)\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
+			OutAsm("JNOR %d%s,  !(%s || %s)\n", v.n1, JumpMark(sJumpMark, off / (int)sizeof(SVMOperation) + 1 + v.n1).c_str(), GetLog(td, v, 2).c_str(), GetLog(td, v, 3).c_str());
 			break;
 		case NOP_JMP_FOR:	// for
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JFOR %d%s,  C[S.%d] < E[S.%d]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), v.n2, v.n3 + 1);
+			OutAsm("JFOR %d%s,  C[S.%d] < E[S.%d]\n", v.n1, JumpMark(sJumpMark, off / (int)sizeof(SVMOperation) + 1 + v.n1).c_str(), v.n2, v.n3 + 1);
 			break;
 		case NOP_JMP_FOREACH:	// foreach
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
-			OutAsm("JFRE %d%s,  T%s, K[S.%d], V[S.%d]\n", v.n1, JumpMark(sJumpMark, off + v.n1).c_str(), GetLog(td, v, 2).c_str(), v.n3, v.n3+1);
+			OutAsm("JFRE %d%s,  T%s, K[S.%d], V[S.%d]\n", v.n1, JumpMark(sJumpMark, off / (int)sizeof(SVMOperation) + 1 + v.n1).c_str(), GetLog(td, v, 2).c_str(), v.n3, v.n3+1);
 			break;
 
 		case NOP_TOSTRING:

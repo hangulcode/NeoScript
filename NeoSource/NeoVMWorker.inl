@@ -1475,7 +1475,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::For(VarInfo* pCur)
 	return false;
 #endif
 }
-NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
+NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool bTwoVar)
 {
 	VarInfo* pValue = pKey + 1;
 	VarInfo* pIterator = pKey + 2;
@@ -1580,6 +1580,13 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 	}
 	case VAR_LIST:
 	{
+		// list 는 값만 순회한다. foreach(var k, v in list) 는 미지원.
+		if (bTwoVar)
+		{
+			pIterator->ClearType();
+			SetError("foreach on list does not support two variables. use: foreach(var v in list)");
+			return false;
+		}
 		ListInfo* lst = pClt->_lst;
 		if (pIterator->GetType() != VAR_ITERATOR)
 		{
@@ -1619,6 +1626,13 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey)
 	}
 	case VAR_SET:
 	{
+		// set 도 값만 순회한다. foreach(var k, v in set) 는 미지원.
+		if (bTwoVar)
+		{
+			pIterator->ClearType();
+			SetError("foreach on set does not support two variables. use: foreach(var v in set)");
+			return false;
+		}
 		SetInfo* set = pClt->_set;
 		if (pIterator->GetType() != VAR_ITERATOR)
 		{

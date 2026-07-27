@@ -1703,7 +1703,8 @@ void CNeoVMWorker::JumpAsyncMsg()
 	if (dist < int(2 * sizeof(SVMOperation))) // 0 : Error, 1 : Idle(Already?)
 		return;
 	SetCodePtr(sizeof(SVMOperation));
-	_pCodeCurrent->n23 = dist - int(sizeof(SVMOperation) * 2); // Idle
+	// IDLE 복귀 offset 도 op 단위 (SetCodeIncPtr 공유). 위치2(op 2)에서 원위치까지의 op 수.
+	_pCodeCurrent->n23 = (dist - int(sizeof(SVMOperation) * 2)) / int(sizeof(SVMOperation)); // Idle
 }
 template<bool TIMEOUT, bool DEBUG>
 bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
@@ -1813,7 +1814,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_JMP_NAND:      if (false == (GetVarPtr2(OP)->IsTrue() && GetVarPtr3(OP)->IsTrue())) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_NOR:       if (false == (GetVarPtr2(OP)->IsTrue() || GetVarPtr3(OP)->IsTrue())) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_FOR:       if (For(GetVarPtr_L(OP.n2))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_FOREACH:   if (ForEach(GetVarPtr2(OP), GetVarPtr3(OP))) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_FOREACH:   if (ForEach(GetVarPtr2(OP), GetVarPtr3(OP), (OP.argFlag & NEOS_OP_FOREACH_TWOVAR) != 0)) SetCodeIncPtr(OP.n1); break;
 		case NOP_STR_ADD:       handle_STR_ADD(OP); break;
 		case NOP_TOSTRING:      handle_TOSTRING(OP); break;
 		case NOP_TOINT:         handle_TOINT(OP); break;
