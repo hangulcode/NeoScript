@@ -1190,6 +1190,7 @@ struct neo_libs
 		pN->ReturnValue(NS_FLOAT((double)clock() / (double)CLOCKS_PER_SEC));
 		return true;
 	}
+	// system.load(source, name) — arg1 = 컴파일할 소스 텍스트, arg2 = 청크 이름(현재 미사용).
 	static bool sys_load(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 2) return false;
@@ -1599,7 +1600,9 @@ static void AddGlobalLibFun()
 	AddSystemFun("date", &neo_libs::sys_date, "string", "string format", "int time");
 	AddSystemFun("clock", &neo_libs::sys_clock, "float");
 	AddSystemFun("meta", &neo_libs::sys_meta, "void", "map table", "map meta");
-	AddSystemFun("load", &neo_libs::sys_load, "module", "string name", "string source");
+	// 인자 순서는 sys_load 구현 기준: arg1=컴파일할 소스, arg2=청크 이름.
+	// name 은 현재 타입 검사만 하고 사용하지 않는다(진단 메시지/모듈 식별용 예약).
+	AddSystemFun("load", &neo_libs::sys_load, "module", "string source", "string name");
 	AddSystemFun("pcall", &neo_libs::sys_pcall, "void", "module m");
 	AddSystemFun("aysnc_create", &neo_libs::sys_aysnc_create, "async");
 	AddSystemFun("set", &neo_libs::sys_set, "set", "list l");
