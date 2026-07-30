@@ -240,6 +240,9 @@ struct SCallStack
 	int		_iSP_VarsMax;
 	int		_iReturnOffset;
 	VarInfo* _pReturnValue;
+	// async.wait가 callback 실행 전에 기록한 native 반환값을 callback return 직전에 복원한다.
+	VarInfo* _pAsyncWaitReturnValue = nullptr;
+	bool	 _asyncWaitReturnValue = false;
 };
 
 enum COROUTINE_STATE
@@ -286,6 +289,13 @@ struct CoroutineBase
 	}
 };
 
+struct AsyncResumeInfo
+{
+	int		codePtr = 0;
+	VarInfo*	pReturnValue = nullptr;
+	bool		returnValue = false;
+};
+
 struct CoroutineInfo : AllocBase
 {
 	//	int	_CoroutineID;
@@ -294,6 +304,9 @@ struct CoroutineInfo : AllocBase
 	COROUTINE_SUB_STATE _sub_state;
 
 	CoroutineBase _info;
+	// async.wait가 Idle dispatcher를 거쳐 돌아갈 원래 IP. 실행 컨텍스트마다
+	// 보관해 중첩 async 대기가 공유 바이트코드를 패치하지 않도록 한다.
+	std::vector<AsyncResumeInfo>	m_sAsyncResumeCodePtrs;
 
 	std::vector<VarInfo>	m_sVarStack;
 	SimpleVector<SCallStack>	m_sCallStack;
@@ -317,6 +330,7 @@ struct NeoExecContextPool
 		NeoExecContext* p = _pool.Receive();
 		p->_info._pCodeCurrent = NULL;
 		p->_info.ClearSP();
+		p->m_sAsyncResumeCodePtrs.clear();
 		p->_state = COROUTINE_STATE_RUNNING;
 		p->_sub_state = COROUTINE_SUB_NORMAL;
 		p->m_sCallStack.reserve(1000);
@@ -338,6 +352,7 @@ struct StringInfo : AllocBase, VMString
 
 struct AsyncInfo : AllocBase
 {
+	CNeoVMWorker*	_ownerWorker = nullptr;
 	std::string _request;
 	std::string _body;
 	std::vector< std::pair<std::string, std::string> > _headers;

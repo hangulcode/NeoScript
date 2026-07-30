@@ -73,7 +73,7 @@ public:
 
 	void ThreadFunction();
 	void AddHttp_Request(AsyncInfo* p);
-	AsyncInfo* Pop_AsyncInfo();
+	AsyncInfo* Pop_AsyncInfo(CNeoVMWorker* pOwnerWorker);
 
 
 

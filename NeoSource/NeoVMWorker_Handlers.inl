@@ -187,6 +187,9 @@ NEOS_FORCEINLINE bool handle_RETURN(const SVMOperation& OP) {
             Move(m_pVarStack_Pointer, GetVarPtrF1(OP));
     }
 
+    if (callStack._pAsyncWaitReturnValue != nullptr)
+        Var_SetBool(callStack._pAsyncWaitReturnValue, callStack._asyncWaitReturnValue);
+
     SetCodePtr(callStack._iReturnOffset);
     _iSP_Vars = callStack._iSP_Vars;
     SetStackPointer(_iSP_Vars);
@@ -275,10 +278,20 @@ NEOS_NOINLINE bool handle_YIELD(const SVMOperation& OP) {
 }
 
 NEOS_NOINLINE bool handle_IDLE(const SVMOperation& OP) {
-    SetCodeIncPtr(OP.n23);
+    if (m_pCur == nullptr || m_pCur->m_sAsyncResumeCodePtrs.empty())
+    {
+        SetError("Async resume state missing");
+        return false;
+    }
+
+    AsyncResumeInfo resumeInfo = m_pCur->m_sAsyncResumeCodePtrs.back();
+    m_pCur->m_sAsyncResumeCodePtrs.pop_back();
+    if (resumeInfo.pReturnValue != nullptr)
+        resumeInfo.returnValue = resumeInfo.pReturnValue->IsTrue();
+    SetCodePtr(resumeInfo.codePtr);
     while (true)
     {
-        AsyncInfo* p = GetVM()->Pop_AsyncInfo();
+        AsyncInfo* p = GetVM()->Pop_AsyncInfo(this);
         if (p == nullptr) break;
         if (!EnsureStackRange(_iSP_VarsMax, 2))
         {
@@ -290,6 +303,12 @@ NEOS_NOINLINE bool handle_IDLE(const SVMOperation& OP) {
         Var_SetBool(GetStackFromBase(_iSP_VarsMax + 1), p->_success);
         Var_SetStringA(GetStackFromBase(_iSP_VarsMax + 2), p->_resultValue);
         Call(p->_fun_index, 2);
+        if (resumeInfo.pReturnValue != nullptr && m_pCallStack->size() > 0)
+        {
+            SCallStack& callStack = (*m_pCallStack)[m_pCallStack->size() - 1];
+            callStack._pAsyncWaitReturnValue = resumeInfo.pReturnValue;
+            callStack._asyncWaitReturnValue = resumeInfo.returnValue;
+        }
         GetVM()->Var_Release(&p->_LockReferance);
     }
     return false;

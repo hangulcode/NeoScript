@@ -1020,6 +1020,8 @@ struct neo_libs
 		pAsync->_fun_index = v3->_fun_index;
 		if (pAsync->_timeout == -1) pAsync->_timeout = 0x7fffffff;
 
+		pAsync->_ownerWorker = pN;
+		pAsync->_event.reset();
 		pAsync->_state = ASYNC_PENDING;
 		pN->Move(&pAsync->_LockReferance, pVar);
 		pN->GetVM()->AddHttp_Request(pAsync);
@@ -1061,6 +1063,8 @@ struct neo_libs
 		pAsync->_fun_index = v4->_fun_index;
 		if (pAsync->_timeout == -1) pAsync->_timeout = 0x7fffffff;
 
+		pAsync->_ownerWorker = pN;
+		pAsync->_event.reset();
 		pAsync->_state = ASYNC_PENDING;
 		pN->Move(&pAsync->_LockReferance, pVar);
 		pN->GetVM()->AddHttp_Request(pAsync);

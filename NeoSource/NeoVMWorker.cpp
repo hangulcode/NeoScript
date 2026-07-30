@@ -386,6 +386,8 @@ void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 	callStack._iSP_Vars = _iSP_Vars;
 	callStack._iSP_VarsMax = _iSP_VarsMax;
 	callStack._pReturnValue = pReturnValue;
+	callStack._pAsyncWaitReturnValue = nullptr;
+	callStack._asyncWaitReturnValue = false;
 	m_pCallStack->push_back(callStack);
 #else
 	SCallStack& callStack = m_pCallStack->push_back();
@@ -393,6 +395,8 @@ void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 	callStack._iSP_Vars = _iSP_Vars;
 	callStack._iSP_VarsMax = _iSP_VarsMax;
 	callStack._pReturnValue = pReturnValue;
+	callStack._pAsyncWaitReturnValue = nullptr;
+	callStack._asyncWaitReturnValue = false;
 #endif
 
 	SetCodePtr(fun._codePtr);
@@ -1699,12 +1703,20 @@ bool	CNeoVMWorker::Run()
 }
 void CNeoVMWorker::JumpAsyncMsg()
 {
-	int dist = int((u8*)_pCodeCurrent - _pCodeBegin);
-	if (dist < int(2 * sizeof(SVMOperation))) // 0 : Error, 1 : Idle(Already?)
+	if (m_pCur == nullptr)
+	{
+		SetError("Async dispatch without execution context");
 		return;
+	}
+
+	const int resumeCodePtr = GetCodeptr();
+	if (resumeCodePtr < int(2 * sizeof(SVMOperation))) // 0 : Error, 1 : Idle(Already?)
+		return;
+
+	// NOP_IDLE의 jump operand를 변경하지 않는다. 중첩 async.wait는 현재
+	// 실행 컨텍스트의 resume stack으로 분리되어 LIFO 순서로 복귀한다.
+	m_pCur->m_sAsyncResumeCodePtrs.push_back({ resumeCodePtr, GetReturnVar() });
 	SetCodePtr(sizeof(SVMOperation));
-	// IDLE 복귀 offset 도 op 단위 (SetCodeIncPtr 공유). 위치2(op 2)에서 원위치까지의 op 수.
-	_pCodeCurrent->n23 = (dist - int(sizeof(SVMOperation) * 2)) / int(sizeof(SVMOperation)); // Idle
 }
 template<bool TIMEOUT, bool DEBUG>
 bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)

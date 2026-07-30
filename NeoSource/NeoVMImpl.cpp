@@ -180,6 +180,7 @@ void CNeoVMImpl::FreeCoroutine(VarInfo *d)
 	for (int i = 0; i < n; i++)
 		Var_Release(&s[i]);
 	pCI->_info.ClearSP();
+	pCI->m_sAsyncResumeCodePtrs.clear();
 	_pExecPool->Release(pCI);
 }
 
@@ -310,6 +311,7 @@ AsyncInfo* CNeoVMImpl::AsyncAlloc()
 {
 	AsyncInfo* p = m_sPool_Async.Receive();
 	p->_refCount = 0;
+	p->_ownerWorker = nullptr;
 	p->_state = ASYNC_READY;
 	++m_sAllocStats.asyncs;
 	return p;
@@ -426,10 +428,10 @@ void CNeoVMImpl::AddHttp_Request(AsyncInfo* p)
 	_job_queue.Push(p);
 }
 
-AsyncInfo* CNeoVMImpl::Pop_AsyncInfo()
+AsyncInfo* CNeoVMImpl::Pop_AsyncInfo(CNeoVMWorker* pOwnerWorker)
 {
 	AsyncInfo* p = nullptr;
-	if(_job_completed.TryPop(p))
+	if(_job_completed.TryPopMatching(p, [pOwnerWorker](AsyncInfo* candidate) { return candidate->_ownerWorker == pOwnerWorker; }))
 		return p;
 	return nullptr;
 }
