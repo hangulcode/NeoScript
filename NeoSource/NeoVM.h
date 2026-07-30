@@ -12,6 +12,7 @@ struct INeoVMWorker;
 struct INeoVM;
 class CNeoVMImpl;
 class CNeoVMWorker;
+class CNeoVMProgram;
 struct FunctionPtr;
 struct VarInfo;
 struct NeoExecContextPool;
@@ -805,7 +806,6 @@ public:
 	inline bool IsLocalErrorMsg() { return _bError; }
 	static FunctionPtrNative RegisterNative(Neo_NativeFunction func);
 	virtual int FindFunction(const std::string& name) =0;
-	virtual bool SetFunction(int iFID, FunctionPtr& fun, int argCount) =0;
 
 	typedef void(*IO_Print)(const char* pMsg);
 	static IO_Print m_pFunPrint;
@@ -868,11 +868,24 @@ public:
 	virtual  void ClearLastErrorMsg() = 0;
 
 	virtual  INeoVMWorker*	LoadVM(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, bool blMainWorker = true, bool init = false, int iStackSize = 50 * 1024) =0; // 0 is error
+	// 미리 만들어 둔 프로그램으로 워커를 붙인다. 같은 스크립트를 쓰는 워커 N 개가
+	// 코드/함수테이블/디버그정보를 공유하고, 파싱과 코드 패치는 프로그램 생성 시 1회만 일어난다.
+	// 소유권은 넘어가지 않는다 — 워커가 자체적으로 AddRef 하므로 호출측은 자기 참조를 Release 하면 된다.
+	virtual  INeoVMWorker*	LoadVM(const NeoLoadVMParam* vparam, CNeoVMProgram* pProgram, bool blMainWorker = true, bool init = false, int iStackSize = 50 * 1024) = 0;
 	virtual  bool PCall(int iModule) = 0;
 
 	static INeoVM* 	CreateVM();
 	static void		ReleaseVM(INeoVM* pVM);
 	static bool		Compile(CNArchive& arw, const NeoCompilerParam& param);
+
+	// 컴파일 이미지 → 공유 가능한 프로그램. 실패하면 nullptr(err 에 사유).
+	// 반환값의 refCount 는 1 이며, 호출측이 Release() 로 자기 참조를 반납할 책임이 있다.
+	static CNeoVMProgram* CreateProgram(const void* pBuffer, int iSize, std::string* err = nullptr);
+	// Compile + CreateProgram 을 한 번에.
+	static CNeoVMProgram* CompileToProgram(const NeoCompilerParam& param);
+	// 호스트가 내부 헤더를 포함하지 않고 프로그램 수명을 다루기 위한 접근자. nullptr 안전.
+	static void ProgramAddRef(CNeoVMProgram* pProgram);
+	static void ProgramRelease(CNeoVMProgram* pProgram);
 
 	static bool		Initialize(INeoLoader* loader = nullptr);
 	static bool		Shutdown();

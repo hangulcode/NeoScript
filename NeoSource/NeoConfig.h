@@ -79,3 +79,4 @@ struct SUtf8One
 #include <map>
 #include <unordered_map>
 #include <set>
+#include <atomic>

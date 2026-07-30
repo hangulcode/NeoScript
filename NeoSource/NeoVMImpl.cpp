@@ -157,7 +157,6 @@ CNeoVMWorker* CNeoVMImpl::FindWorker(int iModule)
 }
 
 int CNeoVMImpl::FindFunction(const std::string& name) { return GetMainWorker()->FindFunction(name); }
-bool CNeoVMImpl::SetFunction(int iFID, FunctionPtr& fun, int argCount) { return GetMainWorker()->SetFunction(iFID, fun, argCount); }
 
 
 CoroutineInfo* CNeoVMImpl::CoroutineAlloc()
@@ -545,8 +544,30 @@ void CNeoVMImpl::SetError(const std::string& msg)
 	}
 }
 
+// 바이트 이미지 직접 로드 — 이 워커 전용 프로그램을 1회 만들고 소유권을 넘긴다.
+// 같은 스크립트를 여러 워커에 붙일 때는 CNeoVMProgram 을 캐시해 아래 오버로드를 쓴다.
 INeoVMWorker* CNeoVMImpl::LoadVM(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, bool blMainWorker, bool init, int iStackSize)
 {
+	std::string err;
+	CNeoVMProgram* pProgram = CNeoVMProgram::Create(pBuffer, iSize, &err);
+	if (pProgram == nullptr)
+	{
+		SetError(err);
+		return NULL;
+	}
+
+	INeoVMWorker* pWorker = LoadVM(vparam, pProgram, blMainWorker, init, iStackSize);
+	pProgram->Release();   // 성공했으면 워커가 자기 참조를 들고 있다
+	return pWorker;
+}
+
+INeoVMWorker* CNeoVMImpl::LoadVM(const NeoLoadVMParam* vparam, CNeoVMProgram* pProgram, bool blMainWorker, bool init, int iStackSize)
+{
+	if (pProgram == nullptr)
+	{
+		SetError("CNeoVMProgram is required.");
+		return NULL;
+	}
 	if (vparam != nullptr && vparam->execPool != nullptr)
 		_pExecPool = vparam->execPool;   // 이후 모듈 로드 워커들이 상속할 수 있도록 VM 에 보관
 	if (_pExecPool == nullptr)
@@ -556,7 +577,7 @@ INeoVMWorker* CNeoVMImpl::LoadVM(const NeoLoadVMParam* vparam, void* pBuffer, in
 	}
 
 	CNeoVMWorker*pWorker = WorkerAlloc(iStackSize);
-	if (false == pWorker->Init(vparam, pBuffer, iSize, iStackSize))
+	if (false == pWorker->Init(vparam, pProgram, iStackSize))
 	{
 		FreeWorker(pWorker);
 		return NULL;

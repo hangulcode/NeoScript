@@ -97,10 +97,14 @@ CNeoVMWorker::~CNeoVMWorker()
 	m_sVarGlobal.clear();
 	m_pVarGlobal_Pointer = nullptr;
 
-	if (_pCodeBegin != NULL)
+	_pCodeBegin = nullptr;
+	_pCodeCurrent = nullptr;
+	// 코드는 프로그램 소유. 이 워커가 마지막 참조면 여기서 해제된다.
+	// (디버거에 정지한 워커가 살아있는 동안 핫 리로드된 옛 이미지가 유지되는 이유)
+	if (_pProgram != nullptr)
 	{
-		delete[] _pCodeBegin;
-		_pCodeBegin = NULL;
+		_pProgram->Release();
+		_pProgram = nullptr;
 	}
 }
 
@@ -375,7 +379,7 @@ void CNeoVMWorker::Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue)
 
 void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 {
-	SFunctionTable& fun = m_sFunctionPtr[n1];
+	const SFunctionTable& fun = Functions()[n1];
 	// n2 is Arg Count not use
 	// 호출 스택을 push하거나 현재 프레임을 변경하기 전에 새 프레임 전체를 검증한다.
 	if (!EnsureStackRange(_iSP_VarsMax, fun._localAddCount - 1))
@@ -461,207 +465,61 @@ bool CNeoVMWorker::Call_MetaTable2(VarInfo* pTable, std::string& funName, VarInf
 }
 
 
-static void ReadString(CNArchive& ar, std::string& str)
+bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, CNeoVMProgram* pProgram, int iStackSize)
 {
-	short nLen;
-	ar >> nLen;
-	str.resize(nLen);
+	if (pProgram == nullptr)
+		return false;
 
-	ar.Read((char*)str.data(), nLen);
-}
-static u32 ReadCount(CNArchive& ar)
-{
-	u16 wCount = 0;
-	ar >> wCount;
-	if (wCount < 0xFFFF)
-		return wCount;
-
-	u32 dwCount = 0;
-	ar >> dwCount;
-	return dwCount;
-}
-bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, int iStackSize)
-{
 	// 실행 컨텍스트 풀: 명시 주입 우선, 없으면 VM(임플) 기본 풀 상속(모듈 로드 워커 등).
 	if (vparam != nullptr && vparam->execPool != nullptr)
 		m_pPool = vparam->execPool;
 	else
 		m_pPool = GetVM()->GetExecPool();
 
-	_BytesSize = iSize;
-	CNArchive ar(pBuffer, iSize);
-	SNeoVMHeader header;
-	memset(&header, 0, sizeof(header));
-	ar >> header;
-	_header = header;
+	pProgram->AddRef();
+	_pProgram = pProgram;
+	_BytesSize = pProgram->byteSize;
 
-	if (header._dwFileType != FILE_NEOS)
-	{
-		return false;
-	}
-	if (header._dwNeoVersion != NEO_VER)
-	{
-		return false;
-	}
+	// 코드는 프로그램 소유(패치 완료, 불변). 워커는 IP 만 갖는다.
+	_pCodeBegin = pProgram->GetCodeBegin();
+	_pCodeCurrent = (const SVMOperation*)_pCodeBegin;
 
-	bool IsDataSinglePrecision = (header ._dwFlag & NEO_HEADER_FLAG_SINGLE_PRECISION) ? true : false;
-	if(IsDataSinglePrecision != INeoVM::IsSinglePrecision())
-	{
-		return false;
-	}
-
-
-	u8* pCode = new u8[header._iCodeSize];
-	SetCodeData(pCode, header._iCodeSize);
-	ar.Read(pCode, header._iCodeSize);
-
-	m_sFunctionPtr.resize(header._iFunctionCount);
-
-	int iID;
-	SFunctionTable fun;
-	std::string Name;
-	for (int i = 0; i < header._iFunctionCount; i++)
-	{
-		memset(&fun, 0, sizeof(SFunctionTable));
-
-		ar >> iID >> fun._codePtr >> fun._argsCount >> fun._localTempMax >> fun._localVarCount >> fun._funType;
-		if (fun._funType != FUNT_NORMAL && fun._funType != FUNT_ANONYMOUS)
-		{
-			ReadString(ar, Name);
-			m_sImExportTable[Name] = iID;
-		}
-
-		fun._localAddCount = 1 + fun._argsCount + fun._localVarCount + fun._localTempMax;
-		m_sFunctionPtr[iID] = fun;
-	}
-	for (int i = 0; i < header._iExportVarCount; i++)
-	{
-		int idx;
-		ar >> idx;
-		ReadString(ar, Name);
-		m_sImportVars[Name] = idx;
-	}
-
-
-	std::string tempStr;
-	int iMaxVar = header._iStaticVarCount + header._iGlobalVarCount;
+	// 전역 슬롯 = [static 상수 | 전역 변수]. static 은 프로그램의 상수 서술자에서
+	// 이 VM 의 할당자로 실체화한다 (StringInfo 는 VM 별 풀 소유라 공유 불가).
+	const int staticCount = pProgram->header._iStaticVarCount;
+	const int iMaxVar = pProgram->GetGlobalSlotCount();
+	m_sVarGlobal.clear();
 	m_sVarGlobal.resize(iMaxVar);
-	if(m_sVarGlobal.empty()) m_pVarGlobal_Pointer = nullptr;
+	if (m_sVarGlobal.empty()) m_pVarGlobal_Pointer = nullptr;
 	else m_pVarGlobal_Pointer = &m_sVarGlobal[0];
 
-	for (int i = 0; i < header._iStaticVarCount; i++)
+	for (int i = 0; i < staticCount; i++)
 	{
+		const SStaticConst& sc = pProgram->staticValues[i];
 		VarInfo& vi = m_sVarGlobal[i];
-		Var_Release(&vi);
-
-		VAR_TYPE type;
-		ar >> type;
-		vi.SetType(type);
-		switch (type)
+		vi.SetType(sc._type);
+		switch (sc._type)
 		{
 		case VAR_INT:
-			ar >> vi._int;
+			vi._int = sc._int;
 			break;
 		case VAR_FLOAT:
-			ar >> vi._float;
+			vi._float = sc._float;
 			break;
 		case VAR_BOOL:
-			ar >> vi._bl;
+			vi._bl = sc._bl;
 			break;
 		case VAR_STRING:
-			ReadString(ar, tempStr);
-			vi._str = GetVM()->StringAlloc(tempStr);
+			vi._str = GetVM()->StringAlloc(sc._str);
 			vi._str->_refCount = 1;
 			break;
-		//case VAR_FUN:
-		//	ar >> vi._fun_index;
-		//	break;
 		default:
+			vi.ClearType();
 			SetError("Error Invalid VAR Type");
 			return false;
 		}
 	}
-	for (int i = header._iStaticVarCount; i < iMaxVar; i++)
-	{
-		m_sVarGlobal[i].ClearType();
-	}
 
-	int opCount = header._iCodeSize / (int)sizeof(SVMOperation);
-	SVMOperation* pOps = (SVMOperation*)_pCodeBegin;
-	for (int i = 0; i < opCount; ++i)
-	{
-		SVMOperation& op = pOps[i];
-		if (op.op != NOP_PTRCALL2)
-			continue;
-
-		if (op.argFlag & NEOS_ARG_N1_LOCAL)
-			continue;
-
-		VarInfo* pFunName = NEOS_GLOBAL_VAR(op.n1);
-		if (pFunName == nullptr || pFunName->GetType() != VAR_STRING)
-			continue;
-
-		int nativeIndex = CNeoVMImpl::FindDefaultNativeIndex(pFunName->_str);
-		if (nativeIndex < 0 || nativeIndex > SHRT_MAX)
-			continue;
-
-		// intrinsic 이 지정된 native(벡터 생성 등)는 전용 opcode 로 패치 (n2=인자수, n3=결과 유지).
-		eNOperation intrinsic = (eNOperation)CNeoVMImpl::GetDefaultNativeIntrinsic(nativeIndex);
-		if (intrinsic != NOP_NONE)
-		{
-			op.op = intrinsic;
-			continue;
-		}
-
-		op.op = NOP_NATIVECALL;
-		op.n1 = (short)nativeIndex;
-	}
-
-	if (header.m_iDebugCount > 0)
-	{
-		_DebugData.resize(header.m_iDebugCount);
-		ar.Read(&_DebugData[0], sizeof(debug_info) * header.m_iDebugCount);
-	}
-	while (ar.GetBufferOffset() + (int)sizeof(u32) <= ar.GetBufferSize())
-	{
-		u32 magic = 0;
-		int oldOffset = ar.GetBufferOffset();
-		ar >> magic;
-		if (magic == 0x4E445642)
-		{
-			u32 funCount = ReadCount(ar);
-			for (u32 i = 0; i < funCount; ++i)
-			{
-				int funId = -1;
-				ar >> funId;
-				u32 nameCount = ReadCount(ar);
-				std::map<int, std::string>& names = (funId == -1) ? m_sDebugGlobalNames : m_sDebugVarNames[funId];
-				for (u32 n = 0; n < nameCount; ++n)
-				{
-					int slot = -1;
-					ar >> slot;
-					ReadString(ar, Name);
-					names[slot] = Name;
-				}
-			}
-		}
-		else if (magic == 0x4E44464E)
-		{
-			u32 funCount = ReadCount(ar);
-			for (u32 i = 0; i < funCount; ++i)
-			{
-				int funId = -1;
-				ar >> funId;
-				ReadString(ar, Name);
-				m_sDebugFunctionNames[funId] = Name;
-			}
-		}
-		else
-		{
-			ar.SetBufferOffset(oldOffset);
-			break;
-		}
-	}
 	if(vparam && vparam->NeoGlobalInterface)
 	{
 		vparam->NeoGlobalInterface(this, vparam->param);
@@ -671,16 +529,18 @@ bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, 
 int CNeoVMWorker::GetDebugLine(int iOPIndex)
 {
 //	int idx = int((u8*)_pCodeCurrent - _pCodeBegin - 1) / sizeof(SVMOperation);
-	if ((int)_DebugData.size() <= iOPIndex || iOPIndex < 0) return -1;
-	return _DebugData[iOPIndex]._lineseq;
+	const std::vector<debug_info>& dbg = DebugData();
+	if ((int)dbg.size() <= iOPIndex || iOPIndex < 0) return -1;
+	return dbg[iOPIndex]._lineseq;
 }
 int CNeoVMWorker::GetFunctionIndexFromCodeOffset(int codeOffset)
 {
 	int iFind = -1;
 	int iFindCodePtr = -1;
-	for (int i = 0; i < (int)m_sFunctionPtr.size(); ++i)
+	const std::vector<SFunctionTable>& funs = Functions();
+	for (int i = 0; i < (int)funs.size(); ++i)
 	{
-		int codePtr = m_sFunctionPtr[i]._codePtr;
+		int codePtr = funs[i]._codePtr;
 		if (codePtr <= codeOffset && codePtr >= iFindCodePtr)
 		{
 			iFind = i;
@@ -701,8 +561,8 @@ std::string CNeoVMWorker::FormatStackTrace(int currentOpIndex)
 		std::string functionName;
 		if (functionId >= 0)
 		{
-			auto itName = m_sDebugFunctionNames.find(functionId);
-			if (itName != m_sDebugFunctionNames.end())
+			auto itName = _pProgram->debugFunctionNames.find(functionId);
+			if (itName != _pProgram->debugFunctionNames.end())
 				functionName = itName->second;
 		}
 		if (functionName.empty())
@@ -713,10 +573,11 @@ std::string CNeoVMWorker::FormatStackTrace(int currentOpIndex)
 
 		int file = -1;
 		int line = -1;
-		if (opIndex >= 0 && opIndex < (int)_DebugData.size())
+		const std::vector<debug_info>& dbg = DebugData();
+		if (opIndex >= 0 && opIndex < (int)dbg.size())
 		{
-			file = _DebugData[opIndex]._fileseq;
-			line = _DebugData[opIndex]._lineseq;
+			file = dbg[opIndex]._fileseq;
+			line = dbg[opIndex]._lineseq;
 		}
 
 		trace += "\n  #";
@@ -733,9 +594,9 @@ std::string CNeoVMWorker::FormatStackTrace(int currentOpIndex)
 		trace += std::to_string(stackBase);
 		trace += ")";
 
-		if (functionId >= 0 && functionId < (int)m_sFunctionPtr.size())
+		if (functionId >= 0 && functionId < (int)Functions().size())
 		{
-			SFunctionTable& fun = m_sFunctionPtr[functionId];
+			const SFunctionTable& fun = Functions()[functionId];
 			trace += ", Args[";
 			for (int argIndex = 0; argIndex < fun._argsCount; ++argIndex)
 			{
@@ -744,8 +605,8 @@ std::string CNeoVMWorker::FormatStackTrace(int currentOpIndex)
 
 				int varIndex = stackBase + 1 + argIndex;
 				std::string argName;
-				auto itFunNames = m_sDebugVarNames.find(functionId);
-				if (itFunNames != m_sDebugVarNames.end())
+				auto itFunNames = _pProgram->debugVarNames.find(functionId);
+				if (itFunNames != _pProgram->debugVarNames.end())
 				{
 					auto itName = itFunNames->second.find(1 + argIndex);
 					if (itName != itFunNames->second.end())
@@ -793,10 +654,10 @@ bool CNeoVMWorker::CheckDebugStop(int iOPIndex)
 		return false;
 	if (IsDebugInfo() == false)
 		return false;
-	if ((int)_DebugData.size() <= iOPIndex || iOPIndex < 0)
+	if ((int)DebugData().size() <= iOPIndex || iOPIndex < 0)
 		return false;
 
-	const debug_info& info = _DebugData[iOPIndex];
+	const debug_info& info = DebugData()[iOPIndex];
 	int file = info._fileseq;
 	int line = info._lineseq;
 	if (line <= 0)
@@ -866,7 +727,7 @@ bool CNeoVMWorker::CheckDebugStop(int iOPIndex)
 }
 void CNeoVMWorker::StopDebug(int iOPIndex, NeoDebugStopReason reason)
 {
-	const debug_info& info = _DebugData[iOPIndex];
+	const debug_info& info = DebugData()[iOPIndex];
 	m_sDebugLocation.opIndex = iOPIndex;
 	m_sDebugLocation.file = info._fileseq;
 	m_sDebugLocation.line = info._lineseq;
@@ -1145,10 +1006,10 @@ void CNeoVMWorker::EndNestedScriptCall()
 
 bool	CNeoVMWorker::Setup(int iFunctionID, std::vector<VarInfo>& _args)
 {
-	if (iFunctionID < 0 || iFunctionID >= (int)m_sFunctionPtr.size())
+	if (iFunctionID < 0 || iFunctionID >= (int)Functions().size())
 		return false;
 
-	SFunctionTable& fun = m_sFunctionPtr[iFunctionID];
+	const SFunctionTable& fun = Functions()[iFunctionID];
 	int iArgs = (int)_args.size();
 	if (iArgs != fun._argsCount)
 		return false;
@@ -1279,7 +1140,7 @@ void CNeoVMWorker::DebugGetExecutableLines(std::vector<int>& lines)
 		return;
 
 	std::set<int> uniqueLines;
-	for (const debug_info& info : _DebugData)
+	for (const debug_info& info : DebugData())
 	{
 		if (info._lineseq > 0)
 			uniqueLines.insert(info._lineseq);
@@ -1294,9 +1155,10 @@ void CNeoVMWorker::DebugGetExecutableLocations(std::vector<NeoDebugLocation>& lo
 		return;
 
 	std::set<u32> uniqueLocations;
-	for (int i = 0; i < (int)_DebugData.size(); ++i)
+	const std::vector<debug_info>& dbg = DebugData();
+	for (int i = 0; i < (int)dbg.size(); ++i)
 	{
-		const debug_info& info = _DebugData[i];
+		const debug_info& info = dbg[i];
 		if (info._lineseq <= 0)
 			continue;
 		u32 key = (((u32)info._fileseq) << 16) | (u32)info._lineseq;
@@ -1531,17 +1393,17 @@ void CNeoVMWorker::DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames)
 	cur.functionId = GetFunctionIndexFromCodeOffset(codeOffset);
 	if (cur.functionId >= 0)
 	{
-		auto itName = m_sDebugFunctionNames.find(cur.functionId);
-		if (itName != m_sDebugFunctionNames.end())
+		auto itName = _pProgram->debugFunctionNames.find(cur.functionId);
+		if (itName != _pProgram->debugFunctionNames.end())
 			cur.functionName = itName->second;
 	}
 	cur.opIndex = codeOffset / (int)sizeof(SVMOperation);
-	cur.file = (cur.opIndex >= 0 && cur.opIndex < (int)_DebugData.size()) ? _DebugData[cur.opIndex]._fileseq : -1;
+	cur.file = (cur.opIndex >= 0 && cur.opIndex < (int)DebugData().size()) ? DebugData()[cur.opIndex]._fileseq : -1;
 	cur.line = GetDebugLine(cur.opIndex);
 	cur.stackBase = _iSP_Vars;
 	if (cur.functionId >= 0)
 	{
-		SFunctionTable& fun = m_sFunctionPtr[cur.functionId];
+		const SFunctionTable& fun = Functions()[cur.functionId];
 		cur.argsCount = fun._argsCount;
 		cur.localCount = fun._localVarCount;
 		cur.tempCount = fun._localTempMax;
@@ -1561,15 +1423,15 @@ void CNeoVMWorker::DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames)
 		frame.functionId = GetFunctionIndexFromCodeOffset(cs._iReturnOffset);
 		if (frame.functionId >= 0)
 		{
-			auto itName = m_sDebugFunctionNames.find(frame.functionId);
-			if (itName != m_sDebugFunctionNames.end())
+			auto itName = _pProgram->debugFunctionNames.find(frame.functionId);
+			if (itName != _pProgram->debugFunctionNames.end())
 				frame.functionName = itName->second;
 		}
-		frame.file = (frame.opIndex >= 0 && frame.opIndex < (int)_DebugData.size()) ? _DebugData[frame.opIndex]._fileseq : -1;
+		frame.file = (frame.opIndex >= 0 && frame.opIndex < (int)DebugData().size()) ? DebugData()[frame.opIndex]._fileseq : -1;
 		frame.line = GetDebugLine(frame.opIndex);
 		if (frame.functionId >= 0)
 		{
-			SFunctionTable& fun = m_sFunctionPtr[frame.functionId];
+			const SFunctionTable& fun = Functions()[frame.functionId];
 			frame.argsCount = fun._argsCount;
 			frame.localCount = fun._localVarCount;
 			frame.tempCount = fun._localTempMax;
@@ -1593,8 +1455,8 @@ void CNeoVMWorker::DebugGetFrameVariables(int frameId, std::vector<NeoDebugVaria
 	const NeoDebugStackFrame& frame = frames[frameId];
 	int base = frame.stackBase;
 	int total = 1 + frame.argsCount + frame.localCount + frame.tempCount;
-	auto itFunNames = m_sDebugVarNames.find(frame.functionId);
-	bool hasDebugVarNames = itFunNames != m_sDebugVarNames.end();
+	auto itFunNames = _pProgram->debugVarNames.find(frame.functionId);
+	bool hasDebugVarNames = itFunNames != _pProgram->debugVarNames.end();
 	for (int i = 0; i < total; ++i)
 	{
 		int stackIndex = base + i;
@@ -1633,7 +1495,7 @@ void CNeoVMWorker::DebugGetFrameVariables(int frameId, std::vector<NeoDebugVaria
 	}
 	if (frameId == 0)
 	{
-		for (auto it = m_sDebugGlobalNames.begin(); it != m_sDebugGlobalNames.end(); ++it)
+		for (auto it = _pProgram->debugGlobalNames.begin(); it != _pProgram->debugGlobalNames.end(); ++it)
 		{
 			int globalIndex = it->first;
 			if (globalIndex < 0 || globalIndex >= (int)m_sVarGlobal.size())
@@ -1692,7 +1554,7 @@ bool	CNeoVMWorker::Run()
 		GetVM()->_sErrorMsgDetail = std::string(chMsg) + FormatStackTrace(_isErrorOPIndex);
 		if (m_pDebugListener || m_iDebugBreakCount > 0 || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
 		{
-			if (_isErrorOPIndex >= 0 && _isErrorOPIndex < (int)_DebugData.size())
+			if (_isErrorOPIndex >= 0 && _isErrorOPIndex < (int)DebugData().size())
 				StopDebug(_isErrorOPIndex, NEO_DEBUG_STOP_EXCEPTION);
 			return false;
 		}
@@ -1891,8 +1753,8 @@ bool CNeoVMWorker::RunFunction(int iFID, std::vector<VarInfo>& _args)
 }
 bool CNeoVMWorker::RunFunction(const std::string& funName, std::vector<VarInfo>& _args)
 {
-	auto it = m_sImExportTable.find(funName);
-	if (it == m_sImExportTable.end())
+	int iID = _pProgram->FindFunction(funName);
+	if (iID < 0)
 	{
 		SetError("Function Not Found");
 		GetVM()->_sErrorMsgDetail = GetVM()->_pErrorMsg;
@@ -1902,7 +1764,6 @@ bool CNeoVMWorker::RunFunction(const std::string& funName, std::vector<VarInfo>&
 		return false;
 	}
 
-	int iID = (*it).second;
 	return Start(iID, _args);
 }
 
@@ -1970,7 +1831,7 @@ bool CNeoVMWorker::StartCoroutione(int argSP_Vars, int n3)
 		if (m_pCur->_info._pCodeCurrent == NULL) // first run
 		{
 			int iResumeParamCount = n3 - 1;
-			SFunctionTable& fun = m_sFunctionPtr[m_pCur->_fun_index];
+			const SFunctionTable& fun = Functions()[m_pCur->_fun_index];
 			if (!EnsureStackRange(0, fun._localAddCount - 1))
 				return false;
 			for (int i = 0; i < fun._argsCount; i++)
@@ -2002,7 +1863,7 @@ VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 	if (_isInitialized == false)
 		return NULL;
 
-	SFunctionTable& fun = m_sFunctionPtr[iFID];
+	const SFunctionTable& fun = Functions()[iFID];
 	if (argc != fun._argsCount)
 		return NULL;
 	if (!EnsureStackRange(_iSP_VarsMax, fun._localAddCount - 1))

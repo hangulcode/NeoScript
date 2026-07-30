@@ -133,6 +133,8 @@ public:
 	static bool IsGlobalLibFun(std::string& FunName);
 	static const std::list< SystemFun>* GetSystemModule(const std::string& module);
 	static int FindDefaultNativeIndex(const VMString* pStr);
+	// 프로그램 로드 시 코드 패치용 — StringInfo 없이 상수 문자열로 조회한다.
+	static int FindDefaultNativeIndex(const std::string& name);
 	static int GetDefaultNativeIntrinsic(int nativeIndex);
 	static bool CallDefaultNativeByIndex(int nativeIndex, CNeoVMWorker* pWorker, short args);
 	void RegLibrary(VarInfo* pSystem, const char* pLibName);// , SNeoFunLib* pFuns);
@@ -140,7 +142,6 @@ public:
 	static void InitLib();
 	void SetError(const std::string& msg);
 	virtual int FindFunction(const std::string& name);
-	virtual bool SetFunction(int iFID, FunctionPtr& fun, int argCount);
 public:
 	CNeoVMImpl();
 	virtual ~CNeoVMImpl();
@@ -158,6 +159,7 @@ public:
 	virtual void ClearLastErrorMsg() { _bError = false; _sErrorMsgDetail.clear(); }
 
 	virtual INeoVMWorker*	LoadVM(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, bool blMainWorker, bool init, int iStackSize); // 0 is error
+	virtual INeoVMWorker*	LoadVM(const NeoLoadVMParam* vparam, CNeoVMProgram* pProgram, bool blMainWorker, bool init, int iStackSize);
 	virtual bool PCall(int iModule);
 };
 

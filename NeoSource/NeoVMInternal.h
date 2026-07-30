@@ -280,7 +280,8 @@ struct CoroutineBase
 	int			_iSP_Vars;
 	int			_iSP_Vars_Max2;
 	int			_iSP_VarsMax;
-	SVMOperation* _pCodeCurrent;
+	// 코드는 CNeoVMProgram 이 소유하는 불변 이미지다. IP 는 읽기 전용 포인터.
+	const SVMOperation* _pCodeCurrent;
 	void ClearSP()
 	{
 		_iSP_Vars = 0;

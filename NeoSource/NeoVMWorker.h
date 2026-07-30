@@ -4,54 +4,13 @@
 
 #include "NeoVMInternal.h"
 
+#include "NeoVMProgram.h"
 #include "NeoVMImpl.h"
 
 
 
 namespace NeoScript
 {
-
-struct SNeoVMHeader
-{
-	u32		_dwFileType;
-	u32		_dwNeoVersion;
-
-	int		_iFunctionCount;
-	int		_iStaticVarCount;
-	int		_iGlobalVarCount;
-	int		_iExportVarCount;
-
-	int		_iMainFunctionOffset;
-	int		_iCodeSize;
-	int		m_iDebugCount;
-	int		m_iDebugOffset;
-
-	u32		_dwFlag;
-};
-
-#define NEO_HEADER_FLAG_DEBUG				0x00000001
-#define NEO_HEADER_FLAG_SINGLE_PRECISION	0x00000002
-
-
-enum FUNCTION_TYPE : u8
-{
-	FUNT_NORMAL = 0,
-	FUNT_EXPORT,
-	FUNT_ANONYMOUS,
-	FUNT_BUILT_IN,
-};
-
-
-struct SFunctionTable
-{
-	int					_codePtr;
-	short				_argsCount;
-	short				_localTempMax;
-	int					_localVarCount;
-	int					_localAddCount; // No Save
-	FUNCTION_TYPE		_funType;
-	FunctionPtr			_fun;
-};
 
 //struct SNeoFunLib
 //{
@@ -117,8 +76,9 @@ class CNeoVMWorker : public INeoVMWorker, public AllocBase, public CoroutineBase
 	friend		neo_libs;
 	friend		neo_DCalllibs;
 private:
-	u8 *					_pCodeBegin;
-	int						_iCodeLen;
+	// 컴파일 이미지(코드/함수테이블/디버그정보/상수)는 프로그램이 소유하고 워커들이 공유한다.
+	CNeoVMProgram*			_pProgram = nullptr;
+	const u8 *				_pCodeBegin = nullptr;   // = _pProgram->GetCodeBegin()
 
 	int					_isErrorOPIndex = 0;
 
@@ -165,15 +125,7 @@ private:
 //	inline void SetCheckTime() { m_op_process = 0; }
 	void JumpAsyncMsg();
 
-	void	SetCodeData(u8* p, int sz)
-	{
-		_pCodeBegin = p;
-		_pCodeCurrent = (SVMOperation*)p;
-		_iCodeLen = sz;
-		//_iCodeOffset = 0;
-	}
-
-	NEOS_FORCEINLINE SVMOperation*	GetOP()
+	NEOS_FORCEINLINE const SVMOperation*	GetOP()
 	{
 		return _pCodeCurrent++;
 	}
@@ -183,48 +135,23 @@ private:
 	void ResetFaultStateForNewExecution();
     int GetFunctionIndexFromCodeOffset(int codeOffset);
 	std::string FormatStackTrace(int currentOpIndex);
-	NEOS_FORCEINLINE int GetCodeptr() { return (int)((u8*)_pCodeCurrent - _pCodeBegin); }
-	NEOS_FORCEINLINE void SetCodePtr(int off) { _pCodeCurrent = (SVMOperation*)(_pCodeBegin + off); }
+	NEOS_FORCEINLINE int GetCodeptr() { return (int)((const u8*)_pCodeCurrent - _pCodeBegin); }
+	NEOS_FORCEINLINE void SetCodePtr(int off) { _pCodeCurrent = (const SVMOperation*)(_pCodeBegin + off); }
 	// 점프 offset 은 op(SVMOperation) 단위. SVMOperation* 포인터 산술로 op 수만큼 이동.
 	NEOS_FORCEINLINE void SetCodeIncPtr(int opOff) { _pCodeCurrent += opOff; }
 
-	SNeoVMHeader			_header;
-//	u8 *					_pCodePtr = NULL;
-//	int						_iCodeLen;
-
-	std::map<std::string, int> m_sImExportTable;
-	std::map<std::string, int> m_sImportVars;
-	std::vector<debug_info>	_DebugData;
-	std::map<int, std::map<int, std::string>> m_sDebugVarNames;
-	std::map<int, std::string> m_sDebugGlobalNames;
-	std::map<int, std::string> m_sDebugFunctionNames;
-
-	//void	SetCodeData(u8* p, int sz)
-	//{
-	//	_pCodePtr = p;
-	//	_iCodeLen = sz;
-	//}
-
+	// 워커 고유 상태 = 전역 변수 슬롯([static | global] 단일 배열).
+	// static 구간은 로드 시 프로그램의 상수 서술자에서 이 VM 의 할당자로 실체화한다.
 	std::vector<VarInfo>	m_sVarGlobal;
-	std::vector<SFunctionTable> m_sFunctionPtr;
 
-	inline bool IsDebugInfo() { return (_header._dwFlag & NEO_HEADER_FLAG_DEBUG) != 0; }
+	NEOS_FORCEINLINE const std::vector<SFunctionTable>& Functions() const { return _pProgram->functions; }
+	NEOS_FORCEINLINE const std::vector<debug_info>& DebugData() const { return _pProgram->debugData; }
+
+	inline bool IsDebugInfo() { return _pProgram->IsDebugInfo(); }
 
 	virtual int FindFunction(const std::string& name)
 	{
-		auto it = m_sImExportTable.find(name);
-		if (it == m_sImExportTable.end())
-			return -1;
-		return (*it).second;
-	}
-	bool SetFunction(int iFID, FunctionPtr& fun, int argCount)
-	{
-		fun._argCount = argCount;
-		if (m_sFunctionPtr[iFID]._argsCount != argCount)
-			return false;
-
-		m_sFunctionPtr[iFID]._fun = fun;
-		return true;
+		return _pProgram->FindFunction(name);
 	}
 
 	std::vector<VarInfo>*	m_pVarStack_Base;
@@ -494,10 +421,10 @@ public:
 
 	virtual VarInfo* GetVar(const std::string& name)
 	{
-		auto it = m_sImportVars.find(name);
-		if (it == m_sImportVars.end())
+		int idx = _pProgram->FindGlobalVar(name);
+		if (idx < 0 || idx >= (int)m_sVarGlobal.size())
 			return NULL;
-		return &m_sVarGlobal[(*it).second];
+		return &m_sVarGlobal[idx];
 	}
 
 	VarInfo* testCall(int iFID, VarInfo* args, int argc);
@@ -510,7 +437,8 @@ public:
 	CNeoVMWorker(INeoVM* pVM, u32 id, int iStackSize);
 	virtual ~CNeoVMWorker();
 
-	bool Init(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, int iStackSize);
+	// pProgram 은 호출측이 소유권 지분을 넘기지 않는다. 성공 시 워커가 AddRef 한다.
+	bool Init(const NeoLoadVMParam* vparam, CNeoVMProgram* pProgram, int iStackSize);
 
 	NEOS_FORCEINLINE static void Var_AddRef(VarInfo* d)
 	{

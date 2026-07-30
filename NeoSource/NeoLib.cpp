@@ -1519,6 +1519,14 @@ int CNeoVMImpl::FindDefaultNativeIndex(const VMString* pStr)
 	return it->second;
 }
 
+int CNeoVMImpl::FindDefaultNativeIndex(const std::string& name)
+{
+	auto it = g_sNeoFunLib_DefaultNativeIndex.find(name);
+	if (it == g_sNeoFunLib_DefaultNativeIndex.end())
+		return -1;
+	return it->second;
+}
+
 bool CNeoVMImpl::CallDefaultNativeByIndex(int nativeIndex, CNeoVMWorker* pWorker, short args)
 {
 	if (nativeIndex < 0 || nativeIndex >= (int)g_sNeoFunLib_DefaultNative.size())

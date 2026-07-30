@@ -403,7 +403,7 @@ NEOS_NOINLINE bool handle_ERROR(const SVMOperation& OP) {
 
     if (m_pDebugListener || m_iDebugBreakCount > 0 || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
     {
-        if (idx >= 0 && idx < (int)_DebugData.size())
+        if (idx >= 0 && idx < (int)DebugData().size())
             StopDebug(idx, NEO_DEBUG_STOP_EXCEPTION);
         return true;
     }

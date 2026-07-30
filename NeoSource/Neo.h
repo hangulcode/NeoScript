@@ -178,18 +178,11 @@ namespace NeoHelper
 		return sizeof ...(Types);
 	}
 
-	template<typename F>
-	bool Register(INeoVM* VM, const char* name, F func)
-	{
-		int iFID = VM->FindFunction(name);
-		if (iFID < 0)
-			return false;
+	// NeoHelper::Register 는 스크립트 함수 슬롯에 C 함수를 덮어쓰는 API 였지만,
+	// 저장된 FunctionPtr 을 런타임에서 읽는 경로가 없어 실동작이 없었다.
+	// 함수 테이블이 CNeoVMProgram(불변/공유)으로 이동하면서 제거됨.
+	// C 함수 노출은 native 등록(AddSystemFun / RegisterTableCallBack) 경로를 쓴다.
 
-		FunctionPtr fun;
-		int iArgCnt = push_functor(&fun, func);
-		return VM->SetFunction(iFID, fun, iArgCnt);
-	}
-	
 	template<typename F>
 	NeoFunction Fun(F func)
 	{
