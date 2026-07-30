@@ -126,7 +126,7 @@ int CNeoVMWorker::Sleep(int iTimeout, VarInfo* v1)
 		iSleepTick = (int)v1->_float;
 		break;
 	default:
-		SetError("Sleep Value Error");
+		SetError(RTE_SLEEP_VALUE);
 		return -1;
 	}
 	if (iSleepTick < 0)
@@ -346,7 +346,7 @@ void CNeoVMWorker::Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue)
 
 	if (fun->_func == NULL)
 	{	// Error
-		SetError("Ptr Call is null");
+		SetError(RTE_CALL_NULL);
 		return;
 	}
 	int op = GetCodeptr();
@@ -368,7 +368,7 @@ void CNeoVMWorker::Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue)
 		if (GetVM()->IsLastErrorMsg())
 			SetCodePtr(0);
 		else
-			SetError("Ptr Call Argument Count Error");
+			SetError(RTE_CALL_ARG_COUNT);
 		return;
 	}
 	_iSP_Vars = iSave_SP_Vars;
@@ -515,7 +515,7 @@ bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, CNeoVMProgram* pProgram, i
 			break;
 		default:
 			vi.ClearType();
-			SetError("Error Invalid VAR Type");
+			SetError(RTE_INVALID_VAR_TYPE);
 			return false;
 		}
 	}
@@ -746,12 +746,44 @@ void CNeoVMWorker::ResetFaultStateForNewExecution()
 	m_bDebugFaulted = false;
 	_isErrorOPIndex = 0;
 }
+const char* g_sNeoRuntimeErrors[RTE_COUNT] =
+{
+#define X(name, message) message,
+	VM_RUNTIME_ERROR_LIST(X)
+#undef X
+};
+
 void CNeoVMWorker::SetError(const char* pErrMsg)
 {
 	if(_isErrorOPIndex == 0)
 		_isErrorOPIndex = int((u8*)_pCodeCurrent - _pCodeBegin - 1) / sizeof(SVMOperation);
 	SetCodePtr(0); // Jump To Error
 	GetVM()->SetError(std::string(pErrMsg));
+}
+void CNeoVMWorker::SetError(ENeoRuntimeError e)
+{
+	SetError(g_sNeoRuntimeErrors[e]);
+}
+void CNeoVMWorker::SetErrorFormat(ENeoRuntimeError e, ...)
+{
+	char buff[1024];
+	va_list ap;
+	va_start(ap, e);
+	vsnprintf(buff, sizeof(buff), g_sNeoRuntimeErrors[e], ap);
+	va_end(ap);
+	buff[sizeof(buff) - 1] = '\0';
+	SetError(buff);
+}
+// 연산자 에러 전용. 피연산자 타입까지 붙여 "invalid operator '+' for 'string' and 'map'" 형태로 만든다.
+void CNeoVMWorker::SetErrorOperator(const char* op, VarInfo* v1, VarInfo* v2)
+{
+	char operands[256];
+	if (v2 == nullptr)
+		snprintf(operands, sizeof(operands), "'%s'", GetDataType(v1->GetType()).c_str());
+	else
+		snprintf(operands, sizeof(operands), "'%s' and '%s'",
+			GetDataType(v1->GetType()).c_str(), GetDataType(v2->GetType()).c_str());
+	SetErrorFormat(RTE_INVALID_OPERATOR, op, operands);
 }
 void CNeoVMWorker::SetErrorUnsupport(const char* pErrMsg, VarInfo* p)
 {
@@ -800,7 +832,7 @@ bool	CNeoVMWorker::Start(int iFunctionID, std::vector<VarInfo>& _args)
 	const bool isNestedScriptCall = (m_iNativeScriptCallDepth > 0);
 	if (isNestedScriptCall && m_iTimeout >= 0)
 	{
-		SetError("time-limited execution is not allowed in a synchronous native-to-script call");
+		SetErrorFormat(RTE_NESTED_NOT_ALLOWED, "time-limited execution");
 		return false;
 	}
 	const int returnCodePtr = isNestedScriptCall ? GetCodeptr() : 0;
@@ -1537,7 +1569,7 @@ bool	CNeoVMWorker::Run()
 	catch (...)
 	{
 		//int idx = int((u8*)_pCodeCurrent - _pCodeBegin - 1) / sizeof(SVMOperation);
-		SetError("Exception");
+		SetError(RTE_EXCEPTION);
 		bool blDebugInfo = IsDebugInfo();
 		int _lineseq = -1;
 		if (blDebugInfo)
@@ -1567,7 +1599,7 @@ void CNeoVMWorker::JumpAsyncMsg()
 {
 	if (m_pCur == nullptr)
 	{
-		SetError("Async dispatch without execution context");
+		SetError(RTE_ASYNC_NO_CONTEXT);
 		return;
 	}
 
@@ -1689,6 +1721,8 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_JMP_NOR:       if (false == (GetVarPtr2(OP)->IsTrue() || GetVarPtr3(OP)->IsTrue())) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_FOR:       if (For(GetVarPtr_L(OP.n2))) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_FOREACH:   if (ForEach(GetVarPtr2(OP), GetVarPtr3(OP), (OP.argFlag & NEOS_OP_FOREACH_TWOVAR) != 0)) SetCodeIncPtr(OP.n1); break;
+		case NOP_SWITCH:        handle_SWITCH(OP); break;
+
 		case NOP_STR_ADD:       handle_STR_ADD(OP); break;
 		case NOP_TOSTRING:      handle_TOSTRING(OP); break;
 		case NOP_TOINT:         handle_TOINT(OP); break;
@@ -1733,7 +1767,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 			handle_ERROR(OP);
 			return false;
 		default:
-			SetError("Unknown OP");
+			SetError(RTE_UNKNOWN_OP);
 			break;
 		}
 	}
@@ -1756,7 +1790,7 @@ bool CNeoVMWorker::RunFunction(const std::string& funName, std::vector<VarInfo>&
 	int iID = _pProgram->FindFunction(funName);
 	if (iID < 0)
 	{
-		SetError("Function Not Found");
+		SetError(RTE_FUNCTION_NOT_FOUND);
 		GetVM()->_sErrorMsgDetail = GetVM()->_pErrorMsg;
 		GetVM()->_sErrorMsgDetail += "(";
 		GetVM()->_sErrorMsgDetail += funName;
@@ -1797,7 +1831,7 @@ bool CNeoVMWorker::StopCoroutine(bool doDead)
 		m_sCoroutines.erase(it);
 		if(m_pCur->_state != COROUTINE_STATE_NORMAL)
 		{
-			SetError("Coroutine State Error");
+			SetError(RTE_COROUTINE_STATE);
 			return false;
 		}
 		m_pCur->_state = COROUTINE_STATE_RUNNING;
@@ -1915,7 +1949,7 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 	Neo_NativeFunction func = functionPtrNative._func;
 	if (func == NULL)
 	{
-		SetError("Ptr Call Error");
+		SetError(RTE_CALL_INVALID);
 		return false;
 	}
 	if (!EnsureStackRange(_iSP_VarsMax, n3))
@@ -1938,7 +1972,7 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 		if (GetVM()->IsLastErrorMsg())
 			SetCodePtr(0);
 		else
-			SetError("Ptr Call Error");
+			SetError(RTE_CALL_INVALID);
 		return false;
 	}
 	if (nullptr != pRet)
@@ -1964,7 +1998,7 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 						DeadCoroutine(m_pRegisterActive);
 						break;
 					case COROUTINE_STATE_RUNNING:
-						if (m_pCur != m_pRegisterActive)SetError("Coroutine Error 1");
+						if (m_pCur != m_pRegisterActive)SetError(RTE_COROUTINE_INVALID);
 						else							StopCoroutine(true);
 						break;
 					case COROUTINE_STATE_DEAD:
@@ -1984,7 +2018,7 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 				m_pRegisterActive = NULL;
 				break;
 			default:
-				SetError("Coroutine Error 1");
+				SetError(RTE_COROUTINE_INVALID);
 				break;
 		}
 	}
@@ -2013,7 +2047,7 @@ bool CNeoVMWorker::CallDefaultNativeByIndex(int nativeIndex, int n3, VarInfo* pR
 		if (GetVM()->IsLastErrorMsg())
 			SetCodePtr(0);
 		else
-			SetError("Ptr Call Error");
+			SetError(RTE_CALL_INVALID);
 		return false;
 	}
 	if (nullptr != pRet)
@@ -2039,7 +2073,7 @@ bool CNeoVMWorker::CallDefaultNativeByIndex(int nativeIndex, int n3, VarInfo* pR
 						DeadCoroutine(m_pRegisterActive);
 						break;
 					case COROUTINE_STATE_RUNNING:
-						if (m_pCur != m_pRegisterActive)SetError("Coroutine Error 1");
+						if (m_pCur != m_pRegisterActive)SetError(RTE_COROUTINE_INVALID);
 						else							StopCoroutine(true);
 						break;
 					case COROUTINE_STATE_DEAD:
@@ -2059,7 +2093,7 @@ bool CNeoVMWorker::CallDefaultNativeByIndex(int nativeIndex, int n3, VarInfo* pR
 				m_pRegisterActive = NULL;
 				break;
 			default:
-				SetError("Coroutine Error 1");
+				SetError(RTE_COROUTINE_INVALID);
 				break;
 		}
 	}
@@ -2071,7 +2105,7 @@ bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUs
 	Neo_NativeProperty func = functionPtrNative._property;
 	if (func == NULL)
 	{
-		SetError("Ptr Call Error");
+		SetError(RTE_CALL_INVALID);
 		return false;
 	}
 	if (!EnsureStackRange(_iSP_VarsMax, 0))
@@ -2094,7 +2128,7 @@ bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUs
 		if (GetVM()->IsLastErrorMsg())
 			SetCodePtr(0);
 		else
-			SetError("Ptr Call Error");
+			SetError(RTE_CALL_INVALID);
 		return false;
 	}
 
@@ -2120,7 +2154,7 @@ bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUs
 				DeadCoroutine(m_pRegisterActive);
 				break;
 			case COROUTINE_STATE_RUNNING:
-				if (m_pCur != m_pRegisterActive)SetError("Coroutine Error 1");
+				if (m_pCur != m_pRegisterActive)SetError(RTE_COROUTINE_INVALID);
 				else							StopCoroutine(true);
 				break;
 			case COROUTINE_STATE_DEAD:
@@ -2140,7 +2174,7 @@ bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUs
 			m_pRegisterActive = NULL;
 			break;
 		default:
-			SetError("Coroutine Error 1");
+			SetError(RTE_COROUTINE_INVALID);
 			break;
 		}
 	}

@@ -3,6 +3,7 @@
 #include <chrono>
 
 #include "NeoVMInternal.h"
+#include "NeoVMError.h"
 
 #include "NeoVMProgram.h"
 #include "NeoVMImpl.h"
@@ -145,6 +146,17 @@ private:
 	std::vector<VarInfo>	m_sVarGlobal;
 
 	NEOS_FORCEINLINE const std::vector<SFunctionTable>& Functions() const { return _pProgram->functions; }
+	// switch table 은 Program 소유(읽기 전용 공유). 매칭 실패/지원 외 타입이면 default offset
+	// 을 돌려주는 것이 정상 동작이다. n1 은 short 저장이지만 인덱스는 부호 없이 해석한다(0~65535).
+	// 테이블 인덱스가 범위를 벗어나는 건 손상된 이미지/VM 버그뿐이므로 호출측에서 에러 처리한다.
+	NEOS_FORCEINLINE bool TryGetSwitchJumpOffset(u16 tableIndex, VarInfo* pKey, int& outOffset) const
+	{
+		const std::vector<ProgramSwitchTable>& t = _pProgram->switchTables;
+		if ((size_t)tableIndex >= t.size())
+			return false;
+		outOffset = t[tableIndex].Find(pKey);
+		return true;
+	}
 	NEOS_FORCEINLINE const std::vector<debug_info>& DebugData() const { return _pProgram->debugData; }
 
 	inline bool IsDebugInfo() { return _pProgram->IsDebugInfo(); }
@@ -433,6 +445,10 @@ public:
 	void SetError(const char* pErrMsg);
 	void SetErrorUnsupport(const char* pErrMsg, VarInfo* p);
 	void SetErrorFormat(const char* pErrMsg, ...);
+	// 런타임 에러 테이블(NeoVMError.h) 기반. 새 코드는 이쪽을 쓴다.
+	void SetError(ENeoRuntimeError e);
+	void SetErrorFormat(ENeoRuntimeError e, ...);
+	void SetErrorOperator(const char* op, VarInfo* v1, VarInfo* v2 = nullptr);
 public:
 	CNeoVMWorker(INeoVM* pVM, u32 id, int iStackSize);
 	virtual ~CNeoVMWorker();

@@ -60,6 +60,36 @@ struct SStaticConst
 	std::string	_str;   // VAR_STRING 전용
 };
 
+// switch/case 테이블. SStaticConst 와 같은 이유로 Program 전용 원시 표현을 쓴다.
+// (VM pool / StringInfo / Var_Release / 스크립트 Map API 에 의존하지 않음)
+// key 는 컴파일 타임 상수이고 strict type 비교한다. -0.0 은 컴파일 시 +0.0 으로 정규화된다.
+struct ProgramSwitchKey
+{
+	VAR_TYPE	_type = VAR_NONE;   // VAR_BOOL / VAR_INT / VAR_FLOAT / VAR_STRING
+	int			_int = 0;
+	float		_float = 0;
+	bool		_bl = false;
+	std::string	_str;               // VAR_STRING 전용 (UTF-8 바이트 그대로)
+};
+
+struct ProgramSwitchEntry
+{
+	ProgramSwitchKey	key;
+	int					jumpOffset = 0;  // op 단위 relative (NOP_SWITCH 다음 op 기준)
+	int					next = -1;       // 같은 버킷의 다음 엔트리. -1 = 끝
+};
+
+// 읽기 전용 해시 테이블. Program 과 수명이 같고 여러 VM/워커가 공유한다.
+struct ProgramSwitchTable
+{
+	std::vector<int>				buckets;   // hash & mask → entry index (-1 = 빈 버킷)
+	std::vector<ProgramSwitchEntry>	entries;
+	int								defaultOffset = 0;
+
+	void Build();                             // entries 로부터 buckets 구성
+	int  Find(VarInfo* pKey) const;           // 매칭 실패/지원 외 타입이면 defaultOffset
+};
+
 // 컴파일된 스크립트 이미지.
 // Create() 에서 1회 파싱 + 1회 코드 패치되고 이후 완전 불변이다.
 // 여러 CNeoVMWorker / 여러 CNeoVMImpl / 여러 스레드가 refcount 로 공유한다.
@@ -84,6 +114,7 @@ public:
 	std::map<std::string, int>	exportFunctions;   // 함수명 → 함수 ID
 	std::map<std::string, int>	exportVariables;   // 전역 변수명 → 전역 슬롯 인덱스
 	std::vector<SStaticConst>	staticValues;
+	std::vector<ProgramSwitchTable>	switchTables;      // NOP_SWITCH.n1 이 이 배열의 인덱스
 
 	// 디버그 정보 (IsDebugInfo() 일 때만 채워진다)
 	std::vector<debug_info>		debugData;

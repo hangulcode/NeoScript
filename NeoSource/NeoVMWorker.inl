@@ -5,7 +5,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::EnsureStackRange(int base, int lastOffset)
 	const int stackSize = (int)m_pVarStack_Base->size();
 	if (base > stackSize - 1 - lastOffset)
 	{
-		SetError("Call Stack Overflow");
+		SetError(RTE_CALL_STACK_OVERFLOW);
 		return false;
 	}
 	return true;
@@ -68,7 +68,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 				}
 			}
 
-			SetError("Collision Insert Error");
+			SetErrorFormat(RTE_INDEX_WRITE, GetDataType(pClt->GetType()).c_str());
 			return;
 		}
 		if(pClt->_lst->SetValue(pKey->_int, pValue))
@@ -88,12 +88,12 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 				return;
 			}
 		}
-		SetError("Vector Insert Index Error");
+		SetError(RTE_VECTOR_INDEX_WRITE);
 		return;
 	default:
 		break;
 	}
-	SetError("Collision Insert Error");
+	SetErrorFormat(RTE_INDEX_WRITE, GetDataType(pClt->GetType()).c_str());
 }
 NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, int key, VarInfo* v)
 {
@@ -108,7 +108,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, int key, VarInfo* v
 	default:
 		break;
 	}
-	SetError("Collision Insert Error");
+	SetErrorFormat(RTE_INDEX_WRITE, GetDataType(pClt->GetType()).c_str());
 }
 
 NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, int v)
@@ -124,7 +124,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, int 
 	default:
 		break;
 	}
-	SetError("Collision Insert Error");
+	SetErrorFormat(RTE_INDEX_WRITE, GetDataType(pClt->GetType()).c_str());
 }
 NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, int key, int v)
 {
@@ -139,7 +139,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, int key, int v)
 	default:
 		break;
 	}
-	SetError("Collision Insert Error");
+	SetErrorFormat(RTE_INDEX_WRITE, GetDataType(pClt->GetType()).c_str());
 }
 NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItem(VarInfo* pClt, VarInfo* pKey)
 {
@@ -164,7 +164,7 @@ NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItem(VarInfo* pClt, VarInfo* pKe
 		}
 	}
 
-	SetError("TableRead Error");
+	SetErrorFormat(RTE_INDEX_READ, GetDataType(pClt->GetType()).c_str());
 	return nullptr;
 }
 NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItemValid(VarInfo* pTable, VarInfo* pKey)
@@ -172,7 +172,7 @@ NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItemValid(VarInfo* pTable, VarIn
 	VarInfo* r = GetTableItem(pTable, pKey);
 	if (r != NULL)
 		return r;
-	SetError("Table Key Not Found");
+	SetError(RTE_KEY_NOT_FOUND);
 	return NULL;
 }
 NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItemValid(VarInfo* pTable, int Array)
@@ -181,7 +181,7 @@ NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItemValid(VarInfo* pTable, int A
 	VarInfo* r = GetTableItem(pTable, &Key);
 	if (r != NULL)
 		return r;
-	SetError("Table Key Not Found");
+	SetError(RTE_KEY_NOT_FOUND);
 	return NULL;
 }
 
@@ -223,7 +223,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 					return;
 				}
 			}
-			SetError("Collision Read Error");
+			SetErrorFormat(RTE_INDEX_READ, GetDataType(pClt->GetType()).c_str());
 			return;
 		}
 		if (true == pClt->_lst->GetValue(pKey->_int, pValue))
@@ -242,19 +242,19 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 				return;
 			}
 		}
-		SetError("Vector Read Index Error");
+		SetError(RTE_VECTOR_INDEX_READ);
 		return;
 	default:
 		break;
 	}
-	SetError("Collision Read Error");
+	SetErrorFormat(RTE_INDEX_READ, GetDataType(pClt->GetType()).c_str());
 }
 
 NEOS_FORCEINLINE void CNeoVMWorker::TableRemove(VarInfo* pTable, VarInfo* pKey)
 {
 	if (pTable->GetType() != VAR_MAP)
 	{
-		SetError("TableRead Error");
+		SetErrorFormat(RTE_INDEX_WRITE, GetDataType(pTable->GetType()).c_str());
 		return;
 	}
 
@@ -304,7 +304,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::MoveMinus(VarInfo* v1, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("Minus Error");
+	SetErrorOperator("-", v2);
 }
 
 
@@ -356,7 +356,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::And(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("& Error");
+	SetErrorOperator("&", v1, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Or(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
@@ -401,7 +401,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Or(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("| Error");
+	SetErrorOperator("|", v1, v2);
 }
 NEOS_FORCEINLINE bool CNeoVMWorker::VecArith(VarInfo* r, VarInfo* v1, VarInfo* v2, int op)
 {
@@ -506,7 +506,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Add3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("unsupported operand Error");
+	SetErrorOperator("+", v1, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Sub3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
@@ -558,7 +558,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Sub3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("unsupported operand Error");
+	SetErrorOperator("-", v1, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Mul3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
@@ -608,7 +608,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Mul3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("unsupported operand Error");
+	SetErrorOperator("*", v1, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Div3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
@@ -656,7 +656,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Div3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("unsupported operand Error");
+	SetErrorOperator("/", v1, v2);
 }
 
 NEOS_FORCEINLINE void CNeoVMWorker::Per3(VarInfo* r, VarInfo* v1, VarInfo* v2)
@@ -677,7 +677,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Per3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("unsupported operand Error");
+	SetErrorOperator("%", v1, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::LSh3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
@@ -701,7 +701,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::LSh3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("unsupported operand Error");
+	SetErrorOperator("<<", v1, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::RSh3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
@@ -727,7 +727,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::RSh3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("unsupported operand Error");
+	SetErrorOperator(">>", v1, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::And3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
@@ -755,7 +755,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::And3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("unsupported operand Error");
+	SetErrorOperator("&", v1, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Or3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
@@ -781,7 +781,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Or3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("unsupported operand Error");
+	SetErrorOperator("|", v1, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Xor3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
@@ -809,7 +809,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Xor3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("unsupported operand Error");
+	SetErrorOperator("^", v1, v2);
 }
 //
 //NEOS_FORCEINLINE void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, int v2)
@@ -972,7 +972,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Inc(VarInfo* v1)
 	default:
 		break;
 	}
-	SetError("++ Error");
+	SetErrorOperator("++", v1);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Dec(VarInfo* v1)
 {
@@ -987,7 +987,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Dec(VarInfo* v1)
 	default:
 		break;
 	}
-	SetError("-- Error");
+	SetErrorOperator("--", v1);
 }
 
 NEOS_FORCEINLINE bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
@@ -1075,7 +1075,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareGR(VarInfo* v1, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("Compare GR Error");
+	SetErrorOperator(">", v1, v2);
 	return false;
 }
 NEOS_FORCEINLINE bool CNeoVMWorker::CompareGE(VarInfo* v1, VarInfo* v2)
@@ -1109,7 +1109,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareGE(VarInfo* v1, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("Compare GE Error");
+	SetErrorOperator(">=", v1, v2);
 	return false;
 }
 
@@ -1173,7 +1173,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Add2(VarInfo* r, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("+= Error");
+	SetErrorOperator("+=", r, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Sub2(VarInfo* r, VarInfo* v2)
 {
@@ -1215,7 +1215,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Sub2(VarInfo* r, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("-= Error");
+	SetErrorOperator("-=", r, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Mul2(VarInfo* r, VarInfo* v2)
 {
@@ -1257,7 +1257,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Mul2(VarInfo* r, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("*= Error");
+	SetErrorOperator("*=", r, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Div2(VarInfo* r, VarInfo* v2)
 {
@@ -1299,7 +1299,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Div2(VarInfo* r, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("/= Error");
+	SetErrorOperator("/=", r, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Per2(VarInfo* r, VarInfo* v2) 
 {
@@ -1323,7 +1323,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Per2(VarInfo* r, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("%= Error");
+	SetErrorOperator("%=", r, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::LSh2(VarInfo* r, VarInfo* v2)
 {
@@ -1347,7 +1347,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::LSh2(VarInfo* r, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("<<= Error");
+	SetErrorOperator("<<=", r, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::RSh2(VarInfo* r, VarInfo* v2)
 {
@@ -1371,7 +1371,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::RSh2(VarInfo* r, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError(">>= Error");
+	SetErrorOperator(">>=", r, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::And2(VarInfo* r, VarInfo* v2)
 {
@@ -1395,7 +1395,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::And2(VarInfo* r, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("&= Error");
+	SetErrorOperator("&=", r, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Or2(VarInfo* r, VarInfo* v2)
 {
@@ -1419,7 +1419,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Or2(VarInfo* r, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("|= Error");
+	SetErrorOperator("|=", r, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Xor2(VarInfo* r, VarInfo* v2)
 {
@@ -1443,7 +1443,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Xor2(VarInfo* r, VarInfo* v2)
 	default:
 		break;
 	}
-	SetError("^= Error");
+	SetErrorOperator("^=", r, v2);
 }
 
 NEOS_FORCEINLINE bool CNeoVMWorker::For(VarInfo* pCur)
@@ -1558,7 +1558,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool b
 			if (pMutationVersion->GetType() != VAR_INT || (u32)pMutationVersion->_int != tbl->_mutationVersion)
 			{
 				pIterator->ClearType();
-				SetError("error : collection modified during foreach");
+				SetError(RTE_FOREACH_MODIFIED);
 				return false;
 			}
 			tbl->NextNode(pIterator->_it);
@@ -1584,7 +1584,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool b
 		if (bTwoVar)
 		{
 			pIterator->ClearType();
-			SetError("foreach on list does not support two variables. use: foreach(var v in list)");
+			SetError(RTE_FOREACH_LIST_TWOVAR);
 			return false;
 		}
 		ListInfo* lst = pClt->_lst;
@@ -1605,7 +1605,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool b
 			if (pMutationVersion->GetType() != VAR_INT || (u32)pMutationVersion->_int != lst->_mutationVersion)
 			{
 				pIterator->ClearType();
-				SetError("error : collection modified during foreach");
+				SetError(RTE_FOREACH_MODIFIED);
 				return false;
 			}
 			++pIterator->_it._iListOffset;
@@ -1630,7 +1630,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool b
 		if (bTwoVar)
 		{
 			pIterator->ClearType();
-			SetError("foreach on set does not support two variables. use: foreach(var v in set)");
+			SetError(RTE_FOREACH_SET_TWOVAR);
 			return false;
 		}
 		SetInfo* set = pClt->_set;
@@ -1651,7 +1651,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool b
 			if (pMutationVersion->GetType() != VAR_INT || (u32)pMutationVersion->_int != set->_mutationVersion)
 			{
 				pIterator->ClearType();
-				SetError("error : collection modified during foreach");
+				SetError(RTE_FOREACH_MODIFIED);
 				return false;
 			}
 			set->NextNode(pIterator->_it);
@@ -1673,7 +1673,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool b
 	default:
 		break;
 	}
-	SetErrorFormat("error : foreach not support '%s'", GetDataType(pClt->GetType()).c_str());
+	SetErrorFormat(RTE_FOREACH_UNSUPPORTED, GetDataType(pClt->GetType()).c_str());
 	return false;
 }
 

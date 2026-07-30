@@ -37,7 +37,7 @@ NEOS_FORCEINLINE bool handle_GETTYPE(const SVMOperation& OP) {
 
 NEOS_NOINLINE bool handle_SLEEP(const SVMOperation& OP) {
 	if (m_iNativeScriptCallDepth > 0) {
-		SetError("sleep is not allowed in a synchronous native-to-script call");
+		SetErrorFormat(RTE_NESTED_NOT_ALLOWED, "sleep");
 		return false;
 	}
     int r = Sleep(m_iTimeout, GetVarPtr2(OP));
@@ -121,7 +121,7 @@ NEOS_FORCEINLINE bool handle_PTRCALL(const SVMOperation& OP) {
         CallNative(GetVM()->_funLib_Async, pVar1, pFunName->_str, n3);
         break;
     default:
-        SetError("Ptr Call Error");
+        SetError(RTE_CALL_INVALID);
         break;
     }
     return false;
@@ -269,7 +269,7 @@ NEOS_FORCEINLINE bool handle_CHANGE_INT(const SVMOperation& OP) {
 
 NEOS_NOINLINE bool handle_YIELD(const SVMOperation& OP) {
 	if (m_iNativeScriptCallDepth > 0) {
-		SetError("yield is not allowed in a synchronous native-to-script call");
+		SetErrorFormat(RTE_NESTED_NOT_ALLOWED, "yield");
 		return false;
 	}
     if (StopCoroutine(false) == false)
@@ -280,7 +280,7 @@ NEOS_NOINLINE bool handle_YIELD(const SVMOperation& OP) {
 NEOS_NOINLINE bool handle_IDLE(const SVMOperation& OP) {
     if (m_pCur == nullptr || m_pCur->m_sAsyncResumeCodePtrs.empty())
     {
-        SetError("Async resume state missing");
+        SetError(RTE_ASYNC_RESUME_STATE);
         return false;
     }
 
@@ -352,6 +352,19 @@ NEOS_FORCEINLINE bool handle_QUAT_MAKE(const SVMOperation& OP) {
         (float)GetStackFromBase(_iSP_VarsMax + 3)->GetFloatNumber(),
         (float)GetStackFromBase(_iSP_VarsMax + 4)->GetFloatNumber());
     if (_iSP_Vars_Max2 < _iSP_VarsMax + 5) _iSP_Vars_Max2 = _iSP_VarsMax + 5;
+    return false;
+}
+
+// switch: n1 = table index, n2 = 조건식 위치. 매칭 실패/지원 외 타입이면 default 로.
+// 점프는 op 단위 상대(다음 op 기준)라 기존 JMP 계열과 동일하다.
+NEOS_NOINLINE bool handle_SWITCH(const SVMOperation& OP) {
+    int jumpOffset = 0;
+    if (false == TryGetSwitchJumpOffset((u16)OP.n1, GetVarPtr2(OP), jumpOffset))
+    {   // 정상 컴파일 결과에서는 발생하지 않는다 (손상된 이미지 등)
+        SetError(RTE_SWITCH_TABLE);
+        return false;
+    }
+    SetCodeIncPtr(jumpOffset);
     return false;
 }
 

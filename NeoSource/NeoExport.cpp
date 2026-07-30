@@ -275,11 +275,15 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 
 			argFlag |= GetArgIndexToCode(argFlag, nullptr, &v.n2, &v.n3);
 			break;
-		case NOP_JMP_FOREACH:	// 
+		case NOP_JMP_FOREACH:	//
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
 
 			argFlag |= GetArgIndexToCode(argFlag, nullptr, &v.n2, &v.n3);
+			break;
+		case NOP_SWITCH:	// n1 = switch table index (변환 금지), n2 = 조건식 위치
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+			argFlag |= GetArgIndexToCode(argFlag, nullptr, &v.n2, nullptr);
 			break;
 
 		case NOP_TOSTRING:
@@ -838,6 +842,10 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 3, skipByteChars);
 			OutAsm("JFRE %d%s,  T%s, K[S.%d], V[S.%d]\n", v.n1, JumpMark(sJumpMark, off / (int)sizeof(SVMOperation) + 1 + v.n1).c_str(), GetLog(td, v, 2).c_str(), v.n3, v.n3+1);
 			break;
+		case NOP_SWITCH:
+			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
+			OutAsm("SWTC table[%u], key %s\n", (unsigned)(u16)v.n1, GetLog(td, v, 2).c_str());
+			break;
 
 		case NOP_TOSTRING:
 			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 2, skipByteChars);
@@ -1026,6 +1034,38 @@ static void WriteString(CNArchive& ar, const std::string& str)
 	ar.Write((char*)str.data(), nLen);
 }
 
+// switch/case 테이블 청크 ('SWIT'). debug 여부와 무관하게 저장한다.
+static void WriteSwitchTables(CNArchive& ar, SFunctions& funs)
+{
+	if (funs._switchTables.empty())
+		return;
+
+	const u32 magic = 0x54495753; // SWIT
+	ar << magic;
+	ar.WriteCount((u32)funs._switchTables.size());
+	for (size_t t = 0; t < funs._switchTables.size(); ++t)
+	{
+		const SSwitchTableCompile& tbl = funs._switchTables[t];
+		ar.Write(&tbl._defaultOffset, sizeof(tbl._defaultOffset));
+		ar.WriteCount((u32)tbl._cases.size());
+		for (size_t c = 0; c < tbl._cases.size(); ++c)
+		{
+			const SSwitchCaseCompile& e = tbl._cases[c];
+			u8 keyType = (u8)e._type;
+			ar.Write(&keyType, sizeof(keyType));
+			switch (e._type)
+			{
+			case VAR_BOOL:   ar.Write((void*)&e._bl, sizeof(e._bl)); break;
+			case VAR_INT:    ar.Write((void*)&e._int, sizeof(e._int)); break;
+			case VAR_FLOAT:  ar.Write((void*)&e._float, sizeof(e._float)); break;
+			case VAR_STRING: WriteString(ar, e._str); break;
+			default: break;
+			}
+			ar.Write((void*)&e._jumpOffset, sizeof(e._jumpOffset));
+		}
+	}
+}
+
 static void WriteDebugVarNames(CNArchive& ar, SFunctions& funs, SVars& vars, int staticVarCount)
 {
 	const u32 magic = 0x4E445642; // NDVB
@@ -1199,6 +1239,8 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 		WriteDebugVarNames(ar, funs, vars, header._iStaticVarCount);
 		WriteDebugFunctionNames(ar, funs);
 	}
+
+	WriteSwitchTables(ar, funs);
 
 	int iSaveOffset2 = ar.GetBufferOffset();
 	ar.SetPointer(iSaveOffset1, SEEK_SET);

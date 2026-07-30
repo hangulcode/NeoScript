@@ -3,6 +3,7 @@
 #include "NeoExport.h"
 #include "UTFString.h"
 #include <algorithm>
+#include <limits.h>
 
 namespace NeoScript
 {
@@ -65,6 +66,12 @@ void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 	X(PCE_CONST_INVALID_OP, "Error (%d, %d): invalid operation in const expression near '%s'") \
 	X(PCE_CONST_DIV_ZERO, "Error (%d, %d): division by zero in const expression") \
 	X(PCE_ELIF_DEPRECATED, "Error (%d, %d): 'elif' is no longer supported. Use 'else if' instead") \
+	X(PCE_CASE_OUTSIDE_SWITCH, "Error (%d, %d): 'case' / 'default' can only be used inside a switch") \
+	X(PCE_SWITCH_DUPLICATE_CASE, "Error (%d, %d): duplicate case value in switch") \
+	X(PCE_SWITCH_DUPLICATE_DEFAULT, "Error (%d, %d): 'default' appears more than once in switch") \
+	X(PCE_SWITCH_INVALID_CASE_VALUE, "Error (%d, %d): case value must be a compile-time constant of type bool, int, float or string") \
+	X(PCE_SWITCH_NAN_CASE, "Error (%d, %d): NaN is not allowed as a case value") \
+	X(PCE_SWITCH_TOO_MANY, "Error (%d, %d): too many switch statements in one program") \
 	X(PCE_VM_NOT_INITIALIZED, "Please call NeoScript::INeoVM::Initialize() before compiling scripts")
 
 enum EParserCompileError
@@ -208,7 +215,9 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 // 값을 소비하는 모든 식 진입점은 ParseJob 대신 이 함수를 거쳐야 한다.
 TK_TYPE ParseShortCircuitLogic(bool bReqReturn, SOperand& sResultStack, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, TK_TYPE tkEnd1 = TK_SEMICOLON, TK_TYPE tkEnd2 = TK_COMMA, TK_TYPE tkEnd3 = TK_R_SMALL, TK_TYPE tkEnd4 = TK_R_ARRAY);
 bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport);
-bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn = NULL, std::vector<SJumpValue>* pContinueJumps = NULL);
+// bStopAtCase: switch 본문 파싱용. case/default/'}' 를 만나면 소비하지 않고(PushToken) 종료한다.
+bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn = NULL, std::vector<SJumpValue>* pContinueJumps = NULL, bool bStopAtCase = false);
+bool ParseSwitch(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn, std::vector<SJumpValue>* pContinueJumps);
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool addOPFunEnd = true);
 
 eNOperation GetOpTypeFromOp(eNOperation op)
@@ -287,6 +296,9 @@ int InitDefaultTokenString()
 	TOKEN_STR2(TK_FOR, "for");
 	TOKEN_STR2(TK_FOREACH, "foreach");
 	TOKEN_STR2(TK_WHILE, "while");
+	TOKEN_STR2(TK_SWITCH, "switch");
+	TOKEN_STR2(TK_CASE, "case");
+	TOKEN_STR2(TK_DEFAULT, "default");
 	TOKEN_STR2(TK_TRUE, "true");
 	TOKEN_STR2(TK_FALSE, "false");
 	TOKEN_STR2(TK_NULL, "null");
@@ -410,6 +422,7 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_JMP_NOR, 3);
 	OP_STR1(NOP_JMP_FOR, 3);
 	OP_STR1(NOP_JMP_FOREACH, 3);
+	OP_STR1(NOP_SWITCH, 2); // n1 = table index, n2 = 조건식 위치 (n3 미사용)
 
 	OP_STR1(NOP_STR_ADD, 3);
 
@@ -4106,7 +4119,193 @@ bool ParseSleep(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 
 
-bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn, std::vector<SJumpValue>* pContinueJumps)
+// switch (expr) { case <const>[, <const>]* : ... default: ... }
+// - case 값은 컴파일 타임 상수(bool/int/float/string), strict type 비교. -0.0 은 +0.0 으로 정규화.
+// - fallthrough 없음: 각 case 본문 끝에서 switch 끝으로 점프
+// - break 는 switch 만 탈출, continue 는 바깥 loop 로 그대로 전달
+bool ParseSwitch(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn, std::vector<SJumpValue>* pContinueJumps)
+{
+	std::string tk1;
+	TK_TYPE tkType1;
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_L_SMALL)
+	{
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'(' after 'switch'", tk1.c_str());
+		return false;
+	}
+
+	SOperand cond;
+	if (TK_R_SMALL != ParseShortCircuitLogic(true, cond, ar, funs, vars))
+	{
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "')' after switch condition", tk1.c_str());
+		return false;
+	}
+	if (cond.IsInvalidValue())
+	{
+		SetParserCompileError(ar, PCE_EXPECTED_EXPRESSION);
+		return false;
+	}
+
+	// 조건식 결과를 슬롯 하나로 확정 (배열 접근이면 값을 읽어온다). 평가는 1회뿐.
+	int iKeyVar;
+	if (cond.IsArray())
+	{
+		iKeyVar = funs._cur->AllocLocalTempVar();
+		funs._cur->Push_TableRead(ar, cond._iVar, cond._iArrayIndex, iKeyVar, cond.IsHaveShort());
+	}
+	else
+		iKeyVar = cond._iVar;
+
+	tkType1 = GetToken(ar, tk1);
+	if (tkType1 != TK_L_MIDDLE)
+	{
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'{' after switch(...)", tk1.c_str());
+		return false;
+	}
+
+	// n1 은 short 슬롯이지만 런타임이 부호 없이(u16) 해석하므로 0~65535 까지 쓸 수 있다.
+	if ((int)funs._switchTables.size() > USHRT_MAX)
+	{
+		SetParserCompileError(ar, PCE_SWITCH_TOO_MANY);
+		return false;
+	}
+	const int iTableIndex = (int)funs._switchTables.size();
+	funs._switchTables.push_back(SSwitchTableCompile());
+
+	funs._cur->Push_Switch(ar, (u16)iTableIndex, (short)iKeyVar);
+	const int iBaseOffset = funs._cur->_code->GetBufferOffset(); // NOP_SWITCH 다음 op 기준
+
+	std::vector<SJumpValue> sBreakJumps;   // break + 각 case 본문 끝 → switch 끝
+	bool bHasDefault = false;
+	int  iDefaultOffset = 0;
+
+	while (true)
+	{
+		tkType1 = GetToken(ar, tk1);
+		if (tkType1 == TK_R_MIDDLE)
+			break;
+
+		if (tkType1 == TK_CASE)
+		{
+			std::vector<SSwitchCaseCompile> keys;
+			while (true)   // <const> [, <const>]* ':'
+			{
+				SConstValue cv;
+				if (false == ParseConstExpr(cv, 0, ar))
+					return false;
+
+				SSwitchCaseCompile kc;
+				switch (cv.type)
+				{
+				case NEO_DEFINE_TOKEN_INT:    kc._type = VAR_INT; kc._int = cv.i; break;
+				case NEO_DEFINE_TOKEN_FLOAT:
+				{
+					float f = (float)cv.f;
+					if (f != f)
+					{
+						SetParserCompileError(ar, PCE_SWITCH_NAN_CASE);
+						return false;
+					}
+					if (f == 0.0f) f = 0.0f;   // -0.0 → +0.0
+					kc._type = VAR_FLOAT; kc._float = f;
+					break;
+				}
+				case NEO_DEFINE_TOKEN_STRING: kc._type = VAR_STRING; kc._str = cv.s; break;
+				case NEO_DEFINE_TOKEN_TRUE:   kc._type = VAR_BOOL; kc._bl = true; break;
+				case NEO_DEFINE_TOKEN_FALSE:  kc._type = VAR_BOOL; kc._bl = false; break;
+				default:
+					SetParserCompileError(ar, PCE_SWITCH_INVALID_CASE_VALUE);
+					return false;
+				}
+				keys.push_back(kc);
+
+				tkType1 = GetToken(ar, tk1);
+				if (tkType1 == TK_COMMA)
+					continue;
+				if (tkType1 == TK_COLON)
+					break;
+				SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "',' or ':' after case value", tk1.c_str());
+				return false;
+			}
+
+			const int iRel = (funs._cur->_code->GetBufferOffset() - iBaseOffset) / (int)sizeof(SVMOperation);
+			SSwitchTableCompile& tbl = funs._switchTables[iTableIndex];
+			for (size_t i = 0; i < keys.size(); ++i)
+			{
+				for (size_t j = 0; j < tbl._cases.size(); ++j)   // 중복 검사 (strict type)
+				{
+					const SSwitchCaseCompile& e = tbl._cases[j];
+					if (e._type != keys[i]._type)
+						continue;
+					bool same = false;
+					switch (e._type)
+					{
+					case VAR_BOOL:   same = (e._bl == keys[i]._bl); break;
+					case VAR_INT:    same = (e._int == keys[i]._int); break;
+					case VAR_FLOAT:  same = (e._float == keys[i]._float); break;
+					case VAR_STRING: same = (e._str == keys[i]._str); break;
+					default: break;
+					}
+					if (same)
+					{
+						SetParserCompileError(ar, PCE_SWITCH_DUPLICATE_CASE);
+						return false;
+					}
+				}
+				keys[i]._jumpOffset = iRel;
+				tbl._cases.push_back(keys[i]);
+			}
+		}
+		else if (tkType1 == TK_DEFAULT)
+		{
+			tkType1 = GetToken(ar, tk1);
+			if (tkType1 != TK_COLON)
+			{
+				SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "':' after 'default'", tk1.c_str());
+				return false;
+			}
+			if (bHasDefault)
+			{
+				SetParserCompileError(ar, PCE_SWITCH_DUPLICATE_DEFAULT);
+				return false;
+			}
+			bHasDefault = true;
+			iDefaultOffset = (funs._cur->_code->GetBufferOffset() - iBaseOffset) / (int)sizeof(SVMOperation);
+		}
+		else
+		{
+			SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'case' or 'default'", tk1.c_str());
+			return false;
+		}
+
+		// 본문: 다음 case/default/'}' 까지. break 는 sBreakJumps, continue 는 바깥 loop 로.
+		AddLocalVar(vars.GetCurrentLayer());
+		if (false == ParseMiddleArea(&sBreakJumps, ar, funs, vars, NULL, pContinueJumps, true))
+			return false;
+		DelLocalVar(vars.GetCurrentLayer());
+		ClearTempVars(funs);
+
+		// fallthrough 없음: 본문 끝에서 switch 끝으로
+		funs._cur->Push_JMP(ar, 0);
+		sBreakJumps.push_back(SJumpValue(funs._cur->_code->GetBufferOffset() - (int)(sizeof(short) * 3), funs._cur->_code->GetBufferOffset()));
+		funs._cur->ClearLastOP();
+	}
+
+	const int iEndOffset = funs._cur->_code->GetBufferOffset();
+	if (false == bHasDefault)   // default 없으면 switch 끝으로
+		iDefaultOffset = (iEndOffset - iBaseOffset) / (int)sizeof(SVMOperation);
+	funs._switchTables[iTableIndex]._defaultOffset = iDefaultOffset;
+
+	for (size_t i = 0; i < sBreakJumps.size(); ++i)
+		funs._cur->Set_JumpOffet(sBreakJumps[i], iEndOffset);
+
+	funs._cur->ClearLastOP();
+	if (lastOPReturn) *lastOPReturn = false;
+	return true;
+}
+
+bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn, std::vector<SJumpValue>* pContinueJumps, bool bStopAtCase)
 {
 	std::string tk1, tk2;
 	TK_TYPE tkType1, tkType2;
@@ -4145,6 +4344,12 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			if(lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_R_MIDDLE:
+			if (bStopAtCase)
+			{	// switch 본문: '}' 는 ParseSwitch 가 소비한다
+				ar.PushToken(tkType1, tk1);
+				blEnd = true;
+				break;
+			}
 			if (ar._allowGlobalInitLogic == false && funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME)
 			{
 				SetParserCompileError(ar, PCE_UNEXPECTED_GLOBAL_BLOCK_END);
@@ -4152,6 +4357,16 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			}
 			blEnd = true;
 			break;
+		case TK_CASE:
+		case TK_DEFAULT:
+			if (bStopAtCase)
+			{	// 다음 case/default 로 넘어간다. 소비하지 않고 ParseSwitch 로 반환
+				ar.PushToken(tkType1, tk1);
+				blEnd = true;
+				break;
+			}
+			SetParserCompileError(ar, PCE_CASE_OUTSIDE_SWITCH);
+			return false;
 		case TK_RETURN:
 			ar.PushToken(tkType1, tk1);
 
@@ -4291,6 +4506,13 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				return false;
 			if (bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME;
 			if (lastOPReturn) *lastOPReturn = false;
+			break;
+		case TK_SWITCH:
+			bGlobalLocal = funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME;
+			if (bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME "SWITCH";
+			if (false == ParseSwitch(ar, funs, vars, lastOPReturn, pContinueJumps))
+				return false;
+			if (bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME;
 			break;
 		default:
 			SetParserCompileError(ar, PCE_UNEXPECTED_TOKEN, tk1.c_str(), funs.GetCurFunName().c_str());

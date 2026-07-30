@@ -308,14 +308,55 @@ Build : Release Mode 64bit
 	- break: exits the current loop
 	- continue: starts the next loop iteration
 	- if (x) / else / else if: C-style conditional chain; the legacy `elif` syntax is removed
+	- switch / case / default: see "switch statement" below
 	- for: `for (var a in 1, 100, 1)` specifies start, end, and increment values
-	- foreach: iterates a map, list, or set; use `foreach (var a[, b] in map)`
+	- foreach: iterates a map, list, or set
+		- map: `foreach (var key, value in map)` or `foreach (var key in map)`
+		- list / set: single variable only, `foreach (var value in list)`
+		  (two-variable form is not supported and reports a runtime error)
 	- true / false: boolean values
 	- null: no value
 	- ++ / --: increments or decrements a variable by one
-	- && / ||: logical operators, equivalent to C semantics
+	- && / ||: logical operators, equivalent to C semantics (short-circuit evaluation:
+	  the right operand is not evaluated when the result is already decided)
+	- & / | / ^ / << / >>: bitwise operators, equivalent to C semantics and precedence
+	  (`&` binds tighter than `^`, which binds tighter than `|`)
 	- > / < / >= / <=: comparison operators, equivalent to C semantics
 	- x..y: converts x and y to strings and concatenates them
+
+### switch statement
+`switch` dispatches on a value through a compile-time table, so matching cost does not
+grow with the number of cases.
+
+```cpp
+switch (command)
+{
+case CMD_FIRE:          // const / compile-time constant expressions are allowed
+    Fire();
+case 2, 3:              // one body can match several values
+    MoveTo(command);
+case "reload":
+    Reload();
+default:
+    Idle();
+}
+```
+
+Rules:
+	- `case` values must be compile-time constants of type `bool`, `int`, `float` or `string`.
+	  Constant expressions and `const` / host defines are allowed (`case 1 + 2:`, `case CMD_FIRE:`).
+	- Matching is a **strict type match**: `true != 1`, `1 != 1.0`, `"1" != 1`.
+	- Strings compare as exact UTF-8 bytes.
+	- Floats compare exactly (no epsilon). `-0.0` is normalized to `0.0`, so `case 0.0:` and
+	  `case -0.0:` are duplicates and fail to compile. `NaN` is not allowed as a case value.
+	- Duplicate case values and a duplicate `default` are compile errors.
+	- `default` is optional and may appear anywhere. With no match and no `default`,
+	  execution continues after the switch.
+	- **There is no fallthrough.** Each case body jumps to the end of the switch when it finishes.
+	- `break` exits the innermost switch only; inside a loop it does not exit the loop.
+	- `continue` still applies to the innermost loop, and `return` behaves as usual.
+	- If the switch value is a type that cannot be a case key (map, list, vector, null, ...),
+	  the `default` branch is taken.
 
 ### Built-in system function use system.
 	## Basic

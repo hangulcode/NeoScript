@@ -468,7 +468,7 @@ CNeoVMImpl::CNeoVMImpl()
 		case NDF_VEC4: Var_SetStringA(&m_sDefaultValue[i], "Vector4"); break;
 		case NDF_QUAT: Var_SetStringA(&m_sDefaultValue[i], "Quaternion"); break;
 		default:
-			SetError("unknown Default Value");
+			SetError(g_sNeoRuntimeErrors[RTE_DEFAULT_VALUE]);
 			break;
 		}
 	}
@@ -565,14 +565,14 @@ INeoVMWorker* CNeoVMImpl::LoadVM(const NeoLoadVMParam* vparam, CNeoVMProgram* pP
 {
 	if (pProgram == nullptr)
 	{
-		SetError("CNeoVMProgram is required.");
+		SetError(g_sNeoRuntimeErrors[RTE_PROGRAM_REQUIRED]);
 		return NULL;
 	}
 	if (vparam != nullptr && vparam->execPool != nullptr)
 		_pExecPool = vparam->execPool;   // 이후 모듈 로드 워커들이 상속할 수 있도록 VM 에 보관
 	if (_pExecPool == nullptr)
 	{
-		SetError("NeoExecContextPool is required.");
+		SetError(g_sNeoRuntimeErrors[RTE_EXEC_POOL_REQUIRED]);
 		return NULL;
 	}
 

@@ -646,6 +646,146 @@ fun TestVectorValueTypes()
     Check(math.RotateVectorByQuat(q, a) == a, __LINE__);
 }
 
+const SWITCH_CONST_KEY = 7;
+
+fun SwitchBasic(var value)
+{
+    switch (value)
+    {
+    case 1:
+        return "one";
+    case 2, 3:
+        return "two-or-three";
+    case "text":
+        return "string";
+    case 1.5:
+        return "float";
+    case true:
+        return "bool";
+    case SWITCH_CONST_KEY:
+        return "const";
+    case 4 + 5:
+        return "expr";
+    default:
+        return "default";
+    }
+    return "unreachable";
+}
+
+// default 가 없으면 매칭 실패 시 switch 뒤로 진행한다.
+fun SwitchNoDefault(var value)
+{
+    var result = "none";
+    switch (value)
+    {
+    case 1:
+        result = "one";
+    }
+    return result;
+}
+
+// fallthrough 가 없으므로 첫 case 본문만 실행된다.
+fun SwitchNoFallthrough(var value)
+{
+    var text = "";
+    switch (value)
+    {
+    case 1:
+        text = text .. "A";
+    case 2:
+        text = text .. "B";
+    default:
+        text = text .. "D";
+    }
+    return text;
+}
+
+// switch 안의 break 는 switch 만, continue 는 바깥 loop 에 적용된다.
+fun SwitchInLoop()
+{
+    var text = "";
+    for (var i in 0, 5, 1)
+    {
+        switch (i)
+        {
+        case 1:
+            continue;
+        case 3:
+            break;
+        default:
+            text = text .. i;
+        }
+        text = text .. "|";
+    }
+    return text;
+}
+
+fun SwitchNested(var outer, var inner)
+{
+    switch (outer)
+    {
+    case 1:
+        switch (inner)
+        {
+        case 10:
+            return "1-10";
+        default:
+            return "1-other";
+        }
+    case 2:
+        return "2";
+    }
+    return "none";
+}
+
+fun TestSwitch()
+{
+    Check(SwitchBasic(1) == "one", __LINE__);
+    Check(SwitchBasic(2) == "two-or-three", __LINE__);
+    Check(SwitchBasic(3) == "two-or-three", __LINE__);
+    Check(SwitchBasic("text") == "string", __LINE__);
+    Check(SwitchBasic(1.5) == "float", __LINE__);
+    Check(SwitchBasic(true) == "bool", __LINE__);
+    Check(SwitchBasic(SWITCH_CONST_KEY) == "const", __LINE__);
+    Check(SwitchBasic(9) == "expr", __LINE__);
+    Check(SwitchBasic(99) == "default", __LINE__);
+
+    // strict type match : true != 1, 1 != 1.0, "1" != 1
+    Check(SwitchBasic(false) == "default", __LINE__);
+    Check(SwitchBasic(2.0) == "default", __LINE__);
+    Check(SwitchBasic("1") == "default", __LINE__);
+
+    // key 로 쓸 수 없는 타입은 default 로 간다
+    Check(SwitchBasic(null) == "default", __LINE__);
+    Check(SwitchBasic([1, 2]) == "default", __LINE__);
+    Check(SwitchBasic({ "a": 1 }) == "default", __LINE__);
+
+    Check(SwitchNoDefault(1) == "one", __LINE__);
+    Check(SwitchNoDefault(2) == "none", __LINE__);
+
+    Check(SwitchNoFallthrough(1) == "A", __LINE__);
+    Check(SwitchNoFallthrough(2) == "B", __LINE__);
+    Check(SwitchNoFallthrough(7) == "D", __LINE__);
+
+    Check(SwitchInLoop() == "0|2||4|", __LINE__);
+
+    Check(SwitchNested(1, 10) == "1-10", __LINE__);
+    Check(SwitchNested(1, 99) == "1-other", __LINE__);
+    Check(SwitchNested(2, 0) == "2", __LINE__);
+    Check(SwitchNested(5, 0) == "none", __LINE__);
+
+    // -0.0 은 0.0 으로 정규화되어 같은 key 다
+    var zero = 0;
+    switch (-0.0)
+    {
+    case 0.0:
+        zero = 1;
+    default:
+        zero = 2;
+    }
+    Check(zero == 1, __LINE__);
+}
+
 fun RegressionRun()
 {
     TestExpressions();
@@ -664,6 +804,7 @@ fun RegressionRun()
     TestLoops();
     TestBulk();
 	TestVectorValueTypes();
+    TestSwitch();
     Check(Add3(10, 20, 30) == 60, __LINE__);
     Check(Fibonacci(12) == 144, __LINE__);
     if (regressionFailed == 0)

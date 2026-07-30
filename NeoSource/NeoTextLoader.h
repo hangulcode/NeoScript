@@ -108,6 +108,10 @@ enum TK_TYPE
 	TK_CONST,			// const (스크립트 컴파일타임 상수 선언)
 	TK_STRING_LITERAL,	// define/const 치환으로 만들어진 완성된 문자열 리터럴 (tk = 내용)
 
+	TK_SWITCH,
+	TK_CASE,
+	TK_DEFAULT,
+
 	TK_MAX
 };
 

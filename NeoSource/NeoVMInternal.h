@@ -149,6 +149,7 @@ enum eNOperation : OpType
 	NOP_JMP_NOR,	// !(||)
 	NOP_JMP_FOR,	// for
 	NOP_JMP_FOREACH,// foreach
+	NOP_SWITCH,		// n1 = switch table index, n2 = 조건식 위치. 매칭 offset(op 단위)만큼 상대 점프
 
 	NOP_STR_ADD,	// ..
 

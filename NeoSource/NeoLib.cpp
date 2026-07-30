@@ -994,7 +994,7 @@ struct neo_libs
 	{
 		if (pN->IsNativeScriptCallActive())
 		{
-			pN->SetError("async.get is not allowed in a synchronous native-to-script call");
+			pN->SetErrorFormat(RTE_NESTED_NOT_ALLOWED, "async.get");
 			return false;
 		}
 		if (args != 3) return false;
@@ -1032,7 +1032,7 @@ struct neo_libs
 	{
 		if (pN->IsNativeScriptCallActive())
 		{
-			pN->SetError("async.post is not allowed in a synchronous native-to-script call");
+			pN->SetErrorFormat(RTE_NESTED_NOT_ALLOWED, "async.post");
 			return false;
 		}
 		if (args != 4) return false;
@@ -1096,7 +1096,7 @@ struct neo_libs
 	{
 		if (pN->IsNativeScriptCallActive())
 		{
-			pN->SetError("async.wait is not allowed in a synchronous native-to-script call");
+			pN->SetErrorFormat(RTE_NESTED_NOT_ALLOWED, "async.wait");
 			return false;
 		}
 		if (args != 0) return false;
@@ -1357,7 +1357,7 @@ struct neo_libs
 				return true;
 			}
 		default:
-			pN->SetErrorUnsupport("Unsupport set('%s')", pArg1);
+			pN->SetErrorFormat(RTE_SET_UNSUPPORTED, GetDataType(pArg1->GetType()).c_str());
 			return false;
 		}
 		pN->ReturnValue();

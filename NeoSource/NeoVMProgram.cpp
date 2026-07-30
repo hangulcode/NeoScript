@@ -7,6 +7,82 @@
 namespace NeoScript
 {
 
+extern u32 GetHashCode(u8* buffer, int len);
+
+// ---- switch/case 테이블 ----
+// 런타임 key(StringInfo)의 해시와 같은 알고리즘이어야 조회가 일치한다.
+static u32 SwitchKeyHash(const ProgramSwitchKey& k)
+{
+	switch (k._type)
+	{
+	case VAR_BOOL:   return k._bl ? 1u : 0u;
+	case VAR_INT:    return (u32)k._int;
+	case VAR_FLOAT:  return GetHashCode((u8*)&k._float, sizeof(k._float));
+	case VAR_STRING: return GetHashCode(k._str);
+	default:         return 0u;
+	}
+}
+
+void ProgramSwitchTable::Build()
+{
+	buckets.clear();
+	if (entries.empty())
+		return;
+
+	int capa = 8;
+	while (capa < (int)entries.size() * 2)
+		capa <<= 1;
+	buckets.assign(capa, -1);
+
+	const u32 mask = (u32)(capa - 1);
+	for (int i = 0; i < (int)entries.size(); ++i)
+	{
+		u32 b = SwitchKeyHash(entries[i].key) & mask;
+		entries[i].next = buckets[b];
+		buckets[b] = i;
+	}
+}
+
+int ProgramSwitchTable::Find(VarInfo* pKey) const
+{
+	if (buckets.empty() || pKey == nullptr)
+		return defaultOffset;
+
+	// strict type match. 지원 외 타입(map/list/vector/null 등)은 default 로.
+	VAR_TYPE t = pKey->GetType();
+	u32 h;
+	switch (t)
+	{
+	case VAR_BOOL:   h = pKey->_bl ? 1u : 0u; break;
+	case VAR_INT:    h = (u32)pKey->_int; break;
+	case VAR_FLOAT:
+	{
+		float f = (float)pKey->_float;
+		if (f == 0.0f) f = 0.0f;               // -0.0 → +0.0 정규화
+		h = GetHashCode((u8*)&f, sizeof(f));
+		break;
+	}
+	case VAR_STRING: h = pKey->_str->GetHash(); break;
+	default: return defaultOffset;
+	}
+
+	for (int i = buckets[h & (u32)(buckets.size() - 1)]; i >= 0; i = entries[i].next)
+	{
+		const ProgramSwitchEntry& e = entries[i];
+		if (e.key._type != t)
+			continue;
+		switch (t)
+		{
+		case VAR_BOOL:   if (e.key._bl == pKey->_bl) return e.jumpOffset; break;
+		case VAR_INT:    if (e.key._int == pKey->_int) return e.jumpOffset; break;
+		case VAR_FLOAT:  if (e.key._float == (float)pKey->_float) return e.jumpOffset; break;
+		case VAR_STRING: if (e.key._str == pKey->_str->_str) return e.jumpOffset; break; // UTF-8 바이트 일치
+		default: break;
+		}
+	}
+	return defaultOffset;
+}
+
 static bool ReadString(CNArchive& ar, std::string& str)
 {
 	short nLen = 0;
@@ -251,6 +327,51 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 				if (false == ReadString(ar, name))
 					return true;
 				debugFunctionNames[funId] = name;
+			}
+		}
+		else if (magic == 0x54495753)   // 'SWIT' : switch/case 테이블
+		{
+			u32 tableCount = 0;
+			if (false == ReadCount(ar, tableCount))
+				return true;
+			switchTables.resize(tableCount);
+			for (u32 t = 0; t < tableCount; ++t)
+			{
+				ProgramSwitchTable& tbl = switchTables[t];
+				if (ar.Read(&tbl.defaultOffset, sizeof(tbl.defaultOffset)) == 0)
+					return true;
+				u32 caseCount = 0;
+				if (false == ReadCount(ar, caseCount))
+					return true;
+				tbl.entries.resize(caseCount);
+				for (u32 c = 0; c < caseCount; ++c)
+				{
+					ProgramSwitchEntry& e = tbl.entries[c];
+					u8 keyType = 0;
+					if (ar.Read(&keyType, sizeof(keyType)) == 0)
+						return true;
+					e.key._type = (VAR_TYPE)keyType;
+					switch (e.key._type)
+					{
+					case VAR_BOOL:
+						if (ar.Read(&e.key._bl, sizeof(e.key._bl)) == 0) return true;
+						break;
+					case VAR_INT:
+						if (ar.Read(&e.key._int, sizeof(e.key._int)) == 0) return true;
+						break;
+					case VAR_FLOAT:
+						if (ar.Read(&e.key._float, sizeof(e.key._float)) == 0) return true;
+						break;
+					case VAR_STRING:
+						if (false == ReadString(ar, e.key._str)) return true;
+						break;
+					default:
+						return true;   // 손상된 이미지
+					}
+					if (ar.Read(&e.jumpOffset, sizeof(e.jumpOffset)) == 0)
+						return true;
+				}
+				tbl.Build();
 			}
 		}
 		else

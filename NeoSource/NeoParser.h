@@ -549,6 +549,17 @@ struct SFunctionInfo
 		//_code->Write(&key, sizeof(key));
 		Push_Flag(bTwoVar ? NEOS_OP_FOREACH_TWOVAR : 0, add, table, key);
 	}
+	// n1 = switch table index (부호 없이 해석, 0~65535), n2 = 조건식 결과 위치.
+	// 점프는 런타임이 table 에서 찾는다.
+	void	Push_Switch(CArchiveRdWC& ar, u16 tableIndex, short keyVar)
+	{
+		AddDebugData(ar);
+		_iLastOPOffset = _code->GetBufferOffset();
+
+		OpType optype = GetOpTypeFromOp(NOP_SWITCH);
+		_code->Write(&optype, sizeof(optype));
+		Push_NoFlag((short)tableIndex, keyVar, 0);   // 런타임이 u16 으로 되읽는다
+	}
 	void	Set_JumpOffet(SJumpValue sJmp, int destOffset)
 	{
 		// offset 은 op(SVMOperation) 단위. dest/base 는 바이트 버퍼 위치라 차이를 op 크기로 나눈다.
@@ -689,6 +700,23 @@ struct SFunctionLayer
 	std::map< std::string, SFunctionLayer*> _defModules;
 };
 
+// 컴파일 타임 switch case 1개. Program 의 ProgramSwitchKey 와 같은 값 모델.
+struct SSwitchCaseCompile
+{
+	VAR_TYPE	_type = VAR_NONE;   // VAR_BOOL / VAR_INT / VAR_FLOAT / VAR_STRING
+	int			_int = 0;
+	float		_float = 0;
+	bool		_bl = false;
+	std::string	_str;
+	int			_jumpOffset = 0;    // NOP_SWITCH 다음 op 기준 상대 op offset
+};
+
+struct SSwitchTableCompile
+{
+	std::vector<SSwitchCaseCompile>	_cases;
+	int								_defaultOffset = 0;
+};
+
 struct SFunctions
 {
 	std::vector<SFunctionLayer*>			_funLayers;
@@ -697,6 +725,10 @@ struct SFunctions
 
 	SFunctionInfo*						_cur = nullptr;
 	std::vector<VarInfo>				_staticVars;
+	// switch 테이블은 _staticVars 처럼 프로그램 전역으로 누적된다(함수별이 아님).
+	// NOP_SWITCH.n1 = 이 배열의 인덱스이고, Export 가 'SWIT' 청크로 써서
+	// 런타임에 CNeoVMProgram::switchTables 가 된다.
+	std::vector<SSwitchTableCompile>	_switchTables;
 
 	CNArchive		_codeFinal;
 	CNArchive		_codeTemp;

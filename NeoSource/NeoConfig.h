@@ -52,7 +52,8 @@ struct SUtf8One
 
 
 #define FILE_NEOS	(('N' << 24) | ('E' << 16) | ('O' << 8) | ('S'))
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('0' << 8) | ('9'))
+// 0110: switch/case 테이블 chunk 추가 (이전 캐시 이미지와 호환 안 됨)
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('1' << 8) | ('0'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline
