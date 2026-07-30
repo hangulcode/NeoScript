@@ -930,9 +930,17 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 			}
 			break;
 		case NOP_RETURN:
-			OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
-			if(v.argFlag & NEOS_OP_CALL_NORESULT) OutAsm("RET\n");
-			else							OutAsm("RET  %s\n", GetLog(td, v, 1).c_str());
+			// NORESULT = 값 없는 'return;'. n1(반환값 슬롯)을 쓰지 않으므로 op/flag 2바이트만 덤프한다.
+			if (v.argFlag & NEOS_OP_CALL_NORESULT)
+			{
+				OutBytes((const u8*)&v, OpFlagByteChars, skipByteChars);
+				OutAsm("RET\n");
+			}
+			else
+			{
+				OutBytes((const u8*)&v, OpFlagByteChars + 2 * 1, skipByteChars);
+				OutAsm("RET  %s\n", GetLog(td, v, 1).c_str());
+			}
 			break;
 		//case NOP_FUNEND:
 		//	OutAsm("- End -\n");
