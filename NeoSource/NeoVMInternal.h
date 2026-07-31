@@ -354,7 +354,10 @@ struct StringInfo : AllocBase, VMString
 
 struct AsyncInfo : AllocBase
 {
-	CNeoVMWorker*	_ownerWorker = nullptr;
+	// 요청을 낸 워커의 ID. 포인터를 들면 워커가 먼저 소멸했을 때 dangling 이 되고,
+	// 같은 주소에 새 워커가 생기면 남의 완료 async 를 자기 것으로 오식별한다.
+	// ID 는 살아있는 워커와 절대 충돌하지 않고, FindWorker 로 생존 여부도 확인할 수 있다.
+	u32				_ownerWorkerId = 0;
 	std::string _request;
 	std::string _body;
 	std::vector< std::pair<std::string, std::string> > _headers;

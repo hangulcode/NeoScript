@@ -658,8 +658,6 @@ fun SwitchBasic(var value)
         return "two-or-three";
     case "text":
         return "string";
-    case 1.5:
-        return "float";
     case true:
         return "bool";
     case SWITCH_CONST_KEY:
@@ -744,18 +742,18 @@ fun TestSwitch()
     Check(SwitchBasic(2) == "two-or-three", __LINE__);
     Check(SwitchBasic(3) == "two-or-three", __LINE__);
     Check(SwitchBasic("text") == "string", __LINE__);
-    Check(SwitchBasic(1.5) == "float", __LINE__);
     Check(SwitchBasic(true) == "bool", __LINE__);
     Check(SwitchBasic(SWITCH_CONST_KEY) == "const", __LINE__);
     Check(SwitchBasic(9) == "expr", __LINE__);
     Check(SwitchBasic(99) == "default", __LINE__);
 
-    // strict type match : true != 1, 1 != 1.0, "1" != 1
+    // strict type match : true != 1, "1" != 1
     Check(SwitchBasic(false) == "default", __LINE__);
-    Check(SwitchBasic(2.0) == "default", __LINE__);
     Check(SwitchBasic("1") == "default", __LINE__);
 
-    // key 로 쓸 수 없는 타입은 default 로 간다
+    // key 로 쓸 수 없는 타입(float 포함)은 default 로 간다
+    Check(SwitchBasic(1.0) == "default", __LINE__);
+    Check(SwitchBasic(2.5) == "default", __LINE__);
     Check(SwitchBasic(null) == "default", __LINE__);
     Check(SwitchBasic([1, 2]) == "default", __LINE__);
     Check(SwitchBasic({ "a": 1 }) == "default", __LINE__);
@@ -773,17 +771,6 @@ fun TestSwitch()
     Check(SwitchNested(1, 99) == "1-other", __LINE__);
     Check(SwitchNested(2, 0) == "2", __LINE__);
     Check(SwitchNested(5, 0) == "none", __LINE__);
-
-    // -0.0 은 0.0 으로 정규화되어 같은 key 다
-    var zero = 0;
-    switch (-0.0)
-    {
-    case 0.0:
-        zero = 1;
-    default:
-        zero = 2;
-    }
-    Check(zero == 1, __LINE__);
 }
 
 fun RegressionRun()

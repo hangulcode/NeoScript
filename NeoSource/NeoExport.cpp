@@ -1057,7 +1057,6 @@ static void WriteSwitchTables(CNArchive& ar, SFunctions& funs)
 			{
 			case VAR_BOOL:   ar.Write((void*)&e._bl, sizeof(e._bl)); break;
 			case VAR_INT:    ar.Write((void*)&e._int, sizeof(e._int)); break;
-			case VAR_FLOAT:  ar.Write((void*)&e._float, sizeof(e._float)); break;
 			case VAR_STRING: WriteString(ar, e._str); break;
 			default: break;
 			}

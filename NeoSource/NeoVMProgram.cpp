@@ -17,7 +17,6 @@ static u32 SwitchKeyHash(const ProgramSwitchKey& k)
 	{
 	case VAR_BOOL:   return k._bl ? 1u : 0u;
 	case VAR_INT:    return (u32)k._int;
-	case VAR_FLOAT:  return GetHashCode((u8*)&k._float, sizeof(k._float));
 	case VAR_STRING: return GetHashCode(k._str);
 	default:         return 0u;
 	}
@@ -48,20 +47,13 @@ int ProgramSwitchTable::Find(VarInfo* pKey) const
 	if (buckets.empty() || pKey == nullptr)
 		return defaultOffset;
 
-	// strict type match. 지원 외 타입(map/list/vector/null 등)은 default 로.
+	// strict type match. case key 로 쓸 수 없는 타입(float/map/list/vector/null 등)은 default 로.
 	VAR_TYPE t = pKey->GetType();
 	u32 h;
 	switch (t)
 	{
 	case VAR_BOOL:   h = pKey->_bl ? 1u : 0u; break;
 	case VAR_INT:    h = (u32)pKey->_int; break;
-	case VAR_FLOAT:
-	{
-		float f = (float)pKey->_float;
-		if (f == 0.0f) f = 0.0f;               // -0.0 → +0.0 정규화
-		h = GetHashCode((u8*)&f, sizeof(f));
-		break;
-	}
 	case VAR_STRING: h = pKey->_str->GetHash(); break;
 	default: return defaultOffset;
 	}
@@ -75,7 +67,6 @@ int ProgramSwitchTable::Find(VarInfo* pKey) const
 		{
 		case VAR_BOOL:   if (e.key._bl == pKey->_bl) return e.jumpOffset; break;
 		case VAR_INT:    if (e.key._int == pKey->_int) return e.jumpOffset; break;
-		case VAR_FLOAT:  if (e.key._float == (float)pKey->_float) return e.jumpOffset; break;
 		case VAR_STRING: if (e.key._str == pKey->_str->_str) return e.jumpOffset; break; // UTF-8 바이트 일치
 		default: break;
 		}
@@ -358,9 +349,6 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 						break;
 					case VAR_INT:
 						if (ar.Read(&e.key._int, sizeof(e.key._int)) == 0) return true;
-						break;
-					case VAR_FLOAT:
-						if (ar.Read(&e.key._float, sizeof(e.key._float)) == 0) return true;
 						break;
 					case VAR_STRING:
 						if (false == ReadString(ar, e.key._str)) return true;

@@ -62,12 +62,12 @@ struct SStaticConst
 
 // switch/case 테이블. SStaticConst 와 같은 이유로 Program 전용 원시 표현을 쓴다.
 // (VM pool / StringInfo / Var_Release / 스크립트 Map API 에 의존하지 않음)
-// key 는 컴파일 타임 상수이고 strict type 비교한다. -0.0 은 컴파일 시 +0.0 으로 정규화된다.
+// key 는 컴파일 타임 상수이고 strict type 비교한다.
+// float 는 정확 비교가 불안정해서 case key 로 허용하지 않는다(컴파일 에러).
 struct ProgramSwitchKey
 {
-	VAR_TYPE	_type = VAR_NONE;   // VAR_BOOL / VAR_INT / VAR_FLOAT / VAR_STRING
+	VAR_TYPE	_type = VAR_NONE;   // VAR_BOOL / VAR_INT / VAR_STRING
 	int			_int = 0;
-	float		_float = 0;
 	bool		_bl = false;
 	std::string	_str;               // VAR_STRING 전용 (UTF-8 바이트 그대로)
 };

@@ -343,19 +343,19 @@ default:
 ```
 
 Rules:
-	- `case` values must be compile-time constants of type `bool`, `int`, `float` or `string`.
+	- `case` values must be compile-time constants of type `bool`, `int` or `string`.
 	  Constant expressions and `const` / host defines are allowed (`case 1 + 2:`, `case CMD_FIRE:`).
-	- Matching is a **strict type match**: `true != 1`, `1 != 1.0`, `"1" != 1`.
+	- **`float` is not allowed as a case value** and is a compile error, because matching would
+	  depend on exact floating-point equality. Use `int` or `string` keys instead.
+	- Matching is a **strict type match**: `true != 1`, `"1" != 1`.
 	- Strings compare as exact UTF-8 bytes.
-	- Floats compare exactly (no epsilon). `-0.0` is normalized to `0.0`, so `case 0.0:` and
-	  `case -0.0:` are duplicates and fail to compile. `NaN` is not allowed as a case value.
 	- Duplicate case values and a duplicate `default` are compile errors.
 	- `default` is optional and may appear anywhere. With no match and no `default`,
 	  execution continues after the switch.
 	- **There is no fallthrough.** Each case body jumps to the end of the switch when it finishes.
 	- `break` exits the innermost switch only; inside a loop it does not exit the loop.
 	- `continue` still applies to the innermost loop, and `return` behaves as usual.
-	- If the switch value is a type that cannot be a case key (map, list, vector, null, ...),
+	- If the switch value is a type that cannot be a case key (float, map, list, vector, null, ...),
 	  the `default` branch is taken.
 
 ### Built-in system function use system.

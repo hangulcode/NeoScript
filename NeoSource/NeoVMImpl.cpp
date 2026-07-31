@@ -310,7 +310,7 @@ AsyncInfo* CNeoVMImpl::AsyncAlloc()
 {
 	AsyncInfo* p = m_sPool_Async.Receive();
 	p->_refCount = 0;
-	p->_ownerWorker = nullptr;
+	p->_ownerWorkerId = 0;
 	p->_state = ASYNC_READY;
 	++m_sAllocStats.asyncs;
 	return p;
@@ -427,17 +427,63 @@ void CNeoVMImpl::AddHttp_Request(AsyncInfo* p)
 	_job_queue.Push(p);
 }
 
-AsyncInfo* CNeoVMImpl::Pop_AsyncInfo(CNeoVMWorker* pOwnerWorker)
+// 주인 워커가 이미 소멸한 완료 async 를 폐기한다.
+// (워커가 요청을 남긴 채 사라지면 아무도 pop 하지 않아 큐와 _LockReferance 가 그대로 남는다)
+void CNeoVMImpl::DiscardOrphanedAsync()
 {
 	AsyncInfo* p = nullptr;
-	if(_job_completed.TryPopMatching(p, [pOwnerWorker](AsyncInfo* candidate) { return candidate->_ownerWorker == pOwnerWorker; }))
+	while (_orphanAsyncCount > 0 && _job_completed.TryPopMatching(p,
+		[this](AsyncInfo* candidate) { return FindWorker(candidate->_ownerWorkerId) == nullptr; }))
+	{
+		--_orphanAsyncCount;
+		Var_Release(&p->_LockReferance);   // 참조가 풀리면 AsyncInfo 도 풀로 반납된다
+	}
+}
+
+// 워커 소멸 직전 호출. 이 워커가 주인인 완료 async 를 폐기한다.
+// 아직 처리 중인 요청은 나중에 완료 큐에 들어오며, DiscardOrphanedAsync 가 정리한다.
+void CNeoVMImpl::DiscardAsyncByWorker(u32 workerId, int pendingCount)
+{
+	int discarded = 0;
+	AsyncInfo* p = nullptr;
+	while (_job_completed.TryPopMatching(p,
+		[workerId](AsyncInfo* candidate) { return candidate->_ownerWorkerId == workerId; }))
+	{
+		++discarded;
+		Var_Release(&p->_LockReferance);
+	}
+
+	// 완료 큐에 없던 나머지는 아직 처리 중이다. 나중에 완료 큐로 들어오면
+	// DiscardOrphanedAsync 가 회수하도록 수를 넘겨둔다.
+	int stillRunning = pendingCount - discarded;
+	if (stillRunning > 0)
+		_orphanAsyncCount += stillRunning;
+}
+
+AsyncInfo* CNeoVMImpl::Pop_AsyncInfo(CNeoVMWorker* pOwnerWorker)
+{
+	// 고아가 하나도 없으면(대부분의 경우) 검사 자체를 건너뛴다.
+	if (_orphanAsyncCount > 0)
+		DiscardOrphanedAsync();
+
+	const u32 ownerId = pOwnerWorker->GetWorkerID();
+	AsyncInfo* p = nullptr;
+	if(_job_completed.TryPopMatching(p, [ownerId](AsyncInfo* candidate) { return candidate->_ownerWorkerId == ownerId; }))
+	{
+		if (pOwnerWorker->_asyncPendingCount > 0)
+			--pOwnerWorker->_asyncPendingCount;
 		return p;
+	}
 	return nullptr;
 }
 
 
 CNeoVMImpl::CNeoVMImpl()
 {
+	// 워커가 늘어나는 과정에서 rehash(전체 재해싱) 스파이크가 프레임에 걸리지 않게
+	// 버킷을 미리 잡아둔다. 부족하면 그때부터 평소대로 확장된다.
+	_sVMWorkers.reserve(4096);
+
 	for (int i = 0; i < NDF_MAX; i++)
 	{
 		m_sDefaultValue[i].ClearType();
@@ -594,11 +640,11 @@ INeoVMWorker* CNeoVMImpl::LoadVM(const NeoLoadVMParam* vparam, CNeoVMProgram* pP
 }
 bool CNeoVMImpl::PCall(int iModule)
 {
-	auto it = _sVMWorkers.find(iModule);
-	if (it == _sVMWorkers.end())
+	CNeoVMWorker* pFound = FindWorker(iModule);
+	if (pFound == nullptr)
 		return false;
 
-	auto pWorker = (*it).second;
+	auto pWorker = pFound;
 	std::vector<VarInfo> _args;
 	int st = pWorker->ExecuteTop(0, _args);   // 모듈 본문(함수0)을 풀 컨텍스트로 최상위 실행
 	return st != NEOEXEC_ERROR;
@@ -622,11 +668,11 @@ u32 CNeoVMImpl::CreateWorker(int iStackSize)
 }
 bool CNeoVMImpl::ReleaseWorker(u32 id)
 {
-	auto it = _sVMWorkers.find(id);
-	if (it == _sVMWorkers.end())
+	CNeoVMWorker* pFound = FindWorker(id);
+	if (pFound == nullptr)
 		return false;
 
-	auto pWorker = (*it).second;
+	auto pWorker = pFound;
 	FreeWorker(pWorker);
 
 	if (pWorker == _pMainWorker)
@@ -636,11 +682,11 @@ bool CNeoVMImpl::ReleaseWorker(u32 id)
 }
 bool CNeoVMImpl::BindWorkerFunction(u32 id, const std::string& funName)
 {
-	auto it = _sVMWorkers.find(id);
-	if (it == _sVMWorkers.end())
+	CNeoVMWorker* pFound = FindWorker(id);
+	if (pFound == nullptr)
 		return false;
 
-	CNeoVMWorker* pWorker = (*it).second;
+	CNeoVMWorker* pWorker = pFound;
 	return pWorker->BindWorkerFunction(funName);
 }
 bool CNeoVMImpl::SetTimeout(u32 id, int iTimeout, int iCheckOpCount)
@@ -652,10 +698,10 @@ bool CNeoVMImpl::SetTimeout(u32 id, int iTimeout, int iCheckOpCount)
 	}
 	else
 	{
-		auto it = _sVMWorkers.find(id);
-		if (it == _sVMWorkers.end())
+		CNeoVMWorker* pFound = FindWorker(id);
+		if (pFound == nullptr)
 			return false;
-		pWorker = (*it).second;
+		pWorker = pFound;
 	}
 	pWorker->SetTimeout(iTimeout, iCheckOpCount);
 	return true;
@@ -663,10 +709,10 @@ bool CNeoVMImpl::SetTimeout(u32 id, int iTimeout, int iCheckOpCount)
 
 bool CNeoVMImpl::IsWorking(u32 id)
 {
-	auto it = _sVMWorkers.find(id);
-	if (it == _sVMWorkers.end())
+	CNeoVMWorker* pFound = FindWorker(id);
+	if (pFound == nullptr)
 		return false;
-	auto pWorker = (*it).second;
+	auto pWorker = pFound;
 	return pWorker->IsWorking();
 }
 
@@ -675,10 +721,10 @@ bool CNeoVMImpl::UpdateWorker(u32 id)
 	if (_pErrorMsg.empty() == false)
 		return false;
 
-	auto it = _sVMWorkers.find(id);
-	if (it == _sVMWorkers.end())
+	CNeoVMWorker* pFound = FindWorker(id);
+	if (pFound == nullptr)
 		return false;
-	auto pWorker = (*it).second;
+	auto pWorker = pFound;
 	bool result = pWorker->Run();// iTimeout >= 0, iTimeout, iCheckOpCount);
 	PublishAllocStats();
 	return result;

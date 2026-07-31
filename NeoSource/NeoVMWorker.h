@@ -117,6 +117,8 @@ private:
     int m_iDebugSuppressCount = 0;
     // Script A -> native API -> Script B 동기 재진입 범위에서만 증가한다.
     int m_iNativeScriptCallDepth = 0;
+    // 이 워커가 요청했고 아직 회수하지 않은 async 수. 소멸 시 고아 판정에 쓴다.
+    int _asyncPendingCount = 0;
 
     void ClearDebugBreakpoints();
     void SetDebugBreakLineBit(std::vector<u8>& bits, int line);

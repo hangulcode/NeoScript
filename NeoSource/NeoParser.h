@@ -703,9 +703,8 @@ struct SFunctionLayer
 // 컴파일 타임 switch case 1개. Program 의 ProgramSwitchKey 와 같은 값 모델.
 struct SSwitchCaseCompile
 {
-	VAR_TYPE	_type = VAR_NONE;   // VAR_BOOL / VAR_INT / VAR_FLOAT / VAR_STRING
+	VAR_TYPE	_type = VAR_NONE;   // VAR_BOOL / VAR_INT / VAR_STRING (float 는 허용 안 함)
 	int			_int = 0;
-	float		_float = 0;
 	bool		_bl = false;
 	std::string	_str;
 	int			_jumpOffset = 0;    // NOP_SWITCH 다음 op 기준 상대 op offset

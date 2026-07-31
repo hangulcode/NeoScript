@@ -1020,7 +1020,8 @@ struct neo_libs
 		pAsync->_fun_index = v3->_fun_index;
 		if (pAsync->_timeout == -1) pAsync->_timeout = 0x7fffffff;
 
-		pAsync->_ownerWorker = pN;
+		pAsync->_ownerWorkerId = pN->GetWorkerID();
+		++pN->_asyncPendingCount;
 		pAsync->_event.reset();
 		pAsync->_state = ASYNC_PENDING;
 		pN->Move(&pAsync->_LockReferance, pVar);
@@ -1063,7 +1064,8 @@ struct neo_libs
 		pAsync->_fun_index = v4->_fun_index;
 		if (pAsync->_timeout == -1) pAsync->_timeout = 0x7fffffff;
 
-		pAsync->_ownerWorker = pN;
+		pAsync->_ownerWorkerId = pN->GetWorkerID();
+		++pN->_asyncPendingCount;
 		pAsync->_event.reset();
 		pAsync->_state = ASYNC_PENDING;
 		pN->Move(&pAsync->_LockReferance, pVar);

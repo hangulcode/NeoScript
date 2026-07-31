@@ -29,7 +29,9 @@ private:
 	u32 _dwLastIDVMWorker = 0;
 
 
-	std::map<u32, CNeoVMWorker*> _sVMWorkers;
+	// 워커는 게임 오브젝트 단위로 수천~수만 개가 살아있고 프레임당 수십~수백 개가
+	// 생성/삭제된다. std::map 은 조회마다 트리를 log n 단계 타서(=캐시 미스) 불리하다.
+	std::unordered_map<u32, CNeoVMWorker*> _sVMWorkers;
 	std::thread*	_job = nullptr;
 	NeoThreadSafeQueue<AsyncInfo*> _job_queue;
 	bool						_job_end = false;
@@ -74,6 +76,13 @@ public:
 	void ThreadFunction();
 	void AddHttp_Request(AsyncInfo* p);
 	AsyncInfo* Pop_AsyncInfo(CNeoVMWorker* pOwnerWorker);
+	void DiscardOrphanedAsync();              // 주인이 사라진 완료 async 폐기
+	// 워커 소멸 시 호출. 완료 큐의 것은 즉시 폐기하고, 아직 처리 중인 수를 고아 카운터에 넘긴다.
+	void DiscardAsyncByWorker(u32 workerId, int pendingCount);
+	// 주인이 사라진 채 아직 완료되지 않은 async 의 수.
+	// 0 이면 고아가 존재할 수 없으므로 Pop_AsyncInfo 가 검사를 건너뛴다.
+	// (워커를 자주 만들고 지워도, async 를 쓴 워커가 없으면 계속 0 이다)
+	int _orphanAsyncCount = 0;
 
 
 

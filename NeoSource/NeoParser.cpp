@@ -69,8 +69,8 @@ void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 	X(PCE_CASE_OUTSIDE_SWITCH, "Error (%d, %d): 'case' / 'default' can only be used inside a switch") \
 	X(PCE_SWITCH_DUPLICATE_CASE, "Error (%d, %d): duplicate case value in switch") \
 	X(PCE_SWITCH_DUPLICATE_DEFAULT, "Error (%d, %d): 'default' appears more than once in switch") \
-	X(PCE_SWITCH_INVALID_CASE_VALUE, "Error (%d, %d): case value must be a compile-time constant of type bool, int, float or string") \
-	X(PCE_SWITCH_NAN_CASE, "Error (%d, %d): NaN is not allowed as a case value") \
+	X(PCE_SWITCH_INVALID_CASE_VALUE, "Error (%d, %d): case value must be a compile-time constant of type bool, int or string") \
+	X(PCE_SWITCH_FLOAT_CASE, "Error (%d, %d): float is not allowed as a case value (exact comparison is unreliable). use int or string") \
 	X(PCE_SWITCH_TOO_MANY, "Error (%d, %d): too many switch statements in one program") \
 	X(PCE_VM_NOT_INITIALIZED, "Please call NeoScript::INeoVM::Initialize() before compiling scripts")
 
@@ -4120,7 +4120,7 @@ bool ParseSleep(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 
 // switch (expr) { case <const>[, <const>]* : ... default: ... }
-// - case 값은 컴파일 타임 상수(bool/int/float/string), strict type 비교. -0.0 은 +0.0 으로 정규화.
+// - case 값은 컴파일 타임 상수(bool/int/string), strict type 비교. float 는 허용하지 않는다.
 // - fallthrough 없음: 각 case 본문 끝에서 switch 끝으로 점프
 // - break 는 switch 만 탈출, continue 는 바깥 loop 로 그대로 전달
 bool ParseSwitch(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn, std::vector<SJumpValue>* pContinueJumps)
@@ -4200,17 +4200,9 @@ bool ParseSwitch(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPRe
 				{
 				case NEO_DEFINE_TOKEN_INT:    kc._type = VAR_INT; kc._int = cv.i; break;
 				case NEO_DEFINE_TOKEN_FLOAT:
-				{
-					float f = (float)cv.f;
-					if (f != f)
-					{
-						SetParserCompileError(ar, PCE_SWITCH_NAN_CASE);
-						return false;
-					}
-					if (f == 0.0f) f = 0.0f;   // -0.0 → +0.0
-					kc._type = VAR_FLOAT; kc._float = f;
-					break;
-				}
+					// float 는 정확 비교에 의존해야 해서 case key 로 허용하지 않는다.
+					SetParserCompileError(ar, PCE_SWITCH_FLOAT_CASE);
+					return false;
 				case NEO_DEFINE_TOKEN_STRING: kc._type = VAR_STRING; kc._str = cv.s; break;
 				case NEO_DEFINE_TOKEN_TRUE:   kc._type = VAR_BOOL; kc._bl = true; break;
 				case NEO_DEFINE_TOKEN_FALSE:  kc._type = VAR_BOOL; kc._bl = false; break;
@@ -4243,7 +4235,6 @@ bool ParseSwitch(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPRe
 					{
 					case VAR_BOOL:   same = (e._bl == keys[i]._bl); break;
 					case VAR_INT:    same = (e._int == keys[i]._int); break;
-					case VAR_FLOAT:  same = (e._float == keys[i]._float); break;
 					case VAR_STRING: same = (e._str == keys[i]._str); break;
 					default: break;
 					}

@@ -88,6 +88,10 @@ CNeoVMWorker::CNeoVMWorker(INeoVM* pVM, u32 id, int iStackSize)
 }
 CNeoVMWorker::~CNeoVMWorker()
 {
+	// 이 워커가 주인인 완료 async 를 먼저 폐기한다. 남겨두면 아무도 pop 하지 않아
+	// 큐와 _LockReferance 가 VM 종료까지 유지된다(누수).
+	GetVM()->DiscardAsyncByWorker(GetWorkerID(), _asyncPendingCount);
+
 	// 정지 상태로 남은(retain 된) 최상위 실행 컨텍스트를 풀로 반납.
 	if (m_pMainCtx != nullptr)
 		ReleaseExecution();
