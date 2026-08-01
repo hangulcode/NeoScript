@@ -473,7 +473,7 @@ int InitDefaultTokenString()
 	return 1;
 }
 static bool g_bInitVM = false;
-INeoLoader* g_NeoLoader = nullptr;
+// (구 전역 g_NeoLoader 제거) import loader 는 이제 NeoCompilerParam.loader → CArchiveRdWC::m_pLoader 로 전달.
 
 std::string GetTokenString(TK_TYPE tk)
 {
@@ -759,6 +759,57 @@ bool AbleName(const std::string& str)
 	return true;
 }
 
+// 숫자 리터럴을 통째로 한 토큰으로 읽는다(예전엔 '.'/지수부호에서 쪼개져 1.2e3, 5.6E-4 가 깨짐).
+// 정수부·소수부·지수부(e/E[+/-]digits)와 헥사(0x…, 0x1.8p4)를 지원. '.' 은 뒤가 숫자일 때만
+// 소비해 멤버 접근(5.foo)과 구분한다. 실제 값 파싱/검증은 StringToNumber 가 담당.
+static void ScanNumberLiteral(CArchiveRdWC& ar, std::string& tk)
+{
+	auto isDig = [](u16 c) { return c >= '0' && c <= '9'; };
+	auto isHex = [](u16 c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'); };
+	auto take  = [&]() { tk.push_back((char)ar.GetData(true)); };
+
+	if (ar.GetData(false) == '0' && (ar.PeekData(1) == 'x' || ar.PeekData(1) == 'X'))
+	{
+		take(); take(); // "0x"
+		while (isHex(ar.GetData(false))) take();
+		if (ar.GetData(false) == '.' && isHex(ar.PeekData(1)))
+		{
+			take();
+			while (isHex(ar.GetData(false))) take();
+		}
+		if (ar.GetData(false) == 'p' || ar.GetData(false) == 'P')
+		{
+			u16 n1 = ar.PeekData(1);
+			if (isDig(n1) || ((n1 == '+' || n1 == '-') && isDig(ar.PeekData(2))))
+			{
+				take(); // p/P
+				u16 s = ar.GetData(false);
+				if (s == '+' || s == '-') take();
+				while (isDig(ar.GetData(false))) take();
+			}
+		}
+		return;
+	}
+
+	while (isDig(ar.GetData(false))) take();            // 정수부
+	if (ar.GetData(false) == '.' && isDig(ar.PeekData(1))) // 소수부('.' 뒤 숫자일 때만)
+	{
+		take();
+		while (isDig(ar.GetData(false))) take();
+	}
+	if (ar.GetData(false) == 'e' || ar.GetData(false) == 'E') // 지수부
+	{
+		u16 n1 = ar.PeekData(1);
+		if (isDig(n1) || ((n1 == '+' || n1 == '-') && isDig(ar.PeekData(2))))
+		{
+			take(); // e/E
+			u16 s = ar.GetData(false);
+			if (s == '+' || s == '-') take();
+			while (isDig(ar.GetData(false))) take();
+		}
+	}
+}
+
 TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk)
 {
 	if (false == ar.m_sTokenQueue.empty())
@@ -877,6 +928,11 @@ TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk)
 			break;
 		}
 		default:
+			if (tk.empty() && c1 >= '0' && c1 <= '9') // 토큰 시작이 숫자 → 리터럴 통째로(1.2e3, 5.6E-4, 0xff)
+			{
+				ScanNumberLiteral(ar, tk);
+				return ApplyCompileDefine(ar, CalcStringToken(tk), tk);
+			}
 			tk.push_back((char)c1);
 			ar.GetData(true);
 			break;
@@ -1040,16 +1096,16 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	std::string fullFileName;
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
-	if (g_NeoLoader)
+	if (ar.m_pLoader)
 	{
-		const char* libPath = g_NeoLoader->GetLibPath();
+		const char* libPath = ar.m_pLoader->GetLibPath();
 		if(libPath != nullptr)
 		{
 			fullFileName = libPath;
 			//fullFileName = "../../Lib/";
 			fullFileName += fileName + ".ns";
 
-			if(false == g_NeoLoader->Load(fullFileName.c_str(), pFileBuffer, iFileLen))
+			if(false == ar.m_pLoader->Load(fullFileName.c_str(), pFileBuffer, iFileLen))
 			{
 				//SetCompileError(ar, "Error (%d, %d): Import Error (%s)", ar.CurLine(), ar.CurCol(), tk2.c_str());
 				//return false;
@@ -1081,6 +1137,7 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	ar2._allowGlobalInitLogic = ar._allowGlobalInitLogic;
 	ar2._debug = ar._debug;
 	ar2.m_pDefines = ar.m_pDefines;
+	ar2.m_pLoader = ar.m_pLoader;                 // 중첩 import 도 같은 loader 로 해석
 	ar2.m_sModuleName = fileName;
 	ar2.m_pDebugSourceFiles = ar.m_pDebugSourceFiles;
 	if (ar2.m_pDebugSourceFiles != nullptr)
@@ -1103,8 +1160,8 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	funs._curModule = pLayerBackup;
 
 	u16* pBuffer = ar2.GetBuffer();
-	if(g_NeoLoader)
-		g_NeoLoader->Unload(fullFileName.c_str(), pBuffer, iFileLen);
+	if(ar.m_pLoader)
+		ar.m_pLoader->Unload(fullFileName.c_str(), pBuffer, iFileLen);
 
 	ar.m_sErrorString = ar2.m_sErrorString;
 	return r;
@@ -1222,17 +1279,7 @@ bool IsTempVar(int iVar)
 
 	return false;
 }
-// 토큰 텍스트 자체가 float 형태인가.
-// 소스의 "1.5" 는 토크나이저가 '.' 에서 쪼개므로 여기 안 걸리고, define/const 치환으로
-// 통째로 들어온 "3.0", "0.5", "1e+20" 같은 토큰을 잡는다. (없으면 (int) 캐스팅으로 강등됨)
-static bool IsFloatNumberToken(const std::string& tk)
-{
-	if (tk.find('.') != std::string::npos)
-		return true;
-	if (tk.size() > 1 && tk[0] == '0' && (tk[1] == 'x' || tk[1] == 'X'))
-		return tk.find('p') != std::string::npos || tk.find('P') != std::string::npos; // hex 지수
-	return tk.find('e') != std::string::npos || tk.find('E') != std::string::npos;
-}
+// (구 IsFloatNumberToken 제거: 정수/실수 판정은 StringToNumber → ParsedNumber.type 으로 통합됨)
 
 // This Function No Error Because Try Only
 // return TK_NONE : error
@@ -1241,23 +1288,23 @@ TK_TYPE Try_ParseIntNum(int& iResultInt, CArchiveRdWC& ar, SFunctions& funs, SVa
 	std::string tk1, tk2;
 	TK_TYPE tkType1, tkType2, tkTypePre = TK_PLUS;
 
-	double num;
+	ParsedNumber num;
 
 	tkType1 = GetToken(ar, tk1);
 
-	if (true == StringToDouble(num, tk1.c_str()))
+	if (true == StringToNumber(num, tk1.c_str()))
 	{
 		u16 c = ar.GetData(false);
-		if (c == '.' || IsFloatNumberToken(tk1))
+		if (c == '.' || num.type == ParsedNumber::Type::Float)
 		{
 			ar.PushToken(tkType1, tk1);
 			return TK_NONE; // float or double is not int
 		}
 		else
 		{
+			int inum = num.intValue;   // 정수 리터럴은 int32 로 정확히 파싱됨(0xffffffff→-1)
 			if (tkTypePre == TK_MINUS)
-				num = -num;
-			int inum = (int)num;
+				inum = -inum;
 #if 0
 			if (IsShort(inum))
 			{
@@ -1457,30 +1504,32 @@ bool ParseNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArch
 	std::string tk2;
 	TK_TYPE tkType2;
 
-	double num;
+	ParsedNumber num;
 
 	iResultStack = vars.FindVar(tk1);
 	if (iResultStack._iVar != -1)
 		return true;
 
-	if (true == StringToDouble(num, tk1.c_str()))
+	if (true == StringToNumber(num, tk1.c_str()))
 	{
 		u16 c = ar.GetData(false);
-		if (IsFloatNumberToken(tk1)) // define/const 치환으로 통째로 들어온 float
+		if (num.type == ParsedNumber::Type::Float) // 통째로 들어온 float(1.5, 1e+20 등)
 		{
+			double f = num.floatValue;
 			if (tkTypePre == TK_MINUS)
-				num = -num;
-			iResultStack = funs.AddStaticNum(num);
+				f = -f;
+			iResultStack = funs.AddStaticNum(f);
 		}
-		else if (c == '.')
+		else if (c == '.')  // 정수 토큰 뒤 '.' → float 로 재조합(토크나이저가 "1.5"를 쪼갬)
 		{
 			ar.GetData(true);
 
 			tkType2 = GetToken(ar, tk2);
 			double num2 = 0;
+			double f = num.floatValue;
 			if (true == StringToDoubleLow(num2, tk2.c_str()))
 			{
-				num += num2;
+				f += num2;
 			}
 			else
 			{
@@ -1488,23 +1537,15 @@ bool ParseNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArch
 				return TK_NONE;
 			}
 			if (tkTypePre == TK_MINUS)
-				num = -num;
-			iResultStack = funs.AddStaticNum(num);
+				f = -f;
+			iResultStack = funs.AddStaticNum(f);
 		}
 		else
 		{
+			int inum = num.intValue;   // 정수 리터럴은 int32 로 정확히(0xffffffff→-1)
 			if (tkTypePre == TK_MINUS)
-				num = -num;
-			int inum = (int)num;
-#if 0
-			if (IsShort(inum))
-			{
-				iResultStack = inum;
-				iResultStack._operandType = Data_NS;
-			}
-			else
-#endif
-				iResultStack = funs.AddStaticInt(inum);
+				inum = -inum;
+			iResultStack = funs.AddStaticInt(inum);
 		}
 	}
 	else
@@ -1520,30 +1561,32 @@ bool ParseNum2(int& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArchiveR
 	std::string tk2;
 	TK_TYPE tkType2;
 
-	double num;
+	ParsedNumber num;
 
 	iResultStack = vars.FindVar(tk1);
 	if (iResultStack != -1)
 		return true;
 
-	if (true == StringToDouble(num, tk1.c_str()))
+	if (true == StringToNumber(num, tk1.c_str()))
 	{
 		u16 c = ar.GetData(false);
-		if (IsFloatNumberToken(tk1)) // define/const 치환으로 통째로 들어온 float
+		if (num.type == ParsedNumber::Type::Float) // 통째로 들어온 float(1.5, 1e+20 등)
 		{
+			double f = num.floatValue;
 			if (tkTypePre == TK_MINUS)
-				num = -num;
-			iResultStack = funs.AddStaticNum(num);
+				f = -f;
+			iResultStack = funs.AddStaticNum(f);
 		}
-		else if (c == '.')
+		else if (c == '.')  // 정수 토큰 뒤 '.' → float 로 재조합
 		{
 			ar.GetData(true);
 
 			tkType2 = GetToken(ar, tk2);
 			double num2 = 0;
+			double f = num.floatValue;
 			if (true == StringToDoubleLow(num2, tk2.c_str()))
 			{
-				num += num2;
+				f += num2;
 			}
 			else
 			{
@@ -1551,14 +1594,14 @@ bool ParseNum2(int& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArchiveR
 				return TK_NONE;
 			}
 			if (tkTypePre == TK_MINUS)
-				num = -num;
-			iResultStack = funs.AddStaticNum(num);
+				f = -f;
+			iResultStack = funs.AddStaticNum(f);
 		}
 		else
 		{
+			int inum = num.intValue;   // 정수 리터럴은 int32 로 정확히(0xffffffff→-1)
 			if (tkTypePre == TK_MINUS)
-				num = -num;
-			int inum = (int)num;
+				inum = -inum;
 			iResultStack = funs.AddStaticInt(inum);
 		}
 	}
@@ -3829,14 +3872,15 @@ static bool ParseConstPrimary(SConstValue& out, CArchiveRdWC& ar)
 		return true;
 	case TK_STRING:
 	{
-		double num;
-		if (false == StringToDouble(num, tk.c_str()))
+		ParsedNumber num;
+		if (false == StringToNumber(num, tk.c_str()))
 		{
 			// define/const 로 치환되지 않은 식별자 → 컴파일 타임 상수가 아님
 			SetParserCompileError(ar, PCE_CONST_INVALID_VALUE, tk.c_str());
 			return false;
 		}
-		bool isFloat = IsFloatNumberToken(tk); // 치환으로 통째로 들어온 "1.5", "1e+20" 등
+		bool isFloat = (num.type == ParsedNumber::Type::Float); // 통째로 들어온 "1.5", "1e+20" 등
+		double fval = num.floatValue;
 		if (false == isFloat && ar.GetData(false) == '.')
 		{
 			// 토크나이저는 "1.5" 를 "1" '.' "5" 로 쪼갠다 (ParseNum 과 동일 처리)
@@ -3849,11 +3893,11 @@ static bool ParseConstPrimary(SConstValue& out, CArchiveRdWC& ar)
 				SetParserCompileError(ar, PCE_INVALID_NUMBER_LITERAL);
 				return false;
 			}
-			num += num2;
+			fval += num2;
 			isFloat = true;
 		}
-		if (isFloat) { out.type = NEO_DEFINE_TOKEN_FLOAT; out.f = num; }
-		else         { out.type = NEO_DEFINE_TOKEN_INT;   out.i = (int)num; }
+		if (isFloat) { out.type = NEO_DEFINE_TOKEN_FLOAT; out.f = fval; }
+		else         { out.type = NEO_DEFINE_TOKEN_INT;   out.i = num.intValue; } // 정수 리터럴은 int32 로 정확히(0xffffffff→-1)
 		return true;
 	}
 	default:
@@ -4741,6 +4785,7 @@ bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
 	ar2._debug = param.debug;
 	ar2.m_pDefines = param.defines;
 	ar2.m_pGlobalSymbols = param.globalSymbols;
+	ar2.m_pLoader = param.loader;                 // import 해석 loader(전역 g_NeoLoader 대체)
 	if (param.debugSourceFiles != nullptr)
 	{
 		param.debugSourceFiles->clear();
@@ -4762,16 +4807,15 @@ bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
 }
 bool INeoVM::Initialize(INeoLoader* loader)
 {
+	(void)loader;   // import loader 는 컴파일마다 NeoCompilerParam.loader 로 전달(전역 아님)
 	InitDefaultTokenString();
 	CNeoVMImpl::InitLib();
 	g_bInitVM = true;
-	g_NeoLoader = loader;
 	return true;
 }
 bool	INeoVM::Shutdown()
 {
 	g_bInitVM = false;
-	g_NeoLoader = nullptr;
 	return true;
 }
 

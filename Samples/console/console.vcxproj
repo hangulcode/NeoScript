@@ -163,6 +163,7 @@
   <ItemGroup>
     <ClInclude Include="..\..\NeoSource\HttpRequest.h" />
     <ClInclude Include="..\..\NeoSource\Neo.h" />
+    <ClInclude Include="..\..\NeoSource\NeoScript.h" />
     <ClInclude Include="..\..\NeoSource\NeoArchive.h" />
     <ClInclude Include="..\..\NeoSource\NeoConfig.h" />
     <ClInclude Include="..\..\NeoSource\NeoExport.h" />
@@ -252,7 +253,14 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="..\..\NeoSource\NeoScriptShim.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="9_times.cpp" />
+    <ClCompile Include="neov2_smoke.cpp" />
     <ClCompile Include="callback.cpp" />
     <ClCompile Include="console.cpp" />
     <ClCompile Include="etc.cpp" />

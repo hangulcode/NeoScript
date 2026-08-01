@@ -1,117 +1,49 @@
-#include "stdafx.h"
-#include "../../NeoSource/Neo.h"
+﻿#include "stdafx.h"
+#include "../../NeoSource/NeoScript.h"   // v2 public API
+#include "../../NeoSource/Neo.h"         // INeoLoader (파일 로더 타입)
+
+#include <string>
 
 using namespace NeoScript;
 
-VMHash<int> g_sVector3Indexer;
-
-class CA
+// 구 CA 클래스의 상태 — g_sData 객체가 노출하는 네이티브 데이터.
+struct HostData
 {
-public:
-	bool FunSum(INeoVMWorker* pN, short args)
-	{
-		if (args != 2)
-			return false;
-
-		NS_FLOAT v1, v2;
-		if (pN->GetArg_Float(1, v1) == false) return false;
-		if (pN->GetArg_Float(2, v2) == false) return false;
-
-		pN->ReturnValue(v1 + v2);
-
-		return true;
-	}
-	bool FunMul(INeoVMWorker* pN, short args)
-	{
-		if (args != 2)
-			return false;
-
-		NS_FLOAT v1, v2;
-		if (pN->GetArg_Float(1, v1) == false) return false;
-		if (pN->GetArg_Float(2, v2) == false) return false;
-
-		pN->ReturnValue(v1 * v2);
-
-		return true;
-	}
-	NS_FLOAT _x = 0.1f;
-	NS_FLOAT _y = 1.0f;
-	NS_FLOAT _z = 10.0f;
-#if 1
-	bool PropertyTransform(INeoVMWorker* pN, VarInfo* pVar, bool get)
-	{
-		if(get)
-		{
-			if(pN->ResetVarType(pVar, VAR_LIST, 3))
-			{
-				pVar->SetListIndexer(&g_sVector3Indexer);
-				pVar->ListInsertFloat(0, _x);
-				pVar->ListInsertFloat(1, _y);
-				pVar->ListInsertFloat(2, _z);
-			}
-		}
-		else
-		{
-			if(pVar->GetType() == VAR_LIST)
-			{
-				if (false == pVar->ListFindFloat(0, _x)) return false;
-				if (false == pVar->ListFindFloat(1, _y)) return false;
-				if (false == pVar->ListFindFloat(2, _z)) return false;
-			}
-		}
-		return true;
-	}
-#else
-	bool PropertyTransform(INeoVMWorker* pN, VarInfo* pVar, bool get)
-	{
-		if (get)
-		{
-			if (pN->ResetVarType(pVar, VAR_MAP, 3))
-			{
-				pVar->MapInsertFloat("x", _x);
-				pVar->MapInsertFloat("y", _y);
-				pVar->MapInsertFloat("z", _z);
-			}
-		}
-		else
-		{
-			if (pVar->GetType() == VAR_MAP)
-			{
-				if (false == pVar->MapFindFloat("x", _x)) return false;
-				if (false == pVar->MapFindFloat("y", _y)) return false;
-				if (false == pVar->MapFindFloat("z", _z)) return false;
-			}
-		}
-		return true;
-	}
-#endif
+	float x = 0.1f, y = 1.0f, z = 10.0f;
 };
 
-typedef bool (CA::*TYPE_FUN)(INeoVMWorker* pN, short args);
-typedef bool (CA::* TYPE_PRY)(INeoVMWorker* pN, VarInfo* pVar, bool get);
-std::map<std::string, TYPE_FUN> g_sTablesFunction;
-std::map<std::string, TYPE_PRY> g_sTablesProperty;
-
-
-bool Fun(INeoVMWorker* pN, void* pUserData, const VMString* pStr, short args)
+// g_sData.method(...) 디스패처
+static bool DataMethod(CallContext& ctx, StringView method)
 {
-	auto it = g_sTablesFunction.find(pStr->_str);
-	if (it == g_sTablesFunction.end())
-		return false;
-
-	TYPE_FUN f = (*it).second;
-	return (((CA*)pUserData)->*f)(pN, args);
+	std::string m(method.data(), method.size());
+	if (m == "sum") { ctx.retFloat(ctx.argFloat(0) + ctx.argFloat(1)); return true; }
+	if (m == "mul") { ctx.retFloat(ctx.argFloat(0) * ctx.argFloat(1)); return true; }
+	return false;
 }
-bool Property(INeoVMWorker* pN, void* pUserData, const VMString* pStr, VarInfo* p, bool get)
+// g_sData.Transform get/set — map {x,y,z} 로 노출(스크립트가 pos.x/.y/.z 접근).
+static bool DataProperty(CallContext& ctx, StringView name, bool isGet)
 {
-	auto it = g_sTablesProperty.find(pStr->_str);
-	if (it == g_sTablesProperty.end())
-		return false;
-
-	TYPE_PRY f = (*it).second;
-	return (((CA*)pUserData)->*f)(pN, p, get);
+	HostData* d = static_cast<HostData*>(ctx.userData());
+	if (std::string(name.data(), name.size()) != "Transform") return false;
+	if (isGet)
+	{
+		MapBuilder m = ctx.retMap();
+		m.setFloat("x", d->x);
+		m.setFloat("y", d->y);
+		m.setFloat("z", d->z);
+	}
+	else
+	{
+		MapReader r;
+		if (ctx.argAsMap(0, r))
+		{
+			r.getFloat("x", d->x);
+			r.getFloat("y", d->y);
+			r.getFloat("z", d->z);
+		}
+	}
+	return true;
 }
-
 
 int SAMPLE_map_callback(INeoLoader* pLoader, std::string filename)
 {
@@ -123,56 +55,54 @@ int SAMPLE_map_callback(INeoLoader* pLoader, std::string filename)
 		return -1;
 	}
 
-	g_sVector3Indexer.Add("x", 0);
-	g_sVector3Indexer.Add("y", 1);
-	g_sVector3Indexer.Add("z", 2);
+	static HostData s_data; // 인스턴스별 userData(BindObject)로 넘겨도 되지만 단일 인스턴스라 전역
 
-	std::string err;
-	NeoCompilerParam param(pFileBuffer, iFileLen);
-	param.err = &err;
-	param.putASM = true;
-	param.debug = true;
+	RuntimeDesc rd;
+	rd.printFn = [](StringView s) { printf("%.*s\n", (int)s.size(), s.data()); };
+	rd.nativeLoader = pLoader;
+	IRuntime* rt = CreateRuntime(rd);
 
-	NeoExecContextPool* execPool = NeoExecContextPool_Create();
-	NeoLoadVMParam vparam;
-	vparam.execPool = execPool;
-	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param, &vparam);
-	if (pVM != NULL)
+	NativeObjectDesc od;
+	od.name = "g_sData";
+	od.method = &DataMethod;
+	od.property = &DataProperty;
+	od.userData = &s_data;
+	od.declareGlobal = false;   // 스크립트가 `export var g_sData` 로 직접 선언
+	rt->RegisterObject(od);
+	rt->FreezeBindings();
+
+	CompileDesc cd;
+	cd.source = StringView((const char*)pFileBuffer, (size_t)iFileLen);
+	cd.sourceName = filename.c_str();
+	cd.emitAsm = true; cd.includeDebugInfo = true;   // 원본 샘플 동작: ASM 덤프 + 디버그 정보
+	CompileResult cr = rt->Compile(cd);
+	if (!cr.program)
 	{
-		CA* pClass = new CA();
+		printf("Error - compile failed : %s\n", cr.error.message.c_str());
+		DestroyRuntime(rt);
+		pLoader->Unload(nullptr, pFileBuffer, iFileLen);
+		return -1;
+	}
 
-		VarInfo* g_sData;
-		g_sData = pVM->GetVar("g_sData");
-		if (g_sData != NULL && pVM->GetMainWorker()->ResetVarType(g_sData, VAR_MAP))
-		{
-			if(INeoVM::RegisterTableCallBack(g_sData, pClass, Fun, Property))
-			{
-				g_sTablesFunction["sum"] = &CA::FunSum;
-				g_sTablesFunction["mul"] = &CA::FunMul;
-				g_sTablesProperty["Transform"] = &CA::PropertyTransform;
-			}
-		}
+	InstanceHandle inst = rt->CreateInstance(cr.program);
 
-		DWORD t1 = GetTickCount();
-		NS_FLOAT r;
-		pVM->Call(&r, "update", 5, 15);
+	DWORD t1 = GetTickCount();
+	{
+		// Invocation 은 인스턴스보다 오래 살면 안 됨 → DestroyInstance 전에 스코프로 소멸.
+		Invocation call = rt->Call(inst, "update");
+		RunStatus st = call.argInt(5).argInt(15).invoke();
 		DWORD t2 = GetTickCount();
 
-		if (pVM->IsLastErrorMsg())
-		{
-			printf("Error - VM Call : %s\n(Elapse:%d)\n", pVM->GetLastErrorMsg(), t2 - t1);
-			pVM->ClearLastErrorMsg();
-		}
-		else
-			printf("%lf\n(Elapse:%d)\n", r, t2 - t1);
-
-		delete pClass;
-		INeoVM::ReleaseVM(pVM);
+		StringView err;
+		if (rt->TakeLastError(err))
+			printf("Error - VM Call : %.*s\n(Elapse:%d)\n", (int)err.size(), err.data(), (int)(t2 - t1));
+		else if (st == RunStatus::Completed)
+			printf("(Elapse:%d)\n", (int)(t2 - t1));
 	}
-	NeoExecContextPool_Destroy(execPool);
+
+	rt->DestroyInstance(inst);
+	rt->DestroyProgram(cr.program);
+	DestroyRuntime(rt);
 	pLoader->Unload(nullptr, pFileBuffer, iFileLen);
-	g_sTablesFunction.clear();
-
-    return 0;
+	return 0;
 }
-

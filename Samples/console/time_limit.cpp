@@ -1,5 +1,6 @@
-#include "stdafx.h"
-#include "../../NeoSource/Neo.h"
+﻿#include "stdafx.h"
+#include "../../NeoSource/NeoScript.h"   // v2 public API
+#include "../../NeoSource/Neo.h"         // INeoLoader
 
 using namespace NeoScript;
 
@@ -13,43 +14,58 @@ int SAMPLE_time_limit(INeoLoader* pLoader, std::string filename)
 		return -1;
 	}
 
-	std::string err;
-	NeoCompilerParam param(pFileBuffer, iFileLen);
-	param.err = &err;
-	param.putASM = true;
-	param.debug = true;
+	RuntimeDesc rd;
+	rd.printFn = [](StringView s) { printf("%.*s\n", (int)s.size(), s.data()); };
+	rd.nativeLoader = pLoader;
+	IRuntime* rt = CreateRuntime(rd);
+	rt->FreezeBindings();
 
-	NeoExecContextPool* execPool = NeoExecContextPool_Create();
-	NeoLoadVMParam vparam;
-	vparam.execPool = execPool;
-	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param, &vparam);
-	if (pVM != NULL)
+	CompileDesc cd;
+	cd.source = StringView((const char*)pFileBuffer, (size_t)iFileLen);
+	cd.sourceName = filename.c_str();
+	cd.emitAsm = true; cd.includeDebugInfo = true;   // 원본 샘플 동작: ASM 덤프 + 디버그 정보
+	CompileResult cr = rt->Compile(cd);
+	if (!cr.program)
 	{
-		pVM->SetTimeout(-1, 100, 1000); // -1 is main worker
-		pVM->Setup_TL("TimeTest");
+		printf("Error - compile failed : %s\n", cr.error.message.c_str());
+		DestroyRuntime(rt);
+		pLoader->Unload(nullptr, pFileBuffer, iFileLen);
+		return -1;
+	}
+
+	InstanceHandle inst = rt->CreateInstance(cr.program);
+
+	// TimeTest 를 100ms/1000op 슬라이스로 나눠 실행(구 Setup_TL/Call_TL).
+	StringView err;
+	if (false == rt->StartSliced(inst, "TimeTest", 100, 1000))
+	{
+		printf("Error - StartSliced TimeTest\n");
+	}
+	else
+	{
 		for (int i = 1; i < 20; i++)
 		{
 			DWORD t1 = GetTickCount();
-			bool bCompleted = pVM->Call_TL();
+			RunStatus st = rt->UpdateSliced(inst);
 			DWORD t2 = GetTickCount();
-			if (pVM->IsLastErrorMsg())
+			if (rt->TakeLastError(err))
 			{
-				printf("Error - VM Call : %s\n(Elapse:%d)\n", pVM->GetLastErrorMsg(), t2 - t1);
-				pVM->ClearLastErrorMsg();
+				printf("Error - VM Call : %.*s\n(Elapse:%d)\n", (int)err.size(), err.data(), (int)(t2 - t1));
 				break;
 			}
-			if (false == bCompleted)
-			{
-				printf("Job Not Completed (Elapse:%d)\n", t2 - t1);
-			}
+			if (st != RunStatus::Completed)
+				printf("Job Not Completed (Elapse:%d)\n", (int)(t2 - t1));
 			else
-				printf("(Elapse:%d)\n", t2 - t1);
+			{
+				printf("(Elapse:%d)\n", (int)(t2 - t1));
+				break;
+			}
 		}
-		INeoVM::ReleaseVM(pVM);
 	}
-	NeoExecContextPool_Destroy(execPool);
+
+	rt->DestroyInstance(inst);
+	rt->DestroyProgram(cr.program);
+	DestroyRuntime(rt);
 	pLoader->Unload(nullptr, pFileBuffer, iFileLen);
-
-    return 0;
+	return 0;
 }
-

@@ -6,6 +6,9 @@ import math;
 const REG_CONST = 6 * 7;
 const REG_MASK = 0x10 | 0x04;
 const REG_SOURCE_LINE = __LINE__;
+const REG_HEX_MAX = 0xffffffff;   // 32-bit two's complement -> -1
+const REG_HEX_MIN = 0x80000000;   // -2147483648
+const REG_EXP = 1.2e3;            // exponent literal via const/define path
 
 var regressionTotal = 0;
 var regressionPassed = 0;
@@ -773,6 +776,39 @@ fun TestSwitch()
     Check(SwitchNested(5, 0) == "none", __LINE__);
 }
 
+fun TestNumberLiterals()
+{
+    // Hex integer literals: parsed as exact int32 bit patterns (not via double).
+    Check(0xffffffff == -1, __LINE__);
+    Check(0x80000000 == -2147483648, __LINE__);
+    Check(0x7fffffff == 2147483647, __LINE__);
+    Check(0xff == 255, __LINE__);
+    Check(0x100 == 256, __LINE__);
+    Check(0x0 == 0, __LINE__);
+    Check(-0x10 == -16, __LINE__);
+    Check((0xff & 0x0f) == 0x0f, __LINE__);
+    Check((0xf0 | 0x0f) == 0xff, __LINE__);
+    // Hex literals through the const/define path.
+    Check(REG_HEX_MAX == -1, __LINE__);
+    Check(REG_HEX_MIN == -2147483648, __LINE__);
+
+    // Exponent float literals with exact representable values.
+    Check(1e0 == 1.0, __LINE__);
+    Check(1e3 == 1000.0, __LINE__);
+    Check(1.5e1 == 15.0, __LINE__);
+    Check(2.5e2 == 250.0, __LINE__);
+    Check(100 + 1.5e1 == 115.0, __LINE__);
+
+    // Exponent float literals with rounding tolerance (1.2, 5.6, ... not exact in double).
+    Check(1.2e3 > 1199.999 && 1.2e3 < 1200.001, __LINE__);
+    Check(1.2e+3 > 1199.999 && 1.2e+3 < 1200.001, __LINE__);
+    Check(5.6E-4 > 0.00055 && 5.6E-4 < 0.00057, __LINE__);
+    Check(6.02e23 > 6.0e23 && 6.02e23 < 6.1e23, __LINE__);
+    Check(3.14 > 3.13 && 3.14 < 3.15, __LINE__);
+    // Exponent literal through the const/define path.
+    Check(REG_EXP > 1199.999 && REG_EXP < 1200.001, __LINE__);
+}
+
 fun RegressionRun()
 {
     TestExpressions();
@@ -792,6 +828,7 @@ fun RegressionRun()
     TestBulk();
 	TestVectorValueTypes();
     TestSwitch();
+    TestNumberLiterals();
     Check(Add3(10, 20, 30) == 60, __LINE__);
     Check(Fibonacci(12) == 144, __LINE__);
     if (regressionFailed == 0)

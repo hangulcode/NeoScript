@@ -331,6 +331,72 @@ bool StringToDouble(double& r, const char* p) {
 
 #endif
 
+// 정수/실수를 명시적으로 구분해 파싱. 정수는 double 을 거치지 않고 int32 로 정확히 만든다.
+// (0xffffffff → uint32 4294967295 → int32 재해석 -1. 예전 (int)(double) 은 범위초과 시 INT_MIN 이었음.)
+bool StringToNumber(ParsedNumber& out, const char* p)
+{
+	const char* orig = p;
+	bool negative = false;
+	if (*p == '-' || *p == '+') { negative = (*p == '-'); p++; }
+
+	if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X'))
+	{
+		const char* q = p + 2;
+		uint64_t uval = 0;
+		int digits = 0;
+		while (isHexDigit(*q)) { uval = uval * 16 + (uint64_t)hexValue(*q); q++; digits++; }
+		if (digits == 0)
+			return false;
+
+		if (*q == '.' || *q == 'p' || *q == 'P') // hex float (0x1a.FF, 0x1p4)
+		{
+			double d;
+			if (false == StringToDouble(d, orig))
+				return false;
+			out.type = ParsedNumber::Type::Float;
+			out.floatValue = d;
+			out.intValue = (int32_t)(long long)d;
+			return true;
+		}
+		if (*q != '\0')
+			return false;
+
+		uint32_t u32 = (uint32_t)uval;              // 32비트로 절단 후 int32 비트패턴
+		double   mag = (double)uval;
+		out.type = ParsedNumber::Type::Int;
+		out.intValue   = negative ? -(int32_t)u32 : (int32_t)u32;
+		out.floatValue = negative ? -mag : mag;
+		return true;
+	}
+
+	// 10진: '.' 또는 'e'/'E' 가 있으면 실수
+	const char* q = p;
+	while (valid_digit(*q)) q++;
+	if (*q == '.' || *q == 'e' || *q == 'E')
+	{
+		double d;
+		if (false == StringToDouble(d, orig))
+			return false;
+		out.type = ParsedNumber::Type::Float;
+		out.floatValue = d;
+		out.intValue = (int32_t)(long long)d;
+		return true;
+	}
+
+	// 10진 정수: int64 누적 후 int32
+	long long ival = 0;
+	int digits = 0;
+	const char* r = p;
+	while (valid_digit(*r)) { ival = ival * 10 + (long long)(*r - '0'); r++; digits++; }
+	if (digits == 0 || *r != '\0')
+		return false;
+
+	out.type = ParsedNumber::Type::Int;
+	out.intValue   = negative ? -(int32_t)ival : (int32_t)ival;
+	out.floatValue = negative ? -(double)ival : (double)ival;
+	return true;
+}
+
 void SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...)
 {
 	char buff[4096];

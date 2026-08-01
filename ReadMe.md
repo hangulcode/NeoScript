@@ -114,28 +114,121 @@ var moved = position + direction * 2.0;
   List literals.
 - Quaternion component order is `w, x, y, z`: `math.Quaternion(w, x, y, z)`.
 
+### Embedding the engine — Host API (`NeoScript.h`)
+The public host API is a **3-concept facade: Runtime / Program / Instance**, declared in `NeoScript.h`.
+It hides the internal VM (`INeoVM` / `INeoVMWorker`, the execution-context pool, the bytecode image);
+host code only sees opaque handles. Embed through this header — the internal `INeoVM` API described in
+*Execution context pool* below is not the public surface.
+
+- **Runtime** (`IRuntime`, `CreateRuntime` / `DestroyRuntime`) — owns native bindings and produces programs
+  and instances. Register native objects/functions, then call `FreezeBindings()` before compiling.
+- **Program** (`ProgramHandle`) — an immutable, shared, refcounted compiled image. Build with `Compile`
+  (from source) or `LoadProgram` (from cached bytecode). One program can back many instances.
+- **Instance** (`InstanceHandle`) — one program's per-instance execution state and global variables.
+
+```cpp
+#include "NeoScript.h"
+using namespace NeoScript;
+
+// 1) Runtime: register native objects, then freeze.
+RuntimeDesc rd;
+rd.onInstanceBind = [](IRuntime* rt, InstanceHandle inst, void* userData) {
+    // Bind a script global (declared by the script) to a native dispatcher for this instance.
+    rt->BindGlobalObject(inst, "Game", rt->GetObjectType("GameObjectRef"), userData);
+};
+IRuntime* rt = CreateRuntime(rd);
+
+NativeObjectDesc od;
+od.name = "GameObjectRef";          // dispatcher type (used by BindGlobalObject / setObject)
+od.method = &GameObjectMethod;      // bool(CallContext&, StringView method)
+od.declareGlobal = false;
+rt->RegisterObject(od);
+rt->FreezeBindings();
+
+// 2) Program: compile source (or LoadProgram(bytecode) from a cache).
+CompileDesc cd; cd.source = scriptText;
+CompileResult cr = rt->Compile(cd);
+if (!cr.program) { /* inspect cr.error */ }
+
+// 3) Instance: per-instance globals + state. userData is passed to bound object dispatchers.
+InstanceDesc idesc; idesc.userData = self; idesc.runGlobalInit = true;
+InstanceHandle inst = rt->CreateInstance(cr.program, idesc);
+```
+
+**Host → script calls.** Function indices are fixed per program, so cache the `FunctionHandle` once and
+call it every frame with no per-call string lookup:
+
+```cpp
+FunctionHandle onUpdate = rt->FindFunction(cr.program, "OnUpdate");   // resolve once
+{
+    Invocation call = rt->Call(inst, onUpdate);        // one live Invocation per instance
+    if (call.argFloat(dt).invoke() == RunStatus::Completed)
+        float result = call.retFloat();
+}                                                       // destroy the Invocation before the instance
+```
+
+Only **one live `Invocation` per instance** is allowed; a second `Call` before the first is invoked or
+destroyed returns a falsy `Invocation` (nested native→script calls *during* `invoke()` are still allowed).
+`FunctionHandle` carries its owning program, so passing a handle to an instance of a different program is
+rejected.
+
+**Cooperative / time-sliced execution** for long or infinite functions (replaces the old
+`BindWorkerFunction` + per-frame `Run` loop):
+
+```cpp
+rt->StartSliced(inst, "run", /*timeoutMs*/0, /*budget*/10);   // 10 instructions per slice
+while (rt->IsRunning(inst)) rt->UpdateSliced(inst);           // advance one slice per frame
+```
+
+**Native method dispatcher** — one function exposes many script methods; `ctx.userData()` is the
+per-instance object bound above:
+
+```cpp
+bool GameObjectMethod(CallContext& ctx, StringView method) {
+    auto* self = static_cast<GameObject*>(ctx.userData());
+    if (method.str() == "AddPos") { self->AddPos(ctx.argInt(0), ctx.argInt(1)); return true; }
+    return false;   // unknown method
+}
+```
+
+**Debugger** is a separate optional interface: `IDebugger* dbg = rt->GetDebugger();` (null in non-debug
+builds) — used only by the editor / DAP adapter.
+
+**Logging.** `SetLogHandler(print, error)` installs a **process-global** sink for all script `print`/`error`
+and compile diagnostics. `RuntimeDesc.printFn` / `errorFn` share that same global hook (the first created
+Runtime's values apply; `SetLogHandler` overrides — last writer wins), so log handlers are not per-Runtime.
+
+```cpp
+rt->DestroyInstance(inst);
+rt->DestroyProgram(cr.program);
+DestroyRuntime(rt);
+```
+
+> Some `IRuntime` members are intentionally not implemented yet and are marked `[미구현]` in the header
+> (`RegisterFunction`, `ResetInstance`, `Cancel`, the `async` family, `CallContext::fail`,
+> `Invocation::error`). They return `false` / a no-op until supported; don't rely on them.
+
 ### Compile-time defines
-Host applications can provide C-style compile-time defines through `NeoCompilerParam::defines`.
-This is useful for engine constants such as keyboard codes.
+Host applications can provide C-style compile-time defines through `CompileDesc::defines`
+(or a prebuilt `CreateDefineSet` for reuse). This is useful for engine constants such as keyboard codes.
 
 The define table is token based, so the host can prepare values before compilation.
 During script compilation, identifiers such as `KEY_LEFT` are replaced before normal parsing.
 This does not create a script global variable and has no runtime lookup cost.
 
 ```cpp
-NeoScript::NeoCompileDefines defines;
-defines.values["KEY_LEFT"]  = { NeoScript::NEO_DEFINE_TOKEN_INT, "37" };
-defines.values["KEY_RIGHT"] = { NeoScript::NEO_DEFINE_TOKEN_INT, "39" };
+using namespace NeoScript;
 
-NeoScript::NeoCompilerParam param(source, sourceLength);
-param.defines = &defines;
+CompileDefine defs[] = {
+    { "KEY_LEFT",  DefineKind::Int, "37" },
+    { "KEY_RIGHT", DefineKind::Int, "39" },
+};
 
-// An execution context pool is required (see "Execution context pool" below).
-NeoScript::NeoExecContextPool* pool = NeoScript::NeoExecContextPool_Create();
-NeoScript::NeoLoadVMParam vparam;
-vparam.execPool = pool;
+CompileDesc cd;
+cd.source  = scriptText;
+cd.defines = defs;                     // inline; or use CreateDefineSet + cd.defineSet for reuse
 
-NeoScript::INeoVM* vm = NeoScript::INeoVM::CompileAndLoadRunVM(param, &vparam);
+CompileResult cr = rt->Compile(cd);    // rt = an IRuntime from CreateRuntime
 ```
 
 Script code:
@@ -146,14 +239,13 @@ if (key == KEY_LEFT)
 }
 ```
 
-Supported define token types:
-	- `NEO_DEFINE_TOKEN_IDENTIFIER`
-	- `NEO_DEFINE_TOKEN_INT`
-	- `NEO_DEFINE_TOKEN_FLOAT`
-	- `NEO_DEFINE_TOKEN_STRING`
-	- `NEO_DEFINE_TOKEN_TRUE`
-	- `NEO_DEFINE_TOKEN_FALSE`
-	- `NEO_DEFINE_TOKEN_NULL`
+Supported define kinds (`DefineKind`):
+	- `Identifier`
+	- `Int`
+	- `Float`
+	- `String`
+	- `Bool`
+	- `Null`
 
 ### Script `const` (compile-time constants)
 Scripts can declare their own compile-time constants with `const`.
@@ -182,6 +274,10 @@ Rules:
 	  or function is a compile error.
 
 ### Execution context pool
+> **Internal / advanced.** This section describes the low-level `INeoVM` engine and its pool. The public
+> host API (see *Embedding the engine* above) hides all of it — the Runtime owns and injects the pool for
+> you. Read on only if you work on the engine internals rather than embedding it.
+
 An **execution context** is one runtime stack set: the operand/local var stack + the call stack + the
 instruction/stack-pointer registers (internally `NeoExecContext`, formerly a per-worker inline `CoroutineInfo`).
 
@@ -283,7 +379,7 @@ Build : Release Mode 64bit
 	- null: represents no value; uninitialized variables are null
 	- bool: stores true or false
 	- int: stores a 4-byte integer
-	- double: stores an 8-byte or 4-byte floating-point value, depending on `NS_SINGLE_PRECISION`
+	- double: stores a 4-byte float by default (8-byte when `NS_DOUBLE_PRECISION` is defined)
 	- string: stores text
 	- list: an array-like container
 	- map: a key/value container

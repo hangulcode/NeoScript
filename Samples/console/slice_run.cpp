@@ -1,5 +1,6 @@
-#include "stdafx.h"
-#include "../../NeoSource/Neo.h"
+﻿#include "stdafx.h"
+#include "../../NeoSource/NeoScript.h"   // v2 public API
+#include "../../NeoSource/Neo.h"         // INeoLoader
 
 using namespace NeoScript;
 
@@ -13,77 +14,64 @@ int SAMPLE_slice_run(INeoLoader* pLoader, std::string filename)
 		return -1;
 	}
 
+	RuntimeDesc rd;
+	rd.printFn = [](StringView s) { printf("%.*s\n", (int)s.size(), s.data()); };
+	rd.nativeLoader = pLoader;
+	IRuntime* rt = CreateRuntime(rd);
+	rt->FreezeBindings();
 
-	std::string err;
-	NeoCompilerParam param(pFileBuffer, iFileLen);
-	param.err = &err;
-	param.putASM = true;
-	param.debug = true;
+	CompileDesc cd;
+	cd.source = StringView((const char*)pFileBuffer, (size_t)iFileLen);
+	cd.sourceName = filename.c_str();
+	cd.emitAsm = true; cd.includeDebugInfo = true;   // 원본 샘플 동작: ASM 덤프 + 디버그 정보
+	CompileResult cr = rt->Compile(cd);
+	if (!cr.program)
+	{
+		printf("Error - compile failed : %s\n", cr.error.message.c_str());
+		DestroyRuntime(rt);
+		pLoader->Unload(nullptr, pFileBuffer, iFileLen);
+		return -1;
+	}
 
 	int result = 0;
-	NeoExecContextPool* execPool = NeoExecContextPool_Create();
-	NeoLoadVMParam vparam;
-	vparam.execPool = execPool;
-	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param, &vparam);
-	if (pVM != NULL)
+	InstanceHandle inst = rt->CreateInstance(cr.program);
+
+	// 협조적 슬라이스 실행: slice_fun 을 200ms/1000op 슬라이스로 나눠 실행.
+	if (false == rt->StartSliced(inst, "slice_fun", 200, 1000))
 	{
-		// Alloc Worker Stack
-		u32 id = pVM->GetMainWorkerID();
-		if (id == 0)
-		{
-			printf("Error - GetMainWorkerID %s", "slice_fun\n");
-			result = -1;
-			goto cleanup;
-		}
-
-		// Worker & NeoFunction Bind
-		if (false == pVM->IsWorking(id))
-		{
-			if (false == pVM->BindWorkerFunction(id, "slice_fun"))
-			{
-				printf("Error - BindWorkerFunction %s\n", "slice_fun");
-				result = -1;
-				goto cleanup;
-			}
-		}
-
-		pVM->SetTimeout(id, 200, 1000);
-
+		printf("Error - StartSliced %s\n", "slice_fun");
+		result = -1;
+	}
+	else
+	{
 		DWORD dwPre = GetTickCount();
-
-		// Run ...
 		int i = 0;
-		while(pVM->IsWorking(id))
+		StringView err;
+		while (rt->IsRunning(inst))
 		{
 			DWORD t1 = GetTickCount();
-			bool r = pVM->UpdateWorker(id);
+			rt->UpdateSliced(inst);
 			DWORD t2 = GetTickCount();
-			if (pVM->IsLastErrorMsg())
+			if (rt->TakeLastError(err))
 			{
-				printf("Error - VM Call : %s\n(Elapse:%d)\n", pVM->GetLastErrorMsg(), t2 - t1);
-				pVM->ClearLastErrorMsg();
+				printf("Error - VM Call : %.*s\n(Elapse:%d)\n", (int)err.size(), err.data(), (int)(t2 - t1));
 			}
 			else
 			{
 				DWORD dwNext = GetTickCount();
 				if (dwNext - dwPre > 500)
 				{
-					printf("Slide Run %d\n(Elapse:%d)\n", i++, t2 - t1);
+					printf("Slide Run %d\n(Elapse:%d)\n", i++, (int)(t2 - t1));
 					dwPre = dwNext;
 				}
 			}
 			Sleep(10);
 		}
-		pVM->ReleaseWorker(id);
-		INeoVM::ReleaseVM(pVM);
-		pVM = NULL;
 	}
-cleanup:
-	if (pVM != NULL)
-		INeoVM::ReleaseVM(pVM);
-	NeoExecContextPool_Destroy(execPool);
+
+	rt->DestroyInstance(inst);
+	rt->DestroyProgram(cr.program);
+	DestroyRuntime(rt);
 	pLoader->Unload(nullptr, pFileBuffer, iFileLen);
-
-    return result;
+	return result;
 }
-

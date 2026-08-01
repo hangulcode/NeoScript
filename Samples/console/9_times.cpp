@@ -1,5 +1,6 @@
-#include "stdafx.h"
-#include "../../NeoSource/Neo.h"
+﻿#include "stdafx.h"
+#include "../../NeoSource/NeoScript.h"   // v2 public API
+#include "../../NeoSource/Neo.h"         // INeoLoader (파일 로더 타입)
 
 using namespace NeoScript;
 
@@ -13,36 +14,44 @@ int SAMPLE_9_times(INeoLoader* pLoader, std::string filename)
 		return -1;
 	}
 
-	std::string err;
-	NeoCompilerParam param(pFileBuffer, iFileLen);
-	param.err = &err;
-	param.putASM = true;
-	param.debug = true;
+	RuntimeDesc rd;
+	rd.printFn = [](StringView s) { printf("%.*s\n", (int)s.size(), s.data()); };
+	rd.nativeLoader = pLoader;
+	IRuntime* rt = CreateRuntime(rd);
+	rt->FreezeBindings();
 
-	NeoExecContextPool* execPool = NeoExecContextPool_Create();
-	NeoLoadVMParam vparam;
-	vparam.execPool = execPool;
-	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param, &vparam);
-	if (pVM != NULL)
+	CompileDesc cd;
+	cd.source = StringView((const char*)pFileBuffer, (size_t)iFileLen);
+	cd.sourceName = filename.c_str();
+	cd.emitAsm = true; cd.includeDebugInfo = true;   // 원본 샘플 동작: ASM 덤프 + 디버그 정보
+	CompileResult cr = rt->Compile(cd);
+	if (!cr.program)
 	{
-		for (int i = 1; i < 10; i++)
-		{
-			DWORD t1 = GetTickCount();
-			pVM->CallN("Time9", i);
-			DWORD t2 = GetTickCount();
-			if (pVM->IsLastErrorMsg())
-			{
-				printf("Error - VM Call : %s\n(Elapse:%d)\n", pVM->GetLastErrorMsg(), t2 - t1);
-				pVM->ClearLastErrorMsg();
-			}
-			else
-				printf("(Elapse:%d)\n", t2 - t1);
-		}
-		INeoVM::ReleaseVM(pVM);
+		printf("Error - compile failed : %s\n", cr.error.message.c_str());
+		DestroyRuntime(rt);
+		pLoader->Unload(nullptr, pFileBuffer, iFileLen);
+		return -1;
 	}
-	NeoExecContextPool_Destroy(execPool);
+
+	InstanceHandle inst = rt->CreateInstance(cr.program);
+	StringView err;
+	if (rt->TakeLastError(err))
+		printf("Error - init : %.*s\n", (int)err.size(), err.data());
+
+	for (int i = 1; i < 10; i++)
+	{
+		DWORD t1 = GetTickCount();
+		rt->Call(inst, "Time9").argInt(i).invoke();
+		DWORD t2 = GetTickCount();
+		if (rt->TakeLastError(err))
+			printf("Error - VM Call : %.*s\n(Elapse:%d)\n", (int)err.size(), err.data(), (int)(t2 - t1));
+		else
+			printf("(Elapse:%d)\n", (int)(t2 - t1));
+	}
+
+	rt->DestroyInstance(inst);
+	rt->DestroyProgram(cr.program);
+	DestroyRuntime(rt);
 	pLoader->Unload(nullptr, pFileBuffer, iFileLen);
-
-    return 0;
+	return 0;
 }
-

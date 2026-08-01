@@ -776,6 +776,7 @@ struct NeoCompilerParam
 	const char* debugSourcePath = nullptr;
 	std::vector<std::string>* debugSourceFiles = nullptr;
 	const NeoCompileDefines* defines = nullptr;
+	INeoLoader* loader = nullptr;              // import 모듈 해석용 loader(이 Runtime 것). 전역 대신 컴파일마다 주입.
 
 	NeoCompilerParam(const void* pSrc, int SrcLen)
 	{
@@ -807,6 +808,8 @@ public:
 	static FunctionPtrNative RegisterNative(Neo_NativeFunction func);
 	virtual int FindFunction(const std::string& name) =0;
 
+	// 프로세스 전역 print/error 훅. 최초 초기화(1회) 때만 설정한다(VM 생성마다 X).
+	// io_print / 에러 리포트가 이걸 통해 호스트로 출력. null 이면 std::cout 로 fallback.
 	typedef void(*IO_Print)(const char* pMsg);
 	static IO_Print m_pFunPrint;
 	static IO_Print m_pFunError;

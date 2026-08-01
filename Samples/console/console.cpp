@@ -1,6 +1,7 @@
 ﻿#include "stdafx.h"
 #include "console.h"
 #include "../../NeoSource/Neo.h"
+#include "../../NeoSource/NeoScript.h"   // v2 public API (RunFile 등이 사용; Neo.h 와 공존)
 #include <cctype>
 #include <algorithm>
 #include <chrono>
@@ -114,7 +115,6 @@ static void PrintSampleList()
 	printf("coroutine\n");
 	printf("module\n");
 	printf("http\n");
-	printf("class\n");
 	printf("regression\n");
 }
 
@@ -138,8 +138,7 @@ static int RunSample(INeoLoader* pLoader, const std::string& key)
 	if (key == "14" || key == "coroutine") return SAMPLE_etc(pLoader, s_path + "coroutine.ns", "test");
 	if (key == "15" || key == "module") return SAMPLE_etc(pLoader, s_path + "module.ns", nullptr);
 	if (key == "16" || key == "http") return SAMPLE_etc(pLoader, s_path + "http.ns", nullptr);
-	if (key == "17" || key == "class") return SAMPLE_etc(pLoader, s_path + "class.ns", nullptr);
-	if (key == "18" || key == "regression") return SAMPLE_etc(pLoader, s_path + "compiler_regression.ns", nullptr);
+	if (key == "17" || key == "regression") return SAMPLE_etc(pLoader, s_path + "compiler_regression.ns", nullptr);
 
 	printf("unknown sample: %s\n", key.c_str());
 	return -1;
@@ -163,30 +162,6 @@ static double ElapsedMs(std::chrono::steady_clock::time_point start, std::chrono
 	return std::chrono::duration<double, std::milli>(end - start).count();
 }
 
-class ScopedNeoExecPool
-{
-	NeoExecContextPool* m_pool = nullptr;
-public:
-	ScopedNeoExecPool()
-	{
-		m_pool = NeoExecContextPool_Create();
-	}
-	~ScopedNeoExecPool()
-	{
-		NeoExecContextPool_Destroy(m_pool);
-	}
-	NeoExecContextPool* Get() const
-	{
-		return m_pool;
-	}
-	NeoLoadVMParam MakeLoadParam() const
-	{
-		NeoLoadVMParam vparam;
-		vparam.execPool = m_pool;
-		return vparam;
-	}
-};
-
 static int RunFile(CNeoLoader* pLoader, const std::string& filename, bool putASM, bool debug)
 {
 	void* pFileBuffer = nullptr;
@@ -197,67 +172,84 @@ static int RunFile(CNeoLoader* pLoader, const std::string& filename, bool putASM
 		return -1;
 	}
 
-	std::string err;
-	NeoCompilerParam param(pFileBuffer, iFileLen);
-	param.err = &err;
-	param.putASM = putASM;
-	param.debug = debug;
+	RuntimeDesc rd;
+	// print 핸들러 미설정: 임의 스크립트를 그대로 실행하므로 엔진 내장 io_print 에 맡긴다.
+	// (1인자 print 는 개행, 2인자 print(x,"") 는 개행 없이 이어붙임 — printFn 을 걸면 이 구분 소실)
+	rd.nativeLoader = pLoader;                 // import 해석
+	IRuntime* rt = CreateRuntime(rd);
+	rt->FreezeBindings();
 
-	ScopedNeoExecPool execPool;
-	NeoLoadVMParam vparam = execPool.MakeLoadParam();
-	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param, &vparam);
+	CompileDesc cd;
+	cd.source = StringView((const char*)pFileBuffer, (size_t)iFileLen);
+	cd.sourceName = filename.c_str();
+	cd.includeDebugInfo = debug;
+	cd.emitAsm = putASM;   // --asm 이면 컴파일 시 디스어셈블 덤프
+	CompileResult cr = rt->Compile(cd);
 	pLoader->Unload(filename.c_str(), pFileBuffer, iFileLen);
 
-	if (pVM == nullptr)
+	if (!cr.program)
 	{
-		if (err.empty() == false)
-			printf("%s\n", err.c_str());
+		if (!cr.error.message.empty())
+			printf("%s\n", cr.error.message.c_str());
+		DestroyRuntime(rt);
 		return -1;
 	}
 
 	int exitCode = 0;
-	if (pVM->IsLastErrorMsg())
+	InstanceHandle inst = rt->CreateInstance(cr.program); // 최상위(전역 초기화) 실행
+	StringView err;
+	if (rt->TakeLastError(err))
 	{
-		printf("Error - VM Call : %s\n", pVM->GetLastErrorMsg());
-		pVM->ClearLastErrorMsg();
+		printf("Error - VM Call : %.*s\n", (int)err.size(), err.data());
 		exitCode = -1;
 	}
 
-	INeoVM::ReleaseVM(pVM);
+	rt->DestroyInstance(inst);
+	rt->DestroyProgram(cr.program);
+	DestroyRuntime(rt);
 	return exitCode;
 }
 
-static int RunBenchCase(const char* name, const char* source, const char* functionName, int arg, int iterations)
+static int RunBenchCase(const char* name, const char* source, const char* functionName, int arg, int iterations, void* nativeLoader)
 {
 	std::string src = source;
-	std::string err;
-	NeoCompilerParam param(src.data(), (int)src.size());
-	param.err = &err;
-	param.putASM = false;
-	param.debug = false;
 
 	auto compileStart = std::chrono::steady_clock::now();
-	ScopedNeoExecPool execPool;
-	NeoLoadVMParam vparam = execPool.MakeLoadParam();
-	INeoVM* pVM = INeoVM::CompileAndLoadRunVM(param, &vparam);
-	auto compileEnd = std::chrono::steady_clock::now();
-	if (pVM == nullptr)
+	RuntimeDesc rd;
+	rd.printFn = [](StringView s) { printf("%.*s\n", (int)s.size(), s.data()); };
+	rd.nativeLoader = nativeLoader;                 // import math 해석
+	IRuntime* rt = CreateRuntime(rd);
+	rt->FreezeBindings();
+
+	CompileDesc cd;
+	cd.source = StringView(src.data(), src.size());
+	cd.sourceName = name;
+	CompileResult cr = rt->Compile(cd);
+	if (!cr.program)
 	{
-		printf("[bench] %-14s compile failed: %s\n", name, err.c_str());
+		printf("[bench] %-14s compile failed: %s\n", name, cr.error.message.c_str());
+		DestroyRuntime(rt);
 		return -1;
 	}
+	InstanceHandle inst = rt->CreateInstance(cr.program); // 최상위(import 해석)
+	auto compileEnd = std::chrono::steady_clock::now();
 
-	NS_FLOAT result = 0;
+	double result = 0;
+	StringView err;
 	auto runStart = std::chrono::steady_clock::now();
 	for (int i = 0; i < iterations; ++i)
 	{
-		pVM->Call(&result, functionName, arg);
-		if (pVM->IsLastErrorMsg())
+		Invocation call = rt->Call(inst, functionName);   // 스코프 = 반복마다 소멸
+		call.argInt(arg).invoke();
+		if (rt->TakeLastError(err))
 		{
-			printf("[bench] %-14s runtime error: %s\n", name, pVM->GetLastErrorMsg());
-			INeoVM::ReleaseVM(pVM);
+			printf("[bench] %-14s runtime error: %.*s\n", name, (int)err.size(), err.data());
+			rt->DestroyInstance(inst);
+			rt->DestroyProgram(cr.program);
+			DestroyRuntime(rt);
 			return -1;
 		}
+		result = call.retFloat();
 	}
 	auto runEnd = std::chrono::steady_clock::now();
 
@@ -267,13 +259,15 @@ static int RunBenchCase(const char* name, const char* source, const char* functi
 		ElapsedMs(runStart, runEnd),
 		iterations,
 		arg,
-		(double)result);
+		result);
 
-	INeoVM::ReleaseVM(pVM);
+	rt->DestroyInstance(inst);
+	rt->DestroyProgram(cr.program);
+	DestroyRuntime(rt);
 	return 0;
 }
 
-static int RunBenchmarks()
+static int RunBenchmarks(CNeoLoader* pLoader)
 {
 	struct BenchCase
 	{
@@ -482,20 +476,21 @@ export fun Read4Only(var n)
 
 	for (const BenchCase& bench : cases)
 	{
-		if (RunBenchCase(bench.name, bench.source, bench.functionName, bench.arg, bench.iterations) != 0)
+		if (RunBenchCase(bench.name, bench.source, bench.functionName, bench.arg, bench.iterations, pLoader) != 0)
 			return -1;
 	}
 	return 0;
 }
 
-class DebugSmokeListener : public INeoVMDebugListener
+// v2 IDebugger 로 이전한 디버그 스모크. 모든 정지는 top-level 실행(RunGlobalInit)이
+// Suspended 를 반환하면 사후 검사 → Continue+Run 으로 재개하는 모델을 쓴다.
+// (구 worker->Start()/PCall + DebugXxx 는 IDebugger 로 대체)
+struct V2DebugSmokeListener : IDebugListener
 {
-public:
 	int stopCount = 0;
-	NeoDebugLocation lastLocation;
-	NeoDebugStopReason lastReason = NEO_DEBUG_STOP_NONE;
-
-	virtual void OnNeoDebugStopped(INeoVMWorker* worker, const NeoDebugLocation& location, NeoDebugStopReason reason)
+	DebugLocation lastLocation;
+	DebugStopReason lastReason = DebugStopReason::Breakpoint;
+	void OnStopped(InstanceHandle, const DebugLocation& location, DebugStopReason reason) override
 	{
 		++stopCount;
 		lastLocation = location;
@@ -506,150 +501,113 @@ public:
 
 static int RunDebugSmoke()
 {
-	const char* source =
-		"var a = 1;\n"
-		"var b = 2;\n"
-		"var c = a + b;\n"
-		"print(c);\n";
+	RuntimeDesc rd;
+	IRuntime* rt = CreateRuntime(rd);
+	rt->FreezeBindings();
+	IDebugger* dbg = rt->GetDebugger();
 
-	std::string err;
-	NeoCompilerParam param(source, (int)strlen(source));
-	param.err = &err;
-	param.putASM = false;
-	param.debug = true;
-	ScopedNeoExecPool execPool;
-	NeoLoadVMParam vparam = execPool.MakeLoadParam();
-
-	INeoVM* pVM = INeoVM::CompileAndLoadVM(param, &vparam);
-	if (pVM == nullptr)
+	// 소스 컴파일 + 인스턴스 생성(전역 init 미실행: BP 걸고 RunGlobalInit 으로 진입).
+	auto compileInst = [&](const char* src, const char* name, ProgramHandle& prog, InstanceHandle& inst) -> bool
 	{
-		printf("[debug-smoke] compile failed: %s\n", err.c_str());
-		return -1;
+		CompileDesc cd; cd.source = src; cd.sourceName = name; cd.includeDebugInfo = true;
+		CompileResult cr = rt->Compile(cd);
+		if (!cr.program) { printf("[debug-smoke] compile failed: %s\n", cr.error.message.c_str()); return false; }
+		prog = cr.program;
+		InstanceDesc idesc; idesc.runGlobalInit = false;
+		inst = rt->CreateInstance(prog, idesc);
+		return true;
+	};
+	auto setBps = [&](InstanceHandle inst, std::initializer_list<int> lines)
+	{
+		std::vector<DebugBreakpoint> bps;
+		for (int l : lines) { DebugBreakpoint b; b.file = 0; b.line = l; bps.push_back(b); }
+		dbg->SetBreakpoints(inst, bps);
+	};
+	auto resumeToEnd = [&](InstanceHandle inst) // BP 제거 후 완주
+	{
+		setBps(inst, {});
+		dbg->Continue(inst);
+		dbg->Run(inst);
+	};
+	auto fail = [&](const char* msg) -> int { printf("%s\n", msg); DestroyRuntime(rt); return -1; };
+
+	// 1) 기본 브레이크포인트 + 프레임/변수 조회
+	{
+		const char* source =
+			"var a = 1;\n"
+			"var b = 2;\n"
+			"var c = a + b;\n"
+			"print(c);\n";
+		ProgramHandle prog; InstanceHandle inst;
+		if (!compileInst(source, "basic.ns", prog, inst)) { DestroyRuntime(rt); return -1; }
+
+		std::vector<int> executableLines;
+		dbg->GetExecutableLines(prog, executableLines);
+		if (std::find(executableLines.begin(), executableLines.end(), 1) == executableLines.end() ||
+			std::find(executableLines.begin(), executableLines.end(), 4) == executableLines.end())
+			return fail("[debug-smoke] executable line metadata failed");
+
+		V2DebugSmokeListener listener;
+		dbg->SetListener(&listener);
+		setBps(inst, { 3 });
+		rt->RunGlobalInit(inst);
+		if (listener.stopCount != 1 || dbg->IsPaused(inst) == false || listener.lastLocation.line != 3)
+			return fail("[debug-smoke] breakpoint failed");
+
+		std::vector<DebugStackFrame> frames;
+		dbg->GetStackTrace(inst, frames);
+		std::vector<DebugVariable> vars;
+		dbg->GetFrameVariables(inst, 0, vars);
+		printf("[debug-smoke] frames=%d vars=%d\n", (int)frames.size(), (int)vars.size());
+		if (frames.empty() || vars.empty()) return fail("[debug-smoke] frames/vars empty");
+		if (frames[0].functionName.empty()) return fail("[debug-smoke] function name failed");
+		bool foundA = false, foundB = false;
+		for (const DebugVariable& var : vars) { if (var.name == "a") foundA = true; if (var.name == "b") foundB = true; }
+		if (!foundA || !foundB) return fail("[debug-smoke] variable names failed");
+
+		dbg->Continue(inst);
+		dbg->Run(inst);
+		if (dbg->IsPaused(inst)) return fail("[debug-smoke] continue failed");
+		dbg->SetListener(nullptr);
+		rt->DestroyInstance(inst);
+		rt->DestroyProgram(prog);
 	}
 
-	INeoVMWorker* worker = pVM->GetMainWorker();
-	std::vector<int> executableLines;
-	worker->DebugGetExecutableLines(executableLines);
-	if (std::find(executableLines.begin(), executableLines.end(), 1) == executableLines.end() ||
-		std::find(executableLines.begin(), executableLines.end(), 4) == executableLines.end())
+	// 2) 컬렉션 변수(맵) children 확장
 	{
-		printf("[debug-smoke] executable line metadata failed\n");
-		INeoVM::ReleaseVM(pVM);
-		return -1;
-	}
-	DebugSmokeListener listener;
-	worker->DebugSetListener(&listener);
-	worker->DebugSetBreakpoints(std::vector<int>{ 3 });
-
-	pVM->PCall(pVM->GetMainWorkerID());
-	if (listener.stopCount != 1 || worker->DebugIsPaused() == false || listener.lastLocation.line != 3)
-	{
-		printf("[debug-smoke] breakpoint failed count=%d paused=%d line=%d\n",
-			listener.stopCount, worker->DebugIsPaused() ? 1 : 0, listener.lastLocation.line);
-		INeoVM::ReleaseVM(pVM);
-		return -1;
-	}
-
-	std::vector<NeoDebugStackFrame> frames;
-	worker->DebugGetStackTrace(frames);
-	std::vector<NeoDebugVariable> vars;
-	worker->DebugGetFrameVariables(0, vars);
-	printf("[debug-smoke] frames=%d vars=%d\n", (int)frames.size(), (int)vars.size());
-	if (frames.empty() || vars.empty())
-	{
-		INeoVM::ReleaseVM(pVM);
-		return -1;
-	}
-	if (frames[0].functionName.empty())
-	{
-		printf("[debug-smoke] function name failed\n");
-		INeoVM::ReleaseVM(pVM);
-		return -1;
-	}
-	bool foundA = false;
-	bool foundB = false;
-	for (const NeoDebugVariable& var : vars)
-	{
-		if (var.name == "a")
-			foundA = true;
-		if (var.name == "b")
-			foundB = true;
-	}
-	if (!foundA || !foundB)
-	{
-		printf("[debug-smoke] variable names failed a=%d b=%d\n", foundA ? 1 : 0, foundB ? 1 : 0);
-		INeoVM::ReleaseVM(pVM);
-		return -1;
-	}
-
-	worker->DebugContinue();
-	worker->Run();
-	if (worker->DebugIsPaused())
-	{
-		printf("[debug-smoke] continue failed\n");
-		INeoVM::ReleaseVM(pVM);
-		return -1;
-	}
-
-	INeoVM::ReleaseVM(pVM);
-
-	const char* collectionSource =
-		"var data = { \"name\": \"Neo\", \"items\": [1, 2] };\n"
-		"var marker = 1;\n";
-	err.clear();
-	NeoCompilerParam collectionParam(collectionSource, (int)strlen(collectionSource));
-	collectionParam.err = &err;
-	collectionParam.putASM = false;
-	collectionParam.debug = true;
-	pVM = INeoVM::CompileAndLoadVM(collectionParam, &vparam);
-	if (pVM == nullptr)
-	{
-		printf("[debug-smoke] collection compile failed: %s\n", err.c_str());
-		return -1;
-	}
-
-	worker = pVM->GetMainWorker();
-	DebugSmokeListener collectionListener;
-	worker->DebugSetListener(&collectionListener);
-	worker->DebugSetBreakpoints(std::vector<int>{ 2 });
-	pVM->PCall(pVM->GetMainWorkerID());
-	std::vector<NeoDebugVariable> collectionVars;
-	worker->DebugGetFrameVariables(0, collectionVars);
-	const NeoDebugVariable* data = nullptr;
-	for (const NeoDebugVariable& var : collectionVars)
-	{
-		if (var.name == "data")
+		const char* collectionSource =
+			"var data = { \"name\": \"Neo\", \"items\": [1, 2] };\n"
+			"var marker = 1;\n";
+		ProgramHandle prog; InstanceHandle inst;
+		if (!compileInst(collectionSource, "collection.ns", prog, inst)) { DestroyRuntime(rt); return -1; }
+		V2DebugSmokeListener listener;
+		dbg->SetListener(&listener);
+		setBps(inst, { 2 });
+		rt->RunGlobalInit(inst);
+		std::vector<DebugVariable> collectionVars;
+		dbg->GetFrameVariables(inst, 0, collectionVars);
+		const DebugVariable* data = nullptr;
+		for (const DebugVariable& var : collectionVars) { if (var.name == "data") { data = &var; break; } }
+		bool foundName = false, foundItems = false, itemsExpanded = false;
+		if (data != nullptr)
 		{
-			data = &var;
-			break;
-		}
-	}
-	bool foundName = false;
-	bool foundItems = false;
-	bool itemsExpanded = false;
-	if (data != nullptr)
-	{
-		for (const NeoDebugVariable& child : data->children)
-		{
-			if (child.name == "[\"name\"]" && child.value == "Neo")
-				foundName = true;
-			if (child.name == "[\"items\"]")
+			for (const DebugVariable& child : data->children)
 			{
-				foundItems = true;
-				itemsExpanded = child.children.size() == 2;
+				if (child.name == "[\"name\"]" && child.value == "Neo") foundName = true;
+				if (child.name == "[\"items\"]") { foundItems = true; itemsExpanded = child.children.size() == 2; }
 			}
 		}
+		if (dbg->IsPaused(inst) == false || data == nullptr || !foundName || !foundItems || !itemsExpanded)
+		{
+			printf("[debug-smoke] collection variables failed paused=%d data=%d name=%d items=%d expanded=%d\n",
+				dbg->IsPaused(inst) ? 1 : 0, data ? 1 : 0, foundName ? 1 : 0, foundItems ? 1 : 0, itemsExpanded ? 1 : 0);
+			DestroyRuntime(rt); return -1;
+		}
+		resumeToEnd(inst);
+		dbg->SetListener(nullptr);
+		rt->DestroyInstance(inst);
+		rt->DestroyProgram(prog);
 	}
-	if (worker->DebugIsPaused() == false || data == nullptr || !foundName || !foundItems || !itemsExpanded)
-	{
-		printf("[debug-smoke] collection variables failed paused=%d data=%d name=%d items=%d expanded=%d\n",
-			worker->DebugIsPaused() ? 1 : 0, data ? 1 : 0, foundName ? 1 : 0, foundItems ? 1 : 0, itemsExpanded ? 1 : 0);
-		INeoVM::ReleaseVM(pVM);
-		return -1;
-	}
-	worker->DebugContinue();
-	worker->Run();
-	INeoVM::ReleaseVM(pVM);
 
 	const char* stepSource =
 		"fun add(var x) {\n"
@@ -659,264 +617,205 @@ static int RunDebugSmoke()
 		"var a = 1;\n"
 		"var b = add(a);\n"
 		"var c = b + 1;\n";
-	err.clear();
-	NeoCompilerParam stepParam(stepSource, (int)strlen(stepSource));
-	stepParam.err = &err;
-	stepParam.putASM = false;
-	stepParam.debug = true;
-	pVM = INeoVM::CompileAndLoadVM(stepParam, &vparam);
-	if (pVM == nullptr)
+
+	// 3) StepOver (line 6 -> 7)
 	{
-		printf("[debug-smoke] step compile failed: %s\n", err.c_str());
-		return -1;
+		ProgramHandle prog; InstanceHandle inst;
+		if (!compileInst(stepSource, "step.ns", prog, inst)) { DestroyRuntime(rt); return -1; }
+		V2DebugSmokeListener listener;
+		dbg->SetListener(&listener);
+		setBps(inst, { 6 });
+		rt->RunGlobalInit(inst);
+		if (dbg->IsPaused(inst) == false || listener.lastLocation.line != 6)
+			return fail("[debug-smoke] step breakpoint failed");
+		dbg->StepOver(inst);
+		dbg->Run(inst);
+		if (dbg->IsPaused(inst) == false || dbg->GetLocation(inst).line != 7)
+			return fail("[debug-smoke] step over failed");
+		resumeToEnd(inst);
+		dbg->SetListener(nullptr);
+		rt->DestroyInstance(inst);
+		rt->DestroyProgram(prog);
 	}
 
-	worker = pVM->GetMainWorker();
-	DebugSmokeListener stepListener;
-	worker->DebugSetListener(&stepListener);
-	worker->DebugSetBreakpoints(std::vector<int>{ 6 });
-	pVM->PCall(pVM->GetMainWorkerID());
-	if (worker->DebugIsPaused() == false || stepListener.lastLocation.line != 6)
+	// 4) StepOut (add 내부 line 2 -> 호출자 callDepth 0)
 	{
-		printf("[debug-smoke] step breakpoint failed line=%d\n", stepListener.lastLocation.line);
-		INeoVM::ReleaseVM(pVM);
-		return -1;
-	}
-
-	worker->DebugStepOver();
-	worker->Run();
-	if (worker->DebugIsPaused() == false || worker->DebugGetLocation().line != 7)
-	{
-		printf("[debug-smoke] step over failed line=%d\n", worker->DebugGetLocation().line);
-		INeoVM::ReleaseVM(pVM);
-		return -1;
-	}
-
-	worker->DebugSetBreakpoints(std::vector<int>{});
-	worker->DebugContinue();
-	worker->Run();
-	INeoVM::ReleaseVM(pVM);
-
-	err.clear();
-	pVM = INeoVM::CompileAndLoadVM(stepParam, &vparam);
-	if (pVM == nullptr)
-	{
-		printf("[debug-smoke] step-out compile failed: %s\n", err.c_str());
-		return -1;
-	}
-
-	worker = pVM->GetMainWorker();
-	DebugSmokeListener outListener;
-	worker->DebugSetListener(&outListener);
-	worker->DebugSetBreakpoints(std::vector<int>{ 2 });
-	pVM->PCall(pVM->GetMainWorkerID());
-	if (worker->DebugIsPaused() == false || outListener.lastLocation.line != 2)
-	{
-		printf("[debug-smoke] step-out breakpoint failed line=%d\n", outListener.lastLocation.line);
-		INeoVM::ReleaseVM(pVM);
-		return -1;
-	}
-
-	worker->DebugStepOut();
-	worker->Run();
-	if (worker->DebugIsPaused() == false || worker->DebugGetLocation().callDepth != 0)
-	{
-		printf("[debug-smoke] step out failed line=%d depth=%d\n",
-			worker->DebugGetLocation().line, worker->DebugGetLocation().callDepth);
-		INeoVM::ReleaseVM(pVM);
-		return -1;
-	}
-
-	worker->DebugContinue();
-	worker->Run();
-	INeoVM::ReleaseVM(pVM);
-
-	const char* exportSource =
-		"export fun Time9(var n)\n"
-		"{\n"
-		"    for(var i in 1, 10, 1)\n"
-		"    {\n"
-		"        var value = n * i;\n"
-		"        print(n..\" x \"..i..\" = \"..value);\n"
-		"    }\n"
-		"}\n";
-	err.clear();
-	NeoCompilerParam exportParam(exportSource, (int)strlen(exportSource));
-	exportParam.err = &err;
-	exportParam.putASM = false;
-	exportParam.debug = true;
-	pVM = INeoVM::CompileAndLoadVM(exportParam, &vparam);
-	if (pVM == nullptr)
-	{
-		printf("[debug-smoke] export compile failed: %s\n", err.c_str());
-		return -1;
-	}
-
-	worker = pVM->GetMainWorker();
-	DebugSmokeListener exportListener;
-	worker->DebugSetListener(&exportListener);
-	worker->DebugSetBreakpoints(std::vector<int>{ 5 });
-	pVM->PCall(pVM->GetMainWorkerID());
-	int time9Id = worker->FindFunction("Time9");
-	std::vector<VarInfo> time9Args;
-	VarInfo time9Arg;
-	worker->Var_SetInt(&time9Arg, 9);
-	time9Args.push_back(time9Arg);
-	if (time9Id < 0 || worker->Start(time9Id, time9Args) == false)
-	{
-		printf("[debug-smoke] export call failed: %s\n", pVM->IsLastErrorMsg() ? pVM->GetLastErrorMsg() : "");
-		INeoVM::ReleaseVM(pVM);
-		return -1;
-	}
-	if (worker->DebugIsPaused() == false || exportListener.lastLocation.line != 5)
-	{
-		printf("[debug-smoke] export breakpoint failed paused=%d line=%d\n",
-			worker->DebugIsPaused() ? 1 : 0, exportListener.lastLocation.line);
-		INeoVM::ReleaseVM(pVM);
-		return -1;
-	}
-	std::vector<NeoDebugVariable> exportVars;
-	worker->DebugGetFrameVariables(0, exportVars);
-	bool foundN = false;
-	bool foundTemp = false;
-	for (const NeoDebugVariable& var : exportVars)
-	{
-		if (var.name == "n" && var.value == "9")
-			foundN = true;
-		if (var.name.rfind("local", 0) == 0 || var.name.rfind("temp", 0) == 0)
-			foundTemp = true;
-	}
-	if (!foundN || foundTemp)
-	{
-		printf("[debug-smoke] export vars failed n=%d temp=%d\n", foundN ? 1 : 0, foundTemp ? 1 : 0);
-		INeoVM::ReleaseVM(pVM);
-		return -1;
-	}
-	worker->DebugContinue();
-	worker->Run();
-	INeoVM::ReleaseVM(pVM);
-
-	const char* errorSource =
-		"var a = 1;\n"
-		"var b = 0;\n"
-		"var c = a / b;\n";
-	err.clear();
-	NeoCompilerParam errorParam(errorSource, (int)strlen(errorSource));
-	errorParam.err = &err;
-	errorParam.putASM = false;
-	errorParam.debug = true;
-	pVM = INeoVM::CompileAndLoadVM(errorParam, &vparam);
-	if (pVM == nullptr)
-	{
-		printf("[debug-smoke] exception compile failed: %s\n", err.c_str());
-		return -1;
-	}
-
-	worker = pVM->GetMainWorker();
-	DebugSmokeListener errorListener;
-	worker->DebugSetListener(&errorListener);
-	pVM->PCall(pVM->GetMainWorkerID());
-	if (worker->DebugIsPaused() == false || errorListener.lastReason != NEO_DEBUG_STOP_EXCEPTION || pVM->IsLastErrorMsg() == false)
-	{
-		printf("[debug-smoke] exception failed paused=%d reason=%d err=%d\n",
-			worker->DebugIsPaused() ? 1 : 0, (int)errorListener.lastReason, pVM->IsLastErrorMsg() ? 1 : 0);
-		INeoVM::ReleaseVM(pVM);
-		return -1;
-	}
-	INeoVM::ReleaseVM(pVM);
-
-	const char* shortCircuitSource =
-		"fun ShortCircuitEcho(var value)\n"
-		"{\n"
-		"    return value;\n"
-		"}\n"
-		"export fun ShortCircuitTest()\n"
-		"{\n"
-		"    var target = null;\n"
-		"    var state = 0;\n"
-		"    if (target == null || target[4] < 10) state = 1;\n"
-		"    if (target != null && target[4] < 10) state = 2;\n"
-		"    var values = [3];\n"
-		"    if (target == null || (values[0] == 3 && target[4] < 10)) state = 3;\n"
-		"    var c = target == null || target[4] < 0.3;\n"
-		"    var arg = ShortCircuitEcho(target == null || target[4] < 0.3);\n"
-		"    var list = [target == null || target[4] < 0.3];\n"
-		"    var map = { \"safe\": target == null || target[4] < 0.3 };\n"
-		"    var emptyList = [];\n"
-		"    var emptyMap = {};\n"
-		"    var shared = { \"items\": [], \"requests\": [] };\n"
-		"    var indexList = [10, 20];\n"
-		"    var indexed = indexList[toint(target == null || target[4] < 0.3)];\n"
-		"    if (c) state = 4;\n"
-		"    if (arg && list[0] && map[\"safe\"] && indexed == 20) state = 5;\n"
-		"    if (emptyList.len() == 0 && emptyMap.len() == 0) state = 6;\n"
-		"    var loop = 0;\n"
-		"    while (target != null && target[4] < 10) loop = loop + 1;\n"
-		"    if (loop == 0) state = 7;\n"
-		"    return state;\n"
-		"}\n"
-		"export fun ShortCircuitReturn()\n"
-		"{\n"
-		"    var a = null;\n"
-		"    return a == null || a[4] < 0.3;\n"
-		"}\n"
-		"export fun ForeachIndexed()\n"
-		"{\n"
-		"    var groups = [[1, 2], [3, 4]];\n"
-		"    var sum = 0;\n"
-		"    foreach(var value in groups[1])\n"
-		"    {\n"
-		"        sum += value;\n"
-		"    }\n"
-		"    return sum;\n"
-		"}\n";
-	err.clear();
-	NeoCompilerParam shortCircuitParam(shortCircuitSource, (int)strlen(shortCircuitSource));
-	shortCircuitParam.err = &err;
-	shortCircuitParam.putASM = false;
-	shortCircuitParam.debug = false;
-	pVM = INeoVM::CompileAndLoadVM(shortCircuitParam, &vparam);
-	int shortCircuitResult = 0;
-	bool shortCircuitReturn = false;
-	int foreachIndexedResult = 0;
-	if (pVM == nullptr ||
-		pVM->Call(&shortCircuitResult, "ShortCircuitTest") == false ||
-		pVM->Call(&shortCircuitReturn, "ShortCircuitReturn") == false ||
-		pVM->Call(&foreachIndexedResult, "ForeachIndexed") == false ||
-		pVM->IsLastErrorMsg())
-	{
-		printf("[short-circuit] execution failed: %s\n", pVM != nullptr && pVM->IsLastErrorMsg() ? pVM->GetLastErrorMsg() : err.c_str());
-		if (pVM != nullptr)
-			INeoVM::ReleaseVM(pVM);
-		return -1;
-	}
-	if (shortCircuitResult != 7 || shortCircuitReturn == false || foreachIndexedResult != 7)
-	{
-		printf("[short-circuit] invalid result=%d return=%d foreach=%d\n", shortCircuitResult, shortCircuitReturn ? 1 : 0, foreachIndexedResult);
-		INeoVM::ReleaseVM(pVM);
-		return -1;
-	}
-	INeoVM::ReleaseVM(pVM);
-
-	const char* invalidConditionSources[] =
-	{
-		"fun InvalidIf() { if () {} }",
-		"fun InvalidWhile() { while () {} }"
-	};
-	for (const char* invalidSource : invalidConditionSources)
-	{
-		err.clear();
-		NeoCompilerParam invalidParam(invalidSource, (int)strlen(invalidSource));
-		invalidParam.err = &err;
-		pVM = INeoVM::CompileAndLoadVM(invalidParam, &vparam);
-		if (pVM != nullptr || err.find("expected an expression") == std::string::npos)
+		ProgramHandle prog; InstanceHandle inst;
+		if (!compileInst(stepSource, "step.ns", prog, inst)) { DestroyRuntime(rt); return -1; }
+		V2DebugSmokeListener listener;
+		dbg->SetListener(&listener);
+		setBps(inst, { 2 });
+		rt->RunGlobalInit(inst);
+		if (dbg->IsPaused(inst) == false || listener.lastLocation.line != 2)
+			return fail("[debug-smoke] step-out breakpoint failed");
+		dbg->StepOut(inst);
+		dbg->Run(inst);
+		if (dbg->IsPaused(inst) == false || dbg->GetLocation(inst).callDepth != 0)
 		{
-			printf("[parser] empty condition was accepted: %s\n", err.c_str());
-			if (pVM != nullptr)
-				INeoVM::ReleaseVM(pVM);
-			return -1;
+			printf("[debug-smoke] step out failed line=%d depth=%d\n",
+				dbg->GetLocation(inst).line, dbg->GetLocation(inst).callDepth);
+			DestroyRuntime(rt); return -1;
+		}
+		resumeToEnd(inst);
+		dbg->SetListener(nullptr);
+		rt->DestroyInstance(inst);
+		rt->DestroyProgram(prog);
+	}
+
+	// 5) export 함수 내부 BP. 구판은 host worker->Start() 로 호출했으나 v2 invoke 는
+	//    BP 정지를 지원하지 않으므로, 스크립트 최상위에서 Time9(9) 를 호출해 RunGlobalInit 이
+	//    함수 내부 BP 를 잡게 한다(동일 커버리지: 인자 n==9 확인, local/temp 노출 안 됨).
+	{
+		const char* exportSource =
+			"export fun Time9(var n)\n"
+			"{\n"
+			"    for(var i in 1, 10, 1)\n"
+			"    {\n"
+			"        var value = n * i;\n"
+			"        print(n..\" x \"..i..\" = \"..value);\n"
+			"    }\n"
+			"}\n"
+			"Time9(9);\n";
+		ProgramHandle prog; InstanceHandle inst;
+		if (!compileInst(exportSource, "export.ns", prog, inst)) { DestroyRuntime(rt); return -1; }
+		V2DebugSmokeListener listener;
+		dbg->SetListener(&listener);
+		setBps(inst, { 5 });
+		rt->RunGlobalInit(inst);
+		if (dbg->IsPaused(inst) == false || listener.lastLocation.line != 5)
+			return fail("[debug-smoke] export breakpoint failed");
+		std::vector<DebugVariable> exportVars;
+		dbg->GetFrameVariables(inst, 0, exportVars);
+		bool foundN = false, foundTemp = false;
+		for (const DebugVariable& var : exportVars)
+		{
+			if (var.name == "n" && var.value == "9") foundN = true;
+			if (var.name.rfind("local", 0) == 0 || var.name.rfind("temp", 0) == 0) foundTemp = true;
+		}
+		if (!foundN || foundTemp)
+		{
+			printf("[debug-smoke] export vars failed n=%d temp=%d\n", foundN ? 1 : 0, foundTemp ? 1 : 0);
+			DestroyRuntime(rt); return -1;
+		}
+		resumeToEnd(inst);
+		dbg->SetListener(nullptr);
+		rt->DestroyInstance(inst);
+		rt->DestroyProgram(prog);
+	}
+
+	// 6) 런타임 예외(0 나누기). 예외는 재개 가능한 정지가 아니라 종료이므로 paused 를 요구하지
+	//    않고, 리스너가 Exception 사유로 정지 보고 + VM 에러 존재를 확인한다.
+	{
+		const char* errorSource =
+			"var a = 1;\n"
+			"var b = 0;\n"
+			"var c = a / b;\n";
+		ProgramHandle prog; InstanceHandle inst;
+		if (!compileInst(errorSource, "error.ns", prog, inst)) { DestroyRuntime(rt); return -1; }
+		V2DebugSmokeListener listener;
+		dbg->SetListener(&listener);
+		rt->RunGlobalInit(inst);
+		StringView emsg;
+		bool hasErr = rt->TakeLastError(emsg);
+		if (listener.stopCount == 0 || listener.lastReason != DebugStopReason::Exception || hasErr == false)
+		{
+			printf("[debug-smoke] exception failed stops=%d reason=%d err=%d\n",
+				listener.stopCount, (int)listener.lastReason, hasErr ? 1 : 0);
+			DestroyRuntime(rt); return -1;
+		}
+		dbg->SetListener(nullptr);
+		rt->DestroyInstance(inst);
+		rt->DestroyProgram(prog);
+	}
+
+	// 7) 단락(short-circuit) 평가 결과 검증 (디버그 아님, 실행 결과만)
+	{
+		const char* shortCircuitSource =
+			"fun ShortCircuitEcho(var value)\n"
+			"{\n"
+			"    return value;\n"
+			"}\n"
+			"export fun ShortCircuitTest()\n"
+			"{\n"
+			"    var target = null;\n"
+			"    var state = 0;\n"
+			"    if (target == null || target[4] < 10) state = 1;\n"
+			"    if (target != null && target[4] < 10) state = 2;\n"
+			"    var values = [3];\n"
+			"    if (target == null || (values[0] == 3 && target[4] < 10)) state = 3;\n"
+			"    var c = target == null || target[4] < 0.3;\n"
+			"    var arg = ShortCircuitEcho(target == null || target[4] < 0.3);\n"
+			"    var list = [target == null || target[4] < 0.3];\n"
+			"    var map = { \"safe\": target == null || target[4] < 0.3 };\n"
+			"    var emptyList = [];\n"
+			"    var emptyMap = {};\n"
+			"    var shared = { \"items\": [], \"requests\": [] };\n"
+			"    var indexList = [10, 20];\n"
+			"    var indexed = indexList[toint(target == null || target[4] < 0.3)];\n"
+			"    if (c) state = 4;\n"
+			"    if (arg && list[0] && map[\"safe\"] && indexed == 20) state = 5;\n"
+			"    if (emptyList.len() == 0 && emptyMap.len() == 0) state = 6;\n"
+			"    var loop = 0;\n"
+			"    while (target != null && target[4] < 10) loop = loop + 1;\n"
+			"    if (loop == 0) state = 7;\n"
+			"    return state;\n"
+			"}\n"
+			"export fun ShortCircuitReturn()\n"
+			"{\n"
+			"    var a = null;\n"
+			"    return a == null || a[4] < 0.3;\n"
+			"}\n"
+			"export fun ForeachIndexed()\n"
+			"{\n"
+			"    var groups = [[1, 2], [3, 4]];\n"
+			"    var sum = 0;\n"
+			"    foreach(var value in groups[1])\n"
+			"    {\n"
+			"        sum += value;\n"
+			"    }\n"
+			"    return sum;\n"
+			"}\n";
+		CompileDesc cd; cd.source = shortCircuitSource; cd.sourceName = "short_circuit.ns";
+		CompileResult cr = rt->Compile(cd);
+		if (!cr.program) return fail("[short-circuit] compile failed");
+		InstanceHandle inst = rt->CreateInstance(cr.program);
+		int shortCircuitResult = 0; bool shortCircuitReturn = false; int foreachIndexedResult = 0;
+		{ Invocation c = rt->Call(inst, "ShortCircuitTest");   c.invoke(); shortCircuitResult = c.retInt(); }
+		{ Invocation c = rt->Call(inst, "ShortCircuitReturn"); c.invoke(); shortCircuitReturn = c.retBool(); }
+		{ Invocation c = rt->Call(inst, "ForeachIndexed");     c.invoke(); foreachIndexedResult = c.retInt(); }
+		StringView emsg;
+		bool hadErr = rt->TakeLastError(emsg);
+		if (hadErr || shortCircuitResult != 7 || shortCircuitReturn == false || foreachIndexedResult != 7)
+		{
+			printf("[short-circuit] invalid result=%d return=%d foreach=%d err=%.*s\n",
+				shortCircuitResult, shortCircuitReturn ? 1 : 0, foreachIndexedResult, (int)emsg.size(), emsg.data());
+			DestroyRuntime(rt); return -1;
+		}
+		rt->DestroyInstance(inst);
+		rt->DestroyProgram(cr.program);
+	}
+
+	// 8) 잘못된 조건식은 컴파일 거부(expected an expression)
+	{
+		const char* invalidConditionSources[] =
+		{
+			"fun InvalidIf() { if () {} }",
+			"fun InvalidWhile() { while () {} }"
+		};
+		for (const char* invalidSource : invalidConditionSources)
+		{
+			CompileDesc cd; cd.source = invalidSource; cd.sourceName = "invalid.ns";
+			CompileResult cr = rt->Compile(cd);
+			if (cr.program || cr.error.message.find("expected an expression") == std::string::npos)
+			{
+				printf("[parser] empty condition was accepted: %s\n", cr.error.message.c_str());
+				if (cr.program) rt->DestroyProgram(cr.program);
+				DestroyRuntime(rt); return -1;
+			}
 		}
 	}
+
+	DestroyRuntime(rt);
 	return 0;
 }
 
@@ -937,55 +836,55 @@ static int RunCompilerErrorRegression()
 		{ "empty-while", "fun F() { while () {} }", "expected an expression" },
 	};
 
+	RuntimeDesc rd;
+	IRuntime* rt = CreateRuntime(rd);
+	rt->FreezeBindings();
+
 	int passed = 0;
 	for (const ErrorCase& test : cases)
 	{
-		std::string source = test.source;
-		std::string err;
-		NeoCompilerParam param(source.data(), (int)source.size());
-		param.err = &err;
-		ScopedNeoExecPool execPool;
-		NeoLoadVMParam vparam = execPool.MakeLoadParam();
-		INeoVM* vm = INeoVM::CompileAndLoadRunVM(param, &vparam);
-		bool rejected = vm == nullptr;
-		if (vm != nullptr)
-			INeoVM::ReleaseVM(vm);
-		if (rejected && err.find(test.expected) != std::string::npos)
+		CompileDesc cd; cd.source = test.source; cd.sourceName = test.name;
+		CompileResult cr = rt->Compile(cd);
+		if (!cr.program && cr.error.message.find(test.expected) != std::string::npos)
 		{
 			++passed;
 			continue;
 		}
-		printf("[compiler-error] %s failed: %s\n", test.name, err.c_str());
+		if (cr.program) rt->DestroyProgram(cr.program);
+		printf("[compiler-error] %s failed: %s\n", test.name, cr.error.message.c_str());
 	}
 
 	const ErrorCase mutationCases[] =
 	{
-		{ "list-append-during-foreach", "var values = [1]; foreach(var value in values) values.append(2);", "collection modified during foreach" },
-		{ "map-insert-during-foreach", "var values = { \"a\": 1 }; foreach(var key, value in values) values[\"b\"] = 2;", "collection modified during foreach" },
-		{ "map-remove-during-foreach", "var values = { \"a\": 1 }; foreach(var key, value in values) values[key] = null;", "collection modified during foreach" },
+		{ "list-append-during-foreach", "var values = [1]; foreach(var value in values) values.append(2);", "modified during foreach" },
+		{ "map-insert-during-foreach", "var values = { \"a\": 1 }; foreach(var key, value in values) values[\"b\"] = 2;", "modified during foreach" },
+		{ "map-remove-during-foreach", "var values = { \"a\": 1 }; foreach(var key, value in values) values[key] = null;", "modified during foreach" },
 	};
 	for (const ErrorCase& test : mutationCases)
 	{
-		std::string source = test.source;
-		std::string err;
-		NeoCompilerParam param(source.data(), (int)source.size());
-		param.err = &err;
-		ScopedNeoExecPool execPool;
-		NeoLoadVMParam vparam = execPool.MakeLoadParam();
-		INeoVM* vm = INeoVM::CompileAndLoadRunVM(param, &vparam);
-		bool rejected = vm != nullptr && vm->IsLastErrorMsg() && std::string(vm->GetLastErrorMsg()).find(test.expected) != std::string::npos;
-		if (vm != nullptr)
-			INeoVM::ReleaseVM(vm);
+		CompileDesc cd; cd.source = test.source; cd.sourceName = test.name;
+		CompileResult cr = rt->Compile(cd);
+		bool rejected = false;
+		if (cr.program)
+		{
+			InstanceHandle inst = rt->CreateInstance(cr.program); // 전역 실행 → foreach 변형 런타임 에러
+			StringView err;
+			rejected = rt->TakeLastError(err) &&
+				std::string(err.data(), err.size()).find(test.expected) != std::string::npos;
+			rt->DestroyInstance(inst);
+			rt->DestroyProgram(cr.program);
+		}
 		if (rejected)
 		{
 			++passed;
 			continue;
 		}
-		printf("[foreach-mutation] %s failed: %s\n", test.name, err.c_str());
+		printf("[foreach-mutation] %s failed\n", test.name);
 	}
 
 	const int total = _countof(cases) + _countof(mutationCases);
 	printf("Compiler error regression %s : %d/%d\n", passed == total ? "PASS" : "FAIL", passed, total);
+	DestroyRuntime(rt);
 	return passed == total ? 0 : -1;
 }
 
@@ -1163,26 +1062,27 @@ static bool ParseNeoCompileError(const std::string& err, int& line, int& column,
 	return line > 0 && column > 0;
 }
 
-class NeoDapSession : public INeoVMDebugListener
+class NeoDapSession : public IDebugListener
 {
 public:
 	CNeoLoader* loader = nullptr;
 	int seq = 1;
-	INeoVM* vm = nullptr;
-	INeoVMWorker* worker = nullptr;
-	NeoExecContextPool* execPool = nullptr;
+	IRuntime* runtime = nullptr;   // v2: VM/worker 대신 Runtime + 핸들
+	IDebugger* dbg = nullptr;
+	ProgramHandle program;
+	InstanceHandle instance;
 	std::string sourcePath;
 	std::vector<std::string> sourceFiles;
 	std::map<int, std::vector<int>> breakpointsByFile;
 	std::set<int> executableLines;
 	std::map<int, std::set<int>> executableLinesByFile;
-	NeoDebugStopReason lastStopReason = NEO_DEBUG_STOP_NONE;
-	NeoDebugLocation lastStopLocation;
+	DebugStopReason lastStopReason = DebugStopReason::Pause;
+	DebugLocation lastStopLocation;
 	bool terminated = false;
 	bool initialRunStarted = false;
 	bool noDebugMode = false;
 	int nextVariableReference = 1000000;
-	std::map<int, std::vector<NeoDebugVariable>> variableReferences;
+	std::map<int, std::vector<DebugVariable>> variableReferences;
 
 	void ClearVariableReferences()
 	{
@@ -1190,7 +1090,7 @@ public:
 		nextVariableReference = 1000000;
 	}
 
-	int StoreVariableChildren(const std::vector<NeoDebugVariable>& children)
+	int StoreVariableChildren(const std::vector<DebugVariable>& children)
 	{
 		if (children.empty())
 			return 0;
@@ -1199,7 +1099,7 @@ public:
 		return reference;
 	}
 
-	void WriteVariables(std::ostringstream& os, const std::vector<NeoDebugVariable>& vars)
+	void WriteVariables(std::ostringstream& os, const std::vector<DebugVariable>& vars)
 	{
 		os << "{\"variables\":[";
 		for (size_t i = 0; i < vars.size(); ++i)
@@ -1212,23 +1112,24 @@ public:
 		os << "]}";
 	}
 
-	virtual void OnNeoDebugStopped(INeoVMWorker* w, const NeoDebugLocation& location, NeoDebugStopReason reason)
+	virtual void OnStopped(InstanceHandle, const DebugLocation& location, DebugStopReason reason) override
 	{
 		ClearVariableReferences();
 		lastStopReason = reason;
 		lastStopLocation = location;
 		const char* reasonText = "pause";
-		if (reason == NEO_DEBUG_STOP_BREAKPOINT)
+		if (reason == DebugStopReason::Breakpoint)
 			reasonText = "breakpoint";
-		else if (reason == NEO_DEBUG_STOP_STEP)
+		else if (reason == DebugStopReason::Step)
 			reasonText = "step";
-		else if (reason == NEO_DEBUG_STOP_EXCEPTION)
+		else if (reason == DebugStopReason::Exception)
 			reasonText = "exception";
 		std::ostringstream os;
 		os << "{\"seq\":" << seq++ << ",\"type\":\"event\",\"event\":\"stopped\",\"body\":{\"reason\":\""
 			<< reasonText << "\",\"threadId\":1,\"allThreadsStopped\":true";
-		if (reason == NEO_DEBUG_STOP_EXCEPTION && vm && vm->IsLastErrorMsg())
-			os << ",\"description\":\"" << JsonEscape(vm->GetLastErrorMsg()) << "\"";
+		StringView err;
+		if (reason == DebugStopReason::Exception && runtime && runtime->PeekLastError(err))
+			os << ",\"description\":\"" << JsonEscape(std::string(err.data(), err.size())) << "\"";
 		os << "}}";
 		DapSendMessage(os.str());
 	}
@@ -1313,9 +1214,9 @@ public:
 
 	void ApplyBreakpoints()
 	{
-		if (!worker)
+		if (!instance || !dbg)
 			return;
-		std::vector<NeoDebugBreakpoint> activeBreakpoints;
+		std::vector<DebugBreakpoint> activeBreakpoints;
 		for (std::map<int, std::vector<int>>::const_iterator it = breakpointsByFile.begin(); it != breakpointsByFile.end(); ++it)
 		{
 			int file = it->first;
@@ -1325,14 +1226,14 @@ public:
 				int line = lines[i];
 				if (IsExecutableLine(file, line))
 				{
-					NeoDebugBreakpoint bp;
+					DebugBreakpoint bp;
 					bp.file = file;
 					bp.line = line;
 					activeBreakpoints.push_back(bp);
 				}
 			}
 		}
-		worker->DebugSetBreakpoints(activeBreakpoints);
+		dbg->SetBreakpoints(instance, activeBreakpoints);
 	}
 
 	bool LoadProgram(const std::string& path, std::string& err, bool enableDebug)
@@ -1345,47 +1246,58 @@ public:
 			return false;
 		}
 		std::string src((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-		NeoCompilerParam param(src.data(), (int)src.size());
-		param.err = &err;
-		param.putASM = false;
-		param.debug = enableDebug;
+
+		RuntimeDesc rd;
+		rd.nativeLoader = loader;                 // import 해석
+		runtime = CreateRuntime(rd);
+		runtime->FreezeBindings();
+
+		CompileDesc cd;
+		cd.source = StringView(src.data(), src.size());
+		cd.sourceName = fullPath.c_str();
+		cd.includeDebugInfo = enableDebug;
 		if (enableDebug)
 		{
-			param.debugSourcePath = fullPath.c_str();
-			param.debugSourceFiles = &sourceFiles;
+			cd.debugSourcePath = StringView(fullPath.c_str(), fullPath.size());
+			cd.debugSourceFiles = &sourceFiles;
 		}
-		if (execPool == nullptr)
-			execPool = NeoExecContextPool_Create();
-		NeoLoadVMParam vparam;
-		vparam.execPool = execPool;
-		vm = INeoVM::CompileAndLoadVM(param, &vparam);
-		if (vm == nullptr)
+		CompileResult cr = runtime->Compile(cd);
+		if (!cr.program)
+		{
+			err = cr.error.message;
 			return false;
-		worker = vm->GetMainWorker();
+		}
+		program = cr.program;
+
+		InstanceDesc idesc;
+		idesc.runGlobalInit = false;              // BP 를 먼저 걸기 위해 전역 실행 지연
+		instance = runtime->CreateInstance(program, idesc);
+		dbg = runtime->GetDebugger();
+
 		executableLines.clear();
 		executableLinesByFile.clear();
-		if (enableDebug)
+		if (enableDebug && dbg)
 		{
-			worker->DebugSetListener(this);
+			dbg->SetListener(this);
 			std::vector<int> lines;
-			worker->DebugGetExecutableLines(lines);
+			dbg->GetExecutableLines(program, lines);
 			for (int line : lines)
 				executableLines.insert(line);
-			std::vector<NeoDebugLocation> locations;
-			worker->DebugGetExecutableLocations(locations);
+			std::vector<DebugLocation> locations;
+			dbg->GetExecutableLocations(program, locations);
 			for (size_t i = 0; i < locations.size(); ++i)
 				executableLinesByFile[locations[i].file].insert(locations[i].line);
 			ApplyBreakpoints();
 		}
-		lastStopReason = NEO_DEBUG_STOP_NONE;
-		lastStopLocation = NeoDebugLocation();
+		lastStopReason = DebugStopReason::Pause;
+		lastStopLocation = DebugLocation();
 		sourcePath = fullPath;
 		return true;
 	}
 
 	void RunCurrent(bool initial)
 	{
-		if (worker == nullptr || terminated)
+		if (!instance || terminated)
 			return;
 		if (initial)
 			SendOutput(noDebugMode ? "\x1b[32m[Neo Script] Run started.\x1b[0m\n" : "\x1b[32m[Neo Script] Debug started.\x1b[0m\n");
@@ -1414,11 +1326,11 @@ public:
 		}
 		if (initial)
 		{
-			vm->PCall(vm->GetMainWorkerID());
+			runtime->RunGlobalInit(instance);   // 전역 코드 실행(구 PCall)
 		}
-		else
+		else if (dbg)
 		{
-			worker->Run();
+			dbg->Run(instance);                 // Continue/Step 재개(구 worker->Run())
 		}
 		fflush(stdout);
 		if (captureActive)
@@ -1433,15 +1345,17 @@ public:
 		{
 			_close(savedStdout);
 		}
-		if (vm && vm->IsLastErrorMsg() &&
-			(worker->DebugIsPaused() == false || lastStopReason == NEO_DEBUG_STOP_EXCEPTION))
+		const bool paused = dbg && dbg->IsPaused(instance);
+		StringView vmErr;
+		if (runtime && runtime->PeekLastError(vmErr) &&
+			(paused == false || lastStopReason == DebugStopReason::Exception))
 		{
-			std::string error = vm->GetLastErrorMsg();
+			std::string error(vmErr.data(), vmErr.size());
 			if (!error.empty() && error.back() != '\n')
 				error += "\n";
 			SendErrorOutput(error);
 		}
-		if (!worker->DebugIsPaused() && !terminated)
+		if (!paused && !terminated)
 		{
 			SendOutput(noDebugMode ? "\x1b[32m[Neo Script] Run finished.\x1b[0m\n" : "\x1b[32m[Neo Script] Debug finished.\x1b[0m\n");
 			terminated = true;
@@ -1535,32 +1449,32 @@ public:
 		}
 		else if (command == "continue")
 		{
-			if (worker) worker->DebugContinue();
+			if (dbg) dbg->Continue(instance);
 			SendResponse(requestSeq, command, "{\"allThreadsContinued\":true}");
 			RunCurrent(false);
 		}
 		else if (command == "stepIn")
 		{
-			if (worker) worker->DebugStepInto();
+			if (dbg) dbg->StepInto(instance);
 			SendResponse(requestSeq, command);
 			RunCurrent(false);
 		}
 		else if (command == "next")
 		{
-			if (worker) worker->DebugStepOver();
+			if (dbg) dbg->StepOver(instance);
 			SendResponse(requestSeq, command);
 			RunCurrent(false);
 		}
 		else if (command == "stepOut")
 		{
-			if (worker) worker->DebugStepOut();
+			if (dbg) dbg->StepOut(instance);
 			SendResponse(requestSeq, command);
 			RunCurrent(false);
 		}
 		else if (command == "stackTrace")
 		{
-			std::vector<NeoDebugStackFrame> frames;
-			if (worker) worker->DebugGetStackTrace(frames);
+			std::vector<DebugStackFrame> frames;
+			if (dbg) dbg->GetStackTrace(instance, frames);
 			std::ostringstream os;
 			os << "{\"stackFrames\":[";
 			for (size_t i = 0; i < frames.size(); ++i)
@@ -1586,12 +1500,12 @@ public:
 		else if (command == "variables")
 		{
 			int ref = JsonInt(body, "variablesReference", 1000);
-			std::vector<NeoDebugVariable> vars;
-			std::map<int, std::vector<NeoDebugVariable>>::const_iterator childIt = variableReferences.find(ref);
+			std::vector<DebugVariable> vars;
+			std::map<int, std::vector<DebugVariable>>::const_iterator childIt = variableReferences.find(ref);
 			if (childIt != variableReferences.end())
 				vars = childIt->second;
-			else if (worker && ref >= 1000 && ref < 1000000)
-				worker->DebugGetFrameVariables(ref - 1000, vars);
+			else if (dbg && ref >= 1000 && ref < 1000000)
+				dbg->GetFrameVariables(instance, ref - 1000, vars);
 			std::ostringstream os;
 			WriteVariables(os, vars);
 			SendResponse(requestSeq, command, os.str());
@@ -1605,10 +1519,10 @@ public:
 			while (!expression.empty() && isspace((unsigned char)expression.back()))
 				expression.pop_back();
 
-			std::vector<NeoDebugVariable> vars;
-			if (worker) worker->DebugGetFrameVariables(frameId, vars);
-			const NeoDebugVariable* found = nullptr;
-			for (const NeoDebugVariable& var : vars)
+			std::vector<DebugVariable> vars;
+			if (dbg) dbg->GetFrameVariables(instance, frameId, vars);
+			const DebugVariable* found = nullptr;
+			for (const DebugVariable& var : vars)
 			{
 				if (var.name == expression)
 				{
@@ -1632,7 +1546,8 @@ public:
 		}
 		else if (command == "exceptionInfo")
 		{
-			std::string description = vm && vm->IsLastErrorMsg() ? vm->GetLastErrorMsg() : "";
+			StringView descErr;
+			std::string description = (runtime && runtime->PeekLastError(descErr)) ? std::string(descErr.data(), descErr.size()) : "";
 			std::ostringstream os;
 			os << "{\"exceptionId\":\"NeoScript.RuntimeError\",\"description\":\"" << JsonEscape(description)
 				<< "\",\"breakMode\":\"always\"}";
@@ -1673,10 +1588,12 @@ static int RunDebugAdapter(CNeoLoader* loader)
 	std::string body;
 	while (!session.terminated && DapReadMessage(body))
 		session.Handle(body);
-	if (session.vm)
-		INeoVM::ReleaseVM(session.vm);
-	if (session.execPool)
-		NeoExecContextPool_Destroy(session.execPool);
+	if (session.runtime)
+	{
+		if (session.instance) session.runtime->DestroyInstance(session.instance);
+		if (session.program) session.runtime->DestroyProgram(session.program);
+		DestroyRuntime(session.runtime);
+	}
 	if (g_DapOutput && g_DapOutput != stdout)
 		fclose(g_DapOutput);
 	g_DapOutput = stdout;
@@ -2032,15 +1949,27 @@ int main(int argc, char* argv[])
 		}
 		else if (command == "--file" && argc >= 3)
 		{
-			exitCode = RunFile(pLoader, argv[2], false, false);
+			bool putASM = false, debug = false; // --file <script.ns> [--asm] [--debug]
+			for (int i = 3; i < argc; ++i)
+			{
+				std::string opt = argv[i];
+				if (opt == "--asm")   putASM = true;
+				else if (opt == "--debug") debug = true;
+			}
+			exitCode = RunFile(pLoader, argv[2], putASM, debug);
 		}
 		else if (command == "--smoke")
 		{
 			exitCode = RunSmokeSamples(pLoader);
 		}
+		else if (command == "--v2smoke")
+		{
+			extern int NeoScriptV2Smoke();
+			exitCode = NeoScriptV2Smoke();
+		}
 		else if (command == "--bench")
 		{
-			exitCode = RunBenchmarks();
+			exitCode = RunBenchmarks(pLoader);
 		}
 		else if (command == "--debug-smoke")
 		{
@@ -2060,7 +1989,7 @@ int main(int argc, char* argv[])
 		}
 		else
 		{
-			printf("usage: console.exe [--list | --run <sample> | --file <script.ns> | --smoke | --bench | --debug-smoke | --compiler-error-regression | --dap | --lsp]\n");
+			printf("usage: console.exe [--list | --run <sample> | --file <script.ns> [--asm] [--debug] | --smoke | --bench | --debug-smoke | --compiler-error-regression | --dap | --lsp]\n");
 			exitCode = -1;
 		}
 
@@ -2091,7 +2020,6 @@ int main(int argc, char* argv[])
 		printf("%d coroutine\n", idx++);
 		printf("%d module\n", idx++);
 		printf("%d http\n", idx++);
-		printf("%d class (In development)\n", idx++);
 		printf("%d regression\n", idx++);
 
 		printf("\nESC press to exit\n");

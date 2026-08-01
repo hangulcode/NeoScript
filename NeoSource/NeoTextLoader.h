@@ -2,6 +2,7 @@
 
 #include "NeoConfig.h"
 #include "NeoVM.h" // NeoCompileDefines (스크립트 const 테이블 소유용)
+#include <cstdint>
 
 namespace NeoScript
 {
@@ -146,6 +147,7 @@ public:
 	NeoCompileDefines m_sScriptDefines;      // 스크립트 내부 const 선언 (모듈-로컬, import 시 전파 안 함)
 	bool m_bSuppressDefines = false;         // const 이름 토큰을 raw 로 읽기 위한 치환 억제 플래그
 	const NeoGlobalSymbolTable* m_pGlobalSymbols = nullptr;
+	INeoLoader* m_pLoader = nullptr;          // import 해석 loader: param→top archive 세팅, 중첩 모듈로 전파
 
 	CArchiveRdWC()
 	{
@@ -191,6 +193,14 @@ public:
 		}
 		return r;
 	}
+	// 현재 위치에서 ahead 칸 앞 문자 미리보기(소비/컬럼 이동 없음). 범위 밖이면 0.
+	u16 PeekData(int ahead)
+	{
+		int idx = m_iOffset + ahead;
+		if (idx < 0 || idx >= m_iSize)
+			return 0;
+		return m_lpBufStart[idx];
+	}
 	void AddLine()
 	{
 		m_iCurLine++;
@@ -235,5 +245,17 @@ void	OutBytes(const u8* pBuffer, int iCount, int iMaxCount);
 
 bool	StringToDouble(double& r, const char *p);
 bool	StringToDoubleLow(double& r, const char *p);
+
+// 숫자 리터럴 파싱 결과: 정수/실수를 명시적으로 구분한다. 정수 리터럴은 double 을 거치지 않고
+// int32 로 정확히 파싱하므로 0xffffffff → -1 처럼 32비트 비트패턴이 보존된다.
+struct ParsedNumber
+{
+	enum class Type { Int, Float };
+	Type    type;
+	int32_t intValue;    // type == Int 일 때 유효(정확한 32비트 값). Float 여도 (int32)근사 보관.
+	double  floatValue;  // 항상 채움(정수 리터럴의 크기 = (double)magnitude). Float 일 때 실제 값.
+};
+// 토큰 문자열을 ParsedNumber 로 파싱. 잘못된 형식이면 false.
+bool	StringToNumber(ParsedNumber& out, const char *p);
 
 };

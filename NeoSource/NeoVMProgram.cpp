@@ -432,6 +432,11 @@ CNeoVMProgram* INeoVM::CompileToProgram(const NeoCompilerParam& param)
 	if (INeoVM::Compile(ar, param) == false)
 		return nullptr;
 
+	// 옛 CompileAndLoadVM 과 동일: putASM(진단) 시 컴파일 성공 + 코드 용량 출력.
+	// (ANSI 색상 리터럴 인라인 — NeoParser.h 의존 회피, "\x1b[32m"=green, "\x1b[0m"=reset)
+	if (param.putASM)
+		printf("\x1b[32m" "Compile Success. Code : %d bytes !!" "\x1b[0m" "\n", ar.GetBufferOffset());
+
 	return CNeoVMProgram::Create(ar.GetData(), ar.GetBufferOffset(), param.err);
 }
 
