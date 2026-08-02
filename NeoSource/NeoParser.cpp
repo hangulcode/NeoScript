@@ -213,7 +213,11 @@ std::map<std::string, TK_TYPE> g_sStringToToken;
 TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef = false, TK_TYPE tkEnd1 = TK_SEMICOLON, TK_TYPE tkEnd2 = TK_COMMA, TK_TYPE tkEnd3 = TK_R_SMALL, TK_TYPE tkEnd4 = TK_R_ARRAY, std::vector<SJumpValue>* pContinueJumps = NULL, TK_TYPE tkEnd5 = TK_UNUSED, TK_TYPE tkEnd6 = TK_UNUSED);
 // ParseJob 과 동일한 계약(종결 토큰 반환, 에러 시 TK_NONE)의 단락 평가 래퍼.
 // 값을 소비하는 모든 식 진입점은 ParseJob 대신 이 함수를 거쳐야 한다.
-TK_TYPE ParseShortCircuitLogic(bool bReqReturn, SOperand& sResultStack, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, TK_TYPE tkEnd1 = TK_SEMICOLON, TK_TYPE tkEnd2 = TK_COMMA, TK_TYPE tkEnd3 = TK_R_SMALL, TK_TYPE tkEnd4 = TK_R_ARRAY);
+// pOutFalseJumps != NULL 이면 "분기 컨텍스트" 모드로 동작한다(if 등 조건식 전용).
+// 이때 &&/|| 의 결과 불린을 만들지 않고(구: MOV true/false + JMP + 재검사 JF),
+// 조건이 거짓일 때 뛸 점프 목록만 돌려준다 → 호출자가 자기 위치로 패치한다.
+// 논리 연산자가 없으면 목록은 비어 있고 기존 경로(값 반환)와 동일하다.
+TK_TYPE ParseShortCircuitLogic(bool bReqReturn, SOperand& sResultStack, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, TK_TYPE tkEnd1 = TK_SEMICOLON, TK_TYPE tkEnd2 = TK_COMMA, TK_TYPE tkEnd3 = TK_R_SMALL, TK_TYPE tkEnd4 = TK_R_ARRAY, std::vector<SJumpValue>* pOutFalseJumps = NULL);
 bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport);
 // bStopAtCase: switch 본문 파싱용. case/default/'}' 를 만나면 소비하지 않고(PushToken) 종료한다.
 bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn = NULL, std::vector<SJumpValue>* pContinueJumps = NULL, bool bStopAtCase = false);
@@ -2723,8 +2727,38 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 // 따라서 "a == null || a.member"에서 a가 null이면 member 접근 자체를 건너뛴다.
 // ParseJob 과 동일한 계약: 실제로 만난 종결 토큰을 반환, 에러는 TK_NONE.
 // 논리 연산자가 없는 식은 emit 없이 그대로 통과한다 (기존 fused jump 최적화 유지).
+eNOperation ConvertCheckOPToOptimize(eNOperation n);      // 아래에 정의(비교 → 참일때점프)
+eNOperation ConvertCheckOPToOptimizeInv(eNOperation n);   // 아래에 정의(비교 → 거짓일때점프)
+
+// 직전에 생성된 비교 OP(LS/GR/...)를 "비교+점프" 결합 명령(JMP_LESS 등)으로 덮어쓴다.
+// 비교 OP 와 결합 점프는 인자 크기가 같아(dst/src1/src2 ↔ jumpOfs/src1/src2) 제자리 치환이 된다.
+// bJumpWhenTrue=true  : 조건이 참일 때 점프(|| 그룹)
+// bJumpWhenTrue=false : 조건이 거짓일 때 점프(&& 그룹 / 마지막 그룹)
+// 성공하면 outJump 에 패치용 점프 위치를 담고 true 를 돌려준다.
+static bool TryFuseCompareJump(bool bJumpWhenTrue, const SOperand& operand, SFunctions& funs, SJumpValue& outJump)
+{
+	if (false == IsTempVar(operand._iVar))
+		return false;
+	const eNOperation opCheck = funs._cur->GetLastOP();
+	const eNOperation opOpz = bJumpWhenTrue ? ConvertCheckOPToOptimize(opCheck)
+	                                        : ConvertCheckOPToOptimizeInv(opCheck);
+	if (opOpz == NOP_NONE)
+		return false;
+
+	const int argLen = (int)sizeof(short) * 3;
+	funs._cur->_code->SetPointer(-((int)sizeof(OpType) + (int)sizeof(ArgFlag) + argLen), SEEK_CUR);
+	OpType optype = GetOpTypeFromOp(opOpz);
+	funs._cur->_code->Write(&optype, sizeof(optype));
+	funs._cur->_code->SetPointer((int)sizeof(ArgFlag), SEEK_CUR);
+	const int cur = funs._cur->_code->GetBufferOffset();
+	funs._cur->Set_JumpOffet(SJumpValue(cur, cur + argLen), 0);
+	funs._cur->_code->SetPointer(argLen, SEEK_CUR);
+	outJump.Set(funs._cur->_code->GetBufferOffset() - 6, funs._cur->_code->GetBufferOffset());
+	return true;
+}
+
 TK_TYPE ParseShortCircuitLogic(bool bReqReturn, SOperand& sResultStack, CArchiveRdWC& ar, SFunctions& funs, SVars& vars,
-	TK_TYPE tkEnd1, TK_TYPE tkEnd2, TK_TYPE tkEnd3, TK_TYPE tkEnd4)
+	TK_TYPE tkEnd1, TK_TYPE tkEnd2, TK_TYPE tkEnd3, TK_TYPE tkEnd4, std::vector<SJumpValue>* pOutFalseJumps)
 {
 	std::vector<SJumpValue> trueJumps;
 	std::vector<SJumpValue> andFalseJumps;
@@ -2762,14 +2796,29 @@ TK_TYPE ParseShortCircuitLogic(bool bReqReturn, SOperand& sResultStack, CArchive
 
 		if (endToken == TK_AND2)
 		{
-			funs._cur->Push_JMPFalse(ar, operand._iVar, 0);
-			andFalseJumps.emplace_back(funs._cur->_code->GetBufferOffset() - (int)(sizeof(short) * 3), funs._cur->_code->GetBufferOffset());
+			// 비교식이면 "비교 + 거짓점프" 를 결합 명령 하나로(구: CMP 1개 + JF 1개).
+			SJumpValue fused;
+			if (TryFuseCompareJump(false, operand, funs, fused))
+				andFalseJumps.push_back(fused);
+			else
+			{
+				funs._cur->Push_JMPFalse(ar, operand._iVar, 0);
+				andFalseJumps.emplace_back(funs._cur->_code->GetBufferOffset() - (int)(sizeof(short) * 3), funs._cur->_code->GetBufferOffset());
+			}
 			continue;
 		}
 
-		// TK_OR2
-		funs._cur->Push_JMPTrue(ar, operand._iVar, 0, ar.CurLine());
-		trueJumps.emplace_back(funs._cur->_code->GetBufferOffset() - (int)(sizeof(short) * 3), funs._cur->_code->GetBufferOffset());
+		// TK_OR2 — 비교식이면 "비교 + 참점프" 를 결합 명령 하나로.
+		{
+			SJumpValue fused;
+			if (TryFuseCompareJump(true, operand, funs, fused))
+				trueJumps.push_back(fused);
+			else
+			{
+				funs._cur->Push_JMPTrue(ar, operand._iVar, 0, ar.CurLine());
+				trueJumps.emplace_back(funs._cur->_code->GetBufferOffset() - (int)(sizeof(short) * 3), funs._cur->_code->GetBufferOffset());
+			}
+		}
 
 		const int nextOrGroup = funs._cur->_code->GetBufferOffset();
 		for (const SJumpValue& jump : andFalseJumps)
@@ -2784,8 +2833,31 @@ TK_TYPE ParseShortCircuitLogic(bool bReqReturn, SOperand& sResultStack, CArchive
 		funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iRead, operand.IsHaveShort());
 		operand = SOperand(iRead);
 	}
-	funs._cur->Push_JMPFalse(ar, operand._iVar, 0);
-	andFalseJumps.emplace_back(funs._cur->_code->GetBufferOffset() - (int)(sizeof(short) * 3), funs._cur->_code->GetBufferOffset());
+	// 마지막 그룹의 false 분기도 비교식이면 결합 명령으로.
+	{
+		SJumpValue fused;
+		if (TryFuseCompareJump(false, operand, funs, fused))
+			andFalseJumps.push_back(fused);
+		else
+		{
+			funs._cur->Push_JMPFalse(ar, operand._iVar, 0);
+			andFalseJumps.emplace_back(funs._cur->_code->GetBufferOffset() - (int)(sizeof(short) * 3), funs._cur->_code->GetBufferOffset());
+		}
+	}
+
+	// [분기 컨텍스트] 값이 필요 없는 조건식(if 등)이면 불린 materialize 를 생략한다.
+	// true 경로는 바로 다음(몸통)으로 떨어지고, false 점프들은 호출자가 패치한다.
+	// 이것만으로 조건식에서 MOV true / JMP / MOV false / 재검사 JF 4개 명령이 사라진다.
+	if (pOutFalseJumps != NULL)
+	{
+		const int bodyPos = funs._cur->_code->GetBufferOffset();
+		for (const SJumpValue& jump : trueJumps)
+			funs._cur->Set_JumpOffet(jump, bodyPos);
+		*pOutFalseJumps = andFalseJumps;
+		sResultStack = operand;      // 실제로 쓰이지 않음(유효성 검사 통과용)
+		funs._cur->ClearLastOP();    // 마지막 OP 는 점프 — 뒤의 비교결합 최적화 대상이 아니다
+		return endToken;
+	}
 
 	const int result = funs._cur->AllocLocalTempVar();
 	const int trueValue = funs.AddStaticBool(true);
@@ -3600,7 +3672,11 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 
 	//==> if( xxx )
 	iTempOffset.Reset();
-	if (TK_R_SMALL != ParseShortCircuitLogic(true, iTempOffset, ar, funs, vars))
+	// 조건식은 분기 컨텍스트로 파싱한다. &&/|| 가 있으면 불린 값을 만들지 않고
+	// false 점프 목록(condFalseJumps)만 받아 아래에서 직접 패치한다.
+	std::vector<SJumpValue> condFalseJumps;
+	if (TK_R_SMALL != ParseShortCircuitLogic(true, iTempOffset, ar, funs, vars,
+		TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, &condFalseJumps))
 	{
 		return false;
 	}
@@ -3615,10 +3691,25 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	bool blJmp1 = true;
 	bool blJmp2 = true;
 
+	// 논리 연산자가 있어 분기 목록을 받은 경우 — jmp1 대신 그 목록 전체를 패치한다.
+	const bool blCondBranch = !condFalseJumps.empty();
+	auto SetCondFalseTarget = [&](int iPos)
+	{
+		if (blCondBranch)
+		{
+			for (const SJumpValue& jump : condFalseJumps)
+				funs._cur->Set_JumpOffet(jump, iPos);
+		}
+		else
+		{
+			funs._cur->Set_JumpOffet(jmp1, iPos);
+		}
+	};
+
 	eNOperation opCheck = funs._cur->GetLastOP();
 	bool isCheckOPOpt = false;
 	eNOperation opOpz = NOP_NONE;
-	if (IsTempVar(iTempOffset._iVar))
+	if (false == blCondBranch && IsTempVar(iTempOffset._iVar))
 	{
 		opOpz = ConvertCheckOPToOptimizeInv(opCheck);
 		if (opOpz != NOP_NONE)
@@ -3626,7 +3717,11 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 			isCheckOPOpt = true;
 		}
 	}
-	if (false == isCheckOPOpt)
+	if (blCondBranch)
+	{
+		// 분기 코드는 ParseShortCircuitLogic 이 이미 생성했다. 여기서 추가할 점프가 없다.
+	}
+	else if (false == isCheckOPOpt)
 	{
 		funs._cur->Push_JMPFalse(ar, iTempOffset._iVar, 0);
 		jmp1.Set(funs._cur->_code->GetBufferOffset() - 6, funs._cur->_code->GetBufferOffset()); // before "- 2"
@@ -3699,7 +3794,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 			jmp2.Set(funs._cur->_code->GetBufferOffset() - 6, funs._cur->_code->GetBufferOffset());
 		}
 
-		funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
+		SetCondFalseTarget(funs._cur->_code->GetBufferOffset());
 
 		if (false == ParseIF(pJumps, ar, funs, vars, lastOPReturn, pContinueJumps))
 			return false;
@@ -3717,7 +3812,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 			funs._cur->Push_JMP(ar, 0);
 			jmp2.Set(funs._cur->_code->GetBufferOffset() - 6, funs._cur->_code->GetBufferOffset());
 		}
-		funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
+		SetCondFalseTarget(funs._cur->_code->GetBufferOffset());
 
 		tkType1 = GetToken(ar, tk1);
 		if (tkType1 == TK_L_MIDDLE)
@@ -3753,7 +3848,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	{
 		ar.PushToken(tkType1, tk1);
 		//if (funs._cur->GetLastOP() != NOP_RETURN) // Code Size OPT TODO !!
-			funs._cur->Set_JumpOffet(jmp1, funs._cur->_code->GetBufferOffset());
+			SetCondFalseTarget(funs._cur->_code->GetBufferOffset());
 	}
 	return true;
 }

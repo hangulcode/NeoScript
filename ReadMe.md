@@ -399,26 +399,50 @@ Lower is better. **ms**, best of 5 runs after a warm-up. `x Neo` = how many time
 
 | Benchmark | What it stresses | Neo (ms) | Lua (ms) | C++ (ms) | Lua vs Neo | C++ vs Neo |
 | :-------- | :--------------- | -------: | -------: | -------: | ---------: | ---------: |
-| `loop_sum`      | integer loop, VM dispatch floor | **234** | 191 |  12.5 | 1.22x | 18.7x |
-| `float_math`    | float mul/add/sub chain         | **268** | 306 |  58.2 | 0.88x |  4.6x |
-| `func_call`     | script function call overhead   | **144** | 157 |   4.3 | 0.92x | 33.5x |
-| `fib_recursive` | recursion, fib(32)              |  **92** |  89 |   6.9 | 1.03x | 13.3x |
-| `array_rw`      | sequential array write + read   |  **63** |  47 |   2.5 | 1.34x | 25.2x |
-| `map_str`       | string-key hash lookup          |  **59** |  41 |  71.4 | 1.44x |  0.8x |
-| `string_ops`    | string build + length           |  **75** | 150 |  13.5 | 0.50x |  5.6x |
-| `particles`     | game-style float + array sim    | **122** |  49 |   3.5 | 2.49x | 34.9x |
-| **total**       |                                 | **1057** | 1030 | 172.8 | 1.03x |  6.1x |
+| `loop_sum`      | integer loop, VM dispatch floor | **233** | 191 |  12.6 | 1.22x | 18.5x |
+| `float_math`    | float mul/add/sub chain         | **244** | 311 |  58.1 | 0.78x |  4.2x |
+| `func_call`     | script function call overhead   | **137** | 157 |   4.2 | 0.87x | 32.6x |
+| `fib_recursive` | recursion, fib(32)              |  **91** |  89 |   6.6 | 1.02x | 13.8x |
+| `array_rw`      | sequential array write + read   |  **58** |  46 |   2.4 | 1.26x | 24.2x |
+| `map_str`       | string-key hash lookup          |  **53** |  40 |  70.1 | 1.33x |  0.8x |
+| `string_ops`    | string build + length           |  **73** | 150 |  13.2 | 0.49x |  5.5x |
+| `particles`     | game-style float + array sim    |  **68** |  49 |   3.3 | 1.39x | 20.6x |
+| **total**       |                                 | **957** | 1033 | 170.5 | 0.92x |  5.6x |
 
 **Reading the numbers.**
-- Against Lua the totals are within ~3% — but the per-benchmark spread is what matters.
-  Neo leads on `string_ops` (2.0x), `float_math` (1.14x) and `func_call` (1.09x);
-  Lua leads on `particles` (2.5x), `map_str` (1.4x) and `array_rw` (1.3x).
-  Lua's edge in the last three comes from its table/array representation, which is the clearest
-  place NeoScript still has headroom.
-- C++ is a **reference ceiling**, not a peer: it is 5-35x faster on compute-bound loops.
+- **Neo is ~8% faster than Lua overall**, but the totals matter less than the spread.
+  Neo leads on `string_ops` (2.0x), `float_math` (1.27x) and `func_call` (1.15x);
+  Lua still leads on `particles` (1.39x), `map_str` (1.33x), `array_rw` (1.26x) and
+  `loop_sum` (1.22x). Lua's remaining edge is in its table/array representation and its
+  very tight dispatch loop — that is where NeoScript has headroom left.
+- C++ is a **reference ceiling**, not a peer: it is 4-33x faster on compute-bound loops.
   The exception is `map_str`, where `std::unordered_map<std::string,…>` is actually *slower*
   than both script VMs — both interpreters intern their strings and cache the hash, while the
   C++ map rehashes the key and chases a pointer on every lookup.
+
+#### What these benchmarks found (and fixed)
+The first run of this suite exposed two codegen defects, both since fixed. They are a good
+illustration of why the benchmark exists:
+
+| | before | after | note |
+| :-- | --: | --: | :-- |
+| `particles`               | 122 ms | **68 ms** | −44% |
+| `if (a \|\| b)` microbench |  37 ms | **15 ms** | −59%, now within 1.15x of Lua |
+| `var x = a & b;`          |  17 ms | **11 ms** | −35% |
+
+1. **Boolean materialization in conditions.** `&&` / `||` emitted correct short-circuit jumps and
+   *then* built a `true`/`false` value that the enclosing `if` immediately re-tested — so
+   `if (a || b)` was slower than the equivalent `else if` chain. Conditions are now compiled in
+   branch context: the operator hands its false-jump list to the `if`, which patches it directly.
+   Comparisons inside `&&`/`||` are also fused into single compare-and-jump ops (`JLS`, `JLE`),
+   the same optimization single conditions already had. Ten instructions became five.
+2. **A missing entry in a peephole table.** Assigning a temporary into a variable is normally
+   elided by retargeting the producing instruction's destination, but the bitwise ops
+   (`NOP_AND` / `NOP_OR`) were absent from that table, so every `var x = a & b;` left a dead `MOV`.
+
+Both changes are compiler-side only and are covered by the 2,783-case compiler regression suite
+plus a dedicated 43-case logical-operator correctness test (truth tables, short-circuit
+side-effect counts, boundary values, value vs branch context, `else`/`else if`, loops, nesting).
 
 #### Methodology
 Micro-benchmarks are easy to get wrong, so the harness is explicit about it:
@@ -602,13 +626,6 @@ Rules:
 ### Comment
 	- //: single-line comment
 	- /* */: multi-line comment
-
-
-#### Neo Script Code Image
-![](/docs/img/vs001.png)
-
-#### Neo Script Output Image
-![](/docs/img/vs002.png)
 
 #### Neo Script Debugger Image
 ![](/docs/img/code_debugger.png)

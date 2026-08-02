@@ -226,6 +226,9 @@ struct SFunctionInfo
 		case NOP_PERSENT3:
 		case NOP_LSHIFT3:
 		case NOP_RSHIFT3:
+		case NOP_AND3:
+		case NOP_OR3:
+		case NOP_XOR3:
 		case NOP_TOSTRING:
 		case NOP_TOINT:
 		case NOP_TOFLOAT:
@@ -245,6 +248,10 @@ struct SFunctionInfo
 		case NOP_NEQUAL:	// !=
 		case NOP_LOG_AND:	// &&
 		case NOP_LOG_OR:	// ||
+		// 비트 &, | 는 (3-피연산자 산술과 달리) 비교 그룹의 NOP_AND/NOP_OR 로 생성된다.
+		// 여기 빠져 있어서 `var x = a & b;` 뒤에 잉여 MOV 가 남았다 — dst 재타겟으로 제거.
+		case NOP_AND:		// &
+		case NOP_OR:		// |
 			return true;
 		default:
 			return false;
