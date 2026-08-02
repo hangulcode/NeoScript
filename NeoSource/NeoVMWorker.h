@@ -319,6 +319,7 @@ private:
 	bool CompareGR(VarInfo* v1, VarInfo* v2);
 	bool CompareGE(VarInfo* v1, VarInfo* v2);
 	bool For(VarInfo* v1);
+	bool ForRare(VarInfo* v1, int step);   // step<0 / step==0 (드문 경로, For 에서 분리)
 	// bTwoVar: foreach(var k, v in ...) 형태(컴파일러가 op argFlag 로 전달).
 	// list 는 2변수 순회를 지원하지 않으므로 런타임에 여기서 에러를 낸다.
 	bool ForEach(VarInfo* v1, VarInfo* v2, bool bTwoVar);

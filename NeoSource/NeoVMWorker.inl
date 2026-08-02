@@ -1448,28 +1448,19 @@ NEOS_FORCEINLINE void CNeoVMWorker::Xor2(VarInfo* r, VarInfo* v2)
 
 NEOS_FORCEINLINE bool CNeoVMWorker::For(VarInfo* pCur)
 {
-#ifdef _DEBUG
-	VarInfo* pCur_Inter = pCur + 1;
-	VarInfo* pEnd = pCur + 2;
-	VarInfo* pStep = pCur + 3;
+//	VarInfo* pCurrent	= pCur + 1;
+//	VarInfo* pEnd		= pCur + 2;
+//	VarInfo* pStep		= pCur + 3;
 
-	Move(pCur, pCur_Inter);
-	if (pCur->_int < pEnd->_int)
-	{
-		pCur_Inter->_int += pStep->_int;
-		return true;
-	}
-	return false;
-#else
 	VarInfo* pCur_Inter = pCur + 1;
 
 	if (pCur->GetType() == VAR_INT)
 		pCur->_int = pCur_Inter->_int;
 	else
 		Move(pCur, pCur_Inter);
-	// step 의 부호로 비교 방향을 정한다. begin/end/step 은 함수 인자 같은 런타임 값일 수 있어
-	// 컴파일 타임에 방향을 확정할 수 없다. 분기는 루프 내내 같은 쪽이라 예측이 100% 적중한다.
-	// 이 판정 덕에 step<0 이면서 begin<end 일 때 i 가 발산하던 무한루프가 0 회 실행으로 바뀐다.
+	// step 의 부호로 비교 방향을 정한다(begin/end/step 이 런타임 값일 수 있어 컴파일 타임 확정 불가).
+	// 압도적 다수인 step>0 만 여기서 처리하고, 음수/0 은 ForRare 로 분리한다 —
+	// 에러 처리까지 이 인라인 함수에 넣으면 코드가 커져 for 를 쓰는 모든 루프가 느려진다(실측 10~29%).
 	const int step = pCur[3]._int;
 	if (step > 0)
 	{
@@ -1478,21 +1469,24 @@ NEOS_FORCEINLINE bool CNeoVMWorker::For(VarInfo* pCur)
 			pCur_Inter->_int += step;
 			return true;
 		}
+		return false;
 	}
-	else if (step < 0)
-	{
-		if (pCur->_int > pCur[2]._int)
-		{
-			pCur_Inter->_int += step;
-			return true;
-		}
-	}
-	else
+	return ForRare(pCur, step);
+}
+// 드문 경로: step<0(역방향) 과 step==0(에러). 인라인하지 않아 For 의 hot path 를 작게 유지한다.
+NEOS_NOINLINE bool CNeoVMWorker::ForRare(VarInfo* pCur, int step)
+{
+	if (step == 0)
 	{
 		SetErrorFormat(RTE_FOR_STEP_ZERO);   // step==0 은 영원히 끝나지 않는다
+		return false;
+	}
+	if (pCur->_int > pCur[2]._int)           // 역방향은 비교 방향이 반대
+	{
+		pCur[1]._int += step;
+		return true;
 	}
 	return false;
-#endif
 }
 NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool bTwoVar)
 {
