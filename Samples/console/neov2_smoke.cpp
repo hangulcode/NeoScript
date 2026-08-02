@@ -105,7 +105,8 @@ int NeoScriptV2Smoke()
         "export fun uid() { return Host.uid(); }\n"  // 5
         "export fun info() { return Host.info(); }\n"  // 6
         "export fun spawn() { var r = Host.spawn(); return r[\"entity\"].id(); }\n"  // 7
-        "export fun spawnTag() { var r = Host.spawn(); return r[\"entity\"].tag(); }\n"; // 8
+        "export fun spawnTag() { var r = Host.spawn(); return r[\"entity\"].tag(); }\n"  // 8
+        "export fun boom() { var z = 0; return 10 / z; }\n";                             // 9 (런타임 에러)
 
     CompileDesc cd;
     cd.source = src;
@@ -162,6 +163,53 @@ int NeoScriptV2Smoke()
                 Check(i0 == 7 && i2 == 9, "info.items[0]==7, [2]==9");
             }
         }
+    }
+
+    // 안전 반환(invokeR): 스칼라를 값으로 스냅샷 → 두 결과를 동시에 들고 있어도 서로 안 깨진다.
+    // (구 retInt 라면 두 번째 Call 이 첫 반환 컨텍스트를 flush 해 첫 값이 무효화되던 GetScore/GetHp 시나리오)
+    {
+        CallResult first  = rt->Call(a, "compute").argInt(40).argInt(60).invokeR(); // 100
+        CallResult second = rt->Call(a, "compute").argInt(3).argInt(4).invokeR();    // 7
+        Check(first.ok() && second.ok(), "invokeR both Completed");
+        Check(first.asInt() == 100, "invokeR first keeps 100 after a second Call (overlap-safe)");
+        Check(second.asInt() == 7,  "invokeR second == 7");
+    }
+
+    // 안전 반환(invokeReadMap): 컬렉션은 콜백 스코프 안에서만 읽는다
+    {
+        int32_t value = 0; bool nameOk = false;
+        RunStatus st = rt->Call(a, "info").invokeReadMap([&](MapReader m){
+            StringView nm; nameOk = m.getString("name", nm) && Eq(nm, "neo");
+            m.getInt("value", value);
+        });
+        Check(st == RunStatus::Completed, "invokeReadMap status Completed");
+        Check(nameOk && value == 42, "invokeReadMap read info.name/value inside scope");
+    }
+
+    // 실패 호출은 이전 성공값을 누출하지 않는다: 성공(100) 직후 실패 호출 → CallResult 기본 무효값(0)
+    {
+        CallResult good = rt->Call(a, "compute").argInt(40).argInt(60).invokeR(); // 100 (성공)
+        CallResult bad  = rt->Call(a, "boom").invokeR();                          // 런타임 에러
+        Check(good.ok() && good.asInt() == 100, "invokeR success-before-failure keeps 100");
+        Check(!bad.ok(), "invokeR failed call is not ok()");
+        Check(bad.asInt() == 0, "invokeR failed call returns default 0 (no stale return leaked)");
+    }
+    // invokeReadMap: 실패면 콜백이 아예 호출되지 않는다(이전 map 누출 방지)
+    {
+        bool called = false;
+        RunStatus st = rt->Call(a, "boom").invokeReadMap([&](MapReader){ called = true; });
+        Check(st != RunStatus::Completed && !called, "invokeReadMap on failure: callback not invoked");
+    }
+
+    // 저수준 소유권(토큰): 이전 Invocation 의 소멸자가 "나중 호출"의 pending 컨텍스트를 닫으면 안 된다.
+    // prev 를 heap 에 둬서 next 가 살아있는 동안 먼저 파괴 → 토큰 없으면 next 의 pending 이 조기 종료돼 깨짐.
+    {
+        Invocation* prev = new Invocation(rt->Call(a, "compute"));
+        prev->argInt(1).argInt(2).invoke();          // prev pending (=3)
+        Invocation next = rt->Call(a, "compute");
+        next.argInt(40).argInt(60).invoke();         // next pending (=100); prev 의 pending 은 이 Call 에서 이미 flush
+        delete prev;                                 // prev 소멸 — next 의 pending 을 건드리면 안 됨
+        Check(next.retInt() == 100, "low-level: prev dtor does not close next's pending (ownership token)");
     }
 
     // setObject: 반환 맵에 중첩된 바인딩 객체를 스크립트가 메서드 호출(호출 종료 후에도 유효)

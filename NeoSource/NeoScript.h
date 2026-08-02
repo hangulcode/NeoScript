@@ -32,6 +32,7 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace NeoScript
@@ -182,8 +183,12 @@ class Invocation;
 // 1회 해석해 재사용(핫패스: 물리 쿼리 히트마다 반복). 유효하지 않으면 falsy.
 struct ObjectType
 {
-    void* m_impl = nullptr;
     explicit operator bool() const noexcept { return m_impl != nullptr; }
+private:
+    // 내부 디스패처(RegisteredObject*)를 담는 불투명 포인터. 구성/해석은 Runtime 내부(NeoScriptInternal)만.
+    // → 소비자가 임의 포인터를 만들거나 읽지 못하게 은닉(raw void* 그대로라 핫패스 비용은 0).
+    friend struct NeoScriptInternal;
+    void* m_impl = nullptr;
 };
 
 class ListBuilder
@@ -436,11 +441,32 @@ struct ResumeDesc
 // 인스턴스를 건드린다(UB). → 반드시 좁은 스코프 `{ }` 안에서 쓰거나 임시객체로 즉시 소진할 것.
 // 이동 전용(컨텍스트 보유). 소멸 시 EndHostCall.
 //------------------------------------------------------------------------------
+// invokeR() 결과 — 스칼라/벡터/문자열 반환을 값으로 소유한다. Invocation 수명이나 이후 다른 Call 과
+// 무관하게 안전(여러 결과를 동시에 들고 있어도 됨). 컬렉션(map/list)은 값 복사가 비싸/부적합하므로
+// 여기 담지 않는다 → invokeReadMap/invokeReadList 로 "살아있는 스코프 안에서" 읽을 것.
+struct CallResult
+{
+    RunStatus status = RunStatus::Failed;
+    bool       ok()       const noexcept { return status == RunStatus::Completed; }
+    ValueType  type()     const noexcept { return m_type; }
+    int32_t    asInt()    const noexcept { return m_i; }
+    float      asFloat()  const noexcept { return m_f[0]; }
+    bool       asBool()   const noexcept { return m_i != 0; }
+    StringView asString() const noexcept { return StringView(m_s.c_str(), m_s.size()); } // CallResult 살아있는 동안 유효
+    void       asVec(float out[4]) const noexcept { out[0]=m_f[0]; out[1]=m_f[1]; out[2]=m_f[2]; out[3]=m_f[3]; }
+private:
+    friend struct NeoScriptInternal;
+    ValueType   m_type = ValueType::None;
+    int32_t     m_i = 0;
+    float       m_f[4] = { 0, 0, 0, 0 };
+    std::string m_s;
+};
+
 class Invocation
 {
 public:
     Invocation() noexcept = default;
-    Invocation(Invocation&& o) noexcept : m_impl(o.m_impl) { o.m_impl = nullptr; }
+    Invocation(Invocation&& o) noexcept : m_impl(o.m_impl), m_seq(o.m_seq) { o.m_impl = nullptr; o.m_seq = 0; }
     Invocation& operator=(Invocation&& o) noexcept;
     Invocation(const Invocation&) = delete;
     Invocation& operator=(const Invocation&) = delete;
@@ -462,7 +488,20 @@ public:
     RunStatus status() const;
     const Error& error() const;   // [미구현] 현재 항상 빈 Error. 실패는 invoke() 의 RunStatus 로 판별할 것.
 
-    // 반환 읽기 (invoke 후, 핸들 소멸 전까지 유효)
+    //--- 안전 반환(권장) — Invocation 수명/다음 Call 과 무관 ---
+    // 스칼라(int/float/bool/string/vec) 반환을 값으로 스냅샷해 돌려준다. 실행 후 컨텍스트는 즉시 반납되므로
+    // 여러 CallResult 를 동시에 보관하거나, 이후 같은 인스턴스를 다시 Call 해도 안전하다.
+    //   CallResult r = rt->Call(inst,"GetScore").argInt(id).invokeR();  if (r.ok()) int s = r.asInt();
+    CallResult invokeR();
+    // 컬렉션(map/list) 반환을 "컨텍스트 살아있는 스코프(콜백) 안에서만" 읽는다. 리더를 fn 밖으로
+    // 들고 나가면 안 된다(그 시점엔 이미 반납). 필요한 값은 fn 안에서 호스트 변수로 복사할 것.
+    //   rt->Call(inst,"GetInv").invokeReadMap([&](MapReader m){ m.getInt("gold", gold); });
+    template<class Fn> RunStatus invokeReadMap (Fn&& fn) { return invokeReadMapImpl (&fn, &ReadTramp<MapReader,  Fn>); }
+    template<class Fn> RunStatus invokeReadList(Fn&& fn) { return invokeReadListImpl(&fn, &ReadTramp<ListReader, Fn>); }
+
+    //--- 저수준 반환 읽기 (invoke 후, 핸들 소멸/다음 Call 전까지만 유효) ---
+    // ⚠️ 이 뷰들은 인스턴스의 공유 반환 컨텍스트를 라이브로 읽는다. 같은 인스턴스에 다시 Call 하면
+    //    무효화된다. 값을 나중에 쓰거나 여러 개를 동시에 보관하려면 위 invokeR/invokeReadMap 을 쓸 것.
     ValueType  retType() const;
     int32_t    retInt() const;
     float      retFloat() const;
@@ -475,7 +514,12 @@ public:
 private:
     friend class IRuntime;
     friend struct NeoScriptInternal;
+    // 콜백 트램폴린(zero-alloc): void* 로 넘긴 람다 주소를 원래 타입으로 되돌려 호출.
+    template<class R, class Fn> static void ReadTramp(void* p, R r) { (*static_cast<typename std::remove_reference<Fn>::type*>(p))(r); }
+    RunStatus invokeReadMapImpl (void* ctx, void(*cb)(void*, MapReader));
+    RunStatus invokeReadListImpl(void* ctx, void(*cb)(void*, ListReader));
     void* m_impl = nullptr;   // InstanceRec* (인스턴스별 호출 스크래치)
+    uint32_t m_seq = 0;       // 이 Invocation 의 호출 시퀀스(소유권 토큰). Call 이 부여, 소멸자가 소유 확인에 사용.
 };
 
 //------------------------------------------------------------------------------

@@ -172,21 +172,41 @@ InstanceHandle inst = rt->CreateInstance(prog, idesc);
 ```
 
 **Host → script calls.** Function indices are fixed per program, so cache the `FunctionHandle` once and
-call it every frame with no per-call string lookup:
+call it every frame with no per-call string lookup. `Call(inst, fn)` returns an `Invocation`: push args,
+`invoke()`, then read the return.
+
+The **return value lives in the instance's shared, borrowed context**, so reading it must not outlive that
+context. Prefer the **safe return terminals** — they detach the result from the Invocation's lifetime:
 
 ```cpp
-FunctionHandle onUpdate = rt->FindFunction(cr.program, "OnUpdate");   // resolve once
-{
-    Invocation call = rt->Call(inst, onUpdate);        // one live Invocation per instance
-    if (call.argFloat(dt).invoke() == RunStatus::Completed)
-        float result = call.retFloat();
-}                                                       // destroy the Invocation before the instance
+FunctionHandle getScore = rt->FindFunction(cr.program, "GetScore");
+
+// Scalar: invokeR() snapshots the return into an owned CallResult (int/float/bool/string/vec).
+CallResult r = rt->Call(inst, getScore).argInt(playerId).invokeR();
+if (r.ok()) int score = r.asInt();
+// r stays valid even after other Calls on the same instance — safe to hold several at once.
+
+// Collection: invokeReadMap / invokeReadList read inside a callback, where the context is guaranteed
+// alive. Copy out what you need; do not keep the reader past the callback.
+rt->Call(inst, "GetInventory").invokeReadMap([&](MapReader inv){
+    inv.getInt("gold", gold);
+});
 ```
 
-Only **one live `Invocation` per instance** is allowed; a second `Call` before the first is invoked or
-destroyed returns a falsy `Invocation` (nested native→script calls *during* `invoke()` are still allowed).
-`FunctionHandle` carries its owning program, so passing a handle to an instance of a different program is
-rejected.
+The low-level `invoke()` + `retInt()/retMap()/...` still exist, but those read the **live** shared context
+and are invalidated by the next `Call` on the same instance:
+
+```cpp
+Invocation a = rt->Call(inst, "GetScore"); a.invoke();
+Invocation b = rt->Call(inst, "GetHp");    b.invoke();  // ← flushes a's return context
+int score = a.retInt();  // ⚠️ no longer 100 — use invokeR() for this pattern
+```
+
+So: **one live `Invocation` per instance** at a time — a second `Call` while one is still armed (built but
+not yet invoked) returns a falsy `Invocation`; and a value read with `retX` is only valid until the next
+`Call`. Use `invokeR` / `invokeReadMap` to avoid both footguns. (Nested native→script calls *during*
+`invoke()` are still allowed.) `FunctionHandle` also carries its owning program, so passing a handle to an
+instance of a different program is rejected.
 
 **Cooperative / time-sliced execution** for long or infinite functions (replaces the old
 `BindWorkerFunction` + per-frame `Run` loop):

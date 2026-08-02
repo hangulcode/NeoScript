@@ -177,10 +177,14 @@ struct InstanceRec
     int32_t              callTimeoutMs = -1;
     uint32_t             callBudget = 0;
     RunStatus            callStatus = RunStatus::Failed;
-    // "arm" = Call() 로 준비됐으나 아직 invoke()/파괴 안 됨. 이 상태에서 같은 인스턴스에 또 Call() 하면
-    // callFID/callArgs 가 덮여 첫 호출이 깨진다 → 겹침 감지해 두 번째 Call 을 안전 거부(무효 Invocation).
-    // invoke() 시작 시 해제 → 스크립트 실행 중 네이티브가 같은 인스턴스를 재호출(중첩)하는 건 허용.
-    bool                 callArmed = false;
+    // 호출 시퀀스(소유권 토큰). Call 마다 ++callSeq 로 Invocation 에 유일 seq 를 부여한다.
+    //  armedSeq  = 지금 arm 된(Call 됐으나 invoke/파괴 전) Invocation 의 seq. 0=없음.
+    //              → armedSeq!=0 이면 두 번째 Call 을 거부(callFID/callArgs 덮임 방지). invoke() 시작 시 0.
+    //  pendingSeq= 반환 컨텍스트(hostCallPending)를 소유한, invoke() 된 Invocation 의 seq. 0=없음.
+    //              → 소멸자는 자기 seq 가 소유한 것만 정리한다(이전 Invocation 이 나중 호출 pending 을 닫는 버그 방지).
+    uint32_t             callSeq = 0;
+    uint32_t             armedSeq = 0;
+    uint32_t             pendingSeq = 0;
 };
 
 } // namespace
@@ -292,8 +296,18 @@ struct NeoScriptInternal
     static ListBuilder listB(void* i)       { ListBuilder b;  b.m_impl = i; return b; }
     static MapReader   mapR(const void* i)  { MapReader r;    r.m_impl = i; return r; }
     static ListReader  listR(const void* i) { ListReader r;   r.m_impl = i; return r; }
-    static Invocation  inv(void* i)         { Invocation v;   v.m_impl = i; return v; }
+    static Invocation  inv(void* i, uint32_t seq) { Invocation v; v.m_impl = i; v.m_seq = seq; return v; }
     static void*       invImpl(const Invocation& v) { return v.m_impl; }
+    // ObjectType 은 불투명 void*(RegisteredObject*) — 구성/해석은 여기서만(공개 API 에 노출 안 함).
+    static ObjectType  objType(void* i)     { ObjectType t; t.m_impl = i; return t; }
+    static void*       objImpl(ObjectType t) { return t.m_impl; }
+    // CallResult 저장(invokeR 이 스칼라 반환을 값으로 스냅샷).
+    static void setResult(CallResult& r, ValueType t, int32_t i, const float* f4, const char* s)
+    {
+        r.m_type = t; r.m_i = i;
+        if (f4) { r.m_f[0]=f4[0]; r.m_f[1]=f4[1]; r.m_f[2]=f4[2]; r.m_f[3]=f4[3]; }
+        if (s)  r.m_s = s;
+    }
 };
 
 class DebuggerImpl;                       // IDebugger shim (RuntimeImpl 뒤에서 정의)
@@ -503,16 +517,12 @@ void RuntimeImpl::FreezeBindings()
 
 ObjectType RuntimeImpl::GetObjectType(StringView name)
 {
-    ObjectType t;
     // FreezeBindings 후엔 m_objects 가 더 안 커지므로 요소 주소 안정 → 포인터 반환 OK.
     for (const RegisteredObject& o : m_objects)
         if (o.name.size() == name.size() &&
             std::memcmp(o.name.data(), name.data(), name.size()) == 0)
-        {
-            t.m_impl = const_cast<RegisteredObject*>(&o);
-            break;
-        }
-    return t;
+            return NeoScriptInternal::objType(const_cast<RegisteredObject*>(&o));
+    return ObjectType{}; // 미발견 = falsy
 }
 
 ObjectBinding* RuntimeImpl::AcquireNestedBinding(InstanceHandle handle, const RegisteredObject* ro, void* userData)
@@ -784,7 +794,7 @@ void RuntimeImpl::BindObjectInto(void* worker, void* mapVar, StringView key, Obj
     // [전이용] 구 neo_globalinterface2 대체: mapVar(VAR_MAP)에 key 로 v2 바인딩 객체 삽입.
     INeoVMWorker* w = static_cast<INeoVMWorker*>(worker);
     VarInfo* pMap = static_cast<VarInfo*>(mapVar);
-    const RegisteredObject* ro = static_cast<const RegisteredObject*>(type.m_impl);
+    const RegisteredObject* ro = static_cast<const RegisteredObject*>(NeoScriptInternal::objImpl(type));
     if (!w || !pMap || pMap->GetType() != VAR_MAP || !pMap->_tbl || !ro) return;
     auto it = m_workerHandle.find(w);   // 워커 → 인스턴스 핸들
     if (it == m_workerHandle.end()) return;
@@ -804,7 +814,7 @@ void RuntimeImpl::BindObjectToVar(void* worker, void* varInfo, ObjectType type, 
     // [전이용] varInfo 를 그 자체로 v2 바인딩 객체(VAR_MAP + 디스패처)로. 구 neo_globalinterface2 대체.
     INeoVMWorker* w = static_cast<INeoVMWorker*>(worker);
     VarInfo* pVar = static_cast<VarInfo*>(varInfo);
-    const RegisteredObject* ro = static_cast<const RegisteredObject*>(type.m_impl);
+    const RegisteredObject* ro = static_cast<const RegisteredObject*>(NeoScriptInternal::objImpl(type));
     if (!w || !pVar || !ro) return;
     auto it = m_workerHandle.find(w);
     if (it == m_workerHandle.end()) return;
@@ -873,6 +883,7 @@ void RuntimeImpl::FlushPendingCall(InstanceRec* inst)
 {
     if (!inst->hostCallPending) return;
     inst->hostCallPending = false;
+    inst->pendingSeq = 0;                            // pending 사라짐 → 소유자 없음
     inst->worker->EndHostCall(inst->pendingBegin);   // 여기서 반환 컨텍스트 반납 → 이전 리더 무효
     if (inst->pendingNested) inst->worker->EndNestedScriptCall();
     inst->readMapPool.clear();
@@ -889,15 +900,16 @@ Invocation RuntimeImpl::Call(InstanceHandle h, FunctionHandle fn)
         (inst->program.id != fn.programId || inst->program.generation != fn.programGeneration))
         return Invocation();
     // 겹침 방지: 이전 Invocation 이 arm 된 채(invoke/파괴 전)면 두 번째 Call 을 안전 거부(상태 파괴 회피).
-    if (inst->callArmed) return Invocation();
+    if (inst->armedSeq != 0) return Invocation();
     FlushPendingCall(inst);
     inst->callFID = static_cast<int>(fn.index);
     inst->callArgs.clear();
     inst->callTimeoutMs = -1;
     inst->callBudget = 0;
     inst->callStatus = RunStatus::Failed;
-    inst->callArmed = true;
-    return NeoScriptInternal::inv(inst);
+    uint32_t seq = ++inst->callSeq;   // 이 Invocation 의 유일 소유권 토큰(0 은 "없음" 이라 pre-increment)
+    inst->armedSeq = seq;
+    return NeoScriptInternal::inv(inst, seq);
 }
 Invocation RuntimeImpl::Call(InstanceHandle h, StringView functionName)
 {
@@ -1141,7 +1153,7 @@ MapBuilder CallContext::retMap() { CallContextImpl* c=Ctx(m_impl); VarInfo* r=Ct
 ListBuilder CallContext::retList() { CallContextImpl* c=Ctx(m_impl); VarInfo* r=CtxRetVar(c); c->worker->ResetVarType(r, VAR_LIST); c->listB.push_back(ListBuilderImpl{ c->worker, r->_lst, c }); return NeoScriptInternal::listB(&c->listB.back()); }
 void CallContext::retObject(ObjectType type, void* userData) {
     CallContextImpl* c=Ctx(m_impl);
-    const RegisteredObject* ro=static_cast<const RegisteredObject*>(type.m_impl);
+    const RegisteredObject* ro=static_cast<const RegisteredObject*>(NeoScriptInternal::objImpl(type));
     VarInfo* r=CtxRetVar(c); if(!ro||!r) return;
     c->worker->ResetVarType(r, VAR_MAP);
     RuntimeImpl* rt=static_cast<RuntimeImpl*>(c->runtime);
@@ -1164,7 +1176,7 @@ MapBuilder MapBuilder::setMap(StringView key) { MapBuilderImpl* b=static_cast<Ma
 ListBuilder MapBuilder::setList(StringView key) { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo k; b->w->Var_SetStringA(&k, std::string(key.data(),key.size())); VarInfo* slot=b->map->Insert(&k); b->w->ResetVarType(slot, VAR_LIST); b->ctx->listB.push_back(ListBuilderImpl{ b->w, slot->_lst, b->ctx }); return NeoScriptInternal::listB(&b->ctx->listB.back()); }
 void MapBuilder::setObject(StringView key, ObjectType type, void* userData) {
     MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl);
-    const RegisteredObject* ro=static_cast<const RegisteredObject*>(type.m_impl); if(!ro) return;
+    const RegisteredObject* ro=static_cast<const RegisteredObject*>(NeoScriptInternal::objImpl(type)); if(!ro) return;
     VarInfo k; b->w->Var_SetStringA(&k, std::string(key.data(),key.size()));
     VarInfo* slot=b->map->Insert(&k); b->w->ResetVarType(slot, VAR_MAP);
     RuntimeImpl* rt=static_cast<RuntimeImpl*>(b->ctx->runtime);
@@ -1187,7 +1199,7 @@ MapBuilder ListBuilder::pushMap()  { ListBuilderImpl* b=static_cast<ListBuilderI
 ListBuilder ListBuilder::pushList(){ ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); int idx=b->list->GetCount(); b->list->Resize(idx+1); VarInfo* slot=b->list->GetValue(idx); b->w->ResetVarType(slot, VAR_LIST); b->ctx->listB.push_back(ListBuilderImpl{ b->w, slot->_lst, b->ctx }); return NeoScriptInternal::listB(&b->ctx->listB.back()); }
 void ListBuilder::pushObject(ObjectType type, void* userData) {
     ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl);
-    const RegisteredObject* ro=static_cast<const RegisteredObject*>(type.m_impl); if(!ro) return;
+    const RegisteredObject* ro=static_cast<const RegisteredObject*>(NeoScriptInternal::objImpl(type)); if(!ro) return;
     int idx=b->list->GetCount(); b->list->Resize(idx+1);
     VarInfo* slot=b->list->GetValue(idx); b->w->ResetVarType(slot, VAR_MAP);
     RuntimeImpl* rt=static_cast<RuntimeImpl*>(b->ctx->runtime);
@@ -1224,10 +1236,23 @@ bool ListReader::getList(int index, ListReader& out) const { const ListReaderImp
 // Invocation (호스트→스크립트 호출 핸들) — 인자 VM 슬롯 직접, 반환 in-place zero-copy
 //==============================================================================
 static InstanceRec* Inv(void* p) { return static_cast<InstanceRec*>(p); }
-static void InvFinish(void* p) { if (!p) return; InstanceRec* i=Inv(p); i->callArmed = false; if (i->runtime) i->runtime->FlushPendingCall(i); }
+// 소유권 정리: 이 Invocation(seq)이 소유한 것만 되돌린다.
+//  - 내가 arm 상태인데 invoke 없이 파괴 → un-arm(다음 Call 허용).
+//  - 내가 소유한 pending 컨텍스트만 flush(나중 Invocation 의 pending 은 안 건드림 — 저수준 겹침 버그 방지).
+static void InvFinish(void* p, uint32_t seq)
+{
+    if (!p || seq == 0) return;
+    InstanceRec* i = Inv(p);
+    if (i->armedSeq == seq) i->armedSeq = 0;                 // 내가 arm 이었으면 해제
+    if (i->pendingSeq == seq && i->runtime) i->runtime->FlushPendingCall(i); // 내 pending 만 반납
+}
 
-Invocation& Invocation::operator=(Invocation&& o) noexcept { if (this != &o) { InvFinish(m_impl); m_impl = o.m_impl; o.m_impl = nullptr; } return *this; }
-Invocation::~Invocation() { InvFinish(m_impl); }
+Invocation& Invocation::operator=(Invocation&& o) noexcept
+{
+    if (this != &o) { InvFinish(m_impl, m_seq); m_impl = o.m_impl; m_seq = o.m_seq; o.m_impl = nullptr; o.m_seq = 0; }
+    return *this;
+}
+Invocation::~Invocation() { InvFinish(m_impl, m_seq); }
 
 Invocation& Invocation::argInt(int32_t v)    { if (m_impl){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetInt(&i->callArgs.back(), v); } return *this; }
 Invocation& Invocation::argFloat(float v)    { if (m_impl){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetFloat(&i->callArgs.back(), v); } return *this; }
@@ -1240,7 +1265,7 @@ Invocation& Invocation::argObject(ObjectType type, void* userData)
     if (m_impl)
     {
         InstanceRec* i = Inv(m_impl);
-        const RegisteredObject* ro = static_cast<const RegisteredObject*>(type.m_impl);
+        const RegisteredObject* ro = static_cast<const RegisteredObject*>(NeoScriptInternal::objImpl(type));
         i->callArgs.emplace_back();
         VarInfo* pVar = &i->callArgs.back();
         if (ro && i->runtime && i->worker->ResetVarType(pVar, VAR_MAP))
@@ -1262,7 +1287,7 @@ RunStatus Invocation::invoke()
     if (!m_impl) return RunStatus::Failed;
     InstanceRec* inst = Inv(m_impl);
     INeoVMWorker* w = inst->worker;
-    inst->callArmed = false;               // 소비 시작 → 스크립트 실행 중 중첩 Call 허용
+    inst->armedSeq = 0;                    // 소비 시작(arm 해제) → 스크립트 실행 중 중첩 Call 허용
     inst->runtime->FlushPendingCall(inst); // 이전 borrowed 컨텍스트 반납
     NeoHostCallBegin begin = w->BeginHostCall();
     if (begin != NeoHostCallBegin::Acquired && begin != NeoHostCallBegin::Nested)
@@ -1280,6 +1305,7 @@ RunStatus Invocation::invoke()
     inst->callArgs.clear();
     // 반환 읽기(retX)를 위해 컨텍스트 유지 — dtor/다음 Call 의 FlushPendingCall 에서 반납.
     inst->hostCallPending = true; inst->pendingBegin = begin; inst->pendingNested = nested;
+    inst->pendingSeq = m_seq;              // 이 pending 컨텍스트의 소유자 = 나(소멸자 소유 검사용)
     return inst->callStatus;
 }
 RunStatus Invocation::status() const { return m_impl ? Inv(m_impl)->callStatus : RunStatus::Failed; }
@@ -1306,6 +1332,80 @@ bool Invocation::retList(ListReader& out) const
     i->readMapPool.clear(); i->readListPool.clear();
     i->readListPool.push_back(ListReaderImpl{ i->worker, rv->_lst, &i->readMapPool, &i->readListPool });
     out = NeoScriptInternal::listR(&i->readListPool.back()); return true;
+}
+
+// 안전 반환: 스칼라를 값으로 스냅샷 → 컨텍스트 즉시 반납(리더 안 남김). Invocation 수명/다음 Call 과 무관.
+CallResult Invocation::invokeR()
+{
+    CallResult r;
+    r.status = invoke();                     // 실행(+hostCallPending)
+    if (m_impl)
+    {
+        InstanceRec* i = Inv(m_impl);
+        // Completed 일 때만 반환 슬롯을 스냅샷한다. 실패면 CallResult 는 기본값(type None, 0/빈) 유지 →
+        // asInt()==0 / asString()=="" 등 접근자의 무효값이 나온다(실패했는데 이전 성공 호출 값이 새는 것 방지).
+        VarInfo* rv = (r.status == RunStatus::Completed) ? i->worker->GetReturnVar() : nullptr;
+        if (rv)
+        {
+            ValueType vt = VarTypeToValueType(rv->GetType());
+            if (vt == ValueType::String)
+                NeoScriptInternal::setResult(r, vt, 0, nullptr, i->worker->PopString(rv));
+            else
+            {
+                float f4[4] = { 0, 0, 0, 0 }; int32_t iv = 0;
+                switch (vt)
+                {
+                case ValueType::Int:   iv = i->worker->PopInt(rv);          f4[0] = static_cast<float>(iv); break;
+                case ValueType::Bool:  iv = i->worker->PopBool(rv) ? 1 : 0; f4[0] = static_cast<float>(iv); break;
+                case ValueType::Float: f4[0] = static_cast<float>(i->worker->PopFloat(rv)); iv = static_cast<int32_t>(f4[0]); break;
+                case ValueType::Vec2: case ValueType::Vec3: case ValueType::Vec4: case ValueType::Quat: ReadVec(rv, f4); break;
+                default: break; // None/Map/List → 스칼라 없음
+                }
+                NeoScriptInternal::setResult(r, vt, iv, f4, nullptr);
+            }
+        }
+        i->runtime->FlushPendingCall(i);     // 스냅샷 완료 → 컨텍스트 즉시 반납
+    }
+    return r;
+}
+
+// 안전 반환: 컬렉션을 콜백 스코프 안에서만 읽게 강제 → 콜백 종료 시 컨텍스트 반납(리더 무효화).
+RunStatus Invocation::invokeReadMapImpl(void* ctx, void(*cb)(void*, MapReader))
+{
+    RunStatus st = invoke();                 // 실행(+hostCallPending: 컨텍스트 살아있음)
+    if (m_impl)
+    {
+        InstanceRec* i = Inv(m_impl);
+        // 실패(Completed 아님)면 콜백을 호출하지 않는다(반환 슬롯에 남은 이전 성공 호출의 map 누출 방지).
+        VarInfo* rv = (st == RunStatus::Completed) ? i->worker->GetReturnVar() : nullptr;
+        if (cb && rv && rv->GetType() == VAR_MAP && rv->_tbl)
+        {
+            i->readMapPool.clear(); i->readListPool.clear();
+            i->readMapPool.push_back(MapReaderImpl{ i->worker, rv->_tbl, &i->readMapPool, &i->readListPool });
+            cb(ctx, NeoScriptInternal::mapR(&i->readMapPool.back())); // 컨텍스트 살아있는 스코프에서만
+        }
+        i->runtime->FlushPendingCall(i);     // 콜백 종료 → 반납
+    }
+    return st;
+}
+
+RunStatus Invocation::invokeReadListImpl(void* ctx, void(*cb)(void*, ListReader))
+{
+    RunStatus st = invoke();
+    if (m_impl)
+    {
+        InstanceRec* i = Inv(m_impl);
+        // 실패(Completed 아님)면 콜백을 호출하지 않는다(반환 슬롯에 남은 이전 성공 호출의 list 누출 방지).
+        VarInfo* rv = (st == RunStatus::Completed) ? i->worker->GetReturnVar() : nullptr;
+        if (cb && rv && rv->GetType() == VAR_LIST && rv->_lst)
+        {
+            i->readMapPool.clear(); i->readListPool.clear();
+            i->readListPool.push_back(ListReaderImpl{ i->worker, rv->_lst, &i->readMapPool, &i->readListPool });
+            cb(ctx, NeoScriptInternal::listR(&i->readListPool.back()));
+        }
+        i->runtime->FlushPendingCall(i);
+    }
+    return st;
 }
 
 //==============================================================================
