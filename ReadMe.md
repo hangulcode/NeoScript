@@ -382,17 +382,70 @@ result before it can return to Script A, so Script B does not own a resumable ex
 > Only the pointer, the two factory functions, and `NeoLoadVMParam::execPool` are part of the public API.
 
 ### Performance test results
-CPU : 12th Gen Intel(R) Core(TM) i7-12700F 2.10GHz  
-RAM : 64GB  
-OS  : Windows 10 Pro 64bit  
-Build : Release Mode 64bit  
 
-|               |Neo Script 1.0.9| [Lua Script 5.5.0](https://www.lua.org/)| Visual C++ 2026 |
-| :-----------  |:--------------:| :-------------:|:---------------:|
-| Loop Sum (1~N)| 0.275 (4% faster) | 0.285       | 0.043           |
-| Math          | 1.634 (3% slower) | 1.584       | 0.129           |
-| Prime Count   | 3.784 (13% faster)| 4.278       | 0.867           |
-| fibonacci     | 4.066 (24% faster)| 5.047       | 0.315           |
+Sources: [`Samples/bench/bench.ns`](Samples/bench/bench.ns) · [`bench.lua`](Samples/bench/bench.lua) ·
+[`bench.cpp`](Samples/bench/bench.cpp) — all three implement the **same algorithm**, statement for statement.
+
+```
+CPU   : Intel Core i7-12700F (12C/20T)      RAM : 64 GB
+OS    : Windows 11 Pro 64-bit (build 26200)
+Neo   : NeoScript (console.exe, Release x64)
+Lua   : Lua 5.5.0 (official Win64 binary)
+C++   : MSVC 19.51 /O2 /std:c++17 (x64)
+```
+
+Lower is better. **ms**, best of 5 runs after a warm-up. `x Neo` = how many times faster than Neo
+(so `1.22x` means Lua finished in 82% of Neo's time; `0.88x` means it was slower than Neo).
+
+| Benchmark | What it stresses | Neo (ms) | Lua (ms) | C++ (ms) | Lua vs Neo | C++ vs Neo |
+| :-------- | :--------------- | -------: | -------: | -------: | ---------: | ---------: |
+| `loop_sum`      | integer loop, VM dispatch floor | **234** | 191 |  12.5 | 1.22x | 18.7x |
+| `float_math`    | float mul/add/sub chain         | **268** | 306 |  58.2 | 0.88x |  4.6x |
+| `func_call`     | script function call overhead   | **144** | 157 |   4.3 | 0.92x | 33.5x |
+| `fib_recursive` | recursion, fib(32)              |  **92** |  89 |   6.9 | 1.03x | 13.3x |
+| `array_rw`      | sequential array write + read   |  **63** |  47 |   2.5 | 1.34x | 25.2x |
+| `map_str`       | string-key hash lookup          |  **59** |  41 |  71.4 | 1.44x |  0.8x |
+| `string_ops`    | string build + length           |  **75** | 150 |  13.5 | 0.50x |  5.6x |
+| `particles`     | game-style float + array sim    | **122** |  49 |   3.5 | 2.49x | 34.9x |
+| **total**       |                                 | **1057** | 1030 | 172.8 | 1.03x |  6.1x |
+
+**Reading the numbers.**
+- Against Lua the totals are within ~3% — but the per-benchmark spread is what matters.
+  Neo leads on `string_ops` (2.0x), `float_math` (1.14x) and `func_call` (1.09x);
+  Lua leads on `particles` (2.5x), `map_str` (1.4x) and `array_rw` (1.3x).
+  Lua's edge in the last three comes from its table/array representation, which is the clearest
+  place NeoScript still has headroom.
+- C++ is a **reference ceiling**, not a peer: it is 5-35x faster on compute-bound loops.
+  The exception is `map_str`, where `std::unordered_map<std::string,…>` is actually *slower*
+  than both script VMs — both interpreters intern their strings and cache the hash, while the
+  C++ map rehashes the key and chases a pointer on every lookup.
+
+#### Methodology
+Micro-benchmarks are easy to get wrong, so the harness is explicit about it:
+
+1. **Identical algorithm.** The three files perform the same operations, in the same order,
+   on the same data structures. No language-specific shortcuts.
+2. **Self-timed.** Each language times only the measured region with its own clock
+   (`system.clock` / `os.clock` / `steady_clock`), so process start-up and compilation are excluded.
+3. **Warm-up + best-of-5.** The best run is reported, which rejects scheduler noise
+   (two full passes agreed within 3%).
+4. **Checksum-verified.** Every benchmark returns a checksum and all three languages must print
+   the *same* value — this is what proves they really did the same work. All 8 checksums match.
+5. **Binary-exact floats.** Constants are powers of two (`0.5`, `0.25`, `1/64`) and accumulators are
+   kept under 2^24, so NeoScript's default **float32** scalar and Lua/C++'s **double** produce
+   bit-identical checksums. (Without this, a large float accumulation alone drifts them apart.)
+6. **Optimizer-proofed C++.** A naive port lets MSVC delete the work outright — `fib` folded to a
+   constant and `float_math` reported 0 ms. The C++ file therefore reads its loop bounds through
+   `volatile`, and each benchmark's inner value depends on the previous result, so the loops cannot
+   be hoisted, closed-form-solved, or CSE'd away. The numbers above are of code that actually ran.
+
+To reproduce: build `Samples/console` in Release x64, run `build_cpp.bat`, then
+
+```powershell
+.\Samples\bench\bench_cpp.exe
+lua55.exe Samples\bench\bench.lua
+.\Samples\console\x64\Release\console.exe --file Samples\bench\bench.ns
+```
 
 ### Sample
 	- console / hello: prints "hello"
@@ -560,219 +613,499 @@ Rules:
 #### Neo Script Debugger Image
 ![](/docs/img/code_debugger.png)
 
-### Neo Script Test Code
+### Benchmark code
+
+All three files below run the **same eight benchmarks with the same algorithm**; only the syntax
+differs. Each returns a checksum that must match across languages (see *Methodology* above).
+The measuring harness (warm-up, best-of-5, reporting) is omitted here for brevity — see the full
+files in [`Samples/bench/`](Samples/bench/).
+
+#### NeoScript — [`Samples/bench/bench.ns`](Samples/bench/bench.ns)
 ```cpp
-import math;
-import system;
-
-print("Start ...");
-var start_time;
-
-fun calculateSum(var n)
+// ---------------------------------------------------------------- 1. 정수 루프
+// VM 디스패치의 순수 비용. inner 합 = 12,497,500 (float32 정확 범위)
+fun LoopSum(var outer, var inner)
 {
-    var sum = 0.0;
-    for(var i in 0, n, 1)
-        sum += i;
-    return sum;
+    var last = 0;
+    for (var o in 0, outer, 1)
+    {
+        var bias = last & 1;           // 직전 결과에 의존(진짜 데이터 의존성) → 축약 불가
+        var sum = 0;
+        for (var i in 0, inner, 1)
+            sum += i + bias;
+        last = sum;
+    }
+    return last;
 }
-start_time = system.clock();
-print("Loop Sum :" .. calculateSum(100000001));
-print("Time :" .. (system.clock() - start_time));
 
-fun calculateMath(var n)
+// ------------------------------------------------------------- 2. 부동소수 산술
+// mul/add/sub 혼합. 상수·피연산자를 모두 **이진 정확값**(1/2, 1/4 배수)으로 잡아
+// float32(Neo)와 double(Lua/C++)이 완전히 같은 체크섬을 내도록 한다.
+fun FloatMath(var outer, var inner)
 {
-    var sum = 0.0;
-    for(var i in 0, n, 1)
-        sum += math.sqrt(i);
-    return sum;
+    var last = 0.0;
+    for (var o in 0, outer, 1)
+    {
+        var bias = toint(last) & 1;    // 직전 결과 의존
+        var acc = 0.0;
+        for (var i in 0, inner, 1)
+        {
+            var x = ((i + bias + toint(acc)) & 15) * 0.5;   // acc 의존 → 예측 불가
+            acc += x * 1.5 - x * 0.25;
+        }
+        last = acc;
+    }
+    return toint(last);
 }
-start_time = system.clock();
-print("Math :" .. calculateMath(100000001));
-print("Time :" .. (system.clock() - start_time));
 
-fun isPrime(var num)
+// ---------------------------------------------------------------- 3. 함수 호출
+fun Inc(var x)
 {
-    if( num < 2)
-        return false;
-	for(var i in 2, math.sqrt(num) + 1, 1)
-	{
-		if(num % i == 0)
-			return false;
-	}
-    return true;
+    return x + 1;
 }
-fun PrimeCount(var num)
+fun FuncCall(var outer, var inner)
 {
-	var cnt = 0;
-	for(var i in 1, num, 1)
-	{
-		if(isPrime(i))
-			cnt++;
-	}
-	return cnt;
+    var last = 0;
+    for (var o in 0, outer, 1)
+    {
+        var bias = last & 1;           // 직전 결과 의존
+        var sum = 0;
+        for (var i in 0, inner, 1)
+            sum += Inc(i + bias);
+        last = sum;
+    }
+    return last;
 }
-start_time = system.clock();
-print("PrimeCount :" .. PrimeCount(5000001));
-print("Time : " .. (system.clock() - start_time));
 
-fun fibonacci_recursive(var n)
+// ------------------------------------------------------------------- 4. 재귀
+fun Fib(var n)
 {
-    if( n <= 1)
+    if (n < 2)
         return n;
-    else
-        return fibonacci_recursive(n - 1) + fibonacci_recursive(n - 2);
+    return Fib(n - 1) + Fib(n - 2);
 }
-start_time = system.clock();
-print("fibonacci :" .. fibonacci_recursive(40));
-print("Time :" .. (system.clock() - start_time));
+
+// -------------------------------------------------------- 5. 배열 순차 쓰기/읽기
+fun ArrayRW(var size, var reps)
+{
+    var a = [];
+    a.resize(size);
+    var last = 0;
+    for (var r in 0, reps, 1)
+    {
+        var bias = last & 1;           // 직전 결과 의존
+        for (var i in 0, size, 1)
+            a[i] = (i + bias) & 255;
+        var sum = 0;
+        for (var i in 0, size, 1)
+            sum += a[i];
+        last = sum;
+    }
+    return last;
+}
+
+// ------------------------------------------------------- 6. 해시맵(문자열 키) 조회
+fun MapStr(var outer, var inner)
+{
+    var m = {};
+    m["alpha"] = 1;
+    m["bravo"] = 2;
+    m["charlie"] = 3;
+    m["delta"] = 4;
+    m["echo"] = 5;
+    m["foxtrot"] = 6;
+    m["golf"] = 7;
+    m["hotel"] = 8;
+    var last = 0;
+    for (var o in 0, outer, 1)
+    {
+        var sum = 0;
+        for (var i in 0, inner, 1)
+        {
+            sum += m["alpha"];
+            sum += m["hotel"];
+            sum += m["charlie"];
+            sum += m["foxtrot"];
+        }
+        last = sum;
+    }
+    return last;
+}
+
+// ----------------------------------------------------------- 7. 문자열 생성/길이
+fun StringOps(var outer, var inner)
+{
+    var last = 0;
+    for (var o in 0, outer, 1)
+    {
+        var total = 0;
+        for (var i in 0, inner, 1)
+        {
+            var s = "item" .. i;
+            total += s.len();
+        }
+        last = total;
+    }
+    return last;
+}
+
+// ------------------------------------------- 8. 파티클 시뮬(게임형 부동소수+배열)
+// pos += vel*dt, 경계 반사. 게임 스크립트에서 가장 흔한 형태의 워크로드.
+fun Particles(var count, var steps)
+{
+    var px = []; px.resize(count);
+    var py = []; py.resize(count);
+    var vx = []; vx.resize(count);
+    var vy = []; vy.resize(count);
+
+    for (var i in 0, count, 1)
+    {
+        px[i] = (i & 63) * 1.0;
+        py[i] = (i & 31) * 1.0;
+        vx[i] = ((i & 7) - 4) * 0.25;
+        vy[i] = ((i & 15) - 8) * 0.125;
+    }
+
+    var dt = 0.015625;   // 1/64 — 이진 정확값(0.016 은 부정확해 언어별 체크섬이 갈린다)
+    for (var s in 0, steps, 1)
+    {
+        for (var i in 0, count, 1)
+        {
+            var nx = px[i] + vx[i] * dt;
+            var ny = py[i] + vy[i] * dt;
+            if (nx < 0.0 || nx > 64.0)
+                vx[i] = -vx[i];
+            if (ny < 0.0 || ny > 32.0)
+                vy[i] = -vy[i];
+            px[i] = nx;
+            py[i] = ny;
+        }
+    }
+
+    // +1000 오프셋: 위치가 음수가 될 수 있어(반사 직전) truncate/floor 차이가 생기는 것을 막는다.
+    var chk = 0;
+    for (var i in 0, count, 1)
+        chk += toint(px[i] + py[i] + 1000.0);
+    return chk;
+}
 ```
 
-### Lua Script 5.5.0 Test Code
+#### Lua 5.5 — [`Samples/bench/bench.lua`](Samples/bench/bench.lua)
 ```lua
-local startTime
-print("Start ...")
-
-function calculateSum(n)
-    local sum = 0
-    for i = 0, n - 1 do
-        sum = sum + i
+-- ---------------------------------------------------------------- 1. 정수 루프
+local function LoopSum(outer, inner)
+    local last = 0
+    for o = 1, outer do
+        local bias = last & 1          -- 직전 결과에 의존(진짜 데이터 의존성) → 축약 불가
+        local sum = 0
+        for i = 0, inner - 1 do
+            sum = sum + i + bias
+        end
+        last = sum
     end
-    return sum
+    return last
 end
 
-startTime = os.clock()
-print("Loop Sum :" .. calculateSum(100000001))
-print("Time:" .. (os.clock() - startTime))
-
-function calculateMath(n)
-    local sum = 0
-    for i = 0, n - 1 do
-        sum = sum + math.sqrt(i)
+-- ------------------------------------------------------------- 2. 부동소수 산술
+local function FloatMath(outer, inner)
+    local last = 0.0
+    for o = 1, outer do
+        local bias = math.floor(last) & 1  -- 직전 결과 의존
+        local acc = 0.0
+        for i = 0, inner - 1 do
+            local x = ((i + bias + math.floor(acc)) & 15) * 0.5   -- acc 의존 → 예측 불가
+            acc = acc + (x * 1.5 - x * 0.25)
+        end
+        last = acc
     end
-    return sum
+    return math.floor(last)
 end
 
-startTime = os.clock()
-print("Math :" .. calculateMath(100000001))
-print("Time:" .. (os.clock() - startTime))
-
-function isPrime(num)
-    if num < 2 then
-        return false
+-- ---------------------------------------------------------------- 3. 함수 호출
+local function Inc(x)
+    return x + 1
+end
+local function FuncCall(outer, inner)
+    local last = 0
+    for o = 1, outer do
+        local bias = last & 1          -- 직전 결과 의존
+        local sum = 0
+        for i = 0, inner - 1 do
+            sum = sum + Inc(i + bias)
+        end
+        last = sum
     end
-    for i = 2, math.sqrt(num) do
-        if num % i == 0 then
-            return false
+    return last
+end
+
+-- ------------------------------------------------------------------- 4. 재귀
+local function Fib(n)
+    if n < 2 then
+        return n
+    end
+    return Fib(n - 1) + Fib(n - 2)
+end
+
+-- -------------------------------------------------------- 5. 배열 순차 쓰기/읽기
+local function ArrayRW(size, reps)
+    local a = {}
+    for i = 1, size do a[i] = 0 end          -- resize 상당(배열부 미리 확보)
+    local last = 0
+    for r = 1, reps do
+        local bias = last & 1          -- 직전 결과 의존
+        for i = 0, size - 1 do
+            a[i + 1] = (i + bias) & 255
+        end
+        local sum = 0
+        for i = 0, size - 1 do
+            sum = sum + a[i + 1]
+        end
+        last = sum
+    end
+    return last
+end
+
+-- ------------------------------------------------------- 6. 해시맵(문자열 키) 조회
+local function MapStr(outer, inner)
+    local m = {}
+    m["alpha"] = 1
+    m["bravo"] = 2
+    m["charlie"] = 3
+    m["delta"] = 4
+    m["echo"] = 5
+    m["foxtrot"] = 6
+    m["golf"] = 7
+    m["hotel"] = 8
+    local last = 0
+    for o = 1, outer do
+        local sum = 0
+        for i = 0, inner - 1 do
+            sum = sum + m["alpha"]
+            sum = sum + m["hotel"]
+            sum = sum + m["charlie"]
+            sum = sum + m["foxtrot"]
+        end
+        last = sum
+    end
+    return last
+end
+
+-- ----------------------------------------------------------- 7. 문자열 생성/길이
+local function StringOps(outer, inner)
+    local last = 0
+    for o = 1, outer do
+        local total = 0
+        for i = 0, inner - 1 do
+            local s = "item" .. i
+            total = total + #s
+        end
+        last = total
+    end
+    return last
+end
+
+-- ------------------------------------------- 8. 파티클 시뮬(게임형 부동소수+배열)
+local function Particles(count, steps)
+    local px, py, vx, vy = {}, {}, {}, {}
+    for i = 0, count - 1 do
+        px[i + 1] = (i & 63) * 1.0
+        py[i + 1] = (i & 31) * 1.0
+        vx[i + 1] = ((i & 7) - 4) * 0.25
+        vy[i + 1] = ((i & 15) - 8) * 0.125
+    end
+
+    local dt = 0.015625                       -- 1/64 (이진 정확값)
+    for s = 1, steps do
+        for i = 1, count do
+            local nx = px[i] + vx[i] * dt
+            local ny = py[i] + vy[i] * dt
+            if nx < 0.0 or nx > 64.0 then
+                vx[i] = -vx[i]
+            end
+            if ny < 0.0 or ny > 32.0 then
+                vy[i] = -vy[i]
+            end
+            px[i] = nx
+            py[i] = ny
         end
     end
-    return true
-end
-function PrimeCount(num)
-	local cnt = 0
-	for i = 1, num - 1 do
-		if isPrime(i) then
-			cnt = cnt + 1
-		end
-	end
-	return cnt
-end
 
-startTime = os.clock()
-print("PrimeCount :" .. PrimeCount(5000001));
-print("Time:" .. (os.clock() - startTime))
-
-function fibonacci_recursive(n)
-    if n <= 1 then
-        return n
-    else
-        return fibonacci_recursive(n - 1) + fibonacci_recursive(n - 2)
+    local chk = 0
+    for i = 1, count do
+        chk = chk + math.floor(px[i] + py[i] + 1000.0)
     end
+    return chk
 end
-
-start_time = os.clock()
-print("fibonacci:" .. fibonacci_recursive(40))
-print("Time:", os.clock() - start_time)
 ```
 
-### Visual C++ 2026 Test Code
+#### C++ (MSVC /O2) — [`Samples/bench/bench.cpp`](Samples/bench/bench.cpp)
 ```cpp
-#include <iostream>
-
-double Clock()
+// ---------------------------------------------------------------- 1. 정수 루프
+static int64_t LoopSum(int outer, int inner)
 {
-	return (double)clock() / (double)CLOCKS_PER_SEC;
+    int64_t last = 0;
+    for (int o = 0; o < outer; ++o)
+    {
+        const int bias = (int)(last & 1);  // 직전 결과에 의존(진짜 데이터 의존성) → 축약 불가
+        int64_t sum = 0;
+        for (int i = 0; i < inner; ++i)
+            sum += i + bias;
+        last = sum;
+    }
+    return last;
 }
-double calculateSum(int n)
+
+// ------------------------------------------------------------- 2. 부동소수 산술
+static int64_t FloatMath(int outer, int inner)
 {
-	double sum = 0.0;
-	for (int i  = 0; i <  n; i++)
-	{
-		sum += i;
-	}
-	return sum;
+    double last = 0.0;
+    for (int o = 0; o < outer; ++o)
+    {
+        const int bias = (int)((int64_t)last & 1);  // 직전 결과 의존
+        double acc = 0.0;
+        for (int i = 0; i < inner; ++i)
+        {
+            double x = ((i + bias + (int64_t)acc) & 15) * 0.5;   // acc 의존 → 예측 불가
+            acc += (x * 1.5 - x * 0.25);
+        }
+        last = acc;
+    }
+    return (int64_t)last;
 }
-double calculateMath(int n)
+
+// ---------------------------------------------------------------- 3. 함수 호출
+// noinline: 스크립트의 "함수 호출" 비용과 대응시키기 위해 인라인 제거.
+// (인라인 허용 시 호출 자체가 사라져 '함수 호출' 측정이 성립하지 않는다.)
+__declspec(noinline) static int64_t Inc(int64_t x)
 {
-	double sum = 0.0;
-	for (int i = 0; i < n; i++)
-	{
-		sum += sqrt(i);
-	}
-	return sum;
+    return x + 1;
 }
-bool isPrime(int num)
+static int64_t FuncCall(int outer, int inner)
 {
-	if (num < 2)
-		return false;
-
-	int end = (int)(sqrt(num) + 1);
-	for (int i = 2; i < end; i++)
-	{
-		if (num % i == 0)
-			return false;
-	}
-	return true;
+    int64_t last = 0;
+    for (int o = 0; o < outer; ++o)
+    {
+        const int bias = (int)(last & 1);  // 직전 결과 의존
+        int64_t sum = 0;
+        for (int i = 0; i < inner; ++i)
+            sum += Inc(i + bias);
+        last = sum;
+    }
+    return last;
 }
-int PrimeCount(int num)
+
+// ------------------------------------------------------------------- 4. 재귀
+static int64_t Fib(int n)
 {
-	int cnt = 0;
-	for (int i = 1; i < num; i++)
-	{
-		if (isPrime(i))
-			cnt++;
-	}
-	return cnt;
+    if (n < 2)
+        return n;
+    return Fib(n - 1) + Fib(n - 2);
 }
-int fibonacci_recursive(int n)
+
+// -------------------------------------------------------- 5. 배열 순차 쓰기/읽기
+static int64_t ArrayRW(int size, int reps)
 {
-	if (n <= 1)
-		return n;
-	else
-		return fibonacci_recursive(n - 1) + fibonacci_recursive(n - 2);
+    std::vector<int64_t> a(size, 0);
+    int64_t last = 0;
+    for (int r = 0; r < reps; ++r)
+    {
+        const int bias = (int)(last & 1);  // 직전 결과 의존
+        for (int i = 0; i < size; ++i)
+            a[i] = (i + bias) & 255;
+        int64_t sum = 0;
+        for (int i = 0; i < size; ++i)
+            sum += a[i];
+        last = sum;
+    }
+    return last;
 }
-int main()
+
+// ------------------------------------------------------- 6. 해시맵(문자열 키) 조회
+static int64_t MapStr(int outer, int inner)
 {
-	printf("\nStart ...");
-	double start_time;
+    std::unordered_map<std::string, int64_t> m;
+    m["alpha"] = 1;
+    m["bravo"] = 2;
+    m["charlie"] = 3;
+    m["delta"] = 4;
+    m["echo"] = 5;
+    m["foxtrot"] = 6;
+    m["golf"] = 7;
+    m["hotel"] = 8;
+    // 스크립트의 상수 문자열(미리 만들어진 VM 문자열)에 대응 — 조회마다 임시 string 생성 방지.
+    static const std::string kAlpha = "alpha";
+    static const std::string kHotel = "hotel";
+    static const std::string kCharlie = "charlie";
+    static const std::string kFoxtrot = "foxtrot";
 
-	start_time = Clock();
-	printf("\nLoop Sum : %lf", calculateSum(100000001));
-	printf("\nTime : %lf", (Clock() - start_time));
+    int64_t last = 0;
+    for (int o = 0; o < outer; ++o)
+    {
+        int64_t sum = 0;
+        for (int i = 0; i < inner; ++i)
+        {
+            sum += m.find(kAlpha)->second;
+            sum += m.find(kHotel)->second;
+            sum += m.find(kCharlie)->second;
+            sum += m.find(kFoxtrot)->second;
+        }
+        last = sum;
+    }
+    return last;
+}
 
-	start_time = Clock();
-	printf("\nMath : %lf", calculateMath(100000001));
-	printf("\nTime : %lf", (Clock() - start_time));
+// ----------------------------------------------------------- 7. 문자열 생성/길이
+static int64_t StringOps(int outer, int inner)
+{
+    int64_t last = 0;
+    for (int o = 0; o < outer; ++o)
+    {
+        int64_t total = 0;
+        for (int i = 0; i < inner; ++i)
+        {
+            std::string s = "item" + std::to_string(i);
+            total += (int64_t)s.size();
+        }
+        last = total;
+    }
+    return last;
+}
 
+// ------------------------------------------- 8. 파티클 시뮬(게임형 부동소수+배열)
+static int64_t Particles(int count, int steps)
+{
+    std::vector<double> px(count), py(count), vx(count), vy(count);
+    for (int i = 0; i < count; ++i)
+    {
+        px[i] = (i & 63) * 1.0;
+        py[i] = (i & 31) * 1.0;
+        vx[i] = ((i & 7) - 4) * 0.25;
+        vy[i] = ((i & 15) - 8) * 0.125;
+    }
 
-	start_time = Clock();
-	printf("\nPrimeCount : %d", PrimeCount(5000001));
-	printf("\nTime : %lf", (Clock() - start_time));
+    const double dt = 0.015625;   // 1/64 (이진 정확값)
+    for (int s = 0; s < steps; ++s)
+    {
+        for (int i = 0; i < count; ++i)
+        {
+            double nx = px[i] + vx[i] * dt;
+            double ny = py[i] + vy[i] * dt;
+            if (nx < 0.0 || nx > 64.0)
+                vx[i] = -vx[i];
+            if (ny < 0.0 || ny > 32.0)
+                vy[i] = -vy[i];
+            px[i] = nx;
+            py[i] = ny;
+        }
+    }
 
-	start_time = Clock();
-	printf("\nfibonacci : %d", fibonacci_recursive(40));
-	printf("\nTime :%lf", (Clock() - start_time));
+    int64_t chk = 0;
+    for (int i = 0; i < count; ++i)
+        chk += (int64_t)(px[i] + py[i] + 1000.0);
+    return chk;
 }
 ```
+
 
 ### YoutTube
 [![YoutTube](https://i9.ytimg.com/vi_webp/iEpmlLcxBVg/mq2.webp?sqp=CLTL6L8G-oaymwEmCMACELQB8quKqQMa8AEB-AH-CYAC0AWKAgwIABABGEkgZSg2MA8=&rs=AOn4CLAwiLyh_R2B056F-Eej9t5PiuJhmw)](https://www.youtube.com/watch?v=iEpmlLcxBVg)
