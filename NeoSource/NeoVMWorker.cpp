@@ -757,10 +757,10 @@ void CNeoVMWorker::StopDebug(int iOPIndex, NeoDebugStopReason reason)
 }
 void CNeoVMWorker::ResetFaultStateForNewExecution()
 {
-	if (m_bDebugFaulted == false)
-		return;
-
 	m_bDebugFaulted = false;
+	// 에러 위치는 실행 단위로 리셋해야 한다. SetError 는 _isErrorOPIndex 가 0 일 때만 기록하므로
+	// (= 가장 안쪽 원인 보존), 여기서 안 지우면 다음 실행의 에러가 이전 에러의 함수/라인/스택으로
+	// 보고된다. 이 함수는 새 실행 시작 지점(ExecuteTop/BeginHostCall/BindWorkerFunction)에서만 불린다.
 	_isErrorOPIndex = 0;
 }
 const char* g_sNeoRuntimeErrors[RTE_COUNT] =
@@ -1041,6 +1041,24 @@ void CNeoVMWorker::EndHostCall(NeoHostCallBegin begin)
 	}
 	ReleaseExecution();
 	GetVM()->PublishAllocStats();
+}
+
+// 정지/바인딩된 실행을 버린다. 전역 변수(m_sVarGlobal)는 워커 소유라 그대로 살아있고,
+// 실행 컨텍스트(스택/코루틴/IP)만 풀로 반납해 idle 로 되돌린다.
+// 인터프리터 실행 중에는 지금 밟고 있는 스택을 반납하게 되므로 거부한다.
+bool CNeoVMWorker::CancelExecution()
+{
+	if (m_bInRun)
+		return false;
+	if (m_pMainCtx == nullptr)
+		return true;   // 이미 idle
+	ReleaseExecution();           // 컨텍스트 반납 + ClearSP + _iRemainSleep=0
+	m_eDebugRunMode = DBG_CONTINUE;
+	m_bDebugPauseRequested = false;
+	m_bDebugFaulted = false;
+	_isErrorOPIndex = 0;
+	_isInitialized = false;
+	return true;
 }
 
 void CNeoVMWorker::BeginNestedScriptCall()
@@ -1561,6 +1579,13 @@ void CNeoVMWorker::DebugGetFrameVariables(int frameId, std::vector<NeoDebugVaria
 bool	CNeoVMWorker::Run()
 {
 	bool b = true;
+	// 인터프리터 진입 표시(중첩 Run 대비 저장/복원). CancelExecution 이 이걸 보고 거부한다.
+	struct InRunGuard
+	{
+		bool* p; bool prev;
+		InRunGuard(bool* f) : p(f), prev(*f) { *f = true; }
+		~InRunGuard() { *p = prev; }
+	} inRunGuard(&m_bInRun);
 #ifdef _WIN32
 	try
 	{

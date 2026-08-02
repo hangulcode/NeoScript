@@ -152,6 +152,7 @@ struct InstanceRec
     InstanceHandle handle;             // 자기 핸들(CreateInstance 에서 채움; 중첩 바인딩이 사용)
     ProgramHandle program;
     void* instanceUserData = nullptr;
+    bool  runGlobalInit = true;        // CreateInstance 때의 설정(ResetInstance 가 그대로 재현)
     // 객체명 -> 이 인스턴스에서의 userData (BindObject). 미지정이면 RegisteredObject.userData.
     std::unordered_map<std::string, void*> objectUserData;
     // CallReadMap/List 결과 리더 보관(다음 이 인스턴스 호출 전까지 유효). 중첩 리더도 여기 쌓임.
@@ -185,6 +186,10 @@ struct InstanceRec
     uint32_t             callSeq = 0;
     uint32_t             armedSeq = 0;
     uint32_t             pendingSeq = 0;
+    // 직전 호출의 에러 스냅샷(Invocation::error 가 참조 반환 → InstanceRec 수명 동안 안정).
+    Error                callError;
+    // 이번 호출 중 네이티브가 CallContext::fail 로 준 코드(0=없음). 첫 호출만 유효.
+    int32_t              failCode = 0;
 };
 
 } // namespace
@@ -345,7 +350,6 @@ public:
     ~RuntimeImpl() override;
 
     //--- 초기 설정 ---
-    bool RegisterFunction(const NativeFunctionDesc& desc) override;
     bool RegisterObject(const NativeObjectDesc& desc) override;
     void FreezeBindings() override;
     ObjectType GetObjectType(StringView name) override;
@@ -364,7 +368,7 @@ public:
     InstanceHandle CreateInstance(ProgramHandle program, const InstanceDesc& desc) override;
     void DestroyInstance(InstanceHandle instance) override;
     bool IsAlive(InstanceHandle instance) const override;
-    void ResetInstance(InstanceHandle instance) override;
+    bool ResetInstance(InstanceHandle instance) override;
     InstanceState GetState(InstanceHandle instance) const override;
     bool BindObject(InstanceHandle instance, StringView name, void* userData) override;
     void BindGlobalObject(InstanceHandle instance, StringView globalName, ObjectType type, void* userData) override;
@@ -378,7 +382,7 @@ public:
 
     //--- 재개/전역/async ---
     RunStatus Resume(InstanceHandle instance, const ResumeDesc& desc) override;
-    void Cancel(InstanceHandle instance) override;
+    bool Cancel(InstanceHandle instance) override;
     bool StartSliced(InstanceHandle instance, StringView functionName, int32_t timeoutMs, uint32_t budget) override;
     RunStatus UpdateSliced(InstanceHandle instance) override;
     bool IsRunning(InstanceHandle instance) const override;
@@ -388,8 +392,6 @@ public:
     bool SetGlobalInt(InstanceHandle instance, StringView name, int32_t v) override;
     bool SetGlobalFloat(InstanceHandle instance, StringView name, float v) override;
     bool SetGlobalString(InstanceHandle instance, StringView name, StringView v) override;
-    bool CompleteAsyncInt(AsyncToken token, int32_t v) override;
-    bool FailAsync(AsyncToken token, const Error& error) override;
 
     bool TakeLastError(StringView& out) override;
     bool PeekLastError(StringView& out) const override;
@@ -404,6 +406,12 @@ public:
     // Invocation 이 쓰는 내부 훅
     InstanceRec* resolveInstance(InstanceHandle h) const { return m_instances.get(h.id, h.generation); }
     void FlushPendingCall(InstanceRec* inst);
+    // 호출 에러 스냅샷: 실행 전 VM 에러 상태를 비우고(스티키 에러가 새 에러를 가리는 것 방지),
+    // 실행 후 실패했으면 VM 상세 메시지 + fail() 코드를 인스턴스에 스냅샷한다.
+    void BeginCallError(InstanceRec* inst);
+    void CaptureCallError(InstanceRec* inst, RunStatus status);
+    // CallContext::fail 이 사용(네이티브 실패 사유를 VM 에러로 등록 + 코드 보관).
+    void NativeFail(InstanceHandle h, int32_t code, StringView message);
     // 내부 전용: 인스턴스 워커/바인딩 헬퍼(BindGlobalObject/MapObject, retInstanceGlobal 이 사용).
     INeoVMWorker* instanceWorker(InstanceHandle h) const;
     void BindObjectInto(void* worker, void* mapVar, StringView key, ObjectType type, void* userData);
@@ -480,14 +488,6 @@ RuntimeImpl::~RuntimeImpl()
 //------------------------------------------------------------------------------
 // 등록
 //------------------------------------------------------------------------------
-bool RuntimeImpl::RegisterFunction(const NativeFunctionDesc& /*desc*/)
-{
-    if (m_frozen) return false;
-    // TODO(build): 단독 전역 네이티브 함수. Neo3D 는 전부 객체(RegisterObject) 경로라
-    // 우선순위 낮음. NeoGlobalSymbol + 글로벌훅에서 FunctionPtr 값으로 GetVar 세팅 예정.
-    return false;
-}
-
 bool RuntimeImpl::RegisterObject(const NativeObjectDesc& desc)
 {
     if (m_frozen || desc.name.data() == nullptr) return false;
@@ -826,12 +826,64 @@ void RuntimeImpl::BindObjectToVar(void* worker, void* varInfo, ObjectType type, 
         (ro->property) ? &PropertyTrampoline : nullptr);
 }
 
-void RuntimeImpl::ResetInstance(InstanceHandle) { /* TODO(build): 전역/스택 초기화 재실행 */ }
+bool RuntimeImpl::ResetInstance(InstanceHandle h)
+{
+    InstanceRec* inst = resolveInstance(h);
+    if (!inst) return false;
+    // 살아있는 Invocation 이 이 인스턴스의 워커/스크래치를 붙들고 있으면 재생성이 UB → 거부.
+    if (inst->armedSeq != 0) return false;
+    ProgramRec* prog = resolveProgram(inst->program);
+    if (!prog || !prog->program) return false;
+
+    // 1) 옛 워커에 매달린 것 전부 정리. callArgs 는 옛 워커 소유 VarInfo 라 반드시 먼저 해제.
+    FlushPendingCall(inst);
+    if (inst->worker)
+    {
+        if (!inst->callArgs.empty()) inst->worker->ReleaseArgs(inst->callArgs);
+        m_workerHandle.erase(inst->worker);
+        m_vm->ReleaseWorker(inst->worker->GetWorkerID());
+        inst->worker = nullptr;
+    }
+    inst->callArgs.clear();
+    inst->bindings.clear();          // LoadVM 훅(BindRegisteredObjects)이 새로 채운다
+    inst->nestedBindings.clear();
+    inst->nestedByKey.clear();
+    inst->readMapPool.clear();
+    inst->readListPool.clear();
+    inst->callFID = -1;
+    inst->callTimeoutMs = -1;
+    inst->callBudget = 0;
+    inst->callStatus = RunStatus::Failed;
+    inst->armedSeq = 0;
+    inst->pendingSeq = 0;
+    inst->callError = Error();
+    inst->failCode = 0;
+    // objectUserData(BindObject 로 준 인스턴스별 값)는 보존 — 리셋 후에도 같은 호스트 객체에 붙어야 한다.
+
+    // 2) 같은 Program 으로 워커 재생성. 전역 슬롯은 Init 이 static 상수부터 새로 실체화하고,
+    //    NeoGlobalInterface 훅이 네이티브 바인딩 + onInstanceBind 를 다시 돌린다.
+    NeoLoadVMParam vparam;
+    vparam.execPool = m_pool;
+    vparam.NeoGlobalInterface = &ShimGlobalInterface;
+    vparam.param = inst;
+    INeoVMWorker* worker = m_vm->LoadVM(&vparam, prog->program, /*mainWorker=*/false, /*init=*/inst->runGlobalInit);
+    if (worker == nullptr)
+    {
+        // 워커 없는 인스턴스는 이후 모든 API 가 역참조하므로 살려둘 수 없다 → 파괴 + 핸들 무효화.
+        delete inst;
+        m_instances.remove(h.id, h.generation);
+        return false;
+    }
+    inst->worker = worker;
+    m_workerHandle[worker] = h;
+    return true;
+}
 
 RunStatus RuntimeImpl::RunGlobalInit(InstanceHandle h)
 {
     InstanceRec* inst = resolveInstance(h);
     if (!inst) return RunStatus::Failed;
+    BeginCallError(inst);                              // 스티키 VM 에러 제거(이번 실행 사유만 남김)
     bool ok = m_vm->PCall(inst->worker->GetWorkerID()); // 최상위 실행(구 PCall)
     // 디버거 브레이크포인트/sleep 로 정지했으면 아직 working → Suspended.
     if (m_vm->IsWorking(inst->worker->GetWorkerID())) return RunStatus::Suspended;
@@ -926,13 +978,26 @@ RunStatus RuntimeImpl::Resume(InstanceHandle h, const ResumeDesc&)
     if (!inst) return RunStatus::Failed;
     return mapExecStatus(inst->worker->ResumeTop());
 }
-void RuntimeImpl::Cancel(InstanceHandle) {} // TODO(build): 취소 경로(내부 API 확인 필요)
+bool RuntimeImpl::Cancel(InstanceHandle h)
+{
+    InstanceRec* inst = resolveInstance(h);
+    if (!inst || !inst->worker) return false;
+    // 반환 컨텍스트를 붙들고 있던 지연 호출부터 정리(리더 무효화) — 그 뒤 실행 컨텍스트를 버린다.
+    FlushPendingCall(inst);
+    if (!inst->callArgs.empty()) { inst->worker->ReleaseArgs(inst->callArgs); inst->callArgs.clear(); }
+    // 인터프리터 실행 중(네이티브 콜백 안)이면 지금 밟고 있는 스택이라 VM 이 거부한다.
+    if (!inst->worker->CancelExecution()) return false;
+    inst->callStatus = RunStatus::Cancelled;
+    return true;
+}
 
 bool RuntimeImpl::StartSliced(InstanceHandle h, StringView functionName, int32_t timeoutMs, uint32_t budget)
 {
     InstanceRec* inst = resolveInstance(h);
     if (!inst) return false;
     FlushPendingCall(inst);
+    // 남아있는 VM 에러를 비운다 — UpdateWorker 는 에러가 걸려 있으면 실행 자체를 거부한다.
+    BeginCallError(inst);
     u32 id = inst->worker->GetWorkerID();
     if (timeoutMs >= 0 || budget > 0)
         m_vm->SetTimeout(id, timeoutMs, budget > 0 ? static_cast<int>(budget) : NEO_DEFAULT_CHECKOP);
@@ -943,7 +1008,14 @@ RunStatus RuntimeImpl::UpdateSliced(InstanceHandle h)
     InstanceRec* inst = resolveInstance(h);
     if (!inst) return RunStatus::Failed;
     u32 id = inst->worker->GetWorkerID();
-    m_vm->UpdateWorker(id);                       // 한 슬라이스 실행
+    if (!m_vm->UpdateWorker(id))                  // 한 슬라이스 실행. false=런타임 에러
+    {
+        // 시분할 경로는 에러가 나도 실행 컨텍스트를 스스로 반납하지 않는다 → IsWorking 이 계속 true 라
+        // 호출자가 무한히 UpdateSliced 를 돌게 된다. 여기서 실행을 버리고 Failed 로 끝낸다.
+        CaptureCallError(inst, RunStatus::Failed);
+        inst->worker->CancelExecution();
+        return RunStatus::Failed;
+    }
     return m_vm->IsWorking(id) ? RunStatus::Suspended : RunStatus::Completed;
 }
 bool RuntimeImpl::IsRunning(InstanceHandle h) const
@@ -1001,8 +1073,37 @@ bool RuntimeImpl::SetGlobalString(InstanceHandle h, StringView name, StringView 
     SetVarString(inst->worker, v, vv); return true;
 }
 
-bool RuntimeImpl::CompleteAsyncInt(AsyncToken, int32_t) { return false; } // TODO(build)
-bool RuntimeImpl::FailAsync(AsyncToken, const Error&) { return false; }   // TODO(build)
+//------------------------------------------------------------------------------
+// 호출 에러 스냅샷 / 네이티브 실패 보고
+//------------------------------------------------------------------------------
+void RuntimeImpl::BeginCallError(InstanceRec* inst)
+{
+    inst->callError = Error();
+    inst->failCode = 0;
+    // VM 에러는 ClearLastErrorMsg 전까지 sticky 다(= 새 에러가 기록되지 않고 첫 에러가 고정).
+    // 호출마다 비워야 이 호출의 실패 사유가 정확히 남는다.
+    if (m_vm) m_vm->ClearLastErrorMsg();
+}
+
+void RuntimeImpl::CaptureCallError(InstanceRec* inst, RunStatus status)
+{
+    if (status == RunStatus::Completed) return;
+    const char* detail = (m_vm && m_vm->IsLastErrorMsg()) ? m_vm->GetLastErrorMsg() : nullptr;
+    inst->callError.message = detail ? detail : "script call failed";
+    inst->callError.code = (inst->failCode != 0) ? inst->failCode : 1;   // 1 = 일반 런타임 에러
+}
+
+void RuntimeImpl::NativeFail(InstanceHandle h, int32_t code, StringView message)
+{
+    // VM 에 사유를 남긴다. 네이티브가 이어서 false 를 반환하면 CallNative/PropertyNative 가
+    // 에러 opcode 로 점프하고, handle_ERROR 가 이 메시지에 IP/Line/스택트레이스를 붙여 상세를 만든다.
+    // (VM 의 SetError 는 first-wins 라 중첩 실패에서도 가장 안쪽 원인이 보존된다.)
+    if (m_vm)
+        m_vm->SetLastErrorMsg(message.empty() ? "native call failed" : message.str().c_str());
+    if (code != 0)
+        if (InstanceRec* inst = resolveInstance(h))
+            if (inst->failCode == 0) inst->failCode = code;
+}
 
 bool RuntimeImpl::TakeLastError(StringView& out)
 {
@@ -1161,8 +1262,11 @@ void CallContext::retObject(ObjectType type, void* userData) {
     INeoVM::RegisterTableCallBack(r, b, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr);
 }
 void CallContext::retNull() { CallContextImpl* c=Ctx(m_impl); c->worker->ResetVarType(CtxRetVar(c), VAR_NONE); }
-AsyncToken CallContext::beginAsync() { return 0; }                        // TODO(build)
-void CallContext::fail(int32_t code, StringView message) { (void)code; (void)message; } // TODO(build)
+void CallContext::fail(int32_t code, StringView message)
+{
+    CallContextImpl* c = Ctx(m_impl);
+    if (c->runtime) static_cast<RuntimeImpl*>(c->runtime)->NativeFail(c->instance, code, message);
+}
 
 //==============================================================================
 // MapBuilder / ListBuilder (타입드) — VM 소유 컬렉션 조립
@@ -1243,7 +1347,13 @@ static void InvFinish(void* p, uint32_t seq)
 {
     if (!p || seq == 0) return;
     InstanceRec* i = Inv(p);
-    if (i->armedSeq == seq) i->armedSeq = 0;                 // 내가 arm 이었으면 해제
+    if (i->armedSeq == seq)
+    {
+        i->armedSeq = 0;                                     // 내가 arm 이었으면 해제
+        // invoke 없이 파괴된 경우: 쌓아둔 인자는 VM 참조(문자열/맵)를 들고 있으므로 여기서 반납.
+        // (vector::clear 는 VarInfo 참조를 풀지 않는다 → 누수)
+        if (!i->callArgs.empty() && i->worker) { i->worker->ReleaseArgs(i->callArgs); i->callArgs.clear(); }
+    }
     if (i->pendingSeq == seq && i->runtime) i->runtime->FlushPendingCall(i); // 내 pending 만 반납
 }
 
@@ -1289,11 +1399,15 @@ RunStatus Invocation::invoke()
     INeoVMWorker* w = inst->worker;
     inst->armedSeq = 0;                    // 소비 시작(arm 해제) → 스크립트 실행 중 중첩 Call 허용
     inst->runtime->FlushPendingCall(inst); // 이전 borrowed 컨텍스트 반납
+    inst->runtime->BeginCallError(inst);   // 이번 호출의 에러만 남도록 VM 에러 상태 초기화
     NeoHostCallBegin begin = w->BeginHostCall();
     if (begin != NeoHostCallBegin::Acquired && begin != NeoHostCallBegin::Nested)
     {
         w->ReleaseArgs(inst->callArgs); inst->callArgs.clear();
-        inst->callStatus = RunStatus::Failed; return RunStatus::Failed;
+        inst->callStatus = RunStatus::Failed;
+        inst->callError.code = 1;
+        inst->callError.message = "instance is not callable (suspended or invalid state)";
+        return RunStatus::Failed;
     }
     const bool nested = (begin == NeoHostCallBegin::Nested);
     if (nested) w->BeginNestedScriptCall();
@@ -1301,6 +1415,7 @@ RunStatus Invocation::invoke()
         w->SetTimeout(inst->callTimeoutMs, inst->callBudget > 0 ? static_cast<int>(inst->callBudget) : NEO_DEFAULT_CHECKOP);
     if (w->RunFunction(inst->callFID, inst->callArgs)) { w->GC(); inst->callStatus = RunStatus::Completed; }
     else inst->callStatus = RunStatus::Failed;
+    inst->runtime->CaptureCallError(inst, inst->callStatus);   // 실패면 VM 상세 + fail() 코드 스냅샷
     w->ReleaseArgs(inst->callArgs);
     inst->callArgs.clear();
     // 반환 읽기(retX)를 위해 컨텍스트 유지 — dtor/다음 Call 의 FlushPendingCall 에서 반납.
@@ -1309,7 +1424,11 @@ RunStatus Invocation::invoke()
     return inst->callStatus;
 }
 RunStatus Invocation::status() const { return m_impl ? Inv(m_impl)->callStatus : RunStatus::Failed; }
-const Error& Invocation::error() const { static const Error e; return e; } // TODO(build): VM 에러 채우기
+const Error& Invocation::error() const
+{
+    static const Error empty;
+    return m_impl ? Inv(m_impl)->callError : empty;   // InstanceRec 소유 스냅샷(비파괴)
+}
 
 ValueType Invocation::retType() const { if(!m_impl) return ValueType::None; VarInfo* rv=Inv(m_impl)->worker->GetReturnVar(); return rv?VarTypeToValueType(rv->GetType()):ValueType::None; }
 int32_t Invocation::retInt() const { if(!m_impl) return 0; InstanceRec* i=Inv(m_impl); return i->worker->PopInt(i->worker->GetReturnVar()); }

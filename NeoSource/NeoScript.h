@@ -14,8 +14,8 @@
 // 리뷰 피드백 반영 사항:
 //   1) C++11 최저공배수 (std::span/std::string_view/std::byte/지정초기화 미사용 →
 //      자체 Span/StringView, uint8_t 바이트코드) — 구형 cocos 클라이언트(C++11)까지 커버
-//   2) NativeFunction 이 CallContext& 를 받음 (인스턴스 컨텍스트 유지: 반환 컬렉션 빌드,
-//      스크립트 재호출(nested), async 토큰 발급, zero-copy 인자 읽기)
+//   2) 네이티브 디스패처가 CallContext& 를 받음 (인스턴스 컨텍스트 유지: 반환 컬렉션 빌드,
+//      스크립트 재호출(nested), 에러 보고, zero-copy 인자 읽기)
 //   3) Value 는 스칼라+문자열+벡터의 "경계 마샬링 타입"만. 컬렉션은 인스턴스 스코프
 //      Builder/Reader 로만 다룸(GC/스레드 안전성 때문에 Value 를 컨테이너로 만들지 않음)
 //   4) 디버거는 IDebugger 로 분리(Runtime->GetDebugger()) — NeoEditor 만 링크
@@ -25,7 +25,8 @@
 //   7) 네이티브 객체 바인딩(RegisterObject + BindObject): 메서드 디스패처 하나로 GameObject.*/
 //      Services.* 처럼 수백 메서드 노출. userData 는 인스턴스별(BindObject). 내부
 //      RegisterTableCallBack + NeoGlobalInterface 에 매핑 — Neo3D 통합의 실제 형태.
-//   * 타입드 등록 헬퍼(Bind, 기존 NeoHelper::Fun 대체)는 코어에서 제외 → 별도 NeoScriptBind.h
+//   * 네이티브 비동기(beginAsync/CompleteAsync)와 단독 전역 함수 등록은 제외 — VM 실행 모델이
+//     지원하지 않거나(전자) 객체 바인딩으로 대체 가능(후자)해서, 쓰이지 않는 API 만 남던 것을 걷어냄
 //==============================================================================
 
 #include <cstddef>
@@ -114,8 +115,6 @@ struct FunctionHandle
     explicit operator bool() const noexcept { return index != UINT32_MAX; }
 };
 
-using AsyncToken = uint64_t;
-
 //------------------------------------------------------------------------------
 // 상태 / 에러
 //------------------------------------------------------------------------------
@@ -123,10 +122,9 @@ enum class RunStatus : uint8_t
 {
     Completed,   // 끝까지 실행됨
     Suspended,   // sleep/디버거 등으로 정지 → Resume 필요
-    Waiting,     // async 대기 → CompleteAsync/FailAsync 로 진행
     Yielded,     // 코루틴 yield
     Failed,      // 런타임 에러
-    Cancelled,   // Cancel 됨
+    Cancelled,   // Cancel 로 실행이 버려짐
 };
 
 enum class InstanceState : uint8_t
@@ -134,7 +132,6 @@ enum class InstanceState : uint8_t
     Idle,
     Running,
     Suspended,
-    Waiting,
     Failed,
 };
 
@@ -157,6 +154,8 @@ enum class ValueType : uint8_t
 
 struct Error
 {
+    // 0=에러 없음. 컴파일 에러는 컴파일러 코드, 런타임 에러는 1(일반) 또는
+    // 네이티브가 CallContext::fail(code,...) 로 준 호스트 정의 코드.
     int32_t code = 0;
     std::string message;      // 소유(값) — string_view 는 임시 수명 문제라 값 보관
     std::string sourceName;
@@ -280,8 +279,8 @@ class CallContext
 {
 public:
     // 소속 / userData
-    void* userData() const;          // 이 호출의 바인딩 userData(함수: NativeFunctionDesc.userData /
-                                     // 객체 메서드: BindObject 로 준 인스턴스별 값, 없으면 NativeObjectDesc.userData)
+    void* userData() const;          // 이 호출의 바인딩 userData(BindObject 로 준 인스턴스별 값,
+                                     // 없으면 NativeObjectDesc.userData)
     void* instanceUserData() const;  // InstanceDesc.userData (인스턴스 일반 데이터)
     IRuntime* runtime() const;
     InstanceHandle instance() const;
@@ -321,30 +320,18 @@ public:
     void        retObject(ObjectType type, void* userData);
     void        retNull();   // 반환/프로퍼티 슬롯을 None 으로(예: 못 찾은 객체 반환)
 
-    // [미구현] 비동기 네이티브 호출. 현재 no-op(beginAsync 는 0, CompleteAsync/FailAsync 는 false).
-    // 지원 전까지 사용 금지 — 필요하면 동기 반환으로 설계할 것.
-    AsyncToken  beginAsync();
-    // [미구현] 네이티브에서 스크립트로 에러 신호. 현재 no-op. 실패는 디스패처가 false 반환으로 알린다.
+    // 이 네이티브 호출의 실패 사유를 남긴다. **호출 후 디스패처는 반드시 false 를 반환해야 한다**
+    // (fail 자체가 실행을 끊지는 않는다). 남긴 메시지는 스크립트 IP/라인/스택트레이스와 함께
+    // 조립되어 Invocation::error() / TakeLastError() 로 나온다. fail 없이 false 만 반환하면
+    // "invalid call" 로 뭉개지므로 실패 경로에서는 되도록 사유를 남길 것.
+    // code 는 호스트 정의값으로 Error.code 에 실린다(0 이면 일반 런타임 에러 = 1).
+    // 한 호출에서 여러 번 불러도 첫 번째만 유효(가장 안쪽 원인 보존).
     void        fail(int32_t code, StringView message);
 
 private:
     friend class IRuntime;
     friend struct NeoScriptInternal;
     void* m_impl = nullptr;
-};
-
-//------------------------------------------------------------------------------
-// 네이티브 함수 등록
-//------------------------------------------------------------------------------
-using NativeFunction = bool (*)(CallContext& ctx);
-
-struct NativeFunctionDesc
-{
-    StringView name;
-    NativeFunction function = nullptr;
-    void* userData = nullptr;
-    int32_t argCount = -1;     // -1 = 가변/미검사
-    uint32_t flags = 0;
 };
 
 //------------------------------------------------------------------------------
@@ -486,7 +473,11 @@ public:
 
     RunStatus invoke();
     RunStatus status() const;
-    const Error& error() const;   // [미구현] 현재 항상 빈 Error. 실패는 invoke() 의 RunStatus 로 판별할 것.
+    // 직전 invoke/invokeR/invokeRead* 의 실패 사유. 성공이면 ok()==true 인 빈 Error.
+    // message = VM 이 조립한 상세("사유 : IP(n), Line(l)" + 스택트레이스), code 는 Error 참고.
+    // 이 Invocation 이 소유한 스냅샷이라 TakeLastError() 처럼 소비되지 않고, 다른 인스턴스의
+    // 에러와 섞이지도 않는다. (line/column 은 채우지 않는다 — 위치는 message 안에 있다.)
+    const Error& error() const;
 
     //--- 안전 반환(권장) — Invocation 수명/다음 Call 과 무관 ---
     // 스칼라(int/float/bool/string/vec) 반환을 값으로 스냅샷해 돌려준다. 실행 후 컨텍스트는 즉시 반납되므로
@@ -644,9 +635,8 @@ public:
     virtual ~IRuntime() = default;
 
     //--- 초기 설정 (FreezeBindings 이후 등록 불가) ---
-    // [미구현] 단독 전역 네이티브 함수 등록. 현재 항상 false. 네이티브는 RegisterObject(객체+메서드
-    // 디스패처) 경로를 쓸 것 — Neo3D/서버 모두 이 경로만 사용한다.
-    virtual bool RegisterFunction(const NativeFunctionDesc& desc) = 0;
+    // 네이티브 바인딩은 RegisterObject(객체 + 메서드/프로퍼티 디스패처) 하나로 통일한다.
+    // 단독 전역 함수 등록 API 는 없다 — 전역 함수가 필요하면 Services.Foo() 처럼 객체 메서드로 낼 것.
     // 네이티브 객체를 전역 심볼로 선언 + 디스패처 등록(컴파일이 전역명을 알아야 하므로 Freeze/Compile 전).
     virtual bool RegisterObject(const NativeObjectDesc& desc) = 0;
     virtual void FreezeBindings() = 0;
@@ -672,7 +662,12 @@ public:
     virtual InstanceHandle CreateInstance(ProgramHandle program, const InstanceDesc& desc = {}) = 0;
     virtual void DestroyInstance(InstanceHandle instance) = 0;
     virtual bool IsAlive(InstanceHandle instance) const = 0;   // 핸들이 아직 유효한 인스턴스인지(파괴 후 false)
-    virtual void ResetInstance(InstanceHandle instance) = 0;   // [미구현] 현재 no-op. 재초기화는 DestroyInstance→CreateInstance 로.
+    // 인스턴스를 **핸들을 유지한 채** 갓 생성된 상태로 되돌린다(전역변수 초기화 + 바인딩 재구성 +
+    // CreateInstance 때의 runGlobalInit 재실행). 호스트가 들고 있던 InstanceHandle/FunctionHandle 이
+    // 그대로 유효하다는 점이 DestroyInstance→CreateInstance 와의 차이다.
+    // BindObject 로 준 인스턴스별 userData 는 보존된다. 살아있는 Invocation 이 있으면 실패(false).
+    // 실패 시 인스턴스는 파괴되고 핸들이 무효화된다(IsAlive 로 확인할 것).
+    virtual bool ResetInstance(InstanceHandle instance) = 0;
     virtual InstanceState GetState(InstanceHandle instance) const = 0;
     // RegisterObject 로 선언한 객체의 userData 를 이 인스턴스에 한해 덮어씀(GameObject 의 eventID 등).
     // 디스패처는 ctx.userData() 로 이 값을 받는다. 미지정이면 NativeObjectDesc.userData 사용.
@@ -697,7 +692,11 @@ public:
 
     //--- 중단/재개 ---
     virtual RunStatus Resume(InstanceHandle instance, const ResumeDesc& desc = {}) = 0;
-    virtual void Cancel(InstanceHandle instance) = 0;   // [미구현] 현재 no-op. 중단은 DestroyInstance 로.
+    // 정지(sleep/디버거)됐거나 StartSliced 로 진행 중인 실행을 버리고 인스턴스를 Idle 로 되돌린다.
+    // 전역변수와 바인딩은 보존된다(초기화까지 하려면 ResetInstance).
+    // **실행 중인 인스턴스를 선점하지는 않는다** — 네이티브 콜백 안에서 자기 인스턴스를 Cancel 하면
+    // false 를 반환한다(그 경우엔 ctx.fail() 로 실패시킬 것). 슬라이스 사이/정지 상태에서 호출할 것.
+    virtual bool Cancel(InstanceHandle instance) = 0;
 
     //--- 협조적/시간분할 실행 (구 BindWorkerFunction/UpdateWorker, Setup_TL/Call_TL).
     // 장시간/무한 함수를 슬라이스로 나눠 실행: StartSliced 로 시작 → IsRunning 동안 UpdateSliced 반복.
@@ -714,9 +713,9 @@ public:
     virtual bool SetGlobalFloat(InstanceHandle instance, StringView name, float v) = 0;
     virtual bool SetGlobalString(InstanceHandle instance, StringView name, StringView v) = 0;
 
-    //--- 비동기 완료 (CallContext::beginAsync 로 얻은 토큰) — [미구현] 현재 항상 false. async 미지원. ---
-    virtual bool CompleteAsyncInt(AsyncToken token, int32_t v) = 0;
-    virtual bool FailAsync(AsyncToken token, const Error& error) = 0;
+    // [비동기 네이티브는 지원하지 않는다] 네이티브 호출은 항상 동기 완료다. 스크립트가 오래 걸리는
+    // 작업을 기다려야 하면 (1) 스크립트 레벨 async 라이브러리(system.async + async.get/wait)를 쓰거나
+    // (2) 호스트가 결과를 폴링해 스크립트 콜백을 Call 하는 형태로 설계할 것.
 
     //--- 마지막 런타임 에러 (init/call 중 발생). 있으면 true+텍스트, 소비(clear)한다. ---
     virtual bool TakeLastError(StringView& out) = 0;
@@ -750,12 +749,6 @@ struct AllocStats
 };
 void GetAllocStats(AllocStats& out);
 
-//------------------------------------------------------------------------------
-// (선택) 타입드 네이티브 등록 헬퍼 — 기존 NeoHelper::Fun 대체.
-// 일반 C++ 함수를 CallContext 마샬링으로 자동 래핑. 구현은 별도 헤더(NeoScriptBind.h).
-//   예) rt->RegisterFunction(Bind("GetHp", &Monster::GetHp));
-// template <typename Fn> NativeFunctionDesc Bind(StringView name, Fn fn, void* userData = nullptr);
-//------------------------------------------------------------------------------
 
 } // namespace NeoScript
 

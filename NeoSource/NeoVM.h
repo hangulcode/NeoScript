@@ -748,6 +748,10 @@ public:
 	virtual void EndHostCall(NeoHostCallBegin begin) = 0;
 	virtual void BeginNestedScriptCall() = 0;
 	virtual void EndNestedScriptCall() = 0;
+	// 정지(sleep/디버거)되었거나 시분할 바인딩된 실행을 버리고 컨텍스트를 풀로 반납한다.
+	// 전역 변수는 보존된다(워커는 그대로 살아있고 idle 로 돌아감).
+	// 인터프리터 실행 중(네이티브 콜백 안 등)에는 컨텍스트를 해제할 수 없으므로 false 를 반환한다.
+	virtual bool CancelExecution() = 0;
 	virtual void SetTimeout(int iTimeout, int iCheckOpCount) = 0;
 	virtual VarInfo* GetVar(const std::string& name) = 0;
 	virtual bool BindWorkerFunction(const std::string& funName) = 0;
@@ -875,6 +879,11 @@ public:
 	virtual  const char* GetLastErrorMsg() = 0;
 	virtual  bool IsLastErrorMsg() = 0;
 	virtual  void ClearLastErrorMsg() = 0;
+	// 네이티브(호스트 바인딩 함수)가 자기 실패 사유를 남긴다. 이 뒤에 네이티브가 false 를 반환하면
+	// CallNative/PropertyNative 가 에러 opcode 로 점프하고, 여기 남긴 메시지가 IP/Line/스택트레이스와
+	// 함께 최종 에러 상세로 조립된다(메시지를 안 남기면 "invalid call" 로 뭉개짐).
+	// 이미 에러가 잡혀 있으면(먼저 난 원인 보존) 무시된다.
+	virtual  void SetLastErrorMsg(const char* msg) = 0;
 
 	virtual  INeoVMWorker*	LoadVM(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, bool blMainWorker = true, bool init = false, int iStackSize = 50 * 1024) =0; // 0 is error
 	// 미리 만들어 둔 프로그램으로 워커를 붙인다. 같은 스크립트를 쓰는 워커 N 개가

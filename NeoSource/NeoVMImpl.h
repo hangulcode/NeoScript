@@ -172,7 +172,10 @@ public:
 
 	virtual const char* GetLastErrorMsg() { return _sErrorMsgDetail.c_str();  }
 	virtual bool IsLastErrorMsg() { return (_sErrorMsgDetail.empty() == false); }
-	virtual void ClearLastErrorMsg() { _bError = false; _sErrorMsgDetail.clear(); }
+	// _pErrorMsg 까지 비운다: 이게 남아 있으면 SetError 가 계속 무시되고(첫 에러 고정),
+	// UpdateWorker 가 영구히 false 를 반환한다(시분할 실행이 첫 에러 이후 죽어버림).
+	virtual void ClearLastErrorMsg() { _bError = false; _sErrorMsgDetail.clear(); _pErrorMsg.clear(); }
+	virtual void SetLastErrorMsg(const char* msg) { SetError(msg != nullptr ? std::string(msg) : std::string()); }
 
 	virtual INeoVMWorker*	LoadVM(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, bool blMainWorker, bool init, int iStackSize); // 0 is error
 	virtual INeoVMWorker*	LoadVM(const NeoLoadVMParam* vparam, CNeoVMProgram* pProgram, bool blMainWorker, bool init, int iStackSize);

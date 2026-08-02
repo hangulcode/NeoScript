@@ -92,6 +92,9 @@ private:
 	int m_op_process = 0;
 	int m_iBreakingCallStack = 0;
 	bool m_bTopExec = false;   // 최상위 실행/재개 중(=완료까지 실행)인지
+	// 인터프리터 루프(Run) 안인지. 중첩 Run 을 고려해 저장/복원한다.
+	// 실행 중에는 실행 컨텍스트를 해제할 수 없으므로 CancelExecution 이 이 플래그로 거부한다.
+	bool m_bInRun = false;
 
     enum EDebugRunMode
     {
@@ -220,6 +223,7 @@ private:
 	virtual void EndHostCall(NeoHostCallBegin begin);
 	virtual void BeginNestedScriptCall();
 	virtual void EndNestedScriptCall();
+	virtual bool CancelExecution();
 
 	template<bool TIMEOUT, bool DEBUG>
 	bool	RunInternal(int iBreakingCallStack);

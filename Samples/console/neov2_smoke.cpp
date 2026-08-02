@@ -65,6 +65,12 @@ static bool HostMethod(CallContext& ctx, StringView method)
         lb.pushInt(7); lb.pushInt(8); lb.pushInt(9);
         return true;
     }
+    if (m == "boomHost")
+    {
+        // 네이티브 실패 보고: fail() 로 사유를 남기고 반드시 false 반환.
+        ctx.fail(4242, "host said no");
+        return false;
+    }
     if (m == "spawn")
     {
         // 반환 맵에 바인딩된 Entity 객체를 중첩(setObject). 스크립트가 r["entity"].id() 호출 가능.
@@ -106,7 +112,9 @@ int NeoScriptV2Smoke()
         "export fun info() { return Host.info(); }\n"  // 6
         "export fun spawn() { var r = Host.spawn(); return r[\"entity\"].id(); }\n"  // 7
         "export fun spawnTag() { var r = Host.spawn(); return r[\"entity\"].tag(); }\n"  // 8
-        "export fun boom() { var z = 0; return 10 / z; }\n";                             // 9 (런타임 에러)
+        "export fun boom() { var z = 0; return 10 / z; }\n"                              // 9 (런타임 에러)
+        "export fun callBoom() { return Host.boomHost(); }\n";                           // 10 (네이티브 fail)
+    // ※ 새 함수는 반드시 뒤에 덧붙일 것 — 아래 디버거 테스트가 line 3(compute 본문)에 BP 를 건다.
 
     CompileDesc cd;
     cd.source = src;
@@ -223,6 +231,87 @@ int NeoScriptV2Smoke()
         StringView tag;
         Check(call.status() == RunStatus::Completed && call.retString().size() > 0, "spawnTag status");
         Check(Eq(call.retString(), "entity"), "nested Entity.tag() == \"entity\"");
+    }
+
+    // CallContext::fail() → Invocation::error(): 네이티브가 남긴 코드/메시지가 그대로 전달된다
+    {
+        Invocation call = rt->Call(a, "callBoom");
+        RunStatus st = call.invoke();
+        const Error& e = call.error();
+        printf("  [error] code=%d msg=%s\n", e.code, e.message.c_str());
+        Check(st == RunStatus::Failed, "native fail(): status Failed");
+        Check(!e.ok() && e.code == 4242, "native fail(): error().code == host code");
+        Check(e.message.find("host said no") != std::string::npos, "native fail(): host message kept (not \"invalid call\")");
+        // 위치는 이 호출(callBoom, line 10)이어야 한다 — 직전 boom(line 9) 에러 위치가 새면 안 됨.
+        Check(e.message.find("Line(10)") != std::string::npos, "native fail(): location is this call (line 10)");
+        Check(e.message.find("callBoom") != std::string::npos, "native fail(): stack trace names callBoom");
+    }
+    // VM 런타임 에러(0 나누기): code 1 + 상세 메시지
+    {
+        Invocation call = rt->Call(a, "boom");
+        Check(call.invoke() == RunStatus::Failed, "runtime error: status Failed");
+        Check(call.error().code == 1 && !call.error().message.empty(), "runtime error: code 1 + message");
+    }
+    // 성공 호출은 직전 에러를 물고 오지 않는다(VM 의 sticky 에러가 호출마다 초기화되는지)
+    {
+        Invocation call = rt->Call(a, "compute");
+        call.argInt(1).argInt(2).invoke();
+        Check(call.error().ok(), "success after failure: error() is empty (no sticky error)");
+        Check(call.retInt() == 3, "success after failure: still returns 3");
+    }
+
+    // ResetInstance: 핸들을 유지한 채 전역 초기화 재실행 + BindObject userData 보존
+    {
+        const char* rsrc =
+            "var counter = 5;\n"
+            "export fun bump() { counter = counter + 1; return counter; }\n"
+            "export fun get() { return counter; }\n"
+            "export fun uid2() { return Host.uid(); }\n";
+        CompileDesc rcd; rcd.source = rsrc; rcd.sourceName = "reset.ns";
+        CompileResult rcr = rt->Compile(rcd);
+        Check(static_cast<bool>(rcr.program), "reset: compile");
+        if (rcr.program)
+        {
+            InstanceHandle r = rt->CreateInstance(rcr.program);
+            rt->BindObject(r, "Host", reinterpret_cast<void*>(static_cast<intptr_t>(55)));
+            FunctionHandle getFn = rt->FindFunction(rcr.program, "get");
+            rt->Call(r, "bump").invoke();
+            Check(rt->Call(r, "get").invokeR().asInt() == 6, "reset: global mutated to 6");
+            Check(rt->ResetInstance(r), "reset: ResetInstance succeeded");
+            Check(rt->IsAlive(r), "reset: InstanceHandle still valid");
+            CallResult after = rt->Call(r, "get").invokeR();
+            Check(after.ok() && after.asInt() == 5, "reset: global back to initial 5");
+            CallResult viaHandle = rt->Call(r, getFn).invokeR();
+            Check(viaHandle.ok() && viaHandle.asInt() == 5, "reset: FunctionHandle still valid");
+            CallResult uid = rt->Call(r, "uid2").invokeR();
+            Check(uid.ok() && uid.asInt() == 55, "reset: BindObject userData preserved");
+            rt->DestroyInstance(r);
+            rt->DestroyProgram(rcr.program);
+        }
+    }
+
+    // Cancel: 시분할로 돌던 실행을 버리고 인스턴스를 재사용 가능한 Idle 로 되돌린다
+    {
+        const char* csrc =
+            "export fun spin() { var i = 0; while (i >= 0) { i = i + 1; } }\n"
+            "export fun ping() { return 77; }\n";
+        CompileDesc ccd; ccd.source = csrc; ccd.sourceName = "cancel.ns";
+        CompileResult ccr = rt->Compile(ccd);
+        Check(static_cast<bool>(ccr.program), "cancel: compile");
+        if (ccr.program)
+        {
+            InstanceHandle c = rt->CreateInstance(ccr.program);
+            Check(rt->StartSliced(c, "spin", /*timeoutMs=*/5), "cancel: StartSliced");
+            RunStatus st = rt->UpdateSliced(c);
+            Check(st == RunStatus::Suspended && rt->IsRunning(c), "cancel: slice suspended, still running");
+            Check(rt->Cancel(c), "cancel: Cancel succeeded");
+            Check(!rt->IsRunning(c), "cancel: not running after Cancel");
+            Check(rt->GetState(c) == InstanceState::Idle, "cancel: state back to Idle");
+            CallResult p = rt->Call(c, "ping").invokeR();
+            Check(p.ok() && p.asInt() == 77, "cancel: instance still callable after Cancel");
+            rt->DestroyInstance(c);
+            rt->DestroyProgram(ccr.program);
+        }
     }
 
     // 디버거 (IDebugger shim) — 브레이크포인트/스택
