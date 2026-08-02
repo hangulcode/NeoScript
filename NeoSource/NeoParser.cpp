@@ -3207,8 +3207,11 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	int iDebugLoopLine = ar.CurLine();
 
+	// end 값. 여기서 ')' 로 끝나면 step 이 생략된 형태다: for (var i in a, b)
+	TK_TYPE tkEndTerm;
 	iTryValue = -1;
-	if (Try_ParseIntNum(iTryValue, ar, funs, vars, TK_COMMA, TK_R_SMALL) != TK_NONE)
+	tkEndTerm = Try_ParseIntNum(iTryValue, ar, funs, vars, TK_COMMA, TK_R_SMALL);
+	if (tkEndTerm != TK_NONE)
 	{
 #if 0
 		if(IsShort(iTryValue))
@@ -3221,11 +3224,12 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	{
 		iTempVar.Reset();
 		r = ParseShortCircuitLogic(true, iTempVar, ar, funs, vars); // end value
-		if (TK_COMMA != r)
+		if (TK_COMMA != r && TK_R_SMALL != r)
 		{
-			SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "',' after for-loop end value", tk1.c_str());
+			SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "',' or ')' after for-loop end value", tk1.c_str());
 			return false;
 		}
+		tkEndTerm = r;
 		if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
 			funs._cur->Push_OP2(ar, NOP_MOV, i_End, iTempVar._iVar, false);
 		else
@@ -3234,31 +3238,41 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		funs._cur->Push_OP(ar, NOP_CHANGE_INT, i_End, 0, 0);
 	}
 
-	iTryValue = -1;
-	if (Try_ParseIntNum(iTryValue, ar, funs, vars, TK_COMMA, TK_R_SMALL) != TK_NONE)
+	// step 은 선택 인자. 생략하면 1 (Lua/Python 과 동일한 관례).
+	// 값 종류(양수/음수/변수)와 무관하게 NOP_JMP_FOR 하나로 처리한다.
+	// 방향은 런타임에 step 부호를 보고 정하고, step==0 은 런타임 에러다.
+	if (tkEndTerm == TK_R_SMALL)
 	{
-#if 0
-		if (IsShort(iTryValue))
-			funs._cur->Push_OP2(ar, NOP_MOV, i_Step, iTryValue, true);
-		else
-#endif
-			funs._cur->Push_MOVI(ar, i_Step, iTryValue);
+		funs._cur->Push_MOVI(ar, i_Step, 1);   // step 생략 = 1
 	}
 	else
 	{
-		iTempVar.Reset();
-		r = ParseShortCircuitLogic(true, iTempVar, ar, funs, vars); // increase value
-		if (TK_R_SMALL != r)
+		iTryValue = -1;
+		if (Try_ParseIntNum(iTryValue, ar, funs, vars, TK_COMMA, TK_R_SMALL) != TK_NONE)
 		{
-			SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "')' after for-loop step value", tk1.c_str());
-			return false;
+#if 0
+			if (IsShort(iTryValue))
+				funs._cur->Push_OP2(ar, NOP_MOV, i_Step, iTryValue, true);
+			else
+#endif
+				funs._cur->Push_MOVI(ar, i_Step, iTryValue);
 		}
-		if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
-			funs._cur->Push_OP2(ar, NOP_MOV, i_Step, iTempVar._iVar, false);
 		else
-			funs._cur->Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_Step, iTempVar.IsHaveShort());
-		//funs._cur->Push_OP(ar, NOP_VERIFY_TYPE, i_Step, VAR_INT, 0);
-		funs._cur->Push_OP(ar, NOP_CHANGE_INT, i_Step, 0, 0);
+		{
+			iTempVar.Reset();
+			r = ParseShortCircuitLogic(true, iTempVar, ar, funs, vars); // increase value
+			if (TK_R_SMALL != r)
+			{
+				SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "')' after for-loop step value", tk1.c_str());
+				return false;
+			}
+			if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
+				funs._cur->Push_OP2(ar, NOP_MOV, i_Step, iTempVar._iVar, false);
+			else
+				funs._cur->Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_Step, iTempVar.IsHaveShort());
+			//funs._cur->Push_OP(ar, NOP_VERIFY_TYPE, i_Step, VAR_INT, 0);
+			funs._cur->Push_OP(ar, NOP_CHANGE_INT, i_Step, 0, 0);
+		}
 	}
 
 

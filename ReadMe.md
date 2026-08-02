@@ -399,50 +399,55 @@ Lower is better. **ms**, best of 5 runs after a warm-up. `x Neo` = how many time
 
 | Benchmark | What it stresses | Neo (ms) | Lua (ms) | C++ (ms) | Lua vs Neo | C++ vs Neo |
 | :-------- | :--------------- | -------: | -------: | -------: | ---------: | ---------: |
-| `loop_sum`      | integer loop, VM dispatch floor | **233** | 191 |  12.6 | 1.22x | 18.5x |
-| `float_math`    | float mul/add/sub chain         | **244** | 311 |  58.1 | 0.78x |  4.2x |
-| `func_call`     | script function call overhead   | **137** | 157 |   4.2 | 0.87x | 32.6x |
-| `fib_recursive` | recursion, fib(32)              |  **91** |  89 |   6.6 | 1.02x | 13.8x |
-| `array_rw`      | sequential array write + read   |  **58** |  46 |   2.4 | 1.26x | 24.2x |
-| `map_str`       | string-key hash lookup          |  **53** |  40 |  70.1 | 1.33x |  0.8x |
-| `string_ops`    | string build + length           |  **73** | 150 |  13.2 | 0.49x |  5.5x |
-| `particles`     | game-style float + array sim    |  **68** |  49 |   3.3 | 1.39x | 20.6x |
-| **total**       |                                 | **957** | 1033 | 170.5 | 0.92x |  5.6x |
+| `loop_sum`      | integer loop, VM dispatch floor | **221** | 183 |  12.6 | 1.21x | 17.5x |
+| `float_math`    | float mul/add/sub chain         | **275** | 294 |  57.6 | 0.94x |  4.8x |
+| `func_call`     | script function call overhead   | **159** | 144 |   4.2 | 1.10x | 37.9x |
+| `fib_recursive` | recursion, fib(32)              |  **96** |  76 |   6.7 | 1.26x | 14.3x |
+| `array_rw`      | sequential array write + read   |  **64** |  34 |   2.4 | 1.88x | 26.7x |
+| `map_str`       | string-key hash lookup          |  **64** |  26 |  70.5 | 2.46x |  0.9x |
+| `string_ops`    | string build + length           |  **71** | 138 |  13.3 | 0.51x |  5.3x |
+| `particles`     | game-style float + array sim    |  **87** |  37 |   3.4 | 2.35x | 25.6x |
+| **total**       |                                 | **1037** | 932 | 170.7 | 1.11x |  6.1x |
 
 **Reading the numbers.**
-- **Neo is ~8% faster than Lua overall**, but the totals matter less than the spread.
-  Neo leads on `string_ops` (2.0x), `float_math` (1.27x) and `func_call` (1.15x);
-  Lua still leads on `particles` (1.39x), `map_str` (1.33x), `array_rw` (1.26x) and
-  `loop_sum` (1.22x). Lua's remaining edge is in its table/array representation and its
-  very tight dispatch loop — that is where NeoScript has headroom left.
-- C++ is a **reference ceiling**, not a peer: it is 4-33x faster on compute-bound loops.
+- Overall Neo is within ~11% of Lua, but the totals matter far less than the spread.
+  Neo clearly leads on `string_ops` (2.0x) and edges `float_math` (1.06x).
+  Lua leads on `map_str` (2.5x), `particles` (2.4x) and `array_rw` (1.9x) — all three are
+  dominated by its table/array representation, which is where NeoScript has the most headroom
+  left. `loop_sum` (1.21x) is the raw dispatch floor.
+- C++ is a **reference ceiling**, not a peer: it is 5-38x faster on compute-bound loops.
   The exception is `map_str`, where `std::unordered_map<std::string,…>` is actually *slower*
   than both script VMs — both interpreters intern their strings and cache the hash, while the
   C++ map rehashes the key and chases a pointer on every lookup.
+- **Compare within one run, not across runs.** Re-measuring on a differently loaded machine moved
+  *Lua's* numbers by 20-30% with its source untouched, so absolute milliseconds from separate
+  sessions are not comparable. Every figure in the table above comes from a single session.
 
 #### What these benchmarks found (and fixed)
-The first run of this suite exposed two codegen defects, both since fixed. They are a good
-illustration of why the benchmark exists:
-
-| | before | after | note |
-| :-- | --: | --: | :-- |
-| `particles`               | 122 ms | **68 ms** | −44% |
-| `if (a \|\| b)` microbench |  37 ms | **15 ms** | −59%, now within 1.15x of Lua |
-| `var x = a & b;`          |  17 ms | **11 ms** | −35% |
+Building the suite exposed two code-generation defects. Both are fixed, and the evidence is the
+emitted bytecode rather than a stopwatch — instruction counts don't drift with machine load:
 
 1. **Boolean materialization in conditions.** `&&` / `||` emitted correct short-circuit jumps and
    *then* built a `true`/`false` value that the enclosing `if` immediately re-tested — so
-   `if (a || b)` was slower than the equivalent `else if` chain. Conditions are now compiled in
-   branch context: the operator hands its false-jump list to the `if`, which patches it directly.
-   Comparisons inside `&&`/`||` are also fused into single compare-and-jump ops (`JLS`, `JLE`),
-   the same optimization single conditions already had. Ten instructions became five.
+   `if (a || b)` compiled worse than the equivalent `else if` chain. Conditions are now compiled
+   in branch context: the operator hands its false-jump list to the `if`, which patches it
+   directly. Comparisons inside `&&`/`||` are also fused into single compare-and-jump ops
+   (`JLS`, `JLE`), an optimization single conditions already had.
+   **The loop body of a two-clause `if` went from ten instructions to five.**
 2. **A missing entry in a peephole table.** Assigning a temporary into a variable is normally
    elided by retargeting the producing instruction's destination, but the bitwise ops
-   (`NOP_AND` / `NOP_OR`) were absent from that table, so every `var x = a & b;` left a dead `MOV`.
+   (`NOP_AND` / `NOP_OR`) were absent from that table, so every `var x = a & b;` left a dead
+   `MOV`. **One instruction removed per bitwise assignment.**
 
-Both changes are compiler-side only and are covered by the 2,783-case compiler regression suite
-plus a dedicated 43-case logical-operator correctness test (truth tables, short-circuit
-side-effect counts, boundary values, value vs branch context, `else`/`else if`, loops, nesting).
+A third idea did *not* survive measurement: a dedicated opcode for the common `step == 1` loop.
+The premise was that skipping the step-slot read would pay off, but `[begin][end][step]` are
+adjacent and already in cache, and the sign test predicts perfectly — the specialized op measured
+**4-5% slower** than the general one (reproduced over three runs), so it was removed. Fewer
+opcodes also keeps stored bytecode compatible.
+
+All compiler changes are covered by the 2,783-case regression suite plus dedicated correctness
+tests: 43 cases for logical operators ([`TestScript/logic_ops.ns`](TestScript/logic_ops.ns)) and
+26 for loops ([`TestScript/for_loop.ns`](TestScript/for_loop.ns)).
 
 #### Methodology
 Micro-benchmarks are easy to get wrong, so the harness is explicit about it:
@@ -518,7 +523,8 @@ lua55.exe Samples\bench\bench.lua
 	- continue: starts the next loop iteration
 	- if (x) / else / else if: C-style conditional chain; the legacy `elif` syntax is removed
 	- switch / case / default: see "switch statement" below
-	- for: `for (var a in 1, 100, 1)` specifies start, end, and increment values
+	- for: `for (var a in start, end [, step])` — see "for loop" below. `end` is **exclusive**
+	  and `step` is optional (defaults to 1)
 	- foreach: iterates a map, list, or set
 		- map: `foreach (var key, value in map)` or `foreach (var key in map)`
 		- list / set: single variable only, `foreach (var value in list)`
@@ -532,6 +538,29 @@ lua55.exe Samples\bench\bench.lua
 	  (`&` binds tighter than `^`, which binds tighter than `|`)
 	- > / < / >= / <=: comparison operators, equivalent to C semantics
 	- x..y: converts x and y to strings and concatenates them
+
+### for loop
+```cpp
+for (var i in 0, n)        // step omitted -> 1
+    total += i;
+
+for (var i in 0, n, 2)     // every other element
+    total += i;
+
+for (var i in n, 0, -1)    // counts down: n-1 … 1
+    total += i;
+```
+
+- `end` is **exclusive**: `for (var i in 0, 5)` runs with `i` = 0,1,2,3,4.
+- `step` is optional and defaults to `1`, matching Lua/Python. Both `for (var i in 0, n)` and
+  `for (var i in 0, n, 1)` are accepted and compile identically.
+- `step` may be **negative** to count down. Direction is decided at run time from the sign of
+  `step`, so `begin`/`end`/`step` can all be runtime values (function arguments, fields, …),
+  which the compiler cannot inspect.
+- If the direction contradicts the range the loop simply **runs zero times** — `for (var i in 0, 5, -1)`
+  does not spin forever.
+- `step == 0` raises the runtime error `'for' step is zero` instead of looping forever. This is
+  checked for variables too, not just literals.
 
 ### switch statement
 `switch` dispatches on a value through a compile-time table, so matching cost does not

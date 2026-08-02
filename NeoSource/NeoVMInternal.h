@@ -147,7 +147,7 @@ enum eNOperation : OpType
 	NOP_JMP_OR,		// ||
 	NOP_JMP_NAND,	// !(&&)
 	NOP_JMP_NOR,	// !(||)
-	NOP_JMP_FOR,	// for
+	NOP_JMP_FOR,	// for (step 부호를 런타임에 보고 방향 결정 — 양수/음수/변수 모두 처리)
 	NOP_JMP_FOREACH,// foreach
 	NOP_SWITCH,		// n1 = switch table index, n2 = 조건식 위치. 매칭 offset(op 단위)만큼 상대 점프
 

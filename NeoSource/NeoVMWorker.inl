@@ -1467,10 +1467,29 @@ NEOS_FORCEINLINE bool CNeoVMWorker::For(VarInfo* pCur)
 		pCur->_int = pCur_Inter->_int;
 	else
 		Move(pCur, pCur_Inter);
-	if (pCur->_int < pCur[2]._int)
+	// step 의 부호로 비교 방향을 정한다. begin/end/step 은 함수 인자 같은 런타임 값일 수 있어
+	// 컴파일 타임에 방향을 확정할 수 없다. 분기는 루프 내내 같은 쪽이라 예측이 100% 적중한다.
+	// 이 판정 덕에 step<0 이면서 begin<end 일 때 i 가 발산하던 무한루프가 0 회 실행으로 바뀐다.
+	const int step = pCur[3]._int;
+	if (step > 0)
 	{
-		pCur_Inter->_int += pCur[3]._int;
-		return true;
+		if (pCur->_int < pCur[2]._int)
+		{
+			pCur_Inter->_int += step;
+			return true;
+		}
+	}
+	else if (step < 0)
+	{
+		if (pCur->_int > pCur[2]._int)
+		{
+			pCur_Inter->_int += step;
+			return true;
+		}
+	}
+	else
+	{
+		SetErrorFormat(RTE_FOR_STEP_ZERO);   // step==0 은 영원히 끝나지 않는다
 	}
 	return false;
 #endif

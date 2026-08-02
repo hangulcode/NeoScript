@@ -37,6 +37,7 @@ namespace NeoScript
 	X(RTE_NESTED_NOT_ALLOWED,      "%s is not allowed in a synchronous native-to-script call") \
 	/* 기타 */ \
 	X(RTE_SLEEP_VALUE,             "invalid sleep value") \
+	X(RTE_FOR_STEP_ZERO,           "'for' step is zero") \
 	X(RTE_UNKNOWN_OP,              "unknown opcode") \
 	X(RTE_SWITCH_TABLE,            "invalid switch table index") \
 	X(RTE_INVALID_VAR_TYPE,        "invalid variable type in image") \
