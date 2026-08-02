@@ -65,6 +65,13 @@ public:
         s.live = false; s.ptr = nullptr; ++s.generation; // 다음 재사용에서 옛 핸들 무효화
         m_free.push_back(id - 1);
     }
+    // 살아있는 항목 순회(Runtime 소멸 시 남은 소유물 일괄 반납용). fn 이 free 를 담당.
+    template<typename Fn>
+    void forEachLive(Fn fn) const
+    {
+        for (const Slot& s : m_slots)
+            if (s.live && s.ptr) fn(s.ptr);
+    }
 
 private:
     std::vector<Slot> m_slots;
@@ -435,9 +442,23 @@ RuntimeImpl::RuntimeImpl(const RuntimeDesc& desc) : m_desc(desc)
 RuntimeImpl::~RuntimeImpl()
 {
     DestroyDebugger(m_debugger);
+    // 호스트가 DestroyInstance/DestroyProgram 을 다 부르지 않고 Runtime 을 파괴해도 소유물 전부 반납(누수 방지).
+    // 순서 중요(refcount·워커 의존): 인스턴스(워커 반납) → VM 파괴 → 프로그램(refcount 최종 반납).
+    m_instances.forEachLive([this](InstanceRec* inst) {
+        FlushPendingCall(inst);                       // 지연된 borrowed 컨텍스트 반납(pool 아직 살아있음)
+        if (inst->worker)
+        {
+            m_workerHandle.erase(inst->worker);
+            if (m_vm) m_vm->ReleaseWorker(inst->worker->GetWorkerID());
+        }
+        delete inst;
+    });
     if (m_vm) INeoVM::ReleaseVM(m_vm);
+    m_programs.forEachLive([](ProgramRec* rec) {      // 인스턴스가 refcount 반납한 뒤라 여기서 실제 free
+        if (rec->program) INeoVM::ProgramRelease(rec->program);
+        delete rec;
+    });
     if (m_pool) NeoExecContextPool_Destroy(m_pool);
-    // 프로그램 refcount 반납은 DestroyProgram 에서. 남은 것 정리는 TODO(build).
     // INeoVM::Shutdown 은 프로세스 전역(토큰/lib) 파괴라 per-Runtime 에서 부르지 않는다
     // (타 스레드가 compile 중일 수 있음). 필요 시 앱 종료 시점에 명시적으로 1회.
 }
