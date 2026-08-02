@@ -78,13 +78,14 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 	case VAR_VEC3:
 	case VAR_VEC4:
 	case VAR_QUAT:
-		// 가변 성분 쓰기: v[i] = x. 값타입이라 이 VarInfo 인스턴스에만 반영된다.
+		// 가변 성분 쓰기: v[i] = x. 저장소를 공유 중이면 여기서 복제해서(copy-on-write)
+		// 이 VarInfo 인스턴스에만 반영되게 한다 — 값 의미론 유지.
 		if (pKey->GetType() == VAR_INT && pValue->IsNumber())
 		{
 			unsigned idx = (unsigned)pKey->_int;
 			if (idx < (unsigned)pClt->VectorComponentCount())
 			{
-				pClt->_vec[idx] = (float)pValue->GetFloatNumber();
+				GetVM()->VecCopyOnWrite(pClt)->v[idx] = (float)pValue->GetFloatNumber();
 				return;
 			}
 		}
@@ -238,7 +239,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 			unsigned idx = (unsigned)pKey->_int;
 			if (idx < (unsigned)pClt->VectorComponentCount())
 			{
-				Var_SetFloat(pValue, pClt->_vec[idx]);
+				Var_SetFloat(pValue, pClt->_vec->v[idx]);
 				return;
 			}
 		}
@@ -414,7 +415,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::VecArith(VarInfo* r, VarInfo* v1, VarInfo* v
 		// Vec op Vec : 성분별
 		for (int i = 0; i < n; i++)
 		{
-			float a = v1->_vec[i], b = v2->_vec[i];
+			float a = v1->_vec->v[i], b = v2->_vec->v[i];
 			tmp[i] = (op == 0) ? a + b : (op == 1) ? a - b : (op == 2) ? a * b : a / b;
 		}
 	}
@@ -423,7 +424,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::VecArith(VarInfo* r, VarInfo* v1, VarInfo* v
 		// Vec * scalar, Vec / scalar
 		float s = (float)v2->GetFloatNumber();
 		for (int i = 0; i < n; i++)
-			tmp[i] = (op == 2) ? v1->_vec[i] * s : v1->_vec[i] / s;
+			tmp[i] = (op == 2) ? v1->_vec->v[i] * s : v1->_vec->v[i] / s;
 	}
 	else
 		return false;
@@ -1019,7 +1020,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
 		{
 			int n = v1->VectorComponentCount();
 			for (int i = 0; i < n; i++)
-				if (v1->_vec[i] != v2->_vec[i]) return false;
+				if (v1->_vec->v[i] != v2->_vec->v[i]) return false;
 			return true;
 		}
 		break;

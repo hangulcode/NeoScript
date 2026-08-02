@@ -35,30 +35,43 @@ static std::string g_meta_Per2 = "%=";
 
 #include "NeoVMWorker.inl"
 
-// 벡터 값타입 세터 (native 호출 내부에서만 쓰이므로 non-inline. NeoLib.cpp 에서 링크됨)
+// 벡터 세터 (native 호출 내부에서만 쓰이므로 non-inline. NeoLib.cpp 에서 링크됨)
+//
+// 대상이 이미 단독 소유(refCount<=1)인 같은 계열 벡터면 그 저장소를 재사용한다.
+// `v = v + d` 처럼 결과를 자기 자신에 되쓰는 패턴에서 할당/해제를 없애기 위한 것이다.
+VecInfo* INeoVMWorker::VecStoreFor(VarInfo* d, VAR_TYPE t)
+{
+	if (d->IsVector() && d->_vec->_refCount <= 1)
+	{
+		d->SetType(t);           // 성분 수만 바뀌어도 저장소는 그대로 쓴다
+		return d->_vec;
+	}
+	if (d->IsAllocType()) Var_Release(d);
+	VecInfo* p = ((CNeoVMImpl*)_pVM)->VecAlloc();
+	p->_refCount = 1;
+	d->SetType(t);
+	d->_vec = p;
+	return p;
+}
 void INeoVMWorker::Var_SetVec2(VarInfo* d, float x, float y)
 {
-	if (d->IsAllocType()) Var_Release(d);
-	d->SetType(VAR_VEC2);
-	d->_vec[0] = x; d->_vec[1] = y;
+	VecInfo* p = VecStoreFor(d, VAR_VEC2);
+	p->v[0] = x; p->v[1] = y;
 }
 void INeoVMWorker::Var_SetVec3(VarInfo* d, float x, float y, float z)
 {
-	if (d->IsAllocType()) Var_Release(d);
-	d->SetType(VAR_VEC3);
-	d->_vec[0] = x; d->_vec[1] = y; d->_vec[2] = z;
+	VecInfo* p = VecStoreFor(d, VAR_VEC3);
+	p->v[0] = x; p->v[1] = y; p->v[2] = z;
 }
 void INeoVMWorker::Var_SetVec4(VarInfo* d, float x, float y, float z, float w)
 {
-	if (d->IsAllocType()) Var_Release(d);
-	d->SetType(VAR_VEC4);
-	d->_vec[0] = x; d->_vec[1] = y; d->_vec[2] = z; d->_vec[3] = w;
+	VecInfo* p = VecStoreFor(d, VAR_VEC4);
+	p->v[0] = x; p->v[1] = y; p->v[2] = z; p->v[3] = w;
 }
 void INeoVMWorker::Var_SetQuat(VarInfo* d, float w, float x, float y, float z)
 {
-	if (d->IsAllocType()) Var_Release(d);
-	d->SetType(VAR_QUAT);
-	d->_vec[0] = w; d->_vec[1] = x; d->_vec[2] = y; d->_vec[3] = z;
+	VecInfo* p = VecStoreFor(d, VAR_QUAT);
+	p->v[0] = w; p->v[1] = x; p->v[2] = y; p->v[3] = z;
 }
 
 int& GetModuleRefCount(VarInfo* p)
@@ -189,14 +202,14 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 	case VAR_STRING:
 		return v1->_str->_str;
 	case VAR_VEC2:
-		snprintf(ch, sizeof(ch), "(%g, %g)", v1->_vec[0], v1->_vec[1]);
+		snprintf(ch, sizeof(ch), "(%g, %g)", v1->_vec->v[0], v1->_vec->v[1]);
 		return ch;
 	case VAR_VEC3:
-		snprintf(ch, sizeof(ch), "(%g, %g, %g)", v1->_vec[0], v1->_vec[1], v1->_vec[2]);
+		snprintf(ch, sizeof(ch), "(%g, %g, %g)", v1->_vec->v[0], v1->_vec->v[1], v1->_vec->v[2]);
 		return ch;
 	case VAR_VEC4:
 	case VAR_QUAT:
-		snprintf(ch, sizeof(ch), "(%g, %g, %g, %g)", v1->_vec[0], v1->_vec[1], v1->_vec[2], v1->_vec[3]);
+		snprintf(ch, sizeof(ch), "(%g, %g, %g, %g)", v1->_vec->v[0], v1->_vec->v[1], v1->_vec->v[2], v1->_vec->v[3]);
 		return ch;
 	case VAR_MAP:
 		return "map";
@@ -1301,22 +1314,22 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 		break;
 	case VAR_VEC2:
 		out.type = "Vector2";
-		snprintf(buf, sizeof(buf), "(%g, %g)", pVar->_vec[0], pVar->_vec[1]);
+		snprintf(buf, sizeof(buf), "(%g, %g)", pVar->_vec->v[0], pVar->_vec->v[1]);
 		out.value = buf;
 		break;
 	case VAR_VEC3:
 		out.type = "Vector3";
-		snprintf(buf, sizeof(buf), "(%g, %g, %g)", pVar->_vec[0], pVar->_vec[1], pVar->_vec[2]);
+		snprintf(buf, sizeof(buf), "(%g, %g, %g)", pVar->_vec->v[0], pVar->_vec->v[1], pVar->_vec->v[2]);
 		out.value = buf;
 		break;
 	case VAR_VEC4:
 		out.type = "Vector4";
-		snprintf(buf, sizeof(buf), "(%g, %g, %g, %g)", pVar->_vec[0], pVar->_vec[1], pVar->_vec[2], pVar->_vec[3]);
+		snprintf(buf, sizeof(buf), "(%g, %g, %g, %g)", pVar->_vec->v[0], pVar->_vec->v[1], pVar->_vec->v[2], pVar->_vec->v[3]);
 		out.value = buf;
 		break;
 	case VAR_QUAT:
 		out.type = "Quaternion";
-		snprintf(buf, sizeof(buf), "(%g, %g, %g, %g)", pVar->_vec[0], pVar->_vec[1], pVar->_vec[2], pVar->_vec[3]);
+		snprintf(buf, sizeof(buf), "(%g, %g, %g, %g)", pVar->_vec->v[0], pVar->_vec->v[1], pVar->_vec->v[2], pVar->_vec->v[3]);
 		out.value = buf;
 		break;
 	case VAR_MAP:

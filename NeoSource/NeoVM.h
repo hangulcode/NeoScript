@@ -138,13 +138,6 @@ enum VAR_TYPE : u8
 
 	VAR_CHAR,
 
-	// 인라인 벡터 값타입 (non-alloc: refcount/힙 없음, VarInfo._vec 에 성분 인라인).
-	// IsAllocType 경계(VAR_STRING) 앞에 둬서 값복사 경로를 타게 한다. For Game_Engine
-	VAR_VEC2,
-	VAR_VEC3,
-	VAR_VEC4,
-	VAR_QUAT,
-
 	VAR_STRING,	// Alloc
 	VAR_MAP,
 	VAR_LIST,
@@ -152,6 +145,16 @@ enum VAR_TYPE : u8
 	VAR_COROUTINE,
 	VAR_MODULE,
 	VAR_ASYNC,
+
+	// 벡터 값타입 (alloc: VecInfo 를 풀에서 받아 refcount 로 공유).
+	// IsAllocType 경계(VAR_STRING) 뒤에 둔다 — 성분 4개를 VarInfo 유니온에 인라인하면
+	// VarInfo 가 16→24바이트가 되어 스택/리스트/맵노드 전체가 50% 커진다(실측: map_str
+	// -12%, particles -13%). 값 의미론은 copy-on-write 로 보존한다(VecCopyOnWrite).
+	// 반드시 연속이어야 한다 — IsVector() 가 범위 비교다.
+	VAR_VEC2,
+	VAR_VEC3,
+	VAR_VEC4,
+	VAR_QUAT,
 };
 
 struct SNeoVMAllocStats
@@ -163,6 +166,7 @@ struct SNeoVMAllocStats
 	int coroutines = 0;
 	int modules = 0;
 	int asyncs = 0;
+	int vectors = 0;
 };
 
 struct INeoVM;
@@ -177,6 +181,7 @@ struct SetInfo;
 struct AsyncInfo;
 struct MapNode;
 struct SetNode;
+struct VecInfo;
 
 #pragma pack(1)
 struct CollectionIterator
@@ -229,7 +234,7 @@ public:
 		INeoVMWorker* _module;
 		AsyncInfo*	_async;
 		CollectionIterator	_it;
-		float		_vec[4]; // VAR_VEC2/VEC3/VEC4/QUAT 성분 인라인 For Game_Engine (유효 성분 수는 태그로 결정) 
+		VecInfo*	_vec; // VAR_VEC2/VEC3/VEC4/QUAT 성분(유효 성분 수는 타입 태그로 결정)
 	};
 
 	NEOS_FORCEINLINE VarInfo() { _type = VAR_NONE; }
@@ -280,21 +285,20 @@ public:
 	bool ListFindFloat(int idx, NS_FLOAT& value);
 	bool SetListIndexer(VMHash<int>* pIndexer);
 
-	// 벡터 값타입 Get/Set (호스트/엔진용). Get 은 벡터 값타입(VAR_VEC*) 전용 — 리스트 폴백 없음.
-	// Set 은 대상 VarInfo 가 non-alloc 일 때만 세팅한다(참조값 leak 방지) — alloc 이면 false.
+	// 벡터 Get (호스트/엔진용). VAR_VEC* 전용 — 리스트 폴백 없음.
 	// Quaternion 은 엔진 컨벤션대로 wxyz 순서, Vector4 는 xyzw.
+	// Set 은 여기 없다: 벡터가 alloc 타입이라 저장소를 만들려면 VM(풀)이 필요하다.
+	// 세팅은 INeoVMWorker::Var_SetVec2/3/4/Quat 를 쓴다.
 	bool GetVec2(NS_FLOAT& x, NS_FLOAT& y);
 	bool GetVec3(NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z);
 	bool GetVec4(NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z, NS_FLOAT& w);
 	bool GetQuat(NS_FLOAT& w, NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z);
-	bool SetVec2(NS_FLOAT x, NS_FLOAT y);
-	bool SetVec3(NS_FLOAT x, NS_FLOAT y, NS_FLOAT z);
-	bool SetVec4(NS_FLOAT x, NS_FLOAT y, NS_FLOAT z, NS_FLOAT w);
-	bool SetQuat(NS_FLOAT w, NS_FLOAT x, NS_FLOAT y, NS_FLOAT z);
 };
 
-// 벡터 값타입(float[4] union)이 들어가면서 x64는 24바이트, Win32는 20바이트가 된다.
-static_assert(sizeof(VarInfo) == (sizeof(void*) == 8 ? 24 : 20), "Unexpected VarInfo size with inline vector value type");
+// 유니온 최대 멤버가 포인터(8바이트)라 x64는 16바이트, Win32는 12바이트다.
+// 벡터를 인라인(float[4])하던 시절엔 24/20바이트였다 — 이 8바이트가 스택·리스트·맵노드
+// 전부에 곱해져서 실측으로 map_str 12%, particles 13% 를 먹었다.
+static_assert(sizeof(VarInfo) == (sizeof(void*) == 8 ? 16 : 12), "Unexpected VarInfo size");
 
 enum NeoDebugStopReason
 {
@@ -519,6 +523,8 @@ public:
 	void Var_SetInt(VarInfo* d, int v);
 	void Var_SetFloat(VarInfo* d, NS_FLOAT v);
 	void Var_SetBool(VarInfo* d, bool v);
+	// 벡터 저장소 확보. 대상이 이미 단독 소유 벡터면 재사용하고, 아니면 풀에서 새로 받는다.
+	VecInfo* VecStoreFor(VarInfo* d, VAR_TYPE t);
 	void Var_SetVec2(VarInfo* d, float x, float y);
 	void Var_SetVec3(VarInfo* d, float x, float y, float z);
 	void Var_SetVec4(VarInfo* d, float x, float y, float z, float w);

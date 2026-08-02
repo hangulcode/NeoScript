@@ -399,23 +399,23 @@ Lower is better. **ms**, best of 5 runs after a warm-up. `x Neo` = how many time
 
 | Benchmark | What it stresses | Neo (ms) | Lua (ms) | C++ (ms) | Lua vs Neo | C++ vs Neo |
 | :-------- | :--------------- | -------: | -------: | -------: | ---------: | ---------: |
-| `loop_sum`      | integer loop, VM dispatch floor | **216** | 190 |  12.6 | 1.14x | 17.1x |
-| `float_math`    | float mul/add/sub chain         | **198** | 307 |  57.8 | 0.64x |  3.4x |
-| `func_call`     | script function call overhead   | **137** | 156 |   4.2 | 0.88x | 32.6x |
-| `fib_recursive` | recursion, fib(32)              |  **86** |  88 |   6.8 | 0.98x | 12.6x |
-| `array_rw`      | sequential array write + read   |  **56** |  47 |   2.4 | 1.19x | 23.3x |
-| `map_str`       | string-key hash lookup          |  **52** |  38 |  69.2 | 1.37x |  0.8x |
-| `string_ops`    | string build + length           |  **74** | 150 |  13.3 | 0.49x |  5.6x |
-| `particles`     | game-style float + array sim    |  **72** |  49 |   3.4 | 1.47x | 21.2x |
-| **total**       |                                 | **891** | 1025 | 169.7 | 0.87x |  5.3x |
+| `loop_sum`      | integer loop, VM dispatch floor | **217** | 191 |  12.8 | 1.14x | 17.0x |
+| `float_math`    | float mul/add/sub chain         | **202** | 309 |  57.6 | 0.65x |  3.5x |
+| `func_call`     | script function call overhead   | **133** | 156 |   4.3 | 0.85x | 31.1x |
+| `fib_recursive` | recursion, fib(32)              |  **87** |  90 |   6.9 | 0.97x | 12.6x |
+| `array_rw`      | sequential array write + read   |  **54** |  45 |   2.4 | 1.20x | 22.1x |
+| `map_str`       | string-key hash lookup          |  **51** |  40 |  70.1 | 1.28x |  0.7x |
+| `string_ops`    | string build + length           |  **72** | 145 |  13.3 | 0.50x |  5.4x |
+| `particles`     | game-style float + array sim    |  **66** |  48 |   3.4 | 1.37x | 19.6x |
+| **total**       |                                 | **882** | 1024 | 170.8 | 0.86x |  5.2x |
 
 **Reading the numbers.**
-- **Neo is ~13% faster than Lua overall**, but the totals matter far less than the spread.
-  Neo leads on `string_ops` (2.0x), `float_math` (1.55x) and `func_call` (1.14x), and `fib_recursive`
-  is now a tie. Lua still leads on `particles` (1.47x), `map_str` (1.37x) and `array_rw` (1.19x) —
+- **Neo is ~16% faster than Lua overall**, but the totals matter far less than the spread.
+  Neo leads on `string_ops` (2.0x), `float_math` (1.53x) and `func_call` (1.17x); `fib_recursive`
+  is a tie. Lua still leads on `particles` (1.37x), `map_str` (1.28x) and `array_rw` (1.20x) —
   all three are dominated by its table/array representation, which is where NeoScript has the most
   headroom left. `loop_sum` (1.14x) is the raw dispatch floor.
-  (Two full passes of this table, run back to back, agreed within 0.5% on both totals.)
+  All 8 checksums match across the three languages, which is what proves they did the same work.
 - C++ is a **reference ceiling**, not a peer: it is 3-33x faster on compute-bound loops.
   The exception is `map_str`, where `std::unordered_map<std::string,…>` is actually *slower*
   than both script VMs — both interpreters intern their strings and cache the hash, while the
@@ -425,11 +425,11 @@ Lower is better. **ms**, best of 5 runs after a warm-up. `x Neo` = how many time
   sessions are not comparable. Every figure in the table above comes from a single session.
 
 #### What these benchmarks found (and fixed)
-Building the suite paid for itself twice over. It exposed two **code-generation defects** (1-2),
-where the evidence is the emitted bytecode rather than a stopwatch — instruction counts don't drift
-with machine load. It then exposed a structural property of the **interpreter loop** itself (3-4),
-where the evidence *is* the stopwatch, so each claim below is an A/B measurement of the same binary
-built two ways:
+Building the suite paid for itself several times over. It exposed two **code-generation defects**
+(1-2), where the evidence is the emitted bytecode rather than a stopwatch — instruction counts
+don't drift with machine load. It then exposed structural properties of the **interpreter loop**
+(3-4) and of the **value representation** (5), where the evidence *is* the stopwatch, so each of
+those claims is an A/B measurement of two full rebuilds run interleaved in one session:
 
 1. **Boolean materialization in conditions.** `&&` / `||` emitted correct short-circuit jumps and
    *then* built a `true`/`false` value that the enclosing `if` immediately re-tested — so
@@ -461,6 +461,19 @@ built two ways:
    `array_rw` −7%. A scalar-arithmetic microbenchmark dropped 25%. Note that `loop_sum` and
    `fib_recursive` sped up too, which no single handler explains — shrinking the dispatch switch
    helps every opcode through the instruction cache, not just the ones that were edited.
+5. **`sizeof(VarInfo)` is multiplied by everything.** Vector value types (`Vector2`…`Quaternion`)
+   used to store their four floats *inline* in the `VarInfo` union. Sixteen bytes of payload forced
+   the whole struct from 16 to **24 bytes** — and `VarInfo` is the element type of the var stack,
+   of every list, and of both halves of every map node (a map node was 60 bytes; Lua's is 24).
+   Moving the components behind a pooled `VecInfo*` brought `VarInfo` back to 16 bytes and cut the
+   suite by **7.5%**: `particles` −23%, `func_call` −12%, `float_math` −11%, `map_str` −11%.
+   The cost is paid where vectors are *created*: a vector microbenchmark got 18% slower overall,
+   concentrated in construction (`math.Vector3(...)` +23%) and copy-then-write (+50%). Two things
+   keep that bill down — assignment shares the storage and only copies on mutation
+   (copy-on-write, so `var b = a` stays free and value semantics are preserved), and a store that
+   is already singly-owned is reused in place, which makes the common `acc = acc + delta`
+   accumulation allocate nothing at all (measured at ±0%). Reading components even got *faster*
+   (−9%), because the smaller `VarInfo` outweighs the extra indirection.
 
 Two ideas did *not* survive measurement:
 
@@ -484,8 +497,11 @@ Micro-benchmarks are easy to get wrong, so the harness is explicit about it:
    on the same data structures. No language-specific shortcuts.
 2. **Self-timed.** Each language times only the measured region with its own clock
    (`system.clock` / `os.clock` / `steady_clock`), so process start-up and compilation are excluded.
-3. **Warm-up + best-of-5.** The best run is reported, which rejects scheduler noise
-   (two full passes agreed within 3%).
+3. **Warm-up + best-of-5, interleaved.** The best run is reported, which rejects scheduler noise.
+   When two builds are compared they are run round-robin in one session (`old, new, old, new, …`)
+   so any drift in machine load lands on both. Comparing builds also means **full rebuilds** —
+   an incremental LTCG link after a header change can produce a binary that is both slower and,
+   in one case, outright corrupt.
 4. **Checksum-verified.** Every benchmark returns a checksum and all three languages must print
    the *same* value — this is what proves they really did the same work. All 8 checksums match.
 5. **Binary-exact floats.** Constants are powers of two (`0.5`, `0.25`, `1/64`) and accumulators are

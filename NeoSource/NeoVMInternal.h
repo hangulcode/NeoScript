@@ -351,6 +351,17 @@ struct StringInfo : AllocBase, VMString
 {
 };
 
+// 벡터 성분 저장소. 유효 성분 수는 VarInfo 의 타입 태그(VAR_VEC2/3/4/QUAT)가 결정한다.
+// Quaternion 은 엔진 컨벤션대로 v[0..3] = w,x,y,z 순서.
+//
+// refcount 로 공유하되 값 의미론을 유지한다 — 대입은 공유(incref)만 하고, 성분을 쓰는
+// 순간(v[i] = x) 공유 중이면 복제한다(copy-on-write). 그래서 `var b = a;` 뒤에 b 를
+// 고쳐도 a 는 그대로다.
+struct VecInfo : AllocBase
+{
+	float v[4];
+};
+
 
 struct AsyncInfo : AllocBase
 {
@@ -396,17 +407,13 @@ NEOS_FORCEINLINE void Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
 	case VAR_FUN_NATIVE: v1->_funPtr = v2->_funPtr; break;
 	case VAR_CHAR: v1->_c = v2->_c; break;
 
-	// 벡터 값타입: refcount 없이 성분 값복사. switch 가 타입별로 갈리므로 각 케이스는
+	// 벡터: 여기서는 공유(incref)만 한다. 값 의미론은 성분을 쓰는 쪽에서 copy-on-write 로
+	// 지킨다(VecCopyOnWrite) — 대입마다 복제하면 할당 비용이 그대로 살아나기 때문이다.
 	case VAR_VEC2:
-		memcpy(v1->_vec, v2->_vec, sizeof(float) * 2);
-		break;
 	case VAR_VEC3:
-		memcpy(v1->_vec, v2->_vec, sizeof(float) * 3);
-		break;
 	case VAR_VEC4:
 	case VAR_QUAT:
-		memcpy(v1->_vec, v2->_vec, sizeof(float) * 4);
-		break;
+		v1->_vec = v2->_vec; ++v1->_vec->_refCount; break;
 
 	case VAR_STRING: v1->_str = v2->_str; ++v1->_str->_refCount; break;
 	case VAR_MAP: v1->_tbl = v2->_tbl; ++v1->_tbl->_refCount; break;

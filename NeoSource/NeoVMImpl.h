@@ -59,6 +59,11 @@ public:
 	StringInfo* StringAlloc(const std::string& str);
 	void FreeString(VarInfo *d);
 
+	VecInfo* VecAlloc();
+	void FreeVec(VecInfo* p);
+	// 공유 중이면 복제해서 단독 소유로 만든다(성분 쓰기 직전에 호출). 값 의미론 보존용.
+	VecInfo* VecCopyOnWrite(VarInfo* d);
+
 	MapInfo* TableAlloc(int cnt = 0);
 	void FreeTable(MapInfo* tbl);
 
@@ -117,6 +122,8 @@ public:
 	CNVMAllocPool < SetNode, 32> m_sPool_SetNode;
 	CNVMAllocPool< SetInfo, 32> m_sPool_SetInfo;
 	CNVMAllocPool< ListInfo, 32> m_sPool_ListInfo;
+
+	CNVMAllocPool< VecInfo, 32> m_sPool_Vec;
 
 	CNVMInstPool< AsyncInfo, 32> m_sPool_Async;
 	CNVMInstPool< StringInfo, 32> m_sPool_String;

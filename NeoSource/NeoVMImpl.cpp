@@ -23,6 +23,7 @@ static std::atomic<int> g_iNeoVMAllocSets{ 0 };
 static std::atomic<int> g_iNeoVMAllocCoroutines{ 0 };
 static std::atomic<int> g_iNeoVMAllocModules{ 0 };
 static std::atomic<int> g_iNeoVMAllocAsyncs{ 0 };
+static std::atomic<int> g_iNeoVMAllocVectors{ 0 };
 
 static void PublishNeoVMAllocStatValue(std::atomic<int>& target, int& published, int current)
 {
@@ -43,6 +44,7 @@ void GetNeoVMAllocStats(SNeoVMAllocStats& outStats)
 	outStats.coroutines = g_iNeoVMAllocCoroutines.load(std::memory_order_relaxed);
 	outStats.modules = g_iNeoVMAllocModules.load(std::memory_order_relaxed);
 	outStats.asyncs = g_iNeoVMAllocAsyncs.load(std::memory_order_relaxed);
+	outStats.vectors = g_iNeoVMAllocVectors.load(std::memory_order_relaxed);
 }
 
 bool GetNeoVMAllocStats(INeoVM* pVM, SNeoVMAllocStats& outStats)
@@ -63,6 +65,7 @@ void CNeoVMImpl::PublishAllocStats()
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocCoroutines, m_sPublishedAllocStats.coroutines, m_sAllocStats.coroutines);
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocModules, m_sPublishedAllocStats.modules, m_sAllocStats.modules);
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocAsyncs, m_sPublishedAllocStats.asyncs, m_sAllocStats.asyncs);
+	PublishNeoVMAllocStatValue(g_iNeoVMAllocVectors, m_sPublishedAllocStats.vectors, m_sAllocStats.vectors);
 }
 
 NeoExecContextPool* NeoExecContextPool_Create(int varStackSize)
@@ -203,6 +206,33 @@ void CNeoVMImpl::FreeString(VarInfo *d)
 {
 	--m_sAllocStats.strings;
 	m_sPool_String.Confer(d->_str);
+}
+VecInfo* CNeoVMImpl::VecAlloc()
+{
+	// MapNode 와 같은 CNVMAllocPool — 생성자를 부르지 않는 raw 블록이라 성분은 호출측이 채운다.
+	VecInfo* p = m_sPool_Vec.Receive();
+	p->_refCount = 0;
+	++m_sAllocStats.vectors;
+	return p;
+}
+void CNeoVMImpl::FreeVec(VecInfo* p)
+{
+	--m_sAllocStats.vectors;
+	m_sPool_Vec.Confer(p);
+}
+VecInfo* CNeoVMImpl::VecCopyOnWrite(VarInfo* d)
+{
+	VecInfo* src = d->_vec;
+	if (src->_refCount <= 1)
+		return src;              // 단독 소유 → 그대로 쓴다
+
+	VecInfo* dst = VecAlloc();   // 공유 중 → 복제해서 이 VarInfo 만 새 것을 갖는다
+	dst->v[0] = src->v[0]; dst->v[1] = src->v[1];
+	dst->v[2] = src->v[2]; dst->v[3] = src->v[3];
+	--src->_refCount;
+	dst->_refCount = 1;
+	d->_vec = dst;
+	return dst;
 }
 MapInfo* CNeoVMImpl::TableAlloc(int cnt)
 {

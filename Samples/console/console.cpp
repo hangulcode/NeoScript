@@ -1949,14 +1949,23 @@ int main(int argc, char* argv[])
 		}
 		else if (command == "--file" && argc >= 3)
 		{
-			bool putASM = false, debug = false; // --file <script.ns> [--asm] [--debug]
+			bool putASM = false, debug = false, stats = false; // --file <script.ns> [--asm] [--debug] [--stats]
 			for (int i = 3; i < argc; ++i)
 			{
 				std::string opt = argv[i];
 				if (opt == "--asm")   putASM = true;
 				else if (opt == "--debug") debug = true;
+				else if (opt == "--stats") stats = true;
 			}
 			exitCode = RunFile(pLoader, argv[2], putASM, debug);
+			if (stats)
+			{
+				// 스크립트/VM 정리 후 남아있는 할당 수. 전부 0 이어야 누수가 없다.
+				NeoScript::SNeoVMAllocStats s;
+				NeoScript::GetNeoVMAllocStats(s);
+				printf("[ALLOC] str=%d map=%d list=%d set=%d cor=%d mod=%d async=%d vec=%d\n",
+					s.strings, s.maps, s.lists, s.sets, s.coroutines, s.modules, s.asyncs, s.vectors);
+			}
 		}
 		else if (command == "--smoke")
 		{
