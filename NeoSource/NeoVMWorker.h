@@ -297,6 +297,14 @@ private:
 	void Or(VarInfo* r, VarInfo* v1, VarInfo* v2);
 
 	void Add3(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	NEOS_NOINLINE void Add3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	NEOS_NOINLINE void Sub3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	NEOS_NOINLINE void Mul3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	NEOS_NOINLINE void Div3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	NEOS_NOINLINE void Add2Rare(VarInfo* r, VarInfo* v2);
+	NEOS_NOINLINE void Sub2Rare(VarInfo* r, VarInfo* v2);
+	NEOS_NOINLINE void Mul2Rare(VarInfo* r, VarInfo* v2);
+	NEOS_NOINLINE void Div2Rare(VarInfo* r, VarInfo* v2);
 	void Sub3(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Mul3(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Div3(VarInfo* r, VarInfo* v1, VarInfo* v2);

@@ -399,24 +399,24 @@ Lower is better. **ms**, best of 5 runs after a warm-up. `x Neo` = how many time
 
 | Benchmark | What it stresses | Neo (ms) | Lua (ms) | C++ (ms) | Lua vs Neo | C++ vs Neo |
 | :-------- | :--------------- | -------: | -------: | -------: | ---------: | ---------: |
-| `loop_sum`      | integer loop, VM dispatch floor | **234** | 193 |  12.5 | 1.21x | 18.7x |
-| `float_math`    | float mul/add/sub chain         | **231** | 307 |  57.5 | 0.75x |  4.0x |
-| `func_call`     | script function call overhead   | **145** | 157 |   4.1 | 0.92x | 35.4x |
-| `fib_recursive` | recursion, fib(32)              |  **95** |  89 |   6.6 | 1.07x | 14.4x |
-| `array_rw`      | sequential array write + read   |  **60** |  47 |   2.4 | 1.28x | 25.0x |
-| `map_str`       | string-key hash lookup          |  **54** |  39 |  69.2 | 1.38x |  0.8x |
-| `string_ops`    | string build + length           |  **75** | 153 |  13.3 | 0.49x |  5.6x |
-| `particles`     | game-style float + array sim    |  **76** |  50 |   3.4 | 1.52x | 22.4x |
-| **total**       |                                 | **970** | 1035 | 169.0 | 0.94x |  5.7x |
+| `loop_sum`      | integer loop, VM dispatch floor | **216** | 190 |  12.6 | 1.14x | 17.1x |
+| `float_math`    | float mul/add/sub chain         | **198** | 307 |  57.8 | 0.64x |  3.4x |
+| `func_call`     | script function call overhead   | **137** | 156 |   4.2 | 0.88x | 32.6x |
+| `fib_recursive` | recursion, fib(32)              |  **86** |  88 |   6.8 | 0.98x | 12.6x |
+| `array_rw`      | sequential array write + read   |  **56** |  47 |   2.4 | 1.19x | 23.3x |
+| `map_str`       | string-key hash lookup          |  **52** |  38 |  69.2 | 1.37x |  0.8x |
+| `string_ops`    | string build + length           |  **74** | 150 |  13.3 | 0.49x |  5.6x |
+| `particles`     | game-style float + array sim    |  **72** |  49 |   3.4 | 1.47x | 21.2x |
+| **total**       |                                 | **891** | 1025 | 169.7 | 0.87x |  5.3x |
 
 **Reading the numbers.**
-- **Neo is ~6% faster than Lua overall**, but the totals matter far less than the spread.
-  Neo leads on `string_ops` (2.0x), `float_math` (1.33x) and `func_call` (1.08x).
-  Lua leads on `particles` (1.52x), `map_str` (1.38x) and `array_rw` (1.28x) — all three are
-  dominated by its table/array representation, which is where NeoScript has the most headroom
-  left. `loop_sum` (1.21x) is the raw dispatch floor.
-  (Two independent sessions of this table agreed within 1%.)
-- C++ is a **reference ceiling**, not a peer: it is 5-38x faster on compute-bound loops.
+- **Neo is ~13% faster than Lua overall**, but the totals matter far less than the spread.
+  Neo leads on `string_ops` (2.0x), `float_math` (1.55x) and `func_call` (1.14x), and `fib_recursive`
+  is now a tie. Lua still leads on `particles` (1.47x), `map_str` (1.37x) and `array_rw` (1.19x) —
+  all three are dominated by its table/array representation, which is where NeoScript has the most
+  headroom left. `loop_sum` (1.14x) is the raw dispatch floor.
+  (Two full passes of this table, run back to back, agreed within 0.5% on both totals.)
+- C++ is a **reference ceiling**, not a peer: it is 3-33x faster on compute-bound loops.
   The exception is `map_str`, where `std::unordered_map<std::string,…>` is actually *slower*
   than both script VMs — both interpreters intern their strings and cache the hash, while the
   C++ map rehashes the key and chases a pointer on every lookup.
@@ -425,8 +425,11 @@ Lower is better. **ms**, best of 5 runs after a warm-up. `x Neo` = how many time
   sessions are not comparable. Every figure in the table above comes from a single session.
 
 #### What these benchmarks found (and fixed)
-Building the suite exposed two code-generation defects. Both are fixed, and the evidence is the
-emitted bytecode rather than a stopwatch — instruction counts don't drift with machine load:
+Building the suite paid for itself twice over. It exposed two **code-generation defects** (1-2),
+where the evidence is the emitted bytecode rather than a stopwatch — instruction counts don't drift
+with machine load. It then exposed a structural property of the **interpreter loop** itself (3-4),
+where the evidence *is* the stopwatch, so each claim below is an A/B measurement of the same binary
+built two ways:
 
 1. **Boolean materialization in conditions.** `&&` / `||` emitted correct short-circuit jumps and
    *then* built a `true`/`false` value that the enclosing `if` immediately re-tested — so
@@ -448,6 +451,16 @@ emitted bytecode rather than a stopwatch — instruction counts don't drift with
    then some: `float_math` −11%, `map_str` −10%, `particles` −7% **versus the original code**.
    In a bytecode interpreter the size of the inlined dispatch body is itself a performance
    parameter.
+4. **The same split, applied to arithmetic, was worth 8% overall.** Each of the eight arithmetic
+   handlers (`Add3`/`Sub3`/`Mul3`/`Div3` and the compound-assign `Add2`…`Div2`) inlined 42-72 lines
+   into the dispatch loop: the int/float cases that virtually all code takes, *followed by* string
+   concatenation, vector math, metatable dispatch, list merging and error formatting. Splitting each
+   one so only the four int/float combinations stay inlined and everything else moves to a
+   `noinline` `…Rare` helper — **a pure code move, no semantic change** — cut the total from
+   970 ms to **891 ms**: `float_math` −14%, `fib_recursive` −9%, `loop_sum` −8%,
+   `array_rw` −7%. A scalar-arithmetic microbenchmark dropped 25%. Note that `loop_sum` and
+   `fib_recursive` sped up too, which no single handler explains — shrinking the dispatch switch
+   helps every opcode through the instruction cache, not just the ones that were edited.
 
 Two ideas did *not* survive measurement:
 

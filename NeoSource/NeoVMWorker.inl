@@ -438,32 +438,28 @@ NEOS_FORCEINLINE bool CNeoVMWorker::VecArith(VarInfo* r, VarInfo* v1, VarInfo* v
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Add3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
+	// 실사용의 대부분인 INT/FLOAT 조합만 인라인한다. 문자열/벡터/메타/에러는 Add3Rare 로 분리 —
+	// 이 함수는 VM 디스패치 루프에 인라인되므로 본문 크기가 곧 전체 성능이다(For 에서 실측).
+	const VAR_TYPE t1 = v1->GetType();
+	const VAR_TYPE t2 = v2->GetType();
+	if (t1 == VAR_INT)
+	{
+		if (t2 == VAR_INT)   { Var_SetInt(r, v1->_int + v2->_int); return; }
+		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_int + v2->_float); return; }
+	}
+	else if (t1 == VAR_FLOAT)
+	{
+		if (t2 == VAR_INT)   { Var_SetFloat(r, v1->_float + v2->_int); return; }
+		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_float + v2->_float); return; }
+	}
+	Add3Rare(r, v1, v2);
+}
+
+// 드문 경로: 문자열 연결 / 벡터 / 메타테이블 / 리스트 / 타입 에러.
+NEOS_NOINLINE void CNeoVMWorker::Add3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
+{
 	switch (v1->GetType())
 	{
-	case VAR_INT:
-		if (v2->GetType() == VAR_INT)
-		{
-			Var_SetInt(r, v1->_int + v2->_int);
-			return;
-		}
-		else if (v2->GetType() == VAR_FLOAT)
-		{
-			Var_SetFloat(r, v1->_int + v2->_float);
-			return;
-		}
-		break;
-	case VAR_FLOAT:
-		if (v2->GetType() == VAR_INT)
-		{
-			Var_SetFloat(r, v1->_float + v2->_int);
-			return;
-		}
-		else if (v2->GetType() == VAR_FLOAT)
-		{
-			Var_SetFloat(r, v1->_float + v2->_float);
-			return;
-		}
-		break;
 	case VAR_CHAR:
 		if (v2->GetType() == VAR_CHAR)
 		{
@@ -510,32 +506,28 @@ NEOS_FORCEINLINE void CNeoVMWorker::Add3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Sub3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
+	// 실사용의 대부분인 INT/FLOAT 조합만 인라인한다. 문자열/벡터/메타/에러는 Sub3Rare 로 분리 —
+	// 이 함수는 VM 디스패치 루프에 인라인되므로 본문 크기가 곧 전체 성능이다(For 에서 실측).
+	const VAR_TYPE t1 = v1->GetType();
+	const VAR_TYPE t2 = v2->GetType();
+	if (t1 == VAR_INT)
+	{
+		if (t2 == VAR_INT)   { Var_SetInt(r, v1->_int - v2->_int); return; }
+		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_int - v2->_float); return; }
+	}
+	else if (t1 == VAR_FLOAT)
+	{
+		if (t2 == VAR_INT)   { Var_SetFloat(r, v1->_float - v2->_int); return; }
+		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_float - v2->_float); return; }
+	}
+	Sub3Rare(r, v1, v2);
+}
+
+// 드문 경로: 문자열 연결 / 벡터 / 메타테이블 / 리스트 / 타입 에러.
+NEOS_NOINLINE void CNeoVMWorker::Sub3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
+{
 	switch (v1->GetType())
 	{
-	case VAR_INT:
-		if (v2->GetType() == VAR_INT)
-		{
-			Var_SetInt(r, v1->_int - v2->_int);
-			return;
-		}
-		else if (v2->GetType() == VAR_FLOAT)
-		{
-			Var_SetFloat(r, v1->_int - v2->_float);
-			return;
-		}
-		break;
-	case VAR_FLOAT:
-		if (v2->GetType() == VAR_INT)
-		{
-			Var_SetFloat(r, v1->_float - v2->_int);
-			return;
-		}
-		else if (v2->GetType() == VAR_FLOAT)
-		{
-			Var_SetFloat(r, v1->_float - v2->_float);
-			return;
-		}
-		break;
 	case VAR_CHAR:
 		break;
 	case VAR_STRING:
@@ -562,32 +554,28 @@ NEOS_FORCEINLINE void CNeoVMWorker::Sub3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Mul3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
+	// 실사용의 대부분인 INT/FLOAT 조합만 인라인한다. 문자열/벡터/메타/에러는 Mul3Rare 로 분리 —
+	// 이 함수는 VM 디스패치 루프에 인라인되므로 본문 크기가 곧 전체 성능이다(For 에서 실측).
+	const VAR_TYPE t1 = v1->GetType();
+	const VAR_TYPE t2 = v2->GetType();
+	if (t1 == VAR_INT)
+	{
+		if (t2 == VAR_INT)   { Var_SetInt(r, v1->_int * v2->_int); return; }
+		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_int * v2->_float); return; }
+	}
+	else if (t1 == VAR_FLOAT)
+	{
+		if (t2 == VAR_INT)   { Var_SetFloat(r, v1->_float * v2->_int); return; }
+		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_float * v2->_float); return; }
+	}
+	Mul3Rare(r, v1, v2);
+}
+
+// 드문 경로: 문자열 연결 / 벡터 / 메타테이블 / 리스트 / 타입 에러.
+NEOS_NOINLINE void CNeoVMWorker::Mul3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
+{
 	switch (v1->GetType())
 	{
-	case VAR_INT:
-		if (v2->GetType() == VAR_INT)
-		{
-			Var_SetInt(r, v1->_int * v2->_int);
-			return;
-		}
-		else if (v2->GetType() == VAR_FLOAT)
-		{
-			Var_SetFloat(r, v1->_int * v2->_float);
-			return;
-		}
-		break;
-	case VAR_FLOAT:
-		if (v2->GetType() == VAR_INT)
-		{
-			Var_SetFloat(r, v1->_float * v2->_int);
-			return;
-		}
-		else if (v2->GetType() == VAR_FLOAT)
-		{
-			Var_SetFloat(r, v1->_float * v2->_float);
-			return;
-		}
-		break;
 	case VAR_CHAR:
 		break;
 	case VAR_STRING:
@@ -612,32 +600,28 @@ NEOS_FORCEINLINE void CNeoVMWorker::Mul3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Div3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
+	// 실사용의 대부분인 INT/FLOAT 조합만 인라인한다. 문자열/벡터/메타/에러는 Div3Rare 로 분리 —
+	// 이 함수는 VM 디스패치 루프에 인라인되므로 본문 크기가 곧 전체 성능이다(For 에서 실측).
+	const VAR_TYPE t1 = v1->GetType();
+	const VAR_TYPE t2 = v2->GetType();
+	if (t1 == VAR_INT)
+	{
+		if (t2 == VAR_INT)   { Var_SetInt(r, v1->_int / v2->_int); return; }
+		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_int / v2->_float); return; }
+	}
+	else if (t1 == VAR_FLOAT)
+	{
+		if (t2 == VAR_INT)   { Var_SetFloat(r, v1->_float / v2->_int); return; }
+		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_float / v2->_float); return; }
+	}
+	Div3Rare(r, v1, v2);
+}
+
+// 드문 경로: 문자열 연결 / 벡터 / 메타테이블 / 리스트 / 타입 에러.
+NEOS_NOINLINE void CNeoVMWorker::Div3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
+{
 	switch (v1->GetType())
 	{
-	case VAR_INT:
-		if (v2->GetType() == VAR_INT)
-		{
-			Var_SetInt(r, v1->_int / v2->_int);
-			return;
-		}
-		else if (v2->GetType() == VAR_FLOAT)
-		{
-			Var_SetFloat(r, v1->_int / v2->_float);
-			return;
-		}
-		break;
-	case VAR_FLOAT:
-		if (v2->GetType() == VAR_INT)
-		{
-			Var_SetFloat(r, v1->_float / v2->_int);
-			return;
-		}
-		else if (v2->GetType() == VAR_FLOAT)
-		{
-			Var_SetFloat(r, v1->_float / v2->_float);
-			return;
-		}
-		break;
 	case VAR_CHAR:
 		break;
 	case VAR_STRING:
@@ -1115,33 +1099,28 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareGE(VarInfo* v1, VarInfo* v2)
 
 NEOS_FORCEINLINE void CNeoVMWorker::Add2(VarInfo* r, VarInfo* v2)
 {
+	// INT/FLOAT 조합만 인라인. 문자열/메타/에러는 Add2Rare 로 — 이 함수는 VM 디스패치
+	// 루프에 인라인되므로 본문 크기가 곧 전체 성능이다(For/Add3 에서 실측).
+	const VAR_TYPE t1 = r->GetType();
+	const VAR_TYPE t2 = v2->GetType();
+	if (t1 == VAR_INT)
+	{
+		if (t2 == VAR_INT)   { r->_int += v2->_int; return; }
+		if (t2 == VAR_FLOAT) { r->SetType(VAR_FLOAT); r->_float = (NS_FLOAT)r->_int + v2->_float; return; }
+	}
+	else if (t1 == VAR_FLOAT)
+	{
+		if (t2 == VAR_INT)   { r->_float += v2->_int; return; }
+		if (t2 == VAR_FLOAT) { r->_float += v2->_float; return; }
+	}
+	Add2Rare(r, v2);
+}
+
+// 드문 경로: 문자열 연결 / 메타테이블 / 타입 에러.
+NEOS_NOINLINE void CNeoVMWorker::Add2Rare(VarInfo* r, VarInfo* v2)
+{
 	switch (r->GetType())
 	{
-	case VAR_INT:
-		if (v2->GetType() == VAR_INT)
-		{
-			r->_int += v2->_int;
-			return;
-		}
-		else if (v2->GetType() == VAR_FLOAT)
-		{
-			r->SetType(VAR_FLOAT);
-			r->_float = (NS_FLOAT)r->_int + v2->_float;
-			return;
-		}
-		break;
-	case VAR_FLOAT:
-		if (v2->GetType() == VAR_INT)
-		{
-			r->_float += v2->_int;
-			return;
-		}
-		else if (v2->GetType() == VAR_FLOAT)
-		{
-			r->_float += v2->_float;
-			return;
-		}
-		break;
 	case VAR_CHAR:
 		if (v2->GetType() == VAR_CHAR)
 		{
@@ -1177,33 +1156,28 @@ NEOS_FORCEINLINE void CNeoVMWorker::Add2(VarInfo* r, VarInfo* v2)
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Sub2(VarInfo* r, VarInfo* v2)
 {
+	// INT/FLOAT 조합만 인라인. 문자열/메타/에러는 Sub2Rare 로 — 이 함수는 VM 디스패치
+	// 루프에 인라인되므로 본문 크기가 곧 전체 성능이다(For/Add3 에서 실측).
+	const VAR_TYPE t1 = r->GetType();
+	const VAR_TYPE t2 = v2->GetType();
+	if (t1 == VAR_INT)
+	{
+		if (t2 == VAR_INT)   { r->_int -= v2->_int; return; }
+		if (t2 == VAR_FLOAT) { r->SetType(VAR_FLOAT); r->_float = (NS_FLOAT)r->_int - v2->_float; return; }
+	}
+	else if (t1 == VAR_FLOAT)
+	{
+		if (t2 == VAR_INT)   { r->_float -= v2->_int; return; }
+		if (t2 == VAR_FLOAT) { r->_float -= v2->_float; return; }
+	}
+	Sub2Rare(r, v2);
+}
+
+// 드문 경로: 문자열 연결 / 메타테이블 / 타입 에러.
+NEOS_NOINLINE void CNeoVMWorker::Sub2Rare(VarInfo* r, VarInfo* v2)
+{
 	switch (r->GetType())
 	{
-	case VAR_INT:
-		if (v2->GetType() == VAR_INT)
-		{
-			r->_int -= v2->_int;
-			return;
-		}
-		else if (v2->GetType() == VAR_FLOAT)
-		{
-			r->SetType(VAR_FLOAT);
-			r->_float = (NS_FLOAT)r->_int - v2->_float;
-			return;
-		}
-		break;
-	case VAR_FLOAT:
-		if (v2->GetType() == VAR_INT)
-		{
-			r->_float -= v2->_int;
-			return;
-		}
-		else if (v2->GetType() == VAR_FLOAT)
-		{
-			r->_float -= v2->_float;
-			return;
-		}
-		break;
 	case VAR_CHAR:
 		break;
 	case VAR_STRING:
@@ -1219,33 +1193,28 @@ NEOS_FORCEINLINE void CNeoVMWorker::Sub2(VarInfo* r, VarInfo* v2)
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Mul2(VarInfo* r, VarInfo* v2)
 {
+	// INT/FLOAT 조합만 인라인. 문자열/메타/에러는 Mul2Rare 로 — 이 함수는 VM 디스패치
+	// 루프에 인라인되므로 본문 크기가 곧 전체 성능이다(For/Add3 에서 실측).
+	const VAR_TYPE t1 = r->GetType();
+	const VAR_TYPE t2 = v2->GetType();
+	if (t1 == VAR_INT)
+	{
+		if (t2 == VAR_INT)   { r->_int *= v2->_int; return; }
+		if (t2 == VAR_FLOAT) { r->SetType(VAR_FLOAT); r->_float = (NS_FLOAT)r->_int * v2->_float; return; }
+	}
+	else if (t1 == VAR_FLOAT)
+	{
+		if (t2 == VAR_INT)   { r->_float *= v2->_int; return; }
+		if (t2 == VAR_FLOAT) { r->_float *= v2->_float; return; }
+	}
+	Mul2Rare(r, v2);
+}
+
+// 드문 경로: 문자열 연결 / 메타테이블 / 타입 에러.
+NEOS_NOINLINE void CNeoVMWorker::Mul2Rare(VarInfo* r, VarInfo* v2)
+{
 	switch (r->GetType())
 	{
-	case VAR_INT:
-		if (v2->GetType() == VAR_INT)
-		{
-			r->_int *= v2->_int;
-			return;
-		}
-		else if (v2->GetType() == VAR_FLOAT)
-		{
-			r->SetType(VAR_FLOAT);
-			r->_float = (NS_FLOAT)r->_int * v2->_float;
-			return;
-		}
-		break;
-	case VAR_FLOAT:
-		if (v2->GetType() == VAR_INT)
-		{
-			r->_float *= v2->_int;
-			return;
-		}
-		else if (v2->GetType() == VAR_FLOAT)
-		{
-			r->_float *= v2->_float;
-			return;
-		}
-		break;
 	case VAR_CHAR:
 		break;
 	case VAR_STRING:
@@ -1261,33 +1230,28 @@ NEOS_FORCEINLINE void CNeoVMWorker::Mul2(VarInfo* r, VarInfo* v2)
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Div2(VarInfo* r, VarInfo* v2)
 {
+	// INT/FLOAT 조합만 인라인. 문자열/메타/에러는 Div2Rare 로 — 이 함수는 VM 디스패치
+	// 루프에 인라인되므로 본문 크기가 곧 전체 성능이다(For/Add3 에서 실측).
+	const VAR_TYPE t1 = r->GetType();
+	const VAR_TYPE t2 = v2->GetType();
+	if (t1 == VAR_INT)
+	{
+		if (t2 == VAR_INT)   { r->_int /= v2->_int; return; }
+		if (t2 == VAR_FLOAT) { r->SetType(VAR_FLOAT); r->_float = (NS_FLOAT)r->_int / v2->_float; return; }
+	}
+	else if (t1 == VAR_FLOAT)
+	{
+		if (t2 == VAR_INT)   { r->_float /= v2->_int; return; }
+		if (t2 == VAR_FLOAT) { r->_float /= v2->_float; return; }
+	}
+	Div2Rare(r, v2);
+}
+
+// 드문 경로: 문자열 연결 / 메타테이블 / 타입 에러.
+NEOS_NOINLINE void CNeoVMWorker::Div2Rare(VarInfo* r, VarInfo* v2)
+{
 	switch (r->GetType())
 	{
-	case VAR_INT:
-		if (v2->GetType() == VAR_INT)
-		{
-			r->_int /= v2->_int;
-			return;
-		}
-		else if (v2->GetType() == VAR_FLOAT)
-		{
-			r->SetType(VAR_FLOAT);
-			r->_float = (NS_FLOAT)r->_int / v2->_float;
-			return;
-		}
-		break;
-	case VAR_FLOAT:
-		if (v2->GetType() == VAR_INT)
-		{
-			r->_float /= v2->_int;
-			return;
-		}
-		else if (v2->GetType() == VAR_FLOAT)
-		{
-			r->_float /= v2->_float;
-			return;
-		}
-		break;
 	case VAR_CHAR:
 		break;
 	case VAR_STRING:
