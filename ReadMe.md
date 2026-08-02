@@ -122,8 +122,12 @@ host code only sees opaque handles. Embed through this header — the internal `
 
 - **Runtime** (`IRuntime`, `CreateRuntime` / `DestroyRuntime`) — owns native bindings and produces programs
   and instances. Register native objects/functions, then call `FreezeBindings()` before compiling.
-- **Program** (`ProgramHandle`) — an immutable, shared, refcounted compiled image. Build with `Compile`
-  (from source) or `LoadProgram` (from cached bytecode). One program can back many instances.
+- **Program** (`ProgramHandle`) — an immutable, shared, refcounted compiled image. One program backs many
+  instances. Compilation is split into a build step and a load step:
+  - `Compile(source) → program` — the common "compile and run now" path (does both steps internally).
+  - `CompileToBytecode(source, out) → Error` — produces only the **bytecode artifact** (no program), for
+    when you want to *save* the compile result (offline cache, or a server storing user scripts in a DB).
+  - `LoadProgram(bytecode) → program` — turns a saved/streamed bytecode artifact into a runnable program.
 - **Instance** (`InstanceHandle`) — one program's per-instance execution state and global variables.
 
 ```cpp
@@ -153,6 +157,18 @@ if (!cr.program) { /* inspect cr.error */ }
 // 3) Instance: per-instance globals + state. userData is passed to bound object dispatchers.
 InstanceDesc idesc; idesc.userData = self; idesc.runGlobalInit = true;
 InstanceHandle inst = rt->CreateInstance(cr.program, idesc);
+```
+
+To **save a compile** instead of running it now, produce the bytecode artifact and store it; load it later:
+
+```cpp
+std::vector<uint8_t> bytecode;
+if (rt->CompileToBytecode(cd, bytecode).ok())
+    saveToCacheOrDb(bytecode);                     // no program created
+
+// ...later / on another run / on the game server...
+ProgramHandle prog = rt->LoadProgram(loadFromCacheOrDb());
+InstanceHandle inst = rt->CreateInstance(prog, idesc);
 ```
 
 **Host → script calls.** Function indices are fixed per program, so cache the `FunctionHandle` once and

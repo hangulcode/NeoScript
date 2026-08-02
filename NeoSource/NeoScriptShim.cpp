@@ -14,6 +14,7 @@
 #include "NeoVMMap.h"
 #include "NeoVMList.h"
 #include "NeoVMProgram.h" // CNeoVMProgram::FindFunction (FindFunction 구현)
+#include "NeoArchive.h"   // CNArchive (CompileToBytecode: 소스→바이트코드)
 
 #include <cstring>
 #include <deque>
@@ -332,7 +333,7 @@ public:
 
     //--- Program ---
     CompileResult Compile(const CompileDesc& desc) override;
-    bool SerializeProgram(ProgramHandle program, std::vector<uint8_t>& out) override;
+    Error CompileToBytecode(const CompileDesc& desc, std::vector<uint8_t>& out) override;
     ProgramHandle LoadProgram(Span<const uint8_t> bytecode, Error* error) override;
     void DestroyProgram(ProgramHandle program) override;
     DefineSetHandle CreateDefineSet(Span<const CompileDefine> defines) override;
@@ -389,6 +390,10 @@ public:
 
 private:
     ProgramRec*  resolveProgram(ProgramHandle h) const { return m_programs.get(h.id, h.generation); }
+    // CompileDesc → NeoCompilerParam. 백킹 스토리지(err/gtab/inlineDefines/dbgPath)는 호출자가 소유하고
+    // 컴파일 호출까지 살아있어야 한다(param 이 그 주소를 가리킴). Compile / CompileToBytecode 공용.
+    void SetupCompilerParam(const CompileDesc& desc, NeoCompilerParam& param, std::string& err,
+                            NeoGlobalSymbolTable& gtab, NeoCompileDefines& inlineDefines, std::string& dbgPath);
 
     RuntimeDesc m_desc;
     LoaderAdapter m_loaderAdapter;   // 공개 ILoader* 배선(nativeLoader 없을 때 사용)
@@ -513,20 +518,16 @@ ObjectBinding* RuntimeImpl::AcquireNestedBinding(InstanceHandle handle, const Re
 //------------------------------------------------------------------------------
 // Program
 //------------------------------------------------------------------------------
-CompileResult RuntimeImpl::Compile(const CompileDesc& desc)
+void RuntimeImpl::SetupCompilerParam(const CompileDesc& desc, NeoCompilerParam& param, std::string& err,
+                                    NeoGlobalSymbolTable& gtab, NeoCompileDefines& inlineDefines, std::string& dbgPath)
 {
-    CompileResult r;
-    std::string err;
-
-    NeoCompilerParam param(desc.source.data(), static_cast<int>(desc.source.size()));
     param.err = &err;
     param.debug = desc.includeDebugInfo;
     param.putASM = desc.emitAsm;   // ASM 덤프(진단): 내부 컴파일러가 OutAsm 으로 stdout 출력
-    NeoGlobalSymbolTable gtab{ m_globalSymbols.data(), static_cast<int>(m_globalSymbols.size()) };
+    gtab = NeoGlobalSymbolTable{ m_globalSymbols.data(), static_cast<int>(m_globalSymbols.size()) };
     param.globalSymbols = m_globalSymbols.empty() ? nullptr : &gtab;
     // TODO(build): desc.sourceName -> param.debugSourcePath, optimize 플래그 매핑
 
-    NeoCompileDefines inlineDefines; // 인라인 경로 전용(지역 — CompileToProgram 반환까지 유효)
     if (desc.defineSet)
     {
         // 재사용 집합: 미리 빌드된 맵을 그대로 가리킨다 → 매 Compile 재구성 0.
@@ -539,7 +540,6 @@ CompileResult RuntimeImpl::Compile(const CompileDesc& desc)
         param.defines = &inlineDefines;
     }
 
-    std::string dbgPath; // param.debugSourcePath 는 const char* — 널종단 보장 위해 로컬 보관
     if (desc.debugSourcePath.data() != nullptr && desc.debugSourcePath.size() > 0)
     {
         dbgPath.assign(desc.debugSourcePath.data(), desc.debugSourcePath.size());
@@ -549,6 +549,17 @@ CompileResult RuntimeImpl::Compile(const CompileDesc& desc)
     // import 해석: 이 Runtime 의 loader(전역 아님). nativeLoader(interop) 우선, 없으면 공개 ILoader 어댑터.
     param.loader = m_desc.nativeLoader ? static_cast<INeoLoader*>(m_desc.nativeLoader)
                  : (m_desc.loader ? &m_loaderAdapter : nullptr);
+}
+
+CompileResult RuntimeImpl::Compile(const CompileDesc& desc)
+{
+    CompileResult r;
+    // 백킹 스토리지(param 이 가리킴 — CompileToProgram 반환까지 생존).
+    std::string err, dbgPath;
+    NeoGlobalSymbolTable gtab{};
+    NeoCompileDefines inlineDefines;
+    NeoCompilerParam param(desc.source.data(), static_cast<int>(desc.source.size()));
+    SetupCompilerParam(desc, param, err, gtab, inlineDefines, dbgPath);
 
     CNeoVMProgram* prog = INeoVM::CompileToProgram(param);
     if (prog == nullptr)
@@ -565,11 +576,26 @@ CompileResult RuntimeImpl::Compile(const CompileDesc& desc)
     return r;
 }
 
-bool RuntimeImpl::SerializeProgram(ProgramHandle, std::vector<uint8_t>&)
+Error RuntimeImpl::CompileToBytecode(const CompileDesc& desc, std::vector<uint8_t>& out)
 {
-    // TODO(build): CNArchive 로 컴파일 이미지 직렬화(오프라인 캐시). 현 API 는 Compile→CNArchive 경로.
-    return false;
+    // 소스 → 바이트코드(빌드 산출물). Program 은 만들지 않는다. 저장/전송 후 LoadProgram 으로 로드.
+    std::string err, dbgPath;
+    NeoGlobalSymbolTable gtab{};
+    NeoCompileDefines inlineDefines;
+    NeoCompilerParam param(desc.source.data(), static_cast<int>(desc.source.size()));
+    SetupCompilerParam(desc, param, err, gtab, inlineDefines, dbgPath);
+
+    CNArchive arw;   // 자체 버퍼(성장). INeoVM::Compile 이 여기 바이트코드를 쓴다.
+    if (!INeoVM::Compile(arw, param))
+    {
+        Error e; e.code = 1; e.message = err; e.sourceName = desc.sourceName.str();
+        return e;
+    }
+    const uint8_t* bytes = static_cast<const uint8_t*>(arw.GetData());
+    out.assign(bytes, bytes + arw.GetBufferOffset());
+    return Error{};   // ok
 }
+
 
 ProgramHandle RuntimeImpl::LoadProgram(Span<const uint8_t> bytecode, Error* error)
 {

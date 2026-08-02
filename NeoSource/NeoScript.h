@@ -610,8 +610,14 @@ public:
     virtual ObjectType GetObjectType(StringView name) = 0;
 
     //--- Program (불변 공유 코드) ---
+    // 컴파일 = 두 단계로 분리: (1) 소스→바이트코드(빌드 산출물), (2) 바이트코드→Program(실행 가능).
+    //   • Compile           : 소스를 곧바로 Program 으로(내부에서 두 단계 수행). "지금 실행" 하는 흔한 경우.
+    //   • CompileToBytecode  : 소스를 바이트코드로만. 그 바이트코드를 저장/전송해 뒀다가 LoadProgram 으로 로드.
+    //     → "컴파일 결과를 저장하고 싶을 때만" 쓰는 경로(오프라인 캐시/서버 DB 저장). 별도 보관 상태 없음.
     virtual CompileResult Compile(const CompileDesc& desc) = 0;
-    virtual bool SerializeProgram(ProgramHandle program, std::vector<uint8_t>& outBytecode) = 0;  // 캐시 저장
+    // 소스를 바이트코드로 컴파일해 outBytecode 에 채운다(Program 은 만들지 않음). 반환 Error.ok()==성공.
+    // 저장한 바이트코드는 나중에 LoadProgram(bytecode) 으로 Program 화한다.
+    virtual Error CompileToBytecode(const CompileDesc& desc, std::vector<uint8_t>& outBytecode) = 0;
     virtual ProgramHandle LoadProgram(Span<const uint8_t> bytecode, Error* error = nullptr) = 0;
     virtual void DestroyProgram(ProgramHandle program) = 0;   // 인스턴스 생존 시 refcount 로 지연 해제
     // 재사용 define 집합: 한 번 빌드해 CompileDesc.defineSet 으로 여러 Compile 에 재사용(재구성 0).
