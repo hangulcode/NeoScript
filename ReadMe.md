@@ -399,22 +399,23 @@ Lower is better. **ms**, best of 5 runs after a warm-up. `x Neo` = how many time
 
 | Benchmark | What it stresses | Neo (ms) | Lua (ms) | C++ (ms) | Lua vs Neo | C++ vs Neo |
 | :-------- | :--------------- | -------: | -------: | -------: | ---------: | ---------: |
-| `loop_sum`      | integer loop, VM dispatch floor | **221** | 183 |  12.6 | 1.21x | 17.5x |
-| `float_math`    | float mul/add/sub chain         | **275** | 294 |  57.6 | 0.94x |  4.8x |
-| `func_call`     | script function call overhead   | **159** | 144 |   4.2 | 1.10x | 37.9x |
-| `fib_recursive` | recursion, fib(32)              |  **96** |  76 |   6.7 | 1.26x | 14.3x |
-| `array_rw`      | sequential array write + read   |  **64** |  34 |   2.4 | 1.88x | 26.7x |
-| `map_str`       | string-key hash lookup          |  **64** |  26 |  70.5 | 2.46x |  0.9x |
-| `string_ops`    | string build + length           |  **71** | 138 |  13.3 | 0.51x |  5.3x |
-| `particles`     | game-style float + array sim    |  **87** |  37 |   3.4 | 2.35x | 25.6x |
-| **total**       |                                 | **1037** | 932 | 170.7 | 1.11x |  6.1x |
+| `loop_sum`      | integer loop, VM dispatch floor | **234** | 193 |  12.5 | 1.21x | 18.7x |
+| `float_math`    | float mul/add/sub chain         | **231** | 307 |  57.5 | 0.75x |  4.0x |
+| `func_call`     | script function call overhead   | **145** | 157 |   4.1 | 0.92x | 35.4x |
+| `fib_recursive` | recursion, fib(32)              |  **95** |  89 |   6.6 | 1.07x | 14.4x |
+| `array_rw`      | sequential array write + read   |  **60** |  47 |   2.4 | 1.28x | 25.0x |
+| `map_str`       | string-key hash lookup          |  **54** |  39 |  69.2 | 1.38x |  0.8x |
+| `string_ops`    | string build + length           |  **75** | 153 |  13.3 | 0.49x |  5.6x |
+| `particles`     | game-style float + array sim    |  **76** |  50 |   3.4 | 1.52x | 22.4x |
+| **total**       |                                 | **970** | 1035 | 169.0 | 0.94x |  5.7x |
 
 **Reading the numbers.**
-- Overall Neo is within ~11% of Lua, but the totals matter far less than the spread.
-  Neo clearly leads on `string_ops` (2.0x) and edges `float_math` (1.06x).
-  Lua leads on `map_str` (2.5x), `particles` (2.4x) and `array_rw` (1.9x) — all three are
+- **Neo is ~6% faster than Lua overall**, but the totals matter far less than the spread.
+  Neo leads on `string_ops` (2.0x), `float_math` (1.33x) and `func_call` (1.08x).
+  Lua leads on `particles` (1.52x), `map_str` (1.38x) and `array_rw` (1.28x) — all three are
   dominated by its table/array representation, which is where NeoScript has the most headroom
   left. `loop_sum` (1.21x) is the raw dispatch floor.
+  (Two independent sessions of this table agreed within 1%.)
 - C++ is a **reference ceiling**, not a peer: it is 5-38x faster on compute-bound loops.
   The exception is `map_str`, where `std::unordered_map<std::string,…>` is actually *slower*
   than both script VMs — both interpreters intern their strings and cache the hash, while the
@@ -439,11 +440,25 @@ emitted bytecode rather than a stopwatch — instruction counts don't drift with
    (`NOP_AND` / `NOP_OR`) were absent from that table, so every `var x = a & b;` left a dead
    `MOV`. **One instruction removed per bitwise assignment.**
 
-A third idea did *not* survive measurement: a dedicated opcode for the common `step == 1` loop.
-The premise was that skipping the step-slot read would pay off, but `[begin][end][step]` are
-adjacent and already in cache, and the sign test predicts perfectly — the specialized op measured
-**4-5% slower** than the general one (reproduced over three runs), so it was removed. Fewer
-opcodes also keeps stored bytecode compatible.
+3. **Keeping the hot path small matters more than saving an instruction.** Teaching `for` to honor
+   a negative `step` (see *for loop* below) added a sign test and an error branch to `For()`, which
+   is `__forceinline`d into the dispatch loop. That alone slowed *every* benchmark that loops by
+   8-19% — far more than the added work explains. Moving the rare cases (negative step, step 0)
+   into a `__declspec(noinline)` helper so the inlined body stays tiny recovered all of it and
+   then some: `float_math` −11%, `map_str` −10%, `particles` −7% **versus the original code**.
+   In a bytecode interpreter the size of the inlined dispatch body is itself a performance
+   parameter.
+
+Two ideas did *not* survive measurement:
+
+- **A dedicated opcode for the common `step == 1` loop.** The premise was that skipping the
+  step-slot read would pay off, but `[begin][end][step]` are adjacent and already in cache, and
+  the sign test predicts perfectly — the specialized op measured **4-5% slower** than the general
+  one (reproduced over three runs), so it was removed. Fewer opcodes also keeps stored bytecode
+  compatible.
+- **A separate loop-entry opcode** to pre-validate `step` once per loop. Making `For()` itself
+  sign-aware removed the infinite-loop cases for free, leaving only `step == 0` to handle, so the
+  extra opcode and its jump patching were dropped.
 
 All compiler changes are covered by the 2,783-case regression suite plus dedicated correctness
 tests: 43 cases for logical operators ([`TestScript/logic_ops.ns`](TestScript/logic_ops.ns)) and
