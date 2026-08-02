@@ -3471,6 +3471,12 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 
 	funs._cur->Push_OP1(ar, NOP_VAR_CLEAR, iKey);
+	// 반복자 슬롯도 진입 시 반드시 비운다. ForEach 런타임은 "이 슬롯이 VAR_ITERATOR 인가"로
+	// 순회 시작/계속을 판별하는데, break/return 으로 루프를 빠져나가면 슬롯이 VAR_ITERATOR 인
+	// 채로 남는다. 로컬 슬롯은 호출 간에 정리되지 않으므로, 같은 슬롯 번호를 쓰는 다음 foreach
+	// 가 이를 "순회 중"으로 오인해 남은 offset 부터 이어가 버린다(같은 입력에 다른 결과).
+	// 루프당 1회 비용이라 반복 비용에는 영향이 없다.
+	funs._cur->Push_OP1(ar, NOP_VAR_CLEAR, iIterator);
 
 	funs._cur->Push_JMP(ar, 0); // for Check 위치로 JMP(일단은 위치만 확보)
 	SJumpValue jmp1(funs._cur->_code->GetBufferOffset() - (sizeof(short) * 3), funs._cur->_code->GetBufferOffset());
