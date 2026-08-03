@@ -347,16 +347,28 @@ typedef CoroutineInfo NeoExecContext;
 
 // 실행 컨텍스트 풀. 호스트(엔진)가 스레드별로 소유(thread_local)하고 VM 로드 시 주입한다.
 // 스레드 귀속 사용 전제라 내부 동기화가 없다. 재사용 fast path는 free-list pop/push이며, 확장은 할당할 수 있다.
+// 실행 컨텍스트 풀이 확보한 총 바이트를 전역에 반영한다(풀은 스레드별이라 각자 델타를 publish).
+void NeoExecPool_PublishBytes(long long delta);
+
 struct NeoExecContextPool
 {
 	CNVMInstPool<CoroutineInfo, 32> _pool;
 	int _varStackSize;
+	// 이 풀이 한 번이라도 대여해 준 컨텍스트들. 풀 페이지는 소멸까지 해제되지 않으므로 포인터가 안정적이다.
+	// 컨텍스트 1개의 var 스택만 50K * sizeof(VarInfo) 라 풀 노드 자체보다 훨씬 크다 — 따로 세야 한다.
+	std::vector<NeoExecContext*> _warmCtx;
+	long long _publishedBytes = 0;
 
 	NeoExecContextPool(int varStackSize = 50 * 1024) : _varStackSize(varStackSize < 100 ? 100 : varStackSize) {}
+	~NeoExecContextPool()
+	{
+		NeoExecPool_PublishBytes(-_publishedBytes);
+	}
 
 	NeoExecContext* Acquire()
 	{
 		NeoExecContext* p = _pool.Receive();
+		const bool cold = p->m_sVarStack.capacity() == 0;   // 처음 대여되는 노드 = 스택 힙이 지금 잡힌다
 		p->_info._pCodeCurrent = NULL;
 		p->_info.ClearSP();
 		p->m_sAsyncResumeCodePtrs.clear();
@@ -365,12 +377,41 @@ struct NeoExecContextPool
 		p->m_sCallStack.reserve(1000);
 		p->m_sCallStack.clear();
 		p->m_sVarStack.resize(_varStackSize);
+		if (cold)
+		{
+			// 재계산은 컨텍스트가 새로 늘어날 때만 한다(대여 fast path 에 부담을 주지 않으려고).
+			// 실행 중 콜스택이 reserve 를 넘겨 자라는 만큼은 다음 신규 컨텍스트 때 반영된다.
+			_warmCtx.push_back(p);
+			PublishBytes();
+		}
 		return p;
 	}
 	// 반납 전 사용 슬롯의 VarInfo 참조 정리는 호출측(워커)이 수행한다(Var_Release 가 워커 멤버라서).
 	void Release(NeoExecContext* p)
 	{
 		_pool.Confer(p);
+	}
+
+	// 풀 페이지 + 각 컨텍스트가 따로 들고 있는 스택 힙의 총 확보 용량.
+	long long ReservedBytes() const
+	{
+		long long n = (long long)_pool.ReservedBytes();
+		for (NeoExecContext* p : _warmCtx)
+		{
+			n += (long long)p->m_sVarStack.capacity() * sizeof(VarInfo);
+			n += (long long)p->m_sCallStack.capacity() * sizeof(SCallStack);
+			n += (long long)p->m_sAsyncResumeCodePtrs.capacity() * sizeof(AsyncResumeInfo);
+		}
+		return n;
+	}
+	void PublishBytes()
+	{
+		long long cur = ReservedBytes();
+		if (cur != _publishedBytes)
+		{
+			NeoExecPool_PublishBytes(cur - _publishedBytes);
+			_publishedBytes = cur;
+		}
 	}
 };
 

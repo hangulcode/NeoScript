@@ -40,7 +40,8 @@ private:
 	SNeoVMAllocStats m_sPublishedAllocStats;
 public:
 	void PublishAllocStats();
-	void GetAllocStats(SNeoVMAllocStats& outStats) const { outStats = m_sAllocStats; }
+	long long PoolBytes() const;   // 이 VM 의 오브젝트 풀 8개가 확보한 총 바이트
+	void GetAllocStats(SNeoVMAllocStats& outStats) const { outStats = m_sAllocStats; outStats.poolBytes = PoolBytes(); }
 	void Var_SetString(VarInfo *d, const char* str);
 	void Var_SetStringA(VarInfo *d, const std::string& str);
 	void Var_SetTable(VarInfo *d, MapInfo* p);

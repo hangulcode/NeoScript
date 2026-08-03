@@ -1156,6 +1156,7 @@ void GetAllocStats(AllocStats& out)
     GetNeoVMAllocStats(s);   // 내부 전역 통계(NeoVM.h)
     out.strings = s.strings; out.maps = s.maps; out.lists = s.lists; out.sets = s.sets;
     out.coroutines = s.coroutines; out.modules = s.modules; out.asyncs = s.asyncs;
+    out.vectors = s.vectors; out.poolBytes = s.poolBytes;
 }
 
 //==============================================================================
@@ -1270,19 +1271,31 @@ void CallContext::fail(int32_t code, StringView message)
 
 //==============================================================================
 // MapBuilder / ListBuilder (타입드) — VM 소유 컬렉션 조립
+//
+// [소유권 규칙] MapInfo::Insert / ListInfo::InsertLast / SetValue 는 넘긴 VarInfo 를 "공유"한다
+// (Move → Move_DestNoRelease = incref). Var_SetStringA / Var_SetVec3 등이 만든 임시 VarInfo 는
+// 이미 refCount 1 이므로, 넣고 나서 로컬 참조를 놓지 않으면 refCount 가 1 로 남아 컨테이너가
+// 해제돼도 영원히 회수되지 않는다. 스칼라(int/float/bool)는 alloc 타입이 아니라 해당 없음.
+// (Resource.LoadJson 처럼 키가 수만 개인 경로에서 그대로 수만 개 누수로 드러났다.)
 //==============================================================================
 void MapBuilder::setInt(StringView key, int32_t v)    { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetInt(&it, v);   b->map->Insert(std::string(key.data(),key.size()), &it); }
 void MapBuilder::setFloat(StringView key, float v)    { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetFloat(&it, v); b->map->Insert(std::string(key.data(),key.size()), &it); }
 void MapBuilder::setBool(StringView key, bool v)      { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetBool(&it, v);  b->map->Insert(std::string(key.data(),key.size()), &it); }
-void MapBuilder::setString(StringView key, StringView v) { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; SetVarString(b->w, &it, v); b->map->Insert(std::string(key.data(),key.size()), &it); }
-void MapBuilder::setVec3(StringView key, float x, float y, float z) { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetVec3(&it, x, y, z); b->map->Insert(std::string(key.data(),key.size()), &it); }
-MapBuilder MapBuilder::setMap(StringView key) { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo k; b->w->Var_SetStringA(&k, std::string(key.data(),key.size())); VarInfo* slot=b->map->Insert(&k); b->w->ResetVarType(slot, VAR_MAP); b->ctx->mapB.push_back(MapBuilderImpl{ b->w, slot->_tbl, b->ctx }); return NeoScriptInternal::mapB(&b->ctx->mapB.back()); }
-ListBuilder MapBuilder::setList(StringView key) { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo k; b->w->Var_SetStringA(&k, std::string(key.data(),key.size())); VarInfo* slot=b->map->Insert(&k); b->w->ResetVarType(slot, VAR_LIST); b->ctx->listB.push_back(ListBuilderImpl{ b->w, slot->_lst, b->ctx }); return NeoScriptInternal::listB(&b->ctx->listB.back()); }
+void MapBuilder::setString(StringView key, StringView v) { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; SetVarString(b->w, &it, v); b->map->Insert(std::string(key.data(),key.size()), &it); b->w->Var_Release(&it); }
+void MapBuilder::setVec3(StringView key, float x, float y, float z) { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetVec3(&it, x, y, z); b->map->Insert(std::string(key.data(),key.size()), &it); b->w->Var_Release(&it); }
+static NEOS_FORCEINLINE VarInfo* MapInsertKey(MapBuilderImpl* b, StringView key)
+{
+    VarInfo k; b->w->Var_SetStringA(&k, std::string(key.data(), key.size()));
+    VarInfo* slot = b->map->Insert(&k);
+    b->w->Var_Release(&k);
+    return slot;
+}
+MapBuilder MapBuilder::setMap(StringView key) { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo* slot=MapInsertKey(b, key); b->w->ResetVarType(slot, VAR_MAP); b->ctx->mapB.push_back(MapBuilderImpl{ b->w, slot->_tbl, b->ctx }); return NeoScriptInternal::mapB(&b->ctx->mapB.back()); }
+ListBuilder MapBuilder::setList(StringView key) { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo* slot=MapInsertKey(b, key); b->w->ResetVarType(slot, VAR_LIST); b->ctx->listB.push_back(ListBuilderImpl{ b->w, slot->_lst, b->ctx }); return NeoScriptInternal::listB(&b->ctx->listB.back()); }
 void MapBuilder::setObject(StringView key, ObjectType type, void* userData) {
     MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl);
     const RegisteredObject* ro=static_cast<const RegisteredObject*>(NeoScriptInternal::objImpl(type)); if(!ro) return;
-    VarInfo k; b->w->Var_SetStringA(&k, std::string(key.data(),key.size()));
-    VarInfo* slot=b->map->Insert(&k); b->w->ResetVarType(slot, VAR_MAP);
+    VarInfo* slot=MapInsertKey(b, key); b->w->ResetVarType(slot, VAR_MAP);
     RuntimeImpl* rt=static_cast<RuntimeImpl*>(b->ctx->runtime);
     ObjectBinding* bind=rt->AcquireNestedBinding(b->ctx->instance, ro, userData); if(!bind) return;
     INeoVM::RegisterTableCallBack(slot, bind, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr);
@@ -1294,11 +1307,11 @@ int  ListBuilder::count() const      { return static_cast<ListBuilderImpl*>(m_im
 void ListBuilder::pushInt(int32_t v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetInt(&it, v);   b->list->InsertLast(&it); }
 void ListBuilder::pushFloat(float v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetFloat(&it, v); b->list->InsertLast(&it); }
 void ListBuilder::pushBool(bool v)      { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetBool(&it, v);  b->list->InsertLast(&it); }
-void ListBuilder::pushString(StringView v) { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; SetVarString(b->w, &it, v); b->list->InsertLast(&it); }
-void ListBuilder::pushVec3(float x, float y, float z) { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetVec3(&it, x, y, z); b->list->InsertLast(&it); }
+void ListBuilder::pushString(StringView v) { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; SetVarString(b->w, &it, v); b->list->InsertLast(&it); b->w->Var_Release(&it); }
+void ListBuilder::pushVec3(float x, float y, float z) { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetVec3(&it, x, y, z); b->list->InsertLast(&it); b->w->Var_Release(&it); }
 void ListBuilder::setInt(int index, int32_t v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetInt(&it, v);   b->list->SetValue(index, &it); }
 void ListBuilder::setFloat(int index, float v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetFloat(&it, v); b->list->SetValue(index, &it); }
-void ListBuilder::setString(int index, StringView v) { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; SetVarString(b->w, &it, v); b->list->SetValue(index, &it); }
+void ListBuilder::setString(int index, StringView v) { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; SetVarString(b->w, &it, v); b->list->SetValue(index, &it); b->w->Var_Release(&it); }
 MapBuilder ListBuilder::pushMap()  { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); int idx=b->list->GetCount(); b->list->Resize(idx+1); VarInfo* slot=b->list->GetValue(idx); b->w->ResetVarType(slot, VAR_MAP); b->ctx->mapB.push_back(MapBuilderImpl{ b->w, slot->_tbl, b->ctx }); return NeoScriptInternal::mapB(&b->ctx->mapB.back()); }
 ListBuilder ListBuilder::pushList(){ ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); int idx=b->list->GetCount(); b->list->Resize(idx+1); VarInfo* slot=b->list->GetValue(idx); b->w->ResetVarType(slot, VAR_LIST); b->ctx->listB.push_back(ListBuilderImpl{ b->w, slot->_lst, b->ctx }); return NeoScriptInternal::listB(&b->ctx->listB.back()); }
 void ListBuilder::pushObject(ObjectType type, void* userData) {

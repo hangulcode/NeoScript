@@ -2,6 +2,7 @@
 // 객체 디스패치 / retMap 빌더 / reader / per-instance userData / 프로그램 공유 / zero-copy 를 실행 검증.
 #include "stdafx.h"
 #include "../../NeoSource/NeoScript.h"
+#include "../../NeoSource/NeoVM.h"   // 누수 회귀용 alloc 카운터(SNeoVMAllocStats) — 공개 API 에는 없다
 
 #include <cstdint>
 #include <cstdio>
@@ -171,6 +172,28 @@ int NeoScriptV2Smoke()
                 Check(i0 == 7 && i2 == 9, "info.items[0]==7, [2]==9");
             }
         }
+    }
+
+    // 빌더 키 누수 회귀: setList/setMap/setObject 는 키 StringInfo 를 임시로 만들어 Insert 한다.
+    // Insert 는 키를 공유(incref)할 뿐이라 로컬 참조를 놓지 않으면 맵이 해제돼도 키가 영원히 남는다.
+    // (Resource.LoadJson 처럼 키가 수만 개인 경로에서 그대로 수만 개 누수로 드러났다)
+    {
+        SNeoVMAllocStats before{}, after{};
+        rt->Call(a, "info").invoke();
+        rt->Call(a, "spawn").invoke();
+        GetNeoVMAllocStats(before);
+        for (int i = 0; i < 200; ++i)
+        {
+            rt->Call(a, "info").invoke();
+            rt->Call(a, "spawn").invoke();
+        }
+        GetNeoVMAllocStats(after);
+        Check(after.strings <= before.strings && after.vectors <= before.vectors && after.maps <= before.maps
+              && after.lists <= before.lists, "builders do not leak across 200 calls");
+        if (after.strings > before.strings || after.vectors > before.vectors || after.maps > before.maps || after.lists > before.lists)
+            printf("  str %d->%d  vec %d->%d  map %d->%d  lst %d->%d\n",
+                   before.strings, after.strings, before.vectors, after.vectors,
+                   before.maps, after.maps, before.lists, after.lists);
     }
 
     // 안전 반환(invokeR): 스칼라를 값으로 스냅샷 → 두 결과를 동시에 들고 있어도 서로 안 깨진다.

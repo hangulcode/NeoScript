@@ -167,6 +167,11 @@ struct SNeoVMAllocStats
 	int modules = 0;
 	int asyncs = 0;
 	int vectors = 0;
+	// VM 메모리풀이 OS 에서 확보해 들고 있는 총 바이트(사용중 + 여유). 풀은 반납해도 페이지를
+	// 돌려주지 않으므로 이 값이 곧 실제 점유량이다. 전역 조회면 모든 VM 의 오브젝트 풀 +
+	// 스레드별 실행 컨텍스트 풀(var 스택 포함) 합계, VM 단위 조회면 그 VM 의 오브젝트 풀만.
+	// 컬렉션이 따로 잡는 힙(ListInfo/MapInfo 의 _Bucket, StringInfo 의 문자열 본문)은 풀 밖이라 제외.
+	long long poolBytes = 0;
 };
 
 struct INeoVM;

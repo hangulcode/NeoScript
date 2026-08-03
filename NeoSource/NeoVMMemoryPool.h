@@ -101,6 +101,10 @@ private:
 
 	_CSelfList<STNode> m_sFreeNode;
 
+	// 이 풀이 malloc 으로 잡아둔 페이지의 총 바이트. 사용중/여유 블록을 구분하지 않는
+	// "확보 용량"이다 — 풀은 반납해도 페이지를 OS 에 돌려주지 않기 때문에 이 값이 곧 실제 점유량이다.
+	size_t m_nReservedBytes = 0;
+
 	void	clear()
 	{
 		for (auto it = m_sMemPagePool.begin(); it != m_sMemPagePool.end(); it++)
@@ -111,6 +115,7 @@ private:
 
 		m_sMemPagePool.clear();
 		m_sFreeNode.clear();
+		m_nReservedBytes = 0;
 	}
 	void	alloc()
 	{
@@ -119,6 +124,7 @@ private:
 		SNodePool* pData = pool.pData;
 
 		m_sMemPagePool.push_back(pool);
+		m_nReservedBytes += sizeof(SNodePool) * (size_t)m_iBlkSize;
 
 		for (int i = m_iBlkSize - 2; i >= 0; i--)
 		{
@@ -176,6 +182,8 @@ public:
 
 		m_sFreeNode.push_head(__p);
 	}
+
+	inline size_t ReservedBytes() const { return m_nReservedBytes; }
 };
 
 
@@ -268,6 +276,10 @@ private:
 
 	_CSelfList<STNode> m_sFreeNode;
 
+	// CNVMAllocPool 과 동일한 의미의 "확보 용량". 노드 안 T 의 멤버가 따로 힙을 잡는 경우
+	// (예: CoroutineInfo 의 var 스택 vector) 는 여기 포함되지 않는다 — 소유자가 따로 센다.
+	size_t m_nReservedBytes = 0;
+
 	void	clear()
 	{
 		for(auto it = m_sMemPagePool.begin(); it != m_sMemPagePool.end(); it++)
@@ -278,6 +290,7 @@ private:
 
 		m_sMemPagePool.clear();
 		m_sFreeNode.clear();
+		m_nReservedBytes = 0;
 	}
 	void	alloc()
 	{
@@ -285,6 +298,7 @@ private:
 		pool.pData = new SNodePool[m_iBlkSize];
 
 		m_sMemPagePool.push_back(pool);
+		m_nReservedBytes += sizeof(SNodePool) * (size_t)m_iBlkSize;
 
 		for (int i = 0; i < m_iBlkSize; i++)
 		{
@@ -333,6 +347,8 @@ public:
 
 		m_sFreeNode.push_head(__p);
 	}
+
+	inline size_t ReservedBytes() const { return m_nReservedBytes; }
 };
 
 #pragma pack()

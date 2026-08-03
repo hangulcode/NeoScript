@@ -1963,8 +1963,9 @@ int main(int argc, char* argv[])
 				// 스크립트/VM 정리 후 남아있는 할당 수. 전부 0 이어야 누수가 없다.
 				NeoScript::SNeoVMAllocStats s;
 				NeoScript::GetNeoVMAllocStats(s);
-				printf("[ALLOC] str=%d map=%d list=%d set=%d cor=%d mod=%d async=%d vec=%d\n",
-					s.strings, s.maps, s.lists, s.sets, s.coroutines, s.modules, s.asyncs, s.vectors);
+				printf("[ALLOC] str=%d map=%d list=%d set=%d cor=%d mod=%d async=%d vec=%d pool=%lld bytes\n",
+					s.strings, s.maps, s.lists, s.sets, s.coroutines, s.modules, s.asyncs, s.vectors,
+					s.poolBytes);
 			}
 		}
 		else if (command == "--smoke")

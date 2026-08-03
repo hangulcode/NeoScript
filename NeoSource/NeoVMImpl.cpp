@@ -24,6 +24,8 @@ static std::atomic<int> g_iNeoVMAllocCoroutines{ 0 };
 static std::atomic<int> g_iNeoVMAllocModules{ 0 };
 static std::atomic<int> g_iNeoVMAllocAsyncs{ 0 };
 static std::atomic<int> g_iNeoVMAllocVectors{ 0 };
+static std::atomic<long long> g_iNeoVMPoolBytes{ 0 };       // 모든 VM 의 오브젝트 풀 합계
+static std::atomic<long long> g_iNeoVMExecPoolBytes{ 0 };   // 스레드별 실행 컨텍스트 풀 합계
 
 static void PublishNeoVMAllocStatValue(std::atomic<int>& target, int& published, int current)
 {
@@ -33,6 +35,22 @@ static void PublishNeoVMAllocStatValue(std::atomic<int>& target, int& published,
 		target.fetch_add(delta, std::memory_order_relaxed);
 		published = current;
 	}
+}
+static void PublishNeoVMAllocStatValue(std::atomic<long long>& target, long long& published, long long current)
+{
+	long long delta = current - published;
+	if (delta != 0)
+	{
+		target.fetch_add(delta, std::memory_order_relaxed);
+		published = current;
+	}
+}
+
+// 실행 컨텍스트 풀(스레드별, 엔진 소유)이 자기 확보량 변화를 전역에 반영할 때 부른다.
+void NeoExecPool_PublishBytes(long long delta)
+{
+	if (delta != 0)
+		g_iNeoVMExecPoolBytes.fetch_add(delta, std::memory_order_relaxed);
 }
 
 void GetNeoVMAllocStats(SNeoVMAllocStats& outStats)
@@ -45,6 +63,8 @@ void GetNeoVMAllocStats(SNeoVMAllocStats& outStats)
 	outStats.modules = g_iNeoVMAllocModules.load(std::memory_order_relaxed);
 	outStats.asyncs = g_iNeoVMAllocAsyncs.load(std::memory_order_relaxed);
 	outStats.vectors = g_iNeoVMAllocVectors.load(std::memory_order_relaxed);
+	outStats.poolBytes = g_iNeoVMPoolBytes.load(std::memory_order_relaxed)
+	                   + g_iNeoVMExecPoolBytes.load(std::memory_order_relaxed);
 }
 
 bool GetNeoVMAllocStats(INeoVM* pVM, SNeoVMAllocStats& outStats)
@@ -56,8 +76,23 @@ bool GetNeoVMAllocStats(INeoVM* pVM, SNeoVMAllocStats& outStats)
 	return true;
 }
 
+long long CNeoVMImpl::PoolBytes() const
+{
+	return (long long)m_sPool_TableNode.ReservedBytes()
+	     + (long long)m_sPool_TableInfo.ReservedBytes()
+	     + (long long)m_sPool_SetNode.ReservedBytes()
+	     + (long long)m_sPool_SetInfo.ReservedBytes()
+	     + (long long)m_sPool_ListInfo.ReservedBytes()
+	     + (long long)m_sPool_Vec.ReservedBytes()
+	     + (long long)m_sPool_Async.ReservedBytes()
+	     + (long long)m_sPool_String.ReservedBytes();
+	// _pExecPool 은 스레드별 공유(엔진 소유)라 여기서 세면 VM 수만큼 중복된다 → 자기가 직접 publish.
+}
+
 void CNeoVMImpl::PublishAllocStats()
 {
+	m_sAllocStats.poolBytes = PoolBytes();
+	PublishNeoVMAllocStatValue(g_iNeoVMPoolBytes, m_sPublishedAllocStats.poolBytes, m_sAllocStats.poolBytes);
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocStrings, m_sPublishedAllocStats.strings, m_sAllocStats.strings);
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocMaps, m_sPublishedAllocStats.maps, m_sAllocStats.maps);
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocLists, m_sPublishedAllocStats.lists, m_sAllocStats.lists);
@@ -600,6 +635,8 @@ CNeoVMImpl::~CNeoVMImpl()
 		delete (*it).second;
 	m_sCache_FunPtr.clear();
 	PublishAllocStats();
+	// 풀 페이지는 곧 멤버 소멸자가 free 한다. 지금 빼두지 않으면 이 VM 몫이 전역 집계에 영원히 남는다.
+	PublishNeoVMAllocStatValue(g_iNeoVMPoolBytes, m_sPublishedAllocStats.poolBytes, 0);
 }
 
 void CNeoVMImpl::SetError(const std::string& msg)

@@ -106,6 +106,7 @@ public:
 		--_cnt;
 	}
 	NEOS_FORCEINLINE int size() { return _cnt; }
+	NEOS_FORCEINLINE int capacity() const { return _capa; }
 	NEOS_FORCEINLINE void resize(int cnt)
 	{ 
 		if(cnt < 0) cnt = 0;
