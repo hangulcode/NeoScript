@@ -188,6 +188,7 @@ int NeoScriptV2Smoke()
             rt->Call(a, "spawn").invoke();
         }
         GetNeoVMAllocStats(after);
+        printf("  [pool] %lld bytes reserved (object pools + exec context pool)\n", after.poolBytes);
         Check(after.strings <= before.strings && after.vectors <= before.vectors && after.maps <= before.maps
               && after.lists <= before.lists, "builders do not leak across 200 calls");
         if (after.strings > before.strings || after.vectors > before.vectors || after.maps > before.maps || after.lists > before.lists)
