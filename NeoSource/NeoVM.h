@@ -200,7 +200,6 @@ struct VarInfo
 {
 private:
 	VAR_TYPE	_type;
-
 	NEOS_FORCEINLINE void SetType(VAR_TYPE t) { _type = t; }
 	NEOS_FORCEINLINE void ClearType()
 	{
@@ -298,7 +297,7 @@ public:
 // 유니온 최대 멤버가 포인터(8바이트)라 x64는 16바이트, Win32는 12바이트다.
 // 벡터를 인라인(float[4])하던 시절엔 24/20바이트였다 — 이 8바이트가 스택·리스트·맵노드
 // 전부에 곱해져서 실측으로 map_str 12%, particles 13% 를 먹었다.
-static_assert(sizeof(VarInfo) == (sizeof(void*) == 8 ? 16 : 12), "Unexpected VarInfo size");
+static_assert(sizeof(VarInfo) == (sizeof(void*) == 8 ? 16 : 8), "Unexpected VarInfo size");
 
 enum NeoDebugStopReason
 {
