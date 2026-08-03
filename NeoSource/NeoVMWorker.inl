@@ -529,9 +529,9 @@ NEOS_FORCEINLINE bool CNeoVMWorker::VecArith(VarInfo* r, VarInfo* v1, VarInfo* v
 	// tmp 로 먼저 계산했으므로 r == v1 (a = a + b) 도 안전
 	switch (vt)
 	{
-	case VAR_VEC2: Var_SetVec2(r, tmp[0], tmp[1]); return true;
-	case VAR_VEC3: Var_SetVec3(r, tmp[0], tmp[1], tmp[2]); return true;
-	case VAR_VEC4: Var_SetVec4(r, tmp[0], tmp[1], tmp[2], tmp[3]); return true;
+	case VAR_VEC2: Var_SetVec2(r, tmp); return true;
+	case VAR_VEC3: Var_SetVec3(r, tmp); return true;
+	case VAR_VEC4: Var_SetVec4(r, tmp); return true;
 	default: return false;
 	}
 }

@@ -1173,17 +1173,19 @@ static VarInfo* CtxRetVar(CallContextImpl* c)
     if (c->propertyVar && !c->propertyIsArg) return c->propertyVar;
     return c->worker->GetReturnVar();
 }
+// GetVecN 은 성공 시 성분 수만큼만 쓰므로 남는 레인은 여기서 미리 0 으로 깔아둔다.
+// 공개 API 가 float[4] 만 주고 유효 성분 수를 알려주지 않으니 Vec2 라도 out[2..3] 이
+// 정의돼 있어야 한다 — 안 그러면 호출자 스택 쓰레기가 값처럼 읽힌다.
 static void ReadVec(VarInfo* v, float out[4])
 {
     out[0] = out[1] = out[2] = out[3] = 0.0f;
     if (!v) return;
-    NS_FLOAT a, b, c, d;
     switch (v->GetType())
     {
-    case VAR_VEC2: if (v->GetVec2(a, b))       { out[0]=(float)a; out[1]=(float)b; } break;
-    case VAR_VEC3: if (v->GetVec3(a, b, c))    { out[0]=(float)a; out[1]=(float)b; out[2]=(float)c; } break;
-    case VAR_VEC4: if (v->GetVec4(a, b, c, d)) { out[0]=(float)a; out[1]=(float)b; out[2]=(float)c; out[3]=(float)d; } break;
-    case VAR_QUAT: if (v->GetQuat(a, b, c, d)) { out[0]=(float)a; out[1]=(float)b; out[2]=(float)c; out[3]=(float)d; } break;
+    case VAR_VEC2: v->GetVec2(out); break;
+    case VAR_VEC3: v->GetVec3(out); break;
+    case VAR_VEC4: v->GetVec4(out); break;
+    case VAR_QUAT: v->GetQuat(out); break;   // wxyz 순서는 GetQuat 이 맞춘다
     default: break;
     }
 }
@@ -1241,7 +1243,7 @@ void CallContext::retInt(int32_t v) { CallContextImpl* c=Ctx(m_impl); c->worker-
 void CallContext::retFloat(float v) { CallContextImpl* c=Ctx(m_impl); c->worker->Var_SetFloat(CtxRetVar(c), v); }
 void CallContext::retBool(bool v) { CallContextImpl* c=Ctx(m_impl); c->worker->Var_SetBool(CtxRetVar(c), v); }
 void CallContext::retString(StringView v) { CallContextImpl* c=Ctx(m_impl); SetVarString(c->worker, CtxRetVar(c), v); }
-void CallContext::retVec2(float x, float y) { CallContextImpl* c=Ctx(m_impl); c->worker->Var_SetVec2(CtxRetVar(c), x, y); }
+void CallContext::retVec2(float x, float y) { CallContextImpl* c=Ctx(m_impl); float v[4]={x,y,0,0}; c->worker->Var_SetVec2(CtxRetVar(c), v); }
 void CallContext::retInstanceGlobal(InstanceHandle instance, StringView name)
 {
     CallContextImpl* c=Ctx(m_impl);
@@ -1250,7 +1252,7 @@ void CallContext::retInstanceGlobal(InstanceHandle instance, StringView name)
     if (v) c->worker->ReturnValue(v);          // Var_Move → 반환 슬롯(구 ReturnValue(GetVar) 재현)
     else   c->worker->Var_Release(CtxRetVar(c)); // None
 }
-void CallContext::retVec3(float x, float y, float z) { CallContextImpl* c=Ctx(m_impl); c->worker->Var_SetVec3(CtxRetVar(c), x, y, z); }
+void CallContext::retVec3(float x, float y, float z) { CallContextImpl* c=Ctx(m_impl); float v[4]={x,y,z,0}; c->worker->Var_SetVec3(CtxRetVar(c), v); }
 MapBuilder CallContext::retMap() { CallContextImpl* c=Ctx(m_impl); VarInfo* r=CtxRetVar(c); c->worker->ResetVarType(r, VAR_MAP); c->mapB.push_back(MapBuilderImpl{ c->worker, r->_tbl, c }); return NeoScriptInternal::mapB(&c->mapB.back()); }
 ListBuilder CallContext::retList() { CallContextImpl* c=Ctx(m_impl); VarInfo* r=CtxRetVar(c); c->worker->ResetVarType(r, VAR_LIST); c->listB.push_back(ListBuilderImpl{ c->worker, r->_lst, c }); return NeoScriptInternal::listB(&c->listB.back()); }
 void CallContext::retObject(ObjectType type, void* userData) {
@@ -1282,7 +1284,7 @@ void MapBuilder::setInt(StringView key, int32_t v)    { MapBuilderImpl* b=static
 void MapBuilder::setFloat(StringView key, float v)    { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetFloat(&it, v); b->map->Insert(std::string(key.data(),key.size()), &it); }
 void MapBuilder::setBool(StringView key, bool v)      { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetBool(&it, v);  b->map->Insert(std::string(key.data(),key.size()), &it); }
 void MapBuilder::setString(StringView key, StringView v) { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; SetVarString(b->w, &it, v); b->map->Insert(std::string(key.data(),key.size()), &it); b->w->Var_Release(&it); }
-void MapBuilder::setVec3(StringView key, float x, float y, float z) { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetVec3(&it, x, y, z); b->map->Insert(std::string(key.data(),key.size()), &it); b->w->Var_Release(&it); }
+void MapBuilder::setVec3(StringView key, float x, float y, float z) { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; float v[4]={x,y,z,0}; b->w->Var_SetVec3(&it, v); b->map->Insert(std::string(key.data(),key.size()), &it); b->w->Var_Release(&it); }
 static NEOS_FORCEINLINE VarInfo* MapInsertKey(MapBuilderImpl* b, StringView key)
 {
     VarInfo k; b->w->Var_SetStringA(&k, std::string(key.data(), key.size()));
@@ -1308,7 +1310,7 @@ void ListBuilder::pushInt(int32_t v)    { ListBuilderImpl* b=static_cast<ListBui
 void ListBuilder::pushFloat(float v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetFloat(&it, v); b->list->InsertLast(&it); }
 void ListBuilder::pushBool(bool v)      { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetBool(&it, v);  b->list->InsertLast(&it); }
 void ListBuilder::pushString(StringView v) { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; SetVarString(b->w, &it, v); b->list->InsertLast(&it); b->w->Var_Release(&it); }
-void ListBuilder::pushVec3(float x, float y, float z) { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetVec3(&it, x, y, z); b->list->InsertLast(&it); b->w->Var_Release(&it); }
+void ListBuilder::pushVec3(float x, float y, float z) { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; float v[4]={x,y,z,0}; b->w->Var_SetVec3(&it, v); b->list->InsertLast(&it); b->w->Var_Release(&it); }
 void ListBuilder::setInt(int index, int32_t v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetInt(&it, v);   b->list->SetValue(index, &it); }
 void ListBuilder::setFloat(int index, float v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetFloat(&it, v); b->list->SetValue(index, &it); }
 void ListBuilder::setString(int index, StringView v) { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; SetVarString(b->w, &it, v); b->list->SetValue(index, &it); b->w->Var_Release(&it); }
@@ -1381,7 +1383,7 @@ Invocation& Invocation::argInt(int32_t v)    { if (m_impl){ InstanceRec* i=Inv(m
 Invocation& Invocation::argFloat(float v)    { if (m_impl){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetFloat(&i->callArgs.back(), v); } return *this; }
 Invocation& Invocation::argBool(bool v)      { if (m_impl){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetBool(&i->callArgs.back(), v); } return *this; }
 Invocation& Invocation::argString(StringView v) { if (m_impl){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); SetVarString(i->worker, &i->callArgs.back(), v); } return *this; }
-Invocation& Invocation::argVec3(float x, float y, float z) { if (m_impl){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetVec3(&i->callArgs.back(), x, y, z); } return *this; }
+Invocation& Invocation::argVec3(float x, float y, float z) { if (m_impl){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); float v[4]={x,y,z,0}; i->worker->Var_SetVec3(&i->callArgs.back(), v); } return *this; }
 Invocation& Invocation::argObject(ObjectType type, void* userData)
 {
     // 바인딩된 네이티브 객체를 인자 슬롯(callArgs)에 VAR_MAP 으로 바인딩(구 neo_globalinterface2 arg 대체).
@@ -1448,7 +1450,7 @@ int32_t Invocation::retInt() const { if(!m_impl) return 0; InstanceRec* i=Inv(m_
 float Invocation::retFloat() const { if(!m_impl) return 0.0f; InstanceRec* i=Inv(m_impl); return static_cast<float>(i->worker->PopFloat(i->worker->GetReturnVar())); }
 bool Invocation::retBool() const { if(!m_impl) return false; InstanceRec* i=Inv(m_impl); return i->worker->PopBool(i->worker->GetReturnVar()); }
 StringView Invocation::retString() const { if(!m_impl) return StringView(); InstanceRec* i=Inv(m_impl); const char* s=i->worker->PopString(i->worker->GetReturnVar()); return StringView(s?s:""); }
-void Invocation::retVec(float out[4]) const { out[0]=out[1]=out[2]=out[3]=0.0f; if(!m_impl) return; ReadVec(Inv(m_impl)->worker->GetReturnVar(), out); }
+void Invocation::retVec(float out[4]) const { ReadVec(m_impl ? Inv(m_impl)->worker->GetReturnVar() : nullptr, out); }
 bool Invocation::retMap(MapReader& out) const
 {
     if(!m_impl) return false; InstanceRec* i=Inv(m_impl); VarInfo* rv=i->worker->GetReturnVar();

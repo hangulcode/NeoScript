@@ -293,10 +293,10 @@ public:
 	// Quaternion 은 엔진 컨벤션대로 wxyz 순서, Vector4 는 xyzw.
 	// Set 은 여기 없다: 벡터가 alloc 타입이라 저장소를 만들려면 VM(풀)이 필요하다.
 	// 세팅은 INeoVMWorker::Var_SetVec2/3/4/Quat 를 쓴다.
-	bool GetVec2(NS_FLOAT& x, NS_FLOAT& y);
-	bool GetVec3(NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z);
-	bool GetVec4(NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z, NS_FLOAT& w);
-	bool GetQuat(NS_FLOAT& w, NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z);
+	bool GetVec2(float out[4]);
+	bool GetVec3(float out[4]);
+	bool GetVec4(float out[4]); // xyzw
+	bool GetQuat(float out[4]); // wxyz
 };
 
 // 유니온 최대 멤버가 포인터(8바이트)라 x64는 16바이트, Win32는 12바이트다.
@@ -529,10 +529,10 @@ public:
 	void Var_SetBool(VarInfo* d, bool v);
 	// 벡터 저장소 확보. 대상이 이미 단독 소유 벡터면 재사용하고, 아니면 풀에서 새로 받는다.
 	VecInfo* VecStoreFor(VarInfo* d, VAR_TYPE t);
-	void Var_SetVec2(VarInfo* d, float x, float y);
-	void Var_SetVec3(VarInfo* d, float x, float y, float z);
-	void Var_SetVec4(VarInfo* d, float x, float y, float z, float w);
-	void Var_SetQuat(VarInfo* d, float w, float x, float y, float z);
+	void Var_SetVec2(VarInfo* d, float v[4]);
+	void Var_SetVec3(VarInfo* d, float v[4]);
+	void Var_SetVec4(VarInfo* d, float v[4]);
+	void Var_SetQuat(VarInfo* d, float v[4]);
 	void Var_SetCoroutine(VarInfo* d, CoroutineInfo* p);
 	void Var_SetString(VarInfo* d, const char* str);
 	void Var_SetString(VarInfo* d, SUtf8One c);

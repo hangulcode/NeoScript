@@ -385,39 +385,43 @@ NEOS_NOINLINE bool handle_IDLE(const SVMOperation& OP) {
 // 인자 슬롯(_iSP_VarsMax+1..N)을 직접 읽어 값타입 세팅. n3=결과 슬롯.
 NEOS_FORCEINLINE bool handle_VEC2_MAKE(const SVMOperation& OP) {
     if (OP.argFlag & NEOS_OP_CALL_NORESULT) return false;
-    Var_SetVec2(GetVarPtr3(OP),
+    float v[4] = {
         (float)GetStackFromBase(_iSP_VarsMax + 1)->GetFloatNumber(),
-        (float)GetStackFromBase(_iSP_VarsMax + 2)->GetFloatNumber());
+        (float)GetStackFromBase(_iSP_VarsMax + 2)->GetFloatNumber(), 0.0f, 0.0f };
+    Var_SetVec2(GetVarPtr3(OP), v);
     if (_iSP_Vars_Max2 < _iSP_VarsMax + 3) _iSP_Vars_Max2 = _iSP_VarsMax + 3;
     return false;
 }
 NEOS_FORCEINLINE bool handle_VEC3_MAKE(const SVMOperation& OP) {
     if (OP.argFlag & NEOS_OP_CALL_NORESULT) return false;
-    Var_SetVec3(GetVarPtr3(OP),
+    float v[4] = {
         (float)GetStackFromBase(_iSP_VarsMax + 1)->GetFloatNumber(),
         (float)GetStackFromBase(_iSP_VarsMax + 2)->GetFloatNumber(),
-        (float)GetStackFromBase(_iSP_VarsMax + 3)->GetFloatNumber());
+        (float)GetStackFromBase(_iSP_VarsMax + 3)->GetFloatNumber(), 0.0f };
+    Var_SetVec3(GetVarPtr3(OP), v);
     if (_iSP_Vars_Max2 < _iSP_VarsMax + 4) _iSP_Vars_Max2 = _iSP_VarsMax + 4;
     return false;
 }
 NEOS_FORCEINLINE bool handle_VEC4_MAKE(const SVMOperation& OP) {
     if (OP.argFlag & NEOS_OP_CALL_NORESULT) return false;
-    Var_SetVec4(GetVarPtr3(OP),
+    float v[4] = {
         (float)GetStackFromBase(_iSP_VarsMax + 1)->GetFloatNumber(),
         (float)GetStackFromBase(_iSP_VarsMax + 2)->GetFloatNumber(),
         (float)GetStackFromBase(_iSP_VarsMax + 3)->GetFloatNumber(),
-        (float)GetStackFromBase(_iSP_VarsMax + 4)->GetFloatNumber());
+        (float)GetStackFromBase(_iSP_VarsMax + 4)->GetFloatNumber() };
+    Var_SetVec4(GetVarPtr3(OP), v);
     if (_iSP_Vars_Max2 < _iSP_VarsMax + 5) _iSP_Vars_Max2 = _iSP_VarsMax + 5;
     return false;
 }
 NEOS_FORCEINLINE bool handle_QUAT_MAKE(const SVMOperation& OP) {
     if (OP.argFlag & NEOS_OP_CALL_NORESULT) return false;
     // wxyz 순서 (등록 "w,x,y,z" = 인자 1..4)
-    Var_SetQuat(GetVarPtr3(OP),
+    float v[4] = {
         (float)GetStackFromBase(_iSP_VarsMax + 1)->GetFloatNumber(),
         (float)GetStackFromBase(_iSP_VarsMax + 2)->GetFloatNumber(),
         (float)GetStackFromBase(_iSP_VarsMax + 3)->GetFloatNumber(),
-        (float)GetStackFromBase(_iSP_VarsMax + 4)->GetFloatNumber());
+        (float)GetStackFromBase(_iSP_VarsMax + 4)->GetFloatNumber() };
+    Var_SetQuat(GetVarPtr3(OP), v);
     if (_iSP_Vars_Max2 < _iSP_VarsMax + 5) _iSP_Vars_Max2 = _iSP_VarsMax + 5;
     return false;
 }

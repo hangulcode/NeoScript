@@ -252,25 +252,31 @@ bool VarInfo::SetListIndexer(VMHash<int>* pIndexer)
 
 // ---- 벡터 값타입 Get/Set ----
 // Get: 벡터 값타입(VAR_VEC*) 전용. 리스트 폴백 없음 — 벡터 인자는 값타입이어야 한다.
-bool VarInfo::GetVec2(NS_FLOAT& x, NS_FLOAT& y)
+// 성공 시엔 타입이 가진 성분까지만 쓴다 — 남는 레인은 호출자 몫이다.
+// 실패 시에만 전부 0 으로 밀어 미초기화 값이 새어나가지 않게 한다.
+bool VarInfo::GetVec2(float out[4])
 {
-	if (IsVector() && VectorComponentCount() >= 2) { x = _vec->v[0]; y = _vec->v[1]; return true; }
+	if (IsVector() && VectorComponentCount() >= 2) { out[0] = _vec->v[0]; out[1] = _vec->v[1]; return true; }
+	out[0] = out[1] = out[2] = out[3] = 0.0f;
 	return false;
 }
-bool VarInfo::GetVec3(NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z)
+bool VarInfo::GetVec3(float out[4])
 {
-	if (IsVector() && VectorComponentCount() >= 3) { x = _vec->v[0]; y = _vec->v[1]; z = _vec->v[2]; return true; }
+	if (IsVector() && VectorComponentCount() >= 3) { out[0] = _vec->v[0]; out[1] = _vec->v[1]; out[2] = _vec->v[2]; return true; }
+	out[0] = out[1] = out[2] = out[3] = 0.0f;
 	return false;
 }
-bool VarInfo::GetVec4(NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z, NS_FLOAT& w)
+bool VarInfo::GetVec4(float out[4])
 {
-	if (IsVector() && VectorComponentCount() >= 4) { x = _vec->v[0]; y = _vec->v[1]; z = _vec->v[2]; w = _vec->v[3]; return true; }
+	if (IsVector() && VectorComponentCount() >= 4) { out[0] = _vec->v[0]; out[1] = _vec->v[1]; out[2] = _vec->v[2]; out[3] = _vec->v[3]; return true; }
+	out[0] = out[1] = out[2] = out[3] = 0.0f;
 	return false;
 }
-bool VarInfo::GetQuat(NS_FLOAT& w, NS_FLOAT& x, NS_FLOAT& y, NS_FLOAT& z)
+bool VarInfo::GetQuat(float out[4])
 {
-	// wxyz 순서 (엔진 컨벤션). 저장은 v[0]=w,[1]=x,[2]=y,[3]=z.
-	if (IsVector() && VectorComponentCount() >= 4) { w = _vec->v[0]; x = _vec->v[1]; y = _vec->v[2]; z = _vec->v[3]; return true; }
+	// wxyz 순서 (엔진 컨벤션). 저장이 v[0]=w,[1]=x,[2]=y,[3]=z 라 GetVec4 와 복사 순서는 같다.
+	if (IsVector() && VectorComponentCount() >= 4) { out[0] = _vec->v[0]; out[1] = _vec->v[1]; out[2] = _vec->v[2]; out[3] = _vec->v[3]; return true; }
+	out[0] = out[1] = out[2] = out[3] = 0.0f;
 	return false;
 }
 // Set 은 VarInfo 멤버에서 없앴다 — 벡터가 alloc 타입이 되면서 VM(풀)이 있어야 저장소를

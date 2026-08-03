@@ -243,7 +243,7 @@ public:
     bool getFloat(StringView key, float& out) const;
     bool getBool(StringView key, bool& out) const;
     bool getString(StringView key, StringView& out) const;  // zero-copy VM 문자열 뷰
-    bool getVec(StringView key, float out[4]) const;
+    bool getVec(StringView key, float out[4]) const;   // 항상 4개를 채운다(Vec2 면 out[2..3]=0)
     bool getMap(StringView key, MapReader& out) const;
     bool getList(StringView key, ListReader& out) const;
 
@@ -498,7 +498,7 @@ public:
     float      retFloat() const;
     bool       retBool() const;
     StringView retString() const;   // zero-copy VM 문자열 뷰
-    void       retVec(float out[4]) const;
+    void       retVec(float out[4]) const;   // 항상 4개를 채운다(Vec2 면 out[2..3]=0, 벡터가 아니면 전부 0)
     bool       retMap(MapReader& out) const;
     bool       retList(ListReader& out) const;
 

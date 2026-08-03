@@ -54,25 +54,25 @@ VecInfo* INeoVMWorker::VecStoreFor(VarInfo* d, VAR_TYPE t)
 	d->_vec = p;
 	return p;
 }
-void INeoVMWorker::Var_SetVec2(VarInfo* d, float x, float y)
+void INeoVMWorker::Var_SetVec2(VarInfo* d, float v[4])
 {
 	VecInfo* p = VecStoreFor(d, VAR_VEC2);
-	p->v[0] = x; p->v[1] = y;
+	p->v[0] = v[0]; p->v[1] = v[1];
 }
-void INeoVMWorker::Var_SetVec3(VarInfo* d, float x, float y, float z)
+void INeoVMWorker::Var_SetVec3(VarInfo* d, float v[4])
 {
 	VecInfo* p = VecStoreFor(d, VAR_VEC3);
-	p->v[0] = x; p->v[1] = y; p->v[2] = z;
+	p->v[0] = v[0]; p->v[1] = v[1]; p->v[2] = v[2];
 }
-void INeoVMWorker::Var_SetVec4(VarInfo* d, float x, float y, float z, float w)
+void INeoVMWorker::Var_SetVec4(VarInfo* d, float v[4])
 {
 	VecInfo* p = VecStoreFor(d, VAR_VEC4);
-	p->v[0] = x; p->v[1] = y; p->v[2] = z; p->v[3] = w;
+	p->v[0] = v[0]; p->v[1] = v[1]; p->v[2] = v[2]; p->v[3] = v[3];
 }
-void INeoVMWorker::Var_SetQuat(VarInfo* d, float w, float x, float y, float z)
+void INeoVMWorker::Var_SetQuat(VarInfo* d, float v[4])
 {
 	VecInfo* p = VecStoreFor(d, VAR_QUAT);
-	p->v[0] = w; p->v[1] = x; p->v[2] = y; p->v[3] = z;
+	p->v[0] = v[0]; p->v[1] = v[1]; p->v[2] = v[2]; p->v[3] = v[3];
 }
 
 int& GetModuleRefCount(VarInfo* p)
