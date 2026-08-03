@@ -4676,6 +4676,172 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 	return true;
 }
 
+// ---------------------------------------------------------------------------
+// 루프 상수 hoisting
+//
+// 루프 안에서 쓰이는 static 상수(리터럴/const)를 함수 프롤로그에서 hidden 지역변수로
+// 한 번 로드해두고, 함수 내 해당 상수 참조를 전부 그 슬롯 참조로 바꾼다.
+// 목적은 로드 시 PatchLocalOps 가 그 op 들을 _L(전 오퍼랜드 로컬)로 승격시킬 수 있게
+// 만드는 것 — 새 opcode 를 늘리지 않고 승격률을 올리는 방식이다.
+// (상수는 static 풀 = 전역 배열에 있어서 'x * 1.5' 는 절대 전 오퍼랜드 로컬이 될 수 없다)
+//
+//  - 대상 : static 이면서 숫자/bool. script-global 은 루프 안에서 값이 바뀔 수 있으므로 제외.
+//           문자열은 정합성 문제는 없으나 호출마다 refcount 트래픽이 늘어 일단 제외한다.
+//  - 게이팅 : 루프 구간 안에서 1회 이상 쓰인 상수만. 루프가 없는 함수(fib 류)가 호출당
+//           MOV 만 무는 순손실을 막는다.
+//  - 배치 : 함수 프롤로그. 모든 제어흐름을 지배하므로 다중/조건부 루프군에서도 안전하다.
+//           특정 루프 앞에 두면 그 루프를 건너뛴 경로에서 미초기화 슬롯을 읽게 된다
+//           (Call 은 새 프레임 슬롯을 클리어하지 않는다).
+//  - 슬롯 : AllocLocalVar 와 같은 append 경로. _localVarCount 는 감소하지 않으므로 기존
+//           지역변수와 절대 겹치지 않고, temp 는 export 의 localCount 보정으로 함께 밀린다.
+// ---------------------------------------------------------------------------
+#define NEOS_HOIST_MAX	8	// 함수당 상한. 프레임이 커지면 재귀 가능 깊이가 줄어든다.
+
+// n1 에 op 단위 상대 점프 offset 을 담는 op. 뒤로 가는 offset = 루프의 back edge.
+static bool IsRelativeJumpOp(eNOperation op)
+{
+	switch (op)
+	{
+	case NOP_JMP:			case NOP_JMP_FALSE:		case NOP_JMP_TRUE:
+	case NOP_JMP_GREAT:		case NOP_JMP_GREAT_EQ:
+	case NOP_JMP_LESS:		case NOP_JMP_LESS_EQ:
+	case NOP_JMP_EQUAL2:	case NOP_JMP_NEQUAL:
+	case NOP_JMP_AND:		case NOP_JMP_OR:
+	case NOP_JMP_NAND:		case NOP_JMP_NOR:
+	case NOP_JMP_FOR:		case NOP_JMP_FOREACH:
+		return true;
+	default:
+		return false;
+	}
+	// NOP_SWITCH 는 offset 이 n1 이 아니라 테이블에 있으므로 제외.
+}
+
+// 값을 읽는 오퍼랜드 중 (a) static 상수가 올 수 있고 (b) _L 변형이 있어 승격 이득이 나는
+// 슬롯만 표시한다. 즉값(n23) / 점프 offset / 인자 수 / 함수 인덱스는 절대 포함하지 않는다 —
+// 그런 필드를 슬롯 인덱스로 재작성하면 코드가 조용히 깨진다.
+// bit1 = n2, bit2 = n3.
+static int HoistableOperandMask(eNOperation op)
+{
+	switch (op)
+	{
+	case NOP_MOV:			// n1 = dest
+	case NOP_MOV_MINUS:		// n1 = dest
+	case NOP_ADD2:			// n1 = dest 겸 src
+	case NOP_TOINT:			// n1 = dest
+		return 0x2;
+	case NOP_ADD3:	case NOP_SUB3:	case NOP_MUL3:
+	case NOP_AND:
+	case NOP_STR_ADD:
+	case NOP_JMP_LESS:		case NOP_JMP_LESS_EQ:
+	case NOP_JMP_GREAT:		case NOP_JMP_GREAT_EQ:
+	case NOP_JMP_EQUAL2:	case NOP_JMP_NEQUAL:
+		return 0x2 | 0x4;
+	case NOP_CLT_MOV:		// n1 = 컨테이너, n2 = key, n3 = value
+		return 0x2 | 0x4;
+	case NOP_CLT_READ:		// n1 = 컨테이너, n2 = key, n3 = dest
+		return 0x2;
+	default:
+		return 0;
+	}
+}
+
+static bool IsStaticOperand(short v)
+{
+	return (v >= COMPILE_STATIC_VAR_BEGIN && v < COMPILE_CALLARG_VAR_BEGIN);
+}
+
+// 반환: 프롤로그에 넣을 (hidden 슬롯, static 오퍼랜드) 쌍. 코드(pCode)는 제자리에서 재작성된다.
+static void HoistLoopConstants(SFunctions& funs, u8* pCode, int codeSize,
+	std::vector<std::pair<short, short> >& outPrologue)
+{
+	outPrologue.clear();
+	const int n = codeSize / (int)sizeof(SVMOperation);
+	if (n <= 0)
+		return;
+	SVMOperation* ops = (SVMOperation*)pCode;
+
+	// 1) back edge 로 루프 구간을 찾는다. 중첩 루프는 구간이 포함관계라 자연히 처리된다.
+	std::vector<u8> inLoop(n, 0);
+	bool anyLoop = false;
+	for (int i = 0; i < n; i++)
+	{
+		if (false == IsRelativeJumpOp(ops[i].op))
+			continue;
+		const int off = ops[i].n1;
+		if (off >= 0)
+			continue;						// 전방 점프(if/break 등)는 루프가 아니다
+		int target = i + 1 + off;			// offset 은 다음 op 기준 op 단위 상대
+		if (target < 0) target = 0;
+		for (int k = target; k <= i && k < n; k++)
+			inLoop[k] = 1;
+		anyLoop = true;
+	}
+	if (false == anyLoop)
+		return;								// 루프 없는 함수는 대상 아님
+
+	// 2) 루프 안에서 쓰인 static 상수를 센다.
+	std::map<short, int> useInLoop;
+	for (int i = 0; i < n; i++)
+	{
+		if (inLoop[i] == 0)
+			continue;
+		const int mask = HoistableOperandMask(ops[i].op);
+		if (mask == 0)
+			continue;
+		if ((mask & 0x2) && IsStaticOperand(ops[i].n2)) useInLoop[ops[i].n2]++;
+		if ((mask & 0x4) && IsStaticOperand(ops[i].n3)) useInLoop[ops[i].n3]++;
+	}
+	if (useInLoop.empty())
+		return;
+
+	// 3) 숫자/bool 만 남기고 사용 횟수 순으로 상위 NEOS_HOIST_MAX 개 선택.
+	std::vector<std::pair<int, short> > cand;	// (사용횟수, static 오퍼랜드)
+	for (std::map<short, int>::iterator it = useInLoop.begin(); it != useInLoop.end(); ++it)
+	{
+		const int idx = it->first - COMPILE_STATIC_VAR_BEGIN;
+		if (idx < 0 || idx >= (int)funs._staticVars.size())
+			continue;
+		const VAR_TYPE t = funs._staticVars[idx].GetType();
+		if (t != VAR_INT && t != VAR_FLOAT && t != VAR_BOOL)
+			continue;
+		cand.push_back(std::make_pair(it->second, it->first));
+	}
+	if (cand.empty())
+		return;
+	std::sort(cand.begin(), cand.end(), std::greater<std::pair<int, short> >());
+	if ((int)cand.size() > NEOS_HOIST_MAX)
+		cand.resize(NEOS_HOIST_MAX);
+
+	// 4) hidden 지역변수 슬롯 할당 + 함수 전체 참조 재작성.
+	//    루프 밖 사용까지 함께 바꾼다 — 프롤로그가 모든 사용을 지배하므로 안전하고,
+	//    MOV 비용은 이미 지불했으므로 추가 이득이다.
+	std::map<short, short> remap;
+	for (int c = 0; c < (int)cand.size(); c++)
+	{
+		const short staticVar = cand[c].second;
+		const short slot = (short)(1 + (int)funs._cur->_args.size() + funs._cur->_localVarCount++);
+		remap[staticVar] = slot;
+		outPrologue.push_back(std::make_pair(slot, staticVar));
+	}
+
+	for (int i = 0; i < n; i++)
+	{
+		const int mask = HoistableOperandMask(ops[i].op);
+		if (mask == 0)
+			continue;
+		if (mask & 0x2)
+		{
+			std::map<short, short>::iterator it = remap.find(ops[i].n2);
+			if (it != remap.end()) ops[i].n2 = it->second;
+		}
+		if (mask & 0x4)
+		{
+			std::map<short, short>::iterator it = remap.find(ops[i].n3);
+			if (it != remap.end()) ops[i].n3 = it->second;
+		}
+	}
+}
+
 void FinalizeFuction(SFunctions& funs)
 {
 	int iCode_Begin = funs._cur->_iCode_Begin;
@@ -4683,18 +4849,41 @@ void FinalizeFuction(SFunctions& funs)
 
 	funs._codeTemp.SetBufferOffset(iCode_Begin);
 	u8* pSrc = (u8*)funs._codeTemp.GetDataCurrent();
+
+	// 루프 상수를 hidden 지역변수로 올리고 본문 참조를 재작성한다(제자리 수정).
+	// 점프가 op 단위 상대라 앞에 프롤로그를 붙여도 함수 내부 점프는 보정이 필요 없다.
+	std::vector<std::pair<short, short> > prologue;
+	HoistLoopConstants(funs, pSrc, funs._cur->_iCode_Size, prologue);
+
+	for (int i = 0; i < (int)prologue.size(); i++)
+	{
+		SVMOperation mv;
+		memset(&mv, 0, sizeof(mv));
+		mv.op = NOP_MOV;
+		mv.argFlag = 0;					// 플래그는 export 의 ChangeIndex 가 채운다
+		mv.n1 = prologue[i].first;		// hidden 지역변수 슬롯
+		mv.n2 = prologue[i].second;		// static 상수 오퍼랜드
+		mv.n3 = 0;
+		funs._codeFinal.Write(&mv, sizeof(mv));
+	}
+
 	funs._codeFinal.Write(pSrc, funs._cur->_iCode_Size);
 
 	if (funs._cur->_pDebugData)
 	{
 		int iSrcBeginDebugOff = iCode_Begin / 8;
 		int base = (int)funs.m_sDebugFinal.size();
+		int iPrologue = (int)prologue.size();
 		funs.m_sDebugFinal.resize(funs._codeFinal.GetBufferOffset() / 8);
-		for (int i = base; i < (int)funs.m_sDebugFinal.size(); i++)
-			funs.m_sDebugFinal[i] = (*funs._cur->_pDebugData)[i + iSrcBeginDebugOff - base];
+		// 프롤로그 op 에는 함수 본문 첫 줄의 디버그 정보를 그대로 붙인다.
+		for (int i = 0; i < iPrologue; i++)
+			funs.m_sDebugFinal[base + i] = (*funs._cur->_pDebugData)[iSrcBeginDebugOff];
+		for (int i = base + iPrologue; i < (int)funs.m_sDebugFinal.size(); i++)
+			funs.m_sDebugFinal[i] = (*funs._cur->_pDebugData)[i + iSrcBeginDebugOff - base - iPrologue];
 
 		funs._cur->_pDebugData->resize(iSrcBeginDebugOff);
 	}
+	funs._cur->_iCode_Size += (int)prologue.size() * (int)sizeof(SVMOperation);
 	
 	funs._funSequence.push_back(funs.FindFun(funs.GetCurFunName()));
 }

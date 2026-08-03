@@ -399,206 +399,103 @@ Lower is better. **ms**, best of 5 runs after a warm-up. `x Neo` = how many time
 
 | Benchmark | What it stresses | Neo (ms) | Lua (ms) | C++ (ms) | Lua vs Neo | C++ vs Neo |
 | :-------- | :--------------- | -------: | -------: | -------: | ---------: | ---------: |
-| `loop_sum`      | integer loop, VM dispatch floor | **170** | 188 |  12.6 | 0.90x | 13.5x |
-| `float_math`    | float mul/add/sub chain         | **202** | 300 |  56.8 | 0.67x |  3.6x |
-| `func_call`     | script function call overhead   | **127** | 155 |   4.1 | 0.82x | 31.0x |
-| `fib_recursive` | recursion, fib(32)              |  **78** |  87 |   6.6 | 0.90x | 11.8x |
-| `array_rw`      | sequential array write + read   |  **44** |  46 |   2.4 | 0.96x | 18.3x |
-| `map_str`       | string-key hash lookup          |  **50** |  38 |  69.6 | 1.32x |  0.7x |
-| `string_ops`    | string build + length           |  **72** | 145 |  13.0 | 0.50x |  5.5x |
-| `particles`     | game-style float + array sim    |  **54** |  49 |   3.3 | 1.10x | 16.4x |
-| **total**       |                                 | **797** | 1008 | 168.4 | 0.79x |  4.7x |
+| `loop_sum`      | integer loop, VM dispatch floor | **173** | 190 |  12.3 | 0.91x | 14.1x |
+| `float_math`    | float mul/add/sub chain         | **205** | 307 |  57.5 | 0.67x |  3.6x |
+| `func_call`     | script function call overhead   | **128** | 154 |   4.1 | 0.83x | 31.2x |
+| `fib_recursive` | recursion, fib(32)              |  **81** |  87 |   6.6 | 0.93x | 12.3x |
+| `array_rw`      | sequential array write + read   |  **43** |  46 |   2.4 | 0.93x | 17.9x |
+| `map_str`       | string-key hash lookup          |  **49** |  40 |  69.3 | 1.23x |  0.7x |
+| `string_ops`    | string build + length           |  **72** | 148 |  13.0 | 0.49x |  5.5x |
+| `particles`     | game-style float + array sim    |  **48** |  49 |   3.3 | 0.98x | 14.5x |
+| **total**       |                                 | **799** | 1021 | 168.5 | 0.78x |  4.7x |
 
 **Reading the numbers.**
-- **Neo is ~26% faster than Lua overall**, but the totals matter far less than the spread.
-  Neo leads on `string_ops` (2.01x), `float_math` (1.49x), `func_call` (1.22x), `fib_recursive`
-  (1.12x) and — for the first time — `loop_sum` (1.11x), the raw dispatch benchmark; `array_rw`
-  is a tie. Lua still leads on `map_str` (1.32x) and `particles` (1.10x).
-  The shape of this table changed with the `_L` opcodes (item 8 below): `loop_sum` went from Lua's
-  best win to Neo's, and `particles` from 1.29x behind to 1.10x. `map_str` is now the one clear
-  gap and the only benchmark that moved the wrong way, so string-keyed maps are where the
-  remaining work is.
-  All 8 checksums match across the three languages, which is what proves they did the same work.
-- C++ is a **reference ceiling**, not a peer: it is 3-33x faster on compute-bound loops.
-  The exception is `map_str`, where `std::unordered_map<std::string,…>` is actually *slower*
-  than both script VMs — both interpreters intern their strings and cache the hash, while the
-  C++ map rehashes the key and chases a pointer on every lookup.
+- **Neo is ~28% faster than Lua overall** and leads on 7 of 8 benchmarks. `map_str` (1.23x) is the
+  only one still behind and the obvious next target. All 8 checksums match across the three
+  languages, which is what proves they did the same work.
+- C++ is a **reference ceiling**, not a peer: 3-31x faster on compute-bound loops. The exception is
+  `map_str`, where `std::unordered_map<std::string,…>` is *slower* than both VMs — the interpreters
+  intern their strings and cache the hash; the C++ map rehashes on every lookup.
 - **Compare within one run, not across runs.** Re-measuring on a differently loaded machine moved
-  *Lua's* numbers by 20-30% with its source untouched, so absolute milliseconds from separate
-  sessions are not comparable. Every figure in the table above comes from a single session.
+  *Lua's* numbers by 20-30% with its source untouched. Every figure above comes from one session.
 
 #### What these benchmarks found (and fixed)
-Building the suite paid for itself several times over. It exposed two **code-generation defects**
-(1-2), where the evidence is the emitted bytecode rather than a stopwatch — instruction counts
-don't drift with machine load. It then exposed structural properties of the **interpreter loop**
-(3-4, 6-8) and of the **value representation** (5), where the evidence *is* the stopwatch, so each
-of those claims is an A/B measurement of two full rebuilds run interleaved in one session:
+Two code-generation defects (evidence: the emitted bytecode) and a series of structural properties
+of the interpreter loop (evidence: interleaved A/B measurement of two full rebuilds in one session).
+
+**Code generation**
 
 1. **Boolean materialization in conditions.** `&&` / `||` emitted correct short-circuit jumps and
-   *then* built a `true`/`false` value that the enclosing `if` immediately re-tested — so
-   `if (a || b)` compiled worse than the equivalent `else if` chain. Conditions are now compiled
-   in branch context: the operator hands its false-jump list to the `if`, which patches it
-   directly. Comparisons inside `&&`/`||` are also fused into single compare-and-jump ops
-   (`JLS`, `JLE`), an optimization single conditions already had.
-   **The loop body of a two-clause `if` went from ten instructions to five.**
-2. **A missing entry in a peephole table.** Assigning a temporary into a variable is normally
-   elided by retargeting the producing instruction's destination, but the bitwise ops
-   (`NOP_AND` / `NOP_OR`) were absent from that table, so every `var x = a & b;` left a dead
-   `MOV`. **One instruction removed per bitwise assignment.**
+   *then* built a `true`/`false` value that the enclosing `if` immediately re-tested. Conditions are
+   now compiled in branch context, and comparisons inside them are fused into single
+   compare-and-jump ops (`JLS`, `JLE`). The body of a two-clause `if` went from ten instructions
+   to five.
+2. **A missing entry in a peephole table.** `NOP_AND` / `NOP_OR` were absent from the
+   destination-retargeting table, so every `var x = a & b;` left a dead `MOV`.
 
-3. **Keeping the hot path small matters more than saving an instruction.** Teaching `for` to honor
-   a negative `step` (see *for loop* below) added a sign test and an error branch to `For()`, which
-   is `__forceinline`d into the dispatch loop. That alone slowed *every* benchmark that loops by
-   8-19% — far more than the added work explains. Moving the rare cases (negative step, step 0)
-   into a `__declspec(noinline)` helper so the inlined body stays tiny recovered all of it and
-   then some: `float_math` −11%, `map_str` −10%, `particles` −7% **versus the original code**.
-   In a bytecode interpreter the size of the inlined dispatch body is itself a performance
-   parameter.
-4. **The same split, applied to arithmetic, was worth 8% overall.** Each of the eight arithmetic
-   handlers (`Add3`/`Sub3`/`Mul3`/`Div3` and the compound-assign `Add2`…`Div2`) inlined 42-72 lines
-   into the dispatch loop: the int/float cases that virtually all code takes, *followed by* string
-   concatenation, vector math, metatable dispatch, list merging and error formatting. Splitting each
-   one so only the four int/float combinations stay inlined and everything else moves to a
-   `noinline` `…Rare` helper — **a pure code move, no semantic change** — cut the total from
-   970 ms to **891 ms**: `float_math` −14%, `fib_recursive` −9%, `loop_sum` −8%,
-   `array_rw` −7%. A scalar-arithmetic microbenchmark dropped 25%. Note that `loop_sum` and
-   `fib_recursive` sped up too, which no single handler explains — shrinking the dispatch switch
-   helps every opcode through the instruction cache, not just the ones that were edited.
-5. **`sizeof(VarInfo)` is multiplied by everything.** Vector value types (`Vector2`…`Quaternion`)
-   used to store their four floats *inline* in the `VarInfo` union. Sixteen bytes of payload forced
-   the whole struct from 16 to **24 bytes** — and `VarInfo` is the element type of the var stack,
-   of every list, and of both halves of every map node (a map node was 60 bytes; Lua's is 24).
-   Moving the components behind a pooled `VecInfo*` brought `VarInfo` back to 16 bytes and cut the
-   suite by **7.5%**: `particles` −23%, `func_call` −12%, `float_math` −11%, `map_str` −11%.
-   The cost is paid where vectors are *created*: a vector microbenchmark got 18% slower overall,
-   concentrated in construction (`math.Vector3(...)` +23%) and copy-then-write (+50%). Two things
-   keep that bill down — assignment shares the storage and only copies on mutation
-   (copy-on-write, so `var b = a` stays free and value semantics are preserved), and a store that
-   is already singly-owned is reused in place, which makes the common `acc = acc + delta`
-   accumulation allocate nothing at all (measured at ±0%). Reading components even got *faster*
-   (−9%), because the smaller `VarInfo` outweighs the extra indirection.
-6. **Indexing a list went through two function boundaries.** `list[i]` compiled to a single
-   opcode, but the handler called `ListInfo::GetValue()` in another translation unit, which in turn
-   reached the value copy through the VM pointer (`_pVM->Move`). Inlining the integer-index case
-   directly into the read/write handlers — bucket access with a single unsigned range check, using
-   the worker's already-inlined `Move` — is again **a pure code move**: `particles` −28%,
-   `float_math` −12%, `array_rw` −9%, with the non-container benchmarks unchanged, exactly as the
-   change predicts. This is the same lesson as items 3 and 4 seen from the other side: what the
-   dispatch loop *cannot* inline costs as much as what it inlines too much of.
-7. **Item 4's split, applied to container indexing.** `CltRead` / `CltInsert` still inlined every
-   collection kind into the dispatch loop — property-backed maps, vector component access, the
-   string-indexer path, and two `SetErrorFormat(…, GetDataType(…).c_str())` calls whose `std::string`
-   temporary is constructed and destroyed inline. Only `list[int]` and `map[string]` stay inlined
-   now; the rest moved to `noinline` `CltReadRare` / `CltInsertRare`. Every container benchmark
-   improved (`particles` −2%, `array_rw` −2%, `map_str` −2%) while the three benchmarks that touch
-   no container regressed by the same order (`loop_sum` +3%, `func_call` +2%, `fib_recursive` +2%),
-   which is the I-cache budget being *moved* rather than saved. It was adopted anyway: the engine
-   workload this VM exists for is container-heavy, and that is the side of the trade worth buying.
-   It is the one change here justified by target workload rather than by the suite total.
-8. **Every operand fetch was paying for a runtime test that is decidable ahead of time.** Each
-   opcode encodes, per operand, an `argFlag` bit selecting the local frame or the global array —
-   up to three tests per instruction, ~35 per particle-loop iteration. That bit is fixed at compile
-   time, yet it was re-tested on every execution. Twenty-four `_L` opcode variants now exist
-   (`MOV_L`, `ADD3_L`, `CLT_READ_L`, …) that skip the test and index the frame base directly;
-   a pass over the loaded program (`PatchLocalOps`) rewrites each instruction whose *fetched*
-   operands are all local. **Neither the compiler nor the stored image changes** — the image still
-   holds base opcodes and the rewrite happens in memory at load, exactly like the existing
-   native-call patch. 44% of instructions qualified when the first nineteen variants landed
-   (198 of 452 in the benchmark suite; in the particle inner loop, 16 of 21). The suite dropped
-   from 881 ms to **797 ms (−10%)**: `loop_sum` −25%, `fib_recursive` −9%, `array_rw` −12%,
-   `particles` −8%, `func_call` −5%, `string_ops` −5%. `map_str` was the sole regression (+4%).
-   Note that the measured win is far larger than the removed instructions explain — MSVC already
-   compiled the flag test to a branchless `cmov` (verified by disassembly), so three `cmov`s per
-   instruction cannot account for `loop_sum` dropping a quarter. What the specialized opcodes
-   really buy is a shorter dependency chain into each fetch and a smaller, more predictable
-   handler body; the same I-cache/layout sensitivity that made items 3, 4 and 7 work, applied to
-   the one thing every single opcode does.
+**Interpreter loop.** The recurring lesson is that *the size of the inlined dispatch body is itself
+a performance parameter*.
 
-   Which operands are actually fetched had to be read out of the handlers, not guessed: `JMP`
-   fetches none (its `n1` is a jump offset), `JLS`/`JLE` fetch only `n2`/`n3`, `MOVI` and
-   `LIST_ALLOC` only `n1` (the rest is an immediate), and `CALL`/`RETURN`/`PTRCALL2` skip their
-   value slot entirely when the `NORESULT` flag is set. `JMP` and `JMP_FOR` got no variant at all —
-   the first fetches nothing and the second already addressed the frame directly.
+3. **Hot-path size beats instruction count.** Teaching `for` to honor a negative `step` added a
+   sign test to `For()`, which is inlined into the dispatch loop — that alone slowed every looping
+   benchmark 8-19%, far more than the added work explains. Moving the rare cases to a `noinline`
+   helper recovered it and more.
+4. **The same split on the eight arithmetic handlers** (int/float inlined, string/vector/metatable/
+   error moved to `…Rare`) cut the suite 970 → 891 ms. `loop_sum` and `fib_recursive` sped up too,
+   which nothing but a smaller dispatch switch explains.
+5. **`sizeof(VarInfo)` is multiplied by everything.** Storing vector components inline pushed it
+   from 16 to 24 bytes — and `VarInfo` is the element type of the var stack, of every list, and of
+   both halves of every map node. Moving them behind a pooled `VecInfo*` with copy-on-write cut the
+   suite 7.5%; the cost is paid where vectors are *created*.
+6. **List indexing crossed two function boundaries.** Inlining the integer-index case directly into
+   the read/write handlers — bucket access with one unsigned range check — gave `particles` −28%,
+   `float_math` −12%, with non-container benchmarks unchanged.
+7. **The same hot/rare split for container indexing.** Only `list[int]` and `map[string]` stay
+   inlined in `CltRead`/`CltInsert`. Containers improved ~2% while non-container benchmarks
+   regressed ~2% — the I-cache budget moved rather than shrank. Adopted anyway: the engine
+   workload this VM exists for is container-heavy.
+8. **Operand fetch was re-testing something fixed at compile time.** Each opcode encodes, per
+   operand, an `argFlag` bit selecting the local frame or the global array. Twenty-four `_L` opcode
+   variants now skip that test and index the frame directly, and `PatchLocalOps` rewrites every
+   instruction whose fetched operands are all local — **at load, leaving the compiler and the stored
+   image untouched**. 44% of instructions qualify. Suite 881 → 797 ms: `loop_sum` −25%,
+   `array_rw` −12%, `fib_recursive` −9%. The win is far larger than the removed instructions
+   explain (MSVC already compiled the flag test to a branchless `cmov`); what the specialized
+   opcodes buy is a shorter fetch dependency chain and a smaller handler body. The last five
+   variants were picked from a dynamic opcode profile (2.14 billion executed instructions) rather
+   than by inspection.
+9. **Loop constants are hoisted into hidden local slots.** Literals live in the static pool, which
+   shares the global array, so `x * 1.5` could never qualify for `_L` — 19% of executed
+   instructions were blocked this way. The compiler now loads each constant used inside a loop into
+   a hidden local in the function prologue and rewrites every reference to it, which costs no new
+   opcodes. `particles` −11% (it now beats Lua), `array_rw` −4%; the suite total is unchanged, so
+   this is another trade bought for the target workload. Three constraints make it work: statics
+   only (script globals are mutable inside the loop), hidden locals rather than temps (temps are
+   recycled every statement), and the prologue rather than the loop header, so that multiple or
+   conditional loop nests cannot reach an uninitialized slot.
 
-   The last five variants (`JMP_GREAT_L`, `JMP_GREAT_EQ_L`, `JMP_EQUAL2_L`, `JMP_NEQUAL_L`,
-   `STR_ADD_L`) were chosen from a **dynamic opcode profile** rather than by inspection — a
-   temporary counter in the dispatch loop over the whole suite (2.14 billion executed
-   instructions) ranked which opcodes still lacking a variant actually ran. Only two did in any
-   quantity: `JMP_GREAT_EQ` at 1.65% and `STR_ADD` at 0.23%; the rest of the comparison-jump family
-   was completed for symmetry. `fib_recursive` — the one benchmark using `JMP_GREAT_EQ` — improved
-   6%, and the suite total moved within noise, which is the expected shape when a change touches
-   under 2% of executed instructions. That profile also showed the top entry, `JMP_FOR` at 19.5%,
-   could gain nothing, since it already addressed the frame directly.
+**Did not survive measurement.** A dedicated opcode for the common `step == 1` loop (4-5% *slower*);
+a separate loop-entry opcode to pre-validate `step`; rewriting the operand fetch as an explicit
+`cmov` (exactly at baseline — MSVC was already emitting one); and reordering the `switch` cases to
+group the hot opcodes (`particles` +8%, `map_str` +22% — MSVC's own layout was better than the
+guess). That last one is worth recording on its own: a two-line reordering with no semantic change
+moved one benchmark by a fifth.
 
-The same profile points at what is left. Roughly **19% of all executed instructions carry a
-`_L` variant yet never qualify for it**, because one operand is a literal: `MUL3` 7.0%, `AND` 3.3%,
-`ADD3` 2.3%, `CLT_READ` 2.3%, `SUB3` 1.7%, `JLS`/`JLE` 1.9%. Constants live in the static pool,
-which shares the global array, so `x * 1.5` can never be all-local. Adding *mixed* variants
-(two locals + one global) would fix it but means yet more opcodes, and the five above already show
-that side of the trade is near its limit. The change that costs no opcodes is to **hoist the
-constant into a hidden local slot at loop entry** and let the existing `_L` variants match: in the
-particle loop that is three `MOV`s executed once, in exchange for 8 M instructions being promoted,
-taking the inner loop from 16/21 to 21/21 patched. Three constraints make it non-trivial —
-it must apply only to *static* operands (script globals are mutable inside the loop), the slot has
-to be a hidden local rather than a temp (`FreeLocalTempVar()` recycles temps every statement), and
-the `MOV` belongs before the *outermost* loop enclosing all uses, not at function entry, or a hot
-small function pays the copy on every call for no benefit. Not attempted yet.
+#### On the remaining gap
+For the identical inner loop Neo issues **15 opcodes to Lua's 19** — Neo fuses each comparison into
+a single compare-and-jump where Lua spends an `LTI` plus a `JMP`. `lua55.dll` in this comparison is
+a **MinGW-w64 / GCC** build, so under `__GNUC__` Lua's `lvm.c` enables computed-goto **direct
+threading**: 54 register-indirect jumps in `luaV_execute`, where a switch-based build has one.
+Every opcode gets its own branch-predictor history instead of sharing one at the top of the loop.
+MSVC has no labels-as-values, so NeoScript cannot express that dispatch.
 
-Ideas that did *not* survive measurement:
-
-- **A dedicated opcode for the common `step == 1` loop.** The premise was that skipping the
-  step-slot read would pay off, but `[begin][end][step]` are adjacent and already in cache, and
-  the sign test predicts perfectly — the specialized op measured **4-5% slower** than the general
-  one (reproduced over three runs), so it was removed. Fewer opcodes also keeps stored bytecode
-  compatible.
-- **A separate loop-entry opcode** to pre-validate `step` once per loop. Making `For()` itself
-  sign-aware removed the infinite-loop cases for free, leaving only `step == 0` to handle, so the
-  extra opcode and its jump patching were dropped.
-- **Branchless operand fetch.** Each opcode tests an `argFlag` bit per operand to pick the local or
-  the global base, up to three times — about 35 branches per particle-loop iteration, where Lua's
-  `R[A] = base + A` has none. Rewriting the fetch to select the base pointer with a ternary so it
-  compiles to `cmov` measured **exactly at baseline**: MSVC was already emitting `cmov` for the
-  two-return form. Reverted. (The test itself was worth removing — but that took specialized
-  opcodes, not a better way of writing the same test. See item 8.)
-- **Reordering the `switch` cases** so the hottest opcodes sit next to each other in source. Case
-  order does not affect the jump table (it is indexed by opcode value) but it does decide code
-  layout, so moving `CLT_READ` / `CLT_MOV` up beside the arithmetic handlers — away from the bulky
-  `CALL` / `STR_ADD` / `TO*` bodies they currently sit behind — looked free. It was a clear
-  **regression**: `particles` +8%, `map_str` +22%. MSVC's own layout was better than the guess.
-  Worth recording that layout sensitivity of this size exists at all: a two-line reordering with no
-  semantic change moved one benchmark by a fifth.
-
-#### On the dispatch gap — and how much of it was not the dispatch
-Three consecutive attempts to close the last ~20% on `particles` came back at noise or worse (the
-last two entries above, plus the container split of item 7 which only moved the cost around).
-Disassembling the benchmark's Lua build explained why the *handlers* had nothing left to give.
-
-Counting the emitted bytecode for the identical inner loop, **Neo issues 15 opcodes to Lua's 19** —
-Neo fuses each comparison into a single compare-and-jump (`JLS` / `JLE`) where Lua spends an `LTI`
-plus a `JMP`. Neo executed *fewer* instructions and still finished slower, so the cost was per
-opcode: at the time, roughly **2.0 ns for Neo against 1.3 ns for Lua**.
-
-Part of that is dispatch structure, and that part is real. `lua55.dll` in this comparison is a
-**MinGW-w64 / GCC** build (GNU ld 2.28, imports `msvcrt.dll`, carries `GCC:` / `libgcc` /
-`__mingw` strings), and under `__GNUC__` Lua's `lvm.c` enables `LUA_USE_JUMPTABLE` — computed-goto
-**direct threading**. The disassembly confirms it: 54 register-indirect jumps clustered in
-`luaV_execute`, where a switch-based build would have one. Every opcode gets its own indirect
-branch and therefore its own branch-predictor history, instead of all of them sharing a single one
-at the top of the loop. MSVC has no labels-as-values, so NeoScript cannot express that dispatch.
-
-**But calling that a ceiling was wrong.** This section previously concluded that the interpreter
-had nothing left on this toolchain. Item 8 then took 10% off the suite and 26% off `loop_sum` —
-the very benchmark that is nothing *but* dispatch — and moved it from Neo's worst result against
-Lua to a win. The error was in scope: the three failed attempts had all been *handler* changes, and
-the conclusion generalized from them to the whole loop. Operand fetch is not a handler; it is the
-work every opcode does before its handler runs, and it was still carrying a decidable-at-compile-
-time test. A structural disadvantage in dispatch does not mean everything around dispatch is
-already optimal.
-
-What remains genuinely toolchain-bound is the indirect-branch prediction itself. The one path that
-would change that is building the VM translation unit with `clang-cl` and enabling threaded
-dispatch under `#if defined(__clang__)`; that is a toolchain decision, not a code one, and has not
-been attempted.
+This section previously concluded the interpreter was therefore at a ceiling. Items 8 and 9 then
+took 10% off the suite and 25% off `loop_sum` — the benchmark that is nothing *but* dispatch. The
+error was one of scope: the failed attempts had all been *handler* changes, and operand fetch is not
+a handler; it is what every opcode does before its handler runs. What remains genuinely
+toolchain-bound is the indirect-branch prediction itself, and the one path that changes it is
+building the VM translation unit with `clang-cl` and enabling threaded dispatch under
+`#if defined(__clang__)` — a toolchain decision, not a code one, and not attempted.
 
 All compiler changes are covered by the 2,783-case regression suite plus dedicated correctness
 tests: 43 cases for logical operators ([`TestScript/logic_ops.ns`](TestScript/logic_ops.ns)) and
