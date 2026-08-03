@@ -34,7 +34,7 @@ struct SVarWrapper
 };
 
 
-#define NEOS_OP_CALL_NORESULT	(1 << 7) // 0x80
+// NEOS_OP_CALL_NORESULT 는 NeoVMInternal.h 의 argFlag 비트 정의로 이동
 // JMP_FOREACH 전용: foreach(var k, v in ...) 2변수 형태. 대상이 list 인지는 런타임에만 알 수
 // 있으므로, 컴파일러가 이 플래그만 실어 보내고 미지원 판정/에러는 ForEach 런타임에서 한다.
 #define NEOS_OP_FOREACH_TWOVAR	(1 << 6) // 0x40

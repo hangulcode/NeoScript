@@ -10,6 +10,11 @@ NEOS_NOINLINE bool handle_STR_ADD(const SVMOperation& OP) {
     return false;
 }
 
+NEOS_NOINLINE bool handle_STR_ADD_L(const SVMOperation& OP) {
+    Var_SetStringA(GetVarPtr_L(OP.n1), ToString(GetVarPtr_L(OP.n2)) + ToString(GetVarPtr_L(OP.n3)));
+    return false;
+}
+
 NEOS_FORCEINLINE bool handle_TOSTRING(const SVMOperation& OP) {
     Var_SetStringA(GetVarPtrF1(OP), ToString(GetVarPtr2(OP)));
     return false;
@@ -17,6 +22,13 @@ NEOS_FORCEINLINE bool handle_TOSTRING(const SVMOperation& OP) {
 
 NEOS_FORCEINLINE bool handle_TOINT(const SVMOperation& OP) {
     Var_SetInt(GetVarPtrF1(OP), ToInt(GetVarPtr2(OP)));
+    return false;
+}
+
+// _L 변형: 오퍼랜드가 전부 로컬인 것이 프로그램 빌드 시(PatchLocalOps) 확정된 op.
+// argFlag 비트 테스트 없이 스택 베이스로 직행한다(test+cmov 제거).
+NEOS_FORCEINLINE bool handle_TOINT_L(const SVMOperation& OP) {
+    Var_SetInt(GetVarPtr_L(OP.n1), ToInt(GetVarPtr_L(OP.n2)));
     return false;
 }
 
@@ -66,8 +78,15 @@ NEOS_FORCEINLINE bool handle_CALL(const SVMOperation& OP) {
     return false;
 }
 
-NEOS_FORCEINLINE bool handle_PTRCALL(const SVMOperation& OP) {
-    VarInfo* pVar1 = GetVarPtrF1(OP);
+NEOS_FORCEINLINE bool handle_CALL_L(const SVMOperation& OP) {
+    // NORESULT 면 반환 슬롯 자체를 안 뽑으므로 PatchLocalOps 가 _L 로 바꾸지 않는다.
+    Call(OP.n1, OP.n2, GetVarPtr_L(OP.n3));
+    return false;
+}
+
+// 본문은 base/_L 공용. pFunNamePre 가 있으면 그것을 쓰고(=_L, 로컬 확정),
+// nullptr 이면 기존대로 필요한 분기에서만 늦게 뽑는다(n2 == -1 센티널 보호).
+NEOS_FORCEINLINE bool handle_PTRCALL_impl(const SVMOperation& OP, VarInfo* pVar1, VarInfo* pFunNamePre) {
     short n3 = OP.n3;
     VarInfo* pFunName = nullptr;
     switch (pVar1->GetType())
@@ -83,12 +102,12 @@ NEOS_FORCEINLINE bool handle_PTRCALL(const SVMOperation& OP) {
     case VAR_CHAR:
         Var_SetString(pVar1, pVar1->_c.c); // char -> string
     case VAR_STRING:
-        pFunName = GetVarPtr2(OP);
+        pFunName = pFunNamePre ? pFunNamePre : GetVarPtr2(OP);
         CallNative(GetVM()->_funLib_String, pVar1, pFunName->_str, n3);
         break;
     case VAR_MAP:
     {
-        pFunName = GetVarPtr2(OP);
+        pFunName = pFunNamePre ? pFunNamePre : GetVarPtr2(OP);
         VarInfo* pVarMeta = pVar1->_tbl->Find(pFunName);
         if (pVarMeta != NULL)
         {
@@ -111,13 +130,13 @@ NEOS_FORCEINLINE bool handle_PTRCALL(const SVMOperation& OP) {
         break;
     }
     case VAR_LIST:
-        pFunName = GetVarPtr2(OP);
+        pFunName = pFunNamePre ? pFunNamePre : GetVarPtr2(OP);
         CallNative(GetVM()->_funLib_List, pVar1, pFunName->_str, n3);
         break;
     case VAR_SET:
         break;
     case VAR_ASYNC:
-        pFunName = GetVarPtr2(OP);
+        pFunName = pFunNamePre ? pFunNamePre : GetVarPtr2(OP);
         CallNative(GetVM()->_funLib_Async, pVar1, pFunName->_str, n3);
         break;
     default:
@@ -127,21 +146,39 @@ NEOS_FORCEINLINE bool handle_PTRCALL(const SVMOperation& OP) {
     return false;
 }
 
-NEOS_FORCEINLINE bool handle_PTRCALL2(const SVMOperation& OP) {
-    short n2 = OP.n2;
-    VarInfo* pFunName = GetVarPtrF1(OP);
+NEOS_FORCEINLINE bool handle_PTRCALL(const SVMOperation& OP) {
+    return handle_PTRCALL_impl(OP, GetVarPtrF1(OP), nullptr);
+}
+
+NEOS_FORCEINLINE bool handle_PTRCALL_L(const SVMOperation& OP) {
+    // n1/n2 모두 로컬로 확정 → 메서드명 슬롯도 미리 뽑아 넘긴다.
+    return handle_PTRCALL_impl(OP, GetVarPtr_L(OP.n1), GetVarPtr_L(OP.n2));
+}
+
+// 본문 공용. pRet 은 NORESULT 를 이미 반영한 반환 슬롯(없으면 nullptr).
+NEOS_FORCEINLINE bool handle_PTRCALL2_impl(short n2, VarInfo* pFunName, VarInfo* pRet) {
     if (pFunName->GetType() == VAR_CHAR)
     {
         GetVM()->Var_SetStringA(pFunName, pFunName->_c.c);
     }
     if (pFunName->GetType() == VAR_STRING)
     {
-        CallNative(GetVM()->_funLib_Default, NULL, pFunName->_str, n2, (OP.argFlag & NEOS_OP_CALL_NORESULT) ? nullptr : GetVarPtr3(OP));
+        CallNative(GetVM()->_funLib_Default, NULL, pFunName->_str, n2, pRet);
     }
 
     if (_iSP_Vars_Max2 < _iSP_VarsMax + (1 + n2))
         _iSP_Vars_Max2 = _iSP_VarsMax + (1 + n2);
     return false;
+}
+
+NEOS_FORCEINLINE bool handle_PTRCALL2(const SVMOperation& OP) {
+    return handle_PTRCALL2_impl(OP.n2, GetVarPtrF1(OP),
+        (OP.argFlag & NEOS_OP_CALL_NORESULT) ? nullptr : GetVarPtr3(OP));
+}
+
+NEOS_FORCEINLINE bool handle_PTRCALL2_L(const SVMOperation& OP) {
+    return handle_PTRCALL2_impl(OP.n2, GetVarPtr_L(OP.n1),
+        (OP.argFlag & NEOS_OP_CALL_NORESULT) ? nullptr : GetVarPtr_L(OP.n3));
 }
 
 NEOS_FORCEINLINE bool handle_NATIVECALL(const SVMOperation& OP) {
@@ -153,13 +190,14 @@ NEOS_FORCEINLINE bool handle_NATIVECALL(const SVMOperation& OP) {
     return false;
 }
 
-NEOS_FORCEINLINE bool handle_RETURN(const SVMOperation& OP) {
+// 본문 공용. pSrc = 반환값 슬롯(NORESULT 면 nullptr).
+NEOS_FORCEINLINE bool handle_RETURN_impl(VarInfo* pSrc) {
     if (m_iBreakingCallStack == (int)m_pCallStack->size())
     {
-        if ((OP.argFlag & NEOS_OP_CALL_NORESULT))
+        if (pSrc == nullptr)
             Var_Release(m_pVarStack_Pointer); // Clear
         else
-            Move(m_pVarStack_Pointer, GetVarPtrF1(OP));
+            Move(m_pVarStack_Pointer, pSrc);
 
         if (m_iBreakingCallStack == 0 && IsMainCoroutine(m_pCur) == false)
         {
@@ -174,17 +212,17 @@ NEOS_FORCEINLINE bool handle_RETURN(const SVMOperation& OP) {
 
     if (callStack._pReturnValue)
     {
-        if ((OP.argFlag & NEOS_OP_CALL_NORESULT))
+        if (pSrc == nullptr)
             Var_Release(callStack._pReturnValue); // Clear
         else
-            Move(callStack._pReturnValue, GetVarPtrF1(OP));
+            Move(callStack._pReturnValue, pSrc);
     }
     else
     {
-        if ((OP.argFlag & NEOS_OP_CALL_NORESULT))
+        if (pSrc == nullptr)
             Var_Release(m_pVarStack_Pointer); // Clear
         else
-            Move(m_pVarStack_Pointer, GetVarPtrF1(OP));
+            Move(m_pVarStack_Pointer, pSrc);
     }
 
     if (callStack._pAsyncWaitReturnValue != nullptr)
@@ -197,6 +235,15 @@ NEOS_FORCEINLINE bool handle_RETURN(const SVMOperation& OP) {
     return false; // break, continue loop
 }
 
+NEOS_FORCEINLINE bool handle_RETURN(const SVMOperation& OP) {
+    return handle_RETURN_impl((OP.argFlag & NEOS_OP_CALL_NORESULT) ? nullptr : GetVarPtrF1(OP));
+}
+
+NEOS_FORCEINLINE bool handle_RETURN_L(const SVMOperation& OP) {
+    // NORESULT 면 슬롯을 안 뽑으므로 PatchLocalOps 가 _L 로 바꾸지 않는다.
+    return handle_RETURN_impl(GetVarPtr_L(OP.n1));
+}
+
 NEOS_FORCEINLINE bool handle_TABLE_ALLOC(const SVMOperation& OP) {
     Var_SetTable(GetVarPtrF1(OP), GetVM()->TableAlloc(OP.n23));
     return false;
@@ -207,6 +254,11 @@ NEOS_FORCEINLINE bool handle_CLT_READ(const SVMOperation& OP) {
     return false;
 }
 
+NEOS_FORCEINLINE bool handle_CLT_READ_L(const SVMOperation& OP) {
+    CltRead(GetVarPtr_L(OP.n1), GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3));
+    return false;
+}
+
 NEOS_NOINLINE bool handle_TABLE_REMOVE(const SVMOperation& OP) {
     TableRemove(GetVarPtrF1(OP), GetVarPtr2(OP));
     return false;
@@ -214,6 +266,11 @@ NEOS_NOINLINE bool handle_TABLE_REMOVE(const SVMOperation& OP) {
 
 NEOS_FORCEINLINE bool handle_CLT_MOV(const SVMOperation& OP) {
     CltInsert(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+    return false;
+}
+
+NEOS_FORCEINLINE bool handle_CLT_MOV_L(const SVMOperation& OP) {
+    CltInsert(GetVarPtr_L(OP.n1), GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3));
     return false;
 }
 
@@ -252,6 +309,11 @@ NEOS_FORCEINLINE bool handle_LIST_ALLOC(const SVMOperation& OP) {
     return false;
 }
 
+NEOS_FORCEINLINE bool handle_LIST_ALLOC_L(const SVMOperation& OP) {
+    Var_SetList(GetVarPtr_L(OP.n1), GetVM()->ListAlloc(OP.n23));
+    return false;
+}
+
 NEOS_NOINLINE bool handle_LIST_REMOVE(const SVMOperation& OP) {
     TableRemove(GetVarPtrF1(OP), GetVarPtr2(OP));
     return false;
@@ -264,6 +326,11 @@ NEOS_FORCEINLINE bool handle_VERIFY_TYPE(const SVMOperation& OP) {
 
 NEOS_FORCEINLINE bool handle_CHANGE_INT(const SVMOperation& OP) {
     ChangeNumber(GetVarPtrF1(OP));
+    return false;
+}
+
+NEOS_FORCEINLINE bool handle_CHANGE_INT_L(const SVMOperation& OP) {
+    ChangeNumber(GetVarPtr_L(OP.n1));
     return false;
 }
 

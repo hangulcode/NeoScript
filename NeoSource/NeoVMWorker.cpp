@@ -12,6 +12,7 @@
 namespace NeoScript
 {
 
+
 void	SetCompileError(const char*	lpszString, ...);
 
 void SVarWrapper::SetNone() { _vmw->Var_SetNone(_var); }
@@ -1712,10 +1713,14 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		switch (OP.op)
 		{
 		case NOP_MOV:           Move(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
+		case NOP_MOV_L:         Move(GetVarPtr_L(OP.n1), GetVarPtr_L(OP.n2)); break;
 		case NOP_MOVI:          MoveI(GetVarPtrF1(OP), OP.n23); break;
+		case NOP_MOVI_L:        MoveI(GetVarPtr_L(OP.n1), OP.n23); break;
 		case NOP_MOV_MINUS:     MoveMinus(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
+		case NOP_MOV_MINUS_L:   MoveMinus(GetVarPtr_L(OP.n1), GetVarPtr_L(OP.n2)); break;
 		case NOP_LOG_NOT:       Var_SetBool(GetVarPtrF1(OP), !GetVarPtr2(OP)->IsTrue()); break;
 		case NOP_ADD2:          Add2(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
+		case NOP_ADD2_L:        Add2(GetVarPtr_L(OP.n1), GetVarPtr_L(OP.n2)); break;
 		case NOP_SUB2:          Sub2(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
 		case NOP_MUL2:          Mul2(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
 		case NOP_DIV2:          Div2(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
@@ -1729,8 +1734,11 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_INC:           Inc(GetVarPtrF1(OP)); break;
 		case NOP_DEC:           Dec(GetVarPtrF1(OP)); break;
 		case NOP_ADD3:          Add3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
+		case NOP_ADD3_L:        Add3(GetVarPtr_L(OP.n1), GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3)); break;
 		case NOP_SUB3:          Sub3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
+		case NOP_SUB3_L:        Sub3(GetVarPtr_L(OP.n1), GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3)); break;
 		case NOP_MUL3:          Mul3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
+		case NOP_MUL3_L:        Mul3(GetVarPtr_L(OP.n1), GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3)); break;
 		case NOP_DIV3:          Div3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
 		case NOP_PERSENT3:      Per3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
 		case NOP_LSHIFT3:       LSh3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
@@ -1745,6 +1753,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_EQUAL2:        Var_SetBool(GetVarPtrF1(OP), CompareEQ(GetVarPtr2(OP), GetVarPtr3(OP))); break;
 		case NOP_NEQUAL:        Var_SetBool(GetVarPtrF1(OP), !CompareEQ(GetVarPtr2(OP), GetVarPtr3(OP))); break;
 		case NOP_AND:           And(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
+		case NOP_AND_L:         And(GetVarPtr_L(OP.n1), GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3)); break;
 		case NOP_OR:            Or(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
 		case NOP_LOG_AND:       Var_SetBool(GetVarPtrF1(OP), GetVarPtr3(OP)->IsTrue() && GetVarPtr2(OP)->IsTrue()); break;
 		case NOP_LOG_OR:        Var_SetBool(GetVarPtrF1(OP), GetVarPtr2(OP)->IsTrue() || GetVarPtr3(OP)->IsTrue()); break;
@@ -1752,11 +1761,17 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_JMP_FALSE:     if (false == GetVarPtr2(OP)->IsTrue()) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_TRUE:      if (true == GetVarPtr2(OP)->IsTrue()) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_GREAT:     if (true == CompareGR(GetVarPtr2(OP), GetVarPtr3(OP))) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_GREAT_L:   if (true == CompareGR(GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3))) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_GREAT_EQ:  if (true == CompareGE(GetVarPtr2(OP), GetVarPtr3(OP))) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_GREAT_EQ_L:if (true == CompareGE(GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3))) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_LESS:      if (true == CompareGR(GetVarPtr3(OP), GetVarPtr2(OP))) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_LESS_L:    if (true == CompareGR(GetVarPtr_L(OP.n3), GetVarPtr_L(OP.n2))) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_LESS_EQ:   if (true == CompareGE(GetVarPtr3(OP), GetVarPtr2(OP))) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_LESS_EQ_L: if (true == CompareGE(GetVarPtr_L(OP.n3), GetVarPtr_L(OP.n2))) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_EQUAL2:    if (true == CompareEQ(GetVarPtr2(OP), GetVarPtr3(OP))) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_EQUAL2_L:  if (true == CompareEQ(GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3))) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_NEQUAL:    if (false == CompareEQ(GetVarPtr2(OP), GetVarPtr3(OP))) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_NEQUAL_L:  if (false == CompareEQ(GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3))) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_AND:       if (GetVarPtr2(OP)->IsTrue() && GetVarPtr3(OP)->IsTrue()) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_OR:        if (GetVarPtr2(OP)->IsTrue() || GetVarPtr3(OP)->IsTrue()) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_NAND:      if (false == (GetVarPtr2(OP)->IsTrue() && GetVarPtr3(OP)->IsTrue())) SetCodeIncPtr(OP.n1); break;
@@ -1766,8 +1781,10 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_SWITCH:        handle_SWITCH(OP); break;
 
 		case NOP_STR_ADD:       handle_STR_ADD(OP); break;
+		case NOP_STR_ADD_L:     handle_STR_ADD_L(OP); break;
 		case NOP_TOSTRING:      handle_TOSTRING(OP); break;
 		case NOP_TOINT:         handle_TOINT(OP); break;
+		case NOP_TOINT_L:       handle_TOINT_L(OP); break;
 		case NOP_TOFLOAT:       handle_TOFLOAT(OP); break;
 		case NOP_TOSIZE:        handle_TOSIZE(OP); break;
 		case NOP_GETTYPE:       handle_GETTYPE(OP); break;
@@ -1777,25 +1794,35 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_FMOV1:         handle_FMOV1(OP); break;
 		case NOP_FMOV2:         handle_FMOV2(OP); break;
 		case NOP_CALL:          handle_CALL(OP); break;
+		case NOP_CALL_L:        handle_CALL_L(OP); break;
 		case NOP_PTRCALL:       handle_PTRCALL(OP); break;
+		case NOP_PTRCALL_L:     handle_PTRCALL_L(OP); break;
 		case NOP_PTRCALL2:      handle_PTRCALL2(OP); break;
+		case NOP_PTRCALL2_L:    handle_PTRCALL2_L(OP); break;
 		case NOP_NATIVECALL:    handle_NATIVECALL(OP); break;
 		case NOP_RETURN:
 			if (handle_RETURN(OP)) return true;
 			break;
+		case NOP_RETURN_L:
+			if (handle_RETURN_L(OP)) return true;
+			break;
 		case NOP_TABLE_ALLOC:   handle_TABLE_ALLOC(OP); break;
 		case NOP_CLT_READ:      handle_CLT_READ(OP); break;
+		case NOP_CLT_READ_L:    handle_CLT_READ_L(OP); break;
 		case NOP_TABLE_REMOVE:  handle_TABLE_REMOVE(OP); break;
 		case NOP_CLT_MOV:       handle_CLT_MOV(OP); break;
+		case NOP_CLT_MOV_L:     handle_CLT_MOV_L(OP); break;
 		case NOP_TABLE_ADD2:    handle_TABLE_ADD2(OP); break;
 		case NOP_TABLE_SUB2:    handle_TABLE_SUB2(OP); break;
 		case NOP_TABLE_MUL2:    handle_TABLE_MUL2(OP); break;
 		case NOP_TABLE_DIV2:    handle_TABLE_DIV2(OP); break;
 		case NOP_TABLE_PERSENT2:handle_TABLE_PERSENT2(OP); break;
 		case NOP_LIST_ALLOC:    handle_LIST_ALLOC(OP); break;
+		case NOP_LIST_ALLOC_L:  handle_LIST_ALLOC_L(OP); break;
 		case NOP_LIST_REMOVE:   handle_LIST_REMOVE(OP); break;
 		case NOP_VERIFY_TYPE:   handle_VERIFY_TYPE(OP); break;
 		case NOP_CHANGE_INT:    handle_CHANGE_INT(OP); break;
+		case NOP_CHANGE_INT_L:  handle_CHANGE_INT_L(OP); break;
 		case NOP_YIELD:
 			if (handle_YIELD(OP)) return true;
 			break;

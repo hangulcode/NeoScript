@@ -53,7 +53,10 @@ struct SUtf8One
 
 #define FILE_NEOS	(('N' << 24) | ('E' << 16) | ('O' << 8) | ('S'))
 // 0110: switch/case 테이블 chunk 추가 (이전 캐시 이미지와 호환 안 됨)
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('1' << 8) | ('0'))
+// 0111: _L(전 오퍼랜드 로컬) opcode 를 각 원본 뒤에 삽입 → 이후 op 번호가 전부 밀림.
+//       이미지 자체는 원본 op 만 담고 _L 치환은 로드 후(PatchLocalOps) 이뤄지지만,
+//       0110 이미지를 그대로 읽으면 op 번호가 어긋나므로 버전을 올린다.
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('1' << 8) | ('1'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline

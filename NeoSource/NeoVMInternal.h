@@ -71,6 +71,9 @@ typedef u8	ArgFlag;
 #define NEOS_ARG_N1_LOCAL		(1 << 2)
 #define NEOS_ARG_N2_LOCAL		(1 << 1)
 #define NEOS_ARG_N3_LOCAL		(1 << 0)
+// 호출/복귀 op 전용: 반환값 슬롯을 쓰지 않음(=해당 오퍼랜드를 페치하지 않음).
+// PatchLocalOps 도 이 비트를 봐야 해서 argFlag 비트 정의와 같은 곳에 둔다.
+#define NEOS_OP_CALL_NORESULT	(1 << 7) // 0x80
 
 enum eNOperationSub : u8
 {
@@ -89,11 +92,15 @@ enum eNOperationSub : u8
 enum eNOperation : OpType
 {
 	NOP_MOV,
+	NOP_MOV_L,
 	NOP_MOVI,
+	NOP_MOVI_L,
 
 	NOP_MOV_MINUS,
+	NOP_MOV_MINUS_L,
 	NOP_LOG_NOT,	// !
 	NOP_ADD2,		// +
+	NOP_ADD2_L,
 	NOP_SUB2,		// -
 	NOP_MUL2,		// *
 	NOP_DIV2,		// /
@@ -111,8 +118,11 @@ enum eNOperation : OpType
 	NOP_DEC,
 
 	NOP_ADD3,
+	NOP_ADD3_L,
 	NOP_SUB3,
+	NOP_SUB3_L,
 	NOP_MUL3,
+	NOP_MUL3_L,
 	NOP_DIV3,
 	NOP_PERSENT3,
 	NOP_LSHIFT3,
@@ -129,6 +139,7 @@ enum eNOperation : OpType
 	NOP_EQUAL2,		// ==
 	NOP_NEQUAL,		// !=
 	NOP_AND,		// &
+	NOP_AND_L,
 	NOP_OR,			// |
 	NOP_LOG_AND,	// &&
 	NOP_LOG_OR,	// ||
@@ -138,11 +149,17 @@ enum eNOperation : OpType
 	NOP_JMP_TRUE,
 
 	NOP_JMP_GREAT,		// >
+	NOP_JMP_GREAT_L,
 	NOP_JMP_GREAT_EQ,	// >=
+	NOP_JMP_GREAT_EQ_L,
 	NOP_JMP_LESS,		// <
+	NOP_JMP_LESS_L,
 	NOP_JMP_LESS_EQ,	// <=
+	NOP_JMP_LESS_EQ_L,
 	NOP_JMP_EQUAL2,	// ==
+	NOP_JMP_EQUAL2_L,
 	NOP_JMP_NEQUAL,	// !=
+	NOP_JMP_NEQUAL_L,
 	NOP_JMP_AND,	// &&
 	NOP_JMP_OR,		// ||
 	NOP_JMP_NAND,	// !(&&)
@@ -152,9 +169,11 @@ enum eNOperation : OpType
 	NOP_SWITCH,		// n1 = switch table index, n2 = 조건식 위치. 매칭 offset(op 단위)만큼 상대 점프
 
 	NOP_STR_ADD,	// ..
+	NOP_STR_ADD_L,
 
 	NOP_TOSTRING,
 	NOP_TOINT,
+	NOP_TOINT_L,
 	NOP_TOFLOAT,
 	NOP_TOSIZE,
 	NOP_GETTYPE,
@@ -164,16 +183,22 @@ enum eNOperation : OpType
 	NOP_FMOV2, // Function Info Load
 
 	NOP_CALL,
+	NOP_CALL_L,
 	NOP_PTRCALL,	// Multiple Call
+	NOP_PTRCALL_L,
 	NOP_PTRCALL2,	// Native Call
+	NOP_PTRCALL2_L,
 	NOP_NATIVECALL,	// Native Call (patched at LoadVM)
 	NOP_RETURN,
+	NOP_RETURN_L,
 	//	NOP_FUNEND,
 
 	NOP_TABLE_ALLOC,
 	NOP_CLT_READ,
+	NOP_CLT_READ_L,
 	NOP_TABLE_REMOVE,
 	NOP_CLT_MOV,
+	NOP_CLT_MOV_L,
 
 	NOP_TABLE_ADD2,
 	NOP_TABLE_SUB2,
@@ -182,10 +207,12 @@ enum eNOperation : OpType
 	NOP_TABLE_PERSENT2,
 
 	NOP_LIST_ALLOC,
+	NOP_LIST_ALLOC_L,
 	NOP_LIST_REMOVE,
 
 	NOP_VERIFY_TYPE,
 	NOP_CHANGE_INT,
+	NOP_CHANGE_INT_L,
 	NOP_YIELD,
 	NOP_IDLE,
 

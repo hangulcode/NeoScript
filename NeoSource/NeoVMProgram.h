@@ -106,10 +106,14 @@ class CNeoVMProgram
 	// PTRCALL2(native 이름) → NATIVECALL(native index) / intrinsic opcode 치환.
 	// Create() 안에서 딱 한 번만 실행된다.
 	void PatchNativeCalls();
+	// 오퍼랜드가 전부 로컬인 op 를 _L 변형으로 치환한다(런타임 argFlag 테스트 제거).
+	// 컴파일러/이미지는 건드리지 않고 로드 후 메모리 코드만 바꾸므로 저장 바이트코드는 그대로다.
+	void PatchLocalOps();
 
 public:
 	SNeoVMHeader				header;
 	std::vector<SVMOperation>	code;              // 패치 완료 상태
+	int							localOpCount = 0;  // PatchLocalOps 가 _L 로 바꾼 op 수(진단용)
 	std::vector<SFunctionTable>	functions;
 	std::map<std::string, int>	exportFunctions;   // 함수명 → 함수 ID
 	std::map<std::string, int>	exportVariables;   // 전역 변수명 → 전역 슬롯 인덱스

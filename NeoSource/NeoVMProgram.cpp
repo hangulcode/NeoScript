@@ -131,6 +131,8 @@ CNeoVMProgram* CNeoVMProgram::Create(const void* pBuffer, int iSize, std::string
 		return nullptr;
 	}
 	p->PatchNativeCalls();
+	// NATIVECALL/intrinsic 치환 뒤에 돌린다 — PTRCALL2 가 먼저 확정되어야 한다.
+	p->PatchLocalOps();
 	return p;
 }
 
@@ -407,6 +409,71 @@ void CNeoVMProgram::PatchNativeCalls()
 		op.op = NOP_NATIVECALL;
 		op.n1 = (short)nativeIndex;
 	}
+}
+
+// 오퍼랜드를 전부 로컬 스택에서 뽑는 op 를 _L 변형으로 바꾼다.
+// 판정 기준은 "VM 이 실제로 GetVarPtr* 로 페치하는 슬롯"이며, 점프 offset / 인자 수 /
+// 함수 인덱스 / 즉값처럼 변수 참조가 아닌 필드는 검사 대상이 아니다.
+// NOP_JMP(페치 0개)와 NOP_JMP_FOR(이미 GetVarPtr_L 고정)은 _L 이 원본과 동일해 치환하지 않는다.
+void CNeoVMProgram::PatchLocalOps()
+{
+	const u8 L1 = NEOS_ARG_N1_LOCAL, L2 = NEOS_ARG_N2_LOCAL, L3 = NEOS_ARG_N3_LOCAL;
+	const int opCount = (int)code.size();
+	int patched = 0;
+	for (int i = 0; i < opCount; ++i)
+	{
+		SVMOperation& op = code[i];
+		const u8 f = op.argFlag;
+		const bool noResult = (f & NEOS_OP_CALL_NORESULT) != 0;
+		eNOperation to = NOP_NONE;
+		bool candidate = true;
+
+		switch (op.op)
+		{
+		// n1, n2
+		case NOP_MOV:          if ((f & (L1|L2)) == (L1|L2)) to = NOP_MOV_L;        break;
+		case NOP_MOV_MINUS:    if ((f & (L1|L2)) == (L1|L2)) to = NOP_MOV_MINUS_L;  break;
+		case NOP_ADD2:         if ((f & (L1|L2)) == (L1|L2)) to = NOP_ADD2_L;       break;
+		case NOP_TOINT:        if ((f & (L1|L2)) == (L1|L2)) to = NOP_TOINT_L;      break;
+		// n1 만
+		case NOP_MOVI:         if (f & L1) to = NOP_MOVI_L;                         break;
+		case NOP_LIST_ALLOC:   if (f & L1) to = NOP_LIST_ALLOC_L;                   break;
+		case NOP_CHANGE_INT:   if (f & L1) to = NOP_CHANGE_INT_L;                   break;
+		// n1, n2, n3
+		case NOP_ADD3:         if ((f & (L1|L2|L3)) == (L1|L2|L3)) to = NOP_ADD3_L;      break;
+		case NOP_SUB3:         if ((f & (L1|L2|L3)) == (L1|L2|L3)) to = NOP_SUB3_L;      break;
+		case NOP_MUL3:         if ((f & (L1|L2|L3)) == (L1|L2|L3)) to = NOP_MUL3_L;      break;
+		case NOP_AND:          if ((f & (L1|L2|L3)) == (L1|L2|L3)) to = NOP_AND_L;       break;
+		case NOP_CLT_READ:     if ((f & (L1|L2|L3)) == (L1|L2|L3)) to = NOP_CLT_READ_L;  break;
+		case NOP_CLT_MOV:      if ((f & (L1|L2|L3)) == (L1|L2|L3)) to = NOP_CLT_MOV_L;   break;
+		// n2, n3 (n1 은 점프 offset)
+		case NOP_JMP_LESS:     if ((f & (L2|L3)) == (L2|L3)) to = NOP_JMP_LESS_L;     break;
+		case NOP_JMP_LESS_EQ:  if ((f & (L2|L3)) == (L2|L3)) to = NOP_JMP_LESS_EQ_L;  break;
+		case NOP_JMP_GREAT:    if ((f & (L2|L3)) == (L2|L3)) to = NOP_JMP_GREAT_L;    break;
+		case NOP_JMP_GREAT_EQ: if ((f & (L2|L3)) == (L2|L3)) to = NOP_JMP_GREAT_EQ_L; break;
+		case NOP_JMP_EQUAL2:   if ((f & (L2|L3)) == (L2|L3)) to = NOP_JMP_EQUAL2_L;   break;
+		case NOP_JMP_NEQUAL:   if ((f & (L2|L3)) == (L2|L3)) to = NOP_JMP_NEQUAL_L;   break;
+		// n1, n2, n3
+		case NOP_STR_ADD:      if ((f & (L1|L2|L3)) == (L1|L2|L3)) to = NOP_STR_ADD_L; break;
+		// 호출/복귀 — NORESULT 면 슬롯을 아예 안 뽑으므로 바꿔봐야 이득이 없다.
+		case NOP_CALL:         if (!noResult && (f & L3)) to = NOP_CALL_L;           break;
+		case NOP_RETURN:       if (!noResult && (f & L1)) to = NOP_RETURN_L;         break;
+		case NOP_PTRCALL:      if ((f & (L1|L2)) == (L1|L2)) to = NOP_PTRCALL_L;     break;
+		case NOP_PTRCALL2:
+			if ((f & L1) && (noResult || (f & L3))) to = NOP_PTRCALL2_L;
+			break;
+		default:
+			candidate = false;
+			break;
+		}
+
+		if (to != NOP_NONE)
+		{
+			op.op = to;
+			++patched;
+		}
+	}
+	localOpCount = patched;
 }
 
 CNeoVMProgram* INeoVM::CreateProgram(const void* pBuffer, int iSize, std::string* err)
