@@ -399,22 +399,23 @@ Lower is better. **ms**, best of 5 runs after a warm-up. `x Neo` = how many time
 
 | Benchmark | What it stresses | Neo (ms) | Lua (ms) | C++ (ms) | Lua vs Neo | C++ vs Neo |
 | :-------- | :--------------- | -------: | -------: | -------: | ---------: | ---------: |
-| `loop_sum`      | integer loop, VM dispatch floor | **167** | 190 |  12.3 | 0.88x | 13.6x |
-| `float_math`    | float mul/add/sub chain         | **196** | 306 |  57.1 | 0.64x |  3.4x |
-| `func_call`     | script function call overhead   | **130** | 154 |   4.1 | 0.84x | 31.7x |
-| `fib_recursive` | recursion, fib(32)              |  **82** |  87 |   6.6 | 0.94x | 12.4x |
-| `array_rw`      | sequential array write + read   |  **43** |  46 |   2.3 | 0.93x | 18.7x |
-| `map_str`       | string-key hash lookup          |  **49** |  37 |  70.2 | 1.32x |  0.7x |
-| `string_ops`    | string build + length           |  **74** | 146 |  13.1 | 0.51x |  5.6x |
-| `particles`     | game-style float + array sim    |  **54** |  48 |   3.3 | 1.13x | 16.4x |
-| **total**       |                                 | **795** | 1014 | 169.0 | 0.78x |  4.7x |
+| `loop_sum`      | integer loop, VM dispatch floor | **170** | 188 |  12.3 | 0.90x | 13.8x |
+| `float_math`    | float mul/add/sub chain         | **195** | 305 |  57.1 | 0.64x |  3.4x |
+| `func_call`     | script function call overhead   | **130** | 156 |   4.1 | 0.83x | 31.7x |
+| `fib_recursive` | recursion, fib(32)              |  **81** |  87 |   6.6 | 0.93x | 12.3x |
+| `array_rw`      | sequential array write + read   |  **44** |  46 |   2.4 | 0.96x | 18.3x |
+| `map_str`       | string-key hash lookup          |  **49** |  36 |  69.4 | 1.36x |  0.7x |
+| `string_ops`    | string build + length           |  **74** | 146 |  13.2 | 0.51x |  5.6x |
+| `particles`     | game-style float + array sim    |  **55** |  48 |   3.4 | 1.15x | 16.2x |
+| **total**       |                                 | **798** | 1012 | 168.5 | 0.79x |  4.7x |
 
 **Reading the numbers.**
-- **Neo is ~28% faster than Lua overall** and leads on 6 of 8 benchmarks. `map_str` (1.32x) and
-  `particles` (1.13x) are the two still behind. All 8 checksums match across the three languages,
+- **Neo is ~27% faster than Lua overall** and leads on 6 of 8 benchmarks. `map_str` (1.36x) and
+  `particles` (1.15x) are the two still behind. All 8 checksums match across the three languages,
   which is what proves they did the same work.
 - `map_str` is the widest remaining gap but **not the next thing to fix** — see the note on target
-  workload below. `map_str` uses only string keys, so the map work in item 10 does not move it.
+  workload below. It also uses only string *reads*, so none of the map work in item 10 shows up
+  here; that change is worth 2x on integer keys and on writes, which this suite never exercises.
 - C++ is a **reference ceiling**, not a peer: 3-31x faster on compute-bound loops. The exception is
   `map_str`, where `std::unordered_map<std::string,…>` is *slower* than both VMs — the interpreters
   intern their strings and cache the hash; the C++ map rehashes on every lookup.
@@ -482,9 +483,9 @@ a performance parameter*.
     dedicated inlined path (`FindString`) while integer keys fell through `CltReadRare` →
     `GetTableItem` → `MapInfo::Find` → `GetHashCode` → `MapBucket::Find`: four out-of-line calls
     and two type switches, to compute a hash that *is* the key. Adding a symmetric inlined
-    `MapInfo::FindInt`, then reusing both to handle the existing-key case of writes without
-    entering `MapInfo::Insert`, gave `map[int]` read **−62%** (182 → 70 ms), `map[int]` write
-    **−50%**, `map["string"]` write **−32%**. Updating a value is not a structural change —
+    `MapInfo::FindInt`, then reusing both so that writes to an existing key find the node and move
+    the value instead of entering `MapInfo::Insert`, gave `map[int]` read **−59%** (182 → 75 ms)
+    and `map[int]` write **−50%** (117 → 58 ms). Updating a value is not a structural change —
     `_mutationVersion` only advances when a node is created — so the write shortcut is
     semantically identical.
 
