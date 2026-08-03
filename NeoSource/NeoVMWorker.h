@@ -353,10 +353,12 @@ private:
 	VarInfo* GetType(VarInfo* v1);
 
 	void CltInsert(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
+	void CltInsertRare(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
 	void CltInsert(VarInfo *pClt, int array, VarInfo *v);
 	void CltInsert(VarInfo *pClt, VarInfo *pArray, int v);
 	void CltInsert(VarInfo *pClt, int key, int v);
 	void CltRead(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
+	void CltReadRare(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
 	void TableRemove(VarInfo *pTable, VarInfo *pArray);
 	VarInfo* GetTableItem(VarInfo *pTable, VarInfo *pArray);
 	VarInfo* GetTableItemValid(VarInfo *pTable, VarInfo *pArray);

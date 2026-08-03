@@ -399,22 +399,24 @@ Lower is better. **ms**, best of 5 runs after a warm-up. `x Neo` = how many time
 
 | Benchmark | What it stresses | Neo (ms) | Lua (ms) | C++ (ms) | Lua vs Neo | C++ vs Neo |
 | :-------- | :--------------- | -------: | -------: | -------: | ---------: | ---------: |
-| `loop_sum`      | integer loop, VM dispatch floor | **217** | 191 |  12.8 | 1.14x | 17.0x |
-| `float_math`    | float mul/add/sub chain         | **202** | 309 |  57.6 | 0.65x |  3.5x |
-| `func_call`     | script function call overhead   | **133** | 156 |   4.3 | 0.85x | 31.1x |
-| `fib_recursive` | recursion, fib(32)              |  **87** |  90 |   6.9 | 0.97x | 12.6x |
-| `array_rw`      | sequential array write + read   |  **54** |  45 |   2.4 | 1.20x | 22.1x |
-| `map_str`       | string-key hash lookup          |  **51** |  40 |  70.1 | 1.28x |  0.7x |
-| `string_ops`    | string build + length           |  **72** | 145 |  13.3 | 0.50x |  5.4x |
-| `particles`     | game-style float + array sim    |  **66** |  48 |   3.4 | 1.37x | 19.6x |
-| **total**       |                                 | **882** | 1024 | 170.8 | 0.86x |  5.2x |
+| `loop_sum`      | integer loop, VM dispatch floor | **226** | 192 |  12.5 | 1.18x | 18.1x |
+| `float_math`    | float mul/add/sub chain         | **203** | 312 |  57.8 | 0.65x |  3.5x |
+| `func_call`     | script function call overhead   | **133** | 156 |   4.2 | 0.85x | 31.7x |
+| `fib_recursive` | recursion, fib(32)              |  **86** |  88 |   6.7 | 0.98x | 12.8x |
+| `array_rw`      | sequential array write + read   |  **50** |  46 |   2.4 | 1.09x | 20.8x |
+| `map_str`       | string-key hash lookup          |  **48** |  41 |  70.3 | 1.17x |  0.7x |
+| `string_ops`    | string build + length           |  **76** | 151 |  13.3 | 0.50x |  5.7x |
+| `particles`     | game-style float + array sim    |  **59** |  49 |   3.3 | 1.20x | 17.9x |
+| **total**       |                                 | **881** | 1035 | 170.5 | 0.85x |  5.2x |
 
 **Reading the numbers.**
-- **Neo is ~16% faster than Lua overall**, but the totals matter far less than the spread.
-  Neo leads on `string_ops` (2.0x), `float_math` (1.53x) and `func_call` (1.17x); `fib_recursive`
-  is a tie. Lua still leads on `particles` (1.37x), `map_str` (1.28x) and `array_rw` (1.20x) —
-  all three are dominated by its table/array representation, which is where NeoScript has the most
-  headroom left. `loop_sum` (1.14x) is the raw dispatch floor.
+- **Neo is ~15% faster than Lua overall**, but the totals matter far less than the spread.
+  Neo leads on `string_ops` (2.00x), `float_math` (1.54x) and `func_call` (1.17x); `fib_recursive`
+  is a tie. Lua still leads on `particles` (1.20x), `loop_sum` (1.18x), `map_str` (1.17x) and
+  `array_rw` (1.09x). Container indexing used to be the widest gap and is now the narrowest
+  (`map_str` 1.35x → 1.17x, `particles` 1.29x → 1.20x, `array_rw` 1.13x → 1.09x) after the two
+  container changes below. What is left on those four is the **dispatch floor**, not the handlers —
+  see the note on interpreter dispatch below.
   All 8 checksums match across the three languages, which is what proves they did the same work.
 - C++ is a **reference ceiling**, not a peer: it is 3-33x faster on compute-bound loops.
   The exception is `map_str`, where `std::unordered_map<std::string,…>` is actually *slower*
@@ -428,8 +430,8 @@ Lower is better. **ms**, best of 5 runs after a warm-up. `x Neo` = how many time
 Building the suite paid for itself several times over. It exposed two **code-generation defects**
 (1-2), where the evidence is the emitted bytecode rather than a stopwatch — instruction counts
 don't drift with machine load. It then exposed structural properties of the **interpreter loop**
-(3-4) and of the **value representation** (5), where the evidence *is* the stopwatch, so each of
-those claims is an A/B measurement of two full rebuilds run interleaved in one session:
+(3-4, 6-7) and of the **value representation** (5), where the evidence *is* the stopwatch, so each
+of those claims is an A/B measurement of two full rebuilds run interleaved in one session:
 
 1. **Boolean materialization in conditions.** `&&` / `||` emitted correct short-circuit jumps and
    *then* built a `true`/`false` value that the enclosing `if` immediately re-tested — so
@@ -474,8 +476,26 @@ those claims is an A/B measurement of two full rebuilds run interleaved in one s
    is already singly-owned is reused in place, which makes the common `acc = acc + delta`
    accumulation allocate nothing at all (measured at ±0%). Reading components even got *faster*
    (−9%), because the smaller `VarInfo` outweighs the extra indirection.
+6. **Indexing a list went through two function boundaries.** `list[i]` compiled to a single
+   opcode, but the handler called `ListInfo::GetValue()` in another translation unit, which in turn
+   reached the value copy through the VM pointer (`_pVM->Move`). Inlining the integer-index case
+   directly into the read/write handlers — bucket access with a single unsigned range check, using
+   the worker's already-inlined `Move` — is again **a pure code move**: `particles` −28%,
+   `float_math` −12%, `array_rw` −9%, with the non-container benchmarks unchanged, exactly as the
+   change predicts. This is the same lesson as items 3 and 4 seen from the other side: what the
+   dispatch loop *cannot* inline costs as much as what it inlines too much of.
+7. **Item 4's split, applied to container indexing.** `CltRead` / `CltInsert` still inlined every
+   collection kind into the dispatch loop — property-backed maps, vector component access, the
+   string-indexer path, and two `SetErrorFormat(…, GetDataType(…).c_str())` calls whose `std::string`
+   temporary is constructed and destroyed inline. Only `list[int]` and `map[string]` stay inlined
+   now; the rest moved to `noinline` `CltReadRare` / `CltInsertRare`. Every container benchmark
+   improved (`particles` −2%, `array_rw` −2%, `map_str` −2%) while the three benchmarks that touch
+   no container regressed by the same order (`loop_sum` +3%, `func_call` +2%, `fib_recursive` +2%),
+   which is the I-cache budget being *moved* rather than saved. It was adopted anyway: the engine
+   workload this VM exists for is container-heavy, and that is the side of the trade worth buying.
+   It is the one change here justified by target workload rather than by the suite total.
 
-Two ideas did *not* survive measurement:
+Ideas that did *not* survive measurement:
 
 - **A dedicated opcode for the common `step == 1` loop.** The premise was that skipping the
   step-slot read would pay off, but `[begin][end][step]` are adjacent and already in cache, and
@@ -485,6 +505,41 @@ Two ideas did *not* survive measurement:
 - **A separate loop-entry opcode** to pre-validate `step` once per loop. Making `For()` itself
   sign-aware removed the infinite-loop cases for free, leaving only `step == 0` to handle, so the
   extra opcode and its jump patching were dropped.
+- **Branchless operand fetch.** Each opcode tests an `argFlag` bit per operand to pick the local or
+  the global base, up to three times — about 35 branches per particle-loop iteration, where Lua's
+  `R[A] = base + A` has none. Rewriting the fetch to select the base pointer with a ternary so it
+  compiles to `cmov` measured **exactly at baseline**: MSVC was already emitting `cmov` for the
+  two-return form. Reverted.
+- **Reordering the `switch` cases** so the hottest opcodes sit next to each other in source. Case
+  order does not affect the jump table (it is indexed by opcode value) but it does decide code
+  layout, so moving `CLT_READ` / `CLT_MOV` up beside the arithmetic handlers — away from the bulky
+  `CALL` / `STR_ADD` / `TO*` bodies they currently sit behind — looked free. It was a clear
+  **regression**: `particles` +8%, `map_str` +22%. MSVC's own layout was better than the guess.
+  Worth recording that layout sensitivity of this size exists at all: a two-line reordering with no
+  semantic change moved one benchmark by a fifth.
+
+#### The remaining gap is dispatch, not handlers
+Three consecutive attempts to close the last ~20% on `particles` came back at noise or worse (the
+last two entries above, plus the container split of item 7 which only moved the cost around). That
+is a result in itself, and disassembling the benchmark's Lua build explains it.
+
+Counting the emitted bytecode for the identical inner loop, **Neo issues 15 opcodes to Lua's 19** —
+Neo fuses each comparison into a single compare-and-jump (`JLS` / `JLE`) where Lua spends an `LTI`
+plus a `JMP`. Neo executes *fewer* instructions and still finishes slower, so the cost is per
+opcode: roughly **2.0 ns for Neo against 1.3 ns for Lua**.
+
+The reason is the dispatch structure. `lua55.dll` in this comparison is a **MinGW-w64 / GCC** build
+(GNU ld 2.28, imports `msvcrt.dll`, carries `GCC:` / `libgcc` / `__mingw` strings), and under
+`__GNUC__` Lua's `lvm.c` enables `LUA_USE_JUMPTABLE` — computed-goto **direct threading**. The
+disassembly confirms it: 54 register-indirect jumps clustered in `luaV_execute`, where a
+switch-based build would have one. Every opcode gets its own indirect branch and therefore its own
+branch-predictor history, instead of all of them sharing a single one at the top of the loop.
+
+MSVC has no labels-as-values, so NeoScript cannot express that dispatch at all. On this toolchain
+the interpreter is at its structural ceiling, and further micro-optimization of individual handlers
+is not where the remaining difference lives. The one path that would change the shape of the curve
+is building the VM translation unit with `clang-cl` and enabling a threaded dispatch under
+`#if defined(__clang__)`; that is a toolchain decision, not a code one, and has not been attempted.
 
 All compiler changes are covered by the 2,783-case regression suite plus dedicated correctness
 tests: 43 cases for logical operators ([`TestScript/logic_ops.ns`](TestScript/logic_ops.ns)) and

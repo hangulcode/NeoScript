@@ -35,7 +35,38 @@ NEOS_FORCEINLINE void CNeoVMWorker::MoveI(VarInfo* v1, int v)
 }
 
 
+// 디스패치 루프에 인라인되는 것은 list[int] / map[string] 두 경로뿐이다.
+// 나머지(프로퍼티 맵, 벡터 성분 쓰기, 문자열 인덱서, 에러 포맷)는 CltInsertRare 로 밀어낸다 —
+// RunInternal 의 인라인 크기가 곧 성능이라(For/Add3 에서 실측) 드문 경로를 루프에 두지 않는다.
 NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue)
+{
+	const VAR_TYPE t = pClt->GetType();
+	if (t == VAR_LIST)
+	{
+		if (pKey->GetType() == VAR_INT)
+		{
+			ListInfo* lst = pClt->_lst;
+			unsigned idx = (unsigned)pKey->_int;
+			if (idx < (unsigned)lst->_itemCount)
+			{
+				Move(&lst->_Bucket[idx], pValue);
+				return;
+			}
+		}
+	}
+	else if (t == VAR_MAP)
+	{
+		MapInfo* tbl = pClt->_tbl;
+		if (pValue->GetType() != VAR_NONE && tbl->_fun._property == nullptr)
+		{
+			tbl->Insert(pKey, pValue);
+			return;
+		}
+	}
+	CltInsertRare(pClt, pKey, pValue);
+}
+
+NEOS_NOINLINE void CNeoVMWorker::CltInsertRare(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue)
 {
 	switch (pClt->GetType())
 	{
@@ -56,24 +87,32 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 		return;
 	}
 	case VAR_LIST:
-		if (pKey->GetType() != VAR_INT)
+	{
+		ListInfo* lst = pClt->_lst;
+		if (pKey->GetType() == VAR_INT)
 		{
-			if (pClt->_lst->_pIndexer != nullptr && pKey->GetType() == VAR_STRING)
+			// fast path: CltRead 와 동일한 이유로 버킷에 직접 쓴다.
+			unsigned idx = (unsigned)pKey->_int;
+			if (idx < (unsigned)lst->_itemCount)
 			{
-				int idx;
-				if(pClt->_lst->_pIndexer->TryGetValue(pKey->_str, &idx))
-				{
-					if(pClt->_lst->SetValue(idx, pValue))
-						return;
-				}
+				Move(&lst->_Bucket[idx], pValue);
+				return;
 			}
-
-			SetErrorFormat(RTE_INDEX_WRITE, GetDataType(pClt->GetType()).c_str());
-			return;
+			break;   // 범위 밖
 		}
-		if(pClt->_lst->SetValue(pKey->_int, pValue))
-			return;
-		break;
+		if (lst->_pIndexer != nullptr && pKey->GetType() == VAR_STRING)
+		{
+			int idx;
+			if(lst->_pIndexer->TryGetValue(pKey->_str, &idx))
+			{
+				if(lst->SetValue(idx, pValue))
+					return;
+			}
+		}
+
+		SetErrorFormat(RTE_INDEX_WRITE, GetDataType(pClt->GetType()).c_str());
+		return;
+	}
 	case VAR_VEC2:
 	case VAR_VEC3:
 	case VAR_VEC4:
@@ -186,7 +225,40 @@ NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItemValid(VarInfo* pTable, int A
 	return NULL;
 }
 
+// CltInsert 와 같은 이유로 list[int] / map[string] 만 인라인하고 나머지는 분리한다.
 NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue)
+{
+	const VAR_TYPE t = pClt->GetType();
+	if (t == VAR_LIST)
+	{
+		if (pKey->GetType() == VAR_INT)
+		{
+			ListInfo* lst = pClt->_lst;
+			unsigned idx = (unsigned)pKey->_int;
+			if (idx < (unsigned)lst->_itemCount)
+			{
+				Move(pValue, &lst->_Bucket[idx]);
+				return;
+			}
+		}
+	}
+	else if (t == VAR_MAP)
+	{
+		MapInfo* tbl = pClt->_tbl;
+		if (pKey->GetType() == VAR_STRING && tbl->_fun._property == nullptr)
+		{
+			VarInfo* pFind = tbl->FindString(pKey->_str);
+			if (pFind)
+				Move(pValue, pFind);
+			else
+				Var_Release(pValue);
+			return;
+		}
+	}
+	CltReadRare(pClt, pKey, pValue);
+}
+
+NEOS_NOINLINE void CNeoVMWorker::CltReadRare(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue)
 {
 	VarInfo* pFind;
 	switch (pClt->GetType())
@@ -213,23 +285,32 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 			return;
 		}
 	case VAR_LIST:
-		if (pKey->GetType() != VAR_INT)
+	{
+		ListInfo* lst = pClt->_lst;
+		if (pKey->GetType() == VAR_INT)
 		{
-			if(pClt->_lst->_pIndexer != nullptr && pKey->GetType() == VAR_STRING)
+			// fast path: 함수 호출(ListInfo::GetValue)과 VM 간접참조 없이 버킷을 직접 읽는다.
+			// 음수는 unsigned 로 접히므로 비교 한 번으로 범위 검사가 끝난다.
+			unsigned idx = (unsigned)pKey->_int;
+			if (idx < (unsigned)lst->_itemCount)
 			{
-				int idx;
-				if (pClt->_lst->_pIndexer->TryGetValue(pKey->_str, &idx))
-				{
-					pClt->_lst->GetValue(idx, pValue);
-					return;
-				}
+				Move(pValue, &lst->_Bucket[idx]);
+				return;
 			}
-			SetErrorFormat(RTE_INDEX_READ, GetDataType(pClt->GetType()).c_str());
-			return;
+			break;   // 범위 밖
 		}
-		if (true == pClt->_lst->GetValue(pKey->_int, pValue))
-			return;
-		break;
+		if (lst->_pIndexer != nullptr && pKey->GetType() == VAR_STRING)
+		{
+			int idx;
+			if (lst->_pIndexer->TryGetValue(pKey->_str, &idx))
+			{
+				lst->GetValue(idx, pValue);
+				return;
+			}
+		}
+		SetErrorFormat(RTE_INDEX_READ, GetDataType(pClt->GetType()).c_str());
+		return;
+	}
 	case VAR_VEC2:
 	case VAR_VEC3:
 	case VAR_VEC4:
