@@ -474,4 +474,22 @@ NEOS_FORCEINLINE VarInfo* MapInfo::FindString(StringInfo* pKeyStr)
 	return NULL;
 }
 
+// 정수 키 전용 fast path. 문자열 키와 대칭 — 없으면 CltReadRare -> GetTableItem ->
+// MapInfo::Find -> GetHashCode(타입 switch) -> MapBucket::Find(타입 switch) 로
+// 아웃오브라인 호출 4단을 타게 된다(실측: 문자열 키의 1.8배).
+// 해시는 GetHashCode(VarInfo*) 의 VAR_INT 경로와 같아야 한다 = 값 그대로.
+NEOS_FORCEINLINE VarInfo* MapInfo::FindInt(int key)
+{
+	if (_BucketCapa <= 0)
+		return NULL;
+	MapNode* pCur = _Bucket[(u32)key & _HashBase].pFirst;
+	while (pCur)
+	{
+		if (pCur->key.GetType() == VAR_INT && pCur->key._int == key)
+			return &pCur->value;
+		pCur = pCur->pNext;
+	}
+	return NULL;
+}
+
 };

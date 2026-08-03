@@ -59,6 +59,20 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 		MapInfo* tbl = pClt->_tbl;
 		if (pValue->GetType() != VAR_NONE && tbl->_fun._property == nullptr)
 		{
+			// 기존 키 갱신은 노드를 찾아 값만 옮기면 된다 — 구조가 안 바뀌므로
+			// MapInfo::Insert 와 결과가 같다(_mutationVersion 은 신규 노드에서만 증가).
+			// 새 키는 할당/ReMap 이 필요해 그대로 아웃오브라인 Insert 로 보낸다.
+			const VAR_TYPE kt = pKey->GetType();
+			if (kt == VAR_STRING || kt == VAR_INT)
+			{
+				VarInfo* pFind = (kt == VAR_STRING) ? tbl->FindString(pKey->_str)
+													: tbl->FindInt(pKey->_int);
+				if (pFind)
+				{
+					Move(pFind, pValue);
+					return;
+				}
+			}
 			tbl->Insert(pKey, pValue);
 			return;
 		}
@@ -245,9 +259,12 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 	else if (t == VAR_MAP)
 	{
 		MapInfo* tbl = pClt->_tbl;
-		if (pKey->GetType() == VAR_STRING && tbl->_fun._property == nullptr)
+		const VAR_TYPE kt = pKey->GetType();
+		// 문자열/정수 두 키 타입만 인라인한다. 꼬리(Move/Release)는 공유해서 본문을 작게 유지.
+		if (tbl->_fun._property == nullptr && (kt == VAR_STRING || kt == VAR_INT))
 		{
-			VarInfo* pFind = tbl->FindString(pKey->_str);
+			VarInfo* pFind = (kt == VAR_STRING) ? tbl->FindString(pKey->_str)
+												: tbl->FindInt(pKey->_int);
 			if (pFind)
 				Move(pValue, pFind);
 			else

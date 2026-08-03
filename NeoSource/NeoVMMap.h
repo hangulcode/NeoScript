@@ -96,6 +96,7 @@ struct MapInfo : AllocBase
 	VarInfo* Find(VarInfo *pKey);
 	VarInfo* Find(const std::string& key);
 	VarInfo* FindString(StringInfo* pKeyStr); // 문자열 키 전용 fast path (NeoVMInternal.h 에 인라인 정의)
+	VarInfo* FindInt(int key);                // 정수 키 전용 fast path (NeoVMInternal.h 에 인라인 정의)
 
 	CollectionIterator FirstNode();
 	bool NextNode(CollectionIterator&);
