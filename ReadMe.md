@@ -84,14 +84,15 @@ The VS Code debugger currently supports:
 	- Runtime exception stop and exceptionInfo
 
 ### Numeric precision
-The scalar float type `NS_FLOAT` is **`float` (32-bit) by default**, matching the game
-engine's native `float3`/`float4` layout. This lets vector value types (Vec2/Vec3/Vec4/
-Quaternion) be stored inline and marshalled to the engine without per-component conversion.
+The scalar float type `NS_FLOAT` is **`float` (32-bit)**, matching the game engine's native
+`float3`/`float4` layout. This lets vector value types (Vec2/Vec3/Vec4/Quaternion) be stored
+inline and marshalled to the engine without per-component conversion.
 
-Define `NS_DOUBLE_PRECISION` at build time to use `double` instead. Note this changes the
-numeric results of scripts and the memory layout of numeric values, so pick one precision
-per build. (Previously the default was `double`, opted into `float` via `NS_SINGLE_PRECISION`;
-the default is now reversed.)
+Precision is **not configurable** — there is no double-precision build. Scripts that need more
+than 24 bits of mantissa must keep the value in an `int`, or split it. (Earlier versions had a
+build switch for `double`; it was removed rather than carried as an untested second layout,
+since `sizeof(VarInfo)` and therefore the var stack, every list, and both halves of every map
+node all depend on it.)
 
 ### Vector value types
 `math.Vector2`, `math.Vector3`, `math.Vector4`, and `math.Quaternion` create dedicated
@@ -543,7 +544,7 @@ Micro-benchmarks are easy to get wrong, so the harness is explicit about it:
 4. **Checksum-verified.** Every benchmark returns a checksum and all three languages must print
    the *same* value — this is what proves they really did the same work. All 8 checksums match.
 5. **Binary-exact floats.** Constants are powers of two (`0.5`, `0.25`, `1/64`) and accumulators are
-   kept under 2^24, so NeoScript's default **float32** scalar and Lua/C++'s **double** produce
+   kept under 2^24, so NeoScript's **float32** scalar and Lua/C++'s **double** produce
    bit-identical checksums. (Without this, a large float accumulation alone drifts them apart.)
 6. **Optimizer-proofed C++.** A naive port lets MSVC delete the work outright — `fib` folded to a
    constant and `float_math` reported 0 ms. The C++ file therefore reads its loop bounds through
@@ -579,7 +580,7 @@ lua55.exe Samples\bench\bench.lua
 	- null: represents no value; uninitialized variables are null
 	- bool: stores true or false
 	- int: stores a 4-byte integer
-	- double: stores a 4-byte float by default (8-byte when `NS_DOUBLE_PRECISION` is defined)
+	- double: stores a 4-byte float (`NS_FLOAT`)
 	- string: stores text
 	- list: an array-like container
 	- map: a key/value container

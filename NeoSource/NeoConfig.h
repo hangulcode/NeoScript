@@ -12,6 +12,7 @@ typedef unsigned int	u32;
 typedef int				s32;
 
 // 반드시 float 로 설정
+#define NS_SINGLE_PRECISION
 typedef float		NS_FLOAT;
 
 #pragma pack(1)
