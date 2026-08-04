@@ -2299,6 +2299,13 @@ std::string GetDataType(VAR_TYPE t)
 		return "set";
 	case VAR_COROUTINE:
 		return "coroutine";
+	case VAR_MODULE:
+		return "module";
+	case VAR_ASYNC:
+		return "async";
+	case VAR_VEC:
+		// 성분 수는 VarInfo 에 있어 타입만으로는 알 수 없다. 에러 메시지용이라 총칭으로 충분하다.
+		return "vector";
 	default:
 		break;
 	}
