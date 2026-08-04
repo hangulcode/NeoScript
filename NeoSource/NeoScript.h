@@ -145,7 +145,6 @@ enum class ValueType : uint8_t
     Vec2,
     Vec3,
     Vec4,
-    Quat,
     Map,      // 경계 Value 로는 직접 못 담음 — Reader/Builder 로만 접근
     List,
     Set,

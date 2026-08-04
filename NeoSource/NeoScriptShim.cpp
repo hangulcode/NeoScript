@@ -1181,13 +1181,14 @@ static VarInfo* CtxRetVar(CallContextImpl* c)
 // 정의돼 있어야 한다 — 안 그러면 호출자 스택 쓰레기가 값처럼 읽힌다.
 static void ReadVec(VarInfo* v, float out[4])
 {
-    out[0] = out[1] = out[2] = out[3] = 0.0f;
-    if (!v) return;
-    switch (v->GetType())
+    if (!v || v->GetType() != VAR_VEC) { out[0] = out[1] = out[2] = out[3] = 0.0f; return; }
+    switch(v->VectorComponentCount())
     {
-    case VAR_VEC: v->GetVec4(out); break;   // 성분 수만큼 채우고 나머지는 0
-    default: break;
+        case 2: v->GetVec2(out); return;
+        case 3: v->GetVec3(out); return;
+        case 4: v->GetVec4(out); return;
     }
+    out[0] = out[1] = out[2] = out[3] = 0.0f; return;
 }
 
 void* CallContext::userData() const { return Ctx(m_impl)->bindingUserData; }
@@ -1492,7 +1493,7 @@ CallResult Invocation::invokeR()
                 case ValueType::Int:   iv = i->worker->PopInt(rv);          f4[0] = static_cast<float>(iv); break;
                 case ValueType::Bool:  iv = i->worker->PopBool(rv) ? 1 : 0; f4[0] = static_cast<float>(iv); break;
                 case ValueType::Float: f4[0] = static_cast<float>(i->worker->PopFloat(rv)); iv = static_cast<int32_t>(f4[0]); break;
-                case ValueType::Vec2: case ValueType::Vec3: case ValueType::Vec4: case ValueType::Quat: ReadVec(rv, f4); break;
+                case ValueType::Vec2: case ValueType::Vec3: case ValueType::Vec4: ReadVec(rv, f4); break;
                 default: break; // None/Map/List → 스칼라 없음
                 }
                 NeoScriptInternal::setResult(r, vt, iv, f4, nullptr);
