@@ -55,7 +55,9 @@ struct SUtf8One
 // 0111: _L(전 오퍼랜드 로컬) opcode 를 각 원본 뒤에 삽입 → 이후 op 번호가 전부 밀림.
 //       이미지 자체는 원본 op 만 담고 _L 치환은 로드 후(PatchLocalOps) 이뤄지지만,
 //       0110 이미지를 그대로 읽으면 op 번호가 어긋나므로 버전을 올린다.
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('1' << 8) | ('1'))
+// 0112: 벡터 타입 통합 — VAR_VEC2/3/4/QUAT -> VAR_VEC(+성분수), VEC*_MAKE 4개 -> VEC_MAKE.
+//       VAR_TYPE / opcode 번호가 모두 밀리므로 이전 이미지와 호환되지 않는다.
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('1' << 8) | ('2'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline

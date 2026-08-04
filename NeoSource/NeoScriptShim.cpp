@@ -269,18 +269,20 @@ static StringView VmName(const VMString* s)
     return StringView(s->_str); // VMString 은 std::string _str 보유
 }
 
-static ValueType VarTypeToValueType(VAR_TYPE t)
+static ValueType VarTypeToValueType(VarInfo* v)
 {
-    switch (t)
+    switch (v->GetType())
     {
     case VAR_BOOL:   return ValueType::Bool;
     case VAR_INT:    return ValueType::Int;
     case VAR_FLOAT:  return ValueType::Float;
     case VAR_STRING: return ValueType::String;
-    case VAR_VEC2:   return ValueType::Vec2;
-    case VAR_VEC3:   return ValueType::Vec3;
-    case VAR_VEC4:   return ValueType::Vec4;
-    case VAR_QUAT:   return ValueType::Quat;
+    // 성분 수가 곧 타입이다. Quat 은 4성분 벡터와 구분하지 않는다(해석은 호출자 규약).
+    case VAR_VEC:
+    {
+        const int n = v->VectorComponentCount();
+        return (n <= 2) ? ValueType::Vec2 : (n == 3 ? ValueType::Vec3 : ValueType::Vec4);
+    }
     case VAR_MAP:    return ValueType::Map;
     case VAR_LIST:   return ValueType::List;
     case VAR_SET:    return ValueType::Set;
@@ -1183,10 +1185,7 @@ static void ReadVec(VarInfo* v, float out[4])
     if (!v) return;
     switch (v->GetType())
     {
-    case VAR_VEC2: v->GetVec2(out); break;
-    case VAR_VEC3: v->GetVec3(out); break;
-    case VAR_VEC4: v->GetVec4(out); break;
-    case VAR_QUAT: v->GetQuat(out); break;   // wxyz 순서는 GetQuat 이 맞춘다
+    case VAR_VEC: v->GetVec4(out); break;   // 성분 수만큼 채우고 나머지는 0
     default: break;
     }
 }
@@ -1197,7 +1196,7 @@ IRuntime* CallContext::runtime() const { return Ctx(m_impl)->runtime; }
 InstanceHandle CallContext::instance() const { return Ctx(m_impl)->instance; }
 // (raw INeoVMWorker*/VarInfo* 접근자는 공개 API 에 없다 — 전부 shim 내부.)
 std::size_t CallContext::argCount() const { return static_cast<std::size_t>(Ctx(m_impl)->argCount); }
-ValueType CallContext::argType(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); VarInfo* v=CtxArgVar(c,i); return v?VarTypeToValueType(v->GetType()):ValueType::None; }
+ValueType CallContext::argType(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); VarInfo* v=CtxArgVar(c,i); return v?VarTypeToValueType(v):ValueType::None; }
 int32_t CallContext::argInt(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); return c->worker->PopInt(CtxArgVar(c,i)); }
 float CallContext::argFloat(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); return static_cast<float>(c->worker->PopFloat(CtxArgVar(c,i))); }
 bool CallContext::argBool(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); return c->worker->PopBool(CtxArgVar(c,i)); }
@@ -1333,22 +1332,22 @@ void ListBuilder::pushObject(ObjectType type, void* userData) {
 static VarInfo* MapFind(const MapReaderImpl* r, StringView key) { return r->map->Find(std::string(key.data(), key.size())); }
 
 bool MapReader::has(StringView key) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); return MapFind(r,key)!=nullptr; }
-ValueType MapReader::type(StringView key) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); return v?VarTypeToValueType(v->GetType()):ValueType::None; }
+ValueType MapReader::type(StringView key) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); return v?VarTypeToValueType(v):ValueType::None; }
 bool MapReader::getInt(StringView key, int32_t& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v) return false; out=r->w->PopInt(v); return true; }
 bool MapReader::getFloat(StringView key, float& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v) return false; out=static_cast<float>(r->w->PopFloat(v)); return true; }
 bool MapReader::getBool(StringView key, bool& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v) return false; out=r->w->PopBool(v); return true; }
 bool MapReader::getString(StringView key, StringView& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v||v->GetType()!=VAR_STRING) return false; const char* s=r->w->PopString(v); out=StringView(s?s:""); return true; }
-bool MapReader::getVec(StringView key, float out[4]) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v) return false; ReadVec(v,out); return v->GetType()>=VAR_VEC2 && v->GetType()<=VAR_QUAT; }
+bool MapReader::getVec(StringView key, float out[4]) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v) return false; ReadVec(v,out); return v->IsVector(); }
 bool MapReader::getMap(StringView key, MapReader& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v||v->GetType()!=VAR_MAP||!v->_tbl) return false; r->mpool->push_back(MapReaderImpl{r->w,v->_tbl,r->mpool,r->lpool}); out=NeoScriptInternal::mapR(&r->mpool->back()); return true; }
 bool MapReader::getList(StringView key, ListReader& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v||v->GetType()!=VAR_LIST||!v->_lst) return false; r->lpool->push_back(ListReaderImpl{r->w,v->_lst,r->mpool,r->lpool}); out=NeoScriptInternal::listR(&r->lpool->back()); return true; }
 
 int ListReader::count() const { return static_cast<const ListReaderImpl*>(m_impl)->list->GetCount(); }
-ValueType ListReader::type(int index) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); return v?VarTypeToValueType(v->GetType()):ValueType::None; }
+ValueType ListReader::type(int index) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); return v?VarTypeToValueType(v):ValueType::None; }
 bool ListReader::getInt(int index, int32_t& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v) return false; out=r->w->PopInt(v); return true; }
 bool ListReader::getFloat(int index, float& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v) return false; out=static_cast<float>(r->w->PopFloat(v)); return true; }
 bool ListReader::getBool(int index, bool& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v) return false; out=r->w->PopBool(v); return true; }
 bool ListReader::getString(int index, StringView& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v||v->GetType()!=VAR_STRING) return false; const char* s=r->w->PopString(v); out=StringView(s?s:""); return true; }
-bool ListReader::getVec(int index, float out[4]) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v) return false; ReadVec(v,out); return v->GetType()>=VAR_VEC2 && v->GetType()<=VAR_QUAT; }
+bool ListReader::getVec(int index, float out[4]) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v) return false; ReadVec(v,out); return v->IsVector(); }
 bool ListReader::getMap(int index, MapReader& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v||v->GetType()!=VAR_MAP||!v->_tbl) return false; r->mpool->push_back(MapReaderImpl{r->w,v->_tbl,r->mpool,r->lpool}); out=NeoScriptInternal::mapR(&r->mpool->back()); return true; }
 bool ListReader::getList(int index, ListReader& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v||v->GetType()!=VAR_LIST||!v->_lst) return false; r->lpool->push_back(ListReaderImpl{r->w,v->_lst,r->mpool,r->lpool}); out=NeoScriptInternal::listR(&r->lpool->back()); return true; }
 
@@ -1446,7 +1445,7 @@ const Error& Invocation::error() const
     return m_impl ? Inv(m_impl)->callError : empty;   // InstanceRec 소유 스냅샷(비파괴)
 }
 
-ValueType Invocation::retType() const { if(!m_impl) return ValueType::None; VarInfo* rv=Inv(m_impl)->worker->GetReturnVar(); return rv?VarTypeToValueType(rv->GetType()):ValueType::None; }
+ValueType Invocation::retType() const { if(!m_impl) return ValueType::None; VarInfo* rv=Inv(m_impl)->worker->GetReturnVar(); return rv?VarTypeToValueType(rv):ValueType::None; }
 int32_t Invocation::retInt() const { if(!m_impl) return 0; InstanceRec* i=Inv(m_impl); return i->worker->PopInt(i->worker->GetReturnVar()); }
 float Invocation::retFloat() const { if(!m_impl) return 0.0f; InstanceRec* i=Inv(m_impl); return static_cast<float>(i->worker->PopFloat(i->worker->GetReturnVar())); }
 bool Invocation::retBool() const { if(!m_impl) return false; InstanceRec* i=Inv(m_impl); return i->worker->PopBool(i->worker->GetReturnVar()); }
@@ -1482,7 +1481,7 @@ CallResult Invocation::invokeR()
         VarInfo* rv = (r.status == RunStatus::Completed) ? i->worker->GetReturnVar() : nullptr;
         if (rv)
         {
-            ValueType vt = VarTypeToValueType(rv->GetType());
+            ValueType vt = VarTypeToValueType(rv);
             if (vt == ValueType::String)
                 NeoScriptInternal::setResult(r, vt, 0, nullptr, i->worker->PopString(rv));
             else

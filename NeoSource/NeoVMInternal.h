@@ -217,11 +217,9 @@ enum eNOperation : OpType
 	NOP_IDLE,
 
 	// math.Vector2/3/4/Quaternion 생성 intrinsic. LoadVM 에서 PTRCALL2(#Vector*) 를 패치.
-	// native 호출 프레임 없이 인자 슬롯에서 직접 Var_SetVec (n2=인자수, n3=결과).
-	NOP_VEC2_MAKE,
-	NOP_VEC3_MAKE,
-	NOP_VEC4_MAKE,
-	NOP_QUAT_MAKE,
+	// native 호출 프레임 없이 인자 슬롯에서 직접 벡터를 만든다(n2=인자수=성분수, n3=결과).
+	// 성분 수가 타입이 아니라 데이터라 op 하나로 충분하다(넷을 두면 디스패치 루프만 커진다).
+	NOP_VEC_MAKE,
 
 	NOP_NONE,
 	NOP_ERROR,
@@ -419,7 +417,7 @@ struct StringInfo : AllocBase, VMString
 {
 };
 
-// 벡터 성분 저장소. 유효 성분 수는 VarInfo 의 타입 태그(VAR_VEC2/3/4/QUAT)가 결정한다.
+// 벡터 성분 저장소. 유효 성분 수는 VarInfo::_vecCount 가 결정한다.
 // Quaternion 은 엔진 컨벤션대로 v[0..3] = w,x,y,z 순서.
 //
 // refcount 로 공유하되 값 의미론을 유지한다 — 대입은 공유(incref)만 하고, 성분을 쓰는
@@ -477,11 +475,9 @@ NEOS_FORCEINLINE void Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
 
 	// 벡터: 여기서는 공유(incref)만 한다. 값 의미론은 성분을 쓰는 쪽에서 copy-on-write 로
 	// 지킨다(VecCopyOnWrite) — 대입마다 복제하면 할당 비용이 그대로 살아나기 때문이다.
-	case VAR_VEC2:
-	case VAR_VEC3:
-	case VAR_VEC4:
-	case VAR_QUAT:
-		v1->_vec = v2->_vec; ++v1->_vec->_refCount; break;
+	case VAR_VEC:
+		// 성분 수는 저장소가 아니라 VarInfo 에 있으므로 포인터와 함께 반드시 옮긴다.
+		v1->_vec = v2->_vec; v1->_vecCount = v2->_vecCount; ++v1->_vec->_refCount; break;
 
 	case VAR_STRING: v1->_str = v2->_str; ++v1->_str->_refCount; break;
 	case VAR_MAP: v1->_tbl = v2->_tbl; ++v1->_tbl->_refCount; break;

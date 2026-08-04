@@ -383,46 +383,18 @@ NEOS_NOINLINE bool handle_IDLE(const SVMOperation& OP) {
 
 // 벡터 생성 intrinsic (LoadVM 에서 PTRCALL2(#Vector*) 패치). native 호출 프레임 없이
 // 인자 슬롯(_iSP_VarsMax+1..N)을 직접 읽어 값타입 세팅. n3=결과 슬롯.
-NEOS_FORCEINLINE bool handle_VEC2_MAKE(const SVMOperation& OP) {
+NEOS_FORCEINLINE bool handle_VEC_MAKE(const SVMOperation& OP) {
     if (OP.argFlag & NEOS_OP_CALL_NORESULT) return false;
-    float v[4] = {
-        (float)GetStackFromBase(_iSP_VarsMax + 1)->GetFloatNumber(),
-        (float)GetStackFromBase(_iSP_VarsMax + 2)->GetFloatNumber(), 0.0f, 0.0f };
-    Var_SetVec2(GetVarPtr3(OP), v);
-    if (_iSP_Vars_Max2 < _iSP_VarsMax + 3) _iSP_Vars_Max2 = _iSP_VarsMax + 3;
-    return false;
-}
-NEOS_FORCEINLINE bool handle_VEC3_MAKE(const SVMOperation& OP) {
-    if (OP.argFlag & NEOS_OP_CALL_NORESULT) return false;
-    float v[4] = {
-        (float)GetStackFromBase(_iSP_VarsMax + 1)->GetFloatNumber(),
-        (float)GetStackFromBase(_iSP_VarsMax + 2)->GetFloatNumber(),
-        (float)GetStackFromBase(_iSP_VarsMax + 3)->GetFloatNumber(), 0.0f };
-    Var_SetVec3(GetVarPtr3(OP), v);
-    if (_iSP_Vars_Max2 < _iSP_VarsMax + 4) _iSP_Vars_Max2 = _iSP_VarsMax + 4;
-    return false;
-}
-NEOS_FORCEINLINE bool handle_VEC4_MAKE(const SVMOperation& OP) {
-    if (OP.argFlag & NEOS_OP_CALL_NORESULT) return false;
-    float v[4] = {
-        (float)GetStackFromBase(_iSP_VarsMax + 1)->GetFloatNumber(),
-        (float)GetStackFromBase(_iSP_VarsMax + 2)->GetFloatNumber(),
-        (float)GetStackFromBase(_iSP_VarsMax + 3)->GetFloatNumber(),
-        (float)GetStackFromBase(_iSP_VarsMax + 4)->GetFloatNumber() };
-    Var_SetVec4(GetVarPtr3(OP), v);
-    if (_iSP_Vars_Max2 < _iSP_VarsMax + 5) _iSP_Vars_Max2 = _iSP_VarsMax + 5;
-    return false;
-}
-NEOS_FORCEINLINE bool handle_QUAT_MAKE(const SVMOperation& OP) {
-    if (OP.argFlag & NEOS_OP_CALL_NORESULT) return false;
-    // wxyz 순서 (등록 "w,x,y,z" = 인자 1..4)
-    float v[4] = {
-        (float)GetStackFromBase(_iSP_VarsMax + 1)->GetFloatNumber(),
-        (float)GetStackFromBase(_iSP_VarsMax + 2)->GetFloatNumber(),
-        (float)GetStackFromBase(_iSP_VarsMax + 3)->GetFloatNumber(),
-        (float)GetStackFromBase(_iSP_VarsMax + 4)->GetFloatNumber() };
-    Var_SetQuat(GetVarPtr3(OP), v);
-    if (_iSP_Vars_Max2 < _iSP_VarsMax + 5) _iSP_Vars_Max2 = _iSP_VarsMax + 5;
+    // n2 = 인자 수 = 성분 수. Vector2/3/4/Quaternion 이 모두 이 op 으로 패치되며,
+    // 무엇으로 해석할지는(예: wxyz 쿼터니언) 사용자 규약이지 VM 의 타입이 아니다.
+    int n = OP.n2;
+    if (n < 1) n = 1; else if (n > 4) n = 4;
+    float v[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    for (int i = 0; i < n; i++)
+        v[i] = (float)GetStackFromBase(_iSP_VarsMax + 1 + i)->GetFloatNumber();
+    VecInfo* p = VecStoreFor(GetVarPtr3(OP), n);
+    p->v[0] = v[0]; p->v[1] = v[1]; p->v[2] = v[2]; p->v[3] = v[3];
+    if (_iSP_Vars_Max2 < _iSP_VarsMax + 1 + n) _iSP_Vars_Max2 = _iSP_VarsMax + 1 + n;
     return false;
 }
 

@@ -138,10 +138,7 @@ void INeoVM::Var_ReleaseInternal(VarInfo* d)
 			((CNeoVMImpl*)this)->FreeAsync(d);
 		d->_async = NULL;
 		break;
-	case VAR_VEC2:
-	case VAR_VEC3:
-	case VAR_VEC4:
-	case VAR_QUAT:
+	case VAR_VEC:
 		if (--d->_vec->_refCount <= 0)
 			((CNeoVMImpl*)this)->FreeVec(d->_vec);
 		d->_vec = NULL;

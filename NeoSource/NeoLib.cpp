@@ -1382,7 +1382,7 @@ static VMHash<TYPE_NeoLib> g_sNeoFunLib_Map;
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_Async;
 static std::vector<TYPE_NeoLib> g_sNeoFunLib_DefaultNative;
 static std::vector<u8> g_sNeoFunLib_DefaultIntrinsic; // native index 별 intrinsic opcode (기본 NOP_NONE)
-static std::map<std::string, int> g_sNeoFunLib_DefaultNativeIndex;
+static std::unordered_map<std::string, int> g_sNeoFunLib_DefaultNativeIndex;
 
 bool CNeoVMImpl::_funInitLib = false;
 FunctionPtrNative CNeoVMImpl::_funLib_Default;
@@ -1576,10 +1576,11 @@ static void AddGlobalLibFun()
 	AddSystemFun("Vector4", &neo_libs::Math_Vector4, "Vector4", "float x", "float y", "float z", "float w");
 	AddSystemFun("Quaternion", &neo_libs::Math_Quaternion, "Quaternion", "float w", "float x", "float y", "float z");
 	// 벡터 생성자는 LoadVM 에서 전용 opcode 로 대체 (native 호출 오버헤드 제거). native 구현은 폴백으로 유지.
-	SetSystemFunIntrinsic("Vector2", NOP_VEC2_MAKE);
-	SetSystemFunIntrinsic("Vector3", NOP_VEC3_MAKE);
-	SetSystemFunIntrinsic("Vector4", NOP_VEC4_MAKE);
-	SetSystemFunIntrinsic("Quaternion", NOP_QUAT_MAKE);
+	// 넷 다 같은 op. 성분 수는 호출 인자 수(n2)에서 나온다.
+	SetSystemFunIntrinsic("Vector2", NOP_VEC_MAKE);
+	SetSystemFunIntrinsic("Vector3", NOP_VEC_MAKE);
+	SetSystemFunIntrinsic("Vector4", NOP_VEC_MAKE);
+	SetSystemFunIntrinsic("Quaternion", NOP_VEC_MAKE);
 	AddSystemFun("Clamp01", &neo_libs::Math_Clamp01, "float", "float x");
 	AddSystemFun("Clamp", &neo_libs::Math_Clamp, "float", "float x", "float min", "float max");
 	AddSystemFun("SmoothStep01", &neo_libs::Math_SmoothStep01, "float", "float t");

@@ -114,10 +114,7 @@ NEOS_NOINLINE void CNeoVMWorker::CltInsertRare(VarInfo* pClt, VarInfo* pKey, Var
 		SetErrorFormat(RTE_INDEX_WRITE, GetDataType(pClt->GetType()).c_str());
 		return;
 	}
-	case VAR_VEC2:
-	case VAR_VEC3:
-	case VAR_VEC4:
-	case VAR_QUAT:
+	case VAR_VEC:
 		// 가변 성분 쓰기: v[i] = x. 저장소를 공유 중이면 여기서 복제해서(copy-on-write)
 		// 이 VarInfo 인스턴스에만 반영되게 한다 — 값 의미론 유지.
 		if (pKey->GetType() == VAR_INT && pValue->IsNumber())
@@ -315,10 +312,7 @@ NEOS_NOINLINE void CNeoVMWorker::CltReadRare(VarInfo* pClt, VarInfo* pKey, VarIn
 		SetErrorFormat(RTE_INDEX_READ, GetDataType(pClt->GetType()).c_str());
 		return;
 	}
-	case VAR_VEC2:
-	case VAR_VEC3:
-	case VAR_VEC4:
-	case VAR_QUAT:
+	case VAR_VEC:
 		if (pKey->GetType() == VAR_INT)
 		{
 			unsigned idx = (unsigned)pKey->_int;
@@ -491,11 +485,12 @@ NEOS_FORCEINLINE void CNeoVMWorker::Or(VarInfo* r, VarInfo* v1, VarInfo* v2)
 }
 NEOS_FORCEINLINE bool CNeoVMWorker::VecArith(VarInfo* r, VarInfo* v1, VarInfo* v2, int op)
 {
-	VAR_TYPE vt = v1->GetType();
-	if (vt == VAR_QUAT) return false; // Quat 산술은 미지원 (회전은 RotateVectorByQuat)
-	int n = v1->VectorComponentCount();
+	// 쿼터니언은 별도 타입이 아니다 — 4성분 벡터의 성분별 연산으로 동작하며,
+	// 회전 의미를 원하면 사용자가 math.RotateVectorByQuat 를 쓴다.
+	const int n = v1->VectorComponentCount();
 	float tmp[4] = { 0, 0, 0, 0 };
-	if (v2->GetType() == vt)
+	// 성분 수가 같아야 성분별 연산이다(vec2 + vec3 는 거부).
+	if (v2->IsVector() && v2->VectorComponentCount() == n)
 	{
 		// Vec op Vec : 성분별
 		for (int i = 0; i < n; i++)
@@ -514,13 +509,9 @@ NEOS_FORCEINLINE bool CNeoVMWorker::VecArith(VarInfo* r, VarInfo* v1, VarInfo* v
 	else
 		return false;
 	// tmp 로 먼저 계산했으므로 r == v1 (a = a + b) 도 안전
-	switch (vt)
-	{
-	case VAR_VEC2: Var_SetVec2(r, tmp); return true;
-	case VAR_VEC3: Var_SetVec3(r, tmp); return true;
-	case VAR_VEC4: Var_SetVec4(r, tmp); return true;
-	default: return false;
-	}
+	VecInfo* p = VecStoreFor(r, n);
+	p->v[0] = tmp[0]; p->v[1] = tmp[1]; p->v[2] = tmp[2]; p->v[3] = tmp[3];
+	return true;
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Add3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
@@ -570,9 +561,7 @@ NEOS_NOINLINE void CNeoVMWorker::Add3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			return;
 		}
 		break;
-	case VAR_VEC2:
-	case VAR_VEC3:
-	case VAR_VEC4:
+	case VAR_VEC:
 		if (VecArith(r, v1, v2, 0)) return;
 		break;
 	case VAR_MAP:
@@ -618,9 +607,7 @@ NEOS_NOINLINE void CNeoVMWorker::Sub3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		break;
 	case VAR_STRING:
 		break;
-	case VAR_VEC2:
-	case VAR_VEC3:
-	case VAR_VEC4:
+	case VAR_VEC:
 		if (VecArith(r, v1, v2, 1)) return;
 		break;
 	case VAR_MAP:
@@ -666,9 +653,7 @@ NEOS_NOINLINE void CNeoVMWorker::Mul3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		break;
 	case VAR_STRING:
 		break;
-	case VAR_VEC2:
-	case VAR_VEC3:
-	case VAR_VEC4:
+	case VAR_VEC:
 		if (VecArith(r, v1, v2, 2)) return;
 		break;
 	case VAR_MAP:
@@ -712,9 +697,7 @@ NEOS_NOINLINE void CNeoVMWorker::Div3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		break;
 	case VAR_STRING:
 		break;
-	case VAR_VEC2:
-	case VAR_VEC3:
-	case VAR_VEC4:
+	case VAR_VEC:
 		if (VecArith(r, v1, v2, 3)) return;
 		break;
 	case VAR_MAP:
@@ -1096,10 +1079,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
 		else if (v2->GetType() == VAR_STRING)
 			return v1->_str->_str == v2->_str->_str;
 		break;
-	case VAR_VEC2:
-	case VAR_VEC3:
-	case VAR_VEC4:
-	case VAR_QUAT:
+	case VAR_VEC:
 		// 같은 벡터 타입 + 모든 성분 정확 일치
 		if (v1->GetType() == v2->GetType())
 		{

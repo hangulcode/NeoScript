@@ -150,11 +150,10 @@ enum VAR_TYPE : u8
 	// IsAllocType 경계(VAR_STRING) 뒤에 둔다 — 성분 4개를 VarInfo 유니온에 인라인하면
 	// VarInfo 가 16→24바이트가 되어 스택/리스트/맵노드 전체가 50% 커진다(실측: map_str
 	// -12%, particles -13%). 값 의미론은 copy-on-write 로 보존한다(VecCopyOnWrite).
-	// 반드시 연속이어야 한다 — IsVector() 가 범위 비교다.
-	VAR_VEC2,
-	VAR_VEC3,
-	VAR_VEC4,
-	VAR_QUAT,
+	//
+	// 성분 수(1~4)는 타입이 아니라 VarInfo::_vecCount 가 들고 있다. 쿼터니언도 별도 타입이
+	// 아니다 — 저장은 4성분이고 wxyz 해석은 사용자 규약이라 VM 이 구분할 이유가 없다.
+	VAR_VEC,
 };
 
 struct SNeoVMAllocStats
@@ -205,7 +204,12 @@ struct VarInfo
 {
 private:
 	VAR_TYPE	_type;
+	// VAR_VEC 의 성분 수(1~4). _type 뒤 패딩에 들어가므로 크기를 늘리지 않는다
+	// (u8 이라 x64 의 7바이트, Win32 의 3바이트 패딩 양쪽에 모두 맞는다).
+	// 설정은 VecStoreFor() 한 곳뿐이고, 복사는 Move_DestNoRelease 가 _vec 과 함께 옮긴다.
+	u8			_vecCount;
 	NEOS_FORCEINLINE void SetType(VAR_TYPE t) { _type = t; }
+	NEOS_FORCEINLINE void SetVecType(int count) { _type = VAR_VEC; _vecCount = (u8)count; }
 	NEOS_FORCEINLINE void ClearType()
 	{
 		_type = VAR_NONE;
@@ -238,7 +242,7 @@ public:
 		INeoVMWorker* _module;
 		AsyncInfo*	_async;
 		CollectionIterator	_it;
-		VecInfo*	_vec; // VAR_VEC2/VEC3/VEC4/QUAT 성분(유효 성분 수는 타입 태그로 결정)
+		VecInfo*	_vec; // VAR_VEC 성분(유효 성분 수는 _vecCount)
 	};
 
 	NEOS_FORCEINLINE VarInfo() { _type = VAR_NONE; }
@@ -262,18 +266,12 @@ public:
 	}
 	NEOS_FORCEINLINE bool IsVector()
 	{
-		return (_type >= VAR_VEC2 && _type <= VAR_QUAT);
+		return (_type == VAR_VEC);
 	}
+	// VAR_VEC 일 때만 유효. 다른 타입에서는 값이 의미 없으므로 IsVector() 로 먼저 거른다.
 	NEOS_FORCEINLINE int VectorComponentCount()
 	{
-		switch (_type)
-		{
-		case VAR_VEC2: return 2;
-		case VAR_VEC3: return 3;
-		case VAR_VEC4:
-		case VAR_QUAT: return 4;
-		default: return 0;
-		}
+		return (_type == VAR_VEC) ? _vecCount : 0;
 	}
 	NEOS_FORCEINLINE NS_FLOAT GetFloatNumber()
 	{
@@ -528,7 +526,7 @@ public:
 	void Var_SetFloat(VarInfo* d, NS_FLOAT v);
 	void Var_SetBool(VarInfo* d, bool v);
 	// 벡터 저장소 확보. 대상이 이미 단독 소유 벡터면 재사용하고, 아니면 풀에서 새로 받는다.
-	VecInfo* VecStoreFor(VarInfo* d, VAR_TYPE t);
+	VecInfo*	VecStoreFor(VarInfo* d, int count);
 	void Var_SetVec2(VarInfo* d, float v[4]);
 	void Var_SetVec3(VarInfo* d, float v[4]);
 	void Var_SetVec4(VarInfo* d, float v[4]);
