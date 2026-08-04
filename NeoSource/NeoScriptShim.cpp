@@ -1254,6 +1254,7 @@ void CallContext::retInstanceGlobal(InstanceHandle instance, StringView name)
     else   c->worker->Var_Release(CtxRetVar(c)); // None
 }
 void CallContext::retVec3(float x, float y, float z) { CallContextImpl* c=Ctx(m_impl); float v[4]={x,y,z,0}; c->worker->Var_SetVec3(CtxRetVar(c), v); }
+void CallContext::retVec4(float x, float y, float z, float w) { CallContextImpl* c=Ctx(m_impl); float v[4]={x,y,z,w}; c->worker->Var_SetVec4(CtxRetVar(c), v); }
 MapBuilder CallContext::retMap() { CallContextImpl* c=Ctx(m_impl); VarInfo* r=CtxRetVar(c); c->worker->ResetVarType(r, VAR_MAP); c->mapB.push_back(MapBuilderImpl{ c->worker, r->_tbl, c }); return NeoScriptInternal::mapB(&c->mapB.back()); }
 ListBuilder CallContext::retList() { CallContextImpl* c=Ctx(m_impl); VarInfo* r=CtxRetVar(c); c->worker->ResetVarType(r, VAR_LIST); c->listB.push_back(ListBuilderImpl{ c->worker, r->_lst, c }); return NeoScriptInternal::listB(&c->listB.back()); }
 void CallContext::retObject(ObjectType type, void* userData) {
