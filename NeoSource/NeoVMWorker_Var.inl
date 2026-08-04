@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 // INeoVMWorker 의 인라인 정의.
 //

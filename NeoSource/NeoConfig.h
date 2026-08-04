@@ -1,5 +1,8 @@
 ﻿#pragma once
 
+#include <cstring>
+#include <cmath>
+
 namespace NeoScript
 {
 
