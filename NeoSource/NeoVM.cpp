@@ -249,18 +249,17 @@ bool VarInfo::SetListIndexer(VMHash<int>* pIndexer)
 
 // ---- 벡터 값타입 Get/Set ----
 // Get: 벡터 값타입(VAR_VEC*) 전용. 리스트 폴백 없음 — 벡터 인자는 값타입이어야 한다.
-// 성공 시엔 타입이 가진 성분까지만 쓴다 — 남는 레인은 호출자 몫이다.
-// 실패 시에만 전부 0 으로 밀어 미초기화 값이 새어나가지 않게 한다.
-bool VarInfo::GetVec2(float out[4])
+// 성공/실패 모두 요청한 성분까지만 쓴다 — 남는 레인은 호출자 몫이다.
+bool VarInfo::GetVec2(float out[2])
 {
 	if (IsVector() && VectorComponentCount() >= 2) { out[0] = _vec->v[0]; out[1] = _vec->v[1]; return true; }
-	out[0] = out[1] = out[2] = out[3] = 0.0f;
+	out[0] = out[1] = 0.0f;
 	return false;
 }
-bool VarInfo::GetVec3(float out[4])
+bool VarInfo::GetVec3(float out[3])
 {
 	if (IsVector() && VectorComponentCount() >= 3) { out[0] = _vec->v[0]; out[1] = _vec->v[1]; out[2] = _vec->v[2]; return true; }
-	out[0] = out[1] = out[2] = out[3] = 0.0f;
+	out[0] = out[1] = out[2] = 0.0f;
 	return false;
 }
 bool VarInfo::GetVec4(float out[4])

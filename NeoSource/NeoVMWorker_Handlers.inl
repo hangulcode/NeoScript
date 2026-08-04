@@ -389,11 +389,9 @@ NEOS_FORCEINLINE bool handle_VEC_MAKE(const SVMOperation& OP) {
     // 무엇으로 해석할지는(예: wxyz 쿼터니언) 사용자 규약이지 VM 의 타입이 아니다.
     int n = OP.n2;
     if (n < 1) n = 1; else if (n > 4) n = 4;
-    float v[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    for (int i = 0; i < n; i++)
-        v[i] = (float)GetStackFromBase(_iSP_VarsMax + 1 + i)->GetFloatNumber();
     VecInfo* p = VecStoreFor(GetVarPtr3(OP), n);
-    p->v[0] = v[0]; p->v[1] = v[1]; p->v[2] = v[2]; p->v[3] = v[3];
+    for (int i = 0; i < n; i++)
+        p->v[i] = (float)GetStackFromBase(_iSP_VarsMax + 1 + i)->GetFloatNumber();
     if (_iSP_Vars_Max2 < _iSP_VarsMax + 1 + n) _iSP_Vars_Max2 = _iSP_VarsMax + 1 + n;
     return false;
 }

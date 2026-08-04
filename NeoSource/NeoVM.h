@@ -291,8 +291,9 @@ public:
 	// Quaternion 은 엔진 컨벤션대로 wxyz 순서, Vector4 는 xyzw.
 	// Set 은 여기 없다: 벡터가 alloc 타입이라 저장소를 만들려면 VM(풀)이 필요하다.
 	// 세팅은 INeoVMWorker::Var_SetVec2/3/4/Quat 를 쓴다.
-	bool GetVec2(float out[4]);
-	bool GetVec3(float out[4]);
+	// 성공/실패 모두 해당 성분 수만 쓴다. 남는 레인은 호출자 몫이다.
+	bool GetVec2(float out[2]);
+	bool GetVec3(float out[3]);
 	bool GetVec4(float out[4]); // xyzw
 	bool GetQuat(float out[4]); // wxyz
 };
@@ -527,10 +528,11 @@ public:
 	void Var_SetBool(VarInfo* d, bool v);
 	// 벡터 저장소 확보. 대상이 이미 단독 소유 벡터면 재사용하고, 아니면 풀에서 새로 받는다.
 	VecInfo*	VecStoreFor(VarInfo* d, int count);
-	void Var_SetVec2(VarInfo* d, float v[4]);
-	void Var_SetVec3(VarInfo* d, float v[4]);
-	void Var_SetVec4(VarInfo* d, float v[4]);
-	void Var_SetQuat(VarInfo* d, float v[4]);
+	// 각 setter는 실제 성분 수만 받거나 저장한다. VecInfo의 남는 레인은 건드리지 않는다.
+	void Var_SetVec2(VarInfo* d, float x, float y);
+	void Var_SetVec3(VarInfo* d, float x, float y, float z);
+	void Var_SetVec4(VarInfo* d, float x, float y, float z, float w);
+	void Var_SetQuat(VarInfo* d, float w, float x, float y, float z);
 	void Var_SetCoroutine(VarInfo* d, CoroutineInfo* p);
 	void Var_SetString(VarInfo* d, const char* str);
 	void Var_SetString(VarInfo* d, SUtf8One c);

@@ -66,6 +66,11 @@ static bool HostMethod(CallContext& ctx, StringView method)
         lb.pushInt(7); lb.pushInt(8); lb.pushInt(9);
         return true;
     }
+    if (m == "vec2")
+    {
+        ctx.retVec2(8.0f, 9.0f);
+        return true;
+    }
     if (m == "boomHost")
     {
         // 네이티브 실패 보고: fail() 로 사유를 남기고 반드시 false 반환.
@@ -114,7 +119,8 @@ int NeoScriptV2Smoke()
         "export fun spawn() { var r = Host.spawn(); return r[\"entity\"].id(); }\n"  // 7
         "export fun spawnTag() { var r = Host.spawn(); return r[\"entity\"].tag(); }\n"  // 8
         "export fun boom() { var z = 0; return 10 / z; }\n"                              // 9 (런타임 에러)
-        "export fun callBoom() { return Host.boomHost(); }\n";                           // 10 (네이티브 fail)
+        "export fun callBoom() { return Host.boomHost(); }\n"                            // 10 (네이티브 fail)
+        "export fun vec2() { return Host.vec2(); }\n";                                   // 11
     // ※ 새 함수는 반드시 뒤에 덧붙일 것 — 아래 디버거 테스트가 line 3(compute 본문)에 BP 를 건다.
 
     CompileDesc cd;
@@ -161,8 +167,8 @@ int NeoScriptV2Smoke()
             Check(info.getString("name", nm) && Eq(nm, "neo"), "info.name == \"neo\"");
             int32_t vv = 0;
             Check(info.getInt("value", vv) && vv == 42, "info.value == 42");
-            float vec[4] = {0,0,0,0};
-            Check(info.getVec("vec", vec) && vec[0]==1.0f && vec[1]==2.0f && vec[2]==3.0f, "info.vec == (1,2,3)");
+            float vec[4] = {-1,-1,-1,-1};
+            Check(info.getVec("vec", vec) && vec[0]==1.0f && vec[1]==2.0f && vec[2]==3.0f && vec[3]==0.0f, "info.vec == (1,2,3,0)");
             ListReader items;
             Check(info.getList("items", items) && items.count() == 3, "info.items has 3 elements");
             if (items.count() == 3)
@@ -172,6 +178,16 @@ int NeoScriptV2Smoke()
                 Check(i0 == 7 && i2 == 9, "info.items[0]==7, [2]==9");
             }
         }
+    }
+
+    // 내부 Vec2 setter는 x/y만 쓰되, 공개 retVec(float[4]) 계약은 나머지 두 레인을 0으로 보정한다.
+    {
+        Invocation call = rt->Call(a, "vec2");
+        Check(call.invoke() == RunStatus::Completed, "vec2 status Completed");
+        float vec[4] = {-1,-1,-1,-1};
+        call.retVec(vec);
+        Check(vec[0] == 8.0f && vec[1] == 9.0f && vec[2] == 0.0f && vec[3] == 0.0f,
+            "vec2 public read == (8,9,0,0)");
     }
 
     // 빌더 키 누수 회귀: setList/setMap/setObject 는 키 StringInfo 를 임시로 만들어 Insert 한다.

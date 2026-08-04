@@ -488,7 +488,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::VecArith(VarInfo* r, VarInfo* v1, VarInfo* v
 	// 쿼터니언은 별도 타입이 아니다 — 4성분 벡터의 성분별 연산으로 동작하며,
 	// 회전 의미를 원하면 사용자가 math.RotateVectorByQuat 를 쓴다.
 	const int n = v1->VectorComponentCount();
-	float tmp[4] = { 0, 0, 0, 0 };
+	float tmp[4];
 	// 성분 수가 같아야 성분별 연산이다(vec2 + vec3 는 거부).
 	if (v2->IsVector() && v2->VectorComponentCount() == n)
 	{
@@ -510,7 +510,8 @@ NEOS_FORCEINLINE bool CNeoVMWorker::VecArith(VarInfo* r, VarInfo* v1, VarInfo* v
 		return false;
 	// tmp 로 먼저 계산했으므로 r == v1 (a = a + b) 도 안전
 	VecInfo* p = VecStoreFor(r, n);
-	p->v[0] = tmp[0]; p->v[1] = tmp[1]; p->v[2] = tmp[2]; p->v[3] = tmp[3];
+	for (int i = 0; i < n; i++)
+		p->v[i] = tmp[i];
 	return true;
 }
 NEOS_FORCEINLINE void CNeoVMWorker::Add3(VarInfo* r, VarInfo* v1, VarInfo* v2)

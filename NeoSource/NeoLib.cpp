@@ -522,31 +522,27 @@ struct neo_libs
 	static bool Math_Vector2(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 2) return false;
-		float v[4] = { (float)pN->read<NS_FLOAT>(1), (float)pN->read<NS_FLOAT>(2), 0, 0 };
-		pN->Var_SetVec2(pN->GetReturnVar(), v);
+		pN->Var_SetVec2(pN->GetReturnVar(), (float)pN->read<NS_FLOAT>(1), (float)pN->read<NS_FLOAT>(2));
 		return true;
 	}
 	static bool Math_Vector3(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 3) return false;
-		float v[4] = { (float)pN->read<NS_FLOAT>(1), (float)pN->read<NS_FLOAT>(2), (float)pN->read<NS_FLOAT>(3), 0 };
-		pN->Var_SetVec3(pN->GetReturnVar(), v);
+		pN->Var_SetVec3(pN->GetReturnVar(), (float)pN->read<NS_FLOAT>(1), (float)pN->read<NS_FLOAT>(2), (float)pN->read<NS_FLOAT>(3));
 		return true;
 	}
 	static bool Math_Vector4(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 4) return false;
-		float v[4] = { (float)pN->read<NS_FLOAT>(1), (float)pN->read<NS_FLOAT>(2),
-		               (float)pN->read<NS_FLOAT>(3), (float)pN->read<NS_FLOAT>(4) };
-		pN->Var_SetVec4(pN->GetReturnVar(), v);
+		pN->Var_SetVec4(pN->GetReturnVar(), (float)pN->read<NS_FLOAT>(1), (float)pN->read<NS_FLOAT>(2),
+			(float)pN->read<NS_FLOAT>(3), (float)pN->read<NS_FLOAT>(4));
 		return true;
 	}
 	static bool Math_Quaternion(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 4) return false;
-		float v[4] = { (float)pN->read<NS_FLOAT>(1), (float)pN->read<NS_FLOAT>(2),
-		               (float)pN->read<NS_FLOAT>(3), (float)pN->read<NS_FLOAT>(4) };
-		pN->Var_SetQuat(pN->GetReturnVar(), v);
+		pN->Var_SetQuat(pN->GetReturnVar(), (float)pN->read<NS_FLOAT>(1), (float)pN->read<NS_FLOAT>(2),
+			(float)pN->read<NS_FLOAT>(3), (float)pN->read<NS_FLOAT>(4));
 		return true;
 	}
 	static NS_FLOAT MathClamp01Value(NS_FLOAT v)
@@ -590,14 +586,14 @@ struct neo_libs
 		return true;
 	}
 	// Read 는 VarInfo::GetVec* 로 벡터 값타입(VAR_VEC*)만 받는다 (리스트 폴백 없음).
-	static bool ReadVec3(VarInfo* pVar, float out[4])
+	static bool ReadVec3(VarInfo* pVar, float out[3])
 	{
 		return pVar != nullptr && pVar->GetVec3(out);
 	}
 	// Write 는 워커 Var_SetVec3(release 처리)로 인라인 값타입을 반환한다(힙 리스트 할당 제거).
-	static bool WriteVec3(CNeoVMWorker* pN, float v[4])
+	static bool WriteVec3(CNeoVMWorker* pN, float x, float y, float z)
 	{
-		pN->Var_SetVec3(pN->GetReturnVar(), v);
+		pN->Var_SetVec3(pN->GetReturnVar(), x, y, z);
 		return true;
 	}
 	static bool ReadQuat(VarInfo* pVar, float out[4])
@@ -605,45 +601,39 @@ struct neo_libs
 		return pVar != nullptr && pVar->GetQuat(out);
 	}
 	// q 는 wxyz. 정규화한 뒤 반환한다 (인자는 건드리지 않는다 — 호출측이 계속 쓸 수 있게).
-	static bool WriteQuat(CNeoVMWorker* pN, const float q[4])
+	static bool WriteQuat(CNeoVMWorker* pN, float w, float x, float y, float z)
 	{
-		float n[4];
-		NS_FLOAT lenSq = q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3];
+		NS_FLOAT lenSq = w * w + x * x + y * y + z * z;
 		if (lenSq < (NS_FLOAT)0.000001)
 		{
-			n[0] = 1.0f;
-			n[1] = n[2] = n[3] = 0.0f;
+			pN->Var_SetQuat(pN->GetReturnVar(), 1.0f, 0.0f, 0.0f, 0.0f);
 		}
 		else
 		{
 			float invLen = (float)((NS_FLOAT)1.0 / (NS_FLOAT)::sqrt(lenSq));
-			n[0] = q[0] * invLen; n[1] = q[1] * invLen;
-			n[2] = q[2] * invLen; n[3] = q[3] * invLen;
+			pN->Var_SetQuat(pN->GetReturnVar(), w * invLen, x * invLen, y * invLen, z * invLen);
 		}
-		// wxyz 순서로 저장 (Var_SetQuat 인자 순서 = _vec[0..3])
-		pN->Var_SetQuat(pN->GetReturnVar(), n);
 		return true;
 	}
 	static bool Math_Lerp3(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 3) return false;
 
-		float a[4], b[4];
+		float a[3], b[3];
 		if (ReadVec3(pN->GetStackVar(1), a) == false) return false;
 		if (ReadVec3(pN->GetStackVar(2), b) == false) return false;
 		NS_FLOAT t = pN->read<NS_FLOAT>(3);
 
-		float r[4] = {
+		return WriteVec3(pN,
 			(float)(a[0] + (b[0] - a[0]) * t),
 			(float)(a[1] + (b[1] - a[1]) * t),
-			(float)(a[2] + (b[2] - a[2]) * t), 0 };
-		return WriteVec3(pN, r);
+			(float)(a[2] + (b[2] - a[2]) * t));
 	}
 	static bool Math_DistanceSquared3(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 2) return false;
 
-		float a[4], b[4];
+		float a[3], b[3];
 		if (ReadVec3(pN->GetStackVar(1), a) == false) return false;
 		if (ReadVec3(pN->GetStackVar(2), b) == false) return false;
 
@@ -657,29 +647,27 @@ struct neo_libs
 	{
 		if (args != 2) return false;
 
-		float v[4], fallback[4];
+		float v[3], fallback[3];
 		if (ReadVec3(pN->GetStackVar(1), v) == false) return false;
 		if (ReadVec3(pN->GetStackVar(2), fallback) == false) return false;
 		NS_FLOAT lenSq = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
 		if (lenSq < (NS_FLOAT)0.00000001)
-			return WriteVec3(pN, fallback);
+			return WriteVec3(pN, fallback[0], fallback[1], fallback[2]);
 
 		float invLen = (float)((NS_FLOAT)1.0 / (NS_FLOAT)::sqrt(lenSq));
-		float r[4] = { v[0] * invLen, v[1] * invLen, v[2] * invLen, 0 };
-		return WriteVec3(pN, r);
+		return WriteVec3(pN, v[0] * invLen, v[1] * invLen, v[2] * invLen);
 	}
 	static bool Math_Cross3(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 2) return false;
 
-		float a[4], b[4];
+		float a[3], b[3];
 		if (ReadVec3(pN->GetStackVar(1), a) == false) return false;
 		if (ReadVec3(pN->GetStackVar(2), b) == false) return false;
-		float r[4] = {
+		return WriteVec3(pN,
 			a[1] * b[2] - a[2] * b[1],
 			a[2] * b[0] - a[0] * b[2],
-			a[0] * b[1] - a[1] * b[0], 0 };
-		return WriteVec3(pN, r);
+			a[0] * b[1] - a[1] * b[0]);
 	}
 	static bool Math_RotateVectorByQuat(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
@@ -688,21 +676,20 @@ struct neo_libs
 		float q[4];   // wxyz
 		if (ReadQuat(pN->GetStackVar(1), q) == false) return false;
 
-		float v[4];
+		float v[3];
 		if (ReadVec3(pN->GetStackVar(2), v) == false) return false;
 		const float qw = q[0], qx = q[1], qy = q[2], qz = q[3];
 		const float x = v[0], y = v[1], z = v[2];
 		NS_FLOAT tx = (NS_FLOAT)2.0 * (qy * z - qz * y);
 		NS_FLOAT ty = (NS_FLOAT)2.0 * (qz * x - qx * z);
 		NS_FLOAT tz = (NS_FLOAT)2.0 * (qx * y - qy * x);
-		float r[4] = {
+		return WriteVec3(pN,
 			(float)(x + qw * tx + (qy * tz - qz * ty)),
 			(float)(y + qw * ty + (qz * tx - qx * tz)),
-			(float)(z + qw * tz + (qx * ty - qy * tx)), 0 };
-		return WriteVec3(pN, r);
+			(float)(z + qw * tz + (qx * ty - qy * tx)));
 	}
 	// v[0..2] 를 제자리 정규화. 길이가 0 에 가까우면 실패(값은 그대로).
-	static bool NormalizeVec3(float v[4])
+	static bool NormalizeVec3(float v[3])
 	{
 		NS_FLOAT lenSq = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
 		if (lenSq < (NS_FLOAT)0.000001) return false;
@@ -716,7 +703,7 @@ struct neo_libs
 	{
 		if (args != 3) return false;
 
-		float right[4], up[4], fwd[4];
+		float right[3], up[3], fwd[3];
 		if (ReadVec3(pN->GetStackVar(1), right) == false) return false;
 		if (ReadVec3(pN->GetStackVar(2), up) == false) return false;
 		if (ReadVec3(pN->GetStackVar(3), fwd) == false) return false;
@@ -762,8 +749,7 @@ struct neo_libs
 			z = (NS_FLOAT)0.25 * s;
 		}
 
-		float q[4] = { (float)w, (float)x, (float)y, (float)z };
-		return WriteQuat(pN, q);
+		return WriteQuat(pN, (float)w, (float)x, (float)y, (float)z);
 	}
 	static bool Math_quat_slerp(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
@@ -807,12 +793,11 @@ struct neo_libs
 			}
 		}
 
-		float q[4] = {
+		return WriteQuat(pN,
 			(float)(a[0] * scaleA + b[0] * scaleB),
 			(float)(a[1] * scaleA + b[1] * scaleB),
 			(float)(a[2] * scaleA + b[2] * scaleB),
-			(float)(a[3] * scaleA + b[3] * scaleB) };
-		return WriteQuat(pN, q);
+			(float)(a[3] * scaleA + b[3] * scaleB));
 	}
 	static bool	Math_srand(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
