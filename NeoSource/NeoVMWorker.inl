@@ -12,19 +12,6 @@ NEOS_FORCEINLINE bool CNeoVMWorker::EnsureStackRange(int base, int lastOffset)
 }
 
 
-NEOS_FORCEINLINE void CNeoVMWorker::Move(VarInfo* v1, VarInfo* v2)
-{
-	if (v1->IsAllocType())
-	{
-		if (v1 == v2)
-			return;
-		Var_Release(v1);
-	}
-	if (v2->IsAllocType() == false)
-		*v1 = *v2;
-	else
-		Move_DestNoRelease(v1, v2);
-}
 NEOS_FORCEINLINE void CNeoVMWorker::MoveI(VarInfo* v1, int v)
 {
 	if (v1->IsAllocType())

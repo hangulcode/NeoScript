@@ -512,4 +512,8 @@ extern std::string GetDataType(VAR_TYPE t);
 
 // INeoVMWorker 인라인 정의. 호출하는 모든 TU 에 정의가 보여야 한다(파일 상단 주석 참고).
 #include "NeoVMWorker_Var.inl"
+
+// NeoLib.cpp 에서도 직접 호출하는 concrete worker fast path. .cpp 전용 .inl 에 두면
+// GCC/Clang 비-LTO 빌드에서 inline 정의를 찾지 못해 undefined reference가 난다.
+#include "NeoVMWorker_Move.inl"
 };

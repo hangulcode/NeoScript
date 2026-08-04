@@ -14,6 +14,7 @@
 #include "NeoVMMap.h"
 #include "NeoVMList.h"
 #include "NeoVMProgram.h" // CNeoVMProgram::FindFunction (FindFunction 구현)
+#include "NeoVMWorker.h"  // INeoVMWorker inline Var_Set*/Var_Release 정의
 #include "NeoArchive.h"   // CNArchive (CompileToBytecode: 소스→바이트코드)
 
 #include <cstring>
