@@ -116,6 +116,7 @@ static void PrintSampleList()
 	printf("module\n");
 	printf("http\n");
 	printf("regression\n");
+	printf("literal_totype\n");
 }
 
 static std::string s_path = "../../TestScript/";
@@ -139,6 +140,7 @@ static int RunSample(INeoLoader* pLoader, const std::string& key)
 	if (key == "15" || key == "module") return SAMPLE_etc(pLoader, s_path + "module.ns", nullptr);
 	if (key == "16" || key == "http") return SAMPLE_etc(pLoader, s_path + "http.ns", nullptr);
 	if (key == "17" || key == "regression") return SAMPLE_etc(pLoader, s_path + "compiler_regression.ns", nullptr);
+	if (key == "18" || key == "literal_totype") return SAMPLE_etc(pLoader, s_path + "literal_totype.ns", nullptr);
 
 	printf("unknown sample: %s\n", key.c_str());
 	return -1;
@@ -146,7 +148,7 @@ static int RunSample(INeoLoader* pLoader, const std::string& key)
 
 static int RunSmokeSamples(INeoLoader* pLoader)
 {
-	const char* samples[] = { "hello", "string", "list", "map", "delegate", "meta", "coroutine", "regression" };
+	const char* samples[] = { "hello", "string", "list", "map", "delegate", "meta", "coroutine", "regression", "literal_totype" };
 	for (const char* sample : samples)
 	{
 		printf("\n[smoke] %s\n", sample);
@@ -834,6 +836,20 @@ static int RunCompilerErrorRegression()
 		{ "argument-count", "fun F(var value) {} F();", "argument" },
 		{ "empty-if", "fun F() { if () {} }", "expected an expression" },
 		{ "empty-while", "fun F() { while () {} }", "expected an expression" },
+		// 리스트/맵 리터럴 안의 실패는 반드시 사유가 남아야 한다.
+		// (toint/tofloat 를 원소로 쓰면 원소를 조용히 버리고 메시지 없이 실패하던 회귀 관련)
+		{ "list-literal-bad-expression", "var v = [1 + ];", "invalid operator" },
+		{ "list-literal-unknown-id", "var v = [undefinedName];", "unknown identifier" },
+		{ "list-literal-missing-value", "var v = [,];", "expected an expression" },
+		{ "map-literal-unknown-id", "var v = { \"a\": undefinedName };", "unknown identifier" },
+		{ "map-literal-missing-value", "var v = { \"a\": };", "expected an expression" },
+		{ "map-literal-missing-key", "var v = { : 1 };", "expected an expression" },
+		// 첫 원소가 아니라 중간/뒤에서 빠져도 똑같이 잡혀야 한다.
+		{ "list-literal-missing-middle", "var v = [1, , 2];", "expected an expression" },
+		{ "map-literal-missing-value-2nd", "var v = { \"a\": 1, \"b\": };", "expected an expression" },
+		// 함수 안(지역 스코프)도 같은 경로를 타는지 고정.
+		{ "list-literal-missing-in-fun", "fun F() { var v = [,]; }", "expected an expression" },
+		{ "map-literal-missing-in-fun", "fun F() { var v = { \"a\": }; }", "expected an expression" },
 	};
 
 	RuntimeDesc rd;
@@ -2031,6 +2047,7 @@ int main(int argc, char* argv[])
 		printf("%d module\n", idx++);
 		printf("%d http\n", idx++);
 		printf("%d regression\n", idx++);
+		printf("%d literal_totype\n", idx++);
 
 		printf("\nESC press to exit\n");
 		printf("press the number and enter ...\n");

@@ -1,0 +1,64 @@
+// for 루프 검증 — step 선택 인자, 음수 step, 무한루프 차단
+var f = 0;
+fun Chk(var n, var got, var want) { if (got != want) { print("FAIL " .. n .. " got=" .. got .. " want=" .. want); f++; } }
+
+// --- step 생략(=1) 과 명시(,1) 가 동일 ---
+fun S3(var n) { var c = 0; for (var i in 0, n, 1) c += i; return c; }
+fun S2(var n) { var c = 0; for (var i in 0, n)    c += i; return c; }
+Chk("explicit_1", S3(10), 45);
+Chk("omitted_1",  S2(10), 45);
+Chk("same",       S2(100), S3(100));
+
+// --- 양수 step ---
+fun Up2(var n) { var c = 0; for (var i in 0, n, 2) c++; return c; }
+Chk("step2", Up2(10), 5);
+fun Up3(var n) { var c = 0; for (var i in 0, n, 3) c++; return c; }
+Chk("step3", Up3(10), 4);
+
+// --- 음수 step: 역방향 루프가 정상 동작해야 한다 ---
+fun Down(var a, var b) { var c = 0; for (var i in a, b, -1) c++; return c; }
+Chk("down_5_0", Down(5, 0), 5);          // i = 5,4,3,2,1
+Chk("down_3_0", Down(3, 0), 3);
+fun DownSum(var a, var b) { var s = 0; for (var i in a, b, -1) s += i; return s; }
+Chk("down_sum", DownSum(5, 0), 15);      // 5+4+3+2+1
+fun DownFirst(var a, var b) { var first = -1; for (var i in a, b, -1) { if (first < 0) first = i; } return first; }
+Chk("down_first_is_begin", DownFirst(5, 0), 5);
+fun DownLast(var a, var b) { var last = -1; for (var i in a, b, -1) last = i; return last; }
+Chk("down_last_excl_end", DownLast(5, 0), 1);   // end 는 exclusive
+fun Down2(var a, var b) { var c = 0; for (var i in a, b, -2) c++; return c; }
+Chk("down_step2", Down2(10, 0), 5);      // 10,8,6,4,2
+
+// --- 방향이 반대면 0회 (예전엔 여기서 무한루프였다) ---
+fun WrongDown(var n) { var c = 0; for (var i in 0, n, -1) { c++; if (c > 100000) break; } return c; }
+Chk("neg_step_wrong_dir_is_0", WrongDown(5), 0);
+fun WrongUp(var n) { var c = 0; for (var i in n, 0, 1) { c++; if (c > 100000) break; } return c; }
+Chk("pos_step_wrong_dir_is_0", WrongUp(5), 0);
+
+// --- 런타임 변수 step (컴파일 타임에 알 수 없는 경로) ---
+fun VarStep(var a, var b, var s) { var c = 0; for (var i in a, b, s) c++; return c; }
+Chk("var_step_up",   VarStep(0, 5, 1), 5);
+Chk("var_step_up2",  VarStep(0, 10, 2), 5);
+Chk("var_step_down", VarStep(5, 0, -1), 5);
+Chk("var_step_wrong_dir", VarStep(0, 5, -1), 0);
+
+// --- 빈 범위 / 경계 ---
+fun Empty() { var c = 0; for (var i in 5, 5) c++; return c; }
+Chk("empty_range", Empty(), 0);
+fun EmptyDown() { var c = 0; for (var i in 5, 5, -1) c++; return c; }
+Chk("empty_range_down", EmptyDown(), 0);
+
+// --- break / continue / 중첩 ---
+fun Brk() { var c = 0; for (var i in 0, 100) { if (i == 5) break; c++; } return c; }
+Chk("break", Brk(), 5);
+fun Cont() { var c = 0; for (var i in 0, 10) { if (i % 2 == 0) continue; c++; } return c; }
+Chk("continue", Cont(), 5);
+fun BrkDown() { var c = 0; for (var i in 10, 0, -1) { if (i == 5) break; c++; } return c; }
+Chk("break_down", BrkDown(), 5);         // 10,9,8,7,6
+fun Nest() { var c = 0; for (var i in 0, 3) { for (var j in 3, 0, -1) c++; } return c; }
+Chk("nested_mixed_dir", Nest(), 9);
+
+// --- 식(expression) 인자 ---
+fun ExprEnd(var n) { var c = 0; for (var i in 1, n * 2) c++; return c; }
+Chk("expr_end", ExprEnd(5), 9);
+
+if (f == 0) print("FOR LOOP TESTS: ALL PASS"); else print("FOR LOOP: " .. f .. " FAIL");

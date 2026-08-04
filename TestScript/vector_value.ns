@@ -1,0 +1,184 @@
+// 벡터를 alloc 타입(VecInfo + 풀)으로 바꾼 뒤의 값 의미론 검증.
+// 핵심: 대입은 저장소를 공유(refcount)하지만, 성분을 쓰는 순간 복제(copy-on-write)되어
+// 원본이 영향을 받지 않아야 한다.
+import system;
+import math;
+
+var f = 0;
+fun Chk(var n, var got, var want) { if (got != want) { print("FAIL " .. n .. " got=" .. got .. " want=" .. want); f++; } }
+
+// --- 생성/읽기 ---
+var a = math.Vector3(1.0, 2.0, 3.0);
+Chk("type", type(a), "Vector3");
+Chk("read0", a[0], 1.0);
+Chk("read1", a[1], 2.0);
+Chk("read2", a[2], 3.0);
+
+// --- 값 의미론: 대입 후 사본을 고쳐도 원본 불변 (CoW 핵심) ---
+var b = a;
+b[0] = 99.0;
+Chk("cow_copy_changed", b[0], 99.0);
+Chk("cow_orig_intact",  a[0], 1.0);
+Chk("cow_orig_rest1",   a[1], 2.0);
+Chk("cow_orig_rest2",   a[2], 3.0);
+
+// --- 반대 방향: 원본을 고쳐도 사본 불변 ---
+var c = math.Vector3(7.0, 8.0, 9.0);
+var d = c;
+c[1] = -1.0;
+Chk("cow_rev_src", c[1], -1.0);
+Chk("cow_rev_dst", d[1], 8.0);
+
+// --- 3중 공유 후 하나만 변경 ---
+var e1 = math.Vector2(5.0, 6.0);
+var e2 = e1;
+var e3 = e1;
+e2[0] = 50.0;
+Chk("share3_changed", e2[0], 50.0);
+Chk("share3_other1",  e1[0], 5.0);
+Chk("share3_other2",  e3[0], 5.0);
+e3[1] = 60.0;
+Chk("share3_second",  e3[1], 60.0);
+Chk("share3_first",   e1[1], 6.0);
+Chk("share3_mid",     e2[1], 6.0);
+
+// --- 함수 인자로 넘겨 고쳐도 호출자 불변 ---
+fun Mutate(var v) { v[0] = 1000.0; return v[0]; }
+var g = math.Vector3(1.0, 1.0, 1.0);
+Chk("arg_inside", Mutate(g), 1000.0);
+Chk("arg_caller", g[0], 1.0);
+
+// --- 반환값 ---
+fun MakeVec(var x) { return math.Vector3(x, x * 2, x * 3); }
+var h = MakeVec(2.0);
+Chk("ret0", h[0], 2.0);
+Chk("ret1", h[1], 4.0);
+Chk("ret2", h[2], 6.0);
+
+// --- 산술 ---
+var p = math.Vector3(1.0, 2.0, 3.0);
+var q = math.Vector3(10.0, 20.0, 30.0);
+var s = p + q;
+Chk("add0", s[0], 11.0);
+Chk("add2", s[2], 33.0);
+Chk("add_src_intact", p[0], 1.0);
+var sub = q - p;
+Chk("sub1", sub[1], 18.0);
+var mul = p * 3.0;
+Chk("mul0", mul[0], 3.0);
+Chk("mul2", mul[2], 9.0);
+
+// --- 자기 자신에 되쓰기(저장소 재사용 경로) ---
+var acc = math.Vector3(0.0, 0.0, 0.0);
+for (var i in 0, 10) acc = acc + math.Vector3(1.0, 2.0, 3.0);
+Chk("acc0", acc[0], 10.0);
+Chk("acc1", acc[1], 20.0);
+Chk("acc2", acc[2], 30.0);
+
+// 되쓰기 중에 사본이 있으면 사본은 그대로여야 한다
+var base = math.Vector3(1.0, 1.0, 1.0);
+var snap = base;
+base = base + math.Vector3(5.0, 5.0, 5.0);
+Chk("selfadd_new", base[0], 6.0);
+Chk("selfadd_snap", snap[0], 1.0);
+
+// --- 비교 ---
+Chk("eq_same", math.Vector3(1.0, 2.0, 3.0) == math.Vector3(1.0, 2.0, 3.0), true);
+Chk("eq_diff", math.Vector3(1.0, 2.0, 3.0) == math.Vector3(1.0, 2.0, 4.0), false);
+var cmpA = math.Vector3(1.0, 2.0, 3.0);
+var cmpB = cmpA;
+Chk("eq_shared", cmpA == cmpB, true);
+cmpB[0] = 9.0;
+Chk("eq_after_cow", cmpA == cmpB, false);
+
+// --- Vector2 / Vector4 / Quaternion ---
+var v2 = math.Vector2(1.0, 2.0);
+Chk("v2_type", type(v2), "Vector2");
+Chk("v2_read", v2[1], 2.0);
+var v4 = math.Vector4(1.0, 2.0, 3.0, 4.0);
+Chk("v4_type", type(v4), "Vector4");
+Chk("v4_read", v4[3], 4.0);
+var qt = math.Quaternion(1.0, 0.0, 0.0, 0.0);
+// 쿼터니언은 별도 타입이 아니다 — 4성분 벡터이고, wxyz 해석은 사용자 규약이다.
+Chk("q_type", type(qt), "Vector4");
+Chk("q_read", qt[0], 1.0);
+var qt2 = qt;
+qt2[1] = 0.5;
+Chk("q_cow", qt[1], 0.0);
+
+// --- 컨테이너에 담기 ---
+var lst = [];
+lst.append(math.Vector3(1.0, 2.0, 3.0));
+lst.append(math.Vector3(4.0, 5.0, 6.0));
+Chk("list_read", lst[1][2], 6.0);
+var fromList = lst[0];
+fromList[0] = 77.0;
+Chk("list_cow_copy", fromList[0], 77.0);
+Chk("list_cow_orig", lst[0][0], 1.0);
+
+var mp = {};
+mp["pos"] = math.Vector3(9.0, 8.0, 7.0);
+Chk("map_read", mp["pos"][0], 9.0);
+var fromMap = mp["pos"];
+fromMap[2] = 70.0;
+Chk("map_cow_copy", fromMap[2], 70.0);
+Chk("map_cow_orig", mp["pos"][2], 7.0);
+
+// --- math 함수들 ---
+Chk("lerp", math.Lerp3(math.Vector3(0.0,0.0,0.0), math.Vector3(10.0,10.0,10.0), 0.5) == math.Vector3(5.0,5.0,5.0), true);
+Chk("cross", math.Cross3(math.Vector3(1.0,0.0,0.0), math.Vector3(0.0,1.0,0.0)) == math.Vector3(0.0,0.0,1.0), true);
+
+// --- quat_from_basis / quat_slerp (성분 순서·전치 회귀) ---
+// 기저를 배열로 넘기게 바꾸면서 m00..m22 채우는 순서가 틀리면 여기서 잡힌다.
+fun Near(var got, var want) { var d = got - want; if (d < 0.0) d = 0.0 - d; return d < 0.0005; }
+fun ChkQ(var n, var q, var w, var x, var y, var z)
+{
+	if (Near(q[0],w) == false || Near(q[1],x) == false || Near(q[2],y) == false || Near(q[3],z) == false)
+	{
+		print("FAIL " .. n .. " got=(" .. q[0] .. "," .. q[1] .. "," .. q[2] .. "," .. q[3] .. ")");
+		f++;
+	}
+}
+
+var qId = math.quat_from_basis(math.Vector3(1.0,0.0,0.0), math.Vector3(0.0,1.0,0.0), math.Vector3(0.0,0.0,1.0));
+ChkQ("qfb_identity", qId, 1.0, 0.0, 0.0, 0.0);
+
+// right=(0,0,-1), up=(0,1,0), fwd=(1,0,0) → Y축 90도
+var qY90 = math.quat_from_basis(math.Vector3(0.0,0.0,-1.0), math.Vector3(0.0,1.0,0.0), math.Vector3(1.0,0.0,0.0));
+ChkQ("qfb_y90", qY90, 0.7071068, 0.0, 0.7071068, 0.0);
+
+// 기저를 안 정규화해도 결과는 같아야 한다(NormalizeVec3 경로)
+var qY90s = math.quat_from_basis(math.Vector3(0.0,0.0,-3.0), math.Vector3(0.0,5.0,0.0), math.Vector3(2.0,0.0,0.0));
+ChkQ("qfb_y90_unnormalized", qY90s, 0.7071068, 0.0, 0.7071068, 0.0);
+
+ChkQ("slerp_t0", math.quat_slerp(qId, qY90, 0.0), 1.0, 0.0, 0.0, 0.0);
+ChkQ("slerp_t1", math.quat_slerp(qId, qY90, 1.0), 0.7071068, 0.0, 0.7071068, 0.0);
+ChkQ("slerp_half", math.quat_slerp(qId, qY90, 0.5), 0.9238795, 0.0, 0.3826834, 0.0);
+// dot<0 → b 를 뒤집어 최단호로 가는 경로
+ChkQ("slerp_negdot", math.quat_slerp(qId, math.Quaternion(-1.0,0.0,0.0,0.0), 0.5), 1.0, 0.0, 0.0, 0.0);
+
+// --- 대량 생성/해제 (풀 재사용 + 누수 경로) ---
+fun Churn(var n)
+{
+	var last = 0.0;
+	for (var i in 0, n)
+	{
+		var t = math.Vector3(i, i, i);
+		var u = t;
+		u[0] = i * 2;
+		last = u[0] - t[0];
+	}
+	return last;
+}
+Chk("churn_1000", Churn(1000), 999.0);
+
+// 재대입으로 이전 벡터가 해제되는 경로
+fun Reassign(var n)
+{
+	var v = math.Vector3(0.0, 0.0, 0.0);
+	for (var i in 0, n) v = math.Vector3(i, i, i);
+	return v[0];
+}
+Chk("reassign_1000", Reassign(1000), 999.0);
+
+if (f == 0) print("VECTOR VALUE TESTS: ALL PASS"); else print("VECTOR VALUE: " .. f .. " FAIL");

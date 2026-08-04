@@ -1,0 +1,90 @@
+// 문자열 순서/동등 비교 검증 — CompareGR/CompareGE/CompareEQ 의 char·string 경로.
+// char(VAR_CHAR) 값은 문자열을 foreach 순회할 때 나오는 UTF-8 단일 문자다.
+var f = 0;
+fun Chk(var n, var got, var want) { if (got != want) { print("FAIL " .. n .. " got=" .. got .. " want=" .. want); f++; } }
+
+// 문자열의 i 번째 문자를 char 로 얻는다(= VAR_CHAR 생산).
+// NOTE: foreach 를 return/break 로 조기 탈출하면 숨은 반복자 슬롯이 남아 다음 호출이
+// 이어서 순회하는 결함이 있다. 그래서 여기서는 끝까지 순회한 뒤 고른 값을 돌려준다.
+fun CharAt(var s, var idx)
+{
+	var k = 0;
+	var hit = 0;
+	foreach (var c in s)
+	{
+		if (k == idx) hit = c;
+		k++;
+	}
+	return hit;
+}
+
+var cA = CharAt("abc", 0);   // 'a'
+var cB = CharAt("abc", 1);   // 'b'
+var cA2 = CharAt("xax", 1);  // 'a' (다른 원본에서 얻은 같은 문자)
+
+// --- char vs char ---
+Chk("cc_gr",    cB >  cA,  true);
+Chk("cc_gr_no", cA >  cB,  false);
+Chk("cc_gr_eq", cA >  cA2, false);
+Chk("cc_ge",    cB >= cA,  true);
+Chk("cc_ge_eq", cA >= cA2, true);
+Chk("cc_ge_no", cA >= cB,  false);
+Chk("cc_ls",    cA <  cB,  true);
+Chk("cc_le",    cA <= cA2, true);
+Chk("cc_eq",    cA == cA2, true);
+Chk("cc_ne",    cA != cB,  true);
+
+// --- char vs string ---
+Chk("cs_gr",     cB >  "a",   true);
+Chk("cs_gr_no",  cA >  "b",   false);
+Chk("cs_gr_pre", cB >  "ab",  true);    // "b" > "ab"
+Chk("cs_gr_len", cA >  "ab",  false);   // "a" < "ab" (접두사가 더 짧으면 작다)
+Chk("cs_ge",     cA >= "a",   true);
+Chk("cs_ge_len", cA >= "ab",  false);
+Chk("cs_ls",     cA <  "b",   true);
+Chk("cs_le",     cA <= "a",   true);
+Chk("cs_eq",     cA == "a",   true);
+Chk("cs_eq_no",  cA == "ab",  false);
+
+// --- string vs char ---
+Chk("sc_gr",     "b"  >  cA,  true);
+Chk("sc_gr_no",  "a"  >  cB,  false);
+Chk("sc_gr_len", "ab" >  cA,  true);    // "ab" > "a"
+Chk("sc_gr_pre", "ab" >  cB,  false);   // "ab" < "b"
+Chk("sc_ge",     "a"  >= cA,  true);
+Chk("sc_ge_len", "ab" >= cA,  true);
+Chk("sc_ls",     "a"  <  cB,  true);
+Chk("sc_le",     "a"  <= cA,  true);
+Chk("sc_eq",     "a"  == cA,  true);
+Chk("sc_eq_no",  "ab" == cA,  false);
+
+// --- string vs string (기존 경로, 회귀 확인용) ---
+Chk("ss_gr",     "b"   >  "a",   true);
+Chk("ss_gr_len", "ab"  >  "a",   true);
+Chk("ss_gr_no",  "a"   >  "ab",  false);
+Chk("ss_ge_eq",  "abc" >= "abc", true);
+Chk("ss_ls",     "a"   <  "b",   true);
+Chk("ss_le",     "abc" <= "abc", true);
+Chk("ss_eq",     "abc" == "abc", true);
+Chk("ss_ne",     "abc" != "abd", true);
+
+// --- 정렬 전이성(문자열 비교가 일관된 순서를 주는지) ---
+fun Cmp3(var a, var b, var c) { return (a < b) && (b < c) && (a < c); }
+Chk("order_chain", Cmp3("a", "ab", "b"), true);
+
+// --- 비교 불가 조합: EQ 는 에러 없이 false, != 는 true ---
+Chk("eq_mixed_type", "a" == 1, false);
+Chk("ne_mixed_type", "a" != 1, true);
+
+// --- 대소문자/숫자 문자 순서(ASCII) ---
+Chk("upper_lt_lower", "A" < "a", true);
+Chk("digit_lt_alpha", "0" < "A", true);
+
+// --- 멀티바이트(UTF-8) 문자도 char 로 순회된다 ---
+var kA = CharAt("가나", 0);
+var kB = CharAt("가나", 1);
+Chk("utf8_gr",  kB >  kA, true);
+Chk("utf8_eq",  kA == CharAt("가다", 0), true);
+Chk("utf8_ne",  kA != kB, true);
+
+if (f == 0) print("STRING COMPARE TESTS: ALL PASS"); else print("STRING COMPARE: " .. f .. " FAIL");

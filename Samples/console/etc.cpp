@@ -47,9 +47,26 @@ int SAMPLE_etc(INeoLoader* pLoader, std::string filename, const char* pFunctionN
 
 	int result = 0;
 	InstanceHandle inst = rt->CreateInstance(cr.program); // 최상위(전역 초기화) 실행
+	if (!inst)
+	{
+		printf("Error - CreateInstance failed\n");
+		rt->DestroyProgram(cr.program);
+		rt->DestroyDefineSet(defineSet);
+		DestroyRuntime(rt);
+		pLoader->Unload(nullptr, pFileBuffer, iFileLen);
+		return -1;
+	}
+	// 전역 초기화는 위 CreateInstance 안에서 돈다. 실패를 여기서 보지 않으면 초기화가
+	// 깨진 상태로 지정 함수를 이어서 호출하게 된다(전역 변수가 비어 있어 2차 에러만 남는다).
+	// Peek 은 에러를 소비하지 않으므로, 출력은 아래 공통 처리부가 그대로 담당한다.
+	{
+		StringView initErr;
+		if (rt->PeekLastError(initErr))
+			result = -1;
+	}
 
 	DWORD dwCallTime = 0;
-	if (pFunctionName != NULL)
+	if (result == 0 && pFunctionName != NULL)
 	{
 		DWORD t1 = GetTickCount();
 		if (rt->Call(inst, StringView(pFunctionName)).invoke() != RunStatus::Completed)

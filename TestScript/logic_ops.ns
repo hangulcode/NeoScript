@@ -1,0 +1,81 @@
+// 논리 연산자 정확성 검증 — 분기 코드젠 변경이 의미를 바꾸지 않았는지
+var fail = 0;
+fun Chk(var name, var got, var want)
+{
+    if (got != want) { print("FAIL " .. name .. " got=" .. got .. " want=" .. want); fail++; }
+}
+
+// 1. 기본 진리표 (if 컨텍스트)
+fun T1(var a, var b) { if (a || b) return 1; return 0; }
+fun T2(var a, var b) { if (a && b) return 1; return 0; }
+Chk("or_TT", T1(true,true), 1);   Chk("or_TF", T1(true,false), 1);
+Chk("or_FT", T1(false,true), 1);  Chk("or_FF", T1(false,false), 0);
+Chk("and_TT", T2(true,true), 1);  Chk("and_TF", T2(true,false), 0);
+Chk("and_FT", T2(false,true), 0); Chk("and_FF", T2(false,false), 0);
+
+// 2. 비교식 결합 (JLS/JLE 결합 경로)
+fun C1(var x) { if (x < 64 || x > 192) return 1; return 0; }
+Chk("cmp_lo", C1(10), 1); Chk("cmp_mid", C1(100), 0); Chk("cmp_hi", C1(200), 1);
+Chk("cmp_edge63", C1(63), 1); Chk("cmp_edge64", C1(64), 0);
+Chk("cmp_edge192", C1(192), 0); Chk("cmp_edge193", C1(193), 1);
+
+fun C2(var x) { if (x >= 10 && x <= 20) return 1; return 0; }
+Chk("and_below", C2(9), 0); Chk("and_lo", C2(10), 1);
+Chk("and_mid", C2(15), 1); Chk("and_hi", C2(20), 1); Chk("and_above", C2(21), 0);
+
+// 3. 혼합 우선순위 (&& 가 || 보다 강함)
+fun M1(var a, var b, var c) { if (a || b && c) return 1; return 0; }
+Chk("mix_Fxx", M1(false,false,false), 0);
+Chk("mix_FTT", M1(false,true,true), 1);
+Chk("mix_FTF", M1(false,true,false), 0);
+Chk("mix_Txx", M1(true,false,false), 1);
+
+// 4. 3개 이상 체인
+fun L3(var a, var b, var c) { if (a || b || c) return 1; return 0; }
+Chk("or3_FFF", L3(false,false,false), 0);
+Chk("or3_FFT", L3(false,false,true), 1);
+Chk("or3_FTF", L3(false,true,false), 1);
+fun A3(var a, var b, var c) { if (a && b && c) return 1; return 0; }
+Chk("and3_TTT", A3(true,true,true), 1);
+Chk("and3_TTF", A3(true,true,false), 0);
+Chk("and3_FTT", A3(false,true,true), 0);
+
+// 5. 단축평가 부작용 (호출 횟수)
+var calls = 0;
+fun Side(var v) { calls++; return v; }
+calls = 0; if (Side(true)  || Side(true)) { } Chk("sc_or_short", calls, 1);
+calls = 0; if (Side(false) || Side(true)) { } Chk("sc_or_full",  calls, 2);
+calls = 0; if (Side(false) && Side(true)) { } Chk("sc_and_short", calls, 1);
+calls = 0; if (Side(true)  && Side(true)) { } Chk("sc_and_full",  calls, 2);
+
+// 6. 값 컨텍스트 (materialize 경로가 여전히 살아있어야 함)
+var v1 = true || false;   Chk("val_or", v1, true);
+var v2 = false || false;  Chk("val_or2", v2, false);
+var v3 = true && false;   Chk("val_and", v3, false);
+var v4 = (5 < 10) || (3 > 7); Chk("val_cmp", v4, true);
+fun RetOr(var a, var b) { return a || b; }
+Chk("ret_or_T", RetOr(false,true), true);
+Chk("ret_or_F", RetOr(false,false), false);
+
+// 7. else / else if 경로
+fun E1(var x) { if (x < 0 || x > 100) return 1; else return 2; }
+Chk("else_in", E1(50), 2); Chk("else_out", E1(-5), 1); Chk("else_out2", E1(101), 1);
+fun E2(var x) { if (x < 0 || x > 100) return 1; else if (x == 50) return 2; else return 3; }
+Chk("elif_a", E2(-1), 1); Chk("elif_b", E2(50), 2); Chk("elif_c", E2(7), 3);
+
+// 8. while / for 조건 (기존 경로 유지 확인)
+fun W1(var n) { var i = 0; var c = 0; while (i < n && c < 1000) { c++; i++; } return c; }
+Chk("while_and", W1(5), 5);
+fun F1c(var n) { var c = 0; for (var i in 0, n, 1) { if (i < 2 || i > 7) c++; } return c; }
+Chk("for_or", F1c(10), 4);
+
+// 9. 중첩 if 안의 논리식
+fun N1(var a, var b) { if (a) { if (b || a) return 1; return 2; } return 3; }
+Chk("nest_TT", N1(true,true), 1); Chk("nest_TF", N1(true,false), 1); Chk("nest_F", N1(false,true), 3);
+
+// 10. 논리식 결과를 조건이 아닌 곳에
+fun P1(var a, var b) { var r = a || b; if (r) return 1; return 0; }
+Chk("var_or_T", P1(false,true), 1); Chk("var_or_F", P1(false,false), 0);
+
+if (fail == 0) print("LOGIC TESTS: ALL PASS");
+else print("LOGIC TESTS: " .. fail .. " FAILURES");

@@ -1,0 +1,83 @@
+// foreach 를 break/return 으로 조기 탈출한 뒤에도 다음 foreach 가 처음부터 순회해야 한다.
+//
+// 회귀 배경: ForEach 런타임은 숨은 반복자 슬롯이 VAR_ITERATOR 인지로 "순회 시작/계속"을
+// 판별한다. 조기 탈출 시 그 슬롯이 VAR_ITERATOR 인 채 남는데, 로컬 슬롯은 호출 간에
+// 정리되지 않으므로 같은 슬롯 번호를 쓰는 다음 foreach 가 남은 offset 부터 이어가 버렸다.
+// 증상은 "같은 함수를 같은 인자로 불렀는데 매번 다른 값" 이고 에러도 나지 않았다.
+var f = 0;
+fun Chk(var n, var got, var want) { if (got != want) { print("FAIL " .. n .. " got=" .. got .. " want=" .. want); f++; } }
+
+// --- 문자열: return 으로 조기 탈출 ---
+fun StrRet(var s, var idx) { var k = 0; foreach (var c in s) { if (k == idx) { return c; } k++; } return "?"; }
+Chk("str_ret_0",      StrRet("abc", 0), "a");
+Chk("str_ret_1",      StrRet("abc", 1), "b");
+Chk("str_ret_2",      StrRet("abc", 2), "c");
+// 같은 인자로 반복 호출해도 항상 같은 값이어야 한다(핵심 회귀).
+Chk("str_ret_rep1",   StrRet("abc", 1), "b");
+Chk("str_ret_rep2",   StrRet("abc", 1), "b");
+Chk("str_ret_rep3",   StrRet("abc", 1), "b");
+Chk("str_ret_none",   StrRet("abc", 9), "?");
+Chk("str_ret_after",  StrRet("abc", 0), "a");
+
+// --- 문자열: break 로 조기 탈출 ---
+fun StrBrk(var s, var idx) { var k = 0; var r = "?"; foreach (var c in s) { if (k == idx) { r = c; break; } k++; } return r; }
+Chk("str_brk_0",    StrBrk("abc", 0), "a");
+Chk("str_brk_1",    StrBrk("abc", 1), "b");
+Chk("str_brk_rep",  StrBrk("abc", 1), "b");
+Chk("str_brk_2",    StrBrk("abc", 2), "c");
+Chk("str_brk_rep2", StrBrk("abc", 2), "c");
+
+// --- 리스트 ---
+fun LstRet(var l, var idx) { var k = 0; foreach (var v in l) { if (k == idx) { return v; } k++; } return -1; }
+Chk("lst_ret_0",   LstRet([10,20,30], 0), 10);
+Chk("lst_ret_1",   LstRet([10,20,30], 1), 20);
+Chk("lst_ret_rep", LstRet([10,20,30], 1), 20);
+Chk("lst_ret_2",   LstRet([10,20,30], 2), 30);
+Chk("lst_ret_rep2",LstRet([10,20,30], 2), 30);
+Chk("lst_ret_none",LstRet([10,20,30], 9), -1);
+
+fun LstBrk(var l, var idx) { var k = 0; var r = -1; foreach (var v in l) { if (k == idx) { r = v; break; } k++; } return r; }
+Chk("lst_brk_1",   LstBrk([10,20,30], 1), 20);
+Chk("lst_brk_rep", LstBrk([10,20,30], 1), 20);
+
+// --- 맵 ---
+fun MapCount(var m) { var n = 0; foreach (var k, v in m) { n++; } return n; }
+fun MapFirstBrk(var m) { var n = 0; foreach (var k, v in m) { n++; break; } return n; }
+var mp = {"a":1, "b":2, "c":3};
+Chk("map_brk_1",    MapFirstBrk(mp), 1);
+Chk("map_brk_rep",  MapFirstBrk(mp), 1);
+Chk("map_full",     MapCount(mp), 3);
+Chk("map_full_rep", MapCount(mp), 3);
+
+// --- 조기 탈출 뒤 전체 순회가 온전한지 ---
+fun StrAll(var s) { var out = ""; foreach (var c in s) { out = out .. c; } return out; }
+Chk("all_1", StrAll("abc"), "abc");
+Chk("all_after_ret", StrRet("abc", 0), "a");
+Chk("all_2", StrAll("abc"), "abc");
+
+// --- 중첩 foreach: 안쪽이 조기 탈출해도 바깥이 온전해야 한다 ---
+fun Nested(var s)
+{
+	var out = "";
+	foreach (var a in s)
+	{
+		foreach (var b in s) { out = out .. a .. b; break; }
+	}
+	return out;
+}
+Chk("nested_inner_break", Nested("ab"), "aaba");
+Chk("nested_repeat",      Nested("ab"), "aaba");
+
+// --- 같은 함수 안에서 foreach 를 두 번 (슬롯 재사용 확인) ---
+fun TwoLoops(var s)
+{
+	var first = "?";
+	foreach (var a in s) { first = a; break; }
+	var rest = "";
+	foreach (var b in s) { rest = rest .. b; }
+	return first .. "|" .. rest;
+}
+Chk("two_loops",     TwoLoops("abc"), "a|abc");
+Chk("two_loops_rep", TwoLoops("abc"), "a|abc");
+
+if (f == 0) print("FOREACH EARLY EXIT TESTS: ALL PASS"); else print("FOREACH EARLY EXIT: " .. f .. " FAIL");

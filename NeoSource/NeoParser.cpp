@@ -1684,9 +1684,15 @@ TK_TYPE ParseListDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs,
 
 		tkType1 = ParseShortCircuitLogic(false, iTempOffsetValue, ar, funs, vars, TK_COMMA, TK_R_ARRAY, TK_NONE, TK_NONE);
 
-		if (iTempOffsetValue.IsNone() == true)
+		// 여기까지 왔으면 원소가 하나 있어야 한다(빈 리스트와 마지막 쉼표는 위에서 이미 걸렀다).
+		// 그런데 값 없이 돌아오면, 예전에는 조용히 break 해서 원소를 버리고 남은 토큰까지
+		// 소비하지 않은 채 빠져나갔다. 그러면 상위 파서가 어긋나 "에러 메시지 없는 컴파일 실패"가
+		// 된다. 원인을 볼 수 있도록 반드시 에러로 남긴다.
+		// 하위 파싱이 실패해도(TK_NONE) 사유가 안 남는 경로가 있었다. 반드시 남기고 전파한다.
+		if (tkType1 == TK_NONE || iTempOffsetValue.IsInvalidValue() || iTempOffsetValue.IsNone())
 		{
-			break;
+			SetParserCompileError(ar, PCE_EXPECTED_EXPRESSION);
+			return TK_NONE;
 		}
 #if 0
 		if (IsShort(iItemCount))
@@ -1780,9 +1786,11 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 
 		tkType1 = ParseShortCircuitLogic(false, iTempOffsetKey, ar, funs, vars, TK_COLON, TK_COMMA, TK_R_MIDDLE, TK_NONE);
 
-		if (iTempOffsetKey.IsNone() == true)
+		// 리스트 리터럴과 같은 이유로 침묵 break 를 없앤다(위 ParseListDef 주석 참고).
+		if (tkType1 == TK_NONE || iTempOffsetKey.IsInvalidValue() || iTempOffsetKey.IsNone())
 		{
-			break;
+			SetParserCompileError(ar, PCE_EXPECTED_EXPRESSION);
+			return TK_NONE;
 		}
 
 		if (tkType1 == TK_COLON)
@@ -1790,6 +1798,14 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 			tkType2 = ParseShortCircuitLogic(false, iTempOffsetValue, ar, funs, vars, TK_COMMA, TK_R_MIDDLE, TK_NONE, TK_NONE);
 			if (tkType2 == TK_NONE)
 			{
+				return TK_NONE;
+			}
+			// ':' 뒤에 식이 없으면 INVALID_ERROR_PARSEJOB(-1)가 그대로 남는다.
+			// 이를 코드 생성까지 통과시키면 잘못된 operand를 참조하게 되므로, 키와
+			// 동일하게 이 지점에서 문법 오류로 확정한다.
+			if (iTempOffsetValue.IsInvalidValue() || iTempOffsetValue.IsNone())
+			{
+				SetParserCompileError(ar, PCE_EXPECTED_EXPRESSION);
 				return TK_NONE;
 			}
 			if (iTempOffsetValue.IsFun())
@@ -2452,6 +2468,9 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			ar._iTableDeep++;
 			r = ParseTableDef(iTempOffset, ar, funs, vars);
 			ar._iTableDeep--;
+			// 실패를 무시하고 계속 진행하면 사유 없는 컴파일 실패로 이어진다.
+			if (r == TK_NONE)
+				return TK_NONE;
 			operands.push_back(iTempOffset);
 			blApperOperator = true;
 			blEnd = true;
@@ -2461,6 +2480,8 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			ar._iTableDeep++;
 			r = ParseListDef(iTempOffset, ar, funs, vars);
 			ar._iTableDeep--;
+			if (r == TK_NONE)
+				return TK_NONE;
 			operands.push_back(iTempOffset);
 			blApperOperator = true;
 			blEnd = true;
@@ -2484,10 +2505,14 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		case TK_TOFLOAT:
 		case TK_TOSIZE:
 		case TK_GETTYPE:
-			iTempOffset = INVALID_ERROR_PARSEJOB;
+			// iTempOffset 에 -1 을 대입하면 SOperand(int) 생성자가 _operandType 을 Data_None 으로
+			// 잡아버린다. ParseToType 은 _iVar 만 채우므로 그 표시가 남아, 값은 멀쩡한데
+			// "값 없음" 으로 보이는 피연산자가 만들어진다(리스트 리터럴이 원소를 버리는 원인).
+			// TK_TRUE/TK_FALSE 처럼 결과 int 로 SOperand 를 새로 만든다.
+			iTempOffset.Reset();
 			if (false == ParseToType(iTempOffset._iVar, tkType1, ar, funs, vars))
 				return TK_NONE;
-			operands.push_back(SOperand(iTempOffset));
+			operands.push_back(SOperand(iTempOffset._iVar));
 			blApperOperator = true;
 			break;
 		case TK_PLUS2: // ++

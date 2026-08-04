@@ -1,0 +1,226 @@
+// map / set 자료구조 검증.
+// 조밀 노드배열 + 개방주소 인덱스테이블로 재작성한 뒤의 회귀 방지용이다.
+// 특히 삭제(툼스톤) · 재해시 · 순회를 집중적으로 본다.
+import system;
+
+var f = 0;
+fun Chk(var n, var got, var want) { if (got != want) { print("FAIL " .. n .. " got=" .. got .. " want=" .. want); f++; } }
+
+// --- 기본 삽입/조회 ---
+var m = { "a" : 1, "b" : 2, "c" : 3 };
+Chk("basic_a", m["a"], 1);
+Chk("basic_c", m["c"], 3);
+Chk("basic_len", m.len(), 3);
+
+// --- 덮어쓰기는 개수를 늘리지 않는다 ---
+m["a"] = 100;
+Chk("overwrite_val", m["a"], 100);
+Chk("overwrite_len", m.len(), 3);
+
+// --- 없는 키 ---
+Chk("missing", m["zzz"], null);
+
+// --- 나중 추가 ---
+m["d"] = 4;
+Chk("add_d", m["d"], 4);
+Chk("add_len", m.len(), 4);
+
+// --- 삭제 후 개수/조회 ---
+m["b"] = null;                 // null 대입 = 삭제
+Chk("del_len", m.len(), 3);
+Chk("del_gone", m["b"], null);
+Chk("del_others_a", m["a"], 100);
+Chk("del_others_c", m["c"], 3);
+Chk("del_others_d", m["d"], 4);
+
+// --- 삭제한 자리에 다시 넣기(툼스톤 재사용) ---
+m["b"] = 22;
+Chk("readd_val", m["b"], 22);
+Chk("readd_len", m.len(), 4);
+
+// --- 삭제/재삽입 반복: 툼스톤이 쌓여도 정상이어야 한다 ---
+fun Churn(var times)
+{
+	var t = {};
+	t["keep"] = 7;
+	for (var i in 0, times)
+	{
+		t["tmp"] = i;
+		t["tmp"] = null;
+	}
+	if (t["keep"] != 7) return -1;
+	if (t.len() != 1) return -2;
+	t["tmp"] = 999;
+	if (t["tmp"] != 999) return -3;
+	return t.len();
+}
+Chk("churn_100", Churn(100), 2);
+Chk("churn_1000", Churn(1000), 2);
+
+// --- 재해시(성장): 초기 용량을 훨씬 넘겨 넣고 전부 되읽기 ---
+fun GrowMap(var n)
+{
+	var t = {};
+	for (var i in 0, n) t["k" .. i] = i * 3;
+	var bad = 0;
+	for (var i in 0, n) { if (t["k" .. i] != i * 3) bad++; }
+	if (t.len() != n) bad = bad + 10000;
+    return bad;
+}
+Chk("grow_10", GrowMap(10), 0);
+Chk("grow_100", GrowMap(100), 0);
+Chk("grow_5000", GrowMap(5000), 0);
+
+// --- 성장 도중 삭제가 섞여도 정확한지 (홀수 키만 남긴다) ---
+fun GrowDelete(var n)
+{
+	var t = {};
+	for (var i in 0, n) t["k" .. i] = i;
+	for (var i in 0, n) { if (i % 2 == 0) t["k" .. i] = null; }
+	var bad = 0;
+	for (var i in 0, n)
+	{
+		if (i % 2 == 0) { if (t["k" .. i] != null) bad++; }
+		else            { if (t["k" .. i] != i) bad++; }
+	}
+	if (t.len() != n / 2) bad = bad + 10000;
+	return bad;
+}
+Chk("growdel_1000", GrowDelete(1000), 0);
+
+// --- 삭제 뒤 더 넣어서 재해시를 유발(죽은 노드 압축 경로) ---
+fun DeleteThenGrow(var n)
+{
+	var t = {};
+	for (var i in 0, n) t["a" .. i] = i;
+	for (var i in 0, n) t["a" .. i] = null;
+	if (t.len() != 0) return -1;
+	for (var i in 0, n) t["b" .. i] = i * 2;
+	var bad = 0;
+	for (var i in 0, n) { if (t["b" .. i] != i * 2) bad++; }
+	for (var i in 0, n) { if (t["a" .. i] != null) bad++; }
+	if (t.len() != n) bad = bad + 10000;
+	return bad;
+}
+Chk("del_then_grow", DeleteThenGrow(500), 0);
+
+// --- 키 타입 다양성 ---
+var mk = {};
+mk[1] = "int1";
+mk[2] = "int2";
+mk["1"] = "str1";       // 문자열 "1" 은 정수 1 과 다른 키다
+mk[true] = "bool";
+mk[1.5] = "float";
+Chk("key_int", mk[1], "int1");
+Chk("key_str", mk["1"], "str1");
+Chk("key_bool", mk[true], "bool");
+Chk("key_float", mk[1.5], "float");
+Chk("key_count", mk.len(), 5);
+
+// --- 순회: 개수와 합계 ---
+fun SumMap(var t)
+{
+	var s = 0;
+	foreach (var k, v in t) s += v;
+	return s;
+}
+fun CountMap(var t)
+{
+	var c = 0;
+	foreach (var k, v in t) c++;
+	return c;
+}
+var ms = { "p" : 10, "q" : 20, "r" : 30 };
+Chk("iter_sum", SumMap(ms), 60);
+Chk("iter_count", CountMap(ms), 3);
+
+// --- 삭제 뒤 순회가 죽은 항목을 건너뛰는지 ---
+ms["q"] = null;
+Chk("iter_sum_after_del", SumMap(ms), 40);
+Chk("iter_count_after_del", CountMap(ms), 2);
+
+// --- 순회 순서는 보장하지 않는다. 순서와 무관하게 "전부 정확히 한 번" 나오는지만 본다. ---
+fun OrderLen(var t)
+{
+	var s = "";
+	foreach (var k, v in t) s = s .. k;
+	return s.len();
+}
+var mo = {};
+mo["z"] = 1; mo["y"] = 2; mo["x"] = 3; mo["w"] = 4;
+Chk("iter_all_keys", OrderLen(mo), 4);
+mo["y"] = null;                       // 가운데 삭제
+Chk("iter_after_del", OrderLen(mo), 3);
+mo["y"] = 9;                          // 다시 넣기
+Chk("iter_readd", OrderLen(mo), 4);
+
+// --- keys() / values() ---
+var mkv = {};
+mkv["a"] = 1; mkv["b"] = 2; mkv["c"] = 3;
+var mkKeys = mkv.keys();
+var mkVals = mkv.values();
+Chk("keys_len", mkKeys.len(), 3);
+Chk("values_len", mkVals.len(), 3);
+fun SumList(var l)
+{
+	var s = 0;
+	for (var i in 0, l.len()) s += l[i];
+	return s;
+}
+Chk("values_sum", SumList(mkVals), 6);
+mkv["b"] = null;
+var mkKeys2 = mkv.keys();
+var mkVals2 = mkv.values();
+Chk("keys_len_after_del", mkKeys2.len(), 2);
+Chk("values_sum_after_del", SumList(mkVals2), 4);
+
+// --- 중첩 맵 ---
+var nest = {};
+nest["inner"] = { "deep" : 42 };
+Chk("nested", nest["inner"]["deep"], 42);
+nest["inner"]["deep2"] = 43;
+Chk("nested_add", nest["inner"]["deep2"], 43);
+
+// ===================== SET =====================
+fun SetCount(var s)
+{
+	var c = 0;
+	foreach (var v in s) c++;
+	return c;
+}
+fun SetSum(var s)
+{
+	var t = 0;
+	foreach (var v in s) t += v;
+	return t;
+}
+
+var s1 = system.set([2, 4, 5, 8]);
+var s2 = system.set([1, 4, 5, 7]);
+Chk("set_count", SetCount(s1), 4);
+Chk("set_sum", SetSum(s1), 19);
+
+Chk("set_and_count", SetCount(s1 & s2), 2);      // 4,5
+Chk("set_and_sum", SetSum(s1 & s2), 9);
+Chk("set_or_count", SetCount(s1 | s2), 6);       // 2,4,5,8,1,7
+Chk("set_or_sum", SetSum(s1 | s2), 27);
+Chk("set_sub_count", SetCount(s1 - s2), 2);      // 2,8
+Chk("set_sub_sum", SetSum(s1 - s2), 10);
+
+// 중복 입력은 하나로 접힌다
+Chk("set_dedup", SetCount(system.set([3, 3, 3, 7])), 2);
+
+// 문자열 원소
+var ss = system.set(["aa", "bb", "aa", "cc"]);
+Chk("set_str_count", SetCount(ss), 3);
+
+// 큰 집합(재해시)
+fun BigSet(var n)
+{
+	var l = [];
+	for (var i in 0, n) l.append(i);
+	return SetCount(system.set(l));
+}
+Chk("set_grow_1000", BigSet(1000), 1000);
+
+if (f == 0) print("MAP/SET TESTS: ALL PASS"); else print("MAP/SET: " .. f .. " FAIL");
