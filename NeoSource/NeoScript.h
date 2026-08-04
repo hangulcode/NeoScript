@@ -309,6 +309,7 @@ public:
     void        retString(StringView v);
     void        retVec2(float x, float y);
     void        retVec3(float x, float y, float z);
+    void        retVec4(float x, float y, float z, float w);
     // [전이용] 다른 인스턴스의 export 전역변수를 현재 반환값으로(임의 타입). 구 GetExport 의 크로스워커
     // ReturnValue(otherWorker->GetVar(name)) 재현. 미존재면 None. GameObject.GetExport 전용.
     void        retInstanceGlobal(InstanceHandle instance, StringView name);
