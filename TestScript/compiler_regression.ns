@@ -645,7 +645,8 @@ fun TestVectorValueTypes()
     Check(normalized == math.Vector3(0.0, 1.0, 0.0), __LINE__);
 
     var q = math.Quaternion(1.0, 0.0, 0.0, 0.0);
-    Check(type(q) == "Quaternion" && q[0] == 1.0 && q[3] == 0.0, __LINE__);
+    // 쿼터니언은 별도 타입이 아니다 — 4성분 벡터이며 wxyz 해석은 사용자 규약이다.
+    Check(type(q) == "Vector4" && q[0] == 1.0 && q[3] == 0.0, __LINE__);
     Check(math.RotateVectorByQuat(q, a) == a, __LINE__);
 }
 
