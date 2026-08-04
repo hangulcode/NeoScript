@@ -509,4 +509,7 @@ public:
 };
 
 extern std::string GetDataType(VAR_TYPE t);
+
+// INeoVMWorker 인라인 정의. 호출하는 모든 TU 에 정의가 보여야 한다(파일 상단 주석 참고).
+#include "NeoVMWorker_Var.inl"
 };

@@ -57,7 +57,9 @@ struct SUtf8One
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline
 #elif defined(__GNUC__) && __GNUC__ >= 4 && defined(NDEBUG)
-#define NEOS_FORCEINLINE __attribute__((always_inline))
+// always_inline 만으로는 inline 이 아니다. 헤더에 정의가 들어가면 TU 마다 실체가 생겨
+// 중복 정의로 링크가 깨지므로 inline 을 반드시 함께 붙인다.
+#define NEOS_FORCEINLINE inline __attribute__((always_inline))
 #else
 #define NEOS_FORCEINLINE inline
 #endif

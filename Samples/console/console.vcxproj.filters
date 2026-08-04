@@ -55,6 +55,15 @@
     <ClCompile Include="..\..\NeoSource\NeoVMImpl.cpp">
       <Filter>NeoScript</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\NeoSource\NeoScriptShim.cpp">
+      <Filter>NeoScript</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\NeoSource\NeoVMProgram.cpp">
+      <Filter>NeoScript</Filter>
+    </ClCompile>
+    <ClCompile Include="neov2_smoke.cpp">
+      <Filter>Samples</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\NeoSource\Neo.h">
@@ -114,11 +123,19 @@
     <ClInclude Include="..\..\NeoSource\NeoQueue.h">
       <Filter>NeoScript</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoConfig.h" />
     <ClInclude Include="..\..\NeoSource\NeoVMHash.h">
       <Filter>NeoScript</Filter>
     </ClInclude>
     <ClInclude Include="..\..\NeoSource\NeoVMInternal.h">
+      <Filter>NeoScript</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\NeoSource\NeoConfig.h">
+      <Filter>NeoScript</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\NeoSource\NeoScript.h">
+      <Filter>NeoScript</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\NeoSource\NeoVMProgram.h">
       <Filter>NeoScript</Filter>
     </ClInclude>
   </ItemGroup>
