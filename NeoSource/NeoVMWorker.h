@@ -464,7 +464,7 @@ public:
 	void SetErrorFormat(const char* pErrMsg, ...);
 	// 런타임 에러 테이블(NeoVMError.h) 기반. 새 코드는 이쪽을 쓴다.
 	void SetError(ENeoRuntimeError e);
-	void SetErrorFormat(ENeoRuntimeError e, ...);
+	void SetErrorFormat(int error, ...);
 	void SetErrorOperator(const char* op, VarInfo* v1, VarInfo* v2 = nullptr);
 public:
 	CNeoVMWorker(INeoVM* pVM, u32 id, int iStackSize);

@@ -142,7 +142,12 @@ struct PtrPairHash
     {
         std::size_t h1 = std::hash<const void*>()(p.first);
         std::size_t h2 = std::hash<const void*>()(p.second);
-        return h1 ^ (h2 + 0x9e3779b97f4a7c15ULL + (h1 << 6) + (h1 >> 2));
+        // 황금비 상수는 size_t 폭에 맞춘다. 64비트 리터럴을 그대로 쓰면 32비트 빌드에서
+        // 식 전체가 unsigned __int64 로 승격돼 반환 시 잘린다(C4244).
+        const std::size_t kGolden = (sizeof(std::size_t) == 8)
+            ? static_cast<std::size_t>(0x9e3779b97f4a7c15ULL)
+            : static_cast<std::size_t>(0x9e3779b9UL);
+        return h1 ^ (h2 + kGolden + (h1 << 6) + (h1 >> 2));
     }
 };
 

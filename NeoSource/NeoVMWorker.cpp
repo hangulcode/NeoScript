@@ -774,12 +774,12 @@ void CNeoVMWorker::SetError(ENeoRuntimeError e)
 {
 	SetError(g_sNeoRuntimeErrors[e]);
 }
-void CNeoVMWorker::SetErrorFormat(ENeoRuntimeError e, ...)
+void CNeoVMWorker::SetErrorFormat(int error, ...)
 {
 	char buff[1024];
 	va_list ap;
-	va_start(ap, e);
-	vsnprintf(buff, sizeof(buff), g_sNeoRuntimeErrors[e], ap);
+	va_start(ap, error);
+	vsnprintf(buff, sizeof(buff), g_sNeoRuntimeErrors[error], ap);
 	va_end(ap);
 	buff[sizeof(buff) - 1] = '\0';
 	SetError(buff);
