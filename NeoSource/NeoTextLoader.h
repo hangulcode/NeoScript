@@ -3,6 +3,8 @@
 #include "NeoConfig.h"
 #include "NeoVM.h" // NeoCompileDefines (스크립트 const 테이블 소유용)
 #include <cstdint>
+#include <string>
+#include <utility>
 
 namespace NeoScript
 {
@@ -125,7 +127,9 @@ struct SToken
 class CArchiveRdWC
 {
 private:
-	u16 *	m_lpBufStart;
+	// Parser source is always UTF-16 code units.  wchar_t is deliberately not
+	// used here: it is UTF-16 on Windows but usually UTF-32 on Linux.
+	std::u16string m_source;
 	int		m_iOffset;
 	int		m_iSize;
 
@@ -151,29 +155,19 @@ public:
 
 	CArchiveRdWC()
 	{
-		m_lpBufStart = NULL;
 		m_iOffset = 0;
 		m_iSize = 0;
 		m_iCurLine = 1;
 		m_iCurCol = 1;
 	}
-	CArchiveRdWC(u16* pBuffer, int iBufferSize)
+	void SetData(std::u16string source)
 	{
-		m_lpBufStart = (u16*)pBuffer;
+		m_source = std::move(source);
 		m_iOffset = 0;
-		m_iSize = iBufferSize;
+		m_iSize = static_cast<int>(m_source.size());
 		m_iCurLine = 1;
 		m_iCurCol = 1;
 	}
-	void    SetData(u16* pBuffer, int iBufferSize)
-	{
-		m_lpBufStart = (u16*)pBuffer;
-		m_iOffset = 0;
-		m_iSize = iBufferSize;
-		m_iCurLine = 1;
-		m_iCurCol = 1;
-	}
-	u16* GetBuffer() { return m_lpBufStart; }
 
 	inline bool IsEOF()
 	{
@@ -185,7 +179,7 @@ public:
 		if (IsEOF())
 			return 0;
 
-		u16 r = m_lpBufStart[m_iOffset];
+		u16 r = static_cast<u16>(m_source[m_iOffset]);
 		if (offsetMove)
 		{
 			m_iOffset++;
@@ -199,7 +193,7 @@ public:
 		int idx = m_iOffset + ahead;
 		if (idx < 0 || idx >= m_iSize)
 			return 0;
-		return m_lpBufStart[idx];
+		return static_cast<u16>(m_source[idx]);
 	}
 	void AddLine()
 	{

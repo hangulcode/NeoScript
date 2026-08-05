@@ -1,8 +1,5 @@
 ﻿#include <stdarg.h>
 #include <stdio.h>
-#include <locale>
-#include <codecvt>
-#include <stdexcept>
 #include <iostream>
 
 #include "UTFString.h"
@@ -11,75 +8,125 @@
 namespace NeoScript
 {
 
-template<class I, class E, class S>
-struct MyCodecvt : std::codecvt<I, E, S>
+// Source code and string literals must be UTF-8.  A few legacy scripts have
+// CP949 text in comments only; comments carry no script meaning, so discard
+// their non-ASCII bytes before the second UTF-8 decode attempt.  Invalid bytes
+// anywhere else remain a compile error.
+static bool SanitizeLegacyCommentBytes(const char* text, int length, std::string& sanitized)
 {
-	~MyCodecvt()
-	{ }
-};
+	if (text == nullptr || length <= 0)
+		return false;
 
+	sanitized.assign(text, static_cast<size_t>(length));
+	enum class State { Code, SingleQuote, DoubleQuote, LineComment, BlockComment };
+	State state = State::Code;
+	bool changed = false;
+
+	for (int i = 0; i < length; ++i)
+	{
+		const char c = sanitized[i];
+		switch (state)
+		{
+		case State::Code:
+			if (c == '/' && i + 1 < length && sanitized[i + 1] == '/')
+			{
+				state = State::LineComment;
+				++i;
+			}
+			else if (c == '/' && i + 1 < length && sanitized[i + 1] == '*')
+			{
+				state = State::BlockComment;
+				++i;
+			}
+			else if (c == '\'')
+				state = State::SingleQuote;
+			else if (c == '"')
+				state = State::DoubleQuote;
+			break;
+
+		case State::SingleQuote:
+		case State::DoubleQuote:
+			if (c == '\\' && i + 1 < length)
+				++i;
+			else if ((state == State::SingleQuote && c == '\'') || (state == State::DoubleQuote && c == '"'))
+				state = State::Code;
+			break;
+
+		case State::LineComment:
+			if (c == '\r' || c == '\n')
+				state = State::Code;
+			else if (static_cast<u8>(c) >= 0x80)
+			{
+				sanitized[i] = ' ';
+				changed = true;
+			}
+			break;
+
+		case State::BlockComment:
+			if (c == '*' && i + 1 < length && sanitized[i + 1] == '/')
+			{
+				state = State::Code;
+				++i;
+			}
+			else if (static_cast<u8>(c) >= 0x80)
+			{
+				sanitized[i] = ' ';
+				changed = true;
+			}
+			break;
+		}
+	}
+	return changed;
+}
 
 bool		ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar)
 {
-	if (iBufferSize < 3)
+	if (iBufferSize < 0 || (pBuffer == nullptr && iBufferSize != 0))
 		return false;
 
-	u16* pWBuffer;
-	int size_toUni;
-	if ((*(u16*)pBuffer) == FILE_UNICODE_HEADER_LE) // Little Endian
-	{
-		size_toUni = iBufferSize / 2 - 1;
-		pWBuffer = new u16[size_toUni + 1];
-		memcpy(pWBuffer, (u16*)(pBuffer + 2), size_toUni * 2);
-		pWBuffer[size_toUni] = 0;
-		ar.SetData(pWBuffer, size_toUni);
-	}
-	else if ((*(u16*)pBuffer) == FILE_UNICODE_HEADER_BE) // Big Endian
-	{
-		size_toUni = iBufferSize / 2 - 1;
-		pWBuffer = new u16[size_toUni + 1];
+	const u8* bytes = reinterpret_cast<const u8*>(pBuffer);
+	std::u16string source;
 
-		u8* pSrc = (u8*)(pBuffer + 2);
-		u8* pDest = (u8*)pWBuffer;
-		for (int i = 0; i < size_toUni; i++)
-		{
-			*pDest++ = pSrc[1];
-			*pDest++ = pSrc[0];
-			pSrc += 2;
-		}
-		pWBuffer[size_toUni] = 0;
-		ar.SetData(pWBuffer, size_toUni);
+	// Detect BOMs as bytes.  Casting an arbitrary char buffer to u16* is
+	// unaligned/aliasing-unsafe on several Linux targets.
+	if (iBufferSize >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE) // UTF-16 LE
+	{
+		const int payloadSize = iBufferSize - 2;
+		if ((payloadSize & 1) != 0)
+			return false;
+
+		source.resize(static_cast<size_t>(payloadSize / 2));
+		for (size_t i = 0; i < source.size(); ++i)
+			source[i] = static_cast<char16_t>(bytes[2 + i * 2] | (static_cast<u16>(bytes[3 + i * 2]) << 8));
+	}
+	else if (iBufferSize >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF) // UTF-16 BE
+	{
+		const int payloadSize = iBufferSize - 2;
+		if ((payloadSize & 1) != 0)
+			return false;
+
+		source.resize(static_cast<size_t>(payloadSize / 2));
+		for (size_t i = 0; i < source.size(); ++i)
+			source[i] = static_cast<char16_t>((static_cast<u16>(bytes[2 + i * 2]) << 8) | bytes[3 + i * 2]);
 	}
 	else
 	{
-		std::wstring str;
-		if ((*(u16*)pBuffer) == FILE_UTF8_HEADER && *(u8*)(pBuffer + 2) == FILE_UTF8_SUB)
+		// Neo Script source is UTF-8 whether or not an editor wrote a BOM.
+		const int bomSize = (iBufferSize >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF) ? 3 : 0;
+		const char* utf8 = pBuffer == nullptr ? nullptr : pBuffer + bomSize;
+		if (utf_string::UTF8_UNICODE(utf8, iBufferSize - bomSize, source) < 0)
 		{
-			utf_string::UTF8_UNICODE(pBuffer + 3, iBufferSize - 3, str);
-			size_toUni = (int)str.length();
-			pWBuffer = new u16[str.length() + 1];
-			memcpy(pWBuffer, (u16*)(str.c_str()), size_toUni * 2);
-			pWBuffer[size_toUni] = 0;
-			ar.SetData(pWBuffer, (int)str.length());
-		}
-		else
-		{
-			// Neo Script source is UTF-8 whether or not an editor wrote a BOM.
-			// The old locale-dependent conversion decoded BOM-less UTF-8 as bytes.
-			std::wstring wstr;
-			utf_string::UTF8_UNICODE(pBuffer, iBufferSize, wstr);
-			size_toUni = (int)wstr.length();
-			pWBuffer = new u16[size_toUni + 1];
-			memcpy(pWBuffer, wstr.c_str(), sizeof(u16) * (size_toUni));
-
-			//int size_toUni = ::MultiByteToWideChar(CP_ACP, 0, pBuffer, iBufferSize, NULL, 0);
-			//pWBuffer = new u16[size_toUni + 1];
-
-			//::MultiByteToWideChar(CP_ACP, 0, pBuffer, iBufferSize, (u16*)str.c_str(), size_toUni);
-			pWBuffer[size_toUni] = 0;
-			ar.SetData(pWBuffer, size_toUni);
+			std::string sanitized;
+			if (!SanitizeLegacyCommentBytes(utf8, iBufferSize - bomSize, sanitized) ||
+				utf_string::UTF8_UNICODE(sanitized.data(), static_cast<int>(sanitized.size()), source) < 0)
+				return false;
 		}
 	}
+
+	if (!utf_string::IsValidUTF16(source))
+		return false;
+
+	ar.SetData(std::move(source));
 	return true;
 }
 

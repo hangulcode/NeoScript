@@ -44,7 +44,9 @@ struct debug_info
 };
 struct SUtf8One
 {
-	char c[4];
+	// Longest UTF-8 sequence is four bytes, plus the terminating NUL used by
+	// UTF8_ONE().
+	char c[5];
 };
 #pragma pack()
 

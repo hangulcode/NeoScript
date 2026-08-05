@@ -109,6 +109,58 @@ int NeoScriptV2Smoke()
     rt->RegisterObject(ed);
     rt->FreezeBindings();
 
+    // UTF-8 source must produce the same UTF-16 parser input on Windows and
+    // Linux. Keep the bytes escaped so this test does not depend on the C++
+    // source-file code page.
+    const char* unicodeText = "\xED\x95\x9C\xEA\xB8\x80 \xF0\x9F\x98\x80"; // 한글 😀
+    const char* unicodeSource =
+        "export fun unicodeText() { return \""
+        "\xED\x95\x9C\xEA\xB8\x80 \xF0\x9F\x98\x80"
+        "\"; }\n";
+    CompileDesc unicodeDesc;
+    unicodeDesc.source = unicodeSource;
+    unicodeDesc.sourceName = "utf8_unicode_smoke.ns";
+    CompileResult unicodeProgram = rt->Compile(unicodeDesc);
+    Check(static_cast<bool>(unicodeProgram.program), "UTF-8 Korean/emoji source compiles");
+    if (unicodeProgram.program)
+    {
+        InstanceHandle unicodeInstance = rt->CreateInstance(unicodeProgram.program);
+        Invocation unicodeCall = rt->Call(unicodeInstance, "unicodeText");
+        Check(unicodeCall.invoke() == RunStatus::Completed && Eq(unicodeCall.retString(), unicodeText),
+            "UTF-8 Korean/emoji source round-trips through parser");
+        rt->DestroyInstance(unicodeInstance);
+        rt->DestroyProgram(unicodeProgram.program);
+    }
+
+    // Legacy CP949 comments have no script meaning and may be ignored, but
+    // the same invalid bytes in a string literal must still be rejected.
+    const char* legacyCommentSource =
+        "// \xB0\xA1\n"
+        "export fun legacyComment() { return 7; }\n";
+    CompileDesc legacyCommentDesc;
+    legacyCommentDesc.source = legacyCommentSource;
+    legacyCommentDesc.sourceName = "legacy_comment_smoke.ns";
+    CompileResult legacyCommentProgram = rt->Compile(legacyCommentDesc);
+    Check(static_cast<bool>(legacyCommentProgram.program), "legacy non-UTF-8 comment is ignored");
+    if (legacyCommentProgram.program)
+    {
+        InstanceHandle legacyCommentInstance = rt->CreateInstance(legacyCommentProgram.program);
+        Invocation legacyCommentCall = rt->Call(legacyCommentInstance, "legacyComment");
+        Check(legacyCommentCall.invoke() == RunStatus::Completed && legacyCommentCall.retInt() == 7,
+            "legacy non-UTF-8 comment does not alter script execution");
+        rt->DestroyInstance(legacyCommentInstance);
+        rt->DestroyProgram(legacyCommentProgram.program);
+    }
+
+    const char* invalidStringSource = "export fun invalidText() { return \"\xB0\xA1\"; }\n";
+    CompileDesc invalidStringDesc;
+    invalidStringDesc.source = invalidStringSource;
+    invalidStringDesc.sourceName = "invalid_encoding_smoke.ns";
+    CompileResult invalidStringProgram = rt->Compile(invalidStringDesc);
+    Check(!invalidStringProgram.program, "non-UTF-8 string literal is rejected");
+    if (invalidStringProgram.program)
+        rt->DestroyProgram(invalidStringProgram.program);
+
     const char* src =
         "export fun compute(var a, var b)\n"        // 1
         "{\n"                                        // 2

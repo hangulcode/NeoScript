@@ -684,8 +684,19 @@ bool GetQuotationString(CArchiveRdWC& ar, std::string& str, u16 quote)
 			}
 		}
 
-		//str.push_back((char)c1);
-		utf_string::UNICODE_UTF8_ONE(c1, str);
+		if (c1 >= 0xD800 && c1 <= 0xDBFF)
+		{
+			const u16 c2 = ar.GetData(false);
+			if (c2 < 0xDC00 || c2 > 0xDFFF)
+				return false;
+			ar.GetData(true);
+			if (utf_string::UNICODE_UTF8_PAIR(c1, c2, str) < 0)
+				return false;
+		}
+		else if (utf_string::UNICODE_UTF8_ONE(c1, str) < 0)
+		{
+			return false;
+		}
 	}
 	return true;
 }
@@ -1137,7 +1148,14 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 
 	CArchiveRdWC ar2;
-	ToArchiveRdWC((const char*)pFileBuffer, iFileLen, ar2);
+	const bool decoded = ToArchiveRdWC((const char*)pFileBuffer, iFileLen, ar2);
+	if (ar.m_pLoader)
+		ar.m_pLoader->Unload(fullFileName.c_str(), pFileBuffer, iFileLen);
+	if (!decoded)
+	{
+		SetParserCompileError(ar, PCE_IMPORT_FAILED, fileName.c_str());
+		return false;
+	}
 	ar2._allowGlobalInitLogic = ar._allowGlobalInitLogic;
 	ar2._debug = ar._debug;
 	ar2.m_pDefines = ar.m_pDefines;
@@ -1162,10 +1180,6 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	vars.m_sImports[fileName] = funs._curModule;
 	pLayerBackup->_defModules[defName] = funs._curModule;
 	funs._curModule = pLayerBackup;
-
-	u16* pBuffer = ar2.GetBuffer();
-	if(ar.m_pLoader)
-		ar.m_pLoader->Unload(fullFileName.c_str(), pBuffer, iFileLen);
 
 	ar.m_sErrorString = ar2.m_sErrorString;
 	return r;
@@ -5122,15 +5136,17 @@ bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
 		ar2.m_pDebugSourceFiles = param.debugSourceFiles;
 	}
 
-	ToArchiveRdWC((const char*)param.pBufferSrc, param.iLenSrc, ar2); // memory alloc
+	if (!ToArchiveRdWC((const char*)param.pBufferSrc, param.iLenSrc, ar2))
+	{
+		if (param.err)
+			*(param.err) = "Invalid script source encoding (expected UTF-8 or BOM-marked UTF-16)";
+		return false;
+	}
 
 
 	bool b = Parse(ar2, arw, param.putASM);
 	if(b == false && param.err)
 		*(param.err) = ar2.m_sErrorString;
-
-	u16* pBuffer = ar2.GetBuffer();
-	if (pBuffer) delete[] pBuffer;
 
 	return b;
 }

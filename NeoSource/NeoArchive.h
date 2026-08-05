@@ -1,6 +1,7 @@
 ﻿#pragma once 
 
 #include "NeoConfig.h"
+#include <string>
 
 namespace NeoScript
 {
@@ -180,13 +181,17 @@ public:
 
 		return *this;
 	}
-	CNArchive& operator << (const wchar_t* lpszString)
+	CNArchive& operator << (const char16_t* lpszString)
 	{
-		std::wstring str = lpszString;
+		std::u16string str = lpszString ? lpszString : u"";
 		*this << str;
 
 		return *this;
 	}
+	// wchar_t has a platform-dependent width.  Do not let the generic template
+	// serialize a pointer/std::wstring object by mistake after moving to UTF-16.
+	CNArchive& operator << (const wchar_t*) = delete;
+	CNArchive& operator << (const std::wstring&) = delete;
 	CNArchive& operator << (std::string& strString)
 	{
 		int nLen = (int)strString.length();
@@ -195,12 +200,12 @@ public:
 		Write((char*)strString.data(), nLen);
 		return *this;
 	}
-	CNArchive& operator << (std::wstring& strString)
+	CNArchive& operator << (const std::u16string& strString)
 	{
-		int nLen = (int)strString.length();
+		u32 nLen = static_cast<u32>(strString.length());
 		*this << nLen;
 
-		Write((wchar_t*)strString.data(), nLen*sizeof(wchar_t));
+		Write(strString.data(), static_cast<int>(nLen * sizeof(char16_t)));
 		return *this;
 	}
 
