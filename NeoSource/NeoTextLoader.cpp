@@ -452,7 +452,7 @@ void SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...)
 #ifdef _WIN32
 	vsnprintf(buff, _countof(buff), lpszString, arg_ptr);
 #else
-	vsnprintf(buff, 8, lpszString, arg_ptr);
+	vsnprintf(buff, _countof(buff), lpszString, arg_ptr);
 #endif
 	va_end(arg_ptr);
 
@@ -471,7 +471,7 @@ void OutAsm(const char*	lpszString, ...)
 #ifdef _WIN32
 	vsnprintf(buff, _countof(buff), lpszString, arg_ptr);
 #else
-	vsnprintf(buff, 8, lpszString, arg_ptr);
+	vsnprintf(buff, _countof(buff), lpszString, arg_ptr);
 #endif
 	va_end(arg_ptr);
 
