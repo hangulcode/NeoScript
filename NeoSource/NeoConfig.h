@@ -44,9 +44,12 @@ struct debug_info
 };
 struct SUtf8One
 {
-	// Longest UTF-8 sequence is four bytes, plus the terminating NUL used by
-	// UTF8_ONE().
-	char c[5];
+	// UTF-8 최대 시퀀스가 4바이트라 4로 고정한다. 절대 늘리지 말 것 —
+	// 이 구조체는 VarInfo 익명 유니온의 멤버라(NeoVM.h), 5바이트로 넓히면
+	// Win32 에서 유니온이 4->8 로 커지며 VarInfo 가 8->12 바이트가 되고
+	// NeoVM.h 의 static_assert(sizeof(VarInfo)==8) 가 깨져 32비트 빌드가 전부 실패한다.
+	// NUL 종료가 필요하면 쓰는 쪽에서 지역 버퍼로 처리한다.
+	char c[4];
 };
 #pragma pack()
 
