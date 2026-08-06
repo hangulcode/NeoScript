@@ -85,6 +85,9 @@ private:
 
 	bool					_isInitialized = false;
 	int						_iRemainSleep = 0;
+	// sleep 카운트다운 기준 시각. 슬라이스 타임아웃 측정(_preClock)과 반드시 분리해야 한다 —
+	// 같은 변수를 쓰면 실행 루프가 타임아웃용으로 덮어써서 남은 sleep 이 밀린다.
+	std::chrono::steady_clock::time_point _sleepClock;
 	std::chrono::steady_clock::time_point _preClock;
 
 	int m_iTimeout = -1;

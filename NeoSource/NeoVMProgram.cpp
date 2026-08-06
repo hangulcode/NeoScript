@@ -3,11 +3,14 @@
 #include "NeoVMProgram.h"
 #include "NeoVMImpl.h"
 #include "NeoArchive.h"
+#include "NeoTextLoader.h"   // FormatAsm / FormatBytes
+#include <algorithm>
 
 namespace NeoScript
 {
 
 extern u32 GetHashCode(u8* buffer, int len);
+extern std::string GetDataType(VAR_TYPE t);   // NeoVMWorker.cpp
 
 // ---- switch/case 테이블 ----
 // 런타임 key(StringInfo)의 해시와 같은 알고리즘이어야 조회가 일치한다.
@@ -481,6 +484,656 @@ CNeoVMProgram* INeoVM::CreateProgram(const void* pBuffer, int iSize, std::string
 	return CNeoVMProgram::Create(pBuffer, iSize, err);
 }
 
+// ---------------------------------------------------------------------------
+// 어셈블리 표기 (컴파일 리스팅 / 디버거 어셈블리 뷰 공용)
+//
+// opcode 별 표기는 이 파일의 FormatDebugOperation 한 곳에만 있다. 심볼(오퍼랜드 이름,
+// 함수 이름, 점프 라벨)은 컴파일 타임과 런타임이 서로 다른 표에서 오므로 resolver 로 받는다.
+// 예전엔 이 switch 가 NeoExport.cpp 안에 있었고 std::cout 으로 직접 찍었다.
+// ---------------------------------------------------------------------------
+
+// 로드 후 PatchLocalOps 가 만든 _L 변형을 원래 opcode 로 되돌린다.
+// _L 은 "오퍼랜드가 전부 로컬"이라는 실행 최적화 표시일 뿐 의미가 같으므로, 표기도 같아야
+// 한다. 이 정규화가 없으면 런타임 코드의 상당수가 default 로 빠져 빈 줄이 된다
+// (치환 대상이 MOV/ADD/CALL/RETURN 같은 최빈 op 이다 — PatchLocalOps 참조).
+static eNOperation NormalizeLocalOp(eNOperation op, bool* outIsLocal)
+{
+	eNOperation base = op;
+	switch (op)
+	{
+	case NOP_MOV_L:          base = NOP_MOV;          break;
+	case NOP_MOVI_L:         base = NOP_MOVI;         break;
+	case NOP_MOV_MINUS_L:    base = NOP_MOV_MINUS;    break;
+	case NOP_ADD2_L:         base = NOP_ADD2;         break;
+	case NOP_ADD3_L:         base = NOP_ADD3;         break;
+	case NOP_SUB3_L:         base = NOP_SUB3;         break;
+	case NOP_MUL3_L:         base = NOP_MUL3;         break;
+	case NOP_AND_L:          base = NOP_AND;          break;
+	case NOP_JMP_GREAT_L:    base = NOP_JMP_GREAT;    break;
+	case NOP_JMP_GREAT_EQ_L: base = NOP_JMP_GREAT_EQ; break;
+	case NOP_JMP_LESS_L:     base = NOP_JMP_LESS;     break;
+	case NOP_JMP_LESS_EQ_L:  base = NOP_JMP_LESS_EQ;  break;
+	case NOP_JMP_EQUAL2_L:   base = NOP_JMP_EQUAL2;   break;
+	case NOP_JMP_NEQUAL_L:   base = NOP_JMP_NEQUAL;   break;
+	case NOP_STR_ADD_L:      base = NOP_STR_ADD;      break;
+	case NOP_TOINT_L:        base = NOP_TOINT;        break;
+	case NOP_CALL_L:         base = NOP_CALL;         break;
+	case NOP_PTRCALL_L:      base = NOP_PTRCALL;      break;
+	case NOP_PTRCALL2_L:     base = NOP_PTRCALL2;     break;
+	case NOP_RETURN_L:       base = NOP_RETURN;       break;
+	case NOP_CLT_READ_L:     base = NOP_CLT_READ;     break;
+	case NOP_CLT_MOV_L:      base = NOP_CLT_MOV;      break;
+	case NOP_LIST_ALLOC_L:   base = NOP_LIST_ALLOC;   break;
+	case NOP_CHANGE_INT_L:   base = NOP_CHANGE_INT;   break;
+	default: break;
+	}
+	if (outIsLocal != nullptr)
+		*outIsLocal = (base != op);
+	return base;
+}
+
+bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::string& outAssembly,
+	int* outByteCount)
+{
+	outAssembly.clear();
+	if (outByteCount != nullptr)
+		*outByteCount = 0;
+	if (context.operation == nullptr)
+		return false;
+
+	// 원본 switch 가 v 를 쓰고 있어 이름을 유지한다(치환 실수를 줄인다).
+	SVMOperation v = *context.operation;
+	bool isLocalVariant = false;
+	v.op = NormalizeLocalOp((eNOperation)v.op, &isLocalVariant);
+
+	// 원본 WriteFunLog 의 지역 상수 그대로.
+	const int OpFlagByteChars = 2;
+	int byteCount = 0;
+	bool known = true;
+
+	switch (v.op)
+	{
+	case NOP_ADD2:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("ADD  %s += %s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_SUB2:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("SUB  %s -= %s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_MUL2:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("MUL  %s *= %s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_DIV2:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("DIV  %s /= %s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_PERSENT2:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("PER  %s %%%%= %s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_LSHIFT2:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("LSH  %s <<= %s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_RSHIFT2:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("RSH  %s >>= %s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_AND2:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("AND  %s &= %s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_OR2:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("OR   %s |= %s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_XOR2:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("XOR  %s ^= %s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_LOG_NOT:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("NOT  %s = !%s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+
+	case NOP_ADD3:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("ADD  %s = %s + %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_SUB3:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("SUB  %s = %s - %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_MUL3:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("MUL  %s = %s * %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_DIV3:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("DIV  %s = %s / %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_PERSENT3:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("PER  %s = %s %%%% %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_LSHIFT3:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("LSHF  %s = %s << %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_RSHIFT3:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("RSHF  %s = %s >> %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_AND3:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("AND  %s = %s & %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_OR3:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("OR   %s = %s | %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_XOR3:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("XOR  %s = %s ^ %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+
+	case NOP_VAR_CLEAR:
+		byteCount = OpFlagByteChars + 2 * 1;
+		outAssembly = FormatAsm("CLR  %s", context.operand(1).c_str());
+		break;
+	case NOP_INC:
+		byteCount = OpFlagByteChars + 2 * 1;
+		outAssembly = FormatAsm("INC  %s", context.operand(1).c_str());
+		break;
+	case NOP_DEC:
+		byteCount = OpFlagByteChars + 2 * 1;
+		outAssembly = FormatAsm("DEC  %s", context.operand(1).c_str());
+		break;
+
+	case NOP_GREAT:		// >
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("GR   %s = %s > %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_GREAT_EQ:	// >=
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("GE   %s = %s >= %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_LESS:		// <
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("LS   %s = %s < %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_LESS_EQ:	// <=
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("LE   %s = %s <= %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_EQUAL2:	// ==
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("EQ   %s = %s == %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_NEQUAL:	// !=
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("NE   %s = %s != %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_AND:	// &
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("AND  %s = %s & %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_OR:	// |
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("OR   %s = %s | %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_LOG_AND:	// &&
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("AND2 %s = %s && %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_LOG_OR:	// ||
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("NE   %s = %s || %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+
+	case NOP_STR_ADD:	// ..
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("SADD %s = ToStr%s + ToStr%s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+
+	case NOP_JMP:
+		byteCount = OpFlagByteChars + 2 * 1;
+		outAssembly = FormatAsm("JMP  %d%s", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str());
+		break;
+	case NOP_JMP_FALSE:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("JF   %d%s %s is False", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_JMP_TRUE:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("JT   %d%s %s is True", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str());
+		break;
+
+	case NOP_JMP_GREAT:		// >
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("JGR  %d%s,  %s > %s", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_JMP_GREAT_EQ:	// >=
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("JGE  %d%s,  %s >= %s", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_JMP_LESS:		// <
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("JLS  %d%s,  %s < %s", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_JMP_LESS_EQ:	// <=
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("JLE  %d%s,  %s <= %s", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_JMP_EQUAL2:	// ==
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("JEQ  %d%s,  %s == %s", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_JMP_NEQUAL:	// !=
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("JNE  %d%s,  %s != %s", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_JMP_AND:	// &&
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("JAND %d%s,  %s && %s", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_JMP_OR:		// ||
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("JOR  %d%s,  %s || %s", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_JMP_NAND:	// !(&&)
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("JNAND %d%s,  !(%s && %s)", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_JMP_NOR:	// !(||)
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("JNOR %d%s,  !(%s || %s)", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_JMP_FOR:	// for
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("JFOR %d%s,  C[S.%d] < E[S.%d]", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), v.n2, v.n3 + 1);
+		break;
+	case NOP_JMP_FOREACH:	// foreach
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("JFRE %d%s,  T%s, K[S.%d], V[S.%d]", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), v.n3, v.n3+1);
+		break;
+	case NOP_SWITCH:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("SWTC table[%u], key %s", (unsigned)(u16)v.n1, context.operand(2).c_str());
+		break;
+
+	case NOP_TOSTRING:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("ToStr %s = %s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_TOINT:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("ToInt %s = %s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_TOFLOAT:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("ToFlo %s = %s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_TOSIZE:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("ToSize %s = %s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_GETTYPE:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("GetType %s = %s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_SLEEP:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("Sleep %s", context.operand(2).c_str());
+		break;
+
+	case NOP_MOV:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("MOV  %s = %s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_MOVI:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("MOVI %s = %d", context.operand(1).c_str(), v.n23);
+		break;
+	case NOP_MOV_MINUS:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("MOV  %s = -%s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+
+	case NOP_FMOV1:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("MOV  %s = &%s", context.operand(1).c_str(), context.functionShort(v.n2).c_str());
+		break;
+	case NOP_FMOV2:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("MOV  %s.%s = &%s", context.operand(1).c_str(), context.operand(2).c_str(), context.functionShort(v.n3).c_str());
+		break;
+
+	case NOP_PTRCALL:
+		byteCount = OpFlagByteChars + 2 * 3;
+		if(v.n2 != -1)
+			outAssembly = FormatAsm("PCAL %s.%s arg:%d", context.operand(1).c_str(), context.operand(2).c_str(), v.n3);
+		else
+			outAssembly = FormatAsm("PCAL %s arg:%d", context.operand(1).c_str(), v.n3);
+		break;
+	case NOP_PTRCALL2:
+		if (v.argFlag & NEOS_OP_CALL_NORESULT)
+		{
+			byteCount = OpFlagByteChars + 2 * 2;
+			outAssembly = FormatAsm("PCA2 %s arg:%d", context.operand(1).c_str(), v.n2);
+		}
+		else
+		{
+			byteCount = OpFlagByteChars + 2 * 3;
+			outAssembly = FormatAsm("PCA2 %s = %s arg:%d", context.operand(3).c_str(), context.operand(1).c_str(), v.n2);
+		}
+		break;
+	case NOP_NATIVECALL: // 컴파일에 나오지 않고, LoadVM 에서 NOP_PTRCALL2 인경우 System 함수이름을 찾어서 함수 Index 화
+		if (v.argFlag & NEOS_OP_CALL_NORESULT)
+		{
+			byteCount = OpFlagByteChars + 2 * 2;
+			outAssembly = FormatAsm("NCAL native:%d arg:%d", v.n1, v.n2);
+		}
+		else
+		{
+			byteCount = OpFlagByteChars + 2 * 3;
+			outAssembly = FormatAsm("NCAL %s = native:%d arg:%d", context.operand(3).c_str(), v.n1, v.n2);
+		}
+		break;
+	case NOP_CALL:
+		if(v.argFlag & NEOS_OP_CALL_NORESULT)
+		{
+			byteCount = OpFlagByteChars + 2 * 2;
+			outAssembly = FormatAsm("CALL %s arg:%d", context.functionFull(v.n1).c_str(), v.n2);
+		}
+		else
+		{
+			byteCount = OpFlagByteChars + 2 * 3;
+			outAssembly = FormatAsm("CALL %s = %s arg:%d", context.operand(3).c_str(), context.functionFull(v.n1).c_str(), v.n2);
+		}
+		break;
+	case NOP_RETURN:
+		// NORESULT = 값 없는 'return;'. n1(반환값 슬롯)을 쓰지 않으므로 op/flag 2바이트만 덤프한다.
+		if (v.argFlag & NEOS_OP_CALL_NORESULT)
+		{
+			byteCount = OpFlagByteChars;
+			outAssembly = FormatAsm("RET");
+		}
+		else
+		{
+			byteCount = OpFlagByteChars + 2 * 1;
+			outAssembly = FormatAsm("RET  %s", context.operand(1).c_str());
+		}
+		break;
+	//case NOP_FUNEND:
+	//	outAssembly = FormatAsm("- End -");
+	//	break;
+	case NOP_TABLE_ALLOC:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("Table Alloc %s, %d", context.operand(1).c_str(), v.n23);
+		break;
+	case NOP_CLT_MOV:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("MOV  %s.%s = %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+
+	case NOP_TABLE_ADD2:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("TADD %s.%s += %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_TABLE_SUB2:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("TSUB %s.%s -= %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_TABLE_MUL2:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("TMUL %s.%s *= %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_TABLE_DIV2:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("TDIV %s.%s /= %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_TABLE_PERSENT2:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("TPER %s.%s %= %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+
+	case NOP_CLT_READ:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("READ %s = %s.%s", context.operand(3).c_str(), context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_TABLE_REMOVE:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("Table Remove %s.%s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+
+	case NOP_LIST_ALLOC:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("List Alloc %s, %d", context.operand(1).c_str(), v.n23);
+		break;
+	case NOP_LIST_REMOVE:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("List Remove %s.%s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+
+	case NOP_VERIFY_TYPE:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("Verify %s %s", context.operand(1).c_str(), GetDataType((VAR_TYPE)v.n2).c_str());
+		break;
+	case NOP_CHANGE_INT:
+		byteCount = OpFlagByteChars + 2 * 1;
+		outAssembly = FormatAsm("Change Int %s", context.operand(1).c_str());
+		break;
+	case NOP_YIELD:
+		byteCount = OpFlagByteChars + 2 * 2;
+		if(v.n1 == YILED_RETURN)
+			outAssembly = FormatAsm("yield return");
+		else
+			{ outAssembly = FormatAsm("?? yield sub(%d)", v.n1); known = false; }
+		break;
+	case NOP_ERROR:
+		outAssembly = FormatAsm("Begin");
+		break;
+	default:
+		{ outAssembly = FormatAsm("?? op(%d)", (int)v.op); known = false; }
+		break;
+	}
+
+	if (outByteCount != nullptr)
+		*outByteCount = byteCount;
+	// 로컬 전용 변형이었다는 표시. 같은 명령이지만 실행 경로가 다르다는 걸 볼 수 있게 한다.
+	if (isLocalVariant)
+		outAssembly += "  ;L";
+	return known;
+}
+
+// 컴파일 타임 GetValueString(NeoExport.cpp)의 런타임 짝. static 상수 하나를 표기한다.
+// 컴파일 타임은 VarInfo, 런타임은 SStaticConst 라 타입이 달라 본문을 공유할 수 없다.
+static std::string StaticConstToString(const SStaticConst& c)
+{
+	char ch[128] = { 0, };
+	switch (c._type)
+	{
+	case VAR_INT:
+		snprintf(ch, sizeof(ch), "%d", c._int);
+		break;
+	case VAR_FLOAT:
+#ifdef NS_SINGLE_PRECISION
+		snprintf(ch, sizeof(ch), "%f", c._float);
+#else
+		snprintf(ch, sizeof(ch), "%lf", c._float);
+#endif
+		break;
+	case VAR_BOOL:
+		snprintf(ch, sizeof(ch), "'%s'", c._bl ? "true" : "false");
+		break;
+	case VAR_STRING:
+	{
+		// 제어문자는 컴파일 리스팅과 같은 방식으로 이스케이프한다.
+		std::string r = "'";
+		for (auto it = c._str.begin(); it != c._str.end(); ++it)
+		{
+			char x = *it;
+			if (x == '\n')       r += "\\n";
+			else if (x == '\r')  r += "\\r";
+			else if (x == '\t')  r += "\\t";
+			else                  r += x;
+		}
+		r += "'";
+		return r;
+	}
+	default:
+		snprintf(ch, sizeof(ch), "unknown type (%d)", (int)c._type);
+		break;
+	}
+	return ch;
+}
+
+// 프로그램 이미지용 심볼 캐시. GetDebugInstructions 는 code 전체를 훑으므로
+// 역맵과 함수 경계를 op 마다 다시 만들면 O(N*F) 가 된다. 한 번 만들어 재사용한다.
+struct ProgramSymbolCache
+{
+	const CNeoVMProgram* program = nullptr;
+	std::map<int, std::string> globalNames;       // 전역 슬롯 -> 이름
+	std::vector<std::pair<int, int>> funStarts;   // (시작 op 인덱스, 함수 ID) 오름차순
+
+	void Build(const CNeoVMProgram& p)
+	{
+		program = &p;
+		globalNames = p.debugGlobalNames;
+		// 디버그 정보가 없으면 export 된 것만이라도 이름을 붙인다.
+		for (auto it = p.exportVariables.begin(); it != p.exportVariables.end(); ++it)
+		{
+			if (globalNames.find((*it).second) == globalNames.end())
+				globalNames[(*it).second] = (*it).first;
+		}
+		funStarts.reserve(p.functions.size());
+		for (int i = 0; i < (int)p.functions.size(); ++i)
+			funStarts.push_back(std::make_pair(p.functions[i]._codePtr / (int)sizeof(SVMOperation), i));
+		std::sort(funStarts.begin(), funStarts.end());
+	}
+
+	// op 가 속한 함수 ID. 프롤로그(NOP_ERROR/NOP_IDLE)는 어느 함수에도 안 속하므로 -1.
+	int FunctionOf(int opIndex) const
+	{
+		int found = -1;
+		for (size_t i = 0; i < funStarts.size(); ++i)
+		{
+			if (funStarts[i].first > opIndex)
+				break;
+			found = funStarts[i].second;
+		}
+		return found;
+	}
+
+	std::string FunctionName(int id) const
+	{
+		if (program == nullptr)
+			return "";
+		auto it = program->debugFunctionNames.find(id);
+		if (it != program->debugFunctionNames.end())
+			return (*it).second;
+		for (auto e = program->exportFunctions.begin(); e != program->exportFunctions.end(); ++e)
+		{
+			if ((*e).second == id)
+				return (*e).first;
+		}
+		char ch[64];
+		snprintf(ch, sizeof(ch), "function#%d", id);
+		return ch;
+	}
+
+	// 컴파일 타임 GetLog 와 같은 표기를 낸다.
+	std::string Operand(const SVMOperation& op, int funId, int argIndex) const
+	{
+		if (program == nullptr)
+			return "";
+		int v = 0;
+		bool isLocal = false;
+		if (argIndex == 1)      { v = op.n1; isLocal = (op.argFlag & NEOS_ARG_N1_LOCAL) != 0; }
+		else if (argIndex == 2) { v = op.n2; isLocal = (op.argFlag & NEOS_ARG_N2_LOCAL) != 0; }
+		else if (argIndex == 3) { v = op.n3; isLocal = (op.argFlag & NEOS_ARG_N3_LOCAL) != 0; }
+
+		char ch[256];
+		if (isLocal)
+		{
+			// 로컬 슬롯 이름은 함수별 표에 있다. 임시/인자 슬롯은 이름이 없다.
+			if (funId >= 0)
+			{
+				auto f = program->debugVarNames.find(funId);
+				if (f != program->debugVarNames.end())
+				{
+					auto n = (*f).second.find(v);
+					if (n != (*f).second.end())
+					{
+						snprintf(ch, sizeof(ch), "[S.%d %s]", v, (*n).second.c_str());
+						return ch;
+					}
+				}
+			}
+			snprintf(ch, sizeof(ch), "[S.%d]", v);
+			return ch;
+		}
+
+		// 전역 영역. 음수 오퍼랜드(-1 = 사용 안 함)가 이미지에 남을 수 있으므로 하한도 막는다.
+		const int staticCount = (int)program->staticValues.size();
+		if (v >= 0 && v < staticCount)
+		{
+			snprintf(ch, sizeof(ch), "[G.%d %s]", v, StaticConstToString(program->staticValues[v]).c_str());
+			return ch;
+		}
+		if (v >= 0 && v < program->GetGlobalSlotCount())
+		{
+			auto it = globalNames.find(v);
+			if (it != globalNames.end())
+			{
+				snprintf(ch, sizeof(ch), "[G.%d %s]", v, (*it).second.c_str());
+				return ch;
+			}
+		}
+		snprintf(ch, sizeof(ch), "[G.%d ???]", v);
+		return ch;
+	}
+};
+
+void FormatDebugInstruction(const CNeoVMProgram& program, int opIndex,
+	std::string& outByteCode, std::string& outAssembly)
+{
+	outByteCode.clear();
+	outAssembly.clear();
+	if (opIndex < 0 || opIndex >= (int)program.code.size())
+		return;
+
+	// 같은 프로그램을 연속 조회하는 것이 정상 사용이라 마지막 것만 들고 있는다.
+	static thread_local ProgramSymbolCache s_cache;
+	if (s_cache.program != &program)
+		s_cache.Build(program);
+
+	const SVMOperation& v = program.code[opIndex];
+	const int funId = s_cache.FunctionOf(opIndex);
+
+	DebugInstructionFormatContext context;
+	context.operation = &v;
+	context.opIndex = opIndex;
+	context.operand = [&](int argIndex) { return s_cache.Operand(v, funId, argIndex); };
+	context.functionFull = [&](int id) { return s_cache.FunctionName(id); };
+	context.functionShort = context.functionFull;
+	// 런타임은 함수 단위 라벨을 만들지 않는다. 대신 절대 목적지를 보여준다.
+	context.jumpLabel = [&](int target) { return FormatAsm(" -> #%d", target); };
+
+	int byteCount = 0;
+	FormatDebugOperation(context, outAssembly, &byteCount);
+
+	// 컴파일 리스팅의 바이트 덤프와 같은 폭/형식.
+	const int kDumpBytes = 12;
+	if (byteCount > (int)sizeof(SVMOperation))
+		byteCount = (int)sizeof(SVMOperation);
+	outByteCode = FormatBytes((const u8*)&v, byteCount, kDumpBytes);
+}
+
+
 void INeoVM::ProgramAddRef(CNeoVMProgram* pProgram)
 {
 	if (pProgram != nullptr)
@@ -506,5 +1159,7 @@ CNeoVMProgram* INeoVM::CompileToProgram(const NeoCompilerParam& param)
 
 	return CNeoVMProgram::Create(ar.GetData(), ar.GetBufferOffset(), param.err);
 }
+
+
 
 };

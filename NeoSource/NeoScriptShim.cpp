@@ -369,6 +369,7 @@ public:
     Error CompileToBytecode(const CompileDesc& desc, std::vector<uint8_t>& out) override;
     ProgramHandle LoadProgram(Span<const uint8_t> bytecode, Error* error) override;
     void DestroyProgram(ProgramHandle program) override;
+    void GetDebugInstructions(ProgramHandle program, std::vector<DebugInstruction>& out) const override;
     DefineSetHandle CreateDefineSet(Span<const CompileDefine> defines) override;
     void DestroyDefineSet(DefineSetHandle set) override;
 
@@ -673,6 +674,28 @@ void RuntimeImpl::DestroyProgram(ProgramHandle h)
     INeoVM::ProgramRelease(rec->program); // 인스턴스가 AddRef 했으면 실제 free 는 지연
     delete rec;
     m_programs.remove(h.id, h.generation);
+}
+
+void RuntimeImpl::GetDebugInstructions(ProgramHandle h, std::vector<DebugInstruction>& out) const
+{
+    out.clear();
+    ProgramRec* rec = resolveProgram(h);
+    if (rec == nullptr || rec->program == nullptr)
+        return;
+    const CNeoVMProgram& program = *rec->program;
+    out.reserve(program.code.size());
+    for (int i = 0; i < (int)program.code.size(); ++i)
+    {
+        DebugInstruction instruction;
+        instruction.opIndex = i;
+        if (i < (int)program.debugData.size())
+        {
+            instruction.file = program.debugData[i]._fileseq;
+            instruction.line = program.debugData[i]._lineseq;
+        }
+        FormatDebugInstruction(program, i, instruction.code, instruction.assembly);
+        out.push_back(std::move(instruction));
+    }
 }
 
 //------------------------------------------------------------------------------

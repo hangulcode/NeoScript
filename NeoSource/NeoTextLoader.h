@@ -233,6 +233,14 @@ protected:
 
 
 bool	ToArchiveRdWC(const char* pBuffer, int iBufferSize, CArchiveRdWC& ar);
+
+// 문자열을 만드는 쪽과 내보내는 쪽을 나눈다.
+// 디스어셈블 결과는 콘솔로 찍기도 하고(컴파일 리스팅) 에디터로 넘기기도 하므로(디버거
+// 어셈블리 뷰), 만드는 코드를 한 벌만 두고 목적지는 호출자가 정하게 한다.
+std::string	FormatAsm(const char* lpszString, ...);
+// 바이트 덤프 문자열. iMaxCount 칸을 "%02X " 3문자씩 채우고, iCount 를 넘는 칸은 공백이다.
+std::string	FormatBytes(const u8* pBuffer, int iCount, int iMaxCount);
+
 void	OutAsm(const char* lpszString, ...);
 void	OutString(const char* lpszString);
 void	OutBytes(const u8* pBuffer, int iCount, int iMaxCount);

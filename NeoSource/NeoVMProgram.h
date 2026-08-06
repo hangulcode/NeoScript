@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include <functional>
 #include "NeoVMInternal.h"
 
 namespace NeoScript
@@ -161,5 +162,35 @@ public:
 		return (*it).second;
 	}
 };
+
+// opcode별 어셈블리 표기는 이 공통 포맷터만 사용한다. 컴파일러와 런타임은
+// 각각 자기 심볼 표를 operand/function resolver로 공급한다.
+struct DebugInstructionFormatContext
+{
+	const SVMOperation* operation = nullptr;
+	// 점프 대상 계산의 기준점. 컴파일 타임은 함수 블록 기준 상대 인덱스, 런타임은 프로그램
+	// 절대 인덱스다. 포맷터는 opIndex + 1 + n1 만 계산하고 표기는 jumpLabel 에 맡기므로
+	// 어느 쪽이든 그대로 동작한다.
+	int opIndex = 0;
+	// argIndex(1,2,3) -> "[S.3]" / "[G.7 'text']" 같은 오퍼랜드 표기.
+	std::function<std::string(int)> operand;
+	// 함수 ID -> 이름. 컴파일 타임이 두 가지 표기를 쓰고 있어(전체이름 vs 짧은 이름)
+	// 출력을 그대로 보존하려고 둘로 나눠 둔다. 런타임은 같은 것을 넣어도 된다.
+	std::function<std::string(int)> functionFull;    // NOP_CALL 용
+	std::function<std::string(int)> functionShort;   // NOP_FMOV1/FMOV2 용
+	// 점프 대상 op 인덱스 -> " 'go_3'" 같은 라벨. 라벨이 없으면 빈 문자열.
+	std::function<std::string(int)> jumpLabel;
+};
+
+// 어셈블리 한 줄(개행 없음)을 만든다. outByteCount 는 바이트 덤프에 표시할
+// opcode + arg flag + 유효 operand 바이트 수다.
+// 반환값 false = 이 포맷터가 모르는 opcode(문자열에는 "?? op(N)" 이 들어간다).
+// 에러로 볼지 말지는 호출자가 정한다 — 컴파일 타임은 컴파일 에러, 런타임은 표시만.
+bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::string& outAssembly,
+	int* outByteCount = nullptr);
+
+// 로드/패치가 끝난 Program 이미지용 공통 포맷터 어댑터.
+void FormatDebugInstruction(const CNeoVMProgram& program, int opIndex,
+	std::string& outByteCode, std::string& outAssembly);
 
 };

@@ -114,6 +114,10 @@ struct SVars
 	std::vector<SLayerVar*>	_varsFunction;
 	std::vector<std::string> _varsExport;
 	std::map<std::string, SFunctionLayer*> m_sImports; // Only Once Load
+	// 지금 파싱 중인 import 체인. m_sImports 는 파싱을 마친 뒤에야 채워지므로,
+	// A->B->A 같은 순환은 캐시로 막히지 않고 A 를 재진입 파싱해 이름 충돌로 죽는다
+	// (게다가 사유가 안 남아 "메시지 없는 컴파일 실패"가 된다). 진입 시 여기에 넣어 막는다.
+	std::set<std::string> m_sImporting;
 
 	~SVars()
 	{

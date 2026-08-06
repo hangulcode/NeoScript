@@ -17,6 +17,7 @@ void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 	X(PCE_DUPLICATE_LOCAL_NAME, "Error (%d, %d): local variable '%s' is already defined in function '%s'") \
 	X(PCE_INVALID_EXPORT_SCOPE, "Error (%d, %d): export is only allowed at the global scope. Current function: '%s', name: '%s'") \
 	X(PCE_IMPORT_FAILED, "Error (%d, %d): failed to import module '%s'") \
+	X(PCE_IMPORT_CYCLE, "Error (%d, %d): circular import of module '%s'") \
 	X(PCE_DUPLICATE_FUNCTION_ARGUMENT, "Error (%d, %d): duplicate function argument '%s'") \
 	X(PCE_EXPECTED_FUNCTION_ARGUMENT, "Error (%d, %d): expected a function argument name, but found '%s'") \
 	X(PCE_EXPECTED_COMMA_BETWEEN_ARGUMENTS, "Error (%d, %d): expected ',' between function arguments") \
@@ -1108,6 +1109,15 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return true;
 	}
 
+	// 순환 import 차단. m_sImports 는 파싱을 끝낸 뒤에 채워지므로 위 캐시로는 못 막는다.
+	// 막지 않으면 같은 모듈을 재진입 파싱해 이름 충돌로 죽는데, 그 실패가 사유 없이
+	// 사라져 "메시지 없는 컴파일 실패"가 된다(자기 자신 import 도 마찬가지).
+	if (vars.m_sImporting.count(fileName) != 0)
+	{
+		SetParserCompileError(ar, PCE_IMPORT_CYCLE, fileName.c_str());
+		return false;
+	}
+
 	std::string fullFileName;
 	void* pFileBuffer = NULL;
 	int iFileLen = 0;
@@ -1175,13 +1185,18 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	SFunctionLayer* pLayerBackup = funs._curModule;
 	funs._curModule = funs.NewLayer();
 	/////////////////////////////////
+	vars.m_sImporting.insert(fileName);      // 이 모듈을 파싱하는 동안 재진입 금지
 	bool r = ParseFunctionBody(ar2, funs, vars, false);
+	vars.m_sImporting.erase(fileName);
 	/////////////////////////////////
 	vars.m_sImports[fileName] = funs._curModule;
 	pLayerBackup->_defModules[defName] = funs._curModule;
 	funs._curModule = pLayerBackup;
 
-	ar.m_sErrorString = ar2.m_sErrorString;
+	// 하위 모듈에서 난 에러를 덮어쓰지 않는다(SetCompileError 는 first-wins 라
+	// 여기서 빈 문자열로 밀면 순환 감지 메시지까지 사라진다).
+	if (ar.m_sErrorString.empty())
+		ar.m_sErrorString = ar2.m_sErrorString;
 	return r;
 //#else
 //	SetCompileError(ar, "Error (%d, %d): Import Not Defined)", ar.CurLine(), ar.CurCol());

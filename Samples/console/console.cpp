@@ -850,9 +850,17 @@ static int RunCompilerErrorRegression()
 		// 함수 안(지역 스코프)도 같은 경로를 타는지 고정.
 		{ "list-literal-missing-in-fun", "fun F() { var v = [,]; }", "expected an expression" },
 		{ "map-literal-missing-in-fun", "fun F() { var v = { \"a\": }; }", "expected an expression" },
+		// 순환 import 는 예전에 사유 없이 실패했다(캐시가 파싱을 마친 뒤에 채워져 재진입을
+		// 못 막았고, 재진입한 모듈이 이름 충돌로 죽으면서 메시지가 사라졌다).
+		// Lib/cyca.ns <-> Lib/cycb.ns, Lib/selfimp.ns 가 이 케이스의 고정 데이터다.
+		{ "import-cycle", "import cyca as a;", "circular import" },
+		{ "import-cycle-self", "import selfimp as s;", "circular import" },
 	};
 
 	RuntimeDesc rd;
+	// import 를 쓰는 케이스가 있어 로더를 붙인다(libPath 기본값 ../../Lib/).
+	CNeoLoader regressionLoader;
+	rd.nativeLoader = &regressionLoader;
 	IRuntime* rt = CreateRuntime(rd);
 	rt->FreezeBindings();
 

@@ -153,7 +153,7 @@ int CNeoVMWorker::Sleep(int iTimeout, VarInfo* v1)
 	if (iTimeout >= 0)
 	{
 		_iRemainSleep = iSleepTick;
-		_preClock = std::chrono::steady_clock::now();
+		_sleepClock = std::chrono::steady_clock::now();
 		return 0;
 	}
 
@@ -1646,11 +1646,14 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 	if (_iRemainSleep > 0)
 	{
 		auto now = std::chrono::steady_clock::now();
-		auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - _preClock).count();
+		auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - _sleepClock).count();
 		if (elapsed > 0)
+		{
 			_iRemainSleep -= (int)elapsed;
-
-		_preClock = now;
+			// 소비한 정수 밀리초만큼만 기준을 전진시킨다. now 로 덮으면 1ms 미만 잔여가
+			// 매번 버려져서, 1ms 보다 자주 호출하면 sleep 이 영원히 안 끝난다.
+			_sleepClock += std::chrono::milliseconds(elapsed);
+		}
 
 		if (_iRemainSleep > 0)
 			return true;

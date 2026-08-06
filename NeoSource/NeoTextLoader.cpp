@@ -463,6 +463,23 @@ void SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...)
 //#endif
 }
 
+// 포맷은 여기 한 곳에서만 한다. 디스어셈블 결과는 콘솔로 찍기도 하고(컴파일 리스팅)
+// 에디터로 넘기기도 하므로(디버거 어셈블리 뷰), 만드는 코드를 한 벌만 두고
+// 목적지는 호출자가 정한다.
+std::string FormatAsm(const char*	lpszString, ...)
+{
+	char buff[4096];
+	va_list arg_ptr;
+	va_start(arg_ptr, lpszString);
+#ifdef _WIN32
+	vsnprintf(buff, _countof(buff), lpszString, arg_ptr);
+#else
+	vsnprintf(buff, sizeof(buff), lpszString, arg_ptr);
+#endif
+	va_end(arg_ptr);
+	return buff;
+}
+
 void OutAsm(const char*	lpszString, ...)
 {
 	char buff[4096];
@@ -475,10 +492,7 @@ void OutAsm(const char*	lpszString, ...)
 #endif
 	va_end(arg_ptr);
 
-
-#ifdef _WIN32	
-	std::cout << buff;
-#endif
+	OutString(buff);
 }
 void OutString(const char* lpszString)
 {
@@ -487,32 +501,32 @@ void OutString(const char* lpszString)
 #endif
 }
 
-void OutBytes(const u8*	pBuffer, int iCount, int iMaxCount)
+// iMaxCount 칸을 "%02X " 3문자씩 채운다. iCount 를 넘는 칸은 공백이라 폭이 항상 같다.
+std::string FormatBytes(const u8*	pBuffer, int iCount, int iMaxCount)
 {
-	char buff[4096];
-	buff[0] = 0;
-
-#ifdef _WIN32
-	for (int i = 0; i < iMaxCount; i++)
-	{
-		if(i < iCount)
-			snprintf(buff + i * 3, 4, "%02X ", pBuffer[i]);
-		else
-			snprintf(buff + i * 3, 4, "   ");
-	}
-#else
+	std::string r;
+	if (iMaxCount <= 0)
+		return r;
+	r.reserve((size_t)iMaxCount * 3);
+	char cell[8];
 	for (int i = 0; i < iMaxCount; i++)
 	{
 		if (i < iCount)
-			sprintf(buff + i * 3, "%02X ", pBuffer[i]);
+		{
+			snprintf(cell, sizeof(cell), "%02X ", pBuffer[i]);
+			r.append(cell, 3);
+		}
 		else
-			sprintf(buff + i * 3, "   ");
+		{
+			r.append("   ", 3);
+		}
 	}
-#endif
+	return r;
+}
 
-#ifdef _WIN32	
-	std::cout << buff;
-#endif
+void OutBytes(const u8*	pBuffer, int iCount, int iMaxCount)
+{
+	OutString(FormatBytes(pBuffer, iCount, iMaxCount).c_str());
 }
 
 };

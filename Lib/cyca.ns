@@ -1,0 +1,3 @@
+import cycb as b;
+export fun FromA() { return 1; }
+export fun CallB() { return b.FromB() + 10; }

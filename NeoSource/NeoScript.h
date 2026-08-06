@@ -532,6 +532,16 @@ struct DebugLocation
     int32_t callDepth = 0;
 };
 
+// 프로그램에 저장된 디버그 명령 1개. code 는 원시 바이트코드, assembly 는 사람이 읽는 VM 명령이다.
+struct DebugInstruction
+{
+    int32_t opIndex = -1;
+    int32_t file = -1;
+    int32_t line = -1;
+    std::string code;
+    std::string assembly;
+};
+
 struct DebugBreakpoint
 {
     int32_t file = -1;
@@ -654,6 +664,7 @@ public:
     virtual Error CompileToBytecode(const CompileDesc& desc, std::vector<uint8_t>& outBytecode) = 0;
     virtual ProgramHandle LoadProgram(Span<const uint8_t> bytecode, Error* error = nullptr) = 0;
     virtual void DestroyProgram(ProgramHandle program) = 0;   // 인스턴스 생존 시 refcount 로 지연 해제
+    virtual void GetDebugInstructions(ProgramHandle program, std::vector<DebugInstruction>& out) const = 0;
     // 재사용 define 집합: 한 번 빌드해 CompileDesc.defineSet 으로 여러 Compile 에 재사용(재구성 0).
     virtual DefineSetHandle CreateDefineSet(Span<const CompileDefine> defines) = 0;
     virtual void DestroyDefineSet(DefineSetHandle set) = 0;

@@ -1,6 +1,8 @@
 ﻿#include "stdafx.h"
 #include "../../NeoSource/NeoScript.h"   // v2 public API
 #include "../../NeoSource/Neo.h"         // INeoLoader
+#include <thread>
+#include <chrono>
 
 using namespace NeoScript;
 
@@ -54,7 +56,12 @@ int SAMPLE_time_limit(INeoLoader* pLoader, std::string filename)
 				break;
 			}
 			if (st != RunStatus::Completed)
+			{
 				printf("Job Not Completed (Elapse:%d)\n", (int)(t2 - t1));
+				// 호스트의 한 프레임에 해당한다. 이 간격이 없으면 폴링 19번이 0ms 안에 끝나서
+				// 스크립트의 sleep(1) x 5 = 5ms 가 흐를 시간 자체가 없다(항상 미완료).
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			}
 			else
 			{
 				printf("(Elapse:%d)\n", (int)(t2 - t1));
