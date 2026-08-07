@@ -1193,6 +1193,7 @@ void GetAllocStats(AllocStats& out)
     out.strings = s.strings; out.maps = s.maps; out.lists = s.lists; out.sets = s.sets;
     out.coroutines = s.coroutines; out.modules = s.modules; out.asyncs = s.asyncs;
     out.vectors = s.vectors; out.poolBytes = s.poolBytes;
+    out.stringIdleBytes = s.stringIdleBytes;
 }
 
 //==============================================================================

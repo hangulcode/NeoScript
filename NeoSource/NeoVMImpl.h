@@ -64,7 +64,8 @@ public:
 	// 유휴 문자열 노드가 붙들고 있는 문자 버퍼 합계(풀 페이지 밖의 힙).
 	// free 리스트를 훑으므로 통계 조회 시점에만 부른다.
 	long long StringIdleBytes();
-	void GetAllocStats(SNeoVMAllocStats& outStats) { outStats = m_sAllocStats; outStats.poolBytes = PoolBytes(); outStats.stringIdleBytes = StringIdleBytes(); }
+	// 조회 시점. 여기서만 stringIdleBytes 를 새로 재고 전역에도 반영한다.
+	void GetAllocStats(SNeoVMAllocStats& outStats);
 	void Var_SetString(VarInfo *d, const char* str);
 	void Var_SetStringA(VarInfo *d, const std::string& str);
 	void Var_SetTable(VarInfo *d, MapInfo* p);

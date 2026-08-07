@@ -114,7 +114,13 @@ long long CNeoVMImpl::CollectEmptyPages(bool force)
 	if (force == false)
 		m_iTrimPoolCursor = (m_iTrimPoolCursor + 1) % kTrimPoolCount;
 
-	if (freed != 0)
+	if (force)
+	{
+		// 강제 정리는 맵 전환처럼 드물게 부르는 명시적 시점이다. 여기서만 유휴 문자열
+		// 버퍼를 다시 재서 전역 통계를 맞춰 둔다 — 매 프레임 경로에서는 절대 하지 않는다.
+		m_sAllocStats.stringIdleBytes = StringIdleBytes();
+	}
+	if (freed != 0 || force)
 		PublishAllocStats();
 	return freed;
 }
@@ -164,10 +170,25 @@ long long CNeoVMImpl::StringIdleBytes()
 	return total;
 }
 
+// 조회 시점에만 유휴 문자열 버퍼를 다시 재고 전역에 반영한다.
+void CNeoVMImpl::GetAllocStats(SNeoVMAllocStats& outStats)
+{
+	m_sAllocStats.stringIdleBytes = StringIdleBytes();
+	PublishNeoVMAllocStatValue(g_iNeoVMStringIdleBytes,
+		m_sPublishedAllocStats.stringIdleBytes, m_sAllocStats.stringIdleBytes);
+	outStats = m_sAllocStats;
+	outStats.poolBytes = PoolBytes();
+}
+
+// 주의: 여기서 stringIdleBytes 를 다시 재지 않는다.
+// StringIdleBytes() 는 문자열 free 리스트 전수 순회라 O(유휴 노드) 인데, 이 함수는
+// RunFunction 이 끝날 때마다 그리고 증분 회수가 도는 동안에는 매 프레임 불린다.
+// 그러면 "한 호출의 비용에 상한을 둔다" 는 증분 회수의 전제가 깨진다.
+// 갱신은 GetAllocStats(조회) 에서만 하고, 여기서는 마지막 값을 그대로 다시 publish 한다
+// (델타 0 이라 전역은 변하지 않는다).
 void CNeoVMImpl::PublishAllocStats()
 {
 	m_sAllocStats.poolBytes = PoolBytes();
-	m_sAllocStats.stringIdleBytes = StringIdleBytes();
 	PublishNeoVMAllocStatValue(g_iNeoVMPoolBytes, m_sPublishedAllocStats.poolBytes, m_sAllocStats.poolBytes);
 	PublishNeoVMAllocStatValue(g_iNeoVMStringIdleBytes, m_sPublishedAllocStats.stringIdleBytes, m_sAllocStats.stringIdleBytes);
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocStrings, m_sPublishedAllocStats.strings, m_sAllocStats.strings);
@@ -754,6 +775,9 @@ CNeoVMImpl::~CNeoVMImpl()
 	PublishAllocStats();
 	// 풀 페이지는 곧 멤버 소멸자가 free 한다. 지금 빼두지 않으면 이 VM 몫이 전역 집계에 영원히 남는다.
 	PublishNeoVMAllocStatValue(g_iNeoVMPoolBytes, m_sPublishedAllocStats.poolBytes, 0);
+	// 유휴 문자열 버퍼도 같은 이유로 빼야 한다. 전역은 델타 누적이라, 죽는 VM 이 자기 몫을
+	// 0 으로 되돌리지 않으면 되돌릴 기회가 영영 없다(기준선인 m_sPublishedAllocStats 가 같이 사라진다).
+	PublishNeoVMAllocStatValue(g_iNeoVMStringIdleBytes, m_sPublishedAllocStats.stringIdleBytes, 0);
 }
 
 void CNeoVMImpl::SetError(const std::string& msg)
