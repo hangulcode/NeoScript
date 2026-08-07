@@ -1,0 +1,23 @@
+// 디버그 스텝오버 회귀용 모듈.
+// Heavy 는 tunnel_walls.EnsureUpTo 처럼 내부 루프 + 리스트 조작 + native 호출을 한다.
+// Take 는 그 다음 줄에서 호출되며, 인자가 null 이면 런타임 에러가 난다.
+import math;
+
+var modList = [];
+
+fun Heavy(var count, var seed)
+{
+	modList = [];
+	for(var i in 0, count, 1)
+	{
+		var v = math.sin(toint(i) * 0.13 + seed) * 10.0;
+		modList.append([toint(i), v, toint(i) + 1]);
+	}
+	return modList.len();
+}
+
+fun Take(var n)
+{
+	var r = n + 1;
+	return r;
+}

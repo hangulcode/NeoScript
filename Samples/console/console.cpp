@@ -504,6 +504,9 @@ struct V2DebugSmokeListener : IDebugListener
 static int RunDebugSmoke()
 {
 	RuntimeDesc rd;
+	// import 를 쓰는 케이스가 있어 loader 를 붙인다(없으면 모듈 해석이 실패한다).
+	CNeoLoader debugSmokeLoader;
+	rd.nativeLoader = &debugSmokeLoader;
 	IRuntime* rt = CreateRuntime(rd);
 	rt->FreezeBindings();
 	IDebugger* dbg = rt->GetDebugger();
@@ -725,6 +728,156 @@ static int RunDebugSmoke()
 				listener.stopCount, (int)listener.lastReason, hasErr ? 1 : 0);
 			DestroyRuntime(rt); return -1;
 		}
+		dbg->SetListener(nullptr);
+		rt->DestroyInstance(inst);
+		rt->DestroyProgram(prog);
+	}
+
+	// 6.5) import 한 모듈 함수를 StepOver 로 연속해서 넘기기.
+	//      게임에서 보고된 형태 그대로다: 무거운 모듈 함수를 F10 으로 넘긴 "다음" F10 에서
+	//      두 번째 모듈 함수의 인자가 사라졌다. 그래서 두 번 연속 StepOver 한다.
+	//      확인 항목: (a) 각 스텝이 다음 줄에 서는가 (b) 콜 깊이가 돌아오는가
+	//                (c) 두 번째 모듈 함수가 인자를 제대로 받았는가(y == 4)
+	{
+		const char* moduleStepSource =
+			"import dbgmod as dm;\n"
+			"fun Run()\n"
+			"{\n"
+			"    var x = 3;\n"
+			"    var n = dm.Heavy(40, 1.5);\n"
+			"    var y = dm.Take(x);\n"
+			"    var z = y + n;\n"
+			"    return z;\n"
+			"}\n"
+			"var result = Run();\n"
+			"print(result);\n";
+		ProgramHandle prog; InstanceHandle inst;
+		if (!compileInst(moduleStepSource, "modstep.ns", prog, inst)) { DestroyRuntime(rt); return -1; }
+		V2DebugSmokeListener listener;
+		dbg->SetListener(&listener);
+		setBps(inst, { 5 });   // var n = dm.Heavy(...);  <- 무거운 모듈 함수
+		rt->RunGlobalInit(inst);
+		if (dbg->IsPaused(inst) == false || listener.lastLocation.line != 5)
+			return fail("[debug-smoke] module step breakpoint failed");
+		const int depthBefore = dbg->GetLocation(inst).callDepth;
+
+		// 1st F10: 무거운 모듈 함수를 넘긴다 -> 6줄
+		dbg->StepOver(inst);
+		dbg->Run(inst);
+		if (dbg->IsPaused(inst) == false || dbg->GetLocation(inst).line != 6)
+		{
+			printf("[debug-smoke] module step over #1 landed line=%d (expected 6)\n",
+				dbg->GetLocation(inst).line);
+			DestroyRuntime(rt); return -1;
+		}
+
+		// 2nd F10: 이어서 두 번째 모듈 함수를 넘긴다 -> 7줄
+		dbg->StepOver(inst);
+		dbg->Run(inst);
+		StringView stepErr;
+		if (rt->TakeLastError(stepErr))
+		{
+			printf("[debug-smoke] module step over #2 error: %.*s\n", (int)stepErr.size(), stepErr.data());
+			DestroyRuntime(rt); return -1;
+		}
+		DebugLocation after = dbg->GetLocation(inst);
+		if (dbg->IsPaused(inst) == false || after.line != 7 || after.callDepth != depthBefore)
+		{
+			printf("[debug-smoke] module step over #2 landed line=%d depth=%d (expected 7/%d)\n",
+				after.line, after.callDepth, depthBefore);
+			DestroyRuntime(rt); return -1;
+		}
+		std::vector<DebugVariable> stepVars;
+		dbg->GetFrameVariables(inst, 0, stepVars);
+		bool foundY = false;
+		for (const DebugVariable& var : stepVars)
+			if (var.name == "y" && var.value == "4") foundY = true;
+		if (!foundY)
+		{
+			printf("[debug-smoke] module step over lost argument (y != 4)\n");
+			for (const DebugVariable& var : stepVars)
+				printf("    %s = %s\n", var.name.c_str(), var.value.c_str());
+			DestroyRuntime(rt); return -1;
+		}
+		resumeToEnd(inst);
+		dbg->SetListener(nullptr);
+		rt->DestroyInstance(inst);
+		rt->DestroyProgram(prog);
+	}
+
+	// 6.6) 호스트 invoke(rt->Call) 안에서 브레이크포인트로 정지 → StepOver 로 재개.
+	//      게임의 OnUpdate 이벤트 핸들러가 정확히 이 모양이다(RunGlobalInit 이 아니라 invoke).
+	//      Invocation::invoke 가 "정지"를 "완료"로 보면 GC() 가 살아 있는 프레임의 스택을
+	//      회수해서, 재개 후 지역 변수를 인자로 받는 함수만 null 을 받는다.
+	//      (전역 인자는 멀쩡하므로 첫 StepOver 는 멀쩡히 지나가고 그 다음에 터진다)
+	{
+		const char* invokeSource =
+			"import dbgmod as dm;\n"
+			"var gCount = 40;\n"
+			"var gSeed = 1.5;\n"
+			"export fun Tick()\n"
+			"{\n"
+			"    var local = 3;\n"
+			"    var n = dm.Heavy(gCount, gSeed);\n"
+			"    var y = dm.Take(local);\n"
+			"    return n + y;\n"
+			"}\n";
+		ProgramHandle prog; InstanceHandle inst;
+		if (!compileInst(invokeSource, "invokestep.ns", prog, inst)) { DestroyRuntime(rt); return -1; }
+		rt->RunGlobalInit(inst);
+		V2DebugSmokeListener listener;
+		dbg->SetListener(&listener);
+		setBps(inst, { 7 });   // var n = dm.Heavy(gCount, gSeed);  (인자가 전역)
+		{
+			Invocation call = rt->Call(inst, "Tick");
+			RunStatus st = call.invoke();
+			if (st != RunStatus::Suspended || dbg->IsPaused(inst) == false || listener.lastLocation.line != 7)
+			{
+				printf("[debug-smoke] invoke breakpoint failed status=%d paused=%d line=%d\n",
+					(int)st, dbg->IsPaused(inst) ? 1 : 0, listener.lastLocation.line);
+				DestroyRuntime(rt); return -1;
+			}
+		}
+		// 1st F10: 무거운 모듈 함수(전역 인자)를 넘긴다 -> 8줄
+		dbg->StepOver(inst);
+		dbg->Run(inst);
+		if (dbg->IsPaused(inst) == false || dbg->GetLocation(inst).line != 8)
+		{
+			printf("[debug-smoke] invoke step over #1 landed line=%d (expected 8)\n",
+				dbg->GetLocation(inst).line);
+			DestroyRuntime(rt); return -1;
+		}
+		// 2nd F10: 지역 변수를 인자로 받는 모듈 함수를 넘긴다 -> 9줄
+		dbg->StepOver(inst);
+		dbg->Run(inst);
+		StringView invokeErr;
+		if (rt->TakeLastError(invokeErr))
+		{
+			printf("[debug-smoke] invoke step over #2 error: %.*s\n", (int)invokeErr.size(), invokeErr.data());
+			DestroyRuntime(rt); return -1;
+		}
+		if (dbg->IsPaused(inst) == false || dbg->GetLocation(inst).line != 9)
+		{
+			printf("[debug-smoke] invoke step over #2 landed line=%d (expected 9)\n",
+				dbg->GetLocation(inst).line);
+			DestroyRuntime(rt); return -1;
+		}
+		std::vector<DebugVariable> invokeVars;
+		dbg->GetFrameVariables(inst, 0, invokeVars);
+		bool foundLocal = false, foundY = false;
+		for (const DebugVariable& var : invokeVars)
+		{
+			if (var.name == "local" && var.value == "3") foundLocal = true;
+			if (var.name == "y" && var.value == "4") foundY = true;
+		}
+		if (!foundLocal || !foundY)
+		{
+			printf("[debug-smoke] invoke step lost locals (local=%d y=%d)\n", foundLocal ? 1 : 0, foundY ? 1 : 0);
+			for (const DebugVariable& var : invokeVars)
+				printf("    %s = %s\n", var.name.c_str(), var.value.c_str());
+			DestroyRuntime(rt); return -1;
+		}
+		resumeToEnd(inst);
 		dbg->SetListener(nullptr);
 		rt->DestroyInstance(inst);
 		rt->DestroyProgram(prog);

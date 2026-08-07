@@ -1458,7 +1458,18 @@ RunStatus Invocation::invoke()
     if (nested) w->BeginNestedScriptCall();
     if (inst->callTimeoutMs >= 0 || inst->callBudget > 0)
         w->SetTimeout(inst->callTimeoutMs, inst->callBudget > 0 ? static_cast<int>(inst->callBudget) : NEO_DEFAULT_CHECKOP);
-    if (w->RunFunction(inst->callFID, inst->callArgs)) { w->GC(); inst->callStatus = RunStatus::Completed; }
+    const bool ran = w->RunFunction(inst->callFID, inst->callArgs);
+    // RunFunction 은 "끝까지 갔을 때"와 "디버거/sleep 으로 멈췄을 때" 둘 다 true 다.
+    // 정지를 완료로 보면 아래 GC() 가 아직 살아 있는 프레임의 스택 슬롯을 회수해 버린다
+    // (전역은 멀쩡하고 지역만 null 이 되므로, 재개 후 지역 인자를 받는 함수에서만 터진다).
+    // 정지 상태에서는 GC/인자 해제/pending 정리를 모두 건너뛰고 컨텍스트를 그대로 둔다 —
+    // 재개는 IDebugger 의 Continue/Step + Run 이 ResumeTop 으로 이어서 한다.
+    if (ran && w->IsSuspended())
+    {
+        inst->callStatus = RunStatus::Suspended;
+        return inst->callStatus;
+    }
+    if (ran) { w->GC(); inst->callStatus = RunStatus::Completed; }
     else inst->callStatus = RunStatus::Failed;
     inst->runtime->CaptureCallError(inst, inst->callStatus);   // 실패면 VM 상세 + fail() 코드 스냅샷
     w->ReleaseArgs(inst->callArgs);
