@@ -2143,6 +2143,8 @@ int main(int argc, char* argv[])
 				printf("[ALLOC] str=%d map=%d list=%d set=%d cor=%d mod=%d async=%d vec=%d pool=%lld bytes\n",
 					s.strings, s.maps, s.lists, s.sets, s.coroutines, s.modules, s.asyncs, s.vectors,
 					s.poolBytes);
+				// 풀 페이지 밖의 문자열 힙. 계속 크면 유지 임계값을 낮춰야 한다.
+				printf("[ALLOC] stringIdle=%lld bytes\n", s.stringIdleBytes);
 			}
 		}
 		else if (command == "--smoke")

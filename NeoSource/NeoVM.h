@@ -171,6 +171,9 @@ struct SNeoVMAllocStats
 	// 스레드별 실행 컨텍스트 풀(var 스택 포함) 합계, VM 단위 조회면 그 VM 의 오브젝트 풀만.
 	// 컬렉션이 따로 잡는 힙(ListInfo/MapInfo 의 _Bucket, StringInfo 의 문자열 본문)은 풀 밖이라 제외.
 	long long poolBytes = 0;
+	// 반납되어 놀고 있는 문자열 노드가 아직 붙들고 있는 문자 버퍼 합계.
+	// poolBytes 에는 안 잡히는 값이다(풀 밖 힙). 이게 계속 크면 유지 임계값을 낮춰야 한다.
+	long long stringIdleBytes = 0;
 };
 
 struct INeoVM;

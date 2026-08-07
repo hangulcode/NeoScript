@@ -142,8 +142,11 @@ private:
 		m_sFreeNode.set_head(&pData[0]);
 		pData[m_iBlkSize - 1].m_pNext = NULL;
 #endif
-		if (m_iBlkSize < 1024*100)
-			m_iBlkSize *= 2;
+		// 페이지 크기는 고정이다(예전에는 2배씩 키웠다).
+		// 2배 증가는 마지막 한 장이 과도하게 커져 필요량을 크게 넘겨 잡는다 —
+		// 32 부터 배증하면 4만 개를 담으려고 65,504 개를 확보한다(64% 초과).
+		// 고정 크기는 초과분이 최대 (페이지 크기 - 1) 이고, 나중에 빈 페이지를
+		// 돌려주는 작업에서도 회수 단위가 잘게 쪼개져 유리하다.
 	}
 
 public:
@@ -308,8 +311,11 @@ private:
 			m_sFreeNode.push_head(pNode);
 		}
 
-		if (m_iBlkSize < 1024 * 100)
-			m_iBlkSize *= 2;
+		// 페이지 크기는 고정이다(예전에는 2배씩 키웠다).
+		// 2배 증가는 마지막 한 장이 과도하게 커져 필요량을 크게 넘겨 잡는다 —
+		// 32 부터 배증하면 4만 개를 담으려고 65,504 개를 확보한다(64% 초과).
+		// 고정 크기는 초과분이 최대 (페이지 크기 - 1) 이고, 나중에 빈 페이지를
+		// 돌려주는 작업에서도 회수 단위가 잘게 쪼개져 유리하다.
 	}
 
 public:
@@ -349,6 +355,16 @@ public:
 	}
 
 	inline size_t ReservedBytes() const { return m_nReservedBytes; }
+
+	// 반납되어 free 리스트에 올라와 있는 노드를 훑는다.
+	// StringInfo 처럼 노드가 std::string 같은 부속 힙을 들고 있는 타입에서,
+	// "지금 놀고 있는 노드가 얼마나 붙들고 있는가" 를 재거나 놓아주는 데 쓴다.
+	template <typename F>
+	void ForEachFree(F fn)
+	{
+		for (SNodePool* n = m_sFreeNode.get_head(); n != NULL; n = n->m_pNext)
+			fn(n->m_sObj.data);
+	}
 };
 
 #pragma pack()

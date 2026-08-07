@@ -41,7 +41,10 @@ private:
 public:
 	void PublishAllocStats();
 	long long PoolBytes() const;   // 이 VM 의 오브젝트 풀 8개가 확보한 총 바이트
-	void GetAllocStats(SNeoVMAllocStats& outStats) const { outStats = m_sAllocStats; outStats.poolBytes = PoolBytes(); }
+	// 유휴 문자열 노드가 붙들고 있는 문자 버퍼 합계(풀 페이지 밖의 힙).
+	// free 리스트를 훑으므로 통계 조회 시점에만 부른다.
+	long long StringIdleBytes();
+	void GetAllocStats(SNeoVMAllocStats& outStats) { outStats = m_sAllocStats; outStats.poolBytes = PoolBytes(); outStats.stringIdleBytes = StringIdleBytes(); }
 	void Var_SetString(VarInfo *d, const char* str);
 	void Var_SetStringA(VarInfo *d, const std::string& str);
 	void Var_SetTable(VarInfo *d, MapInfo* p);
@@ -118,16 +121,23 @@ public:
 
 	VarInfo m_sDefaultValue[NDF_MAX];
 	
-	CNVMAllocPool < MapNode, 32> m_sPool_TableNode;
-	CNVMAllocPool< MapInfo, 32> m_sPool_TableInfo;
-	CNVMAllocPool < SetNode, 32> m_sPool_SetNode;
+	// 페이지 크기는 고정이다(배증 없음 — 마지막 한 장이 필요량을 크게 넘겨 잡던 문제).
+	// 실측 노드 크기(헤더 포함)를 기준으로 한 장이 대략 3~13KB 가 되게 잡았다.
+	// 개수가 적은 타입은 더 작게 — 안 쓰는 타입이 페이지 한 장을 통째로 물지 않게 한다.
+	//   MapNode 48B x 256 = 12.3KB   MapInfo  100B x 64 = 6.4KB
+	//   SetNode 32B x 256 =  8.2KB   SetInfo  100B x 32 = 3.2KB
+	//   ListInfo 148B x 64 =  9.5KB  VecInfo   24B x 512 = 12.3KB
+	//   StringInfo 100B x 128 = 12.8KB  AsyncInfo 372B x 16 = 6.0KB
+	CNVMAllocPool < MapNode, 256> m_sPool_TableNode;
+	CNVMAllocPool< MapInfo, 64> m_sPool_TableInfo;
+	CNVMAllocPool < SetNode, 256> m_sPool_SetNode;
 	CNVMAllocPool< SetInfo, 32> m_sPool_SetInfo;
-	CNVMAllocPool< ListInfo, 32> m_sPool_ListInfo;
+	CNVMAllocPool< ListInfo, 64> m_sPool_ListInfo;
 
-	CNVMAllocPool< VecInfo, 32> m_sPool_Vec;
+	CNVMAllocPool< VecInfo, 512> m_sPool_Vec;
 
-	CNVMInstPool< AsyncInfo, 32> m_sPool_Async;
-	CNVMInstPool< StringInfo, 32> m_sPool_String;
+	CNVMInstPool< AsyncInfo, 16> m_sPool_Async;
+	CNVMInstPool< StringInfo, 128> m_sPool_String;
 	// 코루틴 컨텍스트는 공유 실행 컨텍스트 풀(_pExecPool)로 통합됨 → per-VM 풀 제거.
 
 	std::map<void*, FunctionPtr*> m_sCache_FunPtr;

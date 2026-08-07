@@ -763,6 +763,8 @@ struct AllocStats
     // 실행 컨텍스트 풀(var 스택 포함) 합계.
     // 주의: 컬렉션이 따로 잡는 힙(list/map 의 버킷 배열, 문자열 본문)은 풀 밖이라 포함되지 않는다.
     int64_t poolBytes = 0;
+    // 반납되어 놀고 있는 문자열 노드가 아직 들고 있는 문자 버퍼 합계(poolBytes 밖의 힙).
+    int64_t stringIdleBytes = 0;
 };
 void GetAllocStats(AllocStats& out);
 

@@ -25,6 +25,7 @@ static std::atomic<int> g_iNeoVMAllocModules{ 0 };
 static std::atomic<int> g_iNeoVMAllocAsyncs{ 0 };
 static std::atomic<int> g_iNeoVMAllocVectors{ 0 };
 static std::atomic<long long> g_iNeoVMPoolBytes{ 0 };       // 모든 VM 의 오브젝트 풀 합계
+static std::atomic<long long> g_iNeoVMStringIdleBytes{ 0 };  // 유휴 문자열 노드가 붙든 문자 버퍼
 static std::atomic<long long> g_iNeoVMExecPoolBytes{ 0 };   // 스레드별 실행 컨텍스트 풀 합계
 
 static void PublishNeoVMAllocStatValue(std::atomic<int>& target, int& published, int current)
@@ -65,6 +66,7 @@ void GetNeoVMAllocStats(SNeoVMAllocStats& outStats)
 	outStats.vectors = g_iNeoVMAllocVectors.load(std::memory_order_relaxed);
 	outStats.poolBytes = g_iNeoVMPoolBytes.load(std::memory_order_relaxed)
 	                   + g_iNeoVMExecPoolBytes.load(std::memory_order_relaxed);
+	outStats.stringIdleBytes = g_iNeoVMStringIdleBytes.load(std::memory_order_relaxed);
 }
 
 bool GetNeoVMAllocStats(INeoVM* pVM, SNeoVMAllocStats& outStats)
@@ -89,10 +91,27 @@ long long CNeoVMImpl::PoolBytes() const
 	// _pExecPool 은 스레드별 공유(엔진 소유)라 여기서 세면 VM 수만큼 중복된다 → 자기가 직접 publish.
 }
 
+// 반납된(놀고 있는) 문자열 노드가 아직 붙들고 있는 문자 버퍼의 합계.
+// 풀 페이지(PoolBytes)에는 안 잡히는 값이라 따로 센다. free 리스트를 훑으므로
+// 매 프레임이 아니라 통계 조회 시점에만 부른다.
+long long CNeoVMImpl::StringIdleBytes()
+{
+	long long total = 0;
+	m_sPool_String.ForEachFree([&total](StringInfo& s)
+	{
+		const size_t capa = s._str.capacity();
+		if (capa > 15)   // SSO 범위는 힙을 안 쓴다
+			total += (long long)capa;
+	});
+	return total;
+}
+
 void CNeoVMImpl::PublishAllocStats()
 {
 	m_sAllocStats.poolBytes = PoolBytes();
+	m_sAllocStats.stringIdleBytes = StringIdleBytes();
 	PublishNeoVMAllocStatValue(g_iNeoVMPoolBytes, m_sPublishedAllocStats.poolBytes, m_sAllocStats.poolBytes);
+	PublishNeoVMAllocStatValue(g_iNeoVMStringIdleBytes, m_sPublishedAllocStats.stringIdleBytes, m_sAllocStats.stringIdleBytes);
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocStrings, m_sPublishedAllocStats.strings, m_sAllocStats.strings);
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocMaps, m_sPublishedAllocStats.maps, m_sAllocStats.maps);
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocLists, m_sPublishedAllocStats.lists, m_sAllocStats.lists);
@@ -237,9 +256,24 @@ StringInfo* CNeoVMImpl::StringAlloc(const std::string& str)
 	++m_sAllocStats.strings;
 	return p;
 }
+// 이 용량 이상이면 반납 시 문자 버퍼를 즉시 놓아준다(미만이면 재사용을 위해 유지).
+// 풀은 노드를 재사용하므로 버퍼를 남겨두면 재할당을 아낀다. 다만 상한이 없으면
+// 한 번 큰 문자열을 담았던 노드가 그 용량을 영원히 붙든다 — 맵 로딩처럼 대량 생성 후
+// 전량 소멸하는 구간에서 이게 그대로 남는다. 상한을 두면 총 유지량이
+// (유휴 노드 수 x 이 값) 미만으로 묶인다.
+// MSVC x64 는 15자까지 SSO(힙 미사용)라, 이 값은 그보다 충분히 커야 의미가 있다.
+static const size_t kStringReleaseCapacity = 32;
+
 void CNeoVMImpl::FreeString(VarInfo *d)
 {
 	--m_sAllocStats.strings;
+	std::string& str = d->_str->_str;
+	const size_t capa = str.capacity();
+	if (capa >= kStringReleaseCapacity)
+	{
+		// shrink_to_fit 은 표준상 비구속 요청이라 확정적으로 놓아주려면 swap 을 쓴다.
+		std::string().swap(str);
+	}
 	m_sPool_String.Confer(d->_str);
 }
 VecInfo* CNeoVMImpl::VecAlloc()
@@ -371,19 +405,44 @@ void CNeoVMImpl::FreeSet(SetInfo* set)
 	m_sPool_SetInfo.Confer(set);
 	--m_sAllocStats.sets;
 }
+// 용량이 임계값 이상이면 버퍼를 확정 해제한다(문자열 풀과 같은 규칙).
+static NEOS_FORCEINLINE void ReleaseIfLarge(std::string& s)
+{
+	if (s.capacity() >= kStringReleaseCapacity)
+		std::string().swap(s);
+	else
+		s.clear();
+}
+
 AsyncInfo* CNeoVMImpl::AsyncAlloc()
 {
 	AsyncInfo* p = m_sPool_Async.Receive();
 	p->_refCount = 0;
 	p->_ownerWorkerId = 0;
 	p->_state = ASYNC_READY;
+	// 풀에서 재사용된 노드는 이전 요청의 값을 그대로 들고 있다. 특히 _headers 는
+	// async_add_header 가 push_back 만 하므로, 안 비우면 이전 요청 헤더가 그대로 따라간다.
+	// (요청마다 반드시 새로 채워지는 _type/_timeout/_fun_index 는 호출부가 덮어쓴다)
+	p->_headers.clear();
+	p->_request.clear();
+	p->_body.clear();
+	p->_resultValue.clear();
+	p->_success = false;
 	++m_sAllocStats.asyncs;
 	return p;
 }
 void CNeoVMImpl::FreeAsync(VarInfo* d)
 {
 	--m_sAllocStats.asyncs;
-	m_sPool_Async.Confer(d->_async);
+	AsyncInfo* p = d->_async;
+	// AsyncInfo 는 노드가 372B 로 가장 크고, 문자열 멤버 셋에 HTTP 본문까지 담긴다
+	// (_resultValue 는 응답 전문이라 MB 단위도 가능). 문자열 풀과 같은 규칙으로 놓아준다.
+	ReleaseIfLarge(p->_request);
+	ReleaseIfLarge(p->_body);
+	ReleaseIfLarge(p->_resultValue);
+	// 헤더는 요청마다 새로 쌓이고 재사용 이득이 없다 — 배열째 돌려준다.
+	std::vector< std::pair<std::string, std::string> >().swap(p->_headers);
+	m_sPool_Async.Confer(p);
 }
 
 

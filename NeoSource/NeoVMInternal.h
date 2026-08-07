@@ -350,7 +350,9 @@ void NeoExecPool_PublishBytes(long long delta);
 
 struct NeoExecContextPool
 {
-	CNVMInstPool<CoroutineInfo, 32> _pool;
+	// CoroutineInfo 132B x 16 = 2.1KB. 실행 컨텍스트는 동시 실행 수만큼만 필요해 작게 잡는다
+	// (var 스택 800KB 는 Acquire 때 resize 되므로 페이지 생성 자체는 가볍다).
+	CNVMInstPool<CoroutineInfo, 16> _pool;
 	int _varStackSize;
 	// 이 풀이 한 번이라도 대여해 준 컨텍스트들. 풀 페이지는 소멸까지 해제되지 않으므로 포인터가 안정적이다.
 	// 컨텍스트 1개의 var 스택만 50K * sizeof(VarInfo) 라 풀 노드 자체보다 훨씬 크다 — 따로 세야 한다.
