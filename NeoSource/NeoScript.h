@@ -736,6 +736,27 @@ public:
     //--- 리플렉션 / 디버거 ---
     virtual void GetBuiltins(std::vector<BuiltinInfo>& out) const = 0;
     virtual IDebugger* GetDebugger() = 0;   // 디버그 빌드가 아니면 nullptr
+
+    //--- 메모리 ---
+    // 완전히 빈 풀 페이지를 OS 로 돌려준다. 반환값 = 돌려준 바이트.
+    //  force=false : 매 프레임 부르는 증분 회수다. 보유 시간(기본 5초)이 지난 페이지를
+    //                한 번에 SetTrimPagesPerCall() 장까지만 돌려주고 나머지는 다음
+    //                호출로 넘긴다 — 호출 한 번의 비용에 상한이 있어 프레임이 튀지
+    //                않는다. 빈 페이지가 하나도 없으면 시계도 읽지 않고 즉시 반환하므로
+    //                정상 상태의 비용은 사실상 0 이다.
+    //                보유 시계는 페이지가 빈 순간이 아니라 내부 스윕이 그것을 처음 본
+    //                순간부터 흐르므로, 실제 유지 시간은 보유 시간보다 조금 길 수 있다.
+    //  force=true  : 보유 시간과 회수 예산을 모두 무시하고 지금 비어 있는 페이지를 전부
+    //                즉시 회수한다. 맵 전환처럼 확실한 정리 시점용.
+    virtual int64_t TrimMemory(bool force = false) = 0;
+    // 빈 페이지 보유 시간(초). 0 이면 스윕이 빈 걸 본 즉시 회수 대상이 된다.
+    virtual void SetEmptyPageHoldSeconds(float sec) = 0;
+    virtual float GetEmptyPageHoldSeconds() const = 0;
+    // TrimMemory(false) 한 번이 해제할 페이지 수 상한(기본 4). 회수 속도와 프레임당
+    // 비용의 트레이드오프 손잡이다 — 크게 하면 빨리 돌려주고, 작게 하면 더 잘게 나눈다.
+    // 0 이하면 상한 없음(예전처럼 한 번에 전부).
+    virtual void SetTrimPagesPerCall(int pages) = 0;
+    virtual int GetTrimPagesPerCall() const = 0;
 };
 
 IRuntime* CreateRuntime(const RuntimeDesc& desc = {});

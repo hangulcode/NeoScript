@@ -40,6 +40,26 @@ private:
 	SNeoVMAllocStats m_sPublishedAllocStats;
 public:
 	void PublishAllocStats();
+	// 완전히 빈 페이지를 OS 로 돌려준다. 반환값 = 돌려준 바이트.
+	// 빈 페이지를 Collect 가 처음 본 뒤 m_iEmptyPageHoldMs 가 지나야 대상이 된다
+	// (경계에서 free/malloc 반복 방지). 빈 시각 기록이 지연되는 이유는 .cpp 참고.
+	// force=false 는 한 번에 m_iTrimPagesPerCall 장까지만 해제하고, 빈 페이지가 없으면
+	// 시계도 안 읽고 빠진다 — 매 프레임 불러서 조금씩 돌려주는 용도다.
+	long long CollectEmptyPages(bool force = false);
+	// 어느 풀이든 완전히 빈 페이지가 있는가(포인터 비교 8번). 매 프레임 경로의 조기 반환용.
+	bool AnyEmptyPages() const
+	{
+		return m_sPool_TableNode.HasEmptyPages() || m_sPool_TableInfo.HasEmptyPages()
+			|| m_sPool_SetNode.HasEmptyPages()   || m_sPool_SetInfo.HasEmptyPages()
+			|| m_sPool_ListInfo.HasEmptyPages()  || m_sPool_Vec.HasEmptyPages()
+			|| m_sPool_Async.HasEmptyPages()     || m_sPool_String.HasEmptyPages();
+	}
+	void SetEmptyPageHoldSeconds(float sec) { m_iEmptyPageHoldMs = (sec <= 0.0f) ? 0 : (int)(sec * 1000.0f); }
+	float GetEmptyPageHoldSeconds() const { return m_iEmptyPageHoldMs / 1000.0f; }
+	// 한 번의 CollectEmptyPages(false) 가 해제할 페이지 수 상한. 0 이하 = 상한 없음.
+	void SetTrimPagesPerCall(int pages) { m_iTrimPagesPerCall = pages; }
+	int GetTrimPagesPerCall() const { return m_iTrimPagesPerCall; }
+
 	long long PoolBytes() const;   // 이 VM 의 오브젝트 풀 8개가 확보한 총 바이트
 	// 유휴 문자열 노드가 붙들고 있는 문자 버퍼 합계(풀 페이지 밖의 힙).
 	// free 리스트를 훑으므로 통계 조회 시점에만 부른다.
@@ -138,6 +158,16 @@ public:
 
 	CNVMInstPool< AsyncInfo, 16> m_sPool_Async;
 	CNVMInstPool< StringInfo, 128> m_sPool_String;
+
+	// 빈 페이지 보유 시간(기본 5초).
+	int m_iEmptyPageHoldMs = 5000;
+	// 매 프레임 호출을 전제로 한 회수 예산. 4장/호출 = 60fps 에서 초당 240장이니
+	// 9MB 규모(약 700장)도 3초 남짓에 다 돌아가면서 프레임당 비용은 상한선 안이다.
+	int m_iTrimPagesPerCall = 4;
+	// 라운드로빈 시작 풀. 앞쪽 풀이 예산을 독식해 뒤쪽이 굶는 것을 막는다.
+	int m_iTrimPoolCursor = 0;
+	static const int kTrimPoolCount = 8;
+	size_t CollectPoolAt(int idx, NeoPoolClock::time_point now, int holdMs, int& pageBudget);
 	// 코루틴 컨텍스트는 공유 실행 컨텍스트 풀(_pExecPool)로 통합됨 → per-VM 풀 제거.
 
 	std::map<void*, FunctionPtr*> m_sCache_FunPtr;

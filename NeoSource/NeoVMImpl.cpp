@@ -1,5 +1,6 @@
 ﻿#include <math.h>
 #include <stdlib.h>
+#include <limits.h>   // INT_MAX (회수 예산 무제한 표기)
 #include <atomic>
 #include "NeoVMImpl.h"
 #include "NeoVMWorker.h"
@@ -76,6 +77,63 @@ bool GetNeoVMAllocStats(INeoVM* pVM, SNeoVMAllocStats& outStats)
 
 	((CNeoVMImpl*)pVM)->GetAllocStats(outStats);
 	return true;
+}
+
+// 빈 페이지 회수.
+//  force=false : 보유 시간이 지난 페이지를 "한 번에 m_iTrimPagesPerCall 장까지" 만
+//                돌려준다. 매 프레임 불러서 조금씩 반납하는 용도다.
+//  force=true  : 보유 시간도 예산도 무시하고 지금 비어 있는 페이지를 전부 회수한다.
+//                맵 전환처럼 "지금 확실히 정리" 가 필요한 시점용.
+//
+// [왜 스로틀이 없나]
+// 예전에는 "가끔(보유 시간의 1/4) 크게" 훑었고, 그래서 회수가 걸리는 프레임에만 부하가
+// 몰렸다. 지금은 반대로 "매번 아주 조금" 이다. 풀이 빈 페이지를 비워진 순서 FIFO 로
+// 들고 있어서 (1) 만료 판정이 head 하나 보는 O(1) 이고 (2) 해제도 예산 장수만큼만
+// 하므로, 호출 한 번의 비용에 상한이 있다. 스로틀로 미룰 이유가 없어졌다.
+//
+// [보유 시계 기준점]
+// "페이지가 실제로 빈 순간" 이 아니라 "Collect 가 빈 걸 처음 본 순간" 부터 잰다.
+// Confer 에서 시계를 읽지 않으려고 기록을 여기까지 미루기 때문이다. 매 프레임 도는
+// 지금은 최대 한 프레임 늦는 정도이고, 늦는 방향이라 안전하다.
+long long CNeoVMImpl::CollectEmptyPages(bool force)
+{
+	// 매 프레임 불리는 경로다. 빈 페이지가 하나도 없으면 시계도 읽지 않고 나간다
+	// (풀 8개의 포인터 비교뿐 — QueryPerformanceCounter 보다 싸다).
+	if (force == false && AnyEmptyPages() == false)
+		return 0;
+
+	const NeoPoolClock::time_point now = NeoPoolClock::now();
+	const int hold = force ? 0 : m_iEmptyPageHoldMs;   // force 는 보유 시간도 무시한다
+	int budget = (force || m_iTrimPagesPerCall <= 0) ? INT_MAX : m_iTrimPagesPerCall;
+
+	long long freed = 0;
+	for (int i = 0; i < kTrimPoolCount && budget > 0; ++i)
+		freed += (long long)CollectPoolAt((m_iTrimPoolCursor + i) % kTrimPoolCount, now, hold, budget);
+
+	// 다음 호출은 다음 풀부터 — 앞쪽 풀이 예산을 다 먹어 뒤쪽이 굶는 것을 막는다.
+	if (force == false)
+		m_iTrimPoolCursor = (m_iTrimPoolCursor + 1) % kTrimPoolCount;
+
+	if (freed != 0)
+		PublishAllocStats();
+	return freed;
+}
+
+// 예산을 나눠 주고 라운드로빈 하려면 풀을 인덱스로 다뤄야 한다. 타입이 전부 달라서
+// (템플릿 인자가 다르다) 공통 기반 클래스 대신 switch 로 편다 — vtable 이 안 생긴다.
+size_t CNeoVMImpl::CollectPoolAt(int idx, NeoPoolClock::time_point now, int holdMs, int& pageBudget)
+{
+	switch (idx)
+	{
+	case 0:  return m_sPool_TableNode.Collect(now, holdMs, pageBudget);
+	case 1:  return m_sPool_TableInfo.Collect(now, holdMs, pageBudget);
+	case 2:  return m_sPool_SetNode.Collect(now, holdMs, pageBudget);
+	case 3:  return m_sPool_SetInfo.Collect(now, holdMs, pageBudget);
+	case 4:  return m_sPool_ListInfo.Collect(now, holdMs, pageBudget);
+	case 5:  return m_sPool_Vec.Collect(now, holdMs, pageBudget);
+	case 6:  return m_sPool_Async.Collect(now, holdMs, pageBudget);
+	default: return m_sPool_String.Collect(now, holdMs, pageBudget);
+	}
 }
 
 long long CNeoVMImpl::PoolBytes() const

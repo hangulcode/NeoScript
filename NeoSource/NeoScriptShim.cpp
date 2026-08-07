@@ -408,6 +408,11 @@ public:
     //--- 리플렉션/디버거 ---
     void GetBuiltins(std::vector<BuiltinInfo>& out) const override;
     IDebugger* GetDebugger() override;
+    int64_t TrimMemory(bool force) override;
+    void SetEmptyPageHoldSeconds(float sec) override;
+    float GetEmptyPageHoldSeconds() const override;
+    void SetTrimPagesPerCall(int pages) override;
+    int GetTrimPagesPerCall() const override;
 
     // 내부: 글로벌 인터페이스 훅에서 등록 객체를 워커 맵에 바인딩
     void BindRegisteredObjects(INeoVMWorker* worker, InstanceRec* inst);
@@ -1747,6 +1752,34 @@ IDebugger* RuntimeImpl::GetDebugger()
     if (!m_debugger) m_debugger = new DebuggerImpl(this);
     return m_debugger;
 }
+
+//------------------------------------------------------------------------------
+// 메모리 회수
+//------------------------------------------------------------------------------
+int64_t RuntimeImpl::TrimMemory(bool force)
+{
+    if (m_vm == nullptr) return 0;
+    return ((CNeoVMImpl*)m_vm)->CollectEmptyPages(force);
+}
+void RuntimeImpl::SetEmptyPageHoldSeconds(float sec)
+{
+    if (m_vm != nullptr) ((CNeoVMImpl*)m_vm)->SetEmptyPageHoldSeconds(sec);
+}
+float RuntimeImpl::GetEmptyPageHoldSeconds() const
+{
+    if (m_vm == nullptr) return 0.0f;
+    return ((CNeoVMImpl*)m_vm)->GetEmptyPageHoldSeconds();
+}
+void RuntimeImpl::SetTrimPagesPerCall(int pages)
+{
+    if (m_vm != nullptr) ((CNeoVMImpl*)m_vm)->SetTrimPagesPerCall(pages);
+}
+int RuntimeImpl::GetTrimPagesPerCall() const
+{
+    if (m_vm == nullptr) return 0;
+    return ((CNeoVMImpl*)m_vm)->GetTrimPagesPerCall();
+}
+
 static void DestroyDebugger(DebuggerImpl* d) { delete d; }
 
 } // namespace NeoScript

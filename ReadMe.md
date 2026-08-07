@@ -114,6 +114,13 @@ var moved = position + direction * 2.0;
   `RotateVectorByQuat`, and quaternion helpers) require vector value types, not `[x, y, z]`
   List literals.
 - Quaternion component order is `w, x, y, z`: `math.Quaternion(w, x, y, z)`.
+- **There is one vector type, not four.** Internally all of these are `VAR_VEC` plus a component
+  count of 1-4; the count lives in unused padding in `VarInfo`, so it costs no memory. A
+  quaternion is a 4-component vector — the VM does not track "this is a rotation", and `w,x,y,z`
+  is a convention between the script and the engine, not a type. Two consequences: `type()`
+  reports `"Vector4"` for a quaternion, and `q1 + q2` is a component-wise add rather than an error
+  (quaternion multiplication is `math.quat_*`, which is what you want for composing rotations).
+  Arithmetic between different component counts is still rejected.
 
 ### Embedding the engine — Host API (`NeoScript.h`)
 The public host API is a **3-concept facade: Runtime / Program / Instance**, declared in `NeoScript.h`.
@@ -400,20 +407,20 @@ Lower is better. **ms**, best of 5 runs after a warm-up. `x Neo` = how many time
 
 | Benchmark | What it stresses | Neo (ms) | Lua (ms) | C++ (ms) | Lua vs Neo | C++ vs Neo |
 | :-------- | :--------------- | -------: | -------: | -------: | ---------: | ---------: |
-| `loop_sum`      | integer loop, VM dispatch floor | **170** | 188 |  12.3 | 0.90x | 13.8x |
-| `float_math`    | float mul/add/sub chain         | **195** | 305 |  57.1 | 0.64x |  3.4x |
-| `func_call`     | script function call overhead   | **130** | 156 |   4.1 | 0.83x | 31.7x |
-| `fib_recursive` | recursion, fib(32)              |  **81** |  87 |   6.6 | 0.93x | 12.3x |
-| `array_rw`      | sequential array write + read   |  **44** |  46 |   2.4 | 0.96x | 18.3x |
-| `map_str`       | string-key hash lookup          |  **49** |  36 |  69.4 | 1.36x |  0.7x |
-| `string_ops`    | string build + length           |  **74** | 146 |  13.2 | 0.51x |  5.6x |
-| `particles`     | game-style float + array sim    |  **55** |  48 |   3.4 | 1.15x | 16.2x |
-| **total**       |                                 | **798** | 1012 | 168.5 | 0.79x |  4.7x |
+| `loop_sum`      | integer loop, VM dispatch floor | **176** | 191 |  12.6 | 0.92x | 14.0x |
+| `float_math`    | float mul/add/sub chain         | **200** | 307 |  57.7 | 0.65x |  3.5x |
+| `func_call`     | script function call overhead   | **125** | 156 |   4.2 | 0.80x | 29.8x |
+| `fib_recursive` | recursion, fib(32)              |  **79** |  88 |   6.7 | 0.90x | 11.8x |
+| `array_rw`      | sequential array write + read   |  **44** |  47 |   2.4 | 0.94x | 18.3x |
+| `map_str`       | string-key hash lookup          |  **51** |  37 |  71.0 | 1.38x |  0.7x |
+| `string_ops`    | string build + length           |  **76** | 148 |  13.1 | 0.51x |  5.8x |
+| `particles`     | game-style float + array sim    |  **51** |  49 |   3.4 | 1.04x | 15.0x |
+| **total**       |                                 | **802** | 1023 | 171.1 | 0.78x |  4.7x |
 
 **Reading the numbers.**
-- **Neo is ~27% faster than Lua overall** and leads on 6 of 8 benchmarks. `map_str` (1.36x) and
-  `particles` (1.15x) are the two still behind. All 8 checksums match across the three languages,
-  which is what proves they did the same work.
+- **Neo is ~28% faster than Lua overall** and leads on 6 of 8 benchmarks. `map_str` (1.38x) is the
+  one clear gap left; `particles` (1.04x) is now within a few percent. All 8 checksums match across
+  the three languages, which is what proves they did the same work.
 - `map_str` is the widest remaining gap but **not the next thing to fix** — see the note on target
   workload below. It also uses only string *reads*, so none of the map work in item 10 shows up
   here; that change is worth 2x on integer keys and on writes, which this suite never exercises.

@@ -501,6 +501,131 @@ struct V2DebugSmokeListener : IDebugListener
 	}
 };
 
+// 빈 페이지 회수 측정. 대량 생성 -> 전량 소멸 -> TrimMemory 로 페이지가 실제로
+// OS 에 돌아가는지 본다. (예전 전역 free 리스트 구조에서는 0 바이트만 나온다)
+static int RunPoolTrim(INeoLoader* pLoader)
+{
+	RuntimeDesc rd;
+	rd.nativeLoader = pLoader;
+	rd.printFn = [](StringView s) { printf("%.*s\n", (int)s.size(), s.data()); };
+	IRuntime* rt = CreateRuntime(rd);
+	rt->FreezeBindings();
+
+	const char* source =
+		"var keep = [];\n"
+		"export fun Build()\n"
+		"{\n"
+		"    for(var i in 0, 30000, 1)\n"
+		"    {\n"
+		"        var m = { \"path\": \"map/tunnel/segment/\" .. toint(i) .. \"/mesh.bin\", \"id\": toint(i) };\n"
+		"        keep.append(m);\n"
+		"    }\n"
+		"    return keep.len();\n"
+		"}\n"
+		"export fun Drop()\n"
+		"{\n"
+		"    keep = [];\n"
+		"    return 0;\n"
+		"}\n";
+
+	CompileDesc cd; cd.source = source; cd.sourceName = "pooltrim.ns";
+	CompileResult cr = rt->Compile(cd);
+	if (!cr.program) { printf("[pooltrim] compile failed: %s\n", cr.error.message.c_str()); DestroyRuntime(rt); return -1; }
+	InstanceHandle inst = rt->CreateInstance(cr.program);
+
+	auto dump = [&](const char* tag)
+	{
+		AllocStats s; GetAllocStats(s);
+		printf("[pooltrim] %-14s pool=%8lld KB  stringIdle=%7lld KB  (str=%d map=%d list=%d)\n",
+			tag, s.poolBytes / 1024, s.stringIdleBytes / 1024, s.strings, s.maps, s.lists);
+		return s.poolBytes;
+	};
+
+	auto PoolBytesNow = [&]() { AllocStats s; GetAllocStats(s); return s.poolBytes; };
+
+	dump("start");
+	{ Invocation c = rt->Call(inst, "Build"); c.invoke(); }
+	const long long peak = dump("after build");
+	{ Invocation c = rt->Call(inst, "Drop"); c.invoke(); }
+	const long long dropped = dump("after drop");
+
+	// force=true 는 보유 시간과 스로틀을 모두 무시한다 — 5초로 두고도 즉시 회수돼야 한다.
+	rt->SetEmptyPageHoldSeconds(5.0f);
+	const long long freed = rt->TrimMemory(true);
+	const long long trimmed = dump("after trim(force)");
+
+	printf("[pooltrim] peak=%lld KB -> trim=%lld KB  (freed %lld KB, %.1f%% of peak)\n",
+		peak / 1024, trimmed / 1024, freed / 1024,
+		peak > 0 ? (100.0 * (double)freed / (double)peak) : 0.0);
+
+	// 보유 시간은 force=false 경로에서 지켜져야 한다. hold=1s 로 두고
+	// (a) 스로틀만 지난 시점에는 회수 0, (b) 보유 시간까지 지나면 회수 > 0.
+	{ Invocation c = rt->Call(inst, "Build"); c.invoke(); }
+	{ Invocation c = rt->Call(inst, "Drop"); c.invoke(); }
+	rt->SetEmptyPageHoldSeconds(1.0f);
+	std::this_thread::sleep_for(std::chrono::milliseconds(300));   // 스로틀(250ms) 초과, 보유(1s) 미만
+	const long long tooEarly = rt->TrimMemory(false);
+	// 보유 시계는 "Collect 가 빈 걸 처음 본 시점"부터 흐른다(Confer 에서 시계를 안 읽으려는
+	// 지연 기록). 위 호출이 도장을 찍었으므로 거기서부터 1초를 더 기다린다.
+	std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+	const long long afterHold = rt->TrimMemory(false);
+	printf("[pooltrim] hold=1s  보유 전 회수=%lld bytes (0 이어야 정상), 보유 후 회수=%lld bytes\n",
+		tooEarly, afterHold);
+
+	// --- 증분 회수: 매 프레임 조금씩 돌려주는 경로 ---
+	// 다시 채웠다 비우고, 보유 시간 0 + 프레임 루프로 TrimMemory(false) 를 돌린다.
+	// 확인할 것: (a) 결국 다 돌아오는가, (b) 한 호출이 예산 장수를 넘지 않는가,
+	//            (c) 그래서 호출 하나의 시간이 튀지 않는가.
+	{ Invocation c = rt->Call(inst, "Build"); c.invoke(); }
+	{ Invocation c = rt->Call(inst, "Drop"); c.invoke(); }
+	rt->SetEmptyPageHoldSeconds(0.0f);       // 보유 대기 없이 회수 속도만 본다
+	rt->SetTrimPagesPerCall(4);
+
+	const long long incStart = PoolBytesNow();
+	long long worstCall = 0;                  // 한 호출이 해제한 최대 바이트
+	double worstUs = 0.0;                     // 한 호출의 최대 소요 시간
+	double totalUs = 0.0;
+	int calls = 0;
+	while (calls < 100000)
+	{
+		const auto t0 = std::chrono::steady_clock::now();
+		const long long f = rt->TrimMemory(false);
+		const double us = std::chrono::duration<double, std::micro>(
+			std::chrono::steady_clock::now() - t0).count();
+		++calls;
+		totalUs += us;
+		if (us > worstUs) worstUs = us;
+		if (f > worstCall) worstCall = f;
+		if (f == 0) break;                    // 더 돌려줄 게 없다
+	}
+	const long long incEnd = PoolBytesNow();
+
+	// 예산 4장 * 페이지 최대 크기(가장 큰 풀 기준)를 넘는 호출이 있으면 증분이 깨진 것이다.
+	const long long kMaxPageBytes = 16 * 1024;      // 현재 설정에서 가장 큰 페이지가 이보다 작다
+	const bool budgetKept = worstCall <= 4 * kMaxPageBytes;
+	printf("[pooltrim] 증분: %lld KB -> %lld KB, 호출 %d 회, 최대 1회 해제=%lld bytes,\n"
+	       "           최대 1회 시간=%.1f us, 평균=%.2f us, 예산준수=%s\n",
+		incStart / 1024, incEnd / 1024, calls, worstCall,
+		worstUs, totalUs / (calls > 0 ? calls : 1), budgetKept ? "OK" : "FAIL");
+
+	// 빈 페이지가 없을 때의 호출 비용(엔진이 매 프레임 부르는 정상 상태).
+	double idleUs = 0.0;
+	for (int i = 0; i < 1000; ++i)
+	{
+		const auto t0 = std::chrono::steady_clock::now();
+		rt->TrimMemory(false);
+		idleUs += std::chrono::duration<double, std::micro>(
+			std::chrono::steady_clock::now() - t0).count();
+	}
+	printf("[pooltrim] 정상 상태(빈 페이지 없음) 1회 비용 = %.4f us\n", idleUs / 1000.0);
+
+	rt->DestroyInstance(inst);
+	rt->DestroyProgram(cr.program);
+	DestroyRuntime(rt);
+	return (dropped >= peak && freed > 0 && tooEarly == 0 && afterHold > 0
+		&& budgetKept && incEnd < incStart) ? 0 : -1;
+}
+
 static int RunDebugSmoke()
 {
 	RuntimeDesc rd;
@@ -2159,6 +2284,10 @@ int main(int argc, char* argv[])
 		else if (command == "--bench")
 		{
 			exitCode = RunBenchmarks(pLoader);
+		}
+		else if (command == "--pooltrim")
+		{
+			exitCode = RunPoolTrim(pLoader);
 		}
 		else if (command == "--debug-smoke")
 		{
