@@ -174,7 +174,9 @@ struct neo_libs
 			std::string substring = str.substr(previous, current - previous);
 			pListR->InsertLast(substring);
 
-			previous = current + 1;
+			// 구분자 길이만큼 넘어가야 한다. 1 씩 넘기면 두 글자 이상 구분자에서
+			// 남은 글자가 다음 토큰 앞에 붙는다("a::b".split("::") -> ["a", ":b"]).
+			previous = current + findstr.length();
 			current = str.find(findstr, previous);
 		}
 		pListR->InsertLast(str.substr(previous, current - previous)); // Last
