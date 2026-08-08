@@ -21,6 +21,15 @@ NEOS_FORCEINLINE void CNeoVMWorker::MoveI(VarInfo* v1, int v)
 	v1->_int = v;
 }
 
+NEOS_FORCEINLINE void CNeoVMWorker::MoveF(VarInfo* v1, int bits)
+{
+	if (v1->IsAllocType())
+		Var_Release(v1);
+
+	v1->SetType(VAR_FLOAT);
+	std::memcpy(&v1->_float, &bits, sizeof(bits));
+}
+
 
 // 디스패치 루프에 인라인되는 것은 list[int] / map[string] 두 경로뿐이다.
 // 나머지(프로퍼티 맵, 벡터 성분 쓰기, 문자열 인덱서, 에러 포맷)는 CltInsertRare 로 밀어낸다 —

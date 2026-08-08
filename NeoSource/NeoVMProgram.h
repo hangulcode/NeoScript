@@ -109,7 +109,8 @@ class CNeoVMProgram
 	void PatchNativeCalls();
 	// 오퍼랜드가 전부 로컬인 op 를 _L 변형으로 치환한다(런타임 argFlag 테스트 제거).
 	// 컴파일러/이미지는 건드리지 않고 로드 후 메모리 코드만 바꾸므로 저장 바이트코드는 그대로다.
-	void PatchLocalOps();
+	// 이 순회에서 구성 의존 opcode도 검증한다. false면 Program 생성 실패다.
+	bool PatchLocalOps(std::string* err);
 
 public:
 	SNeoVMHeader				header;

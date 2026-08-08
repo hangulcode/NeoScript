@@ -924,11 +924,7 @@ public:
 
 	static bool		IsSinglePrecision() 
 	{
-	#ifdef NS_SINGLE_PRECISION
-		return true;
-	#else
-		return false;
-	#endif
+		return sizeof(NS_FLOAT) == 4;
 	}
 };
 

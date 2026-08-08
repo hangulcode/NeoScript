@@ -18,6 +18,11 @@ typedef int				s32;
 #define NS_SINGLE_PRECISION
 typedef float		NS_FLOAT;
 
+// NOP_MOVF 는 SVMOperation 의 n23(정확히 4 byte)에 float 비트를 직접 담는다.
+// NS_FLOAT 를 double 로 바꾸면 이 값도 컴파일 타임에 false 가 되어, 컴파일러는
+// 기존 static 상수 + NOP_MOV 경로만 사용한다.
+static constexpr bool NEOS_CAN_EMBED_FLOAT_IMMEDIATE = (sizeof(NS_FLOAT) == 4 && sizeof(int) == 4);
+
 #pragma pack(1)
 struct debug_info
 {
@@ -63,7 +68,8 @@ struct SUtf8One
 //       0110 이미지를 그대로 읽으면 op 번호가 어긋나므로 버전을 올린다.
 // 0112: 벡터 타입 통합 — VAR_VEC2/3/4/QUAT -> VAR_VEC(+성분수), VEC*_MAKE 4개 -> VEC_MAKE.
 //       VAR_TYPE / opcode 번호가 모두 밀리므로 이전 이미지와 호환되지 않는다.
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('1' << 8) | ('2'))
+// 0113: NOP_MOVI_L 뒤에 NOP_MOVF/_L 삽입. 이후 opcode 번호가 바뀌므로 캐시를 재생성한다.
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('1' << 8) | ('3'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline

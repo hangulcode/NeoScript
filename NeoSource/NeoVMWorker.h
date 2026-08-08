@@ -280,6 +280,7 @@ public:
 	}
 	void Move(VarInfo* v1, VarInfo* v2);
 	void MoveI(VarInfo* v1, int v);
+	void MoveF(VarInfo* v1, int bits);
 
 
 	void Swap(VarInfo* v1, VarInfo* v2);

@@ -95,6 +95,8 @@ enum eNOperation : OpType
 	NOP_MOV_L,
 	NOP_MOVI,
 	NOP_MOVI_L,
+	NOP_MOVF,
+	NOP_MOVF_L,
 
 	NOP_MOV_MINUS,
 	NOP_MOV_MINUS_L,

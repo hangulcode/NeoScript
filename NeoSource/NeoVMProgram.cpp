@@ -135,7 +135,11 @@ CNeoVMProgram* CNeoVMProgram::Create(const void* pBuffer, int iSize, std::string
 	}
 	p->PatchNativeCalls();
 	// NATIVECALL/intrinsic 치환 뒤에 돌린다 — PTRCALL2 가 먼저 확정되어야 한다.
-	p->PatchLocalOps();
+	if (p->PatchLocalOps(err) == false)
+	{
+		p->Release();
+		return nullptr;
+	}
 	return p;
 }
 
@@ -418,7 +422,7 @@ void CNeoVMProgram::PatchNativeCalls()
 // 판정 기준은 "VM 이 실제로 GetVarPtr* 로 페치하는 슬롯"이며, 점프 offset / 인자 수 /
 // 함수 인덱스 / 즉값처럼 변수 참조가 아닌 필드는 검사 대상이 아니다.
 // NOP_JMP(페치 0개)와 NOP_JMP_FOR(이미 GetVarPtr_L 고정)은 _L 이 원본과 동일해 치환하지 않는다.
-void CNeoVMProgram::PatchLocalOps()
+bool CNeoVMProgram::PatchLocalOps(std::string* err)
 {
 	const u8 L1 = NEOS_ARG_N1_LOCAL, L2 = NEOS_ARG_N2_LOCAL, L3 = NEOS_ARG_N3_LOCAL;
 	const int opCount = (int)code.size();
@@ -440,6 +444,21 @@ void CNeoVMProgram::PatchLocalOps()
 		case NOP_TOINT:        if ((f & (L1|L2)) == (L1|L2)) to = NOP_TOINT_L;      break;
 		// n1 만
 		case NOP_MOVI:         if (f & L1) to = NOP_MOVI_L;                         break;
+		case NOP_MOVF:
+			if (NEOS_CAN_EMBED_FLOAT_IMMEDIATE == false)
+			{
+				SetLoadError(err, "NOP_MOVF requires 4-byte NS_FLOAT");
+				return false;
+			}
+			if (f & L1) to = NOP_MOVF_L;
+			break;
+		case NOP_MOVF_L:
+			if (NEOS_CAN_EMBED_FLOAT_IMMEDIATE == false)
+			{
+				SetLoadError(err, "NOP_MOVF requires 4-byte NS_FLOAT");
+				return false;
+			}
+			break;
 		case NOP_LIST_ALLOC:   if (f & L1) to = NOP_LIST_ALLOC_L;                   break;
 		case NOP_CHANGE_INT:   if (f & L1) to = NOP_CHANGE_INT_L;                   break;
 		// n1, n2, n3
@@ -477,6 +496,7 @@ void CNeoVMProgram::PatchLocalOps()
 		}
 	}
 	localOpCount = patched;
+	return true;
 }
 
 CNeoVMProgram* INeoVM::CreateProgram(const void* pBuffer, int iSize, std::string* err)
@@ -503,6 +523,7 @@ static eNOperation NormalizeLocalOp(eNOperation op, bool* outIsLocal)
 	{
 	case NOP_MOV_L:          base = NOP_MOV;          break;
 	case NOP_MOVI_L:         base = NOP_MOVI;         break;
+	case NOP_MOVF_L:         base = NOP_MOVF;         break;
 	case NOP_MOV_MINUS_L:    base = NOP_MOV_MINUS;    break;
 	case NOP_ADD2_L:         base = NOP_ADD2;         break;
 	case NOP_ADD3_L:         base = NOP_ADD3;         break;
@@ -797,6 +818,19 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		byteCount = OpFlagByteChars + 2 * 3;
 		outAssembly = FormatAsm("MOVI %s = %d", context.operand(1).c_str(), v.n23);
 		break;
+	case NOP_MOVF:
+	{
+		byteCount = OpFlagByteChars + 2 * 3;
+		if (NEOS_CAN_EMBED_FLOAT_IMMEDIATE)
+		{
+			NS_FLOAT value = 0;
+			std::memcpy(&value, &v.n23, sizeof(v.n23));
+			outAssembly = FormatAsm("MOVF %s = %g", context.operand(1).c_str(), (double)value);
+		}
+		else
+			outAssembly = FormatAsm("MOVF %s = <invalid precision>", context.operand(1).c_str());
+		break;
+	}
 	case NOP_MOV_MINUS:
 		byteCount = OpFlagByteChars + 2 * 2;
 		outAssembly = FormatAsm("MOV  %s = -%s", context.operand(1).c_str(), context.operand(2).c_str());
