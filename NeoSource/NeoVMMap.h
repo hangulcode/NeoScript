@@ -5,16 +5,20 @@ namespace NeoScript
 class CNeoVMWorker;
 class CNeoVMImpl;
 
-#pragma pack(1)
+// 키와 값은 메타데이터 배열 밖의 VM 풀 객체다. 충돌 체인을 훑을 때는
+// hash/next/data 포인터만 읽고, 실제 키 비교가 필요한 경우에만 MapData로 간다.
+struct MapData
+{
+	VarInfo	key;
+	VarInfo	value;
+};
+
 struct MapNode
 {
 	u32		hash;
 	int		next; // 같은 연속 노드 배열 안의 다음 슬롯. -1=끝, -2=빈 슬롯
-
-	VarInfo	key;
-	VarInfo	value;
+	MapData*	data;
 };
-#pragma pack()
 
 static const int MAP_NODE_END = -1;
 static const int MAP_NODE_EMPTY = -2;
@@ -88,6 +92,8 @@ struct MapInfo : AllocBase
 
 private:
 	void ClearNode(MapNode& node);
+	MapData* AllocNodeData();
+	void FreeNodeData(MapData* data);
 	int FindNodeIndex(VarInfo* pKey, u32 hash, int* pPrevious = nullptr) const;
 	int FindFreeNodeIndex();
 	int InsertNewNode(u32 hash);

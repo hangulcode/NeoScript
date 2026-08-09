@@ -519,11 +519,11 @@ NEOS_FORCEINLINE VarInfo* MapInfo::FindString(StringInfo* pKeyStr)
 	MapNode* node = _Bucket + (hash & _HashBase);
 	while (node->next != MAP_NODE_EMPTY)
 	{
-		if (node->hash == hash && node->key.GetType() == VAR_STRING)
+		if (node->hash == hash && node->data->key.GetType() == VAR_STRING)
 		{
-			StringInfo* pCurStr = node->key._str;
+			StringInfo* pCurStr = node->data->key._str;
 			if (pCurStr == pKeyStr)
-				return &node->value;
+				return &node->data->value;
 		}
 		if (node->next == MAP_NODE_END)
 			break;
@@ -543,8 +543,8 @@ NEOS_FORCEINLINE VarInfo* MapInfo::FindInt(int key)
 	MapNode* node = _Bucket + ((u32)key & _HashBase);
 	while (node->next != MAP_NODE_EMPTY)
 	{
-		if (node->key.GetType() == VAR_INT && node->key._int == key)
-			return &node->value;
+		if (node->data->key.GetType() == VAR_INT && node->data->key._int == key)
+			return &node->data->value;
 		if (node->next == MAP_NODE_END)
 			break;
 		node = _Bucket + node->next;

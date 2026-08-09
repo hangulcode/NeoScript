@@ -38,30 +38,47 @@ static VarInfo* NormalizeMapStringKey(CNeoVMImpl* vm, VarInfo* pKey, VarInfo& no
 
 void MapInfo::ClearNode(MapNode& node)
 {
-	node.key.ClearType();
-	node.value.ClearType();
 	node.hash = 0;
 	node.next = MAP_NODE_EMPTY;
+	node.data = NULL;
+}
+
+MapData* MapInfo::AllocNodeData()
+{
+	MapData* data = _pVM->m_sPool_TableData.Receive();
+	data->key.ClearType();
+	data->value.ClearType();
+	return data;
+}
+
+void MapInfo::FreeNodeData(MapData* data)
+{
+	if (data == NULL)
+		return;
+	_pVM->Var_Release(&data->key);
+	_pVM->Var_Release(&data->value);
+	_pVM->m_sPool_TableData.Confer(data);
 }
 
 static bool MapKeyEquals(MapNode& node, VarInfo* pKey, u32 hash)
 {
-	if (node.hash != hash || node.key.GetType() != pKey->GetType())
+	MapData* data = node.data;
+	if (node.hash != hash || data == NULL || data->key.GetType() != pKey->GetType())
 		return false;
 
 	switch (pKey->GetType())
 	{
-	case VAR_INT:       return node.key._int == pKey->_int;
-	case VAR_FLOAT:     return node.key._float == pKey->_float;
-	case VAR_BOOL:      return node.key._bl == pKey->_bl;
+	case VAR_INT:       return data->key._int == pKey->_int;
+	case VAR_FLOAT:     return data->key._float == pKey->_float;
+	case VAR_BOOL:      return data->key._bl == pKey->_bl;
 	case VAR_NONE:      return true;
-	case VAR_FUN:       return node.key._fun_index == pKey->_fun_index;
+	case VAR_FUN:       return data->key._fun_index == pKey->_fun_index;
 	case VAR_STRING:
-		return node.key._str == pKey->_str;
-	case VAR_MAP:       return node.key._tbl == pKey->_tbl;
-	case VAR_LIST:      return node.key._lst == pKey->_lst;
-	case VAR_SET:       return node.key._set == pKey->_set;
-	case VAR_COROUTINE: return node.key._cor == pKey->_cor;
+		return data->key._str == pKey->_str;
+	case VAR_MAP:       return data->key._tbl == pKey->_tbl;
+	case VAR_LIST:      return data->key._lst == pKey->_lst;
+	case VAR_SET:       return data->key._set == pKey->_set;
+	case VAR_COROUTINE: return data->key._cor == pKey->_cor;
 	default:             return false;
 	}
 }
@@ -178,8 +195,7 @@ bool MapInfo::ReMap(int minCapacity)
 			return false;
 		}
 		const int next = _Bucket[target].next;
-		_Bucket[target].key = oldBucket[i].key;
-		_Bucket[target].value = oldBucket[i].value;
+		_Bucket[target].data = oldBucket[i].data;
 		_Bucket[target].hash = oldBucket[i].hash;
 		_Bucket[target].next = next;
 	}
@@ -233,8 +249,7 @@ void MapInfo::Free()
 	{
 		if (!IsMapNodeUsed(_Bucket[i]))
 			continue;
-		_pVM->Var_Release(&_Bucket[i].key);
-		_pVM->Var_Release(&_Bucket[i].value);
+		FreeNodeData(_Bucket[i].data);
 	}
 
 	delete[] _Bucket;
@@ -266,7 +281,7 @@ VarInfo* MapInfo::Insert(VarInfo* pKey)
 	u32 hash = GetMapKeyHash(pKey);
 	const int found = FindNodeIndex(pKey, hash);
 	if (found != MAP_NODE_END)
-		return &_Bucket[found].value;
+		return &_Bucket[found].data->value;
 
 	if (_BucketCapa == 0
 		|| (long long)(_itemCount + 1) * 4 > (long long)_BucketCapa * 3)
@@ -291,12 +306,12 @@ VarInfo* MapInfo::Insert(VarInfo* pKey)
 		return NULL;
 
 	MapNode& node = _Bucket[index];
-	Move_DestNoRelease(&node.key, pKey);
-	node.value.ClearType();
+	node.data = AllocNodeData();
+	Move_DestNoRelease(&node.data->key, pKey);
 	node.hash = hash;
 	++_itemCount;
 	++_mutationVersion;
-	return &node.value;
+	return &node.data->value;
 }
 
 void MapInfo::Insert(const std::string& Key, VarInfo* pValue)
@@ -376,8 +391,7 @@ void MapInfo::Remove(VarInfo* pKey)
 		return;
 
 	MapNode& node = _Bucket[index];
-	_pVM->Var_Release(&node.key);
-	_pVM->Var_Release(&node.value);
+	MapData* removedData = node.data;
 
 	if (previous != MAP_NODE_END)
 	{
@@ -393,12 +407,10 @@ void MapInfo::Remove(VarInfo* pKey)
 		// Move the next node into the head slot to retain the primary-slot invariant.
 		const int next = node.next;
 		const MapNode moved = _Bucket[next];
-		node.key = moved.key;
-		node.value = moved.value;
-		node.hash = moved.hash;
-		node.next = moved.next;
+		node = moved;
 		ClearNode(_Bucket[next]);
 	}
+	FreeNodeData(removedData);
 
 	--_itemCount;
 	++_mutationVersion;
@@ -410,7 +422,7 @@ VarInfo* MapInfo::Find(VarInfo *pKey)
 		return FindString(pKey->_str);
 
 	const int index = FindNodeIndex(pKey, GetMapKeyHash(pKey));
-	return index == MAP_NODE_END ? NULL : &_Bucket[index].value;
+	return index == MAP_NODE_END ? NULL : &_Bucket[index].data->value;
 }
 
 VarInfo* MapInfo::Find(const std::string& key)
@@ -426,7 +438,7 @@ bool MapInfo::ToListKeys(std::vector<VarInfo*>& lst)
 	for (int i = 0; i < _BucketCapa; ++i)
 	{
 		if (IsMapNodeUsed(_Bucket[i]))
-			lst[cnt++] = &_Bucket[i].key;
+			lst[cnt++] = &_Bucket[i].data->key;
 	}
 	return cnt == _itemCount;
 }
@@ -438,7 +450,7 @@ bool MapInfo::ToListValues(std::vector<VarInfo*>& lst)
 	for (int i = 0; i < _BucketCapa; ++i)
 	{
 		if (IsMapNodeUsed(_Bucket[i]))
-			lst[cnt++] = &_Bucket[i].value;
+			lst[cnt++] = &_Bucket[i].data->value;
 	}
 	return cnt == _itemCount;
 }

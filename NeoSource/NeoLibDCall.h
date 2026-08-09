@@ -46,8 +46,8 @@ struct neo_DCalllibs
 		CollectionIterator it = pV1->FirstNode();
 		while (it._pSetNode)
 		{
-			if (true == pV2->Find(&it._pSetNode->key))
-				pR->Insert(&it._pSetNode->key);
+			if (true == pV2->Find(&it._pSetNode->data->key))
+				pR->Insert(&it._pSetNode->data->key);
 			pV1->NextNode(it);
 		}
 		return true;
@@ -68,15 +68,15 @@ struct neo_DCalllibs
 		CollectionIterator it = pV1->FirstNode();
 		while (it._pSetNode)
 		{
-			pR->Insert(&it._pSetNode->key);
+			pR->Insert(&it._pSetNode->data->key);
 			pV1->NextNode(it);
 		}
 
 		it = pV2->FirstNode();
 		while (it._pSetNode)
 		{
-			if (false == pV1->Find(&it._pSetNode->key))
-				pR->Insert(&it._pSetNode->key);
+			if (false == pV1->Find(&it._pSetNode->data->key))
+				pR->Insert(&it._pSetNode->data->key);
 			pV2->NextNode(it);
 		}
 		return true;
@@ -97,8 +97,8 @@ struct neo_DCalllibs
 		CollectionIterator it = pV1->FirstNode();
 		while (it._pSetNode)
 		{
-			if(false == pV2->Find(&it._pSetNode->key))
-				pR->Insert(&it._pSetNode->key);
+			if(false == pV2->Find(&it._pSetNode->data->key))
+				pR->Insert(&it._pSetNode->data->key);
 			pV1->NextNode(it);
 		}
 		return true;

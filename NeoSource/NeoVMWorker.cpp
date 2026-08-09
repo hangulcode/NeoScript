@@ -1314,15 +1314,15 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 				{
 					MapNode* node = iterator._pTableNode;
 					NeoDebugVariable child;
-					if (node->key.GetType() == VAR_STRING && node->key._str != nullptr)
-						child.name = "[\"" + node->key._str->_str + "\"]";
+					if (node->data->key.GetType() == VAR_STRING && node->data->key._str != nullptr)
+						child.name = "[\"" + node->data->key._str->_str + "\"]";
 					else
 					{
 						NeoDebugVariable key;
-						NeoDebugFormatValue(&node->key, key, collectionDepth + 1);
+						NeoDebugFormatValue(&node->data->key, key, collectionDepth + 1);
 						child.name = "[" + key.value + "]";
 					}
-					NeoDebugFormatValue(&node->value, child, collectionDepth + 1);
+					NeoDebugFormatValue(&node->data->value, child, collectionDepth + 1);
 					out.children.push_back(std::move(child));
 					pVar->_tbl->NextNode(iterator);
 				}

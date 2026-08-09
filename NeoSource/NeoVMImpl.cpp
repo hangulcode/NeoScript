@@ -131,9 +131,9 @@ size_t CNeoVMImpl::CollectPoolAt(int idx, NeoPoolClock::time_point now, int hold
 {
 	switch (idx)
 	{
-	case 0:  return m_sPool_TableNode.Collect(now, holdMs, pageBudget);
+	case 0:  return m_sPool_TableData.Collect(now, holdMs, pageBudget);
 	case 1:  return m_sPool_TableInfo.Collect(now, holdMs, pageBudget);
-	case 2:  return m_sPool_SetNode.Collect(now, holdMs, pageBudget);
+	case 2:  return m_sPool_SetData.Collect(now, holdMs, pageBudget);
 	case 3:  return m_sPool_SetInfo.Collect(now, holdMs, pageBudget);
 	case 4:  return m_sPool_ListInfo.Collect(now, holdMs, pageBudget);
 	case 5:  return m_sPool_Vec.Collect(now, holdMs, pageBudget);
@@ -144,9 +144,9 @@ size_t CNeoVMImpl::CollectPoolAt(int idx, NeoPoolClock::time_point now, int hold
 
 long long CNeoVMImpl::PoolBytes() const
 {
-	return (long long)m_sPool_TableNode.ReservedBytes()
+	return (long long)m_sPool_TableData.ReservedBytes()
 	     + (long long)m_sPool_TableInfo.ReservedBytes()
-	     + (long long)m_sPool_SetNode.ReservedBytes()
+	     + (long long)m_sPool_SetData.ReservedBytes()
 	     + (long long)m_sPool_SetInfo.ReservedBytes()
 	     + (long long)m_sPool_ListInfo.ReservedBytes()
 	     + (long long)m_sPool_Vec.ReservedBytes()

@@ -1620,8 +1620,8 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool b
 		MapNode* n = pIterator->_it._pTableNode;
 		if (n)
 		{
-			Move(pKey, &n->key);
-			Move(pValue, &n->value);
+			Move(pKey, &n->data->key);
+			Move(pValue, &n->data->value);
 			return true;
 		}
 		else
@@ -1713,7 +1713,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool b
 		SetNode* n = pIterator->_it._pSetNode;
 		if (n)
 		{
-			Move(pKey, &n->key);
+			Move(pKey, &n->data->key);
 			return true;
 		}
 		else

@@ -58,8 +58,8 @@ public:
 	// 어느 풀이든 완전히 빈 페이지가 있는가(포인터 비교 8번). 매 프레임 경로의 조기 반환용.
 	bool AnyEmptyPages() const
 	{
-		return m_sPool_TableNode.HasEmptyPages() || m_sPool_TableInfo.HasEmptyPages()
-			|| m_sPool_SetNode.HasEmptyPages()
+		return m_sPool_TableData.HasEmptyPages() || m_sPool_TableInfo.HasEmptyPages()
+			|| m_sPool_SetData.HasEmptyPages()
 			|| m_sPool_SetInfo.HasEmptyPages()
 			|| m_sPool_ListInfo.HasEmptyPages()  || m_sPool_Vec.HasEmptyPages()
 			|| m_sPool_Async.HasEmptyPages()     || m_sPool_String.HasEmptyPages();
@@ -162,16 +162,15 @@ public:
 	// 페이지 크기는 고정이다(배증 없음 — 마지막 한 장이 필요량을 크게 넘겨 잡던 문제).
 	// 실측 노드 크기(헤더 포함)를 기준으로 한 장이 대략 3~13KB 가 되게 잡았다.
 	// 개수가 적은 타입은 더 작게 — 안 쓰는 타입이 페이지 한 장을 통째로 물지 않게 한다.
-	//   Legacy MapNode/SetNode pools (layout compatibility only)   MapInfo 100B x 64 = 6.4KB
+	//   MapData 32B x 256 = 8KB  SetData 16B x 256 = 4KB  MapInfo 100B x 64 = 6.4KB
 	//   SetInfo  100B x 32 = 3.2KB
 	//   SetInfo  100B x 32 = 3.2KB
 	//   ListInfo 148B x 64 =  9.5KB  VecInfo   24B x 512 = 12.3KB
 	//   StringInfo 100B x 128 = 12.8KB  AsyncInfo 372B x 16 = 6.0KB
-	// Legacy pools intentionally remain empty. Keeping their positions preserves
-	// CNeoVMImpl's hot-member layout while map/set storage is now contiguous.
-	CNVMAllocPool < MapNode, 256> m_sPool_TableNode;
+	// MapNode/SetNode 자체는 컬렉션별 연속 배열에 있고, key/value는 안정 주소의 별도 풀에 둔다.
+	CNVMAllocPool < MapData, 256> m_sPool_TableData;
 	CNVMAllocPool< MapInfo, 64> m_sPool_TableInfo;
-	CNVMAllocPool < SetNode, 256> m_sPool_SetNode;
+	CNVMAllocPool < SetData, 256> m_sPool_SetData;
 	CNVMAllocPool< SetInfo, 32> m_sPool_SetInfo;
 	CNVMAllocPool< ListInfo, 64> m_sPool_ListInfo;
 

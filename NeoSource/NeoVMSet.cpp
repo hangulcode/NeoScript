@@ -59,30 +59,46 @@ u32 GetHashCode(VarInfo* p)
 
 void SetInfo::ClearNode(SetNode& node)
 {
-	node.key.ClearType();
 	node.hash = 0;
 	node.next = SET_NODE_EMPTY;
+	node.data = NULL;
+}
+
+SetData* SetInfo::AllocNodeData()
+{
+	SetData* data = _pVM->m_sPool_SetData.Receive();
+	data->key.ClearType();
+	return data;
+}
+
+void SetInfo::FreeNodeData(SetData* data)
+{
+	if (data == NULL)
+		return;
+	_pVM->Var_Release(&data->key);
+	_pVM->m_sPool_SetData.Confer(data);
 }
 
 static bool SetKeyEquals(SetNode& node, VarInfo* pKey, u32 hash)
 {
-	if (node.hash != hash || node.key.GetType() != pKey->GetType())
+	SetData* data = node.data;
+	if (node.hash != hash || data == NULL || data->key.GetType() != pKey->GetType())
 		return false;
 
 	switch (pKey->GetType())
 	{
-	case VAR_INT:        return node.key._int == pKey->_int;
-	case VAR_FLOAT:      return node.key._float == pKey->_float;
-	case VAR_BOOL:       return node.key._bl == pKey->_bl;
+	case VAR_INT:        return data->key._int == pKey->_int;
+	case VAR_FLOAT:      return data->key._float == pKey->_float;
+	case VAR_BOOL:       return data->key._bl == pKey->_bl;
 	case VAR_NONE:       return true;
-	case VAR_FUN:        return node.key._fun_index == pKey->_fun_index;
-	case VAR_FUN_NATIVE: return node.key._funPtr == pKey->_funPtr;
+	case VAR_FUN:        return data->key._fun_index == pKey->_fun_index;
+	case VAR_FUN_NATIVE: return data->key._funPtr == pKey->_funPtr;
 	case VAR_STRING:
-		return node.key._str == pKey->_str;
-	case VAR_MAP:       return node.key._tbl == pKey->_tbl;
-	case VAR_LIST:      return node.key._lst == pKey->_lst;
-	case VAR_SET:       return node.key._set == pKey->_set;
-	case VAR_COROUTINE: return node.key._cor == pKey->_cor;
+		return data->key._str == pKey->_str;
+	case VAR_MAP:       return data->key._tbl == pKey->_tbl;
+	case VAR_LIST:      return data->key._lst == pKey->_lst;
+	case VAR_SET:       return data->key._set == pKey->_set;
+	case VAR_COROUTINE: return data->key._cor == pKey->_cor;
 	default:             return false;
 	}
 }
@@ -210,7 +226,7 @@ bool SetInfo::ReMap(int minCapacity)
 			return false;
 		}
 		const int next = _Bucket[target].next;
-		_Bucket[target].key = oldBucket[i].key;
+		_Bucket[target].data = oldBucket[i].data;
 		_Bucket[target].hash = oldBucket[i].hash;
 		_Bucket[target].next = next;
 	}
@@ -258,7 +274,7 @@ void SetInfo::Free()
 	for (int i = 0; i < _BucketCapa; ++i)
 	{
 		if (IsSetNodeUsed(_Bucket[i]))
-			_pVM->Var_Release(&_Bucket[i].key);
+			FreeNodeData(_Bucket[i].data);
 	}
 
 	delete[] _Bucket;
@@ -312,7 +328,8 @@ bool SetInfo::Insert(VarInfo* pKey)
 		return false;
 
 	SetNode& node = _Bucket[index];
-	Move_DestNoRelease(&node.key, pKey);
+	node.data = AllocNodeData();
+	Move_DestNoRelease(&node.data->key, pKey);
 	node.hash = hash;
 	++_itemCount;
 	++_mutationVersion;
@@ -353,7 +370,7 @@ void SetInfo::Remove(VarInfo* pKey)
 		return;
 
 	SetNode& node = _Bucket[index];
-	_pVM->Var_Release(&node.key);
+	SetData* removedData = node.data;
 	if (previous != SET_NODE_END)
 	{
 		_Bucket[previous].next = node.next;
@@ -368,11 +385,10 @@ void SetInfo::Remove(VarInfo* pKey)
 		// Move the next node into the head slot to retain the primary-slot invariant.
 		const int next = node.next;
 		const SetNode moved = _Bucket[next];
-		node.key = moved.key;
-		node.hash = moved.hash;
-		node.next = moved.next;
+		node = moved;
 		ClearNode(_Bucket[next]);
 	}
+	FreeNodeData(removedData);
 
 	--_itemCount;
 	++_mutationVersion;
@@ -404,7 +420,7 @@ bool SetInfo::Find(std::string& key)
 	for (int index = main; index != SET_NODE_END; index = _Bucket[index].next)
 	{
 		SetNode& node = _Bucket[index];
-		if (node.hash == hash && node.key.GetType() == VAR_STRING && node.key._str == pKey)
+		if (node.hash == hash && node.data->key.GetType() == VAR_STRING && node.data->key._str == pKey)
 			return true;
 	}
 	return false;
@@ -417,7 +433,7 @@ bool SetInfo::ToList(std::vector<VarInfo*>& lst)
 	for (int i = 0; i < _BucketCapa; ++i)
 	{
 		if (IsSetNodeUsed(_Bucket[i]))
-			lst[count++] = &_Bucket[i].key;
+			lst[count++] = &_Bucket[i].data->key;
 	}
 	return count == _itemCount;
 }
