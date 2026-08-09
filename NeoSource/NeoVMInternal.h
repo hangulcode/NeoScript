@@ -21,6 +21,11 @@ struct neo_DCalllibs;;
 class CNArchive;
 class CNeoVMWorker;
 
+// CNeoVMImpl is intentionally incomplete in this header.  The non-interned
+// string slow path uses this small bridge so MapInfo::FindString can remain
+// inline for the usual (already canonical) key path.
+StringInfo* FindCanonicalString(CNeoVMImpl* pVM, StringInfo* pString);
+
 struct SystemFun
 {
 	std::string fname;
@@ -495,40 +500,52 @@ NEOS_FORCEINLINE void Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
 }
 
 // 문자열 키 전용 fast path.
-// MapBucket::Find(VAR_STRING) 와 동일 의미론이지만 타입 switch / GetHashCode 디스패치를 생략한다.
+// MapInfo::Find의 문자열 의미론을 인라인해 타입 switch / GetHashCode 디스패치를 생략한다.
 NEOS_FORCEINLINE VarInfo* MapInfo::FindString(StringInfo* pKeyStr)
 {
+	if (pKeyStr == nullptr)
+		return NULL;
+	if (pKeyStr->_interned == false)
+	{
+		pKeyStr = FindCanonicalString(_pVM, pKeyStr);
+		if (pKeyStr == nullptr)
+			return NULL;
+	}
 	if (_BucketCapa <= 0)
 		return NULL;
 	u32 hash = pKeyStr->GetHash();
-	MapNode* pCur = _Bucket[hash & _HashBase].pFirst;
-	while (pCur)
+	MapNode* node = _Bucket + (hash & _HashBase);
+	while (node->next != MAP_NODE_EMPTY)
 	{
-		if (pCur->hash == hash && pCur->key.GetType() == VAR_STRING)
+		if (node->hash == hash && node->key.GetType() == VAR_STRING)
 		{
-			StringInfo* pCurStr = pCur->key._str;
-			if (pCurStr == pKeyStr || pCurStr->_str == pKeyStr->_str)
-				return &pCur->value;
+			StringInfo* pCurStr = node->key._str;
+			if (pCurStr == pKeyStr)
+				return &node->value;
 		}
-		pCur = pCur->pNext;
+		if (node->next == MAP_NODE_END)
+			break;
+		node = _Bucket + node->next;
 	}
 	return NULL;
 }
 
 // 정수 키 전용 fast path. 문자열 키와 대칭 — 없으면 CltReadRare -> GetTableItem ->
-// MapInfo::Find -> GetHashCode(타입 switch) -> MapBucket::Find(타입 switch) 로
+// MapInfo::Find -> GetHashCode(타입 switch) -> 일반 탐색으로
 // 아웃오브라인 호출 4단을 타게 된다(실측: 문자열 키의 1.8배).
 // 해시는 GetHashCode(VarInfo*) 의 VAR_INT 경로와 같아야 한다 = 값 그대로.
 NEOS_FORCEINLINE VarInfo* MapInfo::FindInt(int key)
 {
 	if (_BucketCapa <= 0)
 		return NULL;
-	MapNode* pCur = _Bucket[(u32)key & _HashBase].pFirst;
-	while (pCur)
+	MapNode* node = _Bucket + ((u32)key & _HashBase);
+	while (node->next != MAP_NODE_EMPTY)
 	{
-		if (pCur->key.GetType() == VAR_INT && pCur->key._int == key)
-			return &pCur->value;
-		pCur = pCur->pNext;
+		if (node->key.GetType() == VAR_INT && node->key._int == key)
+			return &node->value;
+		if (node->next == MAP_NODE_END)
+			break;
+		node = _Bucket + node->next;
 	}
 	return NULL;
 }

@@ -38,6 +38,15 @@ private:
 	NeoThreadSafeQueue<AsyncInfo*> _job_completed;
 	SNeoVMAllocStats m_sAllocStats;
 	SNeoVMAllocStats m_sPublishedAllocStats;
+	// VM-local weak string interner. Open-addressed slots own pointers only:
+	// a StringInfo remains here exactly while script values retain it, so unique
+	// dynamic strings do not accumulate for the lifetime of the VM.
+	std::vector<StringInfo*> m_sStringIntern;
+	int m_sStringInternCount = 0;
+	StringInfo* FindInternedString(const std::string& str, u32 hash) const;
+	void InsertInternedString(StringInfo* p);
+	void RemoveInternedString(StringInfo* p);
+	void RehashStringIntern(int capacity);
 public:
 	void PublishAllocStats();
 	// 완전히 빈 페이지를 OS 로 돌려준다. 반환값 = 돌려준 바이트.
@@ -50,7 +59,8 @@ public:
 	bool AnyEmptyPages() const
 	{
 		return m_sPool_TableNode.HasEmptyPages() || m_sPool_TableInfo.HasEmptyPages()
-			|| m_sPool_SetNode.HasEmptyPages()   || m_sPool_SetInfo.HasEmptyPages()
+			|| m_sPool_SetNode.HasEmptyPages()
+			|| m_sPool_SetInfo.HasEmptyPages()
 			|| m_sPool_ListInfo.HasEmptyPages()  || m_sPool_Vec.HasEmptyPages()
 			|| m_sPool_Async.HasEmptyPages()     || m_sPool_String.HasEmptyPages();
 	}
@@ -81,7 +91,14 @@ public:
 	CoroutineInfo* CoroutineAlloc();
 	void FreeCoroutine(VarInfo *d);
 
+	// 일반 문자열: 해시와 인터너 작업을 지연한다. 임시 문자열 핫패스용.
 	StringInfo* StringAlloc(const std::string& str);
+	// 정규 문자열: 프로그램 상수와 Map/Set 키용. 같은 VM 안에서 내용당 하나다.
+	StringInfo* StringIntern(const std::string& str);
+	// Finds an already-live canonical string without creating or retaining one.
+	StringInfo* StringFind(const std::string& str) const;
+	// Reuses an existing object's lazy hash cache for dynamic Map/Set keys.
+	StringInfo* StringFind(StringInfo* pString) const;
 	void FreeString(VarInfo *d);
 
 	VecInfo* VecAlloc();
@@ -145,10 +162,13 @@ public:
 	// 페이지 크기는 고정이다(배증 없음 — 마지막 한 장이 필요량을 크게 넘겨 잡던 문제).
 	// 실측 노드 크기(헤더 포함)를 기준으로 한 장이 대략 3~13KB 가 되게 잡았다.
 	// 개수가 적은 타입은 더 작게 — 안 쓰는 타입이 페이지 한 장을 통째로 물지 않게 한다.
-	//   MapNode 48B x 256 = 12.3KB   MapInfo  100B x 64 = 6.4KB
-	//   SetNode 32B x 256 =  8.2KB   SetInfo  100B x 32 = 3.2KB
+	//   Legacy MapNode/SetNode pools (layout compatibility only)   MapInfo 100B x 64 = 6.4KB
+	//   SetInfo  100B x 32 = 3.2KB
+	//   SetInfo  100B x 32 = 3.2KB
 	//   ListInfo 148B x 64 =  9.5KB  VecInfo   24B x 512 = 12.3KB
 	//   StringInfo 100B x 128 = 12.8KB  AsyncInfo 372B x 16 = 6.0KB
+	// Legacy pools intentionally remain empty. Keeping their positions preserves
+	// CNeoVMImpl's hot-member layout while map/set storage is now contiguous.
 	CNVMAllocPool < MapNode, 256> m_sPool_TableNode;
 	CNVMAllocPool< MapInfo, 64> m_sPool_TableInfo;
 	CNVMAllocPool < SetNode, 256> m_sPool_SetNode;

@@ -9,10 +9,17 @@ struct SetNode
 	VarInfo	key;
 
 	u32		hash;
-
-	SetNode* pNext; // List In Bucket
+	int		next; // index in the contiguous node array; -1=end, -2=empty
 };
 #pragma pack()
+
+static const int SET_NODE_END = -1;
+static const int SET_NODE_EMPTY = -2;
+
+inline bool IsSetNodeUsed(const SetNode& node)
+{
+	return node.next != SET_NODE_EMPTY;
+}
 
 struct SetSortInfo
 {
@@ -20,32 +27,20 @@ struct SetSortInfo
 	int				_compareFunction;
 };
 
-
-
-struct SetBucket
-{
-	SetNode*	pFirst;
-	bool	Pop_Used(SetNode* pTar);
-	SetNode* Find(VarInfo* pKey, u32 hash);
-	inline void Add_NoCheck(SetNode* p)
-	{
-		p->pNext = pFirst;
-		pFirst = p;
-	}
-};
-
 class CNeoVMImpl;
 class CNeoVMWorker;
 struct SetInfo : AllocBase
 {
-	SetBucket*	_Bucket;
+	// Lua-style hash part: each primary bucket is a slot in this node array.
+	SetNode*	_Bucket;
 
 	CNeoVMImpl*	_pVM;
 
 	int	_HashBase;
 	int _BucketCapa;
 
-	int	_SetID;
+	// Former _SetID slot (never used): descending free-slot cursor.
+	int	_lastFree;
 	int _itemCount;
 	u32 _mutationVersion = 0;
 	void* _pUserData;
@@ -75,7 +70,11 @@ struct SetInfo : AllocBase
 	inline int		GetCount() { return _itemCount; }
 
 private:
-	void ReMap();
+	void ClearNode(SetNode& node);
+	int FindNodeIndex(VarInfo* pKey, u32 hash, int* pPrevious = nullptr) const;
+	int FindFreeNodeIndex();
+	int InsertNewNode(u32 hash);
+	bool ReMap(int minCapacity = 0);
 };
 
 };

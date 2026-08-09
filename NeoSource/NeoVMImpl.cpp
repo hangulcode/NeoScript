@@ -321,9 +321,11 @@ void CNeoVMImpl::FreeCoroutine(VarInfo *d)
 
 StringInfo* CNeoVMImpl::StringAlloc(const std::string& str)
 {
-	// String 은 CNVMInstPool(소멸자 지원)이라 종료 시 개별 정리가 불필요 → 레지스트리 없음
+	// 일반 문자열은 임시 문자열 루프를 위해 인터너와 해시 계산을 건너뛴다.
+	// 해시가 필요해지면 VMString::GetHash()가 그때 한 번 채운다.
 	StringInfo* p = m_sPool_String.Receive();// new StringInfo();
 	p->_hash = 0;
+	p->_interned = false;
 	p->_container = nullptr;
 	p->_containerVersion = 0;
 	p->_refCount = 0;
@@ -335,6 +337,133 @@ StringInfo* CNeoVMImpl::StringAlloc(const std::string& str)
 	++m_sAllocStats.strings;
 	return p;
 }
+
+StringInfo* CNeoVMImpl::StringIntern(const std::string& str)
+{
+	const u32 hash = GetHashCode(str);
+	if (StringInfo* existing = FindInternedString(str, hash))
+		return existing;
+
+	StringInfo* p = StringAlloc(str);
+	p->_hash = hash;
+	p->_interned = true;
+	InsertInternedString(p);
+	return p;
+}
+
+StringInfo* CNeoVMImpl::FindInternedString(const std::string& str, u32 hash) const
+{
+	if (m_sStringIntern.empty())
+		return nullptr;
+
+	const int mask = (int)m_sStringIntern.size() - 1;
+	for (int index = (int)(hash & mask); ; index = (index + 1) & mask)
+	{
+		StringInfo* candidate = m_sStringIntern[index];
+		if (candidate == nullptr)
+			return nullptr;
+		if (candidate->_hash == hash && candidate->_str == str)
+			return candidate;
+	}
+}
+
+StringInfo* CNeoVMImpl::StringFind(const std::string& str) const
+{
+	return FindInternedString(str, GetHashCode(str));
+}
+
+StringInfo* CNeoVMImpl::StringFind(StringInfo* pString) const
+{
+	return pString ? FindInternedString(pString->_str, pString->GetHash()) : nullptr;
+}
+
+StringInfo* FindCanonicalString(CNeoVMImpl* pVM, StringInfo* pString)
+{
+	return pVM ? pVM->StringFind(pString) : nullptr;
+}
+
+void CNeoVMImpl::RehashStringIntern(int capacity)
+{
+	if (capacity < 64)
+		capacity = 64;
+
+	int powerOfTwo = 1;
+	while (powerOfTwo < capacity)
+		powerOfTwo <<= 1;
+
+	std::vector<StringInfo*> oldSlots;
+	oldSlots.swap(m_sStringIntern);
+	m_sStringIntern.assign(powerOfTwo, nullptr);
+	m_sStringInternCount = 0;
+
+	const int mask = powerOfTwo - 1;
+	for (StringInfo* p : oldSlots)
+	{
+		if (p == nullptr)
+			continue;
+
+		int index = (int)(p->_hash & mask);
+		while (m_sStringIntern[index] != nullptr)
+			index = (index + 1) & mask;
+		m_sStringIntern[index] = p;
+		++m_sStringInternCount;
+	}
+}
+
+void CNeoVMImpl::InsertInternedString(StringInfo* p)
+{
+	if (m_sStringIntern.empty()
+		|| (m_sStringInternCount + 1) * 4 > (int)m_sStringIntern.size() * 3)
+	{
+		RehashStringIntern(m_sStringIntern.empty() ? 64 : (int)m_sStringIntern.size() << 1);
+	}
+
+	const int mask = (int)m_sStringIntern.size() - 1;
+	int index = (int)(p->_hash & mask);
+	while (m_sStringIntern[index] != nullptr)
+		index = (index + 1) & mask;
+	m_sStringIntern[index] = p;
+	++m_sStringInternCount;
+}
+
+void CNeoVMImpl::RemoveInternedString(StringInfo* p)
+{
+	if (m_sStringIntern.empty())
+		return;
+
+	const int mask = (int)m_sStringIntern.size() - 1;
+	int index = (int)(p->_hash & mask);
+	while (m_sStringIntern[index] != p)
+	{
+		if (m_sStringIntern[index] == nullptr)
+			return;
+		index = (index + 1) & mask;
+	}
+
+	m_sStringIntern[index] = nullptr;
+	--m_sStringInternCount;
+
+	// Fill the hole by reinserting the rest of this probe cluster. This avoids
+	// tombstones, so temporary strings leave no progressively longer probes.
+	for (int cursor = (index + 1) & mask; m_sStringIntern[cursor] != nullptr; cursor = (cursor + 1) & mask)
+	{
+		StringInfo* displaced = m_sStringIntern[cursor];
+		m_sStringIntern[cursor] = nullptr;
+		--m_sStringInternCount;
+
+		int target = (int)(displaced->_hash & mask);
+		while (m_sStringIntern[target] != nullptr)
+			target = (target + 1) & mask;
+		m_sStringIntern[target] = displaced;
+		++m_sStringInternCount;
+	}
+
+	int desiredCapacity = 64;
+	while (m_sStringInternCount * 4 > desiredCapacity * 3)
+		desiredCapacity <<= 1;
+	if (desiredCapacity < (int)m_sStringIntern.size() / 2)
+		RehashStringIntern(desiredCapacity);
+}
 // 이 용량 이상이면 반납 시 문자 버퍼를 즉시 놓아준다(미만이면 재사용을 위해 유지).
 // 풀은 노드를 재사용하므로 버퍼를 남겨두면 재할당을 아낀다. 다만 상한이 없으면
 // 한 번 큰 문자열을 담았던 노드가 그 용량을 영원히 붙든다 — 맵 로딩처럼 대량 생성 후
@@ -345,15 +474,19 @@ static const size_t kStringReleaseCapacity = 32;
 
 void CNeoVMImpl::FreeString(VarInfo *d)
 {
+	StringInfo* p = d->_str;
+	if (p->_interned)
+		RemoveInternedString(p);
+
 	--m_sAllocStats.strings;
-	std::string& str = d->_str->_str;
+	std::string& str = p->_str;
 	const size_t capa = str.capacity();
 	if (capa >= kStringReleaseCapacity)
 	{
 		// shrink_to_fit 은 표준상 비구속 요청이라 확정적으로 놓아주려면 swap 을 쓴다.
 		std::string().swap(str);
 	}
-	m_sPool_String.Confer(d->_str);
+	m_sPool_String.Confer(p);
 }
 VecInfo* CNeoVMImpl::VecAlloc()
 {
@@ -391,6 +524,8 @@ MapInfo* CNeoVMImpl::TableAlloc(int cnt)
 	pTable->_mutationVersion = 0;
 	pTable->_HashBase = 0;
 	pTable->_BucketCapa = 0;
+	pTable->_lastFree = -1;
+	pTable->_Bucket = nullptr;
 	pTable->_pUserData = NULL;
 	pTable->_meta = NULL;
 	pTable->_fun._func = NULL;
@@ -455,6 +590,8 @@ SetInfo* CNeoVMImpl::SetAlloc()
 	pSet->_mutationVersion = 0;
 	pSet->_HashBase = 0;
 	pSet->_BucketCapa = 0;
+	pSet->_lastFree = -1;
+	pSet->_Bucket = nullptr;
 	pSet->_pUserData = NULL;
 	pSet->_meta = NULL;
 	pSet->_fun._func = NULL;

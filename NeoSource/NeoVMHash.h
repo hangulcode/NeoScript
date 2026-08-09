@@ -10,7 +10,12 @@ struct VMString
 	int	_StringID;
 	int _StringLen;
 
+	// _hash 는 FNV-1a 누적 뒤 avalanche까지 끝난 문자열 내용 해시다.
+	// Map/Set/인터너가 같은 해시를 공유한다.
 	mutable u32	_hash;
+	// 일반 문자열은 생성 비용을 줄이기 위해 인터닝하지 않는다. 프로그램 상수와
+	// Map/Set 키만 정규 문자열이며, 이 플래그가 포인터 비교의 전제다.
+	bool		_interned;
 	mutable void* _container;
 	mutable void* _value;
 	mutable int _containerVersion;

@@ -1,7 +1,5 @@
 ﻿#pragma once
 
-//#define HASH_FIND_FLAG
-
 namespace NeoScript
 {
 class CNeoVMWorker;
@@ -14,47 +12,23 @@ struct MapNode
 	VarInfo	value;
 
 	u32		hash;
-
-	MapNode* pNext; // List In Bucket
+	int		next; // 같은 연속 노드 배열 안의 다음 슬롯. -1=끝, -2=빈 슬롯
 };
 #pragma pack()
+
+static const int MAP_NODE_END = -1;
+static const int MAP_NODE_EMPTY = -2;
+
+inline bool IsMapNodeUsed(const MapNode& node)
+{
+	return node.next != MAP_NODE_EMPTY;
+}
 
 struct MapSortInfo
 {
 	CNeoVMWorker*	_pN;
 	int				_compareFunction;
 };
-
-
-
-struct MapBucket
-{
-	MapNode*	pFirst;
-#ifdef HASH_FIND_FLAG
-	u32			flag;// 이 비트가 off 이면 반드시 없음. on 이면 있을수도 없을수도 있음 (추가 될때는 on 하고, 삭제시 off 하지 않음)
-#endif
-	bool	Pop_Used(MapNode* pTar);
-	MapNode* Find(VarInfo* pKey, u32 hash);
-#ifdef HASH_FIND_FLAG
-	inline void Add_NoCheck(MapNode* p, int bit)
-	{
-		p->pNext = pFirst;
-		pFirst = p;
-		flag |= (1 << ((p->hash >> bit) & 0x1F));
-	}
-	inline bool IsNoHaveKey(u32 hash, int bit)
-	{
-		return (flag & (1 << ((hash >> bit) & 0x1F))) == 0;
-	}
-#else
-	inline void Add_NoCheck(MapNode* p)
-	{
-		p->pNext = pFirst;
-		pFirst = p;
-	}
-#endif
-};
-
 
 struct AllocBase
 {
@@ -63,14 +37,17 @@ struct AllocBase
 
 struct MapInfo : AllocBase
 {
-	MapBucket*	_Bucket;
+	// Lua식 hash part: 주 버킷 자체가 연속 MapNode 배열의 슬롯이다.
+	// 별도 pFirst 포인터를 없애고 충돌은 next 인덱스로 연결한다.
+	MapNode*	_Bucket;
 
 	CNeoVMImpl*	_pVM;
-	int _HashCheckBit;
 	int	_HashBase;
 	int _BucketCapa;
-
-	int	_TableID;
+	// Former _TableID slot (never used): next collision-node candidate. It moves
+	// only downward; -1 means exhausted. Reusing the slot preserves MapInfo's
+	// hot-member layout.
+	int	_lastFree;
 	int _itemCount;
 	u32 _mutationVersion = 0;
 	void* _pUserData;
@@ -106,7 +83,11 @@ struct MapInfo : AllocBase
 	inline int		GetCount() { return _itemCount; }
 
 private:
-	void ReMap();
+	void ClearNode(MapNode& node);
+	int FindNodeIndex(VarInfo* pKey, u32 hash, int* pPrevious = nullptr) const;
+	int FindFreeNodeIndex();
+	int InsertNewNode(u32 hash);
+	bool ReMap(int minCapacity = 0);
 };
 
 };

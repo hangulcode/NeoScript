@@ -15,44 +15,211 @@ extern u32 GetHashCode(const std::string& str);
 extern u32 GetHashCode(u8 *buffer, int len);
 extern u32 GetHashCode(VarInfo *p);
 
+static u32 GetMapKeyHash(VarInfo* pKey)
+{
+	return pKey->GetType() == VAR_STRING ? pKey->_str->GetHash() : GetHashCode(pKey);
+}
+
+static VarInfo* NormalizeMapStringKey(CNeoVMImpl* vm, VarInfo* pKey, VarInfo& normalized, bool forInsert)
+{
+	if (pKey->GetType() != VAR_STRING || pKey->_str->_interned)
+		return pKey;
+
+	StringInfo* canonical = forInsert
+		? vm->StringIntern(pKey->_str->_str)
+		: vm->StringFind(pKey->_str);
+	if (canonical == nullptr)
+		return nullptr;
+
+	normalized = *pKey;
+	normalized._str = canonical;
+	return &normalized;
+}
+
+void MapInfo::ClearNode(MapNode& node)
+{
+	node.key.ClearType();
+	node.value.ClearType();
+	node.hash = 0;
+	node.next = MAP_NODE_EMPTY;
+}
+
+static bool MapKeyEquals(MapNode& node, VarInfo* pKey, u32 hash)
+{
+	if (node.hash != hash || node.key.GetType() != pKey->GetType())
+		return false;
+
+	switch (pKey->GetType())
+	{
+	case VAR_INT:       return node.key._int == pKey->_int;
+	case VAR_FLOAT:     return node.key._float == pKey->_float;
+	case VAR_BOOL:      return node.key._bl == pKey->_bl;
+	case VAR_NONE:      return true;
+	case VAR_FUN:       return node.key._fun_index == pKey->_fun_index;
+	case VAR_STRING:
+		return node.key._str == pKey->_str;
+	case VAR_MAP:       return node.key._tbl == pKey->_tbl;
+	case VAR_LIST:      return node.key._lst == pKey->_lst;
+	case VAR_SET:       return node.key._set == pKey->_set;
+	case VAR_COROUTINE: return node.key._cor == pKey->_cor;
+	default:             return false;
+	}
+}
+
+int MapInfo::FindNodeIndex(VarInfo* pKey, u32 hash, int* pPrevious) const
+{
+	if (pPrevious) *pPrevious = MAP_NODE_END;
+	if (_BucketCapa <= 0)
+		return MAP_NODE_END;
+
+	const int main = (int)(hash & _HashBase);
+	if (!IsMapNodeUsed(_Bucket[main]))
+		return MAP_NODE_END;
+
+	int previous = MAP_NODE_END;
+	for (int index = main; index != MAP_NODE_END; index = _Bucket[index].next)
+	{
+		if (MapKeyEquals(_Bucket[index], pKey, hash))
+		{
+			if (pPrevious) *pPrevious = previous;
+			return index;
+		}
+		previous = index;
+	}
+	return MAP_NODE_END;
+}
+
+int MapInfo::FindFreeNodeIndex()
+{
+	// A slot is examined at most once between rehashes. Direct placements can
+	// occupy slots above this cursor; they are skipped once when reached.
+	while (_lastFree >= 0)
+	{
+		const int index = _lastFree--;
+		if (!IsMapNodeUsed(_Bucket[index]))
+			return index;
+	}
+	return MAP_NODE_END;
+}
+
+// A primary slot always remains the head for its own collision chain.
+// If it holds a displaced node, move that node to a free slot first.
+// This is the essential chained-scatter/Brent invariant used by Lua tables.
+int MapInfo::InsertNewNode(u32 hash)
+{
+	const int main = (int)(hash & _HashBase);
+	if (!IsMapNodeUsed(_Bucket[main]))
+	{
+		_Bucket[main].next = MAP_NODE_END;
+		return main;
+	}
+
+	const int freeIndex = FindFreeNodeIndex();
+	if (freeIndex == MAP_NODE_END)
+		return MAP_NODE_END;
+
+	const int occupiedMain = (int)(_Bucket[main].hash & _HashBase);
+	if (occupiedMain != main)
+	{
+		// The resident node belongs to another chain. Preserve that chain by
+		// relinking its predecessor, then use the freed primary slot.
+		int previous = occupiedMain;
+		while (_Bucket[previous].next != main)
+			previous = _Bucket[previous].next;
+
+		_Bucket[freeIndex] = _Bucket[main];
+		_Bucket[previous].next = freeIndex;
+		ClearNode(_Bucket[main]);
+		_Bucket[main].next = MAP_NODE_END;
+		return main;
+	}
+
+	// This is the primary chain; link the new node immediately after its head.
+	_Bucket[freeIndex].next = _Bucket[main].next;
+	_Bucket[main].next = freeIndex;
+	return freeIndex;
+}
+
+bool MapInfo::ReMap(int minCapacity)
+{
+	int newCapacity = _BucketCapa > 0 ? _BucketCapa : 2;
+	if (minCapacity <= 0)
+		minCapacity = newCapacity << 1;
+	while (newCapacity < minCapacity)
+		newCapacity <<= 1;
+
+	MapNode* oldBucket = _Bucket;
+	const int oldCapacity = _BucketCapa;
+	const int oldHashBase = _HashBase;
+	const int oldLastFree = _lastFree;
+
+	_Bucket = new MapNode[newCapacity];
+	_BucketCapa = newCapacity;
+	_HashBase = newCapacity - 1;
+	_lastFree = newCapacity - 1;
+	for (int i = 0; i < newCapacity; ++i)
+		ClearNode(_Bucket[i]);
+
+	for (int i = 0; i < oldCapacity; ++i)
+	{
+		if (!IsMapNodeUsed(oldBucket[i]))
+			continue;
+
+		const int target = InsertNewNode(oldBucket[i].hash);
+		if (target == MAP_NODE_END)
+		{
+			// A failed transfer must be transactional: dropping this node would
+			// lose its key/value while leaving _itemCount and refcounts stale.
+			delete[] _Bucket;
+			_Bucket = oldBucket;
+			_BucketCapa = oldCapacity;
+			_HashBase = oldHashBase;
+			_lastFree = oldLastFree;
+			return false;
+		}
+		const int next = _Bucket[target].next;
+		_Bucket[target].key = oldBucket[i].key;
+		_Bucket[target].value = oldBucket[i].value;
+		_Bucket[target].hash = oldBucket[i].hash;
+		_Bucket[target].next = next;
+	}
+
+	delete[] oldBucket;
+
+	// 노드가 연속 배열로 옮겨가면서 CollectionIterator 가 배열 내부 생 포인터를 들게 됐다.
+	// 재할당으로 옛 배열이 사라지므로 순회 중 여기 오면 그 포인터는 dangling 이다.
+	// 버전을 올려 foreach 가 다음 스텝에서 "순회 중 변경" 으로 막게 한다
+	// (Insert/Remove 와 동일한 계약). 올리지 않으면 해제된 주소로 포인터 산술을 한다.
+	++_mutationVersion;
+	return true;
+}
+
 CollectionIterator MapInfo::FirstNode()
 {
 	CollectionIterator r;
-	for (int iBucket = 0; iBucket < _BucketCapa; iBucket++)
+	for (int i = 0; i < _BucketCapa; ++i)
 	{
-		MapBucket* pBucket = &_Bucket[iBucket];
-
-		MapNode*	pCur = pBucket->pFirst;
-		if(pCur)
+		if (IsMapNodeUsed(_Bucket[i]))
 		{
-			r._pTableNode = pCur;
+			r._pTableNode = &_Bucket[i];
 			return r;
 		}
 	}
 	r._pTableNode = NULL;
 	return r;
 }
+
 bool MapInfo::NextNode(CollectionIterator& r)
 {
-	if (r._pTableNode == NULL)
+	if (r._pTableNode == NULL || _BucketCapa <= 0)
 		return false;
 
+	const ptrdiff_t current = r._pTableNode - _Bucket;
+	for (int i = (int)current + 1; i < _BucketCapa; ++i)
 	{
-		MapNode*	pCur = r._pTableNode->pNext;
-		if (pCur)
+		if (IsMapNodeUsed(_Bucket[i]))
 		{
-			r._pTableNode = pCur;
-			return true;
-		}
-	}
-
-	for (int iBucket = (r._pTableNode->hash & _HashBase) + 1; iBucket < _BucketCapa; iBucket++)
-	{
-		MapBucket* pBucket = &_Bucket[iBucket];
-
-		if(pBucket->pFirst)
-		{
-			r._pTableNode = pBucket->pFirst;
+			r._pTableNode = &_Bucket[i];
 			return true;
 		}
 	}
@@ -62,388 +229,91 @@ bool MapInfo::NextNode(CollectionIterator& r)
 
 void MapInfo::Free()
 {
-	if (_BucketCapa <= 0)
-		return;
-
-	for (int iBucket = 0; iBucket < _BucketCapa; iBucket++)
+	for (int i = 0; i < _BucketCapa; ++i)
 	{
-		MapBucket* pBucket = &_Bucket[iBucket];
-
-		MapNode*	pFirst = pBucket->pFirst;
-		if (pFirst == NULL)
+		if (!IsMapNodeUsed(_Bucket[i]))
 			continue;
-
-		MapNode*	pCur = pFirst;
-		while (pCur)
-		{
-			MapNode*	pNext = pCur->pNext;
-
-			_pVM->Var_Release(&pCur->key);
-			_pVM->Var_Release(&pCur->value);
-
-			_pVM->m_sPool_TableNode.Confer(pCur);
-
-			pCur = pNext;
-		}
+		_pVM->Var_Release(&_Bucket[i].key);
+		_pVM->Var_Release(&_Bucket[i].value);
 	}
 
 	delete[] _Bucket;
+	_Bucket = NULL;
 	_BucketCapa = _HashBase = 0;
-	_HashCheckBit = 0;
+	_lastFree = -1;
 	_itemCount = 0;
-}
-bool	MapBucket::Pop_Used(MapNode* pTar)
-{
-	MapNode* pCur = pFirst;
-	MapNode* pPre = NULL;
-	while (pCur)
-	{
-		if (pCur == pTar)
-		{
-			if (pPre == NULL)
-				pFirst = pCur->pNext;
-			else
-				pPre->pNext = pCur->pNext;
-			pTar->pNext = NULL;
-#ifdef _DEBUG
-			//--_size_use;
-#endif
-			return true;
-		}
-		pPre = pCur;
-		pCur = pCur->pNext;
-	}
-	return false;
-}
-MapNode* MapBucket::Find(VarInfo* pKey, u32 hash)
-{
-	MapNode* pCur = pFirst;
-	switch (pKey->GetType())
-	{
-	case VAR_INT:
-		{
-			int iKey = pKey->_int;
-			while (pCur)
-			{
-				//if (pCur->hash == hash)
-				{
-					if (pCur->key.GetType() == VAR_INT)
-					{
-						if (pCur->key._int == iKey)
-							return pCur;
-					}
-				}
-				pCur = pCur->pNext;
-			}
-		}
-		break;
-	case VAR_FLOAT:
-		{
-			auto fKey = pKey->_float;
-			while (pCur)
-			{
-				//if (pCur->hash == hash)
-				{
-					if (pCur->key.GetType() == VAR_FLOAT)
-					{
-						if (pCur->key._float == fKey)
-							return pCur;
-					}
-				}
-				pCur = pCur->pNext;
-			}
-		}
-		break;
-	case VAR_BOOL:
-		{
-			bool b = pKey->_bl;
-			while (pCur)
-			{
-				if (pCur->key.GetType() == VAR_BOOL)
-				{
-					if (pCur->key._bl == b)
-						return pCur;
-				}
-				pCur = pCur->pNext;
-			}
-		}
-		break;
-	case VAR_NONE:
-		while (pCur)
-		{
-			if (pCur->key.GetType() == VAR_NONE)
-				return pCur;
-			pCur = pCur->pNext;
-		}
-		break;
-	case VAR_FUN:
-		{
-			int iFunKey = pKey->_fun_index;
-			while (pCur)
-			{
-				if (pCur->key.GetType() == VAR_FUN)
-				{
-					if (pCur->key._fun_index == iFunKey)
-						return pCur;
-				}
-				pCur = pCur->pNext;
-			}
-		}
-		break;
-	case VAR_STRING:
-		{
-			StringInfo* pKeyStr = pKey->_str;
-			while (pCur)
-			{
-				if (pCur->hash == hash)
-				{
-					if (pCur->key.GetType() == VAR_STRING)
-					{
-						StringInfo* pCurStr = pCur->key._str;
-						if (pCurStr == pKeyStr || pCurStr->_str == pKeyStr->_str)
-							return pCur;
-					}
-				}
-				pCur = pCur->pNext;
-			}
-		}
-		break;
-	case VAR_MAP:
-		{
-			MapInfo* pTableInfo = pKey->_tbl;
-			while (pCur)
-			{
-				if (pCur->key.GetType() == VAR_MAP)
-				{
-					if (pCur->key._tbl == pTableInfo)
-						return pCur;
-				}
-				pCur = pCur->pNext;
-			}
-		}
-		break;
-	case VAR_LIST:
-		{
-			ListInfo* pInfo = pKey->_lst;
-			while (pCur)
-			{
-				if (pCur->key.GetType() == VAR_LIST)
-				{
-					if (pCur->key._lst == pInfo)
-						return pCur;
-				}
-				pCur = pCur->pNext;
-			}
-		}
-		break;
-	case VAR_SET:
-		{
-			SetInfo* pInfo = pKey->_set;
-			while (pCur)
-			{
-				if (pCur->key.GetType() == VAR_SET)
-				{
-					if (pCur->key._set == pInfo)
-						return pCur;
-				}
-				pCur = pCur->pNext;
-			}
-		}
-		break;
-	case VAR_COROUTINE:
-		{
-			auto cor = pKey->_cor;
-			while (pCur)
-			{
-				//if (pCur->hash == hash)
-				{
-					if (pCur->key.GetType() == VAR_COROUTINE)
-					{
-						if (pCur->key._cor == cor)
-							return pCur;
-					}
-				}
-				pCur = pCur->pNext;
-			}
-		}
-		break;
-	default:
-		break;
-	}
-	return NULL;
-}
-
-int HashShiftBit(int HashBase)
-{
-	for(int i = 0; i < 32; i++)
-	{
-		if((HashBase & (1 << i)) == 0)
-			return i;
-	}
-	return 32;
 }
 
 void MapInfo::Reserve(int sz)
 {
 	if (sz < 0) sz = 0;
-	if (sz <= _BucketCapa) return;
-
-	if (sz >= _BucketCapa)
-	{
-		MapBucket* Old_Bucket = _Bucket;
-		int Old_BucketCapa = _BucketCapa;
-		int Old_HashBase = _HashBase;
-
-		if (_BucketCapa == 0)
-			_BucketCapa = 1;
-		while (true)
-		{
-			_BucketCapa <<= 1;
-			if (_BucketCapa >= sz)
-				break;
-		}
-		_Bucket = new MapBucket[_BucketCapa];
-		memset(_Bucket, 0, sizeof(MapBucket) * _BucketCapa);
-		_HashBase = _BucketCapa - 1;
-		_HashCheckBit = HashShiftBit(_HashBase);
-
-
-		for (int iBucket = 0; iBucket < Old_BucketCapa; iBucket++)
-		{
-			MapBucket* pBucket = &Old_Bucket[iBucket];
-
-			MapNode*	pFirst = pBucket->pFirst;
-			if (pFirst == NULL)
-				continue;
-
-			MapNode*	pCur = pFirst;
-			while (pCur)
-			{
-				MapNode*	pNext = pCur->pNext;
-#ifdef HASH_FIND_FLAG
-				_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur, _HashCheckBit);
-#else
-				_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur); 
-#endif
-
-				pCur = pNext;
-			}
-		}
-
-		if (Old_BucketCapa > 0)
-			delete[] Old_Bucket;
-	}
-}
-
-//int g_MaxList = 0;
-void MapInfo::ReMap()
-{
-	MapBucket* Old_Bucket = _Bucket;
-	int Old_BucketCapa = _BucketCapa;
-	int Old_HashBase = _HashBase;
-
-	if (_BucketCapa == 0)
-		_BucketCapa = 1;
-	while (true)
-	{
-		_BucketCapa <<= 1;
-		if (_BucketCapa > _itemCount)
-			break;
-	}
-	_Bucket = new MapBucket[_BucketCapa];
-	memset(_Bucket, 0, sizeof(MapBucket) * _BucketCapa);
-	_HashBase = _BucketCapa - 1;
-	_HashCheckBit = HashShiftBit(_HashBase);
-
-
-	for (int iBucket = 0; iBucket < Old_BucketCapa; iBucket++)
-	{
-		MapBucket* pBucket = &Old_Bucket[iBucket];
-
-		MapNode* pFirst = pBucket->pFirst;
-		if (pFirst == NULL)
-			continue;
-
-		MapNode* pCur = pFirst;
-		while (pCur)
-		{
-			MapNode* pNext = pCur->pNext;
-#ifdef HASH_FIND_FLAG
-			_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur, _HashCheckBit);
-#else
-			_Bucket[pCur->hash & _HashBase].Add_NoCheck(pCur);
-#endif
-
-			pCur = pNext;
-		}
-	}
-
-	if (Old_BucketCapa > 0)
-		delete[] Old_Bucket;
+	int minCapacity = 2;
+	// Keep the same maximum load as Insert. Nodes live directly in this array,
+	// so a full table makes collision-chain lookup depend on key placement.
+	while ((long long)minCapacity * 3 < (long long)sz * 4)
+		minCapacity <<= 1;
+	if (minCapacity > _BucketCapa)
+		ReMap(minCapacity);
 }
 
 VarInfo* MapInfo::Insert(VarInfo* pKey)
 {
-	if (_itemCount >= _BucketCapa * 2)
-		ReMap();
+	VarInfo normalizedKey;
+	pKey = NormalizeMapStringKey(_pVM, pKey, normalizedKey, true);
+	if (pKey == nullptr)
+		return NULL;
 
-	u32 hash = GetHashCode(pKey);
-	MapBucket* pBucket = &_Bucket[hash & _HashBase];
-	MapNode* pFindNode;
-#ifdef HASH_FIND_FLAG
-	if(pBucket->IsNoHaveKey(hash, _HashCheckBit))
-	{
-		pFindNode = NULL;
-	}
-	else
-#endif
-	{
-		if (pBucket->pFirst)
-			pFindNode = pBucket->Find(pKey, hash);
-		else
-			pFindNode = NULL;
-	}
-	if (pFindNode == NULL)
-	{
-		_itemCount++;
-		++_mutationVersion;
+	u32 hash = GetMapKeyHash(pKey);
+	const int found = FindNodeIndex(pKey, hash);
+	if (found != MAP_NODE_END)
+		return &_Bucket[found].value;
 
-		MapNode* pNew = _pVM->m_sPool_TableNode.Receive();
-		Move_DestNoRelease(&pNew->key, pKey);
-		pNew->value.ClearType();
-		//INeoVM::Move_DestNoRelease(&pNew->value, pValue);
-		pNew->hash = hash;
-
-#ifdef HASH_FIND_FLAG
-		pBucket->Add_NoCheck(pNew, _HashCheckBit);
-#else
-		pBucket->Add_NoCheck(pNew);
-#endif
-
-		return &pNew->value;
-	}
-	else // Replace
+	if (_BucketCapa == 0
+		|| (long long)(_itemCount + 1) * 4 > (long long)_BucketCapa * 3)
 	{
-		//_pVM->Move(&pFindNode->value, pValue);
-		return &pFindNode->value;
+		if (!ReMap(_BucketCapa > 0 ? _BucketCapa << 1 : 2))
+			return NULL;
 	}
+
+	int index = InsertNewNode(hash);
+	if (index == MAP_NODE_END)
+	{
+		// _lastFree does not move back after removals. Rebuild at the same
+		// capacity to recover those holes; grow only when the table is full.
+		const int minCapacity = _itemCount + 1 >= _BucketCapa
+			? _BucketCapa << 1
+			: _BucketCapa;
+		if (!ReMap(minCapacity))
+			return NULL;
+		index = InsertNewNode(hash);
+	}
+	if (index == MAP_NODE_END)
+		return NULL;
+
+	MapNode& node = _Bucket[index];
+	Move_DestNoRelease(&node.key, pKey);
+	node.value.ClearType();
+	node.hash = hash;
+	++_itemCount;
+	++_mutationVersion;
+	return &node.value;
 }
+
 void MapInfo::Insert(const std::string& Key, VarInfo* pValue)
 {
 	VarInfo var;
 	var.SetType(VAR_STRING);
-	var._str = _pVM->StringAlloc(Key);
-	VarInfo* pKey = &var;
-
+	var._str = _pVM->StringIntern(Key);
 	Insert(&var, pValue);
 	if (var._str->_refCount <= 0)
 		_pVM->FreeString(&var);
 }
+
 bool MapInfo::Insert(const std::string& key, NS_FLOAT value)
 {
 	VarInfo var;
 	var.SetType(VAR_STRING);
-	var._str = _pVM->StringAlloc(key);
+	var._str = _pVM->StringIntern(key);
 	VarInfo* pDest = Insert(&var);
 	if (pDest == NULL)
 	{
@@ -461,26 +331,25 @@ bool MapInfo::Insert(const std::string& key, NS_FLOAT value)
 void MapInfo::Insert(VarInfo* pKey, VarInfo* pValue)
 {
 	VarInfo* pDest = Insert(pKey);
-	if (pDest == NULL) return;
-	_pVM->Move(pDest, pValue);
+	if (pDest != NULL)
+		_pVM->Move(pDest, pValue);
 }
+
 void MapInfo::Insert(VarInfo* pKey, int v)
 {
 	VarInfo* pDest = Insert(pKey);
 	if (pDest == NULL) return;
-	if (pDest->IsAllocType())
-		_pVM->Var_Release(pDest);
+	if (pDest->IsAllocType()) _pVM->Var_Release(pDest);
 	pDest->SetType(VAR_INT);
 	pDest->_int = v;
 }
+
 void MapInfo::Insert(int Key, VarInfo* pValue)
 {
 	VarInfo var;
 	var.SetType(VAR_INT);
 	var._int = Key;
-	VarInfo* pKey = &var;
-
-	Insert(pKey, pValue);
+	Insert(&var, pValue);
 }
 
 void MapInfo::Insert(int Key, int v)
@@ -488,34 +357,50 @@ void MapInfo::Insert(int Key, int v)
 	VarInfo var;
 	var.SetType(VAR_INT);
 	var._int = Key;
-	VarInfo* pKey = &var;
-
-	VarInfo* pDest = Insert(pKey);
-	if (pDest == NULL) return;
-	if (pDest->IsAllocType())
-		_pVM->Var_Release(pDest);
-	pDest->SetType(VAR_INT);
-	pDest->_int = v;
+	Insert(&var, v);
 }
 
 void MapInfo::Remove(VarInfo* pKey)
 {
 	if (_BucketCapa <= 0)
 		return;
-	u32 hash = GetHashCode(pKey);
-	MapBucket* pBucket = &_Bucket[hash & _HashBase];
-	MapNode* pCur = pBucket->Find(pKey, hash);
-	if (pCur == NULL)
+	VarInfo normalizedKey;
+	pKey = NormalizeMapStringKey(_pVM, pKey, normalizedKey, false);
+	if (pKey == nullptr)
 		return;
 
-	_pVM->Var_Release(&pCur->key);
-	_pVM->Var_Release(&pCur->value);
+	const u32 hash = GetMapKeyHash(pKey);
+	int previous = MAP_NODE_END;
+	const int index = FindNodeIndex(pKey, hash, &previous);
+	if (index == MAP_NODE_END)
+		return;
 
-	pBucket->Pop_Used(pCur);
+	MapNode& node = _Bucket[index];
+	_pVM->Var_Release(&node.key);
+	_pVM->Var_Release(&node.value);
 
-	_pVM->m_sPool_TableNode.Confer(pCur);
+	if (previous != MAP_NODE_END)
+	{
+		_Bucket[previous].next = node.next;
+		ClearNode(node);
+	}
+	else if (node.next == MAP_NODE_END)
+	{
+		ClearNode(node);
+	}
+	else
+	{
+		// Move the next node into the head slot to retain the primary-slot invariant.
+		const int next = node.next;
+		const MapNode moved = _Bucket[next];
+		node.key = moved.key;
+		node.value = moved.value;
+		node.hash = moved.hash;
+		node.next = moved.next;
+		ClearNode(_Bucket[next]);
+	}
 
-	_itemCount--;
+	--_itemCount;
 	++_mutationVersion;
 }
 
@@ -523,93 +408,45 @@ VarInfo* MapInfo::Find(VarInfo *pKey)
 {
 	if (pKey->GetType() == VAR_STRING)
 		return FindString(pKey->_str);
-	if (_BucketCapa <= 0)
-		return NULL;
-	u32 hash = GetHashCode(pKey);
 
-	MapBucket* pBucket = &_Bucket[hash & _HashBase];
-	MapNode* pCur = pBucket->Find(pKey, hash);
-	if (pCur == 0)
-		return NULL;
-
-	return &pCur->value;
+	const int index = FindNodeIndex(pKey, GetMapKeyHash(pKey));
+	return index == MAP_NODE_END ? NULL : &_Bucket[index].value;
 }
+
 VarInfo* MapInfo::Find(const std::string& key)
 {
-	if (_BucketCapa <= 0)
-		return NULL;
-	u32 hash = GetHashCode(key);
-
-	MapBucket* pBucket = &_Bucket[hash & _HashBase];
-
-	MapNode* pCur = pBucket->pFirst;
-	while (pCur)
-	{
-		if (pCur->hash == hash && pCur->key.GetType() == VAR_STRING)
-		{
-			if (pCur->key._str->_str == key)
-				return &pCur->value;
-		}
-		pCur = pCur->pNext;
-	}
-	return NULL;
+	StringInfo* pKey = _pVM->StringFind(key);
+	return pKey ? FindString(pKey) : NULL;
 }
 
 bool MapInfo::ToListKeys(std::vector<VarInfo*>& lst)
 {
 	lst.resize(_itemCount);
 	int cnt = 0;
-
-	for (int iBucket = 0; iBucket < _BucketCapa; iBucket++)
+	for (int i = 0; i < _BucketCapa; ++i)
 	{
-		MapBucket* pBucket = &_Bucket[iBucket];
-
-		MapNode*	pFirst = pBucket->pFirst;
-		if (pFirst == NULL)
-			continue;
-
-		MapNode*	pCur = pFirst;
-		while (pCur)
-		{
-			lst[cnt++] = &pCur->key;
-			pCur = pCur->pNext;
-		}
+		if (IsMapNodeUsed(_Bucket[i]))
+			lst[cnt++] = &_Bucket[i].key;
 	}
-
-	if (cnt != _itemCount)
-		return false;
-	return true;
+	return cnt == _itemCount;
 }
+
 bool MapInfo::ToListValues(std::vector<VarInfo*>& lst)
 {
 	lst.resize(_itemCount);
 	int cnt = 0;
-
-	for (int iBucket = 0; iBucket < _BucketCapa; iBucket++)
+	for (int i = 0; i < _BucketCapa; ++i)
 	{
-		MapBucket* pBucket = &_Bucket[iBucket];
-
-		MapNode*	pFirst = pBucket->pFirst;
-		if (pFirst == NULL)
-			continue;
-
-		MapNode*	pCur = pFirst;
-		while (pCur)
-		{
-			lst[cnt++] = &pCur->value;
-			pCur = pCur->pNext;
-		}
+		if (IsMapNodeUsed(_Bucket[i]))
+			lst[cnt++] = &_Bucket[i].value;
 	}
-
-	if (cnt != _itemCount)
-		return false;
-	return true;
+	return cnt == _itemCount;
 }
 
 struct NeoSortLocal
 {
-	CNeoVMWorker*	m_pN;
-	int				m_compare;
+	CNeoVMWorker* m_pN;
+	int m_compare;
 
 	NeoSortLocal(CNeoVMWorker* pN, int compare) : m_pN(pN), m_compare(compare) {}
 	bool operator () (VarInfo* a, VarInfo* b)
@@ -618,11 +455,7 @@ struct NeoSortLocal
 		args[0] = *a;
 		args[1] = *b;
 		VarInfo* r = m_pN->testCall(m_compare, args, 2);
-		if (r && r->GetType() == VAR_BOOL)
-		{
-			return r->_bl;
-		}
-		return false;
+		return r && r->GetType() == VAR_BOOL && r->_bl;
 	}
 };
 

@@ -920,25 +920,62 @@ struct neo_libs
 
 		if (pFun->GetType() != VAR_FUN) return false;
 
-		std::vector<VarInfo*> lst;
-		if (false == pVar->_tbl->ToListValues(lst)) return false;
+		// Keep the receiver alive across script callbacks. The callback can replace
+		// the variable that originally held this map.
+		VarInfo mapHold;
+		Move_DestNoRelease(&mapHold, pVar);
+		MapInfo* const table = mapHold._tbl;
 
-		if (lst.size() >= 2)
+		// [주의] _Bucket 내부 포인터를 스크립트 콜백 너머로 들고 있으면 안 된다.
+		// 맵 노드가 연속 배열로 바뀌면서, 비교 함수 안의 삽입이 노드를 다른 슬롯으로
+		// 옮기거나(InsertNewNode) 배열을 통째로 재할당(ReMap)할 수 있게 됐다.
+		// 그래서 정렬 전에 값을 지역 벡터로 복사해 두고, 정렬이 끝난 뒤 슬롯을 다시 얻어 쓴다.
+		std::vector<VarInfo*> slots;
+		if (false == table->ToListValues(slots))
 		{
-			std::vector<VarInfo*> lstSorted = lst;
-			NVM_QuickSort(pN, pFun->_fun_index, lstSorted);
-
-			std::vector<VarInfo> lst3;
-			lst3.resize(lstSorted.size());
-			for (size_t i = 0; i < lstSorted.size(); i++)
-				Move_DestNoRelease(&lst3[i], lstSorted[i]);
-
-			for (size_t i = 0; i < lst.size(); i++)
-				pN->Move(lst[i], &lst3[i]);
-
-			for (size_t i = 0; i < lst3.size(); i++)
-				pN->Var_Release(&lst3[i]);
+			pN->Var_Release(&mapHold);
+			return false;
 		}
+
+		if (slots.size() >= 2)
+		{
+			const u32 mutationVersion = table->_mutationVersion;
+			// Move_DestNoRelease 는 참조계수를 올리는 복사다(원본은 그대로 둔다).
+			std::vector<VarInfo> snapshot;
+			snapshot.resize(slots.size());
+			for (size_t i = 0; i < slots.size(); i++)
+				Move_DestNoRelease(&snapshot[i], slots[i]);
+			slots.clear();   // 콜백 전에 버린다
+
+			std::vector<VarInfo*> sorted;
+			sorted.resize(snapshot.size());
+			for (size_t i = 0; i < snapshot.size(); i++)
+				sorted[i] = &snapshot[i];
+			NVM_QuickSort(pN, pFun->_fun_index, sorted);   // 지역 벡터만 만진다
+
+			// A structural mutation makes the previous ordering meaningless. Do not
+			// overwrite values (including values inserted by the callback) with a
+			// stale snapshot.
+			if (table->_mutationVersion != mutationVersion)
+			{
+				for (size_t i = 0; i < snapshot.size(); i++)
+					pN->Var_Release(&snapshot[i]);
+				pN->Var_Release(&mapHold);
+				pN->SetError("map was modified during sort");
+				return true;
+			}
+
+			// No structural mutation: reacquire slots only after every callback has returned.
+			std::vector<VarInfo*> slotsAfter;
+			if (table->ToListValues(slotsAfter) && slotsAfter.size() == sorted.size())
+			{
+				for (size_t i = 0; i < sorted.size(); i++)
+					pN->Move(slotsAfter[i], sorted[i]);
+			}
+			for (size_t i = 0; i < snapshot.size(); i++)
+				pN->Var_Release(&snapshot[i]);
+		}
+		pN->Var_Release(&mapHold);
 		pN->ReturnValue();
 		return true;
 	}

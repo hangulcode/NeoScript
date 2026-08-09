@@ -487,8 +487,8 @@ bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, CNeoVMProgram* pProgram, i
 			vi._bl = sc._bl;
 			break;
 		case VAR_STRING:
-			vi._str = GetVM()->StringAlloc(sc._str);
-			vi._str->_refCount = 1;
+			vi._str = GetVM()->StringIntern(sc._str);
+			++vi._str->_refCount;
 			break;
 		default:
 			vi.ClearType();
