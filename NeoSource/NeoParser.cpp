@@ -314,9 +314,14 @@ static bool TryFoldLiteralBinOp(SOperand& a, eNOperation op, const SOperand& b, 
 		return false;
 	}
 
-	// 피연산자가 쓰던 상수 슬롯을 되돌린다. 만든 역순으로 시도해야 pop 이 성립한다.
-	funs.TryPopStatic(b._iVar);
-	funs.TryPopStatic(a._iVar);
+	// [주의] 여기서 피연산자의 상수 슬롯을 회수하면 안 된다.
+	// 같은 리터럴 값이 식 안에 여러 번 나오면 AddStaticInt/AddStaticNum 의 중복 제거로
+	// 여러 SOperand 가 같은 슬롯을 가리킨다. 접기가 그 슬롯을 pop 하고 결과값을 같은
+	// 자리에 새로 만들면, 아직 처리되지 않은 다른 SOperand 의 _iVar 가 엉뚱한 값을
+	// (또는 인덱스가 밀려 전역변수를) 가리키게 된다.
+	//   예) 7 == 7 + 1  ->  EQ [8] == [8]  (7 이 8 로 뒤바뀜)
+	// 접히지 않는 연산자(비교/논리/문자열연결)는 _iVar 를 그대로 쓰므로 실제로 터진다.
+	// 미참조 슬롯이 남는 비용은 값 종류당 최대 하나라 감수한다.
 
 	if (resultIsInt)
 		a.SetIntLiteral(funs.AddStaticInt(ri), ri);
