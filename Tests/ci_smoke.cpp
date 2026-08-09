@@ -65,7 +65,7 @@ static bool SetStorageRegression()
     while (it._pSetNode != nullptr)
     {
         ++count;
-        sum += it._pSetNode->key._int;
+        sum += it._pSetNode->data->key._int;
         set->NextNode(it);
     }
     const bool ok = count == 64 && set->GetCount() == 64 && sum == 456704;
