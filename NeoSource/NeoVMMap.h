@@ -8,11 +8,11 @@ class CNeoVMImpl;
 #pragma pack(1)
 struct MapNode
 {
-	VarInfo	key;
-	VarInfo	value;
-
 	u32		hash;
 	int		next; // 같은 연속 노드 배열 안의 다음 슬롯. -1=끝, -2=빈 슬롯
+
+	VarInfo	key;
+	VarInfo	value;
 };
 #pragma pack()
 

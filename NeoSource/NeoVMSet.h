@@ -6,10 +6,10 @@ namespace NeoScript
 #pragma pack(1)
 struct SetNode
 {
-	VarInfo	key;
-
 	u32		hash;
 	int		next; // index in the contiguous node array; -1=end, -2=empty
+
+	VarInfo	key;
 };
 #pragma pack()
 
