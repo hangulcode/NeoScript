@@ -211,22 +211,26 @@ struct SOperand
 // 숫자 리터럴을 값만 옮기는 자리(대입/인자 전달)에서는 상수 풀을 거치지 않고
 // 즉값 명령으로 낸다. int 는 NOP_MOVI, float 는 NOP_MOVF.
 //
-// ParseNum 이 이미 만들어 둔 상수 풀 항목은 회수하지 않는다. AddStaticInt/AddStaticNum 이
-// 값 단위로 중복을 제거하므로, 아무도 참조하지 않게 된 항목은 값 종류당 최대 하나다.
-// 이걸 되돌리려면 "그 슬롯을 참조하는 코드가 아직 없는가" 를 매번 확인해야 하는데,
-// 그 비용(함수 코드 전체 스캔)이 아끼는 슬롯 몇 개보다 훨씬 크다.
+// ParseNum 이 만들어 둔 상수 풀 항목은, 아무도 참조하지 않는 것이 확실할 때만 되돌린다.
+// 판정은 CanPopLastStatic 이 O(1) 로 한다 — 명령을 내면 코드 오프셋이 달라지므로
+// 반드시 방출 '전에' 물어봐야 한다.
 static bool TryPushImmediate(CArchiveRdWC& ar, SFunctions& funs, short dest, const SOperand& source, int iDebugLine = -1)
 {
 	if (source.IsArray())
 		return false;
+	if (source.IsIntLiteral() == false && source.IsFloatLiteral() == false)
+		return false;
+
+	const bool canReclaim = funs.CanPopLastStatic(source._iVar);
+
 	if (source.IsIntLiteral())
-	{
 		funs._cur->Push_MOVI(ar, dest, source._intLiteral, iDebugLine);
-		return true;
-	}
-	if (source.IsFloatLiteral())
-		return funs._cur->Push_MOVF(ar, dest, source._floatLiteral, iDebugLine);
-	return false;
+	else if (funs._cur->Push_MOVF(ar, dest, source._floatLiteral, iDebugLine) == false)
+		return false;   // double 빌드: 상수 풀 경유로 되돌아간다(슬롯은 그대로 둔다)
+
+	if (canReclaim)
+		funs._staticVars.pop_back();
+	return true;
 }
 
 struct SOperationInfo
@@ -1646,63 +1650,6 @@ bool ParseNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArch
 				inum = -inum;
 			int staticVar = funs.AddStaticInt(inum);
 			iResultStack.SetIntLiteral(staticVar, inum);
-		}
-	}
-	else
-	{
-		SetParserCompileError(ar, PCE_UNKNOWN_IDENTIFIER, tk1.c_str());
-		return false;
-	}
-	return true;
-}
-
-bool ParseNum2(int& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
-{
-	std::string tk2;
-	TK_TYPE tkType2;
-
-	ParsedNumber num;
-
-	iResultStack = vars.FindVar(tk1);
-	if (iResultStack != -1)
-		return true;
-
-	if (true == StringToNumber(num, tk1.c_str()))
-	{
-		u16 c = ar.GetData(false);
-		if (num.type == ParsedNumber::Type::Float) // 통째로 들어온 float(1.5, 1e+20 등)
-		{
-			double f = num.floatValue;
-			if (tkTypePre == TK_MINUS)
-				f = -f;
-			iResultStack = funs.AddStaticNum(f);
-		}
-		else if (c == '.')  // 정수 토큰 뒤 '.' → float 로 재조합
-		{
-			ar.GetData(true);
-
-			tkType2 = GetToken(ar, tk2);
-			double num2 = 0;
-			double f = num.floatValue;
-			if (true == StringToDoubleLow(num2, tk2.c_str()))
-			{
-				f += num2;
-			}
-			else
-			{
-				SetParserCompileError(ar, PCE_INVALID_NUMBER_LITERAL);
-				return TK_NONE;
-			}
-			if (tkTypePre == TK_MINUS)
-				f = -f;
-			iResultStack = funs.AddStaticNum(f);
-		}
-		else
-		{
-			int inum = num.intValue;   // 정수 리터럴은 int32 로 정확히(0xffffffff→-1)
-			if (tkTypePre == TK_MINUS)
-				inum = -inum;
-			iResultStack = funs.AddStaticInt(inum);
 		}
 	}
 	else

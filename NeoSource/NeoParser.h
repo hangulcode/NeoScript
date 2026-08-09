@@ -753,6 +753,11 @@ struct SFunctions
 
 	SFunctionInfo*						_cur = nullptr;
 	std::vector<VarInfo>				_staticVars;
+	// 마지막 상수 슬롯을 '어느 함수의 어느 코드 오프셋에서' 만들었는지.
+	// 리터럴을 즉값 명령으로 대체할 때, 그 뒤로 코드가 방출되지 않았다면
+	// 그 슬롯을 참조하는 명령도 있을 수 없다 — 이 비교 하나로 회수 가능 여부가 정해진다.
+	SFunctionInfo*						_lastStaticFun = nullptr;
+	int									_lastStaticCodeOffset = -1;
 	// switch 테이블은 _staticVars 처럼 프로그램 전역으로 누적된다(함수별이 아님).
 	// NOP_SWITCH.n1 = 이 배열의 인덱스이고, Export 가 'SWIT' 청크로 써서
 	// 런타임에 CNeoVMProgram::switchTables 가 된다.
@@ -852,6 +857,26 @@ struct SFunctions
 		//return FindFun((*it).second);
 	}
 
+	// 방금 만든 상수 슬롯의 출처를 기록한다(회수 판정용).
+	void MarkLastStaticOrigin()
+	{
+		_lastStaticFun = _cur;
+		_lastStaticCodeOffset = (_cur != nullptr && _cur->_code != nullptr)
+			? _cur->_code->GetBufferOffset() : -1;
+	}
+	// 리터럴이 만든 상수 슬롯을 되돌릴 수 있는가.
+	//   - 아직 마지막 슬롯이고(뒤에 다른 상수가 생기지 않았고)
+	//   - 그 슬롯을 만든 함수에서, 만든 뒤로 명령이 하나도 방출되지 않았다.
+	// 두 조건이 서면 그 슬롯을 참조하는 코드는 존재할 수 없다.
+	bool CanPopLastStatic(int compileIndex) const
+	{
+		const int idx = compileIndex - COMPILE_STATIC_VAR_BEGIN;
+		if (idx < 0 || idx != (int)_staticVars.size() - 1)
+			return false;
+		if (_cur == nullptr || _cur->_code == nullptr || _lastStaticFun != _cur)
+			return false;
+		return _lastStaticCodeOffset == _cur->_code->GetBufferOffset();
+	}
 	int	AddStaticInt(int num)
 	{
 		for (int i = (int)_staticVars.size() - 1; i >= 0; i--)
@@ -869,6 +894,7 @@ struct SFunctions
 
 		int idx = (int)_staticVars.size() + COMPILE_STATIC_VAR_BEGIN;
 		_staticVars.push_back(v);
+		MarkLastStaticOrigin();
 		return idx;
 	}
 	bool GetStaticNum(int var, int* value)
@@ -912,6 +938,7 @@ struct SFunctions
 
 		int idx = (int)_staticVars.size() + COMPILE_STATIC_VAR_BEGIN;
 		_staticVars.push_back(v);
+		MarkLastStaticOrigin();
 		return idx;
 	}
 	int	AddStaticString(const std::string& str)
