@@ -513,7 +513,9 @@ NEOS_FORCEINLINE VarInfo* MapInfo::FindString(StringInfo* pKeyStr)
 	}
 	if (_BucketCapa <= 0)
 		return NULL;
-	u32 hash = pKeyStr->GetHash();
+	// 여기 도달했다면 pKeyStr 은 정규 문자열이고, _hash 는 인터닝 시점에 이미 채워졌다.
+	// GetHash() 의 "아직 계산 안 됨(0)" 분기는 인터닝되지 않은 문자열용이라 여기서는 죽은 분기다.
+	u32 hash = pKeyStr->_hash;
 	MapNode* node = _Bucket + (hash & _HashBase);
 	while (node->next != MAP_NODE_EMPTY)
 	{

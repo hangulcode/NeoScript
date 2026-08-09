@@ -101,7 +101,9 @@ static bool StringInternRegression()
 
     bool ok = first._str != second._str
 		&& !first._str->_interned && !second._str->_interned
+		&& first._str->_StringLen == (int)key.size()
 		&& canonical != nullptr && canonical->_interned
+		&& canonical->_StringLen == (int)key.size()
         && map->Find(&second) != nullptr
         && map->Find(key) != nullptr
         && set->Find(&second)

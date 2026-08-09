@@ -326,10 +326,7 @@ StringInfo* CNeoVMImpl::StringAlloc(const std::string& str)
 	StringInfo* p = m_sPool_String.Receive();// new StringInfo();
 	p->_hash = 0;
 	p->_interned = false;
-	p->_container = nullptr;
-	p->_containerVersion = 0;
 	p->_refCount = 0;
-	p->_value = nullptr;
 
 	p->_str = str;
 	p->_StringLen = utf_string::UTF8_LENGTH(str);

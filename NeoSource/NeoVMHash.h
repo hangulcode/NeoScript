@@ -7,7 +7,6 @@ extern u32 GetHashCode(const std::string& str);
 struct VMString
 {
 	std::string _str;
-	int	_StringID;
 	int _StringLen;
 
 	// _hash 는 FNV-1a 누적 뒤 avalanche까지 끝난 문자열 내용 해시다.
@@ -16,9 +15,6 @@ struct VMString
 	// 일반 문자열은 생성 비용을 줄이기 위해 인터닝하지 않는다. 프로그램 상수와
 	// Map/Set 키만 정규 문자열이며, 이 플래그가 포인터 비교의 전제다.
 	bool		_interned;
-	mutable void* _container;
-	mutable void* _value;
-	mutable int _containerVersion;
 
 	NEOS_FORCEINLINE u32 GetHash() const
 	{
@@ -215,38 +211,20 @@ public:
 		}
 		return false;
 	}
-	bool TryGetValueForce(const VMString* pStr, T* d)
+	NEOS_FORCEINLINE bool TryGetValue(const VMString* pStr, T* d)
 	{
-		u32 hkey = pStr->GetHash();
-		u32 bkIndex = hkey % _capa;
-		SimpleVector<HNode>& bk = _bucket[bkIndex];
+		const u32 hkey = pStr->GetHash();
+		SimpleVector<HNode>& bk = _bucket[hkey % _capa];
 		for (int idx = bk.size() - 1; idx >= 0; --idx)
 		{
 			HNode& n = bk[idx];
-			if (n.hash == hkey)
+			if (n.hash == hkey && pStr->_str == n.key)
 			{
-				if (pStr->_str == n.key)
-				{
-					pStr->_container = this;
-					pStr->_containerVersion = _version;
-					pStr->_value = &n;
-
-					*d = n.value;
-					return true;
-				}
+				*d = n.value;
+				return true;
 			}
 		}
 		return false;
-	}
-
-	NEOS_FORCEINLINE bool TryGetValue(const VMString* pStr, T* d)
-	{
-		if(pStr->_container == this && pStr->_containerVersion == _version && pStr->_value != nullptr)
-		{
-			*d = ((HNode*)pStr->_value)->value;
-			return true;
-		}
-		return TryGetValueForce(pStr, d);
 	}
 	bool IsKey(const std::string& key)
 	{
