@@ -4861,8 +4861,9 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 // 만드는 것 — 새 opcode 를 늘리지 않고 승격률을 올리는 방식이다.
 // (상수는 static 풀 = 전역 배열에 있어서 'x * 1.5' 는 절대 전 오퍼랜드 로컬이 될 수 없다)
 //
-//  - 대상 : static 이면서 숫자/bool. script-global 은 루프 안에서 값이 바뀔 수 있으므로 제외.
-//           문자열은 정합성 문제는 없으나 호출마다 refcount 트래픽이 늘어 일단 제외한다.
+//  - 대상 : static 이면서 숫자/bool/문자열. script-global 은 루프 안에서 값이 바뀔 수 있으므로 제외.
+//           문자열은 프롤로그에서 한 번만 공유(refcount 증감)하므로, 루프 본문에서의
+//           반복적인 static 슬롯 접근을 없애는 편이 이득이다.
 //  - 게이팅 : 루프 구간 안에서 1회 이상 쓰인 상수만. 루프가 없는 함수(fib 류)가 호출당
 //           MOV 만 무는 순손실을 막는다.
 //  - 배치 : 함수 프롤로그. 모든 제어흐름을 지배하므로 다중/조건부 루프군에서도 안전하다.
@@ -4871,7 +4872,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 //  - 슬롯 : AllocLocalVar 와 같은 append 경로. _localVarCount 는 감소하지 않으므로 기존
 //           지역변수와 절대 겹치지 않고, temp 는 export 의 localCount 보정으로 함께 밀린다.
 // ---------------------------------------------------------------------------
-#define NEOS_HOIST_MAX	8	// 함수당 상한. 프레임이 커지면 재귀 가능 깊이가 줄어든다.
+#define NEOS_HOIST_MAX	32	// 함수당 상한. 프레임이 커지면 재귀 가능 깊이가 줄어든다.
 
 // n1 에 op 단위 상대 점프 offset 을 담는 op. 뒤로 가는 offset = 루프의 back edge.
 static bool IsRelativeJumpOp(eNOperation op)
@@ -4970,7 +4971,7 @@ static void HoistLoopConstants(SFunctions& funs, u8* pCode, int codeSize,
 	if (useInLoop.empty())
 		return;
 
-	// 3) 숫자/bool 만 남기고 사용 횟수 순으로 상위 NEOS_HOIST_MAX 개 선택.
+	// 3) 숫자/bool/문자열만 남기고 사용 횟수 순으로 상위 NEOS_HOIST_MAX 개 선택.
 	std::vector<std::pair<int, short> > cand;	// (사용횟수, static 오퍼랜드)
 	for (std::map<short, int>::iterator it = useInLoop.begin(); it != useInLoop.end(); ++it)
 	{
@@ -4978,7 +4979,7 @@ static void HoistLoopConstants(SFunctions& funs, u8* pCode, int codeSize,
 		if (idx < 0 || idx >= (int)funs._staticVars.size())
 			continue;
 		const VAR_TYPE t = funs._staticVars[idx].GetType();
-		if (t != VAR_INT && t != VAR_FLOAT && t != VAR_BOOL)
+		if (t != VAR_INT && t != VAR_FLOAT && t != VAR_BOOL && t != VAR_STRING)
 			continue;
 		cand.push_back(std::make_pair(it->second, it->first));
 	}
