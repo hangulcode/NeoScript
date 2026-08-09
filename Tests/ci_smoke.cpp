@@ -1,6 +1,8 @@
 #include "NeoScript.h"
 
 #include <cstdio>
+#include <iostream>
+#include <sstream>
 
 int main()
 {
@@ -19,7 +21,11 @@ int main()
     CompileDesc desc;
     desc.source = source;
     desc.sourceName = "ci_smoke.ns";
+    desc.emitAsm = true;
+    std::ostringstream asmOutput;
+    std::streambuf* const originalCout = std::cout.rdbuf(asmOutput.rdbuf());
     CompileResult compiled = runtime->Compile(desc);
+    std::cout.rdbuf(originalCout);
     if (!compiled.program)
     {
         std::fprintf(stderr, "Compile failed: %s\n", compiled.error.message.c_str());
@@ -52,7 +58,8 @@ int main()
     runtime->DestroyProgram(compiled.program);
     DestroyRuntime(runtime);
 
-    if (!addOk || !literalOk)
+    const bool asmOk = asmOutput.str().find("Fun -") != std::string::npos;
+    if (!addOk || !literalOk || !asmOk)
     {
         std::fputs("NeoScript API smoke failed\n", stderr);
         return 1;

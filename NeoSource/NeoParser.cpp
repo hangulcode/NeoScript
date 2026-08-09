@@ -5302,10 +5302,8 @@ INeoVM* INeoVM::CompileAndLoadVM(const NeoCompilerParam& param, const NeoLoadVMP
 	{
 		if (param.err != nullptr)
 			*param.err = "NeoExecContextPool is required.\n";
-#ifdef _WIN32
 		if (param.putASM && param.err != nullptr)
-			printf((ANSI_COLOR_RED + *(param.err) + ANSI_RESET_ALL).c_str());
-#endif
+			printf("%s", (ANSI_COLOR_RED + *(param.err) + ANSI_RESET_ALL).c_str());
 		return NULL;
 	}
 
@@ -5313,10 +5311,8 @@ INeoVM* INeoVM::CompileAndLoadVM(const NeoCompilerParam& param, const NeoLoadVMP
 
 	if (false == Compile(arCode, param))
 	{
-#ifdef _WIN32
 		if(param.putASM && param.err != nullptr)
-			printf((ANSI_COLOR_RED + *(param.err) + ANSI_RESET_ALL).c_str());
-#endif
+			printf("%s", (ANSI_COLOR_RED + *(param.err) + ANSI_RESET_ALL).c_str());
 		return NULL;
 	}
 

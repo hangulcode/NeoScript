@@ -496,9 +496,7 @@ void OutAsm(const char*	lpszString, ...)
 }
 void OutString(const char* lpszString)
 {
-#ifdef _WIN32	
 	std::cout << lpszString;
-#endif
 }
 
 // iMaxCount 칸을 "%02X " 3문자씩 채운다. iCount 를 넘는 칸은 공백이라 폭이 항상 같다.
