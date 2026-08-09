@@ -42,7 +42,7 @@ struct AllocBase
 struct MapInfo : AllocBase
 {
 	// Lua식 hash part: 주 버킷 자체가 연속 MapNode 배열의 슬롯이다.
-	// 별도 pFirst 포인터를 없애고 충돌은 next 인덱스로 연결한다.
+	// 버킷당 체인 헤드 포인터를 따로 두지 않고 충돌은 next 인덱스로 연결한다.
 	MapNode*	_Bucket;
 
 	CNeoVMImpl*	_pVM;

@@ -92,7 +92,7 @@ Precision is **not configurable** — there is no double-precision build. Script
 than 24 bits of mantissa must keep the value in an `int`, or split it. (Earlier versions had a
 build switch for `double`; it was removed rather than carried as an untested second layout,
 since `sizeof(VarInfo)` and therefore the var stack, every list, and both halves of every map
-node all depend on it.)
+entry (`MapData`) all depend on it.)
 
 ### Vector value types
 `math.Vector2`, `math.Vector3`, `math.Vector4`, and `math.Quaternion` create dedicated

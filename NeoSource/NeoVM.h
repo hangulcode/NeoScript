@@ -148,7 +148,7 @@ enum VAR_TYPE : u8
 
 	// 벡터 값타입 (alloc: VecInfo 를 풀에서 받아 refcount 로 공유).
 	// IsAllocType 경계(VAR_STRING) 뒤에 둔다 — 성분 4개를 VarInfo 유니온에 인라인하면
-	// VarInfo 가 16→24바이트가 되어 스택/리스트/맵노드 전체가 50% 커진다(실측: map_str
+	// VarInfo 가 16→24바이트가 되어 스택/리스트/맵 엔트리(MapData) 전체가 50% 커진다(실측: map_str
 	// -12%, particles -13%). 값 의미론은 copy-on-write 로 보존한다(VecCopyOnWrite).
 	//
 	// 성분 수(1~4)는 타입이 아니라 VarInfo::_vecCount 가 들고 있다. 쿼터니언도 별도 타입이
