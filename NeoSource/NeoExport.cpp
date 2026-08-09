@@ -315,6 +315,10 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
 			break;
+		case NOP_MOVF:
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
+			break;
 
 		case NOP_FMOV1:
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
@@ -752,9 +756,8 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	header._dwNeoVersion = NEO_VER;
 	header._iFunctionCount = (int)(funs.GetFunCountAll());
 	header._dwFlag = arText._debug ? NEO_HEADER_FLAG_DEBUG : 0;
-#ifdef NS_SINGLE_PRECISION
+	if (INeoVM::IsSinglePrecision())
 		header._dwFlag |= NEO_HEADER_FLAG_SINGLE_PRECISION;
-#endif
 	
 	std::map<int, SFunctionTableForWriter> funPos;
 

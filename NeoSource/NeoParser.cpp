@@ -134,11 +134,24 @@ enum OperandType
 	Increment_Postfix,
 };
 
+// 리터럴이 어떤 즉값 명령으로 나갈 수 있는지. Literal_None 이면 상수 풀 경유(기존 MOV).
+enum LiteralKind
+{
+	Literal_None = 0,
+	Literal_Int,
+	Literal_Float,
+};
+
 struct SOperand
 {
 	int _iVar;
 	int _iArrayIndex;
 	OperandType _operandType;
+	// 숫자 리터럴이면 그 값을 그대로 들고 있는다. 대입/인자 전달처럼 값만 옮기는
+	// 자리에서는 상수 풀을 거치지 않고 MOVI/MOVF 로 바로 실을 수 있다.
+	LiteralKind _literalKind;
+	NS_FLOAT _floatLiteral;
+	int _intLiteral;
 
 	SOperand()
 	{
@@ -148,6 +161,9 @@ struct SOperand
 	{
 		_iVar = iVar;
 		_iArrayIndex = iArrayIndex;
+		_literalKind = Literal_None;
+		_floatLiteral = 0;
+		_intLiteral = 0;
 		if(iVar == INVALID_ERROR_PARSEJOB && iArrayIndex == INVALID_ERROR_PARSEJOB)
 			_operandType = Data_None;
 		else
@@ -157,17 +173,61 @@ struct SOperand
 	{
 		_iVar = _iArrayIndex = INVALID_ERROR_PARSEJOB;
 		_operandType = Data_NR;
+		_literalKind = Literal_None;
+		_floatLiteral = 0;
+		_intLiteral = 0;
+	}
+	void SetIntLiteral(int var, int value)
+	{
+		_iVar = var;
+		_iArrayIndex = INVALID_ERROR_PARSEJOB;
+		_operandType = Data_NR;
+		_literalKind = Literal_Int;
+		_intLiteral = value;
+		_floatLiteral = 0;
+	}
+	void SetFloatLiteral(int var, NS_FLOAT value)
+	{
+		_iVar = var;
+		_iArrayIndex = INVALID_ERROR_PARSEJOB;
+		_operandType = Data_NR;
+		_literalKind = Literal_Float;
+		_floatLiteral = value;
+		_intLiteral = 0;
 	}
 
 	inline bool IsInvalidValue() { return (false == IsHaveShort()) && (_iVar == INVALID_ERROR_PARSEJOB); }
 
-	inline bool IsArray() { return _iArrayIndex != INVALID_ERROR_PARSEJOB; }
+	inline bool IsArray() const { return _iArrayIndex != INVALID_ERROR_PARSEJOB; }
 	inline bool IsShort() { return _operandType == Data_NS; }
 	inline bool IsConst() { return _operandType == Data_NS; }
 	inline bool IsNone() { return _operandType == Data_None; }
 	inline bool IsHaveShort() { return (_operandType == Data_NS || _operandType == Data_TS); }
 	inline bool IsFun() { return _operandType == Data_Fun; }
+	inline bool IsFloatLiteral() const { return _literalKind == Literal_Float; }
+	inline bool IsIntLiteral() const { return _literalKind == Literal_Int; }
 };
+
+// 숫자 리터럴을 값만 옮기는 자리(대입/인자 전달)에서는 상수 풀을 거치지 않고
+// 즉값 명령으로 낸다. int 는 NOP_MOVI, float 는 NOP_MOVF.
+//
+// ParseNum 이 이미 만들어 둔 상수 풀 항목은 회수하지 않는다. AddStaticInt/AddStaticNum 이
+// 값 단위로 중복을 제거하므로, 아무도 참조하지 않게 된 항목은 값 종류당 최대 하나다.
+// 이걸 되돌리려면 "그 슬롯을 참조하는 코드가 아직 없는가" 를 매번 확인해야 하는데,
+// 그 비용(함수 코드 전체 스캔)이 아끼는 슬롯 몇 개보다 훨씬 크다.
+static bool TryPushImmediate(CArchiveRdWC& ar, SFunctions& funs, short dest, const SOperand& source, int iDebugLine = -1)
+{
+	if (source.IsArray())
+		return false;
+	if (source.IsIntLiteral())
+	{
+		funs._cur->Push_MOVI(ar, dest, source._intLiteral, iDebugLine);
+		return true;
+	}
+	if (source.IsFloatLiteral())
+		return funs._cur->Push_MOVF(ar, dest, source._floatLiteral, iDebugLine);
+	return false;
+}
 
 struct SOperationInfo
 {
@@ -372,6 +432,7 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_NONE, 0);
 	OP_STR1(NOP_MOV, 2);
 	OP_STR1(NOP_MOVI, 3);
+	OP_STR1(NOP_MOVF, 3);
 	OP_STR1(NOP_MOV_MINUS, 2);
 	OP_STR1(NOP_LOG_NOT, 2);
 	OP_STR1(NOP_ADD2, 2);
@@ -1451,7 +1512,10 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 			if (arg.IsFun())
 				funs._cur->Push_OP2(ar, NOP_FMOV1, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg._iVar, false, iCallLine);
 			else if (arg._iArrayIndex == INVALID_ERROR_PARSEJOB)
-				funs._cur->Push_OP2(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg._iVar, arg.IsShort(), iCallLine);
+			{
+				if (TryPushImmediate(ar, funs, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg, iCallLine) == false)
+					funs._cur->Push_OP2(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg._iVar, arg.IsShort(), iCallLine);
+			}
 			else
 				funs._cur->Push_TableRead(ar, arg._iVar, arg._iArrayIndex, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg.IsHaveShort());
 		}
@@ -1551,7 +1615,8 @@ bool ParseNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArch
 			double f = num.floatValue;
 			if (tkTypePre == TK_MINUS)
 				f = -f;
-			iResultStack = funs.AddStaticNum(f);
+			int staticVar = funs.AddStaticNum(f);
+			iResultStack.SetFloatLiteral(staticVar, (NS_FLOAT)f);
 		}
 		else if (c == '.')  // 정수 토큰 뒤 '.' → float 로 재조합(토크나이저가 "1.5"를 쪼갬)
 		{
@@ -1571,14 +1636,16 @@ bool ParseNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArch
 			}
 			if (tkTypePre == TK_MINUS)
 				f = -f;
-			iResultStack = funs.AddStaticNum(f);
+			int staticVar = funs.AddStaticNum(f);
+			iResultStack.SetFloatLiteral(staticVar, (NS_FLOAT)f);
 		}
 		else
 		{
 			int inum = num.intValue;   // 정수 리터럴은 int32 로 정확히(0xffffffff→-1)
 			if (tkTypePre == TK_MINUS)
 				inum = -inum;
-			iResultStack = funs.AddStaticInt(inum);
+			int staticVar = funs.AddStaticInt(inum);
+			iResultStack.SetIntLiteral(staticVar, inum);
 		}
 	}
 	else
@@ -2705,7 +2772,8 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			{
 				if (a.IsArray() == false)
 				{
-					funs._cur->Push_OP2(ar, op, a._iVar, b._iVar, b.IsShort());
+					if (op != NOP_MOV || TryPushImmediate(ar, funs, a._iVar, b) == false)
+						funs._cur->Push_OP2(ar, op, a._iVar, b._iVar, b.IsShort());
 				}
 				else
 				{

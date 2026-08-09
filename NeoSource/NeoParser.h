@@ -221,6 +221,7 @@ struct SFunctionInfo
 		switch (op)
 		{
 		case NOP_MOV:
+		case NOP_MOVF:
 		case NOP_MOV_MINUS:
 		case NOP_LOG_NOT:
 		case NOP_ADD3:
@@ -406,9 +407,9 @@ struct SFunctionInfo
 
 		Push_NoFlag(r, s, 0);
 	}
-	void	Push_MOVI(CArchiveRdWC& ar, short r, int v)
+	void	Push_MOVI(CArchiveRdWC& ar, short r, int v, int iDebugLine = -1)
 	{
-		AddDebugData(ar);
+		AddDebugData(ar, iDebugLine);
 		_iLastOPOffset = _code->GetBufferOffset();
 
 		OpType optype = GetOpTypeFromOp(NOP_MOVI);
@@ -417,6 +418,23 @@ struct SFunctionInfo
 		//_code->Write(&s, sizeof(s));
 
 		Push_NoFlag(r, v);
+	}
+	bool	Push_MOVF(CArchiveRdWC& ar, short r, NS_FLOAT v, int iDebugLine = -1)
+	{
+		if (NEOS_CAN_EMBED_FLOAT_IMMEDIATE)
+		{
+			AddDebugData(ar, iDebugLine);
+			_iLastOPOffset = _code->GetBufferOffset();
+
+			OpType optype = GetOpTypeFromOp(NOP_MOVF);
+			_code->Write(&optype, sizeof(optype));
+
+			int bits = 0;
+			std::memcpy(&bits, &v, sizeof(bits));
+			Push_NoFlag(r, bits);
+			return true;
+		}
+		return false;
 	}
 	void	Push_OP1(CArchiveRdWC& ar, eNOperation op, short r)
 	{
@@ -883,7 +901,9 @@ struct SFunctions
 			if (VAR_FLOAT == v2.GetType())
 			{
 				if (num == v2._float)
+				{
 					return i + COMPILE_STATIC_VAR_BEGIN;
+				}
 			}
 		}
 		VarInfo v;
