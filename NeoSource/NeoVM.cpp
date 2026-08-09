@@ -36,12 +36,13 @@ VarInfo* INeoVM::GetVar(const std::string& name)
 
 bool	INeoVM::RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFunction func, Neo_NativeProperty property)
 {
-	if (p == nullptr || p->GetType() != VAR_MAP) return false;
+	// 일반 VAR_MAP을 변환하지 않는다. VAR_FP_NATIVE를 생성한 뒤에만 바인딩한다.
+	if (p == nullptr || p->GetType() != VAR_FP_NATIVE || p->_fpNative == nullptr) return false;
+	FunctionPropertyInfo* fp = p->_fpNative;
 
-	MapInfo* pTable = p->_tbl;
-	pTable->_pUserData = pUserData;
-	CNeoVMWorker::neo_pushcclosureNative(&pTable->_fun, func);
-	CNeoVMWorker::neo_pushcclosureNative(&pTable->_fun, property);
+	fp->_pUserData = pUserData;
+	CNeoVMWorker::neo_pushcclosureNative(&fp->_fun, func);
+	CNeoVMWorker::neo_pushcclosureNative(&fp->_fun, property);
 
 	return true;
 }
@@ -142,6 +143,11 @@ void INeoVM::Var_ReleaseInternal(VarInfo* d)
 		if (--d->_vec->_refCount <= 0)
 			((CNeoVMImpl*)this)->FreeVec(d->_vec);
 		d->_vec = NULL;
+		break;
+	case VAR_FP_NATIVE:
+		if (--d->_fpNative->_refCount <= 0)
+			((CNeoVMImpl*)this)->FreeFunctionProperty(d->_fpNative);
+		d->_fpNative = NULL;
 		break;
 	default:
 		break;

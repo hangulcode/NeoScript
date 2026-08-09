@@ -53,6 +53,8 @@ u32 GetHashCode(VarInfo* p)
 	case VAR_LIST:       return GetHashCode((u8*)p->_lst, sizeof(p->_lst));
 	case VAR_SET:        return GetHashCode((u8*)p->_set, sizeof(p->_set));
 	case VAR_COROUTINE:  return GetHashCode((u8*)p->_cor, sizeof(p->_cor));
+	case VAR_VEC:		return GetHashCode((u8*)p->_vec, sizeof(p->_vec));
+	case VAR_FP_NATIVE:  return GetHashCode((u8*)p->_fpNative, sizeof(p->_fpNative));
 	default:              return 0;
 	}
 }
@@ -99,6 +101,8 @@ static bool SetKeyEquals(SetNode& node, VarInfo* pKey, u32 hash)
 	case VAR_LIST:      return data->key._lst == pKey->_lst;
 	case VAR_SET:       return data->key._set == pKey->_set;
 	case VAR_COROUTINE: return data->key._cor == pKey->_cor;
+	case VAR_VEC:		return data->key._vec == pKey->_vec;
+	case VAR_FP_NATIVE: return data->key._fpNative == pKey->_fpNative;
 	default:             return false;
 	}
 }

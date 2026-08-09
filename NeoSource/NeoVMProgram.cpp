@@ -18,8 +18,8 @@ static u32 SwitchKeyHash(const ProgramSwitchKey& k)
 {
 	switch (k._type)
 	{
-	case VAR_BOOL:   return k._bl ? 1u : 0u;
 	case VAR_INT:    return (u32)k._int;
+	case VAR_BOOL:   return k._bl ? 1u : 0u;
 	case VAR_STRING: return GetHashCode(k._str);
 	default:         return 0u;
 	}
@@ -55,8 +55,8 @@ int ProgramSwitchTable::Find(VarInfo* pKey) const
 	u32 h;
 	switch (t)
 	{
-	case VAR_BOOL:   h = pKey->_bl ? 1u : 0u; break;
 	case VAR_INT:    h = (u32)pKey->_int; break;
+	case VAR_BOOL:   h = pKey->_bl ? 1u : 0u; break;
 	case VAR_STRING: h = pKey->_str->GetHash(); break;
 	default: return defaultOffset;
 	}
@@ -68,8 +68,8 @@ int ProgramSwitchTable::Find(VarInfo* pKey) const
 			continue;
 		switch (t)
 		{
-		case VAR_BOOL:   if (e.key._bl == pKey->_bl) return e.jumpOffset; break;
 		case VAR_INT:    if (e.key._int == pKey->_int) return e.jumpOffset; break;
+		case VAR_BOOL:   if (e.key._bl == pKey->_bl) return e.jumpOffset; break;
 		case VAR_STRING: if (e.key._str == pKey->_str->_str) return e.jumpOffset; break; // UTF-8 바이트 일치
 		default: break;
 		}
@@ -353,11 +353,11 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 					e.key._type = (VAR_TYPE)keyType;
 					switch (e.key._type)
 					{
-					case VAR_BOOL:
-						if (ar.Read(&e.key._bl, sizeof(e.key._bl)) == 0) return true;
-						break;
 					case VAR_INT:
 						if (ar.Read(&e.key._int, sizeof(e.key._int)) == 0) return true;
+						break;
+					case VAR_BOOL:
+						if (ar.Read(&e.key._bl, sizeof(e.key._bl)) == 0) return true;
 						break;
 					case VAR_STRING:
 						if (false == ReadString(ar, e.key._str)) return true;

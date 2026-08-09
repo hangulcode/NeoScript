@@ -202,14 +202,6 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 		return std::string(v1->_c.c);
 	case VAR_STRING:
 		return v1->_str->_str;
-	case VAR_VEC:
-	{
-		const int n = v1->VectorComponentCount();
-		if (n <= 2)      snprintf(ch, sizeof(ch), "(%g, %g)", v1->_vec->v[0], v1->_vec->v[1]);
-		else if (n == 3) snprintf(ch, sizeof(ch), "(%g, %g, %g)", v1->_vec->v[0], v1->_vec->v[1], v1->_vec->v[2]);
-		else             snprintf(ch, sizeof(ch), "(%g, %g, %g, %g)", v1->_vec->v[0], v1->_vec->v[1], v1->_vec->v[2], v1->_vec->v[3]);
-		return ch;
-	}
 	case VAR_MAP:
 		return "map";
 	case VAR_LIST:
@@ -222,6 +214,16 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 		return "module";
 	case VAR_ASYNC:
 		return "async";
+	case VAR_VEC:
+	{
+		const int n = v1->VectorComponentCount();
+		if (n <= 2)      snprintf(ch, sizeof(ch), "(%g, %g)", v1->_vec->v[0], v1->_vec->v[1]);
+		else if (n == 3) snprintf(ch, sizeof(ch), "(%g, %g, %g)", v1->_vec->v[0], v1->_vec->v[1], v1->_vec->v[2]);
+		else             snprintf(ch, sizeof(ch), "(%g, %g, %g, %g)", v1->_vec->v[0], v1->_vec->v[1], v1->_vec->v[2], v1->_vec->v[3]);
+		return ch;
+	}
+	case VAR_FP_NATIVE:
+		return "native_object";
 	default:
 		break;
 	}
@@ -245,6 +247,8 @@ int CNeoVMWorker::ToInt(VarInfo* v1)
 		return ::atoi(v1->_str->_str.c_str());
 	case VAR_MAP:
 		return -1;
+	case VAR_FP_NATIVE:
+		return -1;
 	default:
 		break;
 	}
@@ -267,6 +271,8 @@ NS_FLOAT CNeoVMWorker::ToFloat(VarInfo* v1)
 	case VAR_STRING:
 		return (NS_FLOAT)atof(v1->_str->_str.c_str());
 	case VAR_MAP:
+		return -1;
+	case VAR_FP_NATIVE:
 		return -1;
 	default:
 		break;
@@ -297,6 +303,8 @@ int CNeoVMWorker::ToSize(VarInfo* v1)
 		return (int)v1->_set->_itemCount;
 	case VAR_VEC:
 		return v1->VectorComponentCount();
+	case VAR_FP_NATIVE:
+		return 0;
 	default:
 		break;
 	}
@@ -314,11 +322,6 @@ VarInfo* CNeoVMWorker::GetType(VarInfo* v1)
 		return &GetVM()->m_sDefaultValue[NDF_BOOL];
 	case VAR_NONE:
 		return &GetVM()->m_sDefaultValue[NDF_NULL];
-	case VAR_VEC:
-	{
-		const int n = v1->VectorComponentCount();
-		return &GetVM()->m_sDefaultValue[n <= 2 ? NDF_VEC2 : (n == 3 ? NDF_VEC3 : NDF_VEC4)];
-	}
 	case VAR_FUN:
 		return &GetVM()->m_sDefaultValue[NDF_FUNCTION];
 	case VAR_ITERATOR:
@@ -341,6 +344,13 @@ VarInfo* CNeoVMWorker::GetType(VarInfo* v1)
 		return &GetVM()->m_sDefaultValue[NDF_MODULE];
 	case VAR_ASYNC:
 		return &GetVM()->m_sDefaultValue[NDF_ASYNC];
+	case VAR_VEC:
+	{
+		const int n = v1->VectorComponentCount();
+		return &GetVM()->m_sDefaultValue[n <= 2 ? NDF_VEC2 : (n == 3 ? NDF_VEC3 : NDF_VEC4)];
+	}
+	case VAR_FP_NATIVE:
+		return &GetVM()->m_sDefaultValue[NDF_NULL];
 	default:
 		break;
 	}
@@ -391,9 +401,10 @@ void CNeoVMWorker::Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue)
 
 bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo* r, VarInfo* a, VarInfo* b)
 {
-	if (pTable->_tbl->_meta == NULL)
+	MapInfo* table = pTable->_tbl;
+	if (table->_meta == NULL)
 		return false;
-	VarInfo* pVarItem = pTable->_tbl->_meta->Find(funName);
+	VarInfo* pVarItem = table->_meta->Find(funName);
 	if (pVarItem == NULL)
 		return false;
 	if (pVarItem->GetType() != VAR_FUN)
@@ -418,9 +429,10 @@ bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo
 
 bool CNeoVMWorker::Call_MetaTable2(VarInfo* pTable, std::string& funName, VarInfo* r, VarInfo* b)
 {
-	if (pTable->_tbl->_meta == NULL)
+	MapInfo* table = pTable->_tbl;
+	if (table->_meta == NULL)
 		return false;
-	VarInfo* pVarItem = pTable->_tbl->_meta->Find(funName);
+	VarInfo* pVarItem = table->_meta->Find(funName);
 	if (pVarItem == NULL)
 		return false;
 	if (pVarItem->GetType() != VAR_FUN)
@@ -1278,6 +1290,10 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 		snprintf(buf, sizeof(buf), "#%d", pVar->_fun_index);
 		out.value = buf;
 		break;
+	case VAR_ITERATOR:
+		out.type = "iterator";
+		out.value = "iterator";
+		break;
 	case VAR_FUN_NATIVE:
 		out.type = "native_function";
 		out.value = "native_function";
@@ -1290,26 +1306,17 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 		out.type = "string";
 		out.value = pVar->_str ? pVar->_str->_str : "";
 		break;
-	case VAR_VEC:
-	{
-		const int n = pVar->VectorComponentCount();
-		out.type = (n <= 2) ? "Vector2" : (n == 3 ? "Vector3" : "Vector4");
-		if (n <= 2)      snprintf(buf, sizeof(buf), "(%g, %g)", pVar->_vec->v[0], pVar->_vec->v[1]);
-		else if (n == 3) snprintf(buf, sizeof(buf), "(%g, %g, %g)", pVar->_vec->v[0], pVar->_vec->v[1], pVar->_vec->v[2]);
-		else             snprintf(buf, sizeof(buf), "(%g, %g, %g, %g)", pVar->_vec->v[0], pVar->_vec->v[1], pVar->_vec->v[2], pVar->_vec->v[3]);
-		out.value = buf;
-		break;
-	}
 	case VAR_MAP:
 		out.type = "map";
 		{
-			const int count = pVar->_tbl ? pVar->_tbl->GetCount() : 0;
+			MapInfo* map = pVar->_tbl;
+			const int count = map ? map->GetCount() : 0;
 			snprintf(buf, sizeof(buf), "map(%d)", count);
-			if (pVar->_tbl != nullptr && collectionDepth < NEO_DEBUG_MAX_COLLECTION_DEPTH)
+			if (map != nullptr && collectionDepth < NEO_DEBUG_MAX_COLLECTION_DEPTH)
 			{
 				const int childCount = count < NEO_DEBUG_MAX_COLLECTION_ITEMS ? count : NEO_DEBUG_MAX_COLLECTION_ITEMS;
 				out.children.reserve(childCount + (count > childCount ? 1 : 0));
-				CollectionIterator iterator = pVar->_tbl->FirstNode();
+				CollectionIterator iterator = map->FirstNode();
 				for (int i = 0; i < childCount && iterator._pTableNode != nullptr; ++i)
 				{
 					MapNode* node = iterator._pTableNode;
@@ -1324,7 +1331,7 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 					}
 					NeoDebugFormatValue(&node->data->value, child, collectionDepth + 1);
 					out.children.push_back(std::move(child));
-					pVar->_tbl->NextNode(iterator);
+					map->NextNode(iterator);
 				}
 				if (count > childCount)
 				{
@@ -1387,9 +1394,19 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 		out.type = "async";
 		out.value = "async";
 		break;
-	case VAR_ITERATOR:
-		out.type = "iterator";
-		out.value = "iterator";
+	case VAR_VEC:
+	{
+		const int n = pVar->VectorComponentCount();
+		out.type = (n <= 2) ? "Vector2" : (n == 3 ? "Vector3" : "Vector4");
+		if (n <= 2)      snprintf(buf, sizeof(buf), "(%g, %g)", pVar->_vec->v[0], pVar->_vec->v[1]);
+		else if (n == 3) snprintf(buf, sizeof(buf), "(%g, %g, %g)", pVar->_vec->v[0], pVar->_vec->v[1], pVar->_vec->v[2]);
+		else             snprintf(buf, sizeof(buf), "(%g, %g, %g, %g)", pVar->_vec->v[0], pVar->_vec->v[1], pVar->_vec->v[2], pVar->_vec->v[3]);
+		out.value = buf;
+		break;
+	}
+	case VAR_FP_NATIVE:
+		out.type = "native_object";
+		out.value = "native_object";
 		break;
 	default:
 		out.type = "unknown";
@@ -2278,6 +2295,8 @@ std::string GetDataType(VAR_TYPE t)
 	case VAR_VEC:
 		// 성분 수는 VarInfo 에 있어 타입만으로는 알 수 없다. 에러 메시지용이라 총칭으로 충분하다.
 		return "vector";
+	case VAR_FP_NATIVE:
+		return "native_object";
 	default:
 		break;
 	}

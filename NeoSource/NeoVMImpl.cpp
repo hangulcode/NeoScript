@@ -133,11 +133,12 @@ size_t CNeoVMImpl::CollectPoolAt(int idx, NeoPoolClock::time_point now, int hold
 	{
 	case 0:  return m_sPool_TableData.Collect(now, holdMs, pageBudget);
 	case 1:  return m_sPool_TableInfo.Collect(now, holdMs, pageBudget);
-	case 2:  return m_sPool_SetData.Collect(now, holdMs, pageBudget);
-	case 3:  return m_sPool_SetInfo.Collect(now, holdMs, pageBudget);
-	case 4:  return m_sPool_ListInfo.Collect(now, holdMs, pageBudget);
-	case 5:  return m_sPool_Vec.Collect(now, holdMs, pageBudget);
-	case 6:  return m_sPool_Async.Collect(now, holdMs, pageBudget);
+	case 2:  return m_sPool_FunctionProperty.Collect(now, holdMs, pageBudget);
+	case 3:  return m_sPool_SetData.Collect(now, holdMs, pageBudget);
+	case 4:  return m_sPool_SetInfo.Collect(now, holdMs, pageBudget);
+	case 5:  return m_sPool_ListInfo.Collect(now, holdMs, pageBudget);
+	case 6:  return m_sPool_Vec.Collect(now, holdMs, pageBudget);
+	case 7:  return m_sPool_Async.Collect(now, holdMs, pageBudget);
 	default: return m_sPool_String.Collect(now, holdMs, pageBudget);
 	}
 }
@@ -146,6 +147,7 @@ long long CNeoVMImpl::PoolBytes() const
 {
 	return (long long)m_sPool_TableData.ReservedBytes()
 	     + (long long)m_sPool_TableInfo.ReservedBytes()
+	     + (long long)m_sPool_FunctionProperty.ReservedBytes()
 	     + (long long)m_sPool_SetData.ReservedBytes()
 	     + (long long)m_sPool_SetInfo.ReservedBytes()
 	     + (long long)m_sPool_ListInfo.ReservedBytes()
@@ -523,10 +525,7 @@ MapInfo* CNeoVMImpl::TableAlloc(int cnt)
 	pTable->_BucketCapa = 0;
 	pTable->_lastFree = -1;
 	pTable->_Bucket = nullptr;
-	pTable->_pUserData = NULL;
 	pTable->_meta = NULL;
-	pTable->_fun._func = NULL;
-	pTable->_fun._property = NULL;
 
 	LiveList_Insert(_sTableHead, pTable);
 	if (cnt > 0) pTable->Reserve(cnt);
@@ -545,14 +544,27 @@ void CNeoVMImpl::FreeTable(MapInfo* tbl)
 		}
 		tbl->_meta = NULL;
 	}
-	tbl->_fun._func = NULL;
-	tbl->_fun._property = NULL;
-
 	tbl->Free();
 
 	//delete tbl;
 	m_sPool_TableInfo.Confer(tbl);
 	--m_sAllocStats.maps;
+}
+FunctionPropertyInfo* CNeoVMImpl::FunctionPropertyAlloc()
+{
+	FunctionPropertyInfo* fp = m_sPool_FunctionProperty.Receive();
+	fp->_refCount = 0;
+	fp->_fun._func = NULL;
+	fp->_fun._property = NULL;
+	fp->_pUserData = NULL;
+	return fp;
+}
+void CNeoVMImpl::FreeFunctionProperty(FunctionPropertyInfo* fp)
+{
+	fp->_fun._func = NULL;
+	fp->_fun._property = NULL;
+	fp->_pUserData = NULL;
+	m_sPool_FunctionProperty.Confer(fp);
 }
 ListInfo* CNeoVMImpl::ListAlloc(int cnt)
 {
@@ -589,10 +601,7 @@ SetInfo* CNeoVMImpl::SetAlloc()
 	pSet->_BucketCapa = 0;
 	pSet->_lastFree = -1;
 	pSet->_Bucket = nullptr;
-	pSet->_pUserData = NULL;
 	pSet->_meta = NULL;
-	pSet->_fun._func = NULL;
-	pSet->_fun._property = NULL;
 
 	LiveList_Insert(_sSetHead, pSet);
 	++m_sAllocStats.sets;
@@ -609,9 +618,6 @@ void CNeoVMImpl::FreeSet(SetInfo* set)
 		}
 		set->_meta = NULL;
 	}
-	set->_fun._func = NULL;
-	set->_fun._property = NULL;
-
 	set->Free();
 
 	//delete tbl;

@@ -154,6 +154,9 @@ enum VAR_TYPE : u8
 	// 성분 수(1~4)는 타입이 아니라 VarInfo::_vecCount 가 들고 있다. 쿼터니언도 별도 타입이
 	// 아니다 — 저장은 4성분이고 wxyz 해석은 사용자 규약이라 VM 이 구분할 이유가 없다.
 	VAR_VEC,
+
+	// 네이티브 Function/Property 객체. map 저장소를 갖지 않는 독립 alloc 타입이다.
+	VAR_FP_NATIVE,
 };
 
 struct SNeoVMAllocStats
@@ -189,6 +192,15 @@ struct AsyncInfo;
 struct MapNode;
 struct SetNode;
 struct VecInfo;
+
+// 네이티브 객체의 Function/Property와 사용자 데이터. MapInfo와 의도적으로
+// 분리되어 일반 map/set 탐색과 네이티브 객체가 서로의 메모리 비용을 만들지 않는다.
+struct FunctionPropertyInfo
+{
+	int				_refCount;
+	FunctionPtrNative	_fun;
+	void*				_pUserData;
+};
 
 #pragma pack(1)
 struct CollectionIterator
@@ -239,6 +251,7 @@ public:
 		ListInfo* _lst;
 		SetInfo* _set;
 		FunctionPtr* _funPtr; // C Native
+		FunctionPropertyInfo* _fpNative; // VAR_FP_NATIVE
 		int			_int;
 		NS_FLOAT	_float;
 		int			_fun_index;

@@ -59,6 +59,7 @@ public:
 	bool AnyEmptyPages() const
 	{
 		return m_sPool_TableData.HasEmptyPages() || m_sPool_TableInfo.HasEmptyPages()
+			|| m_sPool_FunctionProperty.HasEmptyPages()
 			|| m_sPool_SetData.HasEmptyPages()
 			|| m_sPool_SetInfo.HasEmptyPages()
 			|| m_sPool_ListInfo.HasEmptyPages()  || m_sPool_Vec.HasEmptyPages()
@@ -108,6 +109,8 @@ public:
 
 	MapInfo* TableAlloc(int cnt = 0);
 	void FreeTable(MapInfo* tbl);
+	FunctionPropertyInfo* FunctionPropertyAlloc();
+	void FreeFunctionProperty(FunctionPropertyInfo* fp);
 
 	ListInfo* ListAlloc(int cnt = 0);
 	void FreeList(ListInfo* tbl);
@@ -170,6 +173,7 @@ public:
 	// MapNode/SetNode 자체는 컬렉션별 연속 배열에 있고, key/value는 안정 주소의 별도 풀에 둔다.
 	CNVMAllocPool < MapData, 256> m_sPool_TableData;
 	CNVMAllocPool< MapInfo, 64> m_sPool_TableInfo;
+	CNVMAllocPool< FunctionPropertyInfo, 64> m_sPool_FunctionProperty;
 	CNVMAllocPool < SetData, 256> m_sPool_SetData;
 	CNVMAllocPool< SetInfo, 32> m_sPool_SetInfo;
 	CNVMAllocPool< ListInfo, 64> m_sPool_ListInfo;
@@ -186,7 +190,7 @@ public:
 	int m_iTrimPagesPerCall = 4;
 	// 라운드로빈 시작 풀. 앞쪽 풀이 예산을 독식해 뒤쪽이 굶는 것을 막는다.
 	int m_iTrimPoolCursor = 0;
-	static const int kTrimPoolCount = 8;
+	static const int kTrimPoolCount = 9;
 	size_t CollectPoolAt(int idx, NeoPoolClock::time_point now, int holdMs, int& pageBudget);
 	// 코루틴 컨텍스트는 공유 실행 컨텍스트 풀(_pExecPool)로 통합됨 → per-VM 풀 제거.
 

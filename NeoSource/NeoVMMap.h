@@ -55,12 +55,6 @@ struct MapInfo : AllocBase
 	int _itemCount;
 	u32 _mutationVersion = 0;
 
-	// CltRead 는 조회마다 _fun._property 를 본다. _pUserData 뒤에 두면 _property 가
-	// 오프셋 64 = 캐시라인 1 로 밀려나, _Bucket/_HashBase(라인 0)와 합쳐 라인 2개를 읽게 된다.
-	// 핫 필드끼리 같은 라인에 두려고 _pUserData 앞으로 옮긴다.
-	FunctionPtrNative _fun;
-
-	void* _pUserData;
 	MapInfo*		_meta;
 
 	// 살아있는 객체 추적용 intrusive 이중연결 리스트 (std::map 레지스트리 대체)

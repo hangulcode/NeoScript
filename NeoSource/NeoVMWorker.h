@@ -502,6 +502,9 @@ public:
 		case VAR_ASYNC:
 			++d->_async->_refCount;
 			break;
+		case VAR_FP_NATIVE:
+			++d->_fpNative->_refCount;
+			break;
 		default:
 			break;
 		}

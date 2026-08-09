@@ -4568,8 +4568,8 @@ bool ParseSwitch(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPRe
 					bool same = false;
 					switch (e._type)
 					{
-					case VAR_BOOL:   same = (e._bl == keys[i]._bl); break;
 					case VAR_INT:    same = (e._int == keys[i]._int); break;
+					case VAR_BOOL:   same = (e._bl == keys[i]._bl); break;
 					case VAR_STRING: same = (e._str == keys[i]._str); break;
 					default: break;
 					}

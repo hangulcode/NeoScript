@@ -278,21 +278,21 @@ static ValueType VarTypeToValueType(VarInfo* v)
 {
     switch (v->GetType())
     {
-    case VAR_BOOL:   return ValueType::Bool;
     case VAR_INT:    return ValueType::Int;
     case VAR_FLOAT:  return ValueType::Float;
+    case VAR_BOOL:   return ValueType::Bool;
+    case VAR_FUN:
+    case VAR_FUN_NATIVE: return ValueType::Function;
     case VAR_STRING: return ValueType::String;
+    case VAR_MAP:    return ValueType::Map;
+    case VAR_LIST:   return ValueType::List;
+    case VAR_SET:    return ValueType::Set;
     // 성분 수가 곧 타입이다. Quat 은 4성분 벡터와 구분하지 않는다(해석은 호출자 규약).
     case VAR_VEC:
     {
         const int n = v->VectorComponentCount();
         return (n <= 2) ? ValueType::Vec2 : (n == 3 ? ValueType::Vec3 : ValueType::Vec4);
     }
-    case VAR_MAP:    return ValueType::Map;
-    case VAR_LIST:   return ValueType::List;
-    case VAR_SET:    return ValueType::Set;
-    case VAR_FUN:
-    case VAR_FUN_NATIVE: return ValueType::Function;
     default:         return ValueType::None;
     }
 }
@@ -754,7 +754,7 @@ void RuntimeImpl::BindRegisteredObjects(INeoVMWorker* worker, InstanceRec* inst)
         if (o.method == nullptr && o.property == nullptr) continue; // 선언 전용(디스패처 없음)
         VarInfo* pVar = worker->GetVar(o.name);
         if (!pVar) continue;
-        if (!worker->ResetVarType(pVar, VAR_MAP)) continue;
+        if (!worker->ResetVarType(pVar, VAR_FP_NATIVE)) continue;
 
         void* userData = o.defaultUserData;
         auto it = inst->objectUserData.find(o.name);
@@ -837,7 +837,7 @@ void RuntimeImpl::BindObjectInto(void* worker, void* mapVar, StringView key, Obj
     ObjectBinding* bind = AcquireNestedBinding(it->second, ro, userData);
     if (!bind) return;
     VarInfo v{};
-    w->ResetVarType(&v, VAR_MAP);
+    w->ResetVarType(&v, VAR_FP_NATIVE);
     INeoVM::RegisterTableCallBack(&v, bind,
         (ro->method)   ? &MethodTrampoline   : nullptr,
         (ro->property) ? &PropertyTrampoline : nullptr);
@@ -854,7 +854,7 @@ void RuntimeImpl::BindObjectToVar(void* worker, void* varInfo, ObjectType type, 
     if (!w || !pVar || !ro) return;
     auto it = m_workerHandle.find(w);
     if (it == m_workerHandle.end()) return;
-    if (!w->ResetVarType(pVar, VAR_MAP)) return;
+    if (!w->ResetVarType(pVar, VAR_FP_NATIVE)) return;
     ObjectBinding* bind = AcquireNestedBinding(it->second, ro, userData);
     if (!bind) return;
     INeoVM::RegisterTableCallBack(pVar, bind,
@@ -1266,11 +1266,11 @@ bool CallContext::argAsList(std::size_t i, ListReader& out) const
 void* CallContext::argObjectUserData(std::size_t i) const
 {
     CallContextImpl* c=Ctx(m_impl); VarInfo* v=CtxArgVar(c,i);
-    if (!v || v->GetType()!=VAR_MAP || v->_tbl==nullptr) return nullptr;
-    void* ud = v->_tbl->_pUserData;
+    if (!v || v->GetType()!=VAR_FP_NATIVE || v->_fpNative==nullptr) return nullptr;
+    void* ud = v->_fpNative->_pUserData;
     // v2 로 바인딩된 객체는 _pUserData 가 ObjectBinding* → .userData 를 푼다.
     // old(neo_globalinterface2) 바인딩은 _pUserData 가 userData(eventID) 그대로.
-    if (v->_tbl->_fun._func == &MethodTrampoline && ud != nullptr)
+    if (v->_fpNative->_fun._func == &MethodTrampoline && ud != nullptr)
         return static_cast<ObjectBinding*>(ud)->userData;
     return ud;
 }
@@ -1295,7 +1295,7 @@ void CallContext::retObject(ObjectType type, void* userData) {
     CallContextImpl* c=Ctx(m_impl);
     const RegisteredObject* ro=static_cast<const RegisteredObject*>(NeoScriptInternal::objImpl(type));
     VarInfo* r=CtxRetVar(c); if(!ro||!r) return;
-    c->worker->ResetVarType(r, VAR_MAP);
+    c->worker->ResetVarType(r, VAR_FP_NATIVE);
     RuntimeImpl* rt=static_cast<RuntimeImpl*>(c->runtime);
     ObjectBinding* b=rt->AcquireNestedBinding(c->instance, ro, userData); if(!b) return;
     INeoVM::RegisterTableCallBack(r, b, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr);
@@ -1333,7 +1333,7 @@ ListBuilder MapBuilder::setList(StringView key) { MapBuilderImpl* b=static_cast<
 void MapBuilder::setObject(StringView key, ObjectType type, void* userData) {
     MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl);
     const RegisteredObject* ro=static_cast<const RegisteredObject*>(NeoScriptInternal::objImpl(type)); if(!ro) return;
-    VarInfo* slot=MapInsertKey(b, key); b->w->ResetVarType(slot, VAR_MAP);
+    VarInfo* slot=MapInsertKey(b, key); b->w->ResetVarType(slot, VAR_FP_NATIVE);
     RuntimeImpl* rt=static_cast<RuntimeImpl*>(b->ctx->runtime);
     ObjectBinding* bind=rt->AcquireNestedBinding(b->ctx->instance, ro, userData); if(!bind) return;
     INeoVM::RegisterTableCallBack(slot, bind, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr);
@@ -1356,7 +1356,7 @@ void ListBuilder::pushObject(ObjectType type, void* userData) {
     ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl);
     const RegisteredObject* ro=static_cast<const RegisteredObject*>(NeoScriptInternal::objImpl(type)); if(!ro) return;
     int idx=b->list->GetCount(); b->list->Resize(idx+1);
-    VarInfo* slot=b->list->GetValue(idx); b->w->ResetVarType(slot, VAR_MAP);
+    VarInfo* slot=b->list->GetValue(idx); b->w->ResetVarType(slot, VAR_FP_NATIVE);
     RuntimeImpl* rt=static_cast<RuntimeImpl*>(b->ctx->runtime);
     ObjectBinding* bind=rt->AcquireNestedBinding(b->ctx->instance, ro, userData); if(!bind) return;
     INeoVM::RegisterTableCallBack(slot, bind, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr);
@@ -1429,7 +1429,7 @@ Invocation& Invocation::argObject(ObjectType type, void* userData)
         const RegisteredObject* ro = static_cast<const RegisteredObject*>(NeoScriptInternal::objImpl(type));
         i->callArgs.emplace_back();
         VarInfo* pVar = &i->callArgs.back();
-        if (ro && i->runtime && i->worker->ResetVarType(pVar, VAR_MAP))
+        if (ro && i->runtime && i->worker->ResetVarType(pVar, VAR_FP_NATIVE))
         {
             ObjectBinding* bind = i->runtime->AcquireNestedBinding(i->handle, ro, userData);
             if (bind)

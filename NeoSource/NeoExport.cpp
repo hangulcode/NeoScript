@@ -474,9 +474,6 @@ std::string GetValueString(VarInfo& vi, std::map<int, std::string>* pFunTable = 
 	case VAR_BOOL:
 		snprintf(ch, _countof(ch), "'%s'", vi._bl ? "true" : "false");
 		break;
-	case VAR_STRING:
-		snprintf(ch, _countof(ch), "'%s'", ToPtringString(vi._str->_str).c_str());
-		break;
 	case VAR_FUN:
 		//snprintf(ch, _countof(ch), "%s", mapFun[vi._fun_index].c_str());
 		if(pFunTable == NULL)
@@ -489,6 +486,9 @@ std::string GetValueString(VarInfo& vi, std::map<int, std::string>* pFunTable = 
 			else
 				snprintf(ch, _countof(ch), "%d:fun", vi._fun_index);
 		}
+		break;
+	case VAR_STRING:
+		snprintf(ch, _countof(ch), "'%s'", ToPtringString(vi._str->_str).c_str());
 		break;
 	default:
 		snprintf(ch, _countof(ch), "unknown type (%d)", vi.GetType());
@@ -689,8 +689,8 @@ static void WriteSwitchTables(CNArchive& ar, SFunctions& funs)
 			ar.Write(&keyType, sizeof(keyType));
 			switch (e._type)
 			{
-			case VAR_BOOL:   ar.Write((void*)&e._bl, sizeof(e._bl)); break;
 			case VAR_INT:    ar.Write((void*)&e._int, sizeof(e._int)); break;
+			case VAR_BOOL:   ar.Write((void*)&e._bl, sizeof(e._bl)); break;
 			case VAR_STRING: WriteString(ar, e._str); break;
 			default: break;
 			}

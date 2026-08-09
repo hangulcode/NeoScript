@@ -1660,8 +1660,8 @@ const std::list< SystemFun>* CNeoVMImpl::GetSystemModule(const std::string& modu
 }
 void CNeoVMImpl::RegLibrary(VarInfo* pSystem, const char* pLibName)
 {
-	MapInfo* pTable = pSystem->_tbl;
-	pTable->_fun = CNeoVMImpl::RegisterNative(Fun_Default);
+	if (pSystem && pSystem->GetType() == VAR_FP_NATIVE)
+		RegisterTableCallBack(pSystem, nullptr, Fun_Default, nullptr);
 	//AddGlobalLibFun();
 
 	//_funDefaultLib = CNeoVM::RegisterNative(Fun);
