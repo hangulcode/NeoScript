@@ -1,0 +1,180 @@
+// ============================================================================
+// 함수 호출 비용 분해 하네스 (Neo 전용)
+//
+// bench.ns 의 func_call 은 "호출 한 번 12.7ns" 라는 뭉친 값만 준다. 그 안에서
+// 프레임 push/pop / 반환값 전달 / 인자 마샬링이 각각 얼마인지 알아야
+// 최적화 후보의 기대 이득을 노이즈(빌드 간 ±5%)와 비교할 수 있다.
+//
+// [설계]
+// 다섯 루프의 **바깥 구조는 완전히 동일**하고 안쪽 문장 하나만 다르다.
+// 그래서 두 측정값의 차이가 곧 그 문장이 더한 비용이다.
+//
+//   call_floor : sum += 1;                    루프 + ADD2       (기준선)
+//   call_void  : CallV(); sum += 1;           + 반환없는 호출
+//   call_ret0  : sum += CallR0();             + 반환값 있는 호출(인자 0)
+//   call_ret1  : sum += CallR1(i);            + 인자 1개
+//   call_ret3  : sum += CallR3(i, i, i);      + 인자 3개
+//
+//   프레임 push/pop  = call_void  - call_floor
+//   반환값 전달      = call_ret0  - call_void
+//   인자 1개         = call_ret1  - call_ret0
+//   인자 1개(둘째부터)= (call_ret3 - call_ret1) / 2
+//
+// [피호출 함수 본문을 똑같이 맞춘다]
+// CallR0/R1/R3 은 인자 개수만 다르고 본문은 셋 다 `return 1;` 로 동일하다.
+// 본문이 다르면 그 차이가 인자 비용에 섞여 분해가 무의미해진다.
+//
+// [반복 수는 bench.ns 의 func_call 과 같다]
+// 2,000 x 5,000 = 1천만 회. 그래야 func_call 의 12.7ns 와 직접 비교된다.
+//
+// [체크섬]
+// 다섯 개 모두 inner 와 같아야 한다(피호출 함수가 항상 1 을 돌려주므로).
+// 하나라도 다르면 루프가 같은 일을 하지 않은 것이니 비교가 무효다.
+// ============================================================================
+import system;
+
+var REPS = 5;
+
+// ------------------------------------------------------------- 피호출 함수들
+fun CallV()                                { }            // 반환값 없음
+fun CallR0()                               { return 1; }
+fun CallR1(var a)                          { return 1; }
+fun CallR3(var a, var b, var c)            { return 1; }
+
+// ------------------------------------------------------------------ 측정 루프
+fun LoopFloor(var outer, var inner)
+{
+    var last = 0;
+    for (var o in 0, outer, 1)
+    {
+        var sum = 0;
+        for (var i in 0, inner, 1)
+            sum += 1;
+        last = sum;
+    }
+    return last;
+}
+
+fun LoopVoid(var outer, var inner)
+{
+    var last = 0;
+    for (var o in 0, outer, 1)
+    {
+        var sum = 0;
+        for (var i in 0, inner, 1)
+        {
+            CallV();
+            sum += 1;
+        }
+        last = sum;
+    }
+    return last;
+}
+
+fun LoopRet0(var outer, var inner)
+{
+    var last = 0;
+    for (var o in 0, outer, 1)
+    {
+        var sum = 0;
+        for (var i in 0, inner, 1)
+            sum += CallR0();
+        last = sum;
+    }
+    return last;
+}
+
+fun LoopRet1(var outer, var inner)
+{
+    var last = 0;
+    for (var o in 0, outer, 1)
+    {
+        var sum = 0;
+        for (var i in 0, inner, 1)
+            sum += CallR1(i);
+        last = sum;
+    }
+    return last;
+}
+
+fun LoopRet3(var outer, var inner)
+{
+    var last = 0;
+    for (var o in 0, outer, 1)
+    {
+        var sum = 0;
+        for (var i in 0, inner, 1)
+            sum += CallR3(i, i, i);
+        last = sum;
+    }
+    return last;
+}
+
+fun Report(var name, var best, var chk)
+{
+    print(name .. "|" .. toint(best * 1000000.0) .. "|" .. chk);
+}
+
+print("# neo call-decomp begin");
+
+var OUTER = 2000;
+var INNER = 5000;
+var best = 0.0;
+var chk = 0;
+
+LoopFloor(2, INNER);                                  // warmup
+best = 1000000.0;
+for (var r1 in 0, REPS, 1)
+{
+    var t1 = system.clock();
+    chk = LoopFloor(OUTER, INNER);
+    var d1 = system.clock() - t1;
+    if (d1 < best) best = d1;
+}
+Report("call_floor", best, chk);
+
+LoopVoid(2, INNER);
+best = 1000000.0;
+for (var r2 in 0, REPS, 1)
+{
+    var t2 = system.clock();
+    chk = LoopVoid(OUTER, INNER);
+    var d2 = system.clock() - t2;
+    if (d2 < best) best = d2;
+}
+Report("call_void", best, chk);
+
+LoopRet0(2, INNER);
+best = 1000000.0;
+for (var r3 in 0, REPS, 1)
+{
+    var t3 = system.clock();
+    chk = LoopRet0(OUTER, INNER);
+    var d3 = system.clock() - t3;
+    if (d3 < best) best = d3;
+}
+Report("call_ret0", best, chk);
+
+LoopRet1(2, INNER);
+best = 1000000.0;
+for (var r4 in 0, REPS, 1)
+{
+    var t4 = system.clock();
+    chk = LoopRet1(OUTER, INNER);
+    var d4 = system.clock() - t4;
+    if (d4 < best) best = d4;
+}
+Report("call_ret1", best, chk);
+
+LoopRet3(2, INNER);
+best = 1000000.0;
+for (var r5 in 0, REPS, 1)
+{
+    var t5 = system.clock();
+    chk = LoopRet3(OUTER, INNER);
+    var d5 = system.clock() - t5;
+    if (d5 < best) best = d5;
+}
+Report("call_ret3", best, chk);
+
+print("# neo call-decomp end");

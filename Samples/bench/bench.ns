@@ -1,0 +1,293 @@
+// ============================================================================
+// NeoScript 성능 벤치마크 (Neo / Lua / C++ 3자 비교용)
+//
+// 설계 원칙
+//  1) 세 언어가 **완전히 동일한 알고리즘**을 수행한다(자료구조/연산 순서까지).
+//  2) 각 언어가 **자기 시계**로 실행 구간만 잰다 → 프로세스 기동/컴파일 시간 제외.
+//  3) warmup 1회 후 REPS 회 측정, **최소값(best)** 채택 → OS 스케줄링 노이즈 배제.
+//  4) 각 벤치는 **체크섬**을 반환한다. 세 언어의 체크섬이 같아야 유효한 비교다.
+//  5) 체크섬은 항상 2^24(16,777,216) 이하 정수로 유지한다.
+//     NeoScript 의 기본 스칼라는 float32 이므로, 큰 누산은 정밀도 손실로
+//     언어마다 다른 값이 나와 비교 자체가 무의미해지기 때문이다.
+//     → 안쪽 루프 결과를 매번 리셋해 작은 체크섬만 남긴다(총 반복량은 유지).
+// ============================================================================
+import math;
+import system;
+
+var REPS = 5;
+
+// ---------------------------------------------------------------- 1. 정수 루프
+// VM 디스패치의 순수 비용. inner 합 = 12,497,500 (float32 정확 범위)
+fun LoopSum(var outer, var inner)
+{
+    var last = 0;
+    for (var o in 0, outer, 1)
+    {
+        var bias = last & 1;           // 직전 결과에 의존(진짜 데이터 의존성) → 축약 불가
+        var sum = 0;
+        for (var i in 0, inner, 1)
+            sum += i + bias;
+        last = sum;
+    }
+    return last;
+}
+
+// ------------------------------------------------------------- 2. 부동소수 산술
+// mul/add/sub 혼합. 상수·피연산자를 모두 **이진 정확값**(1/2, 1/4 배수)으로 잡아
+// float32(Neo)와 double(Lua/C++)이 완전히 같은 체크섬을 내도록 한다.
+fun FloatMath(var outer, var inner)
+{
+    var last = 0.0;
+    for (var o in 0, outer, 1)
+    {
+        var bias = toint(last) & 1;    // 직전 결과 의존
+        var acc = 0.0;
+        for (var i in 0, inner, 1)
+        {
+            var x = ((i + bias + toint(acc)) & 15) * 0.5;   // acc 의존 → 예측 불가
+            acc += x * 1.5 - x * 0.25;
+        }
+        last = acc;
+    }
+    return toint(last);
+}
+
+// ---------------------------------------------------------------- 3. 함수 호출
+fun Inc(var x)
+{
+    return x + 1;
+}
+fun FuncCall(var outer, var inner)
+{
+    var last = 0;
+    for (var o in 0, outer, 1)
+    {
+        var bias = last & 1;           // 직전 결과 의존
+        var sum = 0;
+        for (var i in 0, inner, 1)
+            sum += Inc(i + bias);
+        last = sum;
+    }
+    return last;
+}
+
+// ------------------------------------------------------------------- 4. 재귀
+fun Fib(var n)
+{
+    if (n < 2)
+        return n;
+    return Fib(n - 1) + Fib(n - 2);
+}
+
+// -------------------------------------------------------- 5. 배열 순차 쓰기/읽기
+fun ArrayRW(var size, var reps)
+{
+    var a = [];
+    a.resize(size);
+    var last = 0;
+    for (var r in 0, reps, 1)
+    {
+        var bias = last & 1;           // 직전 결과 의존
+        for (var i in 0, size, 1)
+            a[i] = (i + bias) & 255;
+        var sum = 0;
+        for (var i in 0, size, 1)
+            sum += a[i];
+        last = sum;
+    }
+    return last;
+}
+
+// ------------------------------------------------------- 6. 해시맵(문자열 키) 조회
+fun MapStr(var outer, var inner)
+{
+    var m = {};
+    m["alpha"] = 1;
+    m["bravo"] = 2;
+    m["charlie"] = 3;
+    m["delta"] = 4;
+    m["echo"] = 5;
+    m["foxtrot"] = 6;
+    m["golf"] = 7;
+    m["hotel"] = 8;
+    var last = 0;
+    for (var o in 0, outer, 1)
+    {
+        var sum = 0;
+        for (var i in 0, inner, 1)
+        {
+            sum += m["alpha"];
+            sum += m["hotel"];
+            sum += m["charlie"];
+            sum += m["foxtrot"];
+        }
+        last = sum;
+    }
+    return last;
+}
+
+// ----------------------------------------------------------- 7. 문자열 생성/길이
+fun StringOps(var outer, var inner)
+{
+    var last = 0;
+    for (var o in 0, outer, 1)
+    {
+        var total = 0;
+        for (var i in 0, inner, 1)
+        {
+            var s = "item" .. i;
+            total += s.len();
+        }
+        last = total;
+    }
+    return last;
+}
+
+// ------------------------------------------- 8. 파티클 시뮬(게임형 부동소수+배열)
+// pos += vel*dt, 경계 반사. 게임 스크립트에서 가장 흔한 형태의 워크로드.
+fun Particles(var count, var steps)
+{
+    var px = []; px.resize(count);
+    var py = []; py.resize(count);
+    var vx = []; vx.resize(count);
+    var vy = []; vy.resize(count);
+
+    for (var i in 0, count, 1)
+    {
+        px[i] = (i & 63) * 1.0;
+        py[i] = (i & 31) * 1.0;
+        vx[i] = ((i & 7) - 4) * 0.25;
+        vy[i] = ((i & 15) - 8) * 0.125;
+    }
+
+    var dt = 0.015625;   // 1/64 — 이진 정확값(0.016 은 부정확해 언어별 체크섬이 갈린다)
+    for (var s in 0, steps, 1)
+    {
+        for (var i in 0, count, 1)
+        {
+            var nx = px[i] + vx[i] * dt;
+            var ny = py[i] + vy[i] * dt;
+            if (nx < 0.0 || nx > 64.0)
+                vx[i] = -vx[i];
+            if (ny < 0.0 || ny > 32.0)
+                vy[i] = -vy[i];
+            px[i] = nx;
+            py[i] = ny;
+        }
+    }
+
+    // +1000 오프셋: 위치가 음수가 될 수 있어(반사 직전) truncate/floor 차이가 생기는 것을 막는다.
+    var chk = 0;
+    for (var i in 0, count, 1)
+        chk += toint(px[i] + py[i] + 1000.0);
+    return chk;
+}
+
+// ============================================================================
+// 측정 하네스 — warmup 1회 + REPS 회 측정 후 최소값(ms)
+// ============================================================================
+fun Report(var name, var best, var chk)
+{
+    print(name .. "|" .. toint(best * 1000000.0) .. "|" .. chk);
+}
+
+print("# neo bench begin");
+
+// 1. loop_sum : 10,000 x 5,000 = 5천만 회
+LoopSum(2, 5000);
+var best = 1000000.0;
+var chk = 0;
+for (var r in 0, REPS, 1)
+{
+    var t0 = system.clock();
+    chk = LoopSum(10000, 5000);
+    var dt = system.clock() - t0;
+    if (dt < best) best = dt;
+}
+Report("loop_sum", best, chk);
+
+// 2. float_math : 2,000 x 5,000 = 1천만 회
+FloatMath(2, 5000);
+best = 1000000.0;
+for (var r in 0, REPS, 1)
+{
+    var t0 = system.clock();
+    chk = FloatMath(2000, 5000);
+    var dt = system.clock() - t0;
+    if (dt < best) best = dt;
+}
+Report("float_math", best, chk);
+
+// 3. func_call : 2,000 x 5,000 = 1천만 회
+FuncCall(2, 5000);
+best = 1000000.0;
+for (var r in 0, REPS, 1)
+{
+    var t0 = system.clock();
+    chk = FuncCall(2000, 5000);
+    var dt = system.clock() - t0;
+    if (dt < best) best = dt;
+}
+Report("func_call", best, chk);
+
+// 4. fib(32) = 2178309
+Fib(10);
+best = 1000000.0;
+for (var r in 0, REPS, 1)
+{
+    var t0 = system.clock();
+    chk = Fib(32);
+    var dt = system.clock() - t0;
+    if (dt < best) best = dt;
+}
+Report("fib_recursive", best, chk);
+
+// 5. array_rw : 200,000 x 20 = 400만 쓰기 + 400만 읽기
+ArrayRW(1000, 1);
+best = 1000000.0;
+for (var r in 0, REPS, 1)
+{
+    var t0 = system.clock();
+    chk = ArrayRW(200000, 20);
+    var dt = system.clock() - t0;
+    if (dt < best) best = dt;
+}
+Report("array_rw", best, chk);
+
+// 6. map_str : 500 x 5,000 x 4 = 1천만 조회
+MapStr(2, 1000);
+best = 1000000.0;
+for (var r in 0, REPS, 1)
+{
+    var t0 = system.clock();
+    chk = MapStr(500, 5000);
+    var dt = system.clock() - t0;
+    if (dt < best) best = dt;
+}
+Report("map_str", best, chk);
+
+// 7. string_ops : 20 x 50,000 = 100만 문자열 생성
+StringOps(1, 1000);
+best = 1000000.0;
+for (var r in 0, REPS, 1)
+{
+    var t0 = system.clock();
+    chk = StringOps(20, 50000);
+    var dt = system.clock() - t0;
+    if (dt < best) best = dt;
+}
+Report("string_ops", best, chk);
+
+// 8. particles : 10,000 파티클 x 200 스텝 = 200만 업데이트
+Particles(100, 2);
+best = 1000000.0;
+for (var r in 0, REPS, 1)
+{
+    var t0 = system.clock();
+    chk = Particles(10000, 200);
+    var dt = system.clock() - t0;
+    if (dt < best) best = dt;
+}
+Report("particles", best, chk);
+
+print("# neo bench end");
