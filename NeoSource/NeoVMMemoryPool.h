@@ -2,6 +2,8 @@
 
 #include <chrono>
 #include <deque>
+#include <new>
+#include <type_traits>
 #include <vector>
 
 namespace NeoScript
@@ -305,7 +307,10 @@ class CNVMInstPool
 	struct STNode
 	{
 		u32 dwpFlag;            // 사용 중일 때 = 소속 페이지 슬롯 번호
-		T data;
+		// T를 멤버로 두면 T가 비표준 레이아웃인 경우 STNode/SNodePool도 비표준
+		// 레이아웃이 되어 offsetof가 조건부 지원이 된다. raw storage로 두고 아래
+		// GetData에서 객체를 복원하면 노드 헤더의 레이아웃은 항상 표준이다.
+		alignas(T) u8 data[sizeof(T)];
 	};
 
 	// 생성자/소멸자를 살려야 해서 union 이 아니라 별도 필드다.
@@ -342,10 +347,23 @@ class CNVMInstPool
 	// (예: CoroutineInfo 의 var 스택 vector) 는 여기 포함되지 않는다 — 소유자가 따로 센다.
 	size_t m_nReservedBytes = 0;
 
+	static T* GetData(SNodePool* node)
+	{
+		// 객체는 페이지 생성 시 이 정확한 주소에 placement new로 만들어진다.
+		// std::launder는 C++17부터라, 구형 Visual Studio 프로젝트도 빌드할 수 있게
+		// 여기서는 새 포인터를 직접 복원한다.
+		return reinterpret_cast<T*>(node->m_sObj.data);
+	}
+
 	// 소멸자가 돌아 노드 안 std::string 등도 같이 해제된다.
 	// 페이지당 노드 수만큼 소멸자가 돌기 때문에, 이 호출을 프레임당 몇 장으로 제한하는
 	// 것이 증분 회수의 핵심이다(Collect 의 pageBudget).
-	static void ReleasePageData(STPool& page) { delete [] page.pData; }
+	void ReleasePageData(STPool& page)
+	{
+		for (int i = 0; i < m_iBlkSize; ++i)
+			GetData(&page.pData[i])->~T();
+		delete [] page.pData;
+	}
 
 	// --- 체인 조작 ---
 	NEOPOOL_COLD void PushEmpty(STPool* page)
@@ -404,7 +422,7 @@ class CNVMInstPool
 	{
 		for (auto it = m_sPages.begin(); it != m_sPages.end(); ++it)
 			if ((*it).pData != NULL)
-				delete [] (*it).pData;
+				ReleasePageData(*it);
 		m_sPages.clear();
 		m_sPageSlots.clear();
 		m_sFreeSlots.clear();
@@ -437,6 +455,8 @@ class CNVMInstPool
 		page->usedCount = 0;
 
 		SNodePool* pData = page->pData;
+		for (int i = 0; i < m_iBlkSize; ++i)
+			::new (static_cast<void*>(pData[i].m_sObj.data)) T();
 		for (int i = m_iBlkSize - 2; i >= 0; i--)
 			pData[i].m_pNext = &pData[i + 1];
 		pData[m_iBlkSize - 1].m_pNext = NULL;
@@ -456,7 +476,9 @@ public:
 	CNVMInstPool() { m_iBlkSize = iBlkSize; }
 	virtual ~CNVMInstPool() { clear(); }
 
-	// 구조체 전체 정렬이 아니라 payload 의 "오프셋" 을 확인해야 한다.
+	// raw storage 기반이므로 offsetof의 두 대상은 표준 레이아웃이다.
+	static_assert(std::is_standard_layout<STNode>::value && std::is_standard_layout<SNodePool>::value,
+		"pool node headers must be standard-layout");
 	static const size_t kDataOffset = offsetof(SNodePool, m_sObj) + offsetof(STNode, data);
 	static_assert(kDataOffset % alignof(T) == 0,
 		"pool node payload offset must satisfy alignof(T)");
@@ -475,7 +497,7 @@ public:
 			UnlinkEmpty(page);
 		__p->m_sObj.dwpFlag = page->slot;
 		__p->m_pNext = NULL;
-		return &__p->m_sObj.data;
+		return GetData(__p);
 	}
 
 	inline void Confer(T* buf)
@@ -543,7 +565,7 @@ public:
 	{
 		for (auto it = m_sPages.begin(); it != m_sPages.end(); ++it)
 			for (SNodePool* n = (*it).pFreeHead; n != NULL; n = n->m_pNext)
-				fn(n->m_sObj.data);
+				fn(*GetData(n));
 	}
 };
 
