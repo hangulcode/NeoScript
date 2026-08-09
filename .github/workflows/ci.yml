@@ -59,7 +59,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Set up Android SDK tools
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
       - name: Install Android NDK
         run: sdkmanager --install "ndk;27.2.12479018"
       - name: Configure and build
