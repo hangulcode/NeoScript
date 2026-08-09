@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 // CNeoVMWorker::Move is used by NeoLib.cpp as well as the interpreter TU.
 // Its definition must therefore be visible from NeoVMWorker.h; placing it only
@@ -16,4 +16,42 @@ NEOS_FORCEINLINE void CNeoVMWorker::Move(VarInfo* v1, VarInfo* v2)
 		*v1 = *v2;
 	else
 		Move_DestNoRelease(v1, v2);
+}
+
+// [핫패스] 스크립트 함수 호출. 측정상 호출 비용의 78%가 이 프레임 push/pop 에 있어
+// (bench_call.ns: 프레임 6.80ns / 반환 0.40ns / 인자 1.50ns) 인라인 대상으로 옮겼다.
+// Move 와 같은 이유로 .cpp 가 아니라 헤더에서 보이는 .inl 에 둔다.
+NEOS_FORCEINLINE void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
+{
+	const SFunctionTable& fun = Functions()[n1];
+	// n2 is Arg Count not use
+	// 호출 스택을 push하거나 현재 프레임을 변경하기 전에 새 프레임 전체를 검증한다.
+	if (!EnsureStackRange(_iSP_VarsMax, fun._localAddCount - 1))
+		return;
+#if _DEBUG
+	SCallStack callStack;
+	callStack._iReturnOffset = GetCodeptr();
+	callStack._iSP_Vars = _iSP_Vars;
+	callStack._iSP_VarsMax = _iSP_VarsMax;
+	callStack._pReturnValue = pReturnValue;
+	callStack._pAsyncWaitReturnValue = nullptr;
+	callStack._asyncWaitReturnValue = false;
+	m_pCallStack->push_back(callStack);
+#else
+	SCallStack& callStack = m_pCallStack->push_back();
+	callStack._iReturnOffset = GetCodeptr();
+	callStack._iSP_Vars = _iSP_Vars;
+	callStack._iSP_VarsMax = _iSP_VarsMax;
+	callStack._pReturnValue = pReturnValue;
+	callStack._pAsyncWaitReturnValue = nullptr;
+	callStack._asyncWaitReturnValue = false;
+#endif
+
+	SetCodePtr(fun._codePtr);
+	_iSP_Vars = _iSP_VarsMax;
+	SetStackPointer(_iSP_Vars);
+	_iSP_VarsMax = _iSP_Vars + fun._localAddCount;
+	if (_iSP_Vars_Max2 < _iSP_VarsMax)
+		_iSP_Vars_Max2 = _iSP_VarsMax;
+
 }
