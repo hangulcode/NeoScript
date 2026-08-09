@@ -758,6 +758,8 @@ struct SFunctions
 	// 그 슬롯을 참조하는 명령도 있을 수 없다 — 이 비교 하나로 회수 가능 여부가 정해진다.
 	SFunctionInfo*						_lastStaticFun = nullptr;
 	int									_lastStaticCodeOffset = -1;
+	// 그 오프셋에서 시작된 상수 '묶음'의 첫 인덱스. 접기로 여러 개를 되돌릴 때 하한이 된다.
+	int									_staticRunBegin = 0;
 	// switch 테이블은 _staticVars 처럼 프로그램 전역으로 누적된다(함수별이 아님).
 	// NOP_SWITCH.n1 = 이 배열의 인덱스이고, Export 가 'SWIT' 청크로 써서
 	// 런타임에 CNeoVMProgram::switchTables 가 된다.
@@ -860,9 +862,15 @@ struct SFunctions
 	// 방금 만든 상수 슬롯의 출처를 기록한다(회수 판정용).
 	void MarkLastStaticOrigin()
 	{
-		_lastStaticFun = _cur;
-		_lastStaticCodeOffset = (_cur != nullptr && _cur->_code != nullptr)
+		const int off = (_cur != nullptr && _cur->_code != nullptr)
 			? _cur->_code->GetBufferOffset() : -1;
+		if (_lastStaticFun != _cur || _lastStaticCodeOffset != off)
+		{
+			// 새 지점에서 시작하는 묶음이다(이전 묶음 뒤로 코드가 방출됐다는 뜻).
+			_lastStaticFun = _cur;
+			_lastStaticCodeOffset = off;
+			_staticRunBegin = (int)_staticVars.size() - 1;
+		}
 	}
 	// 리터럴이 만든 상수 슬롯을 되돌릴 수 있는가.
 	//   - 아직 마지막 슬롯이고(뒤에 다른 상수가 생기지 않았고)
@@ -873,9 +881,18 @@ struct SFunctions
 		const int idx = compileIndex - COMPILE_STATIC_VAR_BEGIN;
 		if (idx < 0 || idx != (int)_staticVars.size() - 1)
 			return false;
+		if (idx < _staticRunBegin)
+			return false;   // 이 묶음보다 앞선 상수는 참조하는 코드가 있을 수 있다
 		if (_cur == nullptr || _cur->_code == nullptr || _lastStaticFun != _cur)
 			return false;
 		return _lastStaticCodeOffset == _cur->_code->GetBufferOffset();
+	}
+	bool TryPopStatic(int compileIndex)
+	{
+		if (CanPopLastStatic(compileIndex) == false)
+			return false;
+		_staticVars.pop_back();
+		return true;
 	}
 	int	AddStaticInt(int num)
 	{

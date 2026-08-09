@@ -233,6 +233,98 @@ static bool TryPushImmediate(CArchiveRdWC& ar, SFunctions& funs, short dest, con
 	return true;
 }
 
+// 양쪽이 숫자 리터럴인 이항 연산은 컴파일 시점에 계산해 리터럴 하나로 접는다.
+// 결과도 리터럴이라 그대로 MOVI/MOVF 로 나가고, 접힌 피연산자의 상수 슬롯은 회수한다.
+//
+// [VM 과 결과가 한 비트도 다르면 안 된다]
+// 그래서 double 이 아니라 NS_FLOAT 로 계산한다. VM 의 Add3/Sub3/Mul3/Div3 은
+// int op float 를 C++ 승격 규칙에 따라 float 산술로 처리하므로 여기서도 같아야 한다.
+// (const 선언용 EvalConstBinOp 는 double 로 계산한다 — 그건 별도 경로라 건드리지 않는다.)
+//
+// [접지 않는 경우]
+// 정수 0 나눗셈/나머지는 접지 않는다. VM 은 예외로 잡아 스크립트 에러로 보고하는데,
+// 여기서 접으면 컴파일 에러로 바뀌어 기존 동작이 달라진다.
+static bool TryFoldLiteralBinOp(SOperand& a, eNOperation op, const SOperand& b, SFunctions& funs)
+{
+	if (a.IsArray() || b.IsArray())
+		return false;
+
+	const bool aInt = a.IsIntLiteral(), aFloat = a.IsFloatLiteral();
+	const bool bInt = b.IsIntLiteral(), bFloat = b.IsFloatLiteral();
+	if ((aInt == false && aFloat == false) || (bInt == false && bFloat == false))
+		return false;
+
+	const bool bothInt = (aInt && bInt);
+	bool resultIsInt = bothInt;
+	int      ri = 0;
+	NS_FLOAT rf = 0;
+
+	// int op float 도 VM 과 같이 float 산술로 맞춘다.
+	const NS_FLOAT fx = aInt ? (NS_FLOAT)a._intLiteral : a._floatLiteral;
+	const NS_FLOAT fy = bInt ? (NS_FLOAT)b._intLiteral : b._floatLiteral;
+
+	switch (op)
+	{
+	case NOP_ADD3:
+		if (bothInt) ri = a._intLiteral + b._intLiteral; else rf = fx + fy;
+		break;
+	case NOP_SUB3:
+		if (bothInt) ri = a._intLiteral - b._intLiteral; else rf = fx - fy;
+		break;
+	case NOP_MUL3:
+		if (bothInt) ri = a._intLiteral * b._intLiteral; else rf = fx * fy;
+		break;
+	case NOP_DIV3:
+		if (bothInt)
+		{
+			if (b._intLiteral == 0)
+				return false;   // 런타임 예외로 남긴다
+			ri = a._intLiteral / b._intLiteral;
+		}
+		else rf = fx / fy;
+		break;
+	// 아래는 VM 도 int/int 조합에서만 계산한다. 나머지 조합은 접지 않고 넘겨서
+	// 기존과 같은 타입 에러가 런타임에 나게 둔다.
+	case NOP_PERSENT3:
+		if (bothInt == false || b._intLiteral == 0)
+			return false;
+		ri = a._intLiteral % b._intLiteral;
+		break;
+	case NOP_AND:
+		if (bothInt == false) return false;
+		ri = a._intLiteral & b._intLiteral;
+		break;
+	case NOP_OR:
+		if (bothInt == false) return false;
+		ri = a._intLiteral | b._intLiteral;
+		break;
+	case NOP_XOR3:
+		if (bothInt == false) return false;
+		ri = a._intLiteral ^ b._intLiteral;
+		break;
+	case NOP_LSHIFT3:
+		if (bothInt == false) return false;
+		ri = a._intLiteral << b._intLiteral;
+		break;
+	case NOP_RSHIFT3:
+		if (bothInt == false) return false;
+		ri = a._intLiteral >> b._intLiteral;
+		break;
+	default:
+		return false;
+	}
+
+	// 피연산자가 쓰던 상수 슬롯을 되돌린다. 만든 역순으로 시도해야 pop 이 성립한다.
+	funs.TryPopStatic(b._iVar);
+	funs.TryPopStatic(a._iVar);
+
+	if (resultIsInt)
+		a.SetIntLiteral(funs.AddStaticInt(ri), ri);
+	else
+		a.SetFloatLiteral(funs.AddStaticNum(rf), rf);
+	return true;
+}
+
 struct SOperationInfo
 {
 	std::string _str;
@@ -2680,6 +2772,16 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 
 		auto a = operands[iFindOffset];
 		auto b = operands[iFindOffset + 1];
+
+		// 양쪽이 숫자 리터럴이면 여기서 계산해 버린다(런타임 연산이 통째로 사라진다).
+		// 결과 리터럴이 다시 피연산자가 되므로 (2 + 3) * 4 처럼 중첩된 식도 끝까지 접힌다.
+		if (TryFoldLiteralBinOp(a, op, b, funs))
+		{
+			operands[iFindOffset] = a;
+			RemoveAt<SOperand>(operands, iFindOffset + 1);
+			continue;
+		}
+
 		if (b.IsFun())
 		{
 			if (op == NOP_MOV)

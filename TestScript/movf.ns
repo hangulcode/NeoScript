@@ -1,0 +1,16 @@
+// NOP_MOVF 회귀:
+// - 직접 대입 전용 float은 static pool에 남지 않아야 한다.
+// - 이미 컬렉션이 쓰는 static float은 MOVF 대입과 값이 같아도 보존해야 한다.
+// - 함수 로컬 대입은 Program 로드 시 NOP_MOVF_L로 패치된다.
+var staticOwner = [1.25];
+
+fun LocalMOVF()
+{
+	var sharedValue = 1.25;
+	var movfValue = 123.456;
+	print(sharedValue);
+	print(movfValue);
+}
+
+LocalMOVF();
+print(staticOwner[0]);
