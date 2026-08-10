@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include <thread>
+#include <deque>
 
 #include "NeoVMInternal.h"
 
@@ -30,6 +31,12 @@ private:
 	// 이 대기열을 깊이 우선으로 비워서, 깊은 트리와 순환 모두 안전하게 처리한다.
 	std::vector<VarInfo> _sDestroyQueue;
 	bool _bDrainingDestroyQueue = false;
+	// VM 종료 중에는 참조 감소가 순환 후보를 새로 만들 필요가 없다. live registry를
+	// 강제 순회해 전부 해제하므로, 후보 티켓만 남기지 않도록 이 구간을 분리한다.
+	bool _isTearingDown = false;
+	// refcount가 남은 컨테이너의 약한 순환 후보 티켓. 티켓은 객체를 AddRef하지 않으며,
+	// 객체가 먼저 죽으면 Free*가 object=null으로 만들어 stale entry를 무효화한다.
+	std::deque<CycleCandidate*> _sCycleCandidates;
 	u32 _dwLastIDVMWorker = 0;
 
 
@@ -58,7 +65,14 @@ public:
 	// (경계에서 free/malloc 반복 방지). 빈 시각 기록이 지연되는 이유는 .cpp 참고.
 	// force=false 는 한 번에 m_iTrimPagesPerCall 장까지만 해제하고, 빈 페이지가 없으면
 	// 시계도 안 읽고 빠진다 — 매 프레임 불러서 조금씩 돌려주는 용도다.
+	// 순환 수집도 여기서 같이 돈다(CollectCycleCandidates). 호스트는 매 프레임 이걸
+	// 불러야 한다 — 순환 회수와 후보 대기열 소진이 모두 여기서만 일어난다.
 	long long CollectEmptyPages(bool force = false);
+	// 순환 후보를 검사·회수한다. 반환값 = 이번에 꺼내 처리한 후보 수.
+	// force=false 면 max(16, 후보 전체의 0.5%) 개까지만 본다. **후보 개수에만 상한이
+	// 있고 후보 하나의 비용에는 상한이 없다** — 그 후보에서 도달 가능한 컨테이너
+	// 그래프 전체를 훑기 때문이다.
+	int CollectCycleCandidates(bool force);
 	// 어느 풀이든 완전히 빈 페이지가 있는가(포인터 비교 8번). 매 프레임 경로의 조기 반환용.
 	bool AnyEmptyPages() const
 	{
@@ -122,6 +136,9 @@ public:
 	SetInfo* SetAlloc();
 	void FreeSet(SetInfo* tbl);
 	void QueueContainerForDestroy(const VarInfo& value);
+	void QueueContainerForCycleCheck(const VarInfo& value);
+	void CancelCycleCandidate(VAR_TYPE type, void* object);
+	bool CollectUnreachableCycleCandidate(VAR_TYPE type, void* object);
 
 	AsyncInfo* AsyncAlloc();
 	void FreeAsync(VarInfo* d);
@@ -168,13 +185,9 @@ public:
 	VarInfo m_sDefaultValue[NDF_MAX];
 	
 	// 페이지 크기는 고정이다(배증 없음 — 마지막 한 장이 필요량을 크게 넘겨 잡던 문제).
-	// 실측 노드 크기(헤더 포함)를 기준으로 한 장이 대략 3~13KB 가 되게 잡았다.
+	// 아래 개수는 노드 크기(헤더 포함)를 기준으로 한 장이 대략 3~13KB 가 되게 잡은 값이다.
 	// 개수가 적은 타입은 더 작게 — 안 쓰는 타입이 페이지 한 장을 통째로 물지 않게 한다.
-	//   MapData 32B x 256 = 8KB  SetData 16B x 256 = 4KB  MapInfo 100B x 64 = 6.4KB
-	//   SetInfo  100B x 32 = 3.2KB
-	//   SetInfo  100B x 32 = 3.2KB
-	//   ListInfo 148B x 64 =  9.5KB  VecInfo   24B x 512 = 12.3KB
-	//   StringInfo 100B x 128 = 12.8KB  AsyncInfo 372B x 16 = 6.0KB
+	// (구조체 크기는 필드가 늘 때마다 바뀌므로 여기 적지 않는다. 필요하면 sizeof 로 확인할 것)
 	// MapNode/SetNode 자체는 컬렉션별 연속 배열에 있고, key/value는 안정 주소의 별도 풀에 둔다.
 	CNVMAllocPool < MapData, 256> m_sPool_TableData;
 	CNVMAllocPool< MapInfo, 64> m_sPool_TableInfo;

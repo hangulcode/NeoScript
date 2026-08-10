@@ -234,6 +234,7 @@ struct AsyncInfo;
 struct MapNode;
 struct SetNode;
 struct VecInfo;
+struct CycleCandidate;
 
 // 네이티브 객체의 Function/Property와 사용자 데이터. MapInfo와 의도적으로
 // 분리되어 일반 map/set 탐색과 네이티브 객체가 서로의 메모리 비용을 만들지 않는다.

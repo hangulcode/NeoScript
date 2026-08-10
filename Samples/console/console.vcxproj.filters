@@ -22,6 +22,9 @@
     <ClCompile Include="callback.cpp">
       <Filter>Samples</Filter>
     </ClCompile>
+    <ClCompile Include="cycle_ref.cpp">
+      <Filter>Samples</Filter>
+    </ClCompile>
     <ClCompile Include="9_times.cpp">
       <Filter>Samples</Filter>
     </ClCompile>

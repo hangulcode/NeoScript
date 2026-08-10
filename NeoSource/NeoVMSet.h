@@ -46,7 +46,7 @@ struct SetInfo : AllocBase
 	// Former _SetID slot (never used): descending free-slot cursor.
 	int	_lastFree;
 	int _itemCount;
-	u32 _mutationVersion = 0;
+	u32 _mutationVersion;
 	SetInfo*		_meta;
 
 	// 살아있는 객체 추적용 intrusive 이중연결 리스트 (std::map 레지스트리 대체)
@@ -70,8 +70,11 @@ struct SetInfo : AllocBase
 	bool ToList(std::vector<VarInfo*>& lst);
 	inline int		GetCount() { return _itemCount; }
 
+	CycleCandidate* _cycleTicket;
 	// 파괴 중 같은 객체를 다시 만났을 때 FreeSet 재진입을 막는다.
 	bool _destroying;
+	bool _cycleQueued;
+	bool _cycleCollecting;
 
 private:
 	void ClearNode(SetNode& node);

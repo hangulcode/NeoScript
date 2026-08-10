@@ -53,7 +53,7 @@ struct MapInfo : AllocBase
 	// hot-member layout.
 	int	_lastFree;
 	int _itemCount;
-	u32 _mutationVersion = 0;
+	u32 _mutationVersion;
 
 	MapInfo*		_meta;
 
@@ -84,8 +84,13 @@ struct MapInfo : AllocBase
 	bool ToListValues(std::vector<VarInfo*>& lst);
 	inline int		GetCount() { return _itemCount; }
 
+	// 순환 후보 큐 티켓은 객체 수명을 잡지 않는다. FreeTable 시 티켓을 무효화해
+	// 큐에 남은 stale 포인터를 안전하게 건너뛴다.
+	CycleCandidate* _cycleTicket;
 	// 파괴 중 같은 객체를 다시 만났을 때 FreeTable 재진입을 막는다.
 	bool _destroying;
+	bool _cycleQueued;
+	bool _cycleCollecting;
 
 private:
 	void ClearNode(MapNode& node);

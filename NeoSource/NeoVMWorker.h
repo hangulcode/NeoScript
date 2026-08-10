@@ -517,8 +517,11 @@ public:
 
 #include "NeoVMWorker_Handlers.inl"
 
+	CycleCandidate* _cycleTicket;
 	// 파괴 중 같은 module을 다시 만났을 때 워커를 중복 delete 하지 않는다.
 	bool _destroying;
+	bool _cycleQueued;
+	bool _cycleCollecting;
 
 };
 

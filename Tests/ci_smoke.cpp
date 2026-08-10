@@ -220,6 +220,123 @@ static bool ContainerDestroyRegression()
     return stats.maps == 0;
 }
 
+static bool CycleTrimRegression()
+{
+    using namespace NeoScript;
+
+    CNeoVMImpl vm;
+    SNeoVMAllocStats stats{};
+
+    // self / list / set cycle must remain alive before TrimMemory and be
+    // reclaimed by its forced cycle-candidate pass.
+    VarInfo self;
+    vm.Var_SetTable(&self, vm.TableAlloc());
+    self._tbl->Insert("self", &self);
+    vm.Var_Release(&self);
+
+    VarInfo list(VAR_LIST);
+    list._lst = vm.ListAlloc();
+    ++list._lst->_refCount;
+    list._lst->InsertLast(&list);
+    vm.Var_Release(&list);
+
+    VarInfo set(VAR_SET);
+    set._set = vm.SetAlloc();
+    ++set._set->_refCount;
+    set._set->Insert(&set);
+    vm.Var_Release(&set);
+
+    vm.GetAllocStats(stats);
+    const bool queuedCyclesRemain = stats.maps == 1 && stats.lists == 1 && stats.sets == 1;
+    vm.CollectEmptyPages(true);
+    vm.GetAllocStats(stats);
+    const bool forcedCollectionOk = stats.maps == 0 && stats.lists == 0 && stats.sets == 0;
+
+    // An external holder keeps the same self-cycle alive.  Releasing that
+    // holder queues it again, and the next TrimMemory may collect it.
+    VarInfo root;
+    VarInfo hold;
+    vm.Var_SetTable(&root, vm.TableAlloc());
+    root._tbl->Insert("self", &root);
+    Move_DestNoRelease(&hold, &root);
+    vm.Var_Release(&root);
+    vm.CollectEmptyPages(true);
+    vm.GetAllocStats(stats);
+    const bool externalReferencePreserved = stats.maps == 1;
+    vm.Var_Release(&hold);
+    vm.CollectEmptyPages(true);
+    vm.GetAllocStats(stats);
+    const bool releasedAfterExternalGone = stats.maps == 0;
+
+    // A queued candidate can die before TrimMemory when its cycle is broken.
+    VarInfo stale;
+    VarInfo staleHold;
+    vm.Var_SetTable(&stale, vm.TableAlloc());
+    VarInfo staleKey(1);
+    stale._tbl->Insert(&staleKey, &stale);
+    MapInfo* staleMap = stale._tbl;
+    Move_DestNoRelease(&staleHold, &stale);
+    vm.Var_Release(&stale);
+    staleMap->Remove(&staleKey);
+    vm.Var_Release(&staleHold);
+    vm.CollectEmptyPages(true);
+    vm.GetAllocStats(stats);
+    const bool staleTicketSafe = stats.maps == 0;
+
+    // Metadata links are refcounted container edges too, not just map values.
+    VarInfo metaA;
+    VarInfo metaB;
+    vm.Var_SetTable(&metaA, vm.TableAlloc());
+    vm.Var_SetTable(&metaB, vm.TableAlloc());
+    metaA._tbl->_meta = metaB._tbl;
+    ++metaB._tbl->_refCount;
+    metaB._tbl->_meta = metaA._tbl;
+    ++metaA._tbl->_refCount;
+    vm.Var_Release(&metaA);
+    vm.Var_Release(&metaB);
+    vm.CollectEmptyPages(true);
+    vm.GetAllocStats(stats);
+    const bool metaCycleCollected = stats.maps == 0;
+
+    // A -> B, B -> A and B -> B.  B is first examined while A has an
+    // external reference, then A becomes the only candidate.  Collection
+    // must still destroy the complete white set without leaving B->A stale.
+    VarInfo nestedA;
+    VarInfo nestedB;
+    vm.Var_SetTable(&nestedA, vm.TableAlloc());
+    vm.Var_SetTable(&nestedB, vm.TableAlloc());
+    nestedA._tbl->Insert("b", &nestedB);
+    nestedB._tbl->Insert("back", &nestedA);
+    nestedB._tbl->Insert("self", &nestedB);
+    vm.Var_Release(&nestedB);
+    vm.CollectEmptyPages(true);
+    vm.Var_Release(&nestedA);
+    vm.CollectEmptyPages(true);
+    vm.GetAllocStats(stats);
+    const bool nestedWhiteSetCollected = stats.maps == 0;
+
+    // Non-forced TrimMemory processes max(16, ceil(queue_size * 0.5%)).
+    constexpr int kCandidateCount = 4000;
+    for (int i = 0; i < kCandidateCount; ++i)
+    {
+        VarInfo value;
+        vm.Var_SetTable(&value, vm.TableAlloc());
+        value._tbl->Insert("self", &value);
+        vm.Var_Release(&value);
+    }
+    vm.GetAllocStats(stats);
+    const int before = stats.maps;
+    vm.CollectEmptyPages(false);
+    vm.GetAllocStats(stats);
+    const bool percentageBudgetOk = before == kCandidateCount && stats.maps <= before - 20;
+    vm.CollectEmptyPages(true);
+    vm.GetAllocStats(stats);
+
+    return queuedCyclesRemain && forcedCollectionOk && externalReferencePreserved
+        && releasedAfterExternalGone && staleTicketSafe && metaCycleCollected && nestedWhiteSetCollected && percentageBudgetOk
+        && stats.maps == 0;
+}
+
 int main()
 {
     using namespace NeoScript;
@@ -329,6 +446,7 @@ int main()
 
 	const bool setOk = SetStorageRegression();
 	const bool containerDestroyOk = ContainerDestroyRegression();
+	const bool cycleTrimOk = CycleTrimRegression();
 	const bool stringHashOk = StringHashRegression();
 	const bool stringInternOk = StringInternRegression();
 	const bool stringInternChurnOk = StringInternChurnRegression();
@@ -339,7 +457,7 @@ int main()
     DestroyRuntime(runtime);
 
     const bool asmOk = asmOutput.str().find("Fun -") != std::string::npos;
-    if (!addOk || !literalOk || !mapOk || !mapDeleteReinsertOk || !mapSortNormalOk || !mapSortMutationOk || !setOk || !containerDestroyOk || !stringHashOk || !stringInternOk || !stringInternChurnOk || !hashLoadFactorOk || !asmOk)
+    if (!addOk || !literalOk || !mapOk || !mapDeleteReinsertOk || !mapSortNormalOk || !mapSortMutationOk || !setOk || !containerDestroyOk || !cycleTrimOk || !stringHashOk || !stringInternOk || !stringInternChurnOk || !hashLoadFactorOk || !asmOk)
     {
         std::fputs("NeoScript API smoke failed\n", stderr);
         return 1;

@@ -125,31 +125,43 @@ void INeoVM::Var_ReleaseInternal(VarInfo* d)
 	case VAR_MAP:
 		if (--d->_tbl->_refCount <= 0)
 			((CNeoVMImpl*)this)->QueueContainerForDestroy(*d);
+		else
+			((CNeoVMImpl*)this)->QueueContainerForCycleCheck(*d);
 		d->_tbl = NULL;
 		break;
 	case VAR_LIST:
 		if (--d->_lst->_refCount <= 0)
 			((CNeoVMImpl*)this)->QueueContainerForDestroy(*d);
+		else
+			((CNeoVMImpl*)this)->QueueContainerForCycleCheck(*d);
 		d->_lst = NULL;
 		break;
 	case VAR_SET:
 		if (--d->_set->_refCount <= 0)
 			((CNeoVMImpl*)this)->QueueContainerForDestroy(*d);
+		else
+			((CNeoVMImpl*)this)->QueueContainerForCycleCheck(*d);
 		d->_set = NULL;
 		break;
 	case VAR_COROUTINE:
 		if (--d->_cor->_refCount <= 0)
 			((CNeoVMImpl*)this)->QueueContainerForDestroy(*d);
+		else
+			((CNeoVMImpl*)this)->QueueContainerForCycleCheck(*d);
 		d->_cor = NULL;
 		break;
 	case VAR_MODULE:
 		if (--((CNeoVMWorker*)(d->_module))->_refCount <= 0)
 			((CNeoVMImpl*)this)->QueueContainerForDestroy(*d);
+		else
+			((CNeoVMImpl*)this)->QueueContainerForCycleCheck(*d);
 		d->_module = NULL;
 		break;
 	case VAR_ASYNC:
 		if (--d->_async->_refCount <= 0)
 			((CNeoVMImpl*)this)->QueueContainerForDestroy(*d);
+		else
+			((CNeoVMImpl*)this)->QueueContainerForCycleCheck(*d);
 		d->_async = NULL;
 		break;
 	default:

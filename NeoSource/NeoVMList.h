@@ -24,7 +24,7 @@ struct ListInfo : AllocBase
 
 	int	_ListID;
 	int _itemCount;
-	u32 _mutationVersion = 0;
+	u32 _mutationVersion;
 	void* _pUserData;
 
 	int _BucketCapa;
@@ -72,8 +72,11 @@ struct ListInfo : AllocBase
 
 	inline VarInfo* GetDataUnsafe() { return _Bucket; }
 
+	CycleCandidate* _cycleTicket;
 	// 파괴 중 같은 객체를 다시 만났을 때 FreeList 재진입을 막는다.
 	bool _destroying;
+	bool _cycleQueued;
+	bool _cycleCollecting;
 private:
 };
 

@@ -345,8 +345,11 @@ struct CoroutineInfo : AllocBase
 	std::vector<VarInfo>	m_sVarStack;
 	SimpleVector<SCallStack>	m_sCallStack;
 
+	CycleCandidate* _cycleTicket;
 	// 파괴 중 같은 코루틴을 다시 만났을 때 실행 컨텍스트 풀로 중복 반납하지 않는다.
 	bool _destroying;
+	bool _cycleQueued;
+	bool _cycleCollecting;
 };
 
 // 실행 컨텍스트(파이버) = var 스택 + 콜 스택 + SP/IP 레지스터.
@@ -379,6 +382,13 @@ struct NeoExecContextPool
 	{
 		NeoExecContext* p = _pool.Receive();
 		const bool cold = p->m_sVarStack.capacity() == 0;   // 처음 대여되는 노드 = 스택 힙이 지금 잡힌다
+		// 실행 컨텍스트 풀은 VM 사이에서도 재사용된다. 이전 코루틴의 약한 순환
+		// 후보/파괴 상태가 남아 있으면 새 대여자가 stale ticket을 건드릴 수 있으므로
+		// 대여 경계에서 항상 초기화한다.
+		p->_cycleQueued = false;
+		p->_cycleTicket = nullptr;
+		p->_cycleCollecting = false;
+		p->_destroying = false;
 		p->_info._pCodeCurrent = NULL;
 		p->_info.ClearSP();
 		p->m_sAsyncResumeCodePtrs.clear();
@@ -462,8 +472,11 @@ struct AsyncInfo : AllocBase
 	VarInfo		_LockReferance;
 	NeoEvent	_event;
 
+	CycleCandidate* _cycleTicket;
 	// 파괴 중 같은 async를 다시 만났을 때 풀로 중복 반납하지 않는다.
 	bool _destroying;
+	bool _cycleQueued;
+	bool _cycleCollecting;
 };
 
 

@@ -12,8 +12,8 @@
 //     파괴 중인 자신에게 재진입해 무한재귀 + 이중 풀반납 + 리스트 헤드 오염을 냈다.
 //     DestroyRuntime 이 정상 반환하는 것 자체가 판정이다.
 //
-// 순환 자체는 참조 카운팅으로 회수되지 않는다(현 설계). 그래서 CycleLeaking 은
-// "안 줄어드는 것이 정상" 이고, 그 사실을 unreachableAtExit 로 수치화해 보고한다.
+// 참조 카운트만으로는 순환을 즉시 회수하지 않는다. CycleLeaking 으로 후보를 만든 뒤
+// TrimMemory(true)가 외부 사용처 없는 고리를 실제로 회수하는지 확인한다.
 #include "stdafx.h"
 #include "../../NeoSource/NeoScript.h"
 #include "../../NeoSource/NeoVM.h"   // alloc 카운터(SNeoVMAllocStats) — 공개 API 에는 없다
@@ -98,23 +98,28 @@ int SAMPLE_cycle_ref(INeoLoader* pLoader, std::string filename)
     }
 
     // ---------------------------------------------------------------------
-    // 2) 순환은 회수되지 않는다(현 설계). 이 호출들이 늘리는 만큼이 곧 누수량이다.
-    //    실패가 아니라 관측치로 보고한다 — 2단계 순환 수집기의 근거 자료다.
+    // 2) 순환 후보를 만든 뒤 TrimMemory가 실제로 회수하는지 본다.
     // ---------------------------------------------------------------------
     {
-        SNeoVMAllocStats before{}, after{};
+        SNeoVMAllocStats before{}, queued{}, trimmed{};
         GetNeoVMAllocStats(before);
         const int kRounds = 20;
         for (int i = 0; i < kRounds; ++i)
             rt->Call(inst, "CycleLeaking").invoke();
-        GetNeoVMAllocStats(after);
+        GetNeoVMAllocStats(queued);
 
-        const int grown = ContainerCount(after) - ContainerCount(before);
-        printf("  info: cyclic paths retained %d containers over %d rounds (%.1f/round)\n",
+        const int grown = ContainerCount(queued) - ContainerCount(before);
+        printf("  info: cyclic paths queued %d containers over %d rounds (%.1f/round)\n",
                grown, kRounds, kRounds ? (double)grown / kRounds : 0.0);
-        // 순환이 정말 순환으로 남아있는지 자체를 확인한다. 0 이면 케이스가 순환을
-        // 만들지 못한 것이므로 테스트가 무의미해진다.
-        CycOk(grown > 0, "cyclic paths are indeed retained (refcount cannot collect cycles)");
+        CycOk(grown > 0, "cyclic paths are retained until TrimMemory");
+
+        rt->TrimMemory(true);
+        GetNeoVMAllocStats(trimmed);
+        CycOk(ContainerCount(trimmed) <= ContainerCount(before),
+              "TrimMemory collects unreachable cyclic containers");
+        if (ContainerCount(trimmed) > ContainerCount(before))
+            printf("    map %d->%d  lst %d->%d  set %d->%d\n",
+                   before.maps, trimmed.maps, before.lists, trimmed.lists, before.sets, trimmed.sets);
     }
 
     // ---------------------------------------------------------------------
@@ -128,10 +133,10 @@ int SAMPLE_cycle_ref(INeoLoader* pLoader, std::string filename)
 
     SNeoVMAllocStats atExit{};
     GetNeoVMAllocStats(atExit);
-    printf("  info: unreachableAtExit = %d (roots released, still-live containers = cycles)\n",
-           atExit.unreachableAtExit);
     printf("  info: live after destroy  map=%d lst=%d set=%d str=%d\n",
            atExit.maps, atExit.lists, atExit.sets, atExit.strings);
+	CycOk(ContainerCount(atExit) == 0,
+	      "runtime destroyed with no live containers");
 
     if (g_cycFail == 0)
         printf("cycle_ref driver PASS\n");

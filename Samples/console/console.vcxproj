@@ -262,6 +262,7 @@
     <ClCompile Include="9_times.cpp" />
     <ClCompile Include="neov2_smoke.cpp" />
     <ClCompile Include="callback.cpp" />
+    <ClCompile Include="cycle_ref.cpp" />
     <ClCompile Include="console.cpp" />
     <ClCompile Include="etc.cpp" />
     <ClCompile Include="map_callback.cpp" />

@@ -248,6 +248,38 @@ rt->DestroyProgram(cr.program);
 DestroyRuntime(rt);
 ```
 
+#### ⚠ Required: call `TrimMemory(false)` every frame
+
+> **This is not an optional optimization. A host that runs scripts must call
+> `rt->TrimMemory(false)` once per frame.** Skip it and memory grows without bound.
+
+```cpp
+// In your frame loop, after script updates:
+rt->TrimMemory(false);
+```
+
+Two jobs happen only inside this call, and nowhere else:
+
+1. **Cycle collection.** Containers are reference counted, and reference counting cannot reclaim a
+   cycle — `m["self"] = m`, or a parent/child pair that point at each other, keeps a non-zero count
+   forever. Those objects are found and freed here. Never calling `TrimMemory` means every cycle a
+   script creates leaks for the process lifetime.
+2. **Draining the cycle-candidate queue.** Whenever a container's reference count drops without
+   reaching zero, the object is recorded as a candidate. That queue is consumed only here, so it
+   grows monotonically until the call happens.
+
+Empty pool pages are also returned to the OS by the same call, in bounded increments
+(`SetTrimPagesPerCall()`, 4 pages per call by default).
+
+**Cost.** The page-return half has a per-call ceiling. The cycle half caps only the *number* of
+candidates examined per call (`max(16, 0.5% of the queue)`) — a single candidate has **no** cost
+ceiling, because checking it walks the whole container graph reachable from that candidate. If a
+candidate reaches a large shared table, that one check scales with the graph. Titles that hold many
+containers should measure frame time, and can move the work to a safe point with `TrimMemory(true)`,
+which processes everything with no budget at all. Never call the `true` form mid-frame.
+
+If the queue is empty and there are no empty pages, the call returns immediately.
+
 > Some `IRuntime` members are intentionally not implemented yet and are marked `[미구현]` in the header
 > (`RegisterFunction`, `ResetInstance`, `Cancel`, the `async` family, `CallContext::fail`,
 > `Invocation::error`). They return `false` / a no-op until supported; don't rely on them.
@@ -407,26 +439,26 @@ Lower is better. **ms**, best of 5 runs after a warm-up. `x Neo` = how many time
 
 | Benchmark | What it stresses | Neo (ms) | Lua (ms) | C++ (ms) | Lua vs Neo | C++ vs Neo |
 | :-------- | :--------------- | -------: | -------: | -------: | ---------: | ---------: |
-| `loop_sum`      | integer loop, VM dispatch floor | **170** | 191 |  12.9 | 0.89x | 13.2x |
-| `float_math`    | float mul/add/sub chain         | **169** | 306 |  57.6 | 0.55x |  2.9x |
-| `func_call`     | script function call overhead   | **117** | 156 |   4.2 | 0.75x | 27.9x |
-| `fib_recursive` | recursion, fib(32)              |  **79** |  87 |   6.7 | 0.91x | 11.8x |
-| `array_rw`      | sequential array write + read   |  **44** |  46 |   2.4 | 0.96x | 18.1x |
-| `map_str`       | string-key hash lookup          |  **43** |  38 |  70.5 | 1.13x |  0.6x |
-| `string_ops`    | string build + length           |  **86** | 148 |  13.4 | 0.58x |  6.4x |
+| `loop_sum`      | integer loop, VM dispatch floor | **168** | 189 |  12.9 | 0.89x | 13.1x |
+| `float_math`    | float mul/add/sub chain         | **167** | 302 |  57.8 | 0.55x |  2.9x |
+| `func_call`     | script function call overhead   | **113** | 154 |   4.1 | 0.73x | 27.5x |
+| `fib_recursive` | recursion, fib(32)              |  **76** |  87 |   6.7 | 0.87x | 11.4x |
+| `array_rw`      | sequential array write + read   |  **44** |  46 |   2.4 | 0.96x | 18.6x |
+| `map_str`       | string-key hash lookup          |  **44** |  38 |  68.7 | 1.16x |  0.6x |
+| `string_ops`    | string build + length           |  **76** | 147 |  13.2 | 0.52x |  5.8x |
 | `particles`     | game-style float + array sim    |  **44** |  49 |   3.3 | 0.90x | 13.4x |
-| **total**       |                                 | **752** | 1021 | 170.9 | 0.74x |  4.4x |
+| **total**       |                                 | **732** | 1012 | 168.9 | 0.72x |  4.3x |
 
 **Reading the numbers.**
-- **Neo is ~26% faster than Lua overall** and leads on 7 of 8 benchmarks. All 8 checksums match
+- **Neo is ~28% faster than Lua overall** and leads on 7 of 8 benchmarks. All 8 checksums match
   across the three languages, which is what proves they did the same work.
-- `map_str` is the only row Lua wins, and the margin is small: 1.13x on best-of-5, **1.12x on the
-  median**. Lua interns *every* short string, so a table lookup is a pointer compare. Neo interns
-  only map/set keys and program constants, which keeps temporary string creation cheap at the cost
-  of this one case.
+- `map_str` is the only row Lua wins, and the margin is small: 1.16x on best-of-5, **1.08x on the
+  median** (Neo 43, Lua 40). Lua interns *every* short string, so a table lookup is a pointer
+  compare. Neo interns only map/set keys and program constants, which keeps temporary string
+  creation cheap at the cost of this one case.
 - `map_str` has only 8 keys, so which slot each key lands in — and therefore the score — shifts with
-  any change to the hash. Lua is also the noisier side here (36-45 ms across runs). Treat
-  differences under ~10% on this row as noise.
+  any change to the hash. Lua is also the noisier side here (38-42 ms across runs, against Neo's
+  44-46). Treat differences under ~10% on this row as noise.
 - C++ is a **reference ceiling**, not a peer: 3-28x faster on compute-bound loops. The exception is
   `map_str`, where `std::unordered_map<std::string,…>` is *slower* than both VMs — the interpreters
   cache the string hash; the C++ map rehashes on every lookup.

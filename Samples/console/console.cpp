@@ -95,6 +95,7 @@ int SAMPLE_9_times(INeoLoader* pLoader, std::string filename);
 int SAMPLE_slice_run(INeoLoader* pLoader, std::string filename);
 int SAMPLE_time_limit(INeoLoader* pLoader, std::string filename);
 int SAMPLE_etc(INeoLoader* pLoader, std::string filename, const char* pFunctionName);
+int SAMPLE_cycle_ref(INeoLoader* pLoader, std::string filename);
 
 static void PrintSampleList()
 {
@@ -117,6 +118,7 @@ static void PrintSampleList()
 	printf("http\n");
 	printf("regression\n");
 	printf("literal_totype\n");
+	printf("cycle\n");
 }
 
 static std::string s_path = "../../TestScript/";
@@ -141,6 +143,7 @@ static int RunSample(INeoLoader* pLoader, const std::string& key)
 	if (key == "16" || key == "http") return SAMPLE_etc(pLoader, s_path + "http.ns", nullptr);
 	if (key == "17" || key == "regression") return SAMPLE_etc(pLoader, s_path + "compiler_regression.ns", nullptr);
 	if (key == "18" || key == "literal_totype") return SAMPLE_etc(pLoader, s_path + "literal_totype.ns", nullptr);
+	if (key == "19" || key == "cycle") return SAMPLE_cycle_ref(pLoader, s_path + "cycle_ref.ns");
 
 	printf("unknown sample: %s\n", key.c_str());
 	return -1;
@@ -2340,6 +2343,7 @@ int main(int argc, char* argv[])
 		printf("%d http\n", idx++);
 		printf("%d regression\n", idx++);
 		printf("%d literal_totype\n", idx++);
+		printf("%d cycle\n", idx++);
 
 		printf("\nESC press to exit\n");
 		printf("press the number and enter ...\n");
