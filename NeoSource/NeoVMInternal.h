@@ -344,6 +344,9 @@ struct CoroutineInfo : AllocBase
 
 	std::vector<VarInfo>	m_sVarStack;
 	SimpleVector<SCallStack>	m_sCallStack;
+
+	// 파괴 중 같은 코루틴을 다시 만났을 때 실행 컨텍스트 풀로 중복 반납하지 않는다.
+	bool _destroying;
 };
 
 // 실행 컨텍스트(파이버) = var 스택 + 콜 스택 + SP/IP 레지스터.
@@ -458,6 +461,9 @@ struct AsyncInfo : AllocBase
 
 	VarInfo		_LockReferance;
 	NeoEvent	_event;
+
+	// 파괴 중 같은 async를 다시 만났을 때 풀로 중복 반납하지 않는다.
+	bool _destroying;
 };
 
 

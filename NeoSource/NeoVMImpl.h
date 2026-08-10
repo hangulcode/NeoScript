@@ -26,6 +26,10 @@ private:
 	ListInfo* _sListHead = nullptr;
 	MapInfo* _sTableHead = nullptr;
 	SetInfo* _sSetHead = nullptr;
+	// 컨테이너 파괴는 자식 Var_Release 로 다시 컨테이너 파괴를 유발한다. 호출 스택 대신
+	// 이 대기열을 깊이 우선으로 비워서, 깊은 트리와 순환 모두 안전하게 처리한다.
+	std::vector<VarInfo> _sDestroyQueue;
+	bool _bDrainingDestroyQueue = false;
 	u32 _dwLastIDVMWorker = 0;
 
 
@@ -117,6 +121,7 @@ public:
 
 	SetInfo* SetAlloc();
 	void FreeSet(SetInfo* tbl);
+	void QueueContainerForDestroy(const VarInfo& value);
 
 	AsyncInfo* AsyncAlloc();
 	void FreeAsync(VarInfo* d);

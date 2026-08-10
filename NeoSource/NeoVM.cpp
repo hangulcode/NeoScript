@@ -124,32 +124,32 @@ void INeoVM::Var_ReleaseInternal(VarInfo* d)
 		break;
 	case VAR_MAP:
 		if (--d->_tbl->_refCount <= 0)
-			((CNeoVMImpl*)this)->FreeTable(d->_tbl);
+			((CNeoVMImpl*)this)->QueueContainerForDestroy(*d);
 		d->_tbl = NULL;
 		break;
 	case VAR_LIST:
 		if (--d->_lst->_refCount <= 0)
-			((CNeoVMImpl*)this)->FreeList(d->_lst);
+			((CNeoVMImpl*)this)->QueueContainerForDestroy(*d);
 		d->_lst = NULL;
 		break;
 	case VAR_SET:
 		if (--d->_set->_refCount <= 0)
-			((CNeoVMImpl*)this)->FreeSet(d->_set);
+			((CNeoVMImpl*)this)->QueueContainerForDestroy(*d);
 		d->_set = NULL;
 		break;
 	case VAR_COROUTINE:
 		if (--d->_cor->_refCount <= 0)
-			((CNeoVMImpl*)this)->FreeCoroutine(d);
+			((CNeoVMImpl*)this)->QueueContainerForDestroy(*d);
 		d->_cor = NULL;
 		break;
 	case VAR_MODULE:
 		if (--((CNeoVMWorker*)(d->_module))->_refCount <= 0)
-			((CNeoVMImpl*)this)->FreeWorker((CNeoVMWorker*)d->_module);
+			((CNeoVMImpl*)this)->QueueContainerForDestroy(*d);
 		d->_module = NULL;
 		break;
 	case VAR_ASYNC:
 		if (--d->_async->_refCount <= 0)
-			((CNeoVMImpl*)this)->FreeAsync(d);
+			((CNeoVMImpl*)this)->QueueContainerForDestroy(*d);
 		d->_async = NULL;
 		break;
 	default:

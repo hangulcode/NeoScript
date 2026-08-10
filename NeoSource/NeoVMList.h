@@ -71,6 +71,9 @@ struct ListInfo : AllocBase
 	MatrixInfo GetMatrix();
 
 	inline VarInfo* GetDataUnsafe() { return _Bucket; }
+
+	// 파괴 중 같은 객체를 다시 만났을 때 FreeList 재진입을 막는다.
+	bool _destroying;
 private:
 };
 

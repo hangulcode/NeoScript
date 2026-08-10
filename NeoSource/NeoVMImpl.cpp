@@ -270,6 +270,7 @@ CNeoVMWorker* CNeoVMImpl::WorkerAlloc(int iStackSize)
 
 	CNeoVMWorker* p = new CNeoVMWorker(this, _dwLastIDVMWorker, iStackSize);
 	p->_refCount = 0;
+	p->_destroying = false;
 	++m_sAllocStats.modules;
 
 	_sVMWorkers[_dwLastIDVMWorker] = p;
@@ -277,6 +278,9 @@ CNeoVMWorker* CNeoVMImpl::WorkerAlloc(int iStackSize)
 }
 void CNeoVMImpl::FreeWorker(CNeoVMWorker *d)
 {
+	if (d->_destroying)
+		return;
+	d->_destroying = true;
 	auto it = _sVMWorkers.find(d->GetWorkerID());
 	if (it == _sVMWorkers.end())
 		return;
@@ -301,13 +305,17 @@ CoroutineInfo* CNeoVMImpl::CoroutineAlloc()
 {
 	// 코루틴 컨텍스트도 default 실행 컨텍스트와 동일한 공유 풀에서 대여한다.
 	CoroutineInfo* p = _pExecPool->Acquire();
+	p->_destroying = false;
 	++m_sAllocStats.coroutines;
 	return p;
 }
 void CNeoVMImpl::FreeCoroutine(VarInfo *d)
 {
-	--m_sAllocStats.coroutines;
 	CoroutineInfo* pCI = d->_cor;
+	if (pCI->_destroying)
+		return;
+	pCI->_destroying = true;
+	--m_sAllocStats.coroutines;
 	// 공유 풀로 반납하기 전에 컨텍스트의 스택 참조를 정리한다.
 	// 완료(DeadCoroutine)를 거친 코루틴은 _iSP_Vars_Max2 가 0 이라 무해하지만,
 	// yield 된 채 버려진 코루틴은 live ref 가 남아있어 정리하지 않으면 다른 VM 재사용 시 손상된다.
@@ -519,6 +527,7 @@ MapInfo* CNeoVMImpl::TableAlloc(int cnt)
 	MapInfo* pTable = m_sPool_TableInfo.Receive();
 	pTable->_pVM = this;
 	pTable->_refCount = 0;
+	pTable->_destroying = false;
 	pTable->_itemCount = 0;
 	pTable->_mutationVersion = 0;
 	pTable->_HashBase = 0;
@@ -534,13 +543,18 @@ MapInfo* CNeoVMImpl::TableAlloc(int cnt)
 }
 void CNeoVMImpl::FreeTable(MapInfo* tbl)
 {
+	if (tbl->_destroying)
+		return;
+	tbl->_destroying = true;
 	LiveList_Remove(_sTableHead, tbl);
 
 	if (tbl->_meta)
 	{
 		if (--tbl->_meta->_refCount <= 0)
 		{
-			FreeTable(tbl->_meta);
+			VarInfo meta(VAR_MAP);
+			meta._tbl = tbl->_meta;
+			QueueContainerForDestroy(meta);
 		}
 		tbl->_meta = NULL;
 	}
@@ -571,6 +585,7 @@ ListInfo* CNeoVMImpl::ListAlloc(int cnt)
 	ListInfo* pList = m_sPool_ListInfo.Receive();
 	pList->_pVM = this;
 	pList->_refCount = 0;
+	pList->_destroying = false;
 	pList->_mutationVersion = 0;
 	pList->_pUserData = NULL;
 	pList->_pIndexer = nullptr;
@@ -583,6 +598,9 @@ ListInfo* CNeoVMImpl::ListAlloc(int cnt)
 }
 void CNeoVMImpl::FreeList(ListInfo* lst)
 {
+	if (lst->_destroying)
+		return;
+	lst->_destroying = true;
 	LiveList_Remove(_sListHead, lst);
 	lst->Free();
 
@@ -595,6 +613,7 @@ SetInfo* CNeoVMImpl::SetAlloc()
 	SetInfo* pSet = m_sPool_SetInfo.Receive();
 	pSet->_pVM = this;
 	pSet->_refCount = 0;
+	pSet->_destroying = false;
 	pSet->_itemCount = 0;
 	pSet->_mutationVersion = 0;
 	pSet->_HashBase = 0;
@@ -609,12 +628,17 @@ SetInfo* CNeoVMImpl::SetAlloc()
 }
 void CNeoVMImpl::FreeSet(SetInfo* set)
 {
+	if (set->_destroying)
+		return;
+	set->_destroying = true;
 	LiveList_Remove(_sSetHead, set);
 	if (set->_meta)
 	{
 		if (--set->_meta->_refCount <= 0)
 		{
-			FreeSet(set->_meta);
+			VarInfo meta(VAR_SET);
+			meta._set = set->_meta;
+			QueueContainerForDestroy(meta);
 		}
 		set->_meta = NULL;
 	}
@@ -637,6 +661,7 @@ AsyncInfo* CNeoVMImpl::AsyncAlloc()
 {
 	AsyncInfo* p = m_sPool_Async.Receive();
 	p->_refCount = 0;
+	p->_destroying = false;
 	p->_ownerWorkerId = 0;
 	p->_state = ASYNC_READY;
 	// 풀에서 재사용된 노드는 이전 요청의 값을 그대로 들고 있다. 특히 _headers 는
@@ -652,8 +677,11 @@ AsyncInfo* CNeoVMImpl::AsyncAlloc()
 }
 void CNeoVMImpl::FreeAsync(VarInfo* d)
 {
-	--m_sAllocStats.asyncs;
 	AsyncInfo* p = d->_async;
+	if (p->_destroying)
+		return;
+	p->_destroying = true;
+	--m_sAllocStats.asyncs;
 	// AsyncInfo 는 노드가 372B 로 가장 크고, 문자열 멤버 셋에 HTTP 본문까지 담긴다
 	// (_resultValue 는 응답 전문이라 MB 단위도 가능). 문자열 풀과 같은 규칙으로 놓아준다.
 	ReleaseIfLarge(p->_request);
@@ -662,6 +690,34 @@ void CNeoVMImpl::FreeAsync(VarInfo* d)
 	// 헤더는 요청마다 새로 쌓이고 재사용 이득이 없다 — 배열째 돌려준다.
 	std::vector< std::pair<std::string, std::string> >().swap(p->_headers);
 	m_sPool_Async.Confer(p);
+}
+
+void CNeoVMImpl::QueueContainerForDestroy(const VarInfo& value)
+{
+	// value 는 참조를 새로 잡지 않는 "파괴 권한"이다. refcount 가 이미 0 이하가 된
+	// 객체만 들어오며, Free* 가 먼저 _destroying 을 세워 순환에서 다시 들어온 항목은
+	// 무시한다.
+	_sDestroyQueue.push_back(value);
+	if (_bDrainingDestroyQueue)
+		return;
+
+	_bDrainingDestroyQueue = true;
+	while (_sDestroyQueue.empty() == false)
+	{
+		VarInfo next = _sDestroyQueue.back();
+		_sDestroyQueue.pop_back();
+		switch (next.GetType())
+		{
+		case VAR_MAP:       FreeTable(next._tbl); break;
+		case VAR_LIST:      FreeList(next._lst); break;
+		case VAR_SET:       FreeSet(next._set); break;
+		case VAR_COROUTINE: FreeCoroutine(&next); break;
+		case VAR_MODULE:    FreeWorker((CNeoVMWorker*)next._module); break;
+		case VAR_ASYNC:     FreeAsync(&next); break;
+		default: break;
+		}
+	}
+	_bDrainingDestroyQueue = false;
 }
 
 
@@ -872,41 +928,30 @@ CNeoVMImpl::~CNeoVMImpl()
 		delete _job;
 		_job = nullptr;
 	}
-	for(auto it = _sVMWorkers.begin(); it != _sVMWorkers.end(); it++)
-	{
-		CNeoVMWorker* d = (*it).second;
-		--m_sAllocStats.modules;
-		delete d;
-	}
-	_sVMWorkers.clear();
+	while (_sVMWorkers.empty() == false)
+		FreeWorker(_sVMWorkers.begin()->second);
 
 	for (int i = 0; i < NDF_MAX; i++)
 		Var_Release(&m_sDefaultValue[i]);
 
 	// 살아남은 List/Map/Set 의 _Bucket 을 해제 (intrusive live 리스트 순회).
 	// String 은 CNVMInstPool 소멸자가 std::str 을 정리하므로 별도 처리 없음.
-	// Free() 는 내부 항목을 Var_Release 하므로 중첩 컬렉션 해제 시 재귀로
-	// LiveList_Remove 가 호출될 수 있다. 먼저 p 를 완전히 언링크한 뒤 Free 한다.
+	// Free* 는 먼저 파괴 표식을 세우고 live 리스트에서 뺀다. 내부 항목의
+	// Var_Release 가 같은 객체로 되돌아와도 재진입하지 않는다.
 	while (_sTableHead)
 	{
 		MapInfo* p = _sTableHead;
-		LiveList_Remove(_sTableHead, p);
-		p->Free();
-		--m_sAllocStats.maps;
+		FreeTable(p);
 	}
 	while (_sListHead)
 	{
 		ListInfo* p = _sListHead;
-		LiveList_Remove(_sListHead, p);
-		p->Free();
-		--m_sAllocStats.lists;
+		FreeList(p);
 	}
 	while (_sSetHead)
 	{
 		SetInfo* p = _sSetHead;
-		LiveList_Remove(_sSetHead, p);
-		p->Free();
-		--m_sAllocStats.sets;
+		FreeSet(p);
 	}
 
 	for (auto it = m_sCache_FunPtr.begin(); it != m_sCache_FunPtr.end(); it++)

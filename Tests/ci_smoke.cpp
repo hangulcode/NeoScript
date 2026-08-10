@@ -185,6 +185,41 @@ static bool HashLoadFactorRegression()
     return ok;
 }
 
+static bool ContainerDestroyRegression()
+{
+    using namespace NeoScript;
+
+    // Dropping the external reference leaves this self-cycle for the VM's
+    // live-list sweep, which must return without re-entering its destruction.
+    {
+        CNeoVMImpl vm;
+        VarInfo self;
+        vm.Var_SetTable(&self, vm.TableAlloc());
+        self._tbl->Insert("self", &self);
+        vm.Var_Release(&self);
+    }
+
+    // A deep acyclic graph must be collected immediately without consuming
+    // one native stack frame per container.
+    CNeoVMImpl vm;
+    VarInfo root;
+    vm.Var_SetTable(&root, vm.TableAlloc());
+    MapInfo* current = root._tbl;
+    for (int i = 0; i < 4096; ++i)
+    {
+        VarInfo child;
+        vm.Var_SetTable(&child, vm.TableAlloc());
+        current->Insert("next", &child);
+        current = child._tbl;
+        vm.Var_Release(&child);
+    }
+    vm.Var_Release(&root);
+
+    SNeoVMAllocStats stats{};
+    vm.GetAllocStats(stats);
+    return stats.maps == 0;
+}
+
 int main()
 {
     using namespace NeoScript;
@@ -293,6 +328,7 @@ int main()
 
 
 	const bool setOk = SetStorageRegression();
+	const bool containerDestroyOk = ContainerDestroyRegression();
 	const bool stringHashOk = StringHashRegression();
 	const bool stringInternOk = StringInternRegression();
 	const bool stringInternChurnOk = StringInternChurnRegression();
@@ -303,7 +339,7 @@ int main()
     DestroyRuntime(runtime);
 
     const bool asmOk = asmOutput.str().find("Fun -") != std::string::npos;
-    if (!addOk || !literalOk || !mapOk || !mapDeleteReinsertOk || !mapSortNormalOk || !mapSortMutationOk || !setOk || !stringHashOk || !stringInternOk || !stringInternChurnOk || !hashLoadFactorOk || !asmOk)
+    if (!addOk || !literalOk || !mapOk || !mapDeleteReinsertOk || !mapSortNormalOk || !mapSortMutationOk || !setOk || !containerDestroyOk || !stringHashOk || !stringInternOk || !stringInternChurnOk || !hashLoadFactorOk || !asmOk)
     {
         std::fputs("NeoScript API smoke failed\n", stderr);
         return 1;

@@ -1,0 +1,565 @@
+// ============================================================================
+// 순환 참조 파괴 경로 회귀 테스트
+//
+// Samples/console 에서:  console.exe --run cycle
+//
+// [이 테스트가 검증하는 것]
+// NeoScript 는 참조 카운팅만 쓰므로 **순환 참조를 회수하지 못한다**. 그건 현재
+// 설계 상태이고 이 테스트의 대상이 아니다. 이 테스트가 잡는 것은 그 다음 문제다:
+//
+//   1) 순환이 있을 때 파괴 경로가 자기 자신에게 **재진입**해서 죽는가.
+//      (무한재귀 / 같은 노드 이중 풀반납 / live 리스트 헤드 오염)
+//   2) 순환이 없어도 **깊이에 비례해 스택이 쌓여** 터지는가.
+//   3) 순환을 손으로 끊으면 **즉시 회수**되는가.
+//
+// 판정은 두 겹이다.
+//   - 스크립트(이 파일) : 끝까지 죽지 않고 값이 맞는가.
+//   - C++ 드라이버      : 런타임을 파괴할 때 죽지 않는가 + 회수 가능한 케이스가
+//                         실제로 회수됐는가(alloc 통계 비교).
+//
+// [케이스가 왜 이렇게 많은가]
+// 재진입은 "자식이 부모를 되가리키는" 모든 조합에서 난다. 컨테이너 타입이
+// map/list/set/coroutine 이고, 맵은 **키와 값 양쪽**이 컨테이너일 수 있으며,
+// 맵/셋은 meta 라는 별도 참조를 하나 더 든다. 그 조합을 빠짐없이 훑는다.
+// ============================================================================
+import system;
+import coroutine;
+
+var cycTotal = 0;
+var cycPassed = 0;
+var cycFailed = 0;
+
+fun CycCheck(var ok, var line)
+{
+    cycTotal += 1;
+    if (ok)
+        cycPassed += 1;
+    else
+    {
+        cycFailed += 1;
+        print("cycle_ref failure #" .. cycTotal .. " at line " .. line);
+    }
+}
+
+// set 은 메서드 테이블이 없다(생성 후 불변). 개수는 순회로 센다.
+fun SetCount(var s)
+{
+    var c = 0;
+    foreach (var v in s) c++;
+    return c;
+}
+
+// ---------------------------------------------------------------------------
+// 1. 자기참조 — 가장 단순한 순환. 값 / 키 / 리스트 / 셋 각각.
+//
+// 값 자기참조가 원 버그다: 종료 스윕이 이 맵을 풀 때 자식(=자기 자신)의 참조가
+// 풀려 refCount 가 0 이 되고, 파괴 중인 자신에게 FreeTable 이 재진입했다.
+// ---------------------------------------------------------------------------
+fun SelfRefMapValue()
+{
+    var m = {};
+    m["self"] = m;
+    CycCheck(m["self"]["self"]["self"] != null, __LINE__);   // 몇 단계든 자기 자신
+}
+
+// 맵의 **키**도 컨테이너가 될 수 있다(키 비교는 포인터 동일성). 값 쪽만 막으면
+// 키 경로에서 그대로 터진다.
+fun SelfRefMapKey()
+{
+    var m = {};
+    var k = {};
+    m[k] = 1;
+    k["holder"] = m;          // 키 -> 맵 -> 키 순환
+    CycCheck(m[k] == 1, __LINE__);
+}
+
+fun SelfRefList()
+{
+    var l = [];
+    l.append(l);
+    CycCheck(l.len() == 1, __LINE__);
+    CycCheck(l[0][0][0].len() == 1, __LINE__);
+}
+
+// 셋은 생성 시점에 원소가 정해진다. 맵을 담은 셋을 그 맵이 되가리키게 만든다.
+fun SelfRefSet()
+{
+    var m = {};
+    var s = system.set([m]);
+    m["s"] = s;               // set -> map -> set 순환
+    CycCheck(SetCount(s) == 1, __LINE__);
+}
+
+// ---------------------------------------------------------------------------
+// 2. 2노드 상호참조 — 같은 타입끼리, 그리고 타입을 섞어서.
+//
+// 자기참조는 "파괴 중인 그 객체" 만 막으면 되지만, 상호참조는 A 를 파괴하다가
+// B 를 파괴하고 B 가 다시 A 로 돌아온다. 표식이 A 에도 남아 있어야 잡힌다.
+// ---------------------------------------------------------------------------
+fun MutualMapMap()
+{
+    var a = {};
+    var b = {};
+    a["peer"] = b;
+    b["peer"] = a;
+    CycCheck(a["peer"]["peer"]["peer"] != null, __LINE__);
+}
+
+fun MutualListList()
+{
+    var a = [];
+    var b = [];
+    a.append(b);
+    b.append(a);
+    CycCheck(a[0][0][0].len() == 1, __LINE__);
+}
+
+fun MutualMapList()
+{
+    var m = {};
+    var l = [];
+    m["lst"] = l;
+    l.append(m);
+    CycCheck(m["lst"][0]["lst"].len() == 1, __LINE__);
+}
+
+fun MutualMapSet()
+{
+    var m = {};
+    var s = system.set([m]);
+    m["st"] = s;
+    CycCheck(SetCount(m["st"]) == 1, __LINE__);
+}
+
+fun MutualListSet()
+{
+    var l = [];
+    var s = system.set([l]);
+    l.append(s);
+    CycCheck(l.len() == 1, __LINE__);
+    CycCheck(SetCount(s) == 1, __LINE__);
+}
+
+// ---------------------------------------------------------------------------
+// 3. 긴 고리 — 3노드, 타입 혼합, 그리고 100 노드짜리 링.
+//
+// 파괴 큐가 없다면 고리 길이만큼 스택이 쌓인다. 짧은 고리에서만 통과하고
+// 긴 고리에서 터지는 회귀를 막는다.
+// ---------------------------------------------------------------------------
+fun Cycle3Nodes()
+{
+    var a = {};
+    var b = {};
+    var c = {};
+    a["n"] = b;
+    b["n"] = c;
+    c["n"] = a;
+    CycCheck(a["n"]["n"]["n"]["n"] != null, __LINE__);
+}
+
+fun CycleMixedRing()
+{
+    var m = {};
+    var l = [];
+    var m2 = {};
+    m["l"] = l;               // map -> list
+    l.append(m2);             // list -> map2
+    m2["back"] = m;           // map2 -> map  (고리 완성)
+    CycCheck(m["l"][0]["back"] != null, __LINE__);
+}
+
+fun CycleLongRing()
+{
+    var head = {};
+    var cur = head;
+    for (var i in 0, 100, 1)
+    {
+        var nxt = {};
+        cur["next"] = nxt;
+        cur = nxt;
+    }
+    cur["next"] = head;       // 닫는다
+    CycCheck(head["next"]["next"] != null, __LINE__);
+}
+
+// ---------------------------------------------------------------------------
+// 4. meta 순환 — 맵이 갖는 별도 참조 경로.
+//
+// meta 는 일반 항목이 아니라 MapInfo 의 전용 필드라서 Free 경로가 따로다.
+// 자기 자신을 meta 로 지정하면 예전 코드는 여기서 **즉시** 무한재귀했다
+// (파괴 진입 시점에 refCount 가 이미 0 이라 --0 = -1 <= 0 이 성립).
+// meta 를 되읽는 API 가 없으므로, 검증은 meta 가 실제로 걸렸는지를 연산자
+// 디스패치로 확인한다.
+// ---------------------------------------------------------------------------
+fun MetaAdd(var a, var b)
+{
+    return 999;
+}
+
+fun MetaSelf()
+{
+    var m = {};
+    m["+"] = MetaAdd;
+    system.meta(m, m);        // 자기 자신이 meta
+    CycCheck((m + m) == 999, __LINE__);   // meta 가 걸렸음을 연산자로 확인
+}
+
+fun MetaMutual()
+{
+    var a = {};
+    var b = {};
+    a["+"] = MetaAdd;
+    b["+"] = MetaAdd;
+    system.meta(a, b);
+    system.meta(b, a);
+    CycCheck((a + a) == 999, __LINE__);
+    CycCheck((b + b) == 999, __LINE__);
+}
+
+// meta 체인이 길면 예전에는 그 길이만큼 스택 프레임이 쌓였다.
+fun MetaChain()
+{
+    var head = {};
+    var cur = head;
+    for (var i in 0, 60, 1)
+    {
+        var nxt = {};
+        system.meta(cur, nxt);
+        cur = nxt;
+    }
+    system.meta(cur, head);   // 체인을 고리로 닫는다
+    CycCheck(true, __LINE__);
+}
+
+// meta 와 일반 항목이 서로 얽힌 경우.
+fun MetaAndValueTangled()
+{
+    var m = {};
+    var meta = {};
+    system.meta(m, meta);
+    meta["owner"] = m;        // meta 가 본체를 되가리킨다
+    m["meta_alias"] = meta;   // 본체도 meta 를 항목으로 든다
+    CycCheck(m["meta_alias"]["owner"] != null, __LINE__);
+}
+
+// ---------------------------------------------------------------------------
+// 5. 외부 참조가 함께 있는 순환.
+//
+// 순환에 속한 객체를 바깥(전역)에서도 붙들고 있는 경우. 순환 때문에 죽으면
+// 안 되고, 바깥 참조가 살아있는 동안 값이 멀쩡해야 한다.
+// ---------------------------------------------------------------------------
+var cycGlobalHold = null;
+
+fun CycleWithExternalRef()
+{
+    var a = {};
+    var b = {};
+    a["peer"] = b;
+    b["peer"] = a;
+    a["tag"] = 7;
+    cycGlobalHold = a;        // 전역이 고리의 한 노드를 붙든다
+    CycCheck(cycGlobalHold["peer"]["peer"]["tag"] == 7, __LINE__);
+}
+
+// ---------------------------------------------------------------------------
+// 6. 손으로 끊기 — 이건 **회수되어야 한다**.
+//
+// 위 케이스들은 회수되지 않는 게 정상이지만, 참조를 끊으면 즉시 풀려야 한다.
+// C++ 드라이버가 이 경로를 반복 호출하며 alloc 카운터가 늘지 않는지 본다.
+// 파괴 큐/표식이 정상 회수까지 막아버리는 회귀를 여기서 잡는다.
+// ---------------------------------------------------------------------------
+fun CycleBrokenByHand()
+{
+    var a = {};
+    var b = {};
+    a["peer"] = b;
+    b["peer"] = a;
+    a["peer"] = null;         // 고리를 끊는다 -> b 가 즉시 회수되어야 한다
+    b["peer"] = null;
+    CycCheck(a["peer"] == null, __LINE__);
+}
+
+fun SelfRefBrokenByHand()
+{
+    var m = {};
+    m["self"] = m;
+    m["self"] = null;         // 자기참조 해제 -> 지역변수 하나만 남는다
+    CycCheck(m["self"] == null, __LINE__);
+}
+
+// 널이 아니라 다른 값으로 덮어써서 끊는 경우.
+fun CycleOverwritten()
+{
+    var a = {};
+    var b = {};
+    a["peer"] = b;
+    b["peer"] = a;
+    a["peer"] = 123;          // 컨테이너를 스칼라로 덮어쓴다
+    b["peer"] = "done";
+    CycCheck(a["peer"] == 123, __LINE__);
+    CycCheck(b["peer"] == "done", __LINE__);
+}
+
+// 리스트 -> 맵 -> 리스트 고리를 맵 쪽에서 끊기.
+fun CycleRemovedByKey()
+{
+    var l = [];
+    var m = {};
+    l.append(m);
+    m["l"] = l;
+    m["l"] = null;            // 맵 -> 리스트 참조를 끊는다
+    CycCheck(l.len() == 1, __LINE__);
+    CycCheck(m["l"] == null, __LINE__);
+}
+
+// ---------------------------------------------------------------------------
+// 7. 순환 **없는** 깊은 중첩 — 스택오버플로 회귀.
+//
+// 순환과 무관하지만 같은 재귀 파괴 경로를 탄다. 예전에는 깊이만큼 스택 프레임이
+// 쌓여 터졌다. 파괴 큐가 있으면 깊이와 무관하게 O(1) 스택이다.
+// ---------------------------------------------------------------------------
+fun DeepNestedList()
+{
+    var root = [];
+    var cur = root;
+    for (var i in 0, 4000, 1)
+    {
+        var nxt = [];
+        cur.append(nxt);
+        cur = nxt;
+    }
+    CycCheck(root.len() == 1, __LINE__);
+    // 반환하지 않는다: 함수를 나가며 4000 단계가 한 번에 해제된다
+}
+
+fun DeepNestedMap()
+{
+    var root = {};
+    var cur = root;
+    for (var i in 0, 4000, 1)
+    {
+        var nxt = {};
+        cur["n"] = nxt;
+        cur = nxt;
+    }
+    CycCheck(root["n"] != null, __LINE__);
+}
+
+// 깊은 중첩 + 맨 끝에서 뿌리로 돌아오는 고리. 깊이와 순환이 동시에 걸린다.
+fun DeepNestedWithCycleAtTail()
+{
+    var root = {};
+    var cur = root;
+    for (var i in 0, 2000, 1)
+    {
+        var nxt = {};
+        cur["n"] = nxt;
+        cur = nxt;
+    }
+    cur["root"] = root;       // 맨 끝이 뿌리를 되가리킨다
+    CycCheck(root["n"] != null, __LINE__);
+}
+
+// ---------------------------------------------------------------------------
+// 8. 코루틴이 얽힌 순환.
+//
+// 코루틴은 var 스택에 alloc 객체를 들고 있는 컨테이너다. 코루틴 지역변수가
+// 맵을 잡고 그 맵이 코루틴을 잡으면 순환이다. yield 된 채 버려진 코루틴은
+// 스택에 live 참조가 남아 있어 정리 경로가 완주 경로와 다르다.
+// ---------------------------------------------------------------------------
+var cycCoroutineBox = {};
+var cycCoroutineStep = 0;
+
+fun CycleCoroutineBody()
+{
+    var local = {};
+    local["box"] = cycCoroutineBox;
+    cycCoroutineBox["fromCoroutine"] = local;   // 전역 맵 <-> 코루틴 지역
+    cycCoroutineStep = 1;
+    yield;
+    local["after"] = 2;
+    cycCoroutineStep = 2;
+    yield;
+    cycCoroutineStep = 3;
+}
+
+// yield 된 채 버린다.
+fun CycleCoroutineAbandoned()
+{
+    cycCoroutineStep = 0;
+    var co = coroutine.create(CycleCoroutineBody);
+    coroutine.resume(co);
+    CycCheck(cycCoroutineStep == 1, __LINE__);
+    cycCoroutineBox["co"] = co;                 // 맵이 코루틴을 붙든다 -> 순환
+    coroutine.resume(co);
+    CycCheck(cycCoroutineStep == 2, __LINE__);
+    // 재개하지 않고 버린다
+}
+
+// 끝까지 돌린 뒤 버린다(정상 종료 경로).
+fun CycleCoroutineCompleted()
+{
+    cycCoroutineStep = 0;
+    var co = coroutine.create(CycleCoroutineBody);
+    coroutine.resume(co);
+    coroutine.resume(co);
+    coroutine.resume(co);
+    CycCheck(cycCoroutineStep == 3, __LINE__);
+}
+
+// ---------------------------------------------------------------------------
+// 9. 대량 — 파괴 큐가 커질 때의 동작.
+//
+// 큐가 vector 라 재할당이 일어난다. 재할당 중에 새 항목이 push 되어도 처리 중인
+// 원소가 무효화되지 않는지(값으로 복사해 쓰는지) 확인한다.
+// ---------------------------------------------------------------------------
+fun ManyCycles()
+{
+    for (var i in 0, 500, 1)
+    {
+        var a = {};
+        var b = {};
+        a["peer"] = b;
+        b["peer"] = a;
+    }
+    CycCheck(true, __LINE__);
+}
+
+fun ManyDeepFreed()
+{
+    for (var i in 0, 200, 1)
+    {
+        var root = [];
+        var cur = root;
+        for (var j in 0, 50, 1)
+        {
+            var nxt = [];
+            cur.append(nxt);
+            cur = nxt;
+        }
+    }
+    CycCheck(true, __LINE__);
+}
+
+// 넓고 얕은 구조 — 깊은 중첩의 반대 축.
+//
+// 파괴를 무조건 큐잉하면 "깊이가 너비로" 바뀐다: 아래 리스트를 풀 때 자식 2만 개가
+// 전부 큐에 쌓인 뒤에야 하나씩 죽는다. 깊이 조건부 큐잉이면 순회 중 즉시 죽어
+// 큐가 아예 안 쓰인다. 이 케이스가 없으면 그 회귀를 못 잡는다.
+fun WideFanOutList()
+{
+    var l = [];
+    for (var i in 0, 20000, 1)
+    {
+        var m = {};
+        m["i"] = i;
+        l.append(m);
+    }
+    CycCheck(l.len() == 20000, __LINE__);
+    CycCheck(l[19999]["i"] == 19999, __LINE__);
+}
+
+// 맵 쪽 넓은 팬아웃. 값이 전부 컨테이너다.
+fun WideFanOutMap()
+{
+    var m = {};
+    for (var i in 0, 20000, 1)
+    {
+        var child = [];
+        child.append(i);
+        m[i] = child;
+    }
+    CycCheck(m.len() == 20000, __LINE__);
+    CycCheck(m[19999][0] == 19999, __LINE__);
+}
+
+// 넓은 팬아웃 + 각 자식이 부모를 되가리키는 순환. 너비와 순환이 동시에 걸린다.
+fun WideFanOutWithCycles()
+{
+    var l = [];
+    for (var i in 0, 5000, 1)
+    {
+        var m = {};
+        m["parent"] = l;      // 자식이 부모 리스트를 되가리킨다
+        l.append(m);
+    }
+    CycCheck(l.len() == 5000, __LINE__);
+}
+
+// ---------------------------------------------------------------------------
+// 실행
+// ---------------------------------------------------------------------------
+export fun CycleRun()
+{
+    SelfRefMapValue();
+    SelfRefMapKey();
+    SelfRefList();
+    SelfRefSet();
+
+    MutualMapMap();
+    MutualListList();
+    MutualMapList();
+    MutualMapSet();
+    MutualListSet();
+
+    Cycle3Nodes();
+    CycleMixedRing();
+    CycleLongRing();
+
+    MetaSelf();
+    MetaMutual();
+    MetaChain();
+    MetaAndValueTangled();
+
+    CycleWithExternalRef();
+
+    CycleBrokenByHand();
+    SelfRefBrokenByHand();
+    CycleOverwritten();
+    CycleRemovedByKey();
+
+    DeepNestedList();
+    DeepNestedMap();
+    DeepNestedWithCycleAtTail();
+
+    CycleCoroutineAbandoned();
+    CycleCoroutineCompleted();
+
+    ManyCycles();
+    ManyDeepFreed();
+    WideFanOutList();
+    WideFanOutMap();
+    WideFanOutWithCycles();
+
+    if (cycFailed == 0)
+        print("cycle_ref PASS : " .. cycPassed .. "/" .. cycTotal);
+    else
+        print("cycle_ref FAIL : " .. cycFailed .. "/" .. cycTotal);
+    return cycFailed;
+}
+
+// C++ 드라이버가 반복 호출해 **회수되는지** 보는 진입점.
+// 순환이 남지 않는 경로만 담는다 — 반복해도 alloc 카운터가 늘면 안 된다.
+export fun CycleReclaimable()
+{
+    CycleBrokenByHand();
+    SelfRefBrokenByHand();
+    CycleOverwritten();
+    CycleRemovedByKey();
+    DeepNestedList();
+    DeepNestedMap();
+    ManyDeepFreed();
+    WideFanOutList();
+    WideFanOutMap();
+}
+
+// C++ 드라이버가 반복 호출해 **순환은 회수되지 않는다**를 확인하는 진입점.
+export fun CycleLeaking()
+{
+    SelfRefMapValue();
+    MutualMapMap();
+    Cycle3Nodes();
+    MetaSelf();
+}
+
+CycleRun();
