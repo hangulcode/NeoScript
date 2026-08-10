@@ -105,6 +105,10 @@ NEOS_FORCEINLINE bool handle_PTRCALL_impl(const SVMOperation& OP, VarInfo* pVar1
         pFunName = pFunNamePre ? pFunNamePre : GetVarPtr2(OP);
         CallNative(GetVM()->_funLib_String, pVar1, pFunName->_str, n3);
         break;
+    case VAR_FP_NATIVE:
+        pFunName = pFunNamePre ? pFunNamePre : GetVarPtr2(OP);
+        CallNative(pVar1->_fpNative->_fun, pVar1->_fpNative->_pUserData, pFunName->_str, n3);
+        break;
     case VAR_MAP:
     {
         pFunName = pFunNamePre ? pFunNamePre : GetVarPtr2(OP);
@@ -132,10 +136,6 @@ NEOS_FORCEINLINE bool handle_PTRCALL_impl(const SVMOperation& OP, VarInfo* pVar1
     case VAR_ASYNC:
         pFunName = pFunNamePre ? pFunNamePre : GetVarPtr2(OP);
         CallNative(GetVM()->_funLib_Async, pVar1, pFunName->_str, n3);
-        break;
-    case VAR_FP_NATIVE:
-        pFunName = pFunNamePre ? pFunNamePre : GetVarPtr2(OP);
-        CallNative(pVar1->_fpNative->_fun, pVar1->_fpNative->_pUserData, pFunName->_str, n3);
         break;
     default:
         SetError(RTE_CALL_INVALID);

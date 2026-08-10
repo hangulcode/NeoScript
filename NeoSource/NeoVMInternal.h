@@ -472,6 +472,7 @@ int& GetModuleRefCount(VarInfo* p);
 NEOS_FORCEINLINE void Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
 {
 	v1->SetType(v2->GetType());
+	// case 순서 = VAR_TYPE 열거 순서. Var_ReleaseInternal 과 같은 이유로 순서가 성능을 좌우한다.
 	switch (v2->GetType())
 	{
 	case VAR_INT: v1->_int = v2->_int; break;
@@ -483,15 +484,15 @@ NEOS_FORCEINLINE void Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
 	case VAR_CHAR: v1->_c = v2->_c; break;
 
 	case VAR_STRING: v1->_str = v2->_str; ++v1->_str->_refCount; break;
+	case VAR_VEC:
+		v1->_vec = v2->_vec; v1->_vecCount = v2->_vecCount; ++v1->_vec->_refCount; break;
+	case VAR_FP_NATIVE: v1->_fpNative = v2->_fpNative; ++v1->_fpNative->_refCount; break;
 	case VAR_MAP: v1->_tbl = v2->_tbl; ++v1->_tbl->_refCount; break;
 	case VAR_LIST: v1->_lst = v2->_lst; ++v1->_lst->_refCount; break;
 	case VAR_SET: v1->_set = v2->_set; ++v1->_set->_refCount; break;
 	case VAR_COROUTINE: v1->_cor = v2->_cor; ++v1->_cor->_refCount; break;
 	case VAR_MODULE: v1->_module = v2->_module; ++GetModuleRefCount(v1); break;
 	case VAR_ASYNC: v1->_async = v2->_async; ++v1->_async->_refCount; break;
-	case VAR_VEC:
-		v1->_vec = v2->_vec; v1->_vecCount = v2->_vecCount; ++v1->_vec->_refCount; break;
-	case VAR_FP_NATIVE: v1->_fpNative = v2->_fpNative; ++v1->_fpNative->_refCount; break;
 	default: break;
 	}
 }

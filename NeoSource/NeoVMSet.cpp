@@ -1,4 +1,4 @@
-#include <math.h>
+﻿#include <math.h>
 #include <stdlib.h>
 #include <thread>
 #include <chrono>
@@ -49,12 +49,21 @@ u32 GetHashCode(VarInfo* p)
 	case VAR_FUN:        return (u32)p->_fun_index;
 	case VAR_FUN_NATIVE: return (u32)(uintptr_t)p->_funPtr;
 	case VAR_STRING:     return p->_str->GetHash();
-	case VAR_MAP:        return GetHashCode((u8*)p->_tbl, sizeof(p->_tbl));
-	case VAR_LIST:       return GetHashCode((u8*)p->_lst, sizeof(p->_lst));
-	case VAR_SET:        return GetHashCode((u8*)p->_set, sizeof(p->_set));
-	case VAR_COROUTINE:  return GetHashCode((u8*)p->_cor, sizeof(p->_cor));
-	case VAR_VEC:		return GetHashCode((u8*)p->_vec, sizeof(p->_vec));
-	case VAR_FP_NATIVE:  return GetHashCode((u8*)p->_fpNative, sizeof(p->_fpNative));
+	// alloc 객체를 키로 쓸 때 동등성은 **포인터 동일성**이다(MapKeyEquals/SetKeyEquals 참조).
+	// 따라서 해시도 포인터 "값" 에서 나와야 한다 — 반드시 &p->_xxx 다.
+	//
+	// [예전 버그] & 없이 (u8*)p->_tbl 로 썼다. 그러면 포인터가 아니라 **가리키는 객체의
+	// 앞 8바이트**를 해싱하는데, 그 첫 필드가 AllocBase::_refCount 라서 참조가 하나
+	// 늘거나 줄 때마다 같은 키의 해시가 바뀌었다. 결과:
+	//   - 넣을 때와 찾을 때 해시가 달라 조회 실패 (m[k]=1 뒤 k 를 어딘가 대입하면 사라짐)
+	//   - 맵 안에 든 키의 해시가 변해 Remove/ReMap 이 그 노드를 찾지 못함
+	//   - refCount 가 같은 서로 다른 객체가 전부 같은 버킷으로 몰림
+	case VAR_VEC:        return GetHashCode((u8*)&p->_vec, sizeof(p->_vec));
+	case VAR_FP_NATIVE:  return GetHashCode((u8*)&p->_fpNative, sizeof(p->_fpNative));
+	case VAR_MAP:        return GetHashCode((u8*)&p->_tbl, sizeof(p->_tbl));
+	case VAR_LIST:       return GetHashCode((u8*)&p->_lst, sizeof(p->_lst));
+	case VAR_SET:        return GetHashCode((u8*)&p->_set, sizeof(p->_set));
+	case VAR_COROUTINE:  return GetHashCode((u8*)&p->_cor, sizeof(p->_cor));
 	default:              return 0;
 	}
 }
@@ -97,12 +106,12 @@ static bool SetKeyEquals(SetNode& node, VarInfo* pKey, u32 hash)
 	case VAR_FUN_NATIVE: return data->key._funPtr == pKey->_funPtr;
 	case VAR_STRING:
 		return data->key._str == pKey->_str;
+	case VAR_VEC:		return data->key._vec == pKey->_vec;
+	case VAR_FP_NATIVE: return data->key._fpNative == pKey->_fpNative;
 	case VAR_MAP:       return data->key._tbl == pKey->_tbl;
 	case VAR_LIST:      return data->key._lst == pKey->_lst;
 	case VAR_SET:       return data->key._set == pKey->_set;
 	case VAR_COROUTINE: return data->key._cor == pKey->_cor;
-	case VAR_VEC:		return data->key._vec == pKey->_vec;
-	case VAR_FP_NATIVE: return data->key._fpNative == pKey->_fpNative;
 	default:             return false;
 	}
 }

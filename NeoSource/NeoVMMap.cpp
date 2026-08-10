@@ -75,12 +75,12 @@ static bool MapKeyEquals(MapNode& node, VarInfo* pKey, u32 hash)
 	case VAR_FUN:       return data->key._fun_index == pKey->_fun_index;
 	case VAR_STRING:
 		return data->key._str == pKey->_str;
+	case VAR_VEC:		return data->key._vec == pKey->_vec;
+	case VAR_FP_NATIVE: return data->key._fpNative == pKey->_fpNative;
 	case VAR_MAP:       return data->key._tbl == pKey->_tbl;
 	case VAR_LIST:      return data->key._lst == pKey->_lst;
 	case VAR_SET:       return data->key._set == pKey->_set;
 	case VAR_COROUTINE: return data->key._cor == pKey->_cor;
-	case VAR_VEC:		return data->key._vec == pKey->_vec;
-	case VAR_FP_NATIVE: return data->key._fpNative == pKey->_fpNative;
 	default:             return false;
 	}
 }

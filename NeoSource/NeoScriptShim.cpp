@@ -284,15 +284,15 @@ static ValueType VarTypeToValueType(VarInfo* v)
     case VAR_FUN:
     case VAR_FUN_NATIVE: return ValueType::Function;
     case VAR_STRING: return ValueType::String;
-    case VAR_MAP:    return ValueType::Map;
-    case VAR_LIST:   return ValueType::List;
-    case VAR_SET:    return ValueType::Set;
     // 성분 수가 곧 타입이다. Quat 은 4성분 벡터와 구분하지 않는다(해석은 호출자 규약).
     case VAR_VEC:
     {
         const int n = v->VectorComponentCount();
         return (n <= 2) ? ValueType::Vec2 : (n == 3 ? ValueType::Vec3 : ValueType::Vec4);
     }
+    case VAR_MAP:    return ValueType::Map;
+    case VAR_LIST:   return ValueType::List;
+    case VAR_SET:    return ValueType::Set;
     default:         return ValueType::None;
     }
 }

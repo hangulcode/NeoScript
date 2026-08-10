@@ -138,26 +138,68 @@ enum VAR_TYPE : u8
 
 	VAR_CHAR,
 
-	VAR_STRING,	// Alloc
+	// =====================================================================
+	// 여기부터 alloc 타입 — IsAllocType() == (_type >= VAR_STRING)
+	//
+	// 풀에서 받아 refcount 로 공유하는 객체다. 대입/해제마다 참조 카운트를 만져야 하므로
+	// 경계 판정이 핫패스에 들어간다. 그래서 "구간의 시작" 한 번 비교로 끝나도록 배치
+	// 순서 자체가 계약이다. 새 타입은 반드시 알맞은 구간의 **끝**에 추가한다.
+	//
+	// [이 열거 순서를 바꾸면 반드시 함께 할 일]
+	// VAR_TYPE 을 대상으로 하는 **모든 switch 의 case 순서**도 같은 순서로 맞춰야 한다.
+	// case 순서가 열거 값 순서와 어긋나면 MSVC 가 다른 디스패치/코드 배치를 골라,
+	// 인터프리터에 인라인되는 Var_ReleaseInternal / Move_DestNoRelease 등이 나빠진다.
+	// (실측: 어긋난 상태로 두면 벤치 전체 +5%, float_math +13%, particles +26%)
+	// =====================================================================
+
+	// --- 리프 alloc: 자식으로 다른 alloc 객체를 들지 않는다 ---
+	// 순환 참조의 당사자가 될 수 없고, 해제가 다른 객체로 내려가지 않는다.
+	VAR_STRING,
+
+	// 벡터 값타입 (alloc: VecInfo 를 풀에서 받아 refcount 로 공유).
+	// alloc 구간에 두는 이유 — 성분 4개를 VarInfo 유니온에 인라인하면 VarInfo 가
+	// 16→24바이트가 되어 스택/리스트/맵 엔트리(MapData) 전체가 50% 커진다(실측: map_str
+	// -12%, particles -13%). 값 의미론은 copy-on-write 로 보존한다(VecCopyOnWrite).
+	//
+	// 성분 수(1~4)는 타입이 아니라 VarInfo::_vecCount 가 들고 있다. 쿼터니언도 별도 타입이
+	// 아니다 — 저장은 4성분이고 wxyz 해석은 사용자 규약이라 VM 이 구분할 이유가 없다.
+	//
+	// 성분은 float 뿐이라 리프다.
+	VAR_VEC,
+
+	// 네이티브 Function/Property 객체. map 저장소를 갖지 않는 독립 alloc 타입이다.
+	// _pUserData 는 호스트 소유의 불투명 포인터라 VM 관점에서는 리프다.
+	VAR_FP_NATIVE,
+
+	// =====================================================================
+	// 여기부터 컨테이너 alloc — IsContainerType() == (_type >= VAR_MAP)
+	//
+	// 자식으로 다른 alloc 객체를 든다. 그래서
+	//   - 순환 참조가 생길 수 있고(참조 카운팅만으로는 회수 불가),
+	//   - 해제가 자식으로 내려간다(재귀/재진입을 고려해야 하는 쪽).
+	//
+	// 각 타입이 무엇을 들고 있는지:
+	//   MAP       MapData{key, value}          — 키도 값도 컨테이너가 될 수 있다
+	//   LIST      VarInfo 배열
+	//   SET       SetData{key}
+	//   COROUTINE CoroutineInfo::m_sVarStack   — 실행 컨텍스트의 var 스택
+	//   MODULE    CNeoVMWorker 의 전역 + var 스택
+	//   ASYNC     AsyncInfo::_LockReferance    — 완료까지 자기 자신을 붙들어 두는 참조
+	// =====================================================================
 	VAR_MAP,
 	VAR_LIST,
 	VAR_SET,
 	VAR_COROUTINE,
 	VAR_MODULE,
 	VAR_ASYNC,
-
-	// 벡터 값타입 (alloc: VecInfo 를 풀에서 받아 refcount 로 공유).
-	// IsAllocType 경계(VAR_STRING) 뒤에 둔다 — 성분 4개를 VarInfo 유니온에 인라인하면
-	// VarInfo 가 16→24바이트가 되어 스택/리스트/맵 엔트리(MapData) 전체가 50% 커진다(실측: map_str
-	// -12%, particles -13%). 값 의미론은 copy-on-write 로 보존한다(VecCopyOnWrite).
-	//
-	// 성분 수(1~4)는 타입이 아니라 VarInfo::_vecCount 가 들고 있다. 쿼터니언도 별도 타입이
-	// 아니다 — 저장은 4성분이고 wxyz 해석은 사용자 규약이라 VM 이 구분할 이유가 없다.
-	VAR_VEC,
-
-	// 네이티브 Function/Property 객체. map 저장소를 갖지 않는 독립 alloc 타입이다.
-	VAR_FP_NATIVE,
 };
+
+// 배치 계약을 코드로 고정한다. IsAllocType()/IsContainerType() 이 단일 비교인 근거가
+// 순전히 열거 순서라서, 주석만 두면 다음 사람이 구간 사이에 새 타입을 끼워 넣는다.
+// 새 타입은 반드시 해당 구간의 **끝**에 추가할 것.
+static_assert(VAR_CHAR < VAR_STRING, "VAR_TYPE: non-alloc 구간이 alloc 구간보다 앞이어야 한다");
+static_assert(VAR_FP_NATIVE + 1 == VAR_MAP, "VAR_TYPE: 리프 alloc 구간 바로 뒤에 컨테이너 구간이 와야 한다");
+static_assert(VAR_MAP < VAR_ASYNC, "VAR_TYPE: 컨테이너 구간이 열거 맨 뒤여야 한다");
 
 struct SNeoVMAllocStats
 {
@@ -266,9 +308,17 @@ public:
 	NEOS_FORCEINLINE VarInfo(int v) { _type = VAR_INT; _int = v; }
 
 	NEOS_FORCEINLINE VAR_TYPE GetType() { return _type; }
+	// 풀 객체 + refcount 를 쓰는 타입인가. 대입/해제 때 참조 카운트를 만져야 하는지 판정.
 	NEOS_FORCEINLINE bool IsAllocType()
 	{
 		return ((_type >= VAR_STRING));
+	}
+	// alloc 타입 중 **다른 alloc 객체를 자식으로 들 수 있는가**.
+	// 참이면 순환 참조의 당사자가 될 수 있고, 해제가 자식으로 내려간다.
+	// 열거 배치가 이 판정을 단일 비교로 만들어 준다(VAR_MAP 이 컨테이너 구간의 시작).
+	NEOS_FORCEINLINE bool IsContainerType()
+	{
+		return ((_type >= VAR_MAP));
 	}
 	NEOS_FORCEINLINE bool IsTrue()
 	{

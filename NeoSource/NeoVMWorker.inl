@@ -80,6 +80,26 @@ NEOS_NOINLINE void CNeoVMWorker::CltInsertRare(VarInfo* pClt, VarInfo* pKey, Var
 {
 	switch (pClt->GetType())
 	{
+	case VAR_VEC:
+		// 가변 성분 쓰기: v[i] = x. 저장소를 공유 중이면 여기서 복제해서(copy-on-write)
+		// 이 VarInfo 인스턴스에만 반영되게 한다 — 값 의미론 유지.
+		if (pKey->GetType() == VAR_INT && pValue->IsNumber())
+		{
+			unsigned idx = (unsigned)pKey->_int;
+			if (idx < (unsigned)pClt->VectorComponentCount())
+			{
+				GetVM()->VecCopyOnWrite(pClt)->v[idx] = (float)pValue->GetFloatNumber();
+				return;
+			}
+		}
+		SetError(RTE_VECTOR_INDEX_WRITE);
+		return;
+	case VAR_FP_NATIVE:
+	{
+		FunctionPropertyInfo* fp = pClt->_fpNative;
+		PropertyNative(fp->_fun, fp->_pUserData, pKey->_str, pValue, false);
+		return;
+	}
 	case VAR_MAP:
 	{
 		if (pValue->GetType() == VAR_NONE)
@@ -115,26 +135,6 @@ NEOS_NOINLINE void CNeoVMWorker::CltInsertRare(VarInfo* pClt, VarInfo* pKey, Var
 		}
 
 		SetErrorFormat(RTE_INDEX_WRITE, GetDataType(pClt->GetType()).c_str());
-		return;
-	}
-	case VAR_VEC:
-		// 가변 성분 쓰기: v[i] = x. 저장소를 공유 중이면 여기서 복제해서(copy-on-write)
-		// 이 VarInfo 인스턴스에만 반영되게 한다 — 값 의미론 유지.
-		if (pKey->GetType() == VAR_INT && pValue->IsNumber())
-		{
-			unsigned idx = (unsigned)pKey->_int;
-			if (idx < (unsigned)pClt->VectorComponentCount())
-			{
-				GetVM()->VecCopyOnWrite(pClt)->v[idx] = (float)pValue->GetFloatNumber();
-				return;
-			}
-		}
-		SetError(RTE_VECTOR_INDEX_WRITE);
-		return;
-	case VAR_FP_NATIVE:
-	{
-		FunctionPropertyInfo* fp = pClt->_fpNative;
-		PropertyNative(fp->_fun, fp->_pUserData, pKey->_str, pValue, false);
 		return;
 	}
 	default:
@@ -273,6 +273,24 @@ NEOS_NOINLINE void CNeoVMWorker::CltReadRare(VarInfo* pClt, VarInfo* pKey, VarIn
 	VarInfo* pFind;
 	switch (pClt->GetType())
 	{
+	case VAR_VEC:
+		if (pKey->GetType() == VAR_INT)
+		{
+			unsigned idx = (unsigned)pKey->_int;
+			if (idx < (unsigned)pClt->VectorComponentCount())
+			{
+				Var_SetFloat(pValue, pClt->_vec->v[idx]);
+				return;
+			}
+		}
+		SetError(RTE_VECTOR_INDEX_READ);
+		return;
+	case VAR_FP_NATIVE:
+		{
+			FunctionPropertyInfo* fp = pClt->_fpNative;
+			PropertyNative(fp->_fun, fp->_pUserData, pKey->_str, pValue, true);
+			return;
+		}
 	case VAR_MAP:
 		{
 			MapInfo* tbl = pClt->_tbl;
@@ -314,24 +332,6 @@ NEOS_NOINLINE void CNeoVMWorker::CltReadRare(VarInfo* pClt, VarInfo* pKey, VarIn
 		SetErrorFormat(RTE_INDEX_READ, GetDataType(pClt->GetType()).c_str());
 		return;
 	}
-	case VAR_VEC:
-		if (pKey->GetType() == VAR_INT)
-		{
-			unsigned idx = (unsigned)pKey->_int;
-			if (idx < (unsigned)pClt->VectorComponentCount())
-			{
-				Var_SetFloat(pValue, pClt->_vec->v[idx]);
-				return;
-			}
-		}
-		SetError(RTE_VECTOR_INDEX_READ);
-		return;
-	case VAR_FP_NATIVE:
-		{
-			FunctionPropertyInfo* fp = pClt->_fpNative;
-			PropertyNative(fp->_fun, fp->_pUserData, pKey->_str, pValue, true);
-			return;
-		}
 	default:
 		break;
 	}
@@ -580,6 +580,9 @@ NEOS_NOINLINE void CNeoVMWorker::Add3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			return;
 		}
 		break;
+	case VAR_VEC:
+		if (VecArith(r, v1, v2, 0)) return;
+		break;
 	case VAR_MAP:
 		if (Call_MetaTable(v1, g_meta_Add3, r, v1, v2))
 			return;
@@ -589,9 +592,6 @@ NEOS_NOINLINE void CNeoVMWorker::Add3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			return;
 		break;
 	case VAR_SET:
-		break;
-	case VAR_VEC:
-		if (VecArith(r, v1, v2, 0)) return;
 		break;
 	default:
 		break;
@@ -626,6 +626,9 @@ NEOS_NOINLINE void CNeoVMWorker::Sub3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		break;
 	case VAR_STRING:
 		break;
+	case VAR_VEC:
+		if (VecArith(r, v1, v2, 1)) return;
+		break;
 	case VAR_MAP:
 		if (Call_MetaTable(v1, g_meta_Sub3, r, v1, v2))
 			return;
@@ -635,9 +638,6 @@ NEOS_NOINLINE void CNeoVMWorker::Sub3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	case VAR_SET:
 		if (neo_DCalllibs::Set_Sub(this, r, v1, v2)) 
 			return;
-		break;
-	case VAR_VEC:
-		if (VecArith(r, v1, v2, 1)) return;
 		break;
 	default:
 		break;
@@ -672,6 +672,9 @@ NEOS_NOINLINE void CNeoVMWorker::Mul3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		break;
 	case VAR_STRING:
 		break;
+	case VAR_VEC:
+		if (VecArith(r, v1, v2, 2)) return;
+		break;
 	case VAR_MAP:
 		if (Call_MetaTable(v1, g_meta_Mul3, r, v1, v2))
 			return;
@@ -679,9 +682,6 @@ NEOS_NOINLINE void CNeoVMWorker::Mul3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	case VAR_LIST:
 		break;
 	case VAR_SET:
-		break;
-	case VAR_VEC:
-		if (VecArith(r, v1, v2, 2)) return;
 		break;
 	default:
 		break;
@@ -716,14 +716,14 @@ NEOS_NOINLINE void CNeoVMWorker::Div3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		break;
 	case VAR_STRING:
 		break;
+	case VAR_VEC:
+		if (VecArith(r, v1, v2, 3)) return;
+		break;
 	case VAR_MAP:
 		if (Call_MetaTable(v1, g_meta_Div3, r, v1, v2))
 			return;
 		break;
 	case VAR_LIST:
-		break;
-	case VAR_VEC:
-		if (VecArith(r, v1, v2, 3)) return;
 		break;
 	default:
 		break;
