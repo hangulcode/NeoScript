@@ -69,12 +69,15 @@ struct SetInfo : AllocBase
 
 	bool ToList(std::vector<VarInfo*>& lst);
 	inline int		GetCount() { return _itemCount; }
+	// 한 번이라도 컨테이너 자식을 저장했으면 pool 재대여 전까지 유지한다.
+	NEOS_FORCEINLINE void MarkContainerChild() { _mayContainContainerChild = true; }
 
 	CycleCandidate* _cycleTicket;
 	// 파괴 중 같은 객체를 다시 만났을 때 FreeSet 재진입을 막는다.
 	bool _destroying;
 	bool _cycleQueued;
 	bool _cycleCollecting;
+	bool _mayContainContainerChild;
 
 private:
 	void ClearNode(SetNode& node);

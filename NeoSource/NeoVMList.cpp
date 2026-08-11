@@ -94,6 +94,8 @@ bool ListInfo::SetValue(int idx, VarInfo* pValue)
 {
 	if (idx < 0 || idx >= _itemCount)
 		return false;
+	if (pValue->IsContainerType())
+		MarkContainerChild();
 	_pVM->Move(&_Bucket[idx], pValue);
 	return true;
 }
@@ -137,6 +139,8 @@ bool ListInfo::InsertLast(VarInfo* pValue)
 	{
 		Reserve(_BucketCapa == 0 ? 2 : _BucketCapa * 2);
 	}
+	if (pValue->IsContainerType())
+		MarkContainerChild();
 	_pVM->Move(&_Bucket[_itemCount++], pValue);
 	++_mutationVersion;
 	return true;

@@ -275,6 +275,9 @@ void MapInfo::Reserve(int sz)
 
 VarInfo* MapInfo::Insert(VarInfo* pKey)
 {
+	if (pKey->IsContainerType())
+		MarkContainerChild();
+
 	VarInfo normalizedKey;
 	pKey = NormalizeMapStringKey(_pVM, pKey, normalizedKey, true);
 	if (pKey == nullptr)
@@ -349,7 +352,11 @@ void MapInfo::Insert(VarInfo* pKey, VarInfo* pValue)
 {
 	VarInfo* pDest = Insert(pKey);
 	if (pDest != NULL)
+	{
+		if (pValue->IsContainerType())
+			MarkContainerChild();
 		_pVM->Move(pDest, pValue);
+	}
 }
 
 void MapInfo::Insert(VarInfo* pKey, int v)

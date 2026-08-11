@@ -234,6 +234,39 @@ static bool CycleCollectionRegression()
     CNeoVMImpl vm;
     SNeoVMAllocStats stats{};
 
+    // Scalar-only map/list/set values cannot participate in a reference cycle.
+    // Releasing one of two references must not create a cycle ticket.
+    VarInfo scalarList(VAR_LIST);
+    scalarList._lst = vm.ListAlloc();
+    ++scalarList._lst->_refCount;
+    VarInfo scalarListHold;
+    Move_DestNoRelease(&scalarListHold, &scalarList);
+    VarInfo scalarValue(7);
+    scalarList._lst->InsertLast(&scalarValue);
+    vm.Var_Release(&scalarList);
+    const bool scalarListSkipsCycleQueue = vm.CollectCycles() == 0;
+    vm.Var_Release(&scalarListHold);
+
+    VarInfo scalarMap;
+    vm.Var_SetTable(&scalarMap, vm.TableAlloc());
+    VarInfo scalarMapHold;
+    Move_DestNoRelease(&scalarMapHold, &scalarMap);
+    VarInfo scalarMapKey(1);
+    scalarMap._tbl->Insert(&scalarMapKey, 7);
+    vm.Var_Release(&scalarMap);
+    const bool scalarMapSkipsCycleQueue = vm.CollectCycles() == 0;
+    vm.Var_Release(&scalarMapHold);
+
+    VarInfo scalarSet(VAR_SET);
+    scalarSet._set = vm.SetAlloc();
+    ++scalarSet._set->_refCount;
+    VarInfo scalarSetHold;
+    Move_DestNoRelease(&scalarSetHold, &scalarSet);
+    scalarSet._set->Insert(&scalarValue);
+    vm.Var_Release(&scalarSet);
+    const bool scalarSetSkipsCycleQueue = vm.CollectCycles() == 0;
+    vm.Var_Release(&scalarSetHold);
+
     // self / list / set cycle is collected by the VM's internal safe-point
     // scheduler, without the host calling TrimMemory.
     VarInfo self;
@@ -302,8 +335,10 @@ static bool CycleCollectionRegression()
     vm.Var_SetTable(&metaA, vm.TableAlloc());
     vm.Var_SetTable(&metaB, vm.TableAlloc());
     metaA._tbl->_meta = metaB._tbl;
+    metaA._tbl->MarkContainerChild();
     ++metaB._tbl->_refCount;
     metaB._tbl->_meta = metaA._tbl;
+    metaB._tbl->MarkContainerChild();
     ++metaA._tbl->_refCount;
     vm.Var_Release(&metaA);
     vm.Var_Release(&metaB);
@@ -345,7 +380,8 @@ static bool CycleCollectionRegression()
     DrainCycles(vm);
     vm.GetAllocStats(stats);
 
-    return queuedCyclesRemain && trimDoesNotCollectCycles && scheduledCollectionOk && externalReferencePreserved
+    return scalarListSkipsCycleQueue && scalarMapSkipsCycleQueue && scalarSetSkipsCycleQueue
+        && queuedCyclesRemain && trimDoesNotCollectCycles && scheduledCollectionOk && externalReferencePreserved
         && releasedAfterExternalGone && staleTicketSafe && metaCycleCollected && nestedWhiteSetCollected && percentageBudgetOk
         && stats.maps == 0;
 }

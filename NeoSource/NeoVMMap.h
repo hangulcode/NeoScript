@@ -83,6 +83,9 @@ struct MapInfo : AllocBase
 	bool ToListKeys(std::vector<VarInfo*>& lst);
 	bool ToListValues(std::vector<VarInfo*>& lst);
 	inline int		GetCount() { return _itemCount; }
+	// 한 번이라도 컨테이너 자식을 저장했으면 pool 재대여 전까지 유지한다. 제거 시
+	// 다시 끄지 않아 mutation hot path에는 부담을 주지 않으며, false이면 순환 불가다.
+	NEOS_FORCEINLINE void MarkContainerChild() { _mayContainContainerChild = true; }
 
 	// 순환 후보 큐 티켓은 객체 수명을 잡지 않는다. FreeTable 시 티켓을 무효화해
 	// 큐에 남은 stale 포인터를 안전하게 건너뛴다.
@@ -91,6 +94,7 @@ struct MapInfo : AllocBase
 	bool _destroying;
 	bool _cycleQueued;
 	bool _cycleCollecting;
+	bool _mayContainContainerChild;
 
 private:
 	void ClearNode(MapNode& node);

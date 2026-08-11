@@ -522,6 +522,8 @@ public:
 	bool _destroying;
 	bool _cycleQueued;
 	bool _cycleCollecting;
+	// 전역/실행 컨텍스트가 컨테이너를 들 수 있으므로 worker는 보수적으로 후보 가능.
+	bool _mayContainContainerChild;
 
 };
 

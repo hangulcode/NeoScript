@@ -1330,8 +1330,8 @@ static NEOS_FORCEINLINE VarInfo* MapInsertKey(MapBuilderImpl* b, StringView key)
     b->w->Var_Release(&k);
     return slot;
 }
-MapBuilder MapBuilder::setMap(StringView key) { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo* slot=MapInsertKey(b, key); b->w->ResetVarType(slot, VAR_MAP); b->ctx->mapB.push_back(MapBuilderImpl{ b->w, slot->_tbl, b->ctx }); return NeoScriptInternal::mapB(&b->ctx->mapB.back()); }
-ListBuilder MapBuilder::setList(StringView key) { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo* slot=MapInsertKey(b, key); b->w->ResetVarType(slot, VAR_LIST); b->ctx->listB.push_back(ListBuilderImpl{ b->w, slot->_lst, b->ctx }); return NeoScriptInternal::listB(&b->ctx->listB.back()); }
+MapBuilder MapBuilder::setMap(StringView key) { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo* slot=MapInsertKey(b, key); b->w->ResetVarType(slot, VAR_MAP); b->map->MarkContainerChild(); b->ctx->mapB.push_back(MapBuilderImpl{ b->w, slot->_tbl, b->ctx }); return NeoScriptInternal::mapB(&b->ctx->mapB.back()); }
+ListBuilder MapBuilder::setList(StringView key) { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo* slot=MapInsertKey(b, key); b->w->ResetVarType(slot, VAR_LIST); b->map->MarkContainerChild(); b->ctx->listB.push_back(ListBuilderImpl{ b->w, slot->_lst, b->ctx }); return NeoScriptInternal::listB(&b->ctx->listB.back()); }
 void MapBuilder::setObject(StringView key, ObjectType type, void* userData) {
     MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl);
     const RegisteredObject* ro=static_cast<const RegisteredObject*>(NeoScriptInternal::objImpl(type)); if(!ro) return;
@@ -1352,8 +1352,8 @@ void ListBuilder::pushVec3(float x, float y, float z) { ListBuilderImpl* b=stati
 void ListBuilder::setInt(int index, int32_t v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetInt(&it, v);   b->list->SetValue(index, &it); }
 void ListBuilder::setFloat(int index, float v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetFloat(&it, v); b->list->SetValue(index, &it); }
 void ListBuilder::setString(int index, StringView v) { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; SetVarString(b->w, &it, v); b->list->SetValue(index, &it); b->w->Var_Release(&it); }
-MapBuilder ListBuilder::pushMap()  { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); int idx=b->list->GetCount(); b->list->Resize(idx+1); VarInfo* slot=b->list->GetValue(idx); b->w->ResetVarType(slot, VAR_MAP); b->ctx->mapB.push_back(MapBuilderImpl{ b->w, slot->_tbl, b->ctx }); return NeoScriptInternal::mapB(&b->ctx->mapB.back()); }
-ListBuilder ListBuilder::pushList(){ ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); int idx=b->list->GetCount(); b->list->Resize(idx+1); VarInfo* slot=b->list->GetValue(idx); b->w->ResetVarType(slot, VAR_LIST); b->ctx->listB.push_back(ListBuilderImpl{ b->w, slot->_lst, b->ctx }); return NeoScriptInternal::listB(&b->ctx->listB.back()); }
+MapBuilder ListBuilder::pushMap()  { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); int idx=b->list->GetCount(); b->list->Resize(idx+1); VarInfo* slot=b->list->GetValue(idx); b->w->ResetVarType(slot, VAR_MAP); b->list->MarkContainerChild(); b->ctx->mapB.push_back(MapBuilderImpl{ b->w, slot->_tbl, b->ctx }); return NeoScriptInternal::mapB(&b->ctx->mapB.back()); }
+ListBuilder ListBuilder::pushList(){ ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); int idx=b->list->GetCount(); b->list->Resize(idx+1); VarInfo* slot=b->list->GetValue(idx); b->w->ResetVarType(slot, VAR_LIST); b->list->MarkContainerChild(); b->ctx->listB.push_back(ListBuilderImpl{ b->w, slot->_lst, b->ctx }); return NeoScriptInternal::listB(&b->ctx->listB.back()); }
 void ListBuilder::pushObject(ObjectType type, void* userData) {
     ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl);
     const RegisteredObject* ro=static_cast<const RegisteredObject*>(NeoScriptInternal::objImpl(type)); if(!ro) return;

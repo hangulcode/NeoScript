@@ -890,6 +890,7 @@ struct neo_libs
 
 		pN->Move(&var, pMeta); // for Referance
 		pTable->_tbl->_meta = pMeta->_tbl;
+		pTable->_tbl->MarkContainerChild();
 		pN->ReturnValue();
 		return true;
 	}
@@ -993,8 +994,14 @@ struct neo_libs
 		pR->Resize((int)lst.size());
 
 		VarInfo* dest = pR->GetDataUnsafe();
+		bool mayContainContainerChild = false;
 		for (int i = 0; i < (int)lst.size(); i++)
+		{
+			mayContainContainerChild |= lst[i]->IsContainerType();
 			Move_DestNoRelease(&dest[i], lst[i]);
+		}
+		if (mayContainContainerChild)
+			pR->MarkContainerChild();
 		return true;
 	}
 	static bool map_values(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -1011,8 +1018,14 @@ struct neo_libs
 		pR->Resize((int)lst.size());
 
 		VarInfo* dest = pR->GetDataUnsafe();
+		bool mayContainContainerChild = false;
 		for (int i = 0; i < (int)lst.size(); i++)
+		{
+			mayContainContainerChild |= lst[i]->IsContainerType();
 			Move_DestNoRelease(&dest[i], lst[i]);
+		}
+		if (mayContainContainerChild)
+			pR->MarkContainerChild();
 		return true;
 	}
 
@@ -1050,6 +1063,7 @@ struct neo_libs
 		++pN->_asyncPendingCount;
 		pAsync->_event.reset();
 		pAsync->_state = ASYNC_PENDING;
+		if (pVar->IsContainerType()) pAsync->_mayContainContainerChild = true;
 		pN->Move(&pAsync->_LockReferance, pVar);
 		pN->GetVM()->AddHttp_Request(pAsync);
 		pN->ReturnValue();
@@ -1094,6 +1108,7 @@ struct neo_libs
 		++pN->_asyncPendingCount;
 		pAsync->_event.reset();
 		pAsync->_state = ASYNC_PENDING;
+		if (pVar->IsContainerType()) pAsync->_mayContainContainerChild = true;
 		pN->Move(&pAsync->_LockReferance, pVar);
 		pN->GetVM()->AddHttp_Request(pAsync);
 		pN->ReturnValue();

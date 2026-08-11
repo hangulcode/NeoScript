@@ -278,6 +278,7 @@ CNeoVMWorker* CNeoVMImpl::WorkerAlloc(int iStackSize)
 	p->_destroying = false;
 	p->_cycleQueued = false;
 	p->_cycleCollecting = false;
+	p->_mayContainContainerChild = true;
 	++m_sAllocStats.modules;
 
 	_sVMWorkers[_dwLastIDVMWorker] = p;
@@ -539,6 +540,7 @@ MapInfo* CNeoVMImpl::TableAlloc(int cnt)
 	pTable->_destroying = false;
 	pTable->_cycleQueued = false;
 	pTable->_cycleCollecting = false;
+	pTable->_mayContainContainerChild = false;
 	pTable->_itemCount = 0;
 	pTable->_mutationVersion = 0;
 	pTable->_HashBase = 0;
@@ -601,6 +603,7 @@ ListInfo* CNeoVMImpl::ListAlloc(int cnt)
 	pList->_destroying = false;
 	pList->_cycleQueued = false;
 	pList->_cycleCollecting = false;
+	pList->_mayContainContainerChild = false;
 	pList->_mutationVersion = 0;
 	pList->_pUserData = NULL;
 	pList->_pIndexer = nullptr;
@@ -633,6 +636,7 @@ SetInfo* CNeoVMImpl::SetAlloc()
 	pSet->_destroying = false;
 	pSet->_cycleQueued = false;
 	pSet->_cycleCollecting = false;
+	pSet->_mayContainContainerChild = false;
 	pSet->_itemCount = 0;
 	pSet->_mutationVersion = 0;
 	pSet->_HashBase = 0;
@@ -685,6 +689,7 @@ AsyncInfo* CNeoVMImpl::AsyncAlloc()
 	p->_destroying = false;
 	p->_cycleQueued = false;
 	p->_cycleCollecting = false;
+	p->_mayContainContainerChild = false;
 	p->_ownerWorkerId = 0;
 	p->_state = ASYNC_READY;
 	// 풀에서 재사용된 노드는 이전 요청의 값을 그대로 들고 있다. 특히 _headers 는
@@ -761,6 +766,20 @@ static void* GetContainerObject(VarInfo value)
 	case VAR_MODULE:    return value._module;
 	case VAR_ASYNC:     return value._async;
 	default:             return nullptr;
+	}
+}
+
+static bool MayContainContainerChild(VAR_TYPE type, void* object)
+{
+	switch (type)
+	{
+	case VAR_MAP:       return ((MapInfo*)object)->_mayContainContainerChild;
+	case VAR_LIST:      return ((ListInfo*)object)->_mayContainContainerChild;
+	case VAR_SET:       return ((SetInfo*)object)->_mayContainContainerChild;
+	case VAR_COROUTINE: return ((CoroutineInfo*)object)->_mayContainContainerChild;
+	case VAR_MODULE:    return ((CNeoVMWorker*)object)->_mayContainContainerChild;
+	case VAR_ASYNC:     return ((AsyncInfo*)object)->_mayContainContainerChild;
+	default:             return false;
 	}
 }
 
@@ -862,6 +881,8 @@ void CNeoVMImpl::QueueContainerForCycleCheck(const VarInfo& source)
 		return;
 
 	const VAR_TYPE type = value.GetType();
+	if (MayContainContainerChild(type, object) == false)
+		return;
 	bool& queued = GetCycleQueuedFlag(type, object);
 	if (queued)
 		return;

@@ -45,6 +45,8 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 			unsigned idx = (unsigned)pKey->_int;
 			if (idx < (unsigned)lst->_itemCount)
 			{
+				if (pValue->IsContainerType())
+					lst->MarkContainerChild();
 				Move(&lst->_Bucket[idx], pValue);
 				return;
 			}
@@ -65,6 +67,8 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 													: tbl->FindInt(pKey->_int);
 				if (pFind)
 				{
+					if (pValue->IsContainerType())
+						tbl->MarkContainerChild();
 					Move(pFind, pValue);
 					return;
 				}
@@ -119,6 +123,8 @@ NEOS_NOINLINE void CNeoVMWorker::CltInsertRare(VarInfo* pClt, VarInfo* pKey, Var
 			unsigned idx = (unsigned)pKey->_int;
 			if (idx < (unsigned)lst->_itemCount)
 			{
+				if (pValue->IsContainerType())
+					lst->MarkContainerChild();
 				Move(&lst->_Bucket[idx], pValue);
 				return;
 			}

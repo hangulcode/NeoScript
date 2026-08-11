@@ -58,6 +58,8 @@ struct ListInfo : AllocBase
 //	bool NextNode(CollectionIterator&);
 
 	inline int		GetCount() { return _itemCount; }
+	// 한 번이라도 컨테이너 자식을 저장했으면 pool 재대여 전까지 유지한다.
+	NEOS_FORCEINLINE void MarkContainerChild() { _mayContainContainerChild = true; }
 	bool GetValue(int idx, VarInfo* pValue);
 	VarInfo* GetValue(int idx);
 	bool SetValue(int idx, VarInfo* pValue);
@@ -77,6 +79,7 @@ struct ListInfo : AllocBase
 	bool _destroying;
 	bool _cycleQueued;
 	bool _cycleCollecting;
+	bool _mayContainContainerChild;
 private:
 };
 

@@ -350,6 +350,8 @@ struct CoroutineInfo : AllocBase
 	bool _destroying;
 	bool _cycleQueued;
 	bool _cycleCollecting;
+	// 실행 스택의 저장 경로가 여러 곳에 분산돼 있어 대여 시 보수적으로 true로 둔다.
+	bool _mayContainContainerChild;
 };
 
 // 실행 컨텍스트(파이버) = var 스택 + 콜 스택 + SP/IP 레지스터.
@@ -389,6 +391,7 @@ struct NeoExecContextPool
 		p->_cycleTicket = nullptr;
 		p->_cycleCollecting = false;
 		p->_destroying = false;
+		p->_mayContainContainerChild = true;
 		p->_info._pCodeCurrent = NULL;
 		p->_info.ClearSP();
 		p->m_sAsyncResumeCodePtrs.clear();
@@ -477,6 +480,7 @@ struct AsyncInfo : AllocBase
 	bool _destroying;
 	bool _cycleQueued;
 	bool _cycleCollecting;
+	bool _mayContainContainerChild;
 };
 
 

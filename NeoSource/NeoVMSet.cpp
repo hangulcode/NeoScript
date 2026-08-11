@@ -309,6 +309,9 @@ void SetInfo::Reserve(int sz)
 
 bool SetInfo::Insert(VarInfo* pKey)
 {
+	if (pKey->IsContainerType())
+		MarkContainerChild();
+
 	VarInfo normalizedKey;
 	pKey = NormalizeSetStringKey(_pVM, pKey, normalizedKey, true);
 	if (pKey == nullptr)
