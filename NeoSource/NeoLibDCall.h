@@ -22,11 +22,20 @@ struct neo_DCalllibs
 		VarInfo* dest = pR->GetDataUnsafe();
 		VarInfo* src1 = pV1->GetDataUnsafe();
 		VarInfo* src2 = pV2->GetDataUnsafe();
+		bool mayContainContainerChild = false;
 
 		for (int i = 0; i < s1; i++)
+		{
+			mayContainContainerChild |= src1[i].IsContainerType();
 			Move_DestNoRelease(&dest[i], &src1[i]);
+		}
 		for (int i = 0; i < s2; i++)
+		{
+			mayContainContainerChild |= src2[i].IsContainerType();
 			Move_DestNoRelease(&dest[i + s1], &src2[i]);
+		}
+		if (mayContainContainerChild)
+			pR->MarkContainerChild();
 
 		return true;
 	}

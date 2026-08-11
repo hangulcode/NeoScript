@@ -1538,8 +1538,8 @@ CallResult Invocation::invokeR()
                 float f4[4] = { 0, 0, 0, 0 }; int32_t iv = 0;
                 switch (vt)
                 {
-                case ValueType::Int:   iv = i->worker->PopInt(rv);          f4[0] = static_cast<float>(iv); break;
                 case ValueType::Bool:  iv = i->worker->PopBool(rv) ? 1 : 0; f4[0] = static_cast<float>(iv); break;
+                case ValueType::Int:   iv = i->worker->PopInt(rv);          f4[0] = static_cast<float>(iv); break;
                 case ValueType::Float: f4[0] = static_cast<float>(i->worker->PopFloat(rv)); iv = static_cast<int32_t>(f4[0]); break;
                 case ValueType::Vec2: case ValueType::Vec3: case ValueType::Vec4: ReadVec(rv, f4); break;
                 default: break; // None/Map/List → 스칼라 없음

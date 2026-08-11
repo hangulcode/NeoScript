@@ -2,15 +2,12 @@ import dump;
 
 fun Fun_List()
 {
-	var A = [[1, 2, 3], [4, 5, 6]];
-	var B = [1, 2, 3];
-	var B1 = [[1, 2], [3, 4], [5, 6]];
-	
-	print("broadcast : " .. dump.object(A.broadcast(B)));
-	print("multiply : " .. dump.object(A.multiply(B1)));
-	print("dot : " .. dump.object(A.dot(A)));
-	print("dot : " .. dump.object(B.dot(B)));
-	print("sum : " .. dump.object(B.sum()));
+	var values = [1, 2, 3];
+	values.append(4);
+	values.append(0, 0);
+	values.resize(3);
+	print("list : " .. dump.object(values));
+	print("len : " .. values.len());
 }
 
 Fun_List();

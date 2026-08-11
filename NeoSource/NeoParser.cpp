@@ -290,18 +290,6 @@ static bool TryFoldLiteralBinOp(SOperand& a, eNOperation op, const SOperand& b, 
 			return false;
 		ri = a._intLiteral % b._intLiteral;
 		break;
-	case NOP_AND:
-		if (bothInt == false) return false;
-		ri = a._intLiteral & b._intLiteral;
-		break;
-	case NOP_OR:
-		if (bothInt == false) return false;
-		ri = a._intLiteral | b._intLiteral;
-		break;
-	case NOP_XOR3:
-		if (bothInt == false) return false;
-		ri = a._intLiteral ^ b._intLiteral;
-		break;
 	case NOP_LSHIFT3:
 		if (bothInt == false) return false;
 		ri = a._intLiteral << b._intLiteral;
@@ -309,6 +297,18 @@ static bool TryFoldLiteralBinOp(SOperand& a, eNOperation op, const SOperand& b, 
 	case NOP_RSHIFT3:
 		if (bothInt == false) return false;
 		ri = a._intLiteral >> b._intLiteral;
+		break;
+	case NOP_XOR3:
+		if (bothInt == false) return false;
+		ri = a._intLiteral ^ b._intLiteral;
+		break;
+	case NOP_AND:
+		if (bothInt == false) return false;
+		ri = a._intLiteral & b._intLiteral;
+		break;
+	case NOP_OR:
+		if (bothInt == false) return false;
+		ri = a._intLiteral | b._intLiteral;
 		break;
 	default:
 		return false;
@@ -718,6 +718,12 @@ static TK_TYPE CompileDefineTokenToToken(const NeoCompileDefineToken& defineToke
 	tk = defineToken.text;
 	switch (defineToken.type)
 	{
+	case NEO_DEFINE_TOKEN_IDENTIFIER:
+	case NEO_DEFINE_TOKEN_INT:
+	case NEO_DEFINE_TOKEN_FLOAT:
+		return TK_STRING;
+	case NEO_DEFINE_TOKEN_STRING:
+		return TK_STRING_LITERAL; // 완성된 문자열 리터럴 (따옴표 재파싱 없이 tk 가 곧 내용)
 	case NEO_DEFINE_TOKEN_TRUE:
 //		if (tk.empty()) tk = "true"; // 이렇게 하는것 보다 Define 을 전달하는 곳에서 잘하면 됨.
 		return TK_TRUE;
@@ -727,11 +733,6 @@ static TK_TYPE CompileDefineTokenToToken(const NeoCompileDefineToken& defineToke
 	case NEO_DEFINE_TOKEN_NULL:
 //		if (tk.empty()) tk = "null";
 		return TK_NULL;
-	case NEO_DEFINE_TOKEN_STRING:
-		return TK_STRING_LITERAL; // 완성된 문자열 리터럴 (따옴표 재파싱 없이 tk 가 곧 내용)
-	case NEO_DEFINE_TOKEN_IDENTIFIER:
-	case NEO_DEFINE_TOKEN_INT:
-	case NEO_DEFINE_TOKEN_FLOAT:
 	default:
 		return TK_STRING;
 	}
@@ -4201,11 +4202,11 @@ static int ConstBinOpPrec(TK_TYPE t)
 {
 	switch (t)
 	{
-	case TK_MUL: case TK_DIV: case TK_PERCENT: return 6;
 	case TK_PLUS: case TK_MINUS: return 5;
+	case TK_MUL: case TK_DIV: case TK_PERCENT: return 6;
+	case TK_XOR: return 2;
 	case TK_LSHIFT: case TK_RSHIFT: return 4;
 	case TK_AND: return 3;
-	case TK_XOR: return 2;
 	case TK_OR: return 1;
 	default: return 0;
 	}
@@ -4249,7 +4250,7 @@ static bool EvalConstBinOp(SConstValue& a, TK_TYPE op, const SConstValue& b, CAr
 			a.f = (op == TK_DIV) ? (x / y) : fmod(x, y);
 		}
 		return true;
-	case TK_LSHIFT: case TK_RSHIFT: case TK_AND: case TK_XOR: case TK_OR:
+	case TK_XOR: case TK_LSHIFT: case TK_RSHIFT: case TK_AND: case TK_OR:
 		if (false == bothInt)
 		{
 			SetParserCompileError(ar, PCE_CONST_INVALID_OP, GetTokenString(op).c_str());
@@ -4257,10 +4258,10 @@ static bool EvalConstBinOp(SConstValue& a, TK_TYPE op, const SConstValue& b, CAr
 		}
 		switch (op)
 		{
+		case TK_XOR:    a.i ^= b.i;  break;
 		case TK_LSHIFT: a.i <<= b.i; break;
 		case TK_RSHIFT: a.i >>= b.i; break;
 		case TK_AND:    a.i &= b.i;  break;
-		case TK_XOR:    a.i ^= b.i;  break;
 		default:        a.i |= b.i;  break;
 		}
 		return true;

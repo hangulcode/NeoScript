@@ -643,10 +643,6 @@ Rules:
 	- len (): returns the number of list items
 	- resize (x): changes the list item count
 	- append (x, [y]): appends x; y optionally specifies the position
-	- broadcast (x): returns the element-wise sum of two matrices
-	- multiply (x): returns the matrix product of two matrices
-	- dot (x): returns per-row dot products as a list
-	- sum (): returns the sum of all matrix elements
 
 	## map
 	- len (): returns the number of map items

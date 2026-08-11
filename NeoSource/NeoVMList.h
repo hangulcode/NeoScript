@@ -2,12 +2,6 @@
 
 namespace NeoScript
 {
-struct MatrixInfo
-{
-	int	row; // V
-	int	col; // U
-};
-
 class CNeoVMImpl;
 class CNeoVMWorker;
 
@@ -50,7 +44,6 @@ struct ListInfo : AllocBase
 
 	void Free();
 	void Resize(int size);
-	void Resize(int row, int col);
 	void Reserve(int capa);
 
 
@@ -69,8 +62,6 @@ struct ListInfo : AllocBase
 	bool Insert(int idx, VarInfo* pValue);
 	bool InsertLast(VarInfo* pValue);
 	bool InsertLast(const std::string& str);
-
-	MatrixInfo GetMatrix();
 
 	inline VarInfo* GetDataUnsafe() { return _Bucket; }
 
