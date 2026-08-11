@@ -116,6 +116,7 @@ struct FunctionPtrNative
 	Neo_NativeFunction			_func;
 	Neo_NativeProperty			_property;
 };
+#pragma pack()
 struct NeoFunction
 {
 	// Script Function
@@ -234,7 +235,31 @@ struct AsyncInfo;
 struct MapNode;
 struct SetNode;
 struct VecInfo;
-struct CycleCandidate;
+
+// 순환 수집 후보의 intrusive FIFO 링크와 수명 상태. 후보 큐에 없을 때는
+// _cyclePrev == owner 를 유지해 별도 queued 플래그 없이 중복 등록을 막는다.
+template<typename T>
+struct CycleState
+{
+	T* _cycleNext;
+	T* _cyclePrev;
+	bool _destroying;
+	bool _cycleCollecting;
+	bool _mayContainContainerChild;
+
+	NEOS_FORCEINLINE void Init(T* owner)
+	{
+		_cycleNext = nullptr;
+		_cyclePrev = owner;
+		_destroying = false;
+		_cycleCollecting = false;
+		_mayContainContainerChild = false;
+	}
+	NEOS_FORCEINLINE bool IsQueued(T* owner) const
+	{
+		return _cyclePrev != owner;
+	}
+};
 
 // 네이티브 객체의 Function/Property와 사용자 데이터. MapInfo와 의도적으로
 // 분리되어 일반 map/set 탐색과 네이티브 객체가 서로의 메모리 비용을 만들지 않는다.

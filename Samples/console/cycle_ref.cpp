@@ -7,10 +7,10 @@
 //     막아버리는 회귀가 나기 쉽다. CycleReclaimable 을 반복 호출하며 alloc 카운터가
 //     늘지 않는지 확인한다.
 //
-//  2) 순환이 호스트 개입 없이 회수되는가.
+//  2) 호스트가 선택한 시점에 순환을 회수할 수 있는가.
 //     참조 카운팅은 순환을 회수하지 못한다. CycleLeaking 으로 고리를 만든 뒤
-//     CycleTick(빈 함수)으로 안전 지점만 공급해, VM 이 스스로 회수하는지 본다.
-//     이 드라이버는 TrimMemory 를 한 번도 부르지 않는다 — 그게 판정의 전제다.
+//     IRuntime::CollectCycles(false)로 증분 회수를 요청한다. TrimMemory는 호출하지
+//     않는다 — pool 페이지 정책과 순환 회수가 분리돼 있음을 함께 검증한다.
 //
 //  3) 런타임을 파괴할 때 죽지 않는가.
 //     원 버그가 바로 여기서 났다 — VM 소멸자의 live 리스트 스윕이 순환 객체를 풀다가
@@ -78,22 +78,13 @@ int SAMPLE_cycle_ref(INeoLoader* pLoader, std::string filename)
     }
 
     // ---------------------------------------------------------------------
-    // 1) 순환은 호스트가 TrimMemory 를 부르지 않아도 회수되어야 한다.
+    // 1) 순환은 host의 명시적 CollectCycles 호출로 회수되어야 한다.
     //
     // 이 드라이버는 TrimMemory 를 한 번도 부르지 않는다. 그래서 여기서 컨테이너가
-    // 기준선으로 돌아온다면, VM 이 자기 안전 지점에서 수집했다는 뜻이다.
+    // 기준선으로 돌아온다면, pool 회수가 아니라 공개 CollectCycles API가 회수한 것이다.
     //
-    // [이 검사가 왜 필요한가]
-    // 안전 지점은 실행 경로마다 따로 배선된다. 예전에 EndHostCall 의 배선이 빠져
-    // **공개 v2 API(rt->Call(...).invoke())로는 수집이 한 번도 일어나지 않은** 적이
-    // 있는데, 그때도 아래 1)/3) 과 스크립트 케이스는 전부 통과했다. 즉 이 검사가
-    // 없으면 "수집기가 통째로 비활성" 인 상태를 CI 가 구분하지 못한다.
-    //
-    // [순서가 중요하다 — 반드시 첫 번째여야 한다]
-    // 후보 큐에는 무효화된 티켓이 그대로 남는다(CancelCycleCandidate 는 ticket->object
-    // 만 null 로 만들고 deque 에서 빼지 않는다). 아래 2) 의 대량 컨테이너 churn 을
-    // 먼저 돌리면 죽은 티켓이 수십만 개 쌓이고, 이후 만든 진짜 순환은 그 뒤에 줄서서
-    // 예산 안에 도달하지 못한다. 그래서 이 검사는 큐가 깨끗한 맨 처음에 둔다.
+    // 후보 큐는 객체 자신의 intrusive 링크라, 객체가 먼저 죽으면 즉시 unlink된다.
+    // 따라서 대량 churn이 있더라도 죽은 후보가 수집 예산을 소비하지 않는다.
     // 검사는 반드시 실제 호출 경로(invoke)로 해야 하고, 내부 함수를 직접 부르면
     // 배선 자체가 미검증으로 남는다.
     // ---------------------------------------------------------------------
@@ -108,24 +99,23 @@ int SAMPLE_cycle_ref(INeoLoader* pLoader, std::string filename)
         printf("  info: cyclic rounds=%d, containers %d -> %d\n",
                kLeakRounds, ContainerCount(before), ContainerCount(peak));
 
-        // 수집은 증분이다 — worker 라운드가 한 바퀴 돌고 후보 예산만큼씩 처리한다.
-        // CycleTick 은 순환을 만들지 않는 빈 함수라, 안전 지점만 공급한다.
-        //
-        // 호출이 실제로 성공했는지 반드시 확인한다. 이름이 틀리거나 export 가 빠지면
-        // invoke 는 조용히 아무 일도 하지 않고, 그러면 "안전 지점을 공급했다"는 전제가
-        // 무너진 채로 아래 판정만 남는다(실제로 그렇게 잘못 만든 적이 있다).
-        int tickOk = 0;
-        const int kTicks = 256;
-        for (int i = 0; i < kTicks; ++i)
+        // false는 한 번에 후보 일부만 처리한다. 호스트 프레임 루프가 이 호출을
+        // 원하는 빈도로 넣는 것과 같은 형태로, 큐가 빌 때까지 반복한다.
+        int collectPasses = 0;
+        int collected = 0;
+        while (collectPasses < 256)
         {
-            if (rt->Call(inst, "CycleTick").invoke() == RunStatus::Completed)
-                ++tickOk;
+            const int processed = rt->CollectCycles(false);
+            if (processed == 0)
+                break;
+            collected += processed;
+            ++collectPasses;
         }
-        CycOk(tickOk == kTicks, "CycleTick invocations all completed (safe points really were supplied)");
+        CycOk(collected > 0, "CollectCycles(false) processed cycle candidates");
         GetNeoVMAllocStats(after);
 
         CycOk(ContainerCount(after) <= ContainerCount(before),
-              "VM collects unreachable cycles at its own safe points (host never calls TrimMemory)");
+              "host CollectCycles reclaims unreachable cycles without TrimMemory");
         if (ContainerCount(after) > ContainerCount(before))
             printf("    map %d->%d  lst %d->%d  set %d->%d\n",
                    before.maps, after.maps, before.lists, after.lists, before.sets, after.sets);

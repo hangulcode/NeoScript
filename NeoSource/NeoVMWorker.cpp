@@ -909,7 +909,6 @@ int CNeoVMWorker::RunSettle()
 		ReleaseExecution();
 		status = NEOEXEC_COMPLETED;
 	}
-	GetVM()->OnVMSafePoint();
 	return status;
 }
 
@@ -1013,7 +1012,6 @@ void CNeoVMWorker::EndHostCall(NeoHostCallBegin begin)
 	}
 	else if (IsSuspended())
 	{
-		GetVM()->OnVMSafePoint();
 		GetVM()->PublishAllocStats();
 		return;   // 호출이 정지(sleep/브레이크)됐으면 컨텍스트 retain
 	}
@@ -1021,7 +1019,6 @@ void CNeoVMWorker::EndHostCall(NeoHostCallBegin begin)
 	{
 		ReleaseExecution();
 	}
-	GetVM()->OnVMSafePoint();
 	GetVM()->PublishAllocStats();
 }
 

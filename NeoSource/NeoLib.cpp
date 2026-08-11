@@ -901,7 +901,7 @@ struct neo_libs
 		++pN->_asyncPendingCount;
 		pAsync->_event.reset();
 		pAsync->_state = ASYNC_PENDING;
-		if (pVar->IsContainerType()) pAsync->_mayContainContainerChild = true;
+		if (pVar->IsContainerType()) pAsync->_cycleState._mayContainContainerChild = true;
 		pN->Move(&pAsync->_LockReferance, pVar);
 		pN->GetVM()->AddHttp_Request(pAsync);
 		pN->ReturnValue();
@@ -946,7 +946,7 @@ struct neo_libs
 		++pN->_asyncPendingCount;
 		pAsync->_event.reset();
 		pAsync->_state = ASYNC_PENDING;
-		if (pVar->IsContainerType()) pAsync->_mayContainContainerChild = true;
+		if (pVar->IsContainerType()) pAsync->_cycleState._mayContainContainerChild = true;
 		pN->Move(&pAsync->_LockReferance, pVar);
 		pN->GetVM()->AddHttp_Request(pAsync);
 		pN->ReturnValue();

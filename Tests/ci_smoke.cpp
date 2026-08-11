@@ -222,9 +222,7 @@ static bool ContainerDestroyRegression()
 
 static void DrainCycles(NeoScript::CNeoVMImpl& vm)
 {
-    while (vm.CollectCycles() != 0)
-    {
-    }
+    vm.CollectCycles(true);
 }
 
 static bool CycleCollectionRegression()
@@ -267,8 +265,8 @@ static bool CycleCollectionRegression()
     const bool scalarSetSkipsCycleQueue = vm.CollectCycles() == 0;
     vm.Var_Release(&scalarSetHold);
 
-    // self / list / set cycle is collected by the VM's internal safe-point
-    // scheduler, without the host calling TrimMemory.
+    // Cycle collection is an explicit host operation; TrimMemory only returns
+    // pool pages and must not consume these candidates.
     VarInfo self;
     vm.Var_SetTable(&self, vm.TableAlloc());
     self._tbl->Insert("self", &self);
@@ -292,11 +290,10 @@ static bool CycleCollectionRegression()
     vm.CollectEmptyPages(true);
     vm.GetAllocStats(stats);
     const bool trimDoesNotCollectCycles = stats.maps == 1 && stats.lists == 1 && stats.sets == 1;
-    // A direct-use VM has no workers, so its next safe point immediately
-    // reaches the worker-round boundary and runs the cycle collector.
-    vm.OnVMSafePoint();
+    const int explicitProcessed = vm.CollectCycles(false);
     vm.GetAllocStats(stats);
-    const bool scheduledCollectionOk = stats.maps == 0 && stats.lists == 0 && stats.sets == 0;
+    const bool explicitCollectionOk = explicitProcessed == 3
+        && stats.maps == 0 && stats.lists == 0 && stats.sets == 0;
 
     // An external holder keeps the same self-cycle alive.  Releasing that
     // holder queues it again, and the next VM cycle pass may collect it.
@@ -322,12 +319,15 @@ static bool CycleCollectionRegression()
     stale._tbl->Insert(&staleKey, &stale);
     MapInfo* staleMap = stale._tbl;
     Move_DestNoRelease(&staleHold, &stale);
-    vm.Var_Release(&stale);
-    staleMap->Remove(&staleKey);
-    vm.Var_Release(&staleHold);
-    DrainCycles(vm);
-    vm.GetAllocStats(stats);
-    const bool staleTicketSafe = stats.maps == 0;
+	vm.Var_Release(&stale);
+	staleMap->Remove(&staleKey);
+	vm.Var_Release(&staleHold);
+	// An intrusive candidate unlinks as soon as the object dies; no stale entry
+	// may consume a CollectCycles budget slot.
+	const bool staleCandidateWasUnlinked = vm.CollectCycles() == 0;
+	DrainCycles(vm);
+	vm.GetAllocStats(stats);
+	const bool staleTicketSafe = staleCandidateWasUnlinked && stats.maps == 0;
 
     // Metadata links are refcounted container edges too, not just map values.
     VarInfo metaA;
@@ -363,7 +363,7 @@ static bool CycleCollectionRegression()
     vm.GetAllocStats(stats);
     const bool nestedWhiteSetCollected = stats.maps == 0;
 
-    // Each automatic cycle pass processes max(16, ceil(queue_size * 2%)).
+    // Each explicit incremental cycle pass processes max(16, ceil(queue_size * 2%)).
     constexpr int kCandidateCount = 4000;
     for (int i = 0; i < kCandidateCount; ++i)
     {
@@ -381,7 +381,7 @@ static bool CycleCollectionRegression()
     vm.GetAllocStats(stats);
 
     return scalarListSkipsCycleQueue && scalarMapSkipsCycleQueue && scalarSetSkipsCycleQueue
-        && queuedCyclesRemain && trimDoesNotCollectCycles && scheduledCollectionOk && externalReferencePreserved
+        && queuedCyclesRemain && trimDoesNotCollectCycles && explicitCollectionOk && externalReferencePreserved
         && releasedAfterExternalGone && staleTicketSafe && metaCycleCollected && nestedWhiteSetCollected && percentageBudgetOk
         && stats.maps == 0;
 }
@@ -396,9 +396,7 @@ int main()
         std::fputs("CreateRuntime failed\n", stderr);
         return 1;
     }
-    runtime->SetCycleCollectIntervalSeconds(0.125f);
-    const bool cycleIntervalApiOk = runtime->GetCycleCollectIntervalSeconds() == 0.125f;
-    runtime->SetCycleCollectIntervalSeconds(0.02f);
+    const bool cycleCollectApiOk = runtime->CollectCycles() == 0 && runtime->CollectCycles(true) == 0;
 
     const char* source =
 		"var sortMutationMap = null;\n"
@@ -509,7 +507,7 @@ int main()
     DestroyRuntime(runtime);
 
     const bool asmOk = asmOutput.str().find("Fun -") != std::string::npos;
-    if (!addOk || !literalOk || !mapOk || !mapDeleteReinsertOk || !mapSortNormalOk || !mapSortMutationOk || !setOk || !containerDestroyOk || !cycleTrimOk || !cycleIntervalApiOk || !stringHashOk || !stringInternOk || !stringInternChurnOk || !hashLoadFactorOk || !asmOk)
+    if (!addOk || !literalOk || !mapOk || !mapDeleteReinsertOk || !mapSortNormalOk || !mapSortMutationOk || !setOk || !containerDestroyOk || !cycleTrimOk || !cycleCollectApiOk || !stringHashOk || !stringInternOk || !stringInternChurnOk || !hashLoadFactorOk || !asmOk)
     {
         std::fputs("NeoScript API smoke failed\n", stderr);
         return 1;

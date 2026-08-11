@@ -52,7 +52,7 @@ struct ListInfo : AllocBase
 
 	inline int		GetCount() { return _itemCount; }
 	// 한 번이라도 컨테이너 자식을 저장했으면 pool 재대여 전까지 유지한다.
-	NEOS_FORCEINLINE void MarkContainerChild() { _mayContainContainerChild = true; }
+	NEOS_FORCEINLINE void MarkContainerChild() { _cycleState._mayContainContainerChild = true; }
 	bool GetValue(int idx, VarInfo* pValue);
 	VarInfo* GetValue(int idx);
 	bool SetValue(int idx, VarInfo* pValue);
@@ -65,12 +65,8 @@ struct ListInfo : AllocBase
 
 	inline VarInfo* GetDataUnsafe() { return _Bucket; }
 
-	CycleCandidate* _cycleTicket;
-	// 파괴 중 같은 객체를 다시 만났을 때 FreeList 재진입을 막는다.
-	bool _destroying;
-	bool _cycleQueued;
-	bool _cycleCollecting;
-	bool _mayContainContainerChild;
+	// 파괴 재진입 방지와 순환 후보 intrusive FIFO 링크.
+	CycleState<ListInfo> _cycleState;
 private:
 };
 

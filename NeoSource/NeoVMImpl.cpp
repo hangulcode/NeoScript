@@ -234,6 +234,47 @@ static NEOS_FORCEINLINE void LiveList_Remove(T*& head, T* p)
 	if (p->_liveNext) p->_liveNext->_livePrev = p->_livePrev;
 }
 
+// 순환 후보는 객체 자신이 FIFO 노드다. _cyclePrev == owner 는 큐에 없다는 표식이다.
+template<typename T>
+static NEOS_FORCEINLINE bool CycleList_Append(T*& head, T*& tail, T* p)
+{
+	CycleState<T>& state = p->_cycleState;
+	if (state.IsQueued(p))
+		return false;
+
+	state._cyclePrev = tail;
+	state._cycleNext = nullptr;
+	if (tail) tail->_cycleState._cycleNext = p;
+	else      head = p;
+	tail = p;
+	return true;
+}
+template<typename T>
+static NEOS_FORCEINLINE bool CycleList_Remove(T*& head, T*& tail, T* p)
+{
+	CycleState<T>& state = p->_cycleState;
+	if (state.IsQueued(p) == false)
+		return false;
+
+	T* prev = state._cyclePrev;
+	T* next = state._cycleNext;
+	if (prev) prev->_cycleState._cycleNext = next;
+	else      head = next;
+	if (next) next->_cycleState._cyclePrev = prev;
+	else      tail = prev;
+	state._cycleNext = nullptr;
+	state._cyclePrev = p;
+	return true;
+}
+template<typename T>
+static NEOS_FORCEINLINE T* CycleList_PopFront(T*& head, T*& tail)
+{
+	T* p = head;
+	if (p)
+		CycleList_Remove(head, tail, p);
+	return p;
+}
+
 void CNeoVMImpl::Var_SetString(VarInfo *d, const char* str)
 {
 	std::string s(str);
@@ -274,11 +315,8 @@ CNeoVMWorker* CNeoVMImpl::WorkerAlloc(int iStackSize)
 
 	CNeoVMWorker* p = new CNeoVMWorker(this, _dwLastIDVMWorker, iStackSize);
 	p->_refCount = 0;
-	p->_cycleTicket = nullptr;
-	p->_destroying = false;
-	p->_cycleQueued = false;
-	p->_cycleCollecting = false;
-	p->_mayContainContainerChild = true;
+	p->_cycleState.Init(p);
+	p->_cycleState._mayContainContainerChild = true;
 	++m_sAllocStats.modules;
 
 	_sVMWorkers[_dwLastIDVMWorker] = p;
@@ -286,13 +324,13 @@ CNeoVMWorker* CNeoVMImpl::WorkerAlloc(int iStackSize)
 }
 void CNeoVMImpl::FreeWorker(CNeoVMWorker *d)
 {
-	if (d == nullptr || d->_destroying)
+	if (d == nullptr || d->_cycleState._destroying)
 		return;
 	auto it = _sVMWorkers.find(d->GetWorkerID());
 	if (it == _sVMWorkers.end())
 		return;
 
-	d->_destroying = true;
+	d->_cycleState._destroying = true;
 	CancelCycleCandidate(VAR_MODULE, d);
 	_sVMWorkers.erase(it);
 	--m_sAllocStats.modules;
@@ -321,9 +359,9 @@ void CNeoVMImpl::FreeCoroutine(VarInfo *d)
 {
 	CoroutineInfo* pCI = d->_cor;
 	CancelCycleCandidate(VAR_COROUTINE, pCI);
-	if (pCI->_destroying)
+	if (pCI->_cycleState._destroying)
 		return;
-	pCI->_destroying = true;
+	pCI->_cycleState._destroying = true;
 	--m_sAllocStats.coroutines;
 	// 공유 풀로 반납하기 전에 컨텍스트의 스택 참조를 정리한다.
 	// 완료(DeadCoroutine)를 거친 코루틴은 _iSP_Vars_Max2 가 0 이라 무해하지만,
@@ -536,11 +574,7 @@ MapInfo* CNeoVMImpl::TableAlloc(int cnt)
 	MapInfo* pTable = m_sPool_TableInfo.Receive();
 	pTable->_pVM = this;
 	pTable->_refCount = 0;
-	pTable->_cycleTicket = nullptr;
-	pTable->_destroying = false;
-	pTable->_cycleQueued = false;
-	pTable->_cycleCollecting = false;
-	pTable->_mayContainContainerChild = false;
+	pTable->_cycleState.Init(pTable);
 	pTable->_itemCount = 0;
 	pTable->_mutationVersion = 0;
 	pTable->_HashBase = 0;
@@ -557,9 +591,9 @@ MapInfo* CNeoVMImpl::TableAlloc(int cnt)
 void CNeoVMImpl::FreeTable(MapInfo* tbl)
 {
 	CancelCycleCandidate(VAR_MAP, tbl);
-	if (tbl->_destroying)
+	if (tbl->_cycleState._destroying)
 		return;
-	tbl->_destroying = true;
+	tbl->_cycleState._destroying = true;
 	LiveList_Remove(_sTableHead, tbl);
 
 	if (tbl->_meta)
@@ -599,11 +633,7 @@ ListInfo* CNeoVMImpl::ListAlloc(int cnt)
 	ListInfo* pList = m_sPool_ListInfo.Receive();
 	pList->_pVM = this;
 	pList->_refCount = 0;
-	pList->_cycleTicket = nullptr;
-	pList->_destroying = false;
-	pList->_cycleQueued = false;
-	pList->_cycleCollecting = false;
-	pList->_mayContainContainerChild = false;
+	pList->_cycleState.Init(pList);
 	pList->_mutationVersion = 0;
 	pList->_pUserData = NULL;
 	pList->_pIndexer = nullptr;
@@ -617,9 +647,9 @@ ListInfo* CNeoVMImpl::ListAlloc(int cnt)
 void CNeoVMImpl::FreeList(ListInfo* lst)
 {
 	CancelCycleCandidate(VAR_LIST, lst);
-	if (lst->_destroying)
+	if (lst->_cycleState._destroying)
 		return;
-	lst->_destroying = true;
+	lst->_cycleState._destroying = true;
 	LiveList_Remove(_sListHead, lst);
 	lst->Free();
 
@@ -632,11 +662,7 @@ SetInfo* CNeoVMImpl::SetAlloc()
 	SetInfo* pSet = m_sPool_SetInfo.Receive();
 	pSet->_pVM = this;
 	pSet->_refCount = 0;
-	pSet->_cycleTicket = nullptr;
-	pSet->_destroying = false;
-	pSet->_cycleQueued = false;
-	pSet->_cycleCollecting = false;
-	pSet->_mayContainContainerChild = false;
+	pSet->_cycleState.Init(pSet);
 	pSet->_itemCount = 0;
 	pSet->_mutationVersion = 0;
 	pSet->_HashBase = 0;
@@ -652,9 +678,9 @@ SetInfo* CNeoVMImpl::SetAlloc()
 void CNeoVMImpl::FreeSet(SetInfo* set)
 {
 	CancelCycleCandidate(VAR_SET, set);
-	if (set->_destroying)
+	if (set->_cycleState._destroying)
 		return;
-	set->_destroying = true;
+	set->_cycleState._destroying = true;
 	LiveList_Remove(_sSetHead, set);
 	if (set->_meta)
 	{
@@ -685,11 +711,7 @@ AsyncInfo* CNeoVMImpl::AsyncAlloc()
 {
 	AsyncInfo* p = m_sPool_Async.Receive();
 	p->_refCount = 0;
-	p->_cycleTicket = nullptr;
-	p->_destroying = false;
-	p->_cycleQueued = false;
-	p->_cycleCollecting = false;
-	p->_mayContainContainerChild = false;
+	p->_cycleState.Init(p);
 	p->_ownerWorkerId = 0;
 	p->_state = ASYNC_READY;
 	// 풀에서 재사용된 노드는 이전 요청의 값을 그대로 들고 있다. 특히 _headers 는
@@ -707,9 +729,9 @@ void CNeoVMImpl::FreeAsync(VarInfo* d)
 {
 	AsyncInfo* p = d->_async;
 	CancelCycleCandidate(VAR_ASYNC, p);
-	if (p->_destroying)
+	if (p->_cycleState._destroying)
 		return;
-	p->_destroying = true;
+	p->_cycleState._destroying = true;
 	--m_sAllocStats.asyncs;
 	// AsyncInfo 는 노드가 372B 로 가장 크고, 문자열 멤버 셋에 HTTP 본문까지 담긴다
 	// (_resultValue 는 응답 전문이라 MB 단위도 가능). 문자열 풀과 같은 규칙으로 놓아준다.
@@ -749,12 +771,6 @@ void CNeoVMImpl::QueueContainerForDestroy(const VarInfo& value)
 	_bDrainingDestroyQueue = false;
 }
 
-struct CycleCandidate
-{
-	VAR_TYPE type;
-	void* object;
-};
-
 static void* GetContainerObject(VarInfo value)
 {
 	switch (value.GetType())
@@ -773,28 +789,13 @@ static bool MayContainContainerChild(VAR_TYPE type, void* object)
 {
 	switch (type)
 	{
-	case VAR_MAP:       return ((MapInfo*)object)->_mayContainContainerChild;
-	case VAR_LIST:      return ((ListInfo*)object)->_mayContainContainerChild;
-	case VAR_SET:       return ((SetInfo*)object)->_mayContainContainerChild;
-	case VAR_COROUTINE: return ((CoroutineInfo*)object)->_mayContainContainerChild;
-	case VAR_MODULE:    return ((CNeoVMWorker*)object)->_mayContainContainerChild;
-	case VAR_ASYNC:     return ((AsyncInfo*)object)->_mayContainContainerChild;
+	case VAR_MAP:       return ((MapInfo*)object)->_cycleState._mayContainContainerChild;
+	case VAR_LIST:      return ((ListInfo*)object)->_cycleState._mayContainContainerChild;
+	case VAR_SET:       return ((SetInfo*)object)->_cycleState._mayContainContainerChild;
+	case VAR_COROUTINE: return ((CoroutineInfo*)object)->_cycleState._mayContainContainerChild;
+	case VAR_MODULE:    return ((CNeoVMWorker*)object)->_cycleState._mayContainContainerChild;
+	case VAR_ASYNC:     return ((AsyncInfo*)object)->_cycleState._mayContainContainerChild;
 	default:             return false;
-	}
-}
-
-static bool& GetCycleQueuedFlag(VAR_TYPE type, void* object)
-{
-	static bool invalid = false;
-	switch (type)
-	{
-	case VAR_MAP:       return ((MapInfo*)object)->_cycleQueued;
-	case VAR_LIST:      return ((ListInfo*)object)->_cycleQueued;
-	case VAR_SET:       return ((SetInfo*)object)->_cycleQueued;
-	case VAR_COROUTINE: return ((CoroutineInfo*)object)->_cycleQueued;
-	case VAR_MODULE:    return ((CNeoVMWorker*)object)->_cycleQueued;
-	case VAR_ASYNC:     return ((AsyncInfo*)object)->_cycleQueued;
-	default:             return invalid;
 	}
 }
 
@@ -803,27 +804,12 @@ static bool& GetCycleCollectingFlag(VAR_TYPE type, void* object)
 	static bool invalid = false;
 	switch (type)
 	{
-	case VAR_MAP:       return ((MapInfo*)object)->_cycleCollecting;
-	case VAR_LIST:      return ((ListInfo*)object)->_cycleCollecting;
-	case VAR_SET:       return ((SetInfo*)object)->_cycleCollecting;
-	case VAR_COROUTINE: return ((CoroutineInfo*)object)->_cycleCollecting;
-	case VAR_MODULE:    return ((CNeoVMWorker*)object)->_cycleCollecting;
-	case VAR_ASYNC:     return ((AsyncInfo*)object)->_cycleCollecting;
-	default:             return invalid;
-	}
-}
-
-static CycleCandidate*& GetCycleTicket(VAR_TYPE type, void* object)
-{
-	static CycleCandidate* invalid = nullptr;
-	switch (type)
-	{
-	case VAR_MAP:       return ((MapInfo*)object)->_cycleTicket;
-	case VAR_LIST:      return ((ListInfo*)object)->_cycleTicket;
-	case VAR_SET:       return ((SetInfo*)object)->_cycleTicket;
-	case VAR_COROUTINE: return ((CoroutineInfo*)object)->_cycleTicket;
-	case VAR_MODULE:    return ((CNeoVMWorker*)object)->_cycleTicket;
-	case VAR_ASYNC:     return ((AsyncInfo*)object)->_cycleTicket;
+	case VAR_MAP:       return ((MapInfo*)object)->_cycleState._cycleCollecting;
+	case VAR_LIST:      return ((ListInfo*)object)->_cycleState._cycleCollecting;
+	case VAR_SET:       return ((SetInfo*)object)->_cycleState._cycleCollecting;
+	case VAR_COROUTINE: return ((CoroutineInfo*)object)->_cycleState._cycleCollecting;
+	case VAR_MODULE:    return ((CNeoVMWorker*)object)->_cycleState._cycleCollecting;
+	case VAR_ASYNC:     return ((AsyncInfo*)object)->_cycleState._cycleCollecting;
 	default:             return invalid;
 	}
 }
@@ -883,14 +869,19 @@ void CNeoVMImpl::QueueContainerForCycleCheck(const VarInfo& source)
 	const VAR_TYPE type = value.GetType();
 	if (MayContainContainerChild(type, object) == false)
 		return;
-	bool& queued = GetCycleQueuedFlag(type, object);
-	if (queued)
-		return;
-
-	CycleCandidate* ticket = new CycleCandidate{ type, object };
-	queued = true;
-	GetCycleTicket(type, object) = ticket;
-	_sCycleCandidates.push_back(ticket);
+	bool appended = false;
+	switch (type)
+	{
+	case VAR_MAP:       appended = CycleList_Append(_sCycleMapHead, _sCycleMapTail, (MapInfo*)object); break;
+	case VAR_LIST:      appended = CycleList_Append(_sCycleListHead, _sCycleListTail, (ListInfo*)object); break;
+	case VAR_SET:       appended = CycleList_Append(_sCycleSetHead, _sCycleSetTail, (SetInfo*)object); break;
+	case VAR_COROUTINE: appended = CycleList_Append(_sCycleCoroutineHead, _sCycleCoroutineTail, (CoroutineInfo*)object); break;
+	case VAR_MODULE:    appended = CycleList_Append(_sCycleModuleHead, _sCycleModuleTail, (CNeoVMWorker*)object); break;
+	case VAR_ASYNC:     appended = CycleList_Append(_sCycleAsyncHead, _sCycleAsyncTail, (AsyncInfo*)object); break;
+	default:             break;
+	}
+	if (appended)
+		++_cycleCandidateCount;
 }
 
 void CNeoVMImpl::CancelCycleCandidate(VAR_TYPE type, void* object)
@@ -898,15 +889,62 @@ void CNeoVMImpl::CancelCycleCandidate(VAR_TYPE type, void* object)
 	if (object == nullptr)
 		return;
 
-	bool& queued = GetCycleQueuedFlag(type, object);
-	if (queued == false)
-		return;
+	bool removed = false;
+	switch (type)
+	{
+	case VAR_MAP:       removed = CycleList_Remove(_sCycleMapHead, _sCycleMapTail, (MapInfo*)object); break;
+	case VAR_LIST:      removed = CycleList_Remove(_sCycleListHead, _sCycleListTail, (ListInfo*)object); break;
+	case VAR_SET:       removed = CycleList_Remove(_sCycleSetHead, _sCycleSetTail, (SetInfo*)object); break;
+	case VAR_COROUTINE: removed = CycleList_Remove(_sCycleCoroutineHead, _sCycleCoroutineTail, (CoroutineInfo*)object); break;
+	case VAR_MODULE:    removed = CycleList_Remove(_sCycleModuleHead, _sCycleModuleTail, (CNeoVMWorker*)object); break;
+	case VAR_ASYNC:     removed = CycleList_Remove(_sCycleAsyncHead, _sCycleAsyncTail, (AsyncInfo*)object); break;
+	default:             break;
+	}
+	if (removed && _cycleCandidateCount != 0)
+		--_cycleCandidateCount;
+}
 
-	CycleCandidate*& ticket = GetCycleTicket(type, object);
-	queued = false;
-	if (ticket != nullptr)
-		ticket->object = nullptr;
-	ticket = nullptr;
+bool CNeoVMImpl::PopCycleCandidate(VAR_TYPE& type, void*& object)
+{
+	if (_cycleCandidateCount == 0)
+		return false;
+
+	for (int checked = 0; checked < 6; ++checked)
+	{
+		const int queueIndex = _cycleQueueRoundRobin;
+		_cycleQueueRoundRobin = (_cycleQueueRoundRobin + 1) % 6;
+		switch (queueIndex)
+		{
+		case 0:
+			if (MapInfo* p = CycleList_PopFront(_sCycleMapHead, _sCycleMapTail)) { type = VAR_MAP; object = p; --_cycleCandidateCount; return true; }
+			break;
+		case 1:
+			if (ListInfo* p = CycleList_PopFront(_sCycleListHead, _sCycleListTail)) { type = VAR_LIST; object = p; --_cycleCandidateCount; return true; }
+			break;
+		case 2:
+			if (SetInfo* p = CycleList_PopFront(_sCycleSetHead, _sCycleSetTail)) { type = VAR_SET; object = p; --_cycleCandidateCount; return true; }
+			break;
+		case 3:
+			if (CoroutineInfo* p = CycleList_PopFront(_sCycleCoroutineHead, _sCycleCoroutineTail)) { type = VAR_COROUTINE; object = p; --_cycleCandidateCount; return true; }
+			break;
+		case 4:
+			if (CNeoVMWorker* p = CycleList_PopFront(_sCycleModuleHead, _sCycleModuleTail)) { type = VAR_MODULE; object = p; --_cycleCandidateCount; return true; }
+			break;
+		case 5:
+			if (AsyncInfo* p = CycleList_PopFront(_sCycleAsyncHead, _sCycleAsyncTail)) { type = VAR_ASYNC; object = p; --_cycleCandidateCount; return true; }
+			break;
+		}
+	}
+	return false;
+}
+
+void CNeoVMImpl::ClearCycleCandidates()
+{
+	VAR_TYPE type = VAR_NONE;
+	void* object = nullptr;
+	while (PopCycleCandidate(type, object))
+	{
+	}
 }
 
 struct CycleNodeKey
@@ -1238,69 +1276,34 @@ bool CNeoVMImpl::CollectUnreachableCycleCandidate(VAR_TYPE candidateType, void* 
 	return true;
 }
 
-int CNeoVMImpl::CollectCycles()
+int CNeoVMImpl::CollectCycles(bool force)
 {
-	// 다음 수집은 현재 VM의 모든 worker가 한 번씩 안전 지점에 도달한 뒤에 한다.
-	// worker가 없는 직접 사용 VM은 0으로 설정되어 다음 안전 지점에서 바로 수집된다.
-	_cycleSafePointRemainCount = (_sVMWorkers.size() > (size_t)INT_MAX) ? INT_MAX : (int)_sVMWorkers.size();
-	_cycleLastCollectTime = std::chrono::steady_clock::now();
-
-	if (_isTearingDown || _sCycleCandidates.empty())
+	if (_isTearingDown || _cycleCandidateCount == 0)
 		return 0;
 
-	const size_t total = _sCycleCandidates.size();
-	const size_t budget = std::max<size_t>(16, (total + 49) / 50); // max(16, 전체의 2%), 올림
-	int processed = 0;
-	while (_sCycleCandidates.empty() == false && (size_t)processed < budget)
+	int processedTotal = 0;
+	do
 	{
-		CycleCandidate* ticket = _sCycleCandidates.front();
-		_sCycleCandidates.pop_front();
-		if (ticket->object != nullptr)
+		const size_t total = _cycleCandidateCount;
+		const size_t budget = force ? total : std::max<size_t>(16, (total + 49) / 50);
+		int processed = 0;
+		while (_cycleCandidateCount != 0 && (size_t)processed < budget)
 		{
-			void* object = ticket->object;
-			if (GetCycleQueuedFlag(ticket->type, object) && GetCycleTicket(ticket->type, object) == ticket)
-			{
-				if (CollectUnreachableCycleCandidate(ticket->type, object) == false)
-				{
-					CancelCycleCandidate(ticket->type, object);
-				}
-			}
+			VAR_TYPE type = VAR_NONE;
+			void* object = nullptr;
+			if (PopCycleCandidate(type, object) == false)
+				break;
+			CollectUnreachableCycleCandidate(type, object);
+			++processed;
 		}
-		delete ticket;
-		++processed;
-	}
-	if (processed != 0)
+		processedTotal += processed;
+		if (processed == 0)
+			break;
+	} while (force && _cycleCandidateCount != 0);
+
+	if (processedTotal != 0)
 		PublishAllocStats();
-	return processed;
-}
-
-void CNeoVMImpl::OnVMSafePoint()
-{
-	if (_isTearingDown)
-		return;
-
-	// 후보가 없는 동안에도 worker 라운드는 진행하되, 0 아래로는 내리지 않는다.
-	// 이후 후보가 생겼을 때 이미 라운드가 끝났다면 다음 안전 지점에서 바로 수집한다.
-	if (_cycleSafePointRemainCount > 0)
-		--_cycleSafePointRemainCount;
-
-	if (_sCycleCandidates.empty())
-		return;
-
-	if (_cycleSafePointRemainCount <= 0)
-	{
-		CollectCycles();
-		return;
-	}
-
-	// steady_clock 조회는 hot path에서 매번 하지 않는다. 남은 worker 수가 256의
-	// 배수인 지점에서만 설정된 시간 fallback을 확인한다.
-	constexpr int kTimeCheckRemainModulo = 256;
-	if ((_cycleSafePointRemainCount % kTimeCheckRemainModulo) == 0
-		&& std::chrono::steady_clock::now() - _cycleLastCollectTime >= std::chrono::milliseconds(_cycleCollectIntervalMs))
-	{
-		CollectCycles();
-	}
+	return processedTotal;
 }
 
 
@@ -1515,16 +1518,9 @@ CNeoVMImpl::~CNeoVMImpl()
 		delete _job;
 		_job = nullptr;
 	}
-	// 후보 티켓은 객체를 소유하지 않는다. 실제 객체를 정리하기 전에 연결만 끊고
-	// 티켓을 버린다. 그래야 뒤따르는 Free*가 이미 해제된 티켓을 건드리지 않는다.
-	while (_sCycleCandidates.empty() == false)
-	{
-		CycleCandidate* ticket = _sCycleCandidates.front();
-		_sCycleCandidates.pop_front();
-		if (ticket->object != nullptr && GetCycleTicket(ticket->type, ticket->object) == ticket)
-			CancelCycleCandidate(ticket->type, ticket->object);
-		delete ticket;
-	}
+	// 후보는 객체 자신이 들고 있는 intrusive 링크다. 실제 객체를 정리하기 전에
+	// 모두 unlink해 뒤따르는 Free*가 이미 비워진 큐를 다시 건드리지 않게 한다.
+	ClearCycleCandidates();
 	while (_sVMWorkers.empty() == false)
 		FreeWorker(_sVMWorkers.begin()->second);
 
@@ -1551,14 +1547,9 @@ CNeoVMImpl::~CNeoVMImpl()
 		FreeSet(p);
 	}
 
-	// _isTearingDown guard 때문에 보통 비어 있어야 한다. 그래도 종료 경로가
-	// 확장되더라도 heap 티켓만 남기지 않도록 마지막으로 포인터만 폐기한다.
-	while (_sCycleCandidates.empty() == false)
-	{
-		CycleCandidate* ticket = _sCycleCandidates.front();
-		_sCycleCandidates.pop_front();
-		delete ticket;
-	}
+	// _isTearingDown guard 때문에 보통 비어 있다. 종료 경로가 확장돼도 객체가
+	// 남긴 intrusive 링크를 풀기 위해 한 번 더 비운다.
+	ClearCycleCandidates();
 
 	for (auto it = m_sCache_FunPtr.begin(); it != m_sCache_FunPtr.end(); it++)
 		delete (*it).second;
@@ -1725,7 +1716,6 @@ bool CNeoVMImpl::UpdateWorker(u32 id)
 		return false;
 	auto pWorker = pFound;
 	bool result = pWorker->Run();// iTimeout >= 0, iTimeout, iCheckOpCount);
-	OnVMSafePoint();
 	PublishAllocStats();
 	return result;
 }

@@ -517,13 +517,9 @@ public:
 
 #include "NeoVMWorker_Handlers.inl"
 
-	CycleCandidate* _cycleTicket;
-	// 파괴 중 같은 module을 다시 만났을 때 워커를 중복 delete 하지 않는다.
-	bool _destroying;
-	bool _cycleQueued;
-	bool _cycleCollecting;
-	// 전역/실행 컨텍스트가 컨테이너를 들 수 있으므로 worker는 보수적으로 후보 가능.
-	bool _mayContainContainerChild;
+	// 파괴 재진입 방지와 순환 후보 intrusive FIFO 링크. 전역/실행 컨텍스트가
+	// 컨테이너를 들 수 있으므로 worker는 보수적으로 후보 가능으로 초기화한다.
+	CycleState<CNeoVMWorker> _cycleState;
 
 };
 

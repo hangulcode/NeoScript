@@ -125,42 +125,42 @@ void INeoVM::Var_ReleaseInternal(VarInfo* d)
 	case VAR_MAP:
 		if (--d->_tbl->_refCount <= 0)
 			((CNeoVMImpl*)this)->QueueContainerForDestroy(*d);
-		else if (d->_tbl->_mayContainContainerChild)
+		else if (d->_tbl->_cycleState._mayContainContainerChild)
 			((CNeoVMImpl*)this)->QueueContainerForCycleCheck(*d);
 		d->_tbl = NULL;
 		break;
 	case VAR_LIST:
 		if (--d->_lst->_refCount <= 0)
 			((CNeoVMImpl*)this)->QueueContainerForDestroy(*d);
-		else if (d->_lst->_mayContainContainerChild)
+		else if (d->_lst->_cycleState._mayContainContainerChild)
 			((CNeoVMImpl*)this)->QueueContainerForCycleCheck(*d);
 		d->_lst = NULL;
 		break;
 	case VAR_SET:
 		if (--d->_set->_refCount <= 0)
 			((CNeoVMImpl*)this)->QueueContainerForDestroy(*d);
-		else if (d->_set->_mayContainContainerChild)
+		else if (d->_set->_cycleState._mayContainContainerChild)
 			((CNeoVMImpl*)this)->QueueContainerForCycleCheck(*d);
 		d->_set = NULL;
 		break;
 	case VAR_COROUTINE:
 		if (--d->_cor->_refCount <= 0)
 			((CNeoVMImpl*)this)->QueueContainerForDestroy(*d);
-		else if (d->_cor->_mayContainContainerChild)
+		else if (d->_cor->_cycleState._mayContainContainerChild)
 			((CNeoVMImpl*)this)->QueueContainerForCycleCheck(*d);
 		d->_cor = NULL;
 		break;
 	case VAR_MODULE:
 		if (--((CNeoVMWorker*)(d->_module))->_refCount <= 0)
 			((CNeoVMImpl*)this)->QueueContainerForDestroy(*d);
-		else if (((CNeoVMWorker*)(d->_module))->_mayContainContainerChild)
+		else if (((CNeoVMWorker*)(d->_module))->_cycleState._mayContainContainerChild)
 			((CNeoVMImpl*)this)->QueueContainerForCycleCheck(*d);
 		d->_module = NULL;
 		break;
 	case VAR_ASYNC:
 		if (--d->_async->_refCount <= 0)
 			((CNeoVMImpl*)this)->QueueContainerForDestroy(*d);
-		else if (d->_async->_mayContainContainerChild)
+		else if (d->_async->_cycleState._mayContainContainerChild)
 			((CNeoVMImpl*)this)->QueueContainerForCycleCheck(*d);
 		d->_async = NULL;
 		break;

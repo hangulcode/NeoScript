@@ -739,28 +739,23 @@ public:
 
     //--- 메모리 ---
     // 이미 객체가 풀에 반납된 뒤 비어 있는 페이지를 OS로 돌려준다.
-    // force=false에서는 순환 참조 후보를 건드리지 않는다. 순환 참조 회수는 VM이
-    // 최상위 실행 종료/일시정지 같은 안전 지점에서 자동으로 증분 수행하므로,
-    // 이 함수를 매 프레임 호출할 필요는 없다.
-    //
     // 호스트가 씬 전환·로딩 화면·메모리 압박처럼 실제 예약 메모리를 줄이고 싶은
     // 시점에 호출한다. 반환값은 OS로 돌려준 페이지 바이트이며, 아직 사용 중인 객체나
     // 풀의 일부만 비어 있는 페이지는 대상이 아니다.
     //
     //  force=false : 보유 시간(기본 5초)이 지난 빈 페이지를 한 번에
     //                SetTrimPagesPerCall() 장까지만 반환한다.
-    //  force=true  : 먼저 순환 참조 후보 큐를 모두 수집한 뒤, 보유 시간과 페이지
-    //                예산을 무시하고 현재 비어 있는 페이지를 모두 반환한다.
-    //                맵 전환 같은 명시적 강제 정리 시점용이다.
+    //  force=true  : 보유 시간과 페이지 예산을 무시하고 현재 비어 있는 페이지를
+    //                모두 반환한다. 맵 전환 같은 명시적 강제 정리 시점용이다.
     virtual int64_t TrimMemory(bool force = false) = 0;
+    // 순환 참조 후보를 회수한다. 호출 시점과 빈도는 호스트가 결정한다.
+    // force=false : max(16, 후보 전체의 2%)개만 증분 처리한다.
+    // force=true  : 후보 큐가 빌 때까지 모두 처리한다(로딩 화면 등 비프레임 시점용).
+    // 반환값은 처리한 후보 수다.
+    virtual int CollectCycles(bool force = false) = 0;
     // 빈 페이지 보유 시간(초). 0 이면 스윕이 빈 걸 본 즉시 회수 대상이 된다.
     virtual void SetEmptyPageHoldSeconds(float sec) = 0;
     virtual float GetEmptyPageHoldSeconds() const = 0;
-    // 순환 참조 수집의 시간 fallback 간격(초). 기본 0.02초. 후보가 남아 있고
-    // worker 라운드가 끝나지 않아도 이 시간이 지나면 다음 256-worker 확인 지점에서
-    // 증분 수집한다. 0 이하면 시간 대기 없이 해당 확인 지점에서 수집한다.
-    virtual void SetCycleCollectIntervalSeconds(float sec = 0.02f) = 0;
-    virtual float GetCycleCollectIntervalSeconds() const = 0;
     // TrimMemory(false) 한 번이 해제할 페이지 수 상한(기본 4). 회수 속도와 프레임당
     // 비용의 트레이드오프 손잡이다 — 크게 하면 빨리 돌려주고, 작게 하면 더 잘게 나눈다.
     // 0 이하면 상한 없음(예전처럼 한 번에 전부).
