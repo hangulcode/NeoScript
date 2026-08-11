@@ -21,6 +21,8 @@
 #include <deque>
 #include <functional>
 #include <mutex>
+#include <new>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -128,12 +130,57 @@ struct ObjectBinding
     InstanceHandle          handle;   // CreateInstance 완료 후 채움(트램폴린이 ctx.instance() 로 노출)
 };
 
+// 첫 원소가 필요할 때만 deque 자체를 만든다. CallContextImpl 은 모든 네이티브 디스패치마다
+// 스택에 만들어지므로, 사용하지 않는 builder/reader용 deque의 allocator proxy 할당을 피한다.
+// deque는 기존처럼 원소 주소를 안정적으로 유지한다.
+template <typename T>
+struct LazyDeque;
+
 // 컬렉션 리더 impl (공개 MapReader/ListReader 의 m_impl). InstanceRec 가 결과 리더를
 // 담아야 하므로(CallReadMap/List) InstanceRec 앞에 정의. 중첩 리더는 pool 에 추가된다.
 struct MapReaderImpl;
 struct ListReaderImpl;
-struct MapReaderImpl  { INeoVMWorker* w = nullptr; MapInfo*  map = nullptr;  std::deque<MapReaderImpl>* mpool = nullptr; std::deque<ListReaderImpl>* lpool = nullptr; };
-struct ListReaderImpl { INeoVMWorker* w = nullptr; ListInfo* list = nullptr; std::deque<MapReaderImpl>* mpool = nullptr; std::deque<ListReaderImpl>* lpool = nullptr; };
+struct MapReaderImpl  { INeoVMWorker* w = nullptr; MapInfo*  map = nullptr;  LazyDeque<MapReaderImpl>* mpool = nullptr; LazyDeque<ListReaderImpl>* lpool = nullptr; };
+struct ListReaderImpl { INeoVMWorker* w = nullptr; ListInfo* list = nullptr; LazyDeque<MapReaderImpl>* mpool = nullptr; LazyDeque<ListReaderImpl>* lpool = nullptr; };
+
+template <typename T>
+struct LazyDeque
+{
+    LazyDeque() noexcept : m_constructed(false) {}
+    ~LazyDeque()
+    {
+        if (m_constructed) deque()->~Deque();
+    }
+
+    LazyDeque(const LazyDeque&) = delete;
+    LazyDeque& operator=(const LazyDeque&) = delete;
+
+    void push_back(T&& value)
+    {
+        ensure()->push_back(std::move(value));
+    }
+
+    T& back() { return deque()->back(); }
+    void clear() { if (m_constructed) deque()->clear(); }
+
+private:
+    typedef std::deque<T> Deque;
+    typedef typename std::aligned_storage<sizeof(Deque), alignof(Deque)>::type Storage;
+
+    Deque* deque() { return reinterpret_cast<Deque*>(&m_storage); }
+    Deque* ensure()
+    {
+        if (!m_constructed)
+        {
+            ::new (static_cast<void*>(&m_storage)) Deque();
+            m_constructed = true;
+        }
+        return deque();
+    }
+
+    Storage m_storage;
+    bool m_constructed;
+};
 
 // 중첩 바인딩 dedup 키 (RegisteredObject*, userData) 해시 — O(1) 조회(unordered_map).
 struct PtrPairHash
@@ -162,8 +209,8 @@ struct InstanceRec
     // 객체명 -> 이 인스턴스에서의 userData (BindObject). 미지정이면 RegisteredObject.userData.
     std::unordered_map<std::string, void*> objectUserData;
     // CallReadMap/List 결과 리더 보관(다음 이 인스턴스 호출 전까지 유효). 중첩 리더도 여기 쌓임.
-    std::deque<MapReaderImpl>  readMapPool;
-    std::deque<ListReaderImpl> readListPool;
+    LazyDeque<MapReaderImpl>  readMapPool;
+    LazyDeque<ListReaderImpl> readListPool;
     // 구조화 반환(map/list)은 반환 컨텍스트를 유지해야 리더가 유효하므로 EndHostCall 을
     // 다음 호출까지 지연한다. 그 지연 상태를 여기에 보관.
     bool             hostCallPending = false;
@@ -265,11 +312,11 @@ struct CallContextImpl
     // 프로퍼티 접근용 오버라이드: get 은 retX 를 propertyVar 로, set 은 argX(0) 를 propertyVar 로.
     VarInfo*       propertyVar = nullptr;
     bool           propertyIsArg = false;   // true=set(arg0=propertyVar), false=get(ret=propertyVar)
-    // 이 호출 동안 만들어지는 빌더/리더 impl 보관(안정 주소 위해 deque).
-    std::deque<MapBuilderImpl>  mapB;
-    std::deque<ListBuilderImpl> listB;
-    std::deque<MapReaderImpl>   mapR;
-    std::deque<ListReaderImpl>  listR;
+    // 이 호출 동안 실제로 요청된 builder/reader impl만 보관(안정 주소 위해 deque).
+    LazyDeque<MapBuilderImpl>  mapB;
+    LazyDeque<ListBuilderImpl> listB;
+    LazyDeque<MapReaderImpl>   mapR;
+    LazyDeque<ListReaderImpl>  listR;
 };
 
 static StringView VmName(const VMString* s)
