@@ -31,6 +31,9 @@ private:
 	// 이 대기열을 깊이 우선으로 비워서, 깊은 트리와 순환 모두 안전하게 처리한다.
 	std::vector<VarInfo> _sDestroyQueue;
 	bool _bDrainingDestroyQueue = false;
+	// CollectCycles는 객체 내부의 임시 color/scratch를 쓴다. 재진입하면 상태가
+	// 겹치므로 수집 중에는 같은 VM의 중첩 호출을 무시한다.
+	bool _isCollectingCycles = false;
 	// VM 종료 중에는 참조 감소가 순환 후보를 새로 만들 필요가 없다. live registry를
 	// 강제 순회해 전부 해제하므로, 후보 티켓만 남기지 않도록 이 구간을 분리한다.
 	bool _isTearingDown = false;
@@ -44,12 +47,22 @@ private:
 	SetInfo* _sCycleSetTail = nullptr;
 	CoroutineInfo* _sCycleCoroutineHead = nullptr;
 	CoroutineInfo* _sCycleCoroutineTail = nullptr;
+	// Module 큐는 현재 항상 비어 있다. QueueContainerForCycleCheck 가 VAR_MODULE 을
+	// 초입에서 걸러내기 때문이다 — module 은 worker registry 가 raw 포인터로 수명을
+	// 소유하고 FreeWorker 가 유일한 정리 경로라, 수집기가 회수할 대상이 아니다.
+	// (전개해봐야 native root 로 판정돼 결과가 바뀌지 않으면서 worker 의 전역 변수
+	//  전체를 훑는 비용만 든다.) Pop/Cancel/Clear 의 VAR_MODULE 분기도 같은 이유로
+	// 지금은 죽은 경로다. 타입별 링크 구조의 대칭을 깨지 않으려고 남겨둔다 —
+	// module 을 다시 후보로 올리려면 Append 한 줄만 되살리면 된다.
 	CNeoVMWorker* _sCycleModuleHead = nullptr;
 	CNeoVMWorker* _sCycleModuleTail = nullptr;
 	AsyncInfo* _sCycleAsyncHead = nullptr;
 	AsyncInfo* _sCycleAsyncTail = nullptr;
 	size_t _cycleCandidateCount = 0;
 	int _cycleQueueRoundRobin = 0;
+	// 후보 루트, graph node, black work, white set을 구간별로 재사용한다.
+	// 워밍업 뒤에는 CollectCycles가 그래프용 힙을 새로 할당하지 않는다.
+	std::vector<VarInfo> _cycleWorkList;
 	u32 _dwLastIDVMWorker = 0;
 
 
@@ -149,7 +162,9 @@ public:
 	void CancelCycleCandidate(VAR_TYPE type, void* object);
 	bool PopCycleCandidate(VAR_TYPE& type, void*& object);
 	void ClearCycleCandidates();
-	bool CollectUnreachableCycleCandidate(VAR_TYPE type, void* object);
+	template<typename Visitor>
+	void VisitCycleContainerChildren(VarInfo source, Visitor visitor);
+	int CollectUnreachableCycleCandidates(size_t rootBudget);
 
 	AsyncInfo* AsyncAlloc();
 	void FreeAsync(VarInfo* d);

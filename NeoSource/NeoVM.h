@@ -246,6 +246,10 @@ struct CycleState
 	bool _destroying;
 	bool _cycleCollecting;
 	bool _mayContainContainerChild;
+	// 순환 수집 중에만 쓰는 임시 상태다. x64에서는 기존 bool 뒤의 padding을
+	// 사용하므로 CycleState 크기는 24B 그대로다.
+	u8   _cycleColor;
+	int  _cycleScratchRefCount;
 
 	NEOS_FORCEINLINE void Init(T* owner)
 	{
@@ -254,6 +258,8 @@ struct CycleState
 		_destroying = false;
 		_cycleCollecting = false;
 		_mayContainContainerChild = false;
+		_cycleColor = 0;
+		_cycleScratchRefCount = 0;
 	}
 	NEOS_FORCEINLINE bool IsQueued(T* owner) const
 	{

@@ -286,9 +286,21 @@ rt->TrimMemory(true);    // every empty page, ignoring the hold time and page bu
   garbage occupies pool slots until it is collected, so trimming first leaves those pages partly
   occupied and returns less than you expect.
 
-**Cost.** Each pass examines a bounded *number* of candidates, but a single candidate has no cost
-ceiling: checking it walks the whole container graph reachable from that candidate, so a candidate
-that reaches a large shared table scales with that graph. Choose a host safe point accordingly.
+**Cost.** One call is a single pass. Every candidate in the budget is traversed together, so an
+object reachable from several candidates is visited once for the whole pass, not once per candidate.
+Two things are never walked into:
+
+- A container that has never held a container child cannot be part of a cycle, so it is skipped
+  outright. A list of coordinate lists, a mesh cache, a table of plain values — none of it enlarges
+  the walk, however large it is.
+- Objects the VM owns outside the reference graph — modules, running or scheduled coroutines,
+  in-flight async requests — are treated as roots and are not expanded. A reference held by one of
+  them keeps its target alive without ever being traversed.
+
+What is left is proportional to the number of *interlinked* containers the candidates can reach, and
+that still has no fixed ceiling: a candidate embedded in a large graph of containers pays for that
+graph. Call it at a host safe point where a variable-cost pass is acceptable, and measure worst-case
+frame time rather than the average if your title keeps many containers cross-referenced.
 
 > Some `IRuntime` members are intentionally not implemented yet and are marked `[미구현]` in the header
 > (`RegisterFunction`, `ResetInstance`, `Cancel`, the `async` family, `CallContext::fail`,

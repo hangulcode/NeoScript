@@ -814,6 +814,70 @@ static bool& GetCycleCollectingFlag(VAR_TYPE type, void* object)
 	}
 }
 
+enum CycleColor : u8
+{
+	CYCLE_COLOR_NONE = 0,
+	CYCLE_COLOR_GRAY = 1,
+	CYCLE_COLOR_WHITE = 2,
+	CYCLE_COLOR_BLACK = 3,
+	CYCLE_COLOR_STATE_MASK = 0x7f,
+	CYCLE_COLOR_NATIVE_ROOT = 0x80,
+};
+
+static u8& GetCycleColor(VAR_TYPE type, void* object)
+{
+	static u8 invalid = CYCLE_COLOR_NONE;
+	switch (type)
+	{
+	case VAR_MAP:       return ((MapInfo*)object)->_cycleState._cycleColor;
+	case VAR_LIST:      return ((ListInfo*)object)->_cycleState._cycleColor;
+	case VAR_SET:       return ((SetInfo*)object)->_cycleState._cycleColor;
+	case VAR_COROUTINE: return ((CoroutineInfo*)object)->_cycleState._cycleColor;
+	case VAR_MODULE:    return ((CNeoVMWorker*)object)->_cycleState._cycleColor;
+	case VAR_ASYNC:     return ((AsyncInfo*)object)->_cycleState._cycleColor;
+	default:             return invalid;
+	}
+}
+
+static int& GetCycleScratchRefCount(VAR_TYPE type, void* object)
+{
+	static int invalid = 0;
+	switch (type)
+	{
+	case VAR_MAP:       return ((MapInfo*)object)->_cycleState._cycleScratchRefCount;
+	case VAR_LIST:      return ((ListInfo*)object)->_cycleState._cycleScratchRefCount;
+	case VAR_SET:       return ((SetInfo*)object)->_cycleState._cycleScratchRefCount;
+	case VAR_COROUTINE: return ((CoroutineInfo*)object)->_cycleState._cycleScratchRefCount;
+	case VAR_MODULE:    return ((CNeoVMWorker*)object)->_cycleState._cycleScratchRefCount;
+	case VAR_ASYNC:     return ((AsyncInfo*)object)->_cycleState._cycleScratchRefCount;
+	default:             return invalid;
+	}
+}
+
+static NEOS_FORCEINLINE u8 GetCycleColorState(VAR_TYPE type, void* object)
+{
+	return GetCycleColor(type, object) & CYCLE_COLOR_STATE_MASK;
+}
+
+static NEOS_FORCEINLINE void SetCycleColorState(VAR_TYPE type, void* object, u8 state)
+{
+	u8& color = GetCycleColor(type, object);
+	color = (color & CYCLE_COLOR_NATIVE_ROOT) | state;
+}
+
+// native root가 잡은 자식은 refcount 그래프 밖의 사용처를 하나 가진다. 따라서
+// 수집 그래프에 native root의 자식을 전개하지 않아도, 그 자식이 다른 경로에서
+// 발견되면 scratch RC가 양수로 남아 black 처리된다.
+static NEOS_FORCEINLINE bool IsCycleNativeRoot(VAR_TYPE type, void* object)
+{
+	if (type == VAR_MODULE)
+		return true;
+	if (type == VAR_ASYNC)
+		return ((AsyncInfo*)object)->_state != ASYNC_READY;
+	return type == VAR_COROUTINE
+		&& (GetCycleColor(type, object) & CYCLE_COLOR_NATIVE_ROOT) != 0;
+}
+
 static int& GetContainerRefCountRef(VAR_TYPE type, void* object)
 {
 	static int invalid = 0;
@@ -850,6 +914,88 @@ static VarInfo MakeContainerVar(VAR_TYPE type, void* object)
 	return value;
 }
 
+// Cycle collector의 gray/black 단계에서만 쓴다. 그래프를 별도 노드/children
+// 벡터로 복제하지 않고 실제 컨테이너의 소유 간선을 직접 방문한다.
+template<typename Visitor>
+void CNeoVMImpl::VisitCycleContainerChildren(VarInfo source, Visitor visitor)
+{
+	switch (source.GetType())
+	{
+	case VAR_MAP:
+	{
+		MapInfo* map = source._tbl;
+		if (map->_meta) visitor(VAR_MAP, map->_meta);
+		for (int i = 0; i < map->_BucketCapa; ++i)
+		{
+			MapNode& node = map->_Bucket[i];
+			if (IsMapNodeUsed(node) && node.data)
+			{
+				VarInfo key = node.data->key;
+				VarInfo value = node.data->value;
+				if (key.IsContainerType()) visitor(key.GetType(), GetContainerObject(key));
+				if (value.IsContainerType()) visitor(value.GetType(), GetContainerObject(value));
+			}
+		}
+		break;
+	}
+	case VAR_LIST:
+	{
+		ListInfo* list = source._lst;
+		for (int i = 0; i < list->_itemCount; ++i)
+		{
+			VarInfo value = list->_Bucket[i];
+			if (value.IsContainerType()) visitor(value.GetType(), GetContainerObject(value));
+		}
+		break;
+	}
+	case VAR_SET:
+	{
+		SetInfo* set = source._set;
+		if (set->_meta) visitor(VAR_SET, set->_meta);
+		for (int i = 0; i < set->_BucketCapa; ++i)
+		{
+			SetNode& node = set->_Bucket[i];
+			if (IsSetNodeUsed(node) && node.data)
+			{
+				VarInfo key = node.data->key;
+				if (key.IsContainerType()) visitor(key.GetType(), GetContainerObject(key));
+			}
+		}
+		break;
+	}
+	case VAR_COROUTINE:
+	{
+		CoroutineInfo* coroutine = source._cor;
+		int count = coroutine->_info._iSP_Vars_Max2;
+		if (count < 0) count = 0;
+		if (count > (int)coroutine->m_sVarStack.size()) count = (int)coroutine->m_sVarStack.size();
+		for (int i = 0; i < count; ++i)
+		{
+			VarInfo value = coroutine->m_sVarStack[i];
+			if (value.IsContainerType()) visitor(value.GetType(), GetContainerObject(value));
+		}
+		break;
+	}
+	case VAR_MODULE:
+	{
+		CNeoVMWorker* worker = (CNeoVMWorker*)source._module;
+		for (VarInfo& value : worker->m_sVarGlobal)
+		{
+			if (value.IsContainerType()) visitor(value.GetType(), GetContainerObject(value));
+		}
+		break;
+	}
+	case VAR_ASYNC:
+	{
+		VarInfo value = source._async->_LockReferance;
+		if (value.IsContainerType()) visitor(value.GetType(), GetContainerObject(value));
+		break;
+	}
+	default:
+		break;
+	}
+}
+
 void CNeoVMImpl::QueueContainerForCycleCheck(const VarInfo& source)
 {
 	// VM 소멸은 참조 그래프의 생존성을 판단하는 단계가 아니다. 아래의 live
@@ -867,6 +1013,10 @@ void CNeoVMImpl::QueueContainerForCycleCheck(const VarInfo& source)
 		return;
 
 	const VAR_TYPE type = value.GetType();
+	// Module은 VM worker registry가 raw 포인터로 수명 전체를 소유한다. 순환
+	// 수집기가 회수할 대상이 아니며, FreeWorker가 유일한 정리 경로다.
+	if (type == VAR_MODULE)
+		return;
 	if (MayContainContainerChild(type, object) == false)
 		return;
 	bool appended = false;
@@ -876,7 +1026,6 @@ void CNeoVMImpl::QueueContainerForCycleCheck(const VarInfo& source)
 	case VAR_LIST:      appended = CycleList_Append(_sCycleListHead, _sCycleListTail, (ListInfo*)object); break;
 	case VAR_SET:       appended = CycleList_Append(_sCycleSetHead, _sCycleSetTail, (SetInfo*)object); break;
 	case VAR_COROUTINE: appended = CycleList_Append(_sCycleCoroutineHead, _sCycleCoroutineTail, (CoroutineInfo*)object); break;
-	case VAR_MODULE:    appended = CycleList_Append(_sCycleModuleHead, _sCycleModuleTail, (CNeoVMWorker*)object); break;
 	case VAR_ASYNC:     appended = CycleList_Append(_sCycleAsyncHead, _sCycleAsyncTail, (AsyncInfo*)object); break;
 	default:             break;
 	}
@@ -947,211 +1096,159 @@ void CNeoVMImpl::ClearCycleCandidates()
 	}
 }
 
-struct CycleNodeKey
+int CNeoVMImpl::CollectUnreachableCycleCandidates(size_t rootBudget)
 {
-	VAR_TYPE type;
-	void* object;
-
-	bool operator==(const CycleNodeKey& rhs) const
+	_cycleWorkList.clear();
+	bool activeCoroutineRootsMarked = false;
+	auto setActiveCoroutineNativeRoot = [this](bool enabled)
 	{
-		return type == rhs.type && object == rhs.object;
-	}
-};
+		auto setRoot = [enabled](CoroutineInfo* coroutine)
+		{
+			if (coroutine == nullptr)
+				return;
+			u8& color = GetCycleColor(VAR_COROUTINE, coroutine);
+			if (enabled)
+				color |= CYCLE_COLOR_NATIVE_ROOT;
+			else
+				color = (u8)(color & ~CYCLE_COLOR_NATIVE_ROOT);
+		};
 
-struct CycleNodeKeyHash
-{
-	size_t operator()(const CycleNodeKey& key) const
-	{
-		return ((size_t)(uintptr_t)key.object >> 3) ^ ((size_t)key.type * 0x9e3779b9u);
-	}
-};
-
-struct CycleGraphNode
-{
-	CycleNodeKey key;
-	int refCount = 0;
-	int internalIncoming = 0;
-	bool markedLive = false;
-	bool nativeRoot = false;
-	std::vector<int> children;
-};
-
-bool CNeoVMImpl::CollectUnreachableCycleCandidate(VAR_TYPE candidateType, void* candidateObject)
-{
-	std::vector<CycleGraphNode> nodes;
-	std::unordered_map<CycleNodeKey, int, CycleNodeKeyHash> indices;
-
-	auto isNativeRoot = [this](VAR_TYPE type, void* object)
-	{
-		// Module은 VM worker registry가 raw 포인터로 소유한다. 요청을 보낸 Async도
-		// worker/completed queue가 소유하므로 refcount 그래프 밖의 사용처로 취급한다.
-		if (type == VAR_MODULE)
-			return true;
-		if (type == VAR_ASYNC)
-			return ((AsyncInfo*)object)->_state != ASYNC_READY;
-
-		if (type != VAR_COROUTINE)
-			return false;
-
-		CoroutineInfo* coroutine = (CoroutineInfo*)object;
 		for (const auto& pair : _sVMWorkers)
 		{
 			CNeoVMWorker* worker = pair.second;
-			if (worker->m_pMainCtx == coroutine || worker->m_pCur == coroutine
-				|| worker->m_pRegisterActive == coroutine)
-				return true;
+			setRoot(worker->m_pMainCtx);
+			setRoot(worker->m_pCur);
+			setRoot(worker->m_pRegisterActive);
 			for (CoroutineInfo* scheduled : worker->m_sCoroutines)
-			{
-				if (scheduled == coroutine)
-					return true;
-			}
+				setRoot(scheduled);
 		}
-		return false;
 	};
 
-	auto addNode = [&](VAR_TYPE type, void* object)
+	// Gray 단계는 후보 루트 전체의 closure를 한 번만 만든다. color가 NONE인
+	// 객체만 worklist에 넣으므로 타입+포인터 side table이 필요 없다.
+	auto markGray = [&](VAR_TYPE type, void* object)
 	{
-		const CycleNodeKey key{ type, object };
-		auto found = indices.find(key);
-		if (found != indices.end())
-			return found->second;
-
-		const int index = (int)nodes.size();
-		CycleGraphNode node;
-		node.key = key;
-		node.refCount = GetContainerRefCount(type, object);
-		node.nativeRoot = isNativeRoot(type, object);
-		nodes.push_back(node);
-		indices.emplace(key, index);
-		return index;
+		if (object == nullptr || GetCycleColorState(type, object) != CYCLE_COLOR_NONE)
+			return;
+		// active coroutine은 worker가 raw 포인터로 붙들고 있다. 처음 coroutine을
+		// 만났을 때만 한 번 비트를 준비해 Gray 단계에서도 자식 전개를 생략한다.
+		if (type == VAR_COROUTINE && activeCoroutineRootsMarked == false)
+		{
+			setActiveCoroutineNativeRoot(true);
+			activeCoroutineRootsMarked = true;
+		}
+		SetCycleColorState(type, object, CYCLE_COLOR_GRAY);
+		GetCycleScratchRefCount(type, object) = GetContainerRefCount(type, object);
+		_cycleWorkList.push_back(MakeContainerVar(type, object));
 	};
 
-	addNode(candidateType, candidateObject);
-	for (int source = 0; source < (int)nodes.size(); ++source)
+	int processed = 0;
+	while (_cycleCandidateCount != 0 && (size_t)processed < rootBudget)
 	{
-		auto addEdge = [&](VAR_TYPE type, void* object)
+		VAR_TYPE type = VAR_NONE;
+		void* object = nullptr;
+		if (PopCycleCandidate(type, object) == false)
+			break;
+		++processed;
+		markGray(type, object);
+	}
+	if (_cycleWorkList.empty())
+		return processed;
+
+	for (size_t cursor = 0; cursor < _cycleWorkList.size(); ++cursor)
+	{
+		VarInfo source = _cycleWorkList[cursor]; // child 추가로 vector가 재할당될 수 있다.
+		if (IsCycleNativeRoot(source.GetType(), GetContainerObject(source)))
+			continue;
+		VisitCycleContainerChildren(source, [&](VAR_TYPE type, void* object)
 		{
 			if (object == nullptr)
 				return;
-			const int child = addNode(type, object);
-			++nodes[child].internalIncoming;
-			nodes[source].children.push_back(child);
-		};
-		auto addVarEdge = [&](VarInfo& value)
-		{
-			if (value.IsContainerType())
-				addEdge(value.GetType(), GetContainerObject(value));
-		};
-		auto addCoroutineVars = [&](CoroutineInfo* coroutine)
-		{
-			int count = coroutine->_info._iSP_Vars_Max2;
-			if (count < 0) count = 0;
-			if (count > (int)coroutine->m_sVarStack.size()) count = (int)coroutine->m_sVarStack.size();
-			for (int i = 0; i < count; ++i)
-				addVarEdge(coroutine->m_sVarStack[i]);
-		};
+			// 컨테이너 자식을 담은 적 없는 객체는 순환의 구성원이 될 수 없다.
+			// parent가 white이면 release 단계에서 이 참조를 정상 해제한다.
+			if (MayContainContainerChild(type, object) == false)
+				return;
 
-		switch (nodes[source].key.type)
-		{
-		case VAR_MAP:
-		{
-			MapInfo* map = (MapInfo*)nodes[source].key.object;
-			if (map->_meta) addEdge(VAR_MAP, map->_meta);
-			for (int i = 0; i < map->_BucketCapa; ++i)
-			{
-				MapNode& node = map->_Bucket[i];
-				if (IsMapNodeUsed(node) && node.data)
-				{
-					addVarEdge(node.data->key);
-					addVarEdge(node.data->value);
-				}
-			}
-			break;
-		}
-		case VAR_LIST:
-		{
-			ListInfo* list = (ListInfo*)nodes[source].key.object;
-			for (int i = 0; i < list->_itemCount; ++i)
-				addVarEdge(list->_Bucket[i]);
-			break;
-		}
-		case VAR_SET:
-		{
-			SetInfo* set = (SetInfo*)nodes[source].key.object;
-			if (set->_meta) addEdge(VAR_SET, set->_meta);
-			for (int i = 0; i < set->_BucketCapa; ++i)
-			{
-				SetNode& node = set->_Bucket[i];
-				if (IsSetNodeUsed(node) && node.data)
-					addVarEdge(node.data->key);
-			}
-			break;
-		}
-		case VAR_COROUTINE:
-			addCoroutineVars((CoroutineInfo*)nodes[source].key.object);
-			break;
-		case VAR_MODULE:
-		{
-			CNeoVMWorker* worker = (CNeoVMWorker*)nodes[source].key.object;
-			for (VarInfo& value : worker->m_sVarGlobal)
-				addVarEdge(value);
-			break;
-		}
-		case VAR_ASYNC:
-			addVarEdge(((AsyncInfo*)nodes[source].key.object)->_LockReferance);
-			break;
-		default:
-			break;
-		}
+			if (GetCycleColorState(type, object) == CYCLE_COLOR_NONE)
+				markGray(type, object);
+			// 같은 child에 여러 간선이 오면 모두 감소해야 한다. 자식 자체는 한 번만
+			// worklist에 들어가지만, 이 감소는 간선마다 수행한다.
+			--GetCycleScratchRefCount(type, object);
+		});
 	}
 
-	std::vector<int> work;
-	for (int i = 0; i < (int)nodes.size(); ++i)
+	const size_t touchedCount = _cycleWorkList.size();
+
+	// scratchRC = refCount - internalIncoming 이다. 0이 아닌 값은 외부 사용처
+	// (음수는 참조 장부 불일치)를 뜻하므로 모두 black으로 보수적으로 처리한다.
+	const size_t blackBegin = _cycleWorkList.size();
+	for (size_t i = 0; i < touchedCount; ++i)
 	{
-		CycleGraphNode& node = nodes[i];
-		// 내부 간선보다 refcount가 작으면 참조 장부가 이미 손상된 상태다. 안전을 위해
-		// 외부 사용처가 있는 것으로 보수적으로 처리한다.
-		if (node.refCount < node.internalIncoming || node.nativeRoot
-			|| node.refCount > node.internalIncoming)
+		VarInfo value = _cycleWorkList[i];
+		const VAR_TYPE type = value.GetType();
+		void* object = GetContainerObject(value);
+		const bool nativeRoot = IsCycleNativeRoot(type, object);
+		if (nativeRoot || GetCycleScratchRefCount(type, object) != 0)
 		{
-			node.markedLive = true;
-			work.push_back(i);
+			SetCycleColorState(type, object, CYCLE_COLOR_BLACK);
+			_cycleWorkList.push_back(value);
 		}
 	}
-	for (size_t cursor = 0; cursor < work.size(); ++cursor)
+	for (size_t cursor = blackBegin; cursor < _cycleWorkList.size(); ++cursor)
 	{
-		for (int child : nodes[work[cursor]].children)
+		VarInfo source = _cycleWorkList[cursor];
+		if (IsCycleNativeRoot(source.GetType(), GetContainerObject(source)))
+			continue;
+		VisitCycleContainerChildren(source, [&](VAR_TYPE type, void* object)
 		{
-			if (nodes[child].markedLive == false)
-			{
-				nodes[child].markedLive = true;
-				work.push_back(child);
-			}
+			if (object == nullptr || GetCycleColorState(type, object) != CYCLE_COLOR_GRAY)
+				return;
+			SetCycleColorState(type, object, CYCLE_COLOR_BLACK);
+			_cycleWorkList.push_back(MakeContainerVar(type, object));
+		});
+	}
+
+	// worklist의 앞쪽은 touched node, 뒤쪽은 black BFS다. White만 다시 뒤에 복사해
+	// 기존과 같은 hold/release 3단계를 유지하면서도 별도 white vector를 만들지 않는다.
+	const size_t whiteBegin = _cycleWorkList.size();
+	for (size_t i = 0; i < touchedCount; ++i)
+	{
+		VarInfo value = _cycleWorkList[i];
+		const VAR_TYPE type = value.GetType();
+		void* object = GetContainerObject(value);
+		if (GetCycleColorState(type, object) == CYCLE_COLOR_GRAY)
+		{
+			SetCycleColorState(type, object, CYCLE_COLOR_WHITE);
+			_cycleWorkList.push_back(value);
 		}
 	}
+	const size_t whiteEnd = _cycleWorkList.size();
 
-	if (nodes.empty() || nodes[0].markedLive)
-		return false;
-
-	// white set 전체를 하나의 수집 단위로 잡는다. 후보 하나만 먼저 Free하면 그 자식이
-	// 아직 부모를 가리킨 채 살아남아 pool에 반납된 부모를 역참조할 수 있다.
-	std::vector<VarInfo> white;
-	white.reserve(nodes.size());
-	for (const CycleGraphNode& node : nodes)
+	// White 전체를 먼저 hold한다. 이 뒤에 내부 간선을 지우는 동안에는 어느 white도
+	// pool로 반납되지 않는다.
+	for (size_t i = whiteBegin; i < whiteEnd; ++i)
 	{
-		if (node.markedLive == false)
-			white.push_back(MakeContainerVar(node.key.type, node.key.object));
-	}
-
-	// ticket을 먼저 무효화하고 GC hold를 하나씩 더한다. 아래에서 내부 간선을 지우는
-	// 동안에는 어떤 white 객체도 pool로 반납되지 않는다.
-	for (VarInfo& value : white)
-	{
+		VarInfo value = _cycleWorkList[i];
 		void* object = GetContainerObject(value);
 		CancelCycleCandidate(value.GetType(), object);
 		GetCycleCollectingFlag(value.GetType(), object) = true;
 		++GetContainerRefCountRef(value.GetType(), object);
 	}
+
+	// 이후 release 과정에서 black 객체가 먼저 죽을 수 있으므로, 살아 있는 모든
+	// touched 객체의 임시 상태를 hold를 푸는 것보다 먼저 지운다.
+	if (activeCoroutineRootsMarked)
+		setActiveCoroutineNativeRoot(false);
+	for (size_t i = 0; i < touchedCount; ++i)
+	{
+		VarInfo value = _cycleWorkList[i];
+		void* object = GetContainerObject(value);
+		GetCycleColor(value.GetType(), object) = CYCLE_COLOR_NONE;
+		GetCycleScratchRefCount(value.GetType(), object) = 0;
+	}
+
+	if (whiteBegin == whiteEnd)
+		return processed;
 
 	auto releaseVar = [this](VarInfo& value)
 	{
@@ -1199,8 +1296,16 @@ bool CNeoVMImpl::CollectUnreachableCycleCandidate(VAR_TYPE candidateType, void* 
 
 	// 모든 white 객체가 살아 있는 상태에서만 소유 간선을 제거한다. 이 단계가 끝나면
 	// 컨테이너 사이에 dangling pointer가 남지 않으므로 이후에는 기존 Free*를 써도 된다.
-	for (VarInfo& owner : white)
+	//
+	// 이 루프만 _cycleWorkList 원소를 참조로 잡는다(다른 루프는 전부 복사한다). 아래
+	// releaseVar 가 도는 Var_Release -> QueueContainerForDestroy/QueueContainerForCycleCheck
+	// 경로는 _sDestroyQueue 와 후보 intrusive 링크만 건드리고 _cycleWorkList 에는
+	// push 하지 않으며, 재진입은 _isCollectingCycles 가 막는다. 그래서 여기서는
+	// 재할당이 일어나지 않는다 — 이 루프 안에서 워크리스트에 뭔가 넣게 되면
+	// owner 가 즉시 dangling 이 되므로, 그때는 복사로 바꿔야 한다.
+	for (size_t i = whiteBegin; i < whiteEnd; ++i)
 	{
+		VarInfo& owner = _cycleWorkList[i];
 		switch (owner.GetType())
 		{
 		case VAR_MAP:
@@ -1264,8 +1369,9 @@ bool CNeoVMImpl::CollectUnreachableCycleCandidate(VAR_TYPE candidateType, void* 
 
 	// 내부 간선이 모두 사라진 뒤 hold를 반납한다. 이제 각 객체는 안전하게 기존
 	// 파괴 큐를 통해 Free*/Confer 경로로 들어간다.
-	for (VarInfo& value : white)
+	for (size_t i = whiteBegin; i < whiteEnd; ++i)
 	{
+		VarInfo value = _cycleWorkList[i];
 		void* object = GetContainerObject(value);
 		GetCycleCollectingFlag(value.GetType(), object) = false;
 		if (--GetContainerRefCountRef(value.GetType(), object) <= 0)
@@ -1273,29 +1379,30 @@ bool CNeoVMImpl::CollectUnreachableCycleCandidate(VAR_TYPE candidateType, void* 
 		else
 			QueueContainerForCycleCheck(value);
 	}
-	return true;
+	return processed;
 }
+
+class CycleCollectingScope
+{
+public:
+	explicit CycleCollectingScope(bool& flag) : _flag(flag) { _flag = true; }
+	~CycleCollectingScope() { _flag = false; }
+private:
+	bool& _flag;
+};
 
 int CNeoVMImpl::CollectCycles(bool force)
 {
-	if (_isTearingDown || _cycleCandidateCount == 0)
+	if (_isTearingDown || _isCollectingCycles || _cycleCandidateCount == 0)
 		return 0;
+	CycleCollectingScope collectingScope(_isCollectingCycles);
 
 	int processedTotal = 0;
 	do
 	{
 		const size_t total = _cycleCandidateCount;
 		const size_t budget = force ? total : std::max<size_t>(16, (total + 49) / 50);
-		int processed = 0;
-		while (_cycleCandidateCount != 0 && (size_t)processed < budget)
-		{
-			VAR_TYPE type = VAR_NONE;
-			void* object = nullptr;
-			if (PopCycleCandidate(type, object) == false)
-				break;
-			CollectUnreachableCycleCandidate(type, object);
-			++processed;
-		}
+		const int processed = CollectUnreachableCycleCandidates(budget);
 		processedTotal += processed;
 		if (processed == 0)
 			break;
