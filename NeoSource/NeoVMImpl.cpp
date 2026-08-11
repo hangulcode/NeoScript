@@ -188,7 +188,7 @@ void CNeoVMImpl::GetAllocStats(SNeoVMAllocStats& outStats)
 
 // 주의: 여기서 stringIdleBytes 를 다시 재지 않는다.
 // StringIdleBytes() 는 문자열 free 리스트 전수 순회라 O(유휴 노드) 인데, 이 함수는
-// RunFunction 이 끝날 때마다 그리고 증분 회수가 도는 동안에는 매 프레임 불린다.
+// 실행이 끝날 때마다 그리고 증분 회수가 도는 동안에는 매 프레임 불린다.
 // 그러면 "한 호출의 비용에 상한을 둔다" 는 증분 회수의 전제가 깨진다.
 // 갱신은 GetAllocStats(조회) 에서만 하고, 여기서는 마지막 값을 그대로 다시 publish 한다
 // (델타 0 이라 전역은 변하지 않는다).
@@ -344,9 +344,6 @@ CNeoVMWorker* CNeoVMImpl::FindWorker(int iModule)
 
 	return (*it).second;
 }
-
-int CNeoVMImpl::FindFunction(const std::string& name) { return GetMainWorker()->FindFunction(name); }
-
 
 CoroutineInfo* CNeoVMImpl::CoroutineAlloc()
 {
@@ -1735,96 +1732,20 @@ INeoVMWorker* CNeoVMImpl::LoadVM(const NeoLoadVMParam* vparam, CNeoVMProgram* pP
 	PublishAllocStats();
 	return pWorker;
 }
-bool CNeoVMImpl::PCall(int iModule)
+bool CNeoVMImpl::ReleaseWorker(INeoVMWorker* worker)
 {
-	CNeoVMWorker* pFound = FindWorker(iModule);
-	if (pFound == nullptr)
+	CNeoVMWorker* pWorker = static_cast<CNeoVMWorker*>(worker);
+	if (pWorker == nullptr)
 		return false;
-
-	auto pWorker = pFound;
-	std::vector<VarInfo> _args;
-	int st = pWorker->ExecuteTop(0, _args);   // 모듈 본문(함수0)을 풀 컨텍스트로 최상위 실행
-	return st != NEOEXEC_ERROR;
-}
-
-bool CNeoVMImpl::RunFunction(const std::string& funName)
-{
-	int iFID = _pMainWorker->FindFunction(funName);
-	if (iFID == -1)
+	auto it = _sVMWorkers.find(pWorker->GetWorkerID());
+	if (it == _sVMWorkers.end() || it->second != pWorker)
 		return false;
-
-	std::vector<VarInfo> _args;
-	_pMainWorker->ExecuteTop(iFID, _args);
-	return true;
-}
-u32 CNeoVMImpl::CreateWorker(int iStackSize)
-{
-	auto pWorker = WorkerAlloc(iStackSize);
-	PublishAllocStats();
-	return pWorker->GetWorkerID();
-}
-bool CNeoVMImpl::ReleaseWorker(u32 id)
-{
-	CNeoVMWorker* pFound = FindWorker(id);
-	if (pFound == nullptr)
-		return false;
-
-	auto pWorker = pFound;
+	const bool isMainWorker = (pWorker == _pMainWorker);
 	FreeWorker(pWorker);
-
-	if (pWorker == _pMainWorker)
+	if (isMainWorker)
 		_pMainWorker = NULL;
 	PublishAllocStats();
 	return true;
-}
-bool CNeoVMImpl::BindWorkerFunction(u32 id, const std::string& funName)
-{
-	CNeoVMWorker* pFound = FindWorker(id);
-	if (pFound == nullptr)
-		return false;
-
-	CNeoVMWorker* pWorker = pFound;
-	return pWorker->BindWorkerFunction(funName);
-}
-bool CNeoVMImpl::SetTimeout(u32 id, int iTimeout, int iCheckOpCount)
-{
-	CNeoVMWorker* pWorker;
-	if ((int)id == -1)
-	{
-		pWorker = (CNeoVMWorker*)_pMainWorker;
-	}
-	else
-	{
-		CNeoVMWorker* pFound = FindWorker(id);
-		if (pFound == nullptr)
-			return false;
-		pWorker = pFound;
-	}
-	pWorker->SetTimeout(iTimeout, iCheckOpCount);
-	return true;
-}
-
-bool CNeoVMImpl::IsWorking(u32 id)
-{
-	CNeoVMWorker* pFound = FindWorker(id);
-	if (pFound == nullptr)
-		return false;
-	auto pWorker = pFound;
-	return pWorker->IsWorking();
-}
-
-bool CNeoVMImpl::UpdateWorker(u32 id)
-{
-	if (_pErrorMsg.empty() == false)
-		return false;
-
-	CNeoVMWorker* pFound = FindWorker(id);
-	if (pFound == nullptr)
-		return false;
-	auto pWorker = pFound;
-	bool result = pWorker->Run();// iTimeout >= 0, iTimeout, iCheckOpCount);
-	PublishAllocStats();
-	return result;
 }
 
 };

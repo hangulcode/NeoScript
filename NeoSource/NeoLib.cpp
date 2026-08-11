@@ -1113,7 +1113,9 @@ struct neo_libs
 		VarInfo* pArg1 = pN->GetStack(1);
 		if (pArg1->GetType() != VAR_MODULE) return false;
 
-		pN->_pVM->PCall(pArg1->_module->GetWorkerID());
+		std::vector<VarInfo> moduleArgs;
+		if (pArg1->_module->ExecuteTop(0, moduleArgs) == NEOEXEC_ERROR)
+			return false;
 
 		pN->ReturnValue();
 		return true;

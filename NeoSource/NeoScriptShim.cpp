@@ -169,6 +169,10 @@ struct InstanceRec
     bool             hostCallPending = false;
     NeoHostCallBegin pendingBegin = NeoHostCallBegin::Acquired;
     bool             pendingNested = false;
+	// Invocation 이 정지한 경우에는 반환 슬롯을 빌리지 않지만 실행 컨텍스트는
+	// ResumeTop이 이어서 쓴다. nested depth는 최종 Resume/Cancel 때 한 번만 푼다.
+	bool             suspendedHostCall = false;
+	bool             suspendedNested = false;
     // 이 인스턴스의 객체 바인딩. reserve(objectCount) 로 안정 주소 유지(트램폴린이 &bindings[i] 보관).
     std::vector<ObjectBinding> bindings;
     // setObject/pushObject 로 반환값에 중첩된 바인딩 객체들. 반환 맵/리스트가 호출 종료 후에도
@@ -486,7 +490,7 @@ RuntimeImpl::~RuntimeImpl()
         if (inst->worker)
         {
             m_workerHandle.erase(inst->worker);
-            if (m_vm) m_vm->ReleaseWorker(inst->worker->GetWorkerID());
+            if (m_vm) m_vm->ReleaseWorker(inst->worker);
         }
         delete inst;
     });
@@ -790,7 +794,7 @@ void RuntimeImpl::DestroyInstance(InstanceHandle h)
     if (!inst) return;
     FlushPendingCall(inst); // 지연된 borrowed 컨텍스트 반납
     m_workerHandle.erase(inst->worker);
-    m_vm->ReleaseWorker(inst->worker->GetWorkerID());
+    m_vm->ReleaseWorker(inst->worker);
     delete inst;
     m_instances.remove(h.id, h.generation);
 }
@@ -878,7 +882,7 @@ bool RuntimeImpl::ResetInstance(InstanceHandle h)
     {
         if (!inst->callArgs.empty()) inst->worker->ReleaseArgs(inst->callArgs);
         m_workerHandle.erase(inst->worker);
-        m_vm->ReleaseWorker(inst->worker->GetWorkerID());
+        m_vm->ReleaseWorker(inst->worker);
         inst->worker = nullptr;
     }
     inst->callArgs.clear();
@@ -893,6 +897,8 @@ bool RuntimeImpl::ResetInstance(InstanceHandle h)
     inst->callStatus = RunStatus::Failed;
     inst->armedSeq = 0;
     inst->pendingSeq = 0;
+	inst->suspendedHostCall = false;
+	inst->suspendedNested = false;
     inst->callError = Error();
     inst->failCode = 0;
     // objectUserData(BindObject 로 준 인스턴스별 값)는 보존 — 리셋 후에도 같은 호스트 객체에 붙어야 한다.
@@ -920,11 +926,12 @@ RunStatus RuntimeImpl::RunGlobalInit(InstanceHandle h)
 {
     InstanceRec* inst = resolveInstance(h);
     if (!inst) return RunStatus::Failed;
-    BeginCallError(inst);                              // 스티키 VM 에러 제거(이번 실행 사유만 남김)
-    bool ok = m_vm->PCall(inst->worker->GetWorkerID()); // 최상위 실행(구 PCall)
-    // 디버거 브레이크포인트/sleep 로 정지했으면 아직 working → Suspended.
-    if (m_vm->IsWorking(inst->worker->GetWorkerID())) return RunStatus::Suspended;
-    return ok ? RunStatus::Completed : RunStatus::Failed;
+    BeginCallError(inst); // 스티키 VM 에러 제거(이번 실행 사유만 남김)
+    std::vector<VarInfo> args;
+    const RunStatus status = mapExecStatus(inst->worker->ExecuteTop(0, args));
+    if (status == RunStatus::Failed)
+        CaptureCallError(inst, status);
+    return status;
 }
 
 InstanceState RuntimeImpl::GetState(InstanceHandle h) const
@@ -937,6 +944,7 @@ InstanceState RuntimeImpl::GetState(InstanceHandle h) const
     case NeoExecutionState::Running:           return InstanceState::Running;
     case NeoExecutionState::SuspendedSleep:    return InstanceState::Suspended;
     case NeoExecutionState::SuspendedDebugger: return InstanceState::Suspended;
+    case NeoExecutionState::SuspendedSlice:    return InstanceState::Suspended;
     default:                                   return InstanceState::Idle;
     }
 }
@@ -1013,7 +1021,23 @@ RunStatus RuntimeImpl::Resume(InstanceHandle h, const ResumeDesc&)
 {
     InstanceRec* inst = resolveInstance(h);
     if (!inst) return RunStatus::Failed;
-    return mapExecStatus(inst->worker->ResumeTop());
+    const RunStatus status = mapExecStatus(inst->worker->ResumeTop());
+    if (inst->suspendedHostCall)
+    {
+        inst->callStatus = status;
+        if (status != RunStatus::Suspended)
+        {
+            // ResumeTop은 Completed/Error에서 실행 컨텍스트를 직접 반납한다.
+            // suspend 중에는 반환 슬롯을 빌리지 않았으므로 여기서 GC/EndHostCall은 하지 않는다.
+            if (status == RunStatus::Failed)
+                CaptureCallError(inst, status);
+            if (inst->suspendedNested)
+                inst->worker->EndNestedScriptCall();
+            inst->suspendedHostCall = false;
+            inst->suspendedNested = false;
+        }
+    }
+    return status;
 }
 bool RuntimeImpl::Cancel(InstanceHandle h)
 {
@@ -1024,6 +1048,10 @@ bool RuntimeImpl::Cancel(InstanceHandle h)
     if (!inst->callArgs.empty()) { inst->worker->ReleaseArgs(inst->callArgs); inst->callArgs.clear(); }
     // 인터프리터 실행 중(네이티브 콜백 안)이면 지금 밟고 있는 스택이라 VM 이 거부한다.
     if (!inst->worker->CancelExecution()) return false;
+	if (inst->suspendedHostCall && inst->suspendedNested)
+		inst->worker->EndNestedScriptCall();
+	inst->suspendedHostCall = false;
+	inst->suspendedNested = false;
     inst->callStatus = RunStatus::Cancelled;
     return true;
 }
@@ -1033,32 +1061,43 @@ bool RuntimeImpl::StartSliced(InstanceHandle h, StringView functionName, int32_t
     InstanceRec* inst = resolveInstance(h);
     if (!inst) return false;
     FlushPendingCall(inst);
-    // 남아있는 VM 에러를 비운다 — UpdateWorker 는 에러가 걸려 있으면 실행 자체를 거부한다.
+    if (inst->worker->GetExecutionState() != NeoExecutionState::Idle)
+        return false;
     BeginCallError(inst);
-    u32 id = inst->worker->GetWorkerID();
-    if (timeoutMs >= 0 || budget > 0)
-        m_vm->SetTimeout(id, timeoutMs, budget > 0 ? static_cast<int>(budget) : NEO_DEFAULT_CHECKOP);
-    return m_vm->BindWorkerFunction(id, functionName.str());
+    const int iFID = inst->worker->FindFunction(functionName.str());
+    if (iFID < 0)
+        return false;
+
+    // 첫 슬라이스도 ExecuteTop으로 바로 실행한다. 시간 제한으로 멈추면 컨텍스트는
+    // SuspendedSlice 상태로 retain되고, 다음 UpdateSliced가 ResumeTop으로 잇는다.
+    inst->worker->SetTimeout(timeoutMs, budget > 0 ? static_cast<int>(budget) : NEO_DEFAULT_CHECKOP);
+    std::vector<VarInfo> args;
+    const RunStatus status = mapExecStatus(inst->worker->ExecuteTop(iFID, args));
+    if (status == RunStatus::Failed)
+    {
+        CaptureCallError(inst, status);
+        return false;
+    }
+    return true;
 }
 RunStatus RuntimeImpl::UpdateSliced(InstanceHandle h)
 {
     InstanceRec* inst = resolveInstance(h);
     if (!inst) return RunStatus::Failed;
-    u32 id = inst->worker->GetWorkerID();
-    if (!m_vm->UpdateWorker(id))                  // 한 슬라이스 실행. false=런타임 에러
+    if (inst->worker->GetExecutionState() == NeoExecutionState::Idle)
+        return RunStatus::Completed;
+
+    const RunStatus status = mapExecStatus(inst->worker->ResumeTop());
+    if (status == RunStatus::Failed)
     {
-        // 시분할 경로는 에러가 나도 실행 컨텍스트를 스스로 반납하지 않는다 → IsWorking 이 계속 true 라
-        // 호출자가 무한히 UpdateSliced 를 돌게 된다. 여기서 실행을 버리고 Failed 로 끝낸다.
-        CaptureCallError(inst, RunStatus::Failed);
-        inst->worker->CancelExecution();
-        return RunStatus::Failed;
+        CaptureCallError(inst, status);
     }
-    return m_vm->IsWorking(id) ? RunStatus::Suspended : RunStatus::Completed;
+    return status;
 }
 bool RuntimeImpl::IsRunning(InstanceHandle h) const
 {
     InstanceRec* inst = resolveInstance(h);
-    return inst ? m_vm->IsWorking(inst->worker->GetWorkerID()) : false;
+    return inst && inst->worker->GetExecutionState() != NeoExecutionState::Idle;
 }
 
 bool RuntimeImpl::GetGlobalInt(InstanceHandle h, StringView name, int32_t& out) const
@@ -1465,18 +1504,19 @@ RunStatus Invocation::invoke()
     if (nested) w->BeginNestedScriptCall();
     if (inst->callTimeoutMs >= 0 || inst->callBudget > 0)
         w->SetTimeout(inst->callTimeoutMs, inst->callBudget > 0 ? static_cast<int>(inst->callBudget) : NEO_DEFAULT_CHECKOP);
-    const bool ran = w->RunFunction(inst->callFID, inst->callArgs);
-    // RunFunction 은 "끝까지 갔을 때"와 "디버거/sleep 으로 멈췄을 때" 둘 다 true 다.
-    // 정지를 완료로 보면 아래 GC() 가 아직 살아 있는 프레임의 스택 슬롯을 회수해 버린다
-    // (전역은 멀쩡하고 지역만 null 이 되므로, 재개 후 지역 인자를 받는 함수에서만 터진다).
-    // 정지 상태에서는 GC/인자 해제/pending 정리를 모두 건너뛰고 컨텍스트를 그대로 둔다 —
-    // 재개는 IDebugger 의 Continue/Step + Run 이 ResumeTop 으로 이어서 한다.
-    if (ran && w->IsSuspended())
+    const int execStatus = w->RunHostCall(inst->callFID, inst->callArgs);
+    if (execStatus == NEOEXEC_SUSPENDED)
     {
+        // Setup은 callArgs의 alloc 참조를 실행 스택에 AddRef해 복사했다. 이 벡터를
+        // retain할 이유가 없고, vector::clear만 하면 문자열/컨테이너 참조가 누수된다.
+        w->ReleaseArgs(inst->callArgs);
+        inst->callArgs.clear();
         inst->callStatus = RunStatus::Suspended;
+		inst->suspendedHostCall = true;
+		inst->suspendedNested = nested;
         return inst->callStatus;
     }
-    if (ran) { w->GC(); inst->callStatus = RunStatus::Completed; }
+    if (execStatus == NEOEXEC_COMPLETED) { w->GC(); inst->callStatus = RunStatus::Completed; }
     else inst->callStatus = RunStatus::Failed;
     inst->runtime->CaptureCallError(inst, inst->callStatus);   // 실패면 VM 상세 + fail() 코드 스냅샷
     w->ReleaseArgs(inst->callArgs);

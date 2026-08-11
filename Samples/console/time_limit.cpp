@@ -37,7 +37,7 @@ int SAMPLE_time_limit(INeoLoader* pLoader, std::string filename)
 
 	InstanceHandle inst = rt->CreateInstance(cr.program);
 
-	// TimeTest 를 100ms/1000op 슬라이스로 나눠 실행(구 Setup_TL/Call_TL).
+	// TimeTest 를 100ms/1000op 슬라이스로 나눠 실행.
 	StringView err;
 	if (false == rt->StartSliced(inst, "TimeTest", 100, 1000))
 	{

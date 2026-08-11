@@ -9,7 +9,7 @@
 // INeoVMWorker) 위에 shim 으로 얹는다(내부 재작성 아님):
 //     Runtime  ≈ INeoVM (+ Initialize)         — 이미 존재
 //     Program  ≈ CNeoVMProgram                 — 이미 refcount 공유 불변 이미지
-//     Instance ≈ INeoVMWorker (CreateWorker 는 이미 u32 id 반환) — 핸들 모델 반쯤 존재
+//     Instance ≈ INeoVMWorker — 핸들 모델 반쯤 존재
 //
 // 리뷰 피드백 반영 사항:
 //   1) C++11 최저공배수 (std::span/std::string_view/std::byte/지정초기화 미사용 →
@@ -586,7 +586,7 @@ public:
     virtual void StepOut(InstanceHandle instance) = 0;
     virtual void Pause(InstanceHandle instance) = 0;
     virtual bool IsPaused(InstanceHandle instance) = 0;
-    // Continue/Step 로 재개 모드를 설정한 뒤(콜백 밖에서) 실행을 다음 정지/종료까지 진행(= 구 worker->Run()).
+    // Continue/Step 로 재개 모드를 설정한 뒤(콜백 밖에서) 실행을 다음 정지/종료까지 진행한다.
     virtual RunStatus Run(InstanceHandle instance) = 0;
 
     virtual DebugLocation GetLocation(InstanceHandle instance) = 0;
@@ -709,7 +709,7 @@ public:
     // false 를 반환한다(그 경우엔 ctx.fail() 로 실패시킬 것). 슬라이스 사이/정지 상태에서 호출할 것.
     virtual bool Cancel(InstanceHandle instance) = 0;
 
-    //--- 협조적/시간분할 실행 (구 BindWorkerFunction/UpdateWorker, Setup_TL/Call_TL).
+    //--- 협조적/시간분할 실행.
     // 장시간/무한 함수를 슬라이스로 나눠 실행: StartSliced 로 시작 → IsRunning 동안 UpdateSliced 반복.
     // timeoutMs/budget = 슬라이스당 한도(-1/0 = 무제한). ---
     virtual bool StartSliced(InstanceHandle instance, StringView functionName, int32_t timeoutMs = -1, uint32_t budget = 0) = 0;

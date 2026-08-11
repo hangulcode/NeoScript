@@ -2,8 +2,11 @@
 #include "NeoVMImpl.h"
 
 #include <cstdio>
+#include <chrono>
 #include <iostream>
 #include <sstream>
+#include <string>
+#include <thread>
 
 static bool SetStorageRegression()
 {
@@ -403,6 +406,9 @@ int main()
 		"fun sortMutating(var a, var b) { sortMutationMap[9] = 9; return a < b; }\n"
         "export fun add(var a, var b) { return a + b; }\n"
         "export fun literal() { return 1.25 + 2.75; }\n"
+		"var suspendedArg = \"\";\n"
+		"export fun suspendEcho(var value) { sleep(1); suspendedArg = value; return value; }\n"
+		"export fun suspendedArgValue() { return suspendedArg; }\n"
         "export fun mapRehash(var n) {\n"
         "  var m = {};\n"
         "  for (var i in 0, n, 1) { var key = \"key\" .. i; m[key] = i; }\n"
@@ -469,6 +475,26 @@ int main()
         literalOk = literal.invoke() == RunStatus::Completed && literal.retFloat() == 4.0f;
     }
 
+    // Host execution must distinguish completion from sleep suspension.
+    // The string argument must still survive after Resume.
+    bool suspendedCallOk = false;
+    {
+        RunStatus status;
+        {
+            Invocation suspendEcho = runtime->Call(instance, "suspendEcho");
+            status = suspendEcho.argString("resume-arg").invoke();
+        }
+        for (int i = 0; status == RunStatus::Suspended && i < 20; ++i)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            status = runtime->Resume(instance);
+        }
+        CallResult value = runtime->Call(instance, "suspendedArgValue").invokeR();
+        const StringView resumed = value.asString();
+        suspendedCallOk = status == RunStatus::Completed && value.ok()
+            && std::string(resumed.data(), resumed.size()) == "resume-arg";
+    }
+
     bool mapOk = false;
     {
         Invocation mapRehash = runtime->Call(instance, "mapRehash");
@@ -507,7 +533,7 @@ int main()
     DestroyRuntime(runtime);
 
     const bool asmOk = asmOutput.str().find("Fun -") != std::string::npos;
-    if (!addOk || !literalOk || !mapOk || !mapDeleteReinsertOk || !mapSortNormalOk || !mapSortMutationOk || !setOk || !containerDestroyOk || !cycleTrimOk || !cycleCollectApiOk || !stringHashOk || !stringInternOk || !stringInternChurnOk || !hashLoadFactorOk || !asmOk)
+    if (!addOk || !literalOk || !suspendedCallOk || !mapOk || !mapDeleteReinsertOk || !mapSortNormalOk || !mapSortMutationOk || !setOk || !containerDestroyOk || !cycleTrimOk || !cycleCollectApiOk || !stringHashOk || !stringInternOk || !stringInternChurnOk || !hashLoadFactorOk || !asmOk)
     {
         std::fputs("NeoScript API smoke failed\n", stderr);
         return 1;

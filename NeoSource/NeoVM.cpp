@@ -24,16 +24,6 @@ FunctionPtrNative INeoVM::RegisterNative(Neo_NativeFunction func)
 	CNeoVMWorker::neo_pushcclosureNative(&fun, func);
 	return fun;
 }
-bool INeoVM::Call_TL() // Time Limit
-{
-	return ((CNeoVMWorker*)_pMainWorker)->CallN_TL();
-}
-
-VarInfo* INeoVM::GetVar(const std::string& name)
-{
-	return ((CNeoVMWorker*)_pMainWorker)->GetVar(name);
-}
-
 bool	INeoVM::RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFunction func, Neo_NativeProperty property)
 {
 	// 일반 VAR_MAP을 변환하지 않는다. VAR_FP_NATIVE를 생성한 뒤에만 바인딩한다.
@@ -247,6 +237,7 @@ bool VarInfo::ListInsertFloat(int idx, NS_FLOAT value)
 }
 bool VarInfo::ListFindFloat(int idx, NS_FLOAT& value)
 {
+	if (_type != VAR_LIST) return false;
 	VarInfo* p = _lst->GetValue(idx);
 	if(p == nullptr) return false;
 	if (p->GetType() == VAR_INT)

@@ -6,10 +6,9 @@
 
 using namespace NeoScript;
 
-// v2 대안: 구 callback 은 NeoHelper::Fun 으로 C함수를 스크립트 "값(델리게이트)"으로 넘겼다.
-// v2 는 함수-값 델리게이트를 두지 않는 대신, 호스트 로직을 "네이티브 객체 메서드"로 노출한다.
-//   구 Mul(a,b)  → Host.mul(a,b)  (호스트가 스크립트에 제공하는 콜백/로직)
-//   호스트→스크립트 호출은 rt->Call(inst, "Sum") 로.
+// 호스트 로직은 네이티브 객체 메서드로 노출한다.
+//   Host.mul(a,b): 호스트가 스크립트에 제공하는 콜백/로직
+//   호스트→스크립트 호출: rt->Call(inst, "Sum")
 static bool HostMethod(CallContext& ctx, StringView method)
 {
 	std::string m(method.data(), method.size());

@@ -5346,7 +5346,8 @@ INeoVM* INeoVM::CompileAndLoadRunVM(const NeoCompilerParam& param, const NeoLoad
 	if(pVM == nullptr)
 		return nullptr;
 
-	pVM->PCall(pVM->GetMainWorkerID());
+	std::vector<VarInfo> args;
+	pVM->GetMainWorker()->ExecuteTop(0, args);
 
 	return pVM;
 }

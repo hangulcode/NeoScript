@@ -489,7 +489,7 @@ export fun Read4Only(var n)
 
 // v2 IDebugger 로 이전한 디버그 스모크. 모든 정지는 top-level 실행(RunGlobalInit)이
 // Suspended 를 반환하면 사후 검사 → Continue+Run 으로 재개하는 모델을 쓴다.
-// (구 worker->Start()/PCall + DebugXxx 는 IDebugger 로 대체)
+// IDebugger는 ExecuteTop/ResumeTop 실행 모델을 사용한다.
 struct V2DebugSmokeListener : IDebugListener
 {
 	int stopCount = 0;
@@ -1631,11 +1631,11 @@ public:
 		}
 		if (initial)
 		{
-			runtime->RunGlobalInit(instance);   // 전역 코드 실행(구 PCall)
+			runtime->RunGlobalInit(instance);   // 전역 코드 실행
 		}
 		else if (dbg)
 		{
-			dbg->Run(instance);                 // Continue/Step 재개(구 worker->Run())
+			dbg->Run(instance);                 // Continue/Step 재개
 		}
 		fflush(stdout);
 		if (captureActive)

@@ -29,7 +29,7 @@ void                NeoExecContextPool_Destroy(NeoExecContextPool* pool);
 enum NeoExecStatus
 {
 	NEOEXEC_COMPLETED = 0,   // 실행이 끝까지 완료됨 → 컨텍스트 반납됨
-	NEOEXEC_SUSPENDED = 1,   // sleep/yield/브레이크로 정지 → 컨텍스트 retain(반납 안 됨), Resume 필요
+	NEOEXEC_SUSPENDED = 1,   // sleep/yield/브레이크/슬라이스 제한으로 정지 → 컨텍스트 retain(반납 안 됨), Resume 필요
 	NEOEXEC_ERROR     = 2,   // 에러 → 컨텍스트 반납됨
 };
 
@@ -51,6 +51,7 @@ enum class NeoExecutionState : u8
 	Running,
 	SuspendedSleep,
 	SuspendedDebugger,
+	SuspendedSlice,
 };
 
 // 호스트가 Script 함수를 시작하려 할 때의 컨텍스트 상태.
@@ -465,9 +466,6 @@ public:
 	inline u32 GetWorkerID() { return _idWorker; }
 	inline int GetBytesSize() { return _BytesSize; }
 
-	virtual bool RunFunctionResume(int iFID, std::vector<VarInfo>& _args) = 0;
-	virtual bool RunFunction(int iFID, std::vector<VarInfo>& _args) =0;
-	virtual bool RunFunction(const std::string& funName, std::vector<VarInfo>& _args) =0;
 	virtual void GC() =0;
 	virtual VarInfo* GetReturnVar() =0;
 	virtual VarInfo* GetStackVar(int idx) =0;
@@ -674,150 +672,6 @@ public:
 			Var_Release(&arg);
 	}
 
-	class ScopedNestedScriptCall
-	{
-		INeoVMWorker* m_pWorker = nullptr;
-	public:
-		ScopedNestedScriptCall(INeoVMWorker* worker, bool active)
-		{
-			if (active)
-			{
-				m_pWorker = worker;
-				m_pWorker->BeginNestedScriptCall();
-			}
-		}
-		~ScopedNestedScriptCall()
-		{
-			if (m_pWorker != nullptr)
-				m_pWorker->EndNestedScriptCall();
-		}
-	};
-
-	template<typename RVal, typename ... Types>
-	bool iCall(RVal& r, int iFID, Types ... args)
-	{
-		NeoHostCallBegin begin = BeginHostCall();
-		if (begin != NeoHostCallBegin::Acquired && begin != NeoHostCallBegin::Nested)
-			return false;
-		ScopedNestedScriptCall nestedScriptCall(this, begin == NeoHostCallBegin::Nested);
-		std::vector<VarInfo> args_;
-		_args = &args_;
-		PushArgs(args...);
-		_args = NULL;
-
-		if (RunFunction(iFID, args_) == false)
-		{
-			ReleaseArgs(args_);
-			EndHostCall(begin);
-			return false;
-		}
-		GC();
-		ReleaseArgs(args_);
-		_read(GetReturnVar(), r);
-		EndHostCall(begin);
-		return true;
-	}
-
-	template<typename ... Types>
-	bool iCallN(int iFID, Types ... args)
-	{
-		NeoHostCallBegin begin = BeginHostCall();
-		if (begin != NeoHostCallBegin::Acquired && begin != NeoHostCallBegin::Nested)
-			return false;
-		ScopedNestedScriptCall nestedScriptCall(this, begin == NeoHostCallBegin::Nested);
-		std::vector<VarInfo> args_;
-		_args = &args_;
-		PushArgs(args...);
-		_args = NULL;
-
-		if (RunFunction(iFID, args_) == false)
-		{
-			ReleaseArgs(args_);
-			EndHostCall(begin);
-			return false;
-		}
-		GC();
-		ReleaseArgs(args_);
-		ReturnValue();
-		EndHostCall(begin);
-		return true;
-	}
-
-	template<typename RVal, typename ... Types>
-	bool Call(RVal& r, const std::string& funName, Types ... args)
-	{
-		NeoHostCallBegin begin = BeginHostCall();
-		if (begin != NeoHostCallBegin::Acquired && begin != NeoHostCallBegin::Nested)
-			return false;
-		ScopedNestedScriptCall nestedScriptCall(this, begin == NeoHostCallBegin::Nested);
-		std::vector<VarInfo> args_;
-		_args = &args_;
-		PushArgs(args...);
-		_args = NULL;
-
-		if (RunFunction(funName, args_) == false)
-		{
-			ReleaseArgs(args_);
-			EndHostCall(begin);
-			return false;
-		}
-		GC();
-		ReleaseArgs(args_);
-		_read(GetReturnVar(), r);
-		EndHostCall(begin);
-		return true;
-	}
-
-	template<typename ... Types>
-	bool CallN(const std::string& funName, Types ... args)
-	{
-		NeoHostCallBegin begin = BeginHostCall();
-		if (begin != NeoHostCallBegin::Acquired && begin != NeoHostCallBegin::Nested)
-			return false;
-		ScopedNestedScriptCall nestedScriptCall(this, begin == NeoHostCallBegin::Nested);
-		std::vector<VarInfo> args_;
-		_args = &args_;
-		PushArgs(args...);
-		_args = NULL;
-
-		if (RunFunction(funName, args_) == false)
-		{
-			ReleaseArgs(args_);
-			EndHostCall(begin);
-			return false;
-		}
-		GC();
-		ReleaseArgs(args_);
-		ReturnValue();
-		EndHostCall(begin);
-		return true;
-	}
-
-	template<typename ... Types>
-	bool Setup_TL(int iFID, Types ... args)
-	{
-		if (IsSuspended())
-			return false;
-
-		NeoHostCallBegin begin = BeginHostCall();
-		if (begin != NeoHostCallBegin::Acquired)
-			return false;
-
-		std::vector<VarInfo> args_;
-		_args = &args_;
-		PushArgs(args...);
-		_args = NULL;
-
-		if (false == Setup(iFID, args_))
-		{
-			ReleaseArgs(args_);
-			EndHostCall(begin);
-			return false;
-		}
-		ReleaseArgs(args_);
-		return true;
-	}
-
 	// 최상위 실행(엔진 이벤트 진입). 풀에서 컨텍스트를 대여해 iFID 를 실행한다.
 	// 반환: NeoExecStatus. SUSPENDED 면 컨텍스트를 retain 하고, 다음엔 ResumeTop() 으로 이어가야 한다.
 	template<typename ... Types>
@@ -835,28 +689,27 @@ public:
 
 	virtual int FindFunction(const std::string& name) = 0;
 	virtual bool	Setup(int iFunctionID, std::vector<VarInfo>& _args) = 0;
-	virtual bool	Start(int iFunctionID, std::vector<VarInfo>& _args) = 0;
-	virtual bool IsWorking() = 0;
 	virtual bool	Run() =0;
 	// 최상위 실행/재개 (NeoExecStatus 반환). IsSuspended() 가 true 면 ResumeTop() 을 호출한다.
 	virtual int	ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args) = 0;
 	virtual int	ResumeTop() = 0;
 	virtual NeoExecutionState GetExecutionState() = 0;
-	// SuspendedSleep 또는 SuspendedDebugger일 때만 true. Running 상태는 포함하지 않는다.
+	// sleep/debugger/slice 제한 정지일 때 true. Running 상태는 포함하지 않는다.
 	virtual bool IsSuspended() = 0;
-	// 호스트→스크립트 함수 호출(Call/CallN/iCall/iCallN)용. idle 이면 최상위 컨텍스트를 대여하고
+	// 호스트 Invocation 호출용. idle 이면 최상위 컨텍스트를 대여하고
 	// (반환값=대여했는지), 완료 후 EndHostCall 에서 반납한다. 실행 중(중첩 호출)이면 현재 컨텍스트 재사용.
 	virtual NeoHostCallBegin BeginHostCall() = 0;
 	virtual void EndHostCall(NeoHostCallBegin begin) = 0;
 	virtual void BeginNestedScriptCall() = 0;
 	virtual void EndNestedScriptCall() = 0;
-	// 정지(sleep/디버거)되었거나 시분할 바인딩된 실행을 버리고 컨텍스트를 풀로 반납한다.
+	// BeginHostCall로 확보한 컨텍스트에서 실행하고 상태를 반환한다.
+	virtual int RunHostCall(int iFunctionID, std::vector<VarInfo>& _args) = 0;
+	// 정지(sleep/디버거/슬라이스 제한)된 실행을 버리고 컨텍스트를 풀로 반납한다.
 	// 전역 변수는 보존된다(워커는 그대로 살아있고 idle 로 돌아감).
 	// 인터프리터 실행 중(네이티브 콜백 안 등)에는 컨텍스트를 해제할 수 없으므로 false 를 반환한다.
 	virtual bool CancelExecution() = 0;
 	virtual void SetTimeout(int iTimeout, int iCheckOpCount) = 0;
 	virtual VarInfo* GetVar(const std::string& name) = 0;
-	virtual bool BindWorkerFunction(const std::string& funName) = 0;
 };
 
 
@@ -918,7 +771,6 @@ protected:
 public:
 	inline bool IsLocalErrorMsg() { return _bError; }
 	static FunctionPtrNative RegisterNative(Neo_NativeFunction func);
-	virtual int FindFunction(const std::string& name) =0;
 
 	// 프로세스 전역 print/error 훅. 최초 초기화(1회) 때만 설정한다(VM 생성마다 X).
 	// io_print / 에러 리포트가 이걸 통해 호스트로 출력. null 이면 std::cout 로 fallback.
@@ -931,51 +783,11 @@ public:
 
 	void Var_ReleaseInternal(VarInfo* d);
 
-	template<typename F>
-	static FunctionPtr Register(F func)
-	{
-		FunctionPtr fun;
-		int argCount = push_functor(&fun, func);
-		fun._argCount = argCount;
-		return fun;
-	}
-
-	template<typename RVal, typename ... Types>
-	bool Call(RVal* r, const std::string& funName, Types ... args)
-	{
-		return _pMainWorker->Call<RVal>(*r, funName, args...);
-	}
-
-	template<typename ... Types>
-	bool CallN(const std::string& funName, Types ... args)
-	{
-		return _pMainWorker->CallN(funName, args...);
-	}
-
-	template<typename ... Types>
-	bool Setup_TL(const std::string& funName, Types ... args) // Setup Time Limit
-	{
-		int iFID = _pMainWorker->FindFunction(funName);
-		if (iFID == -1)
-			return false;
-
-		return _pMainWorker->Setup_TL(iFID, args...);
-	}
-
-	bool Call_TL(); // Time Limit
-	VarInfo* GetVar(const std::string& name);
-
 	static bool	RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFunction func, Neo_NativeProperty property);
 
-	virtual u32 CreateWorker(int iStackSize = 50 * 1024) =0;
-	virtual bool ReleaseWorker(u32 id) = 0;
-	virtual bool BindWorkerFunction(u32 id, const std::string& funName) = 0;
-	virtual bool SetTimeout(u32 id, int iTimeout = -1, int iCheckOpCount = NEO_DEFAULT_CHECKOP) = 0;
-	virtual bool IsWorking(u32 id) = 0;
-	virtual bool UpdateWorker(u32 id) = 0;
+	virtual bool ReleaseWorker(INeoVMWorker* worker) = 0;
 
 	inline INeoVMWorker* GetMainWorker() { return _pMainWorker; }
-	int GetMainWorkerID() { return _pMainWorker == NULL ? 0 : _pMainWorker->GetWorkerID(); }
 	inline int GetBytesSize() { return _pMainWorker->GetBytesSize(); }
 
 	virtual  const char* GetLastErrorMsg() = 0;
@@ -992,7 +804,6 @@ public:
 	// 코드/함수테이블/디버그정보를 공유하고, 파싱과 코드 패치는 프로그램 생성 시 1회만 일어난다.
 	// 소유권은 넘어가지 않는다 — 워커가 자체적으로 AddRef 하므로 호출측은 자기 참조를 Release 하면 된다.
 	virtual  INeoVMWorker*	LoadVM(const NeoLoadVMParam* vparam, CNeoVMProgram* pProgram, bool blMainWorker = true, bool init = false, int iStackSize = 50 * 1024) = 0;
-	virtual  bool PCall(int iModule) = 0;
 
 	static INeoVM* 	CreateVM();
 	static void		ReleaseVM(INeoVM* pVM);

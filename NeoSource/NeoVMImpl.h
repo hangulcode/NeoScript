@@ -249,9 +249,6 @@ public:
 public:
 	NEOS_FORCEINLINE CNeoVMWorker* GetMainWorker() { return (CNeoVMWorker*)_pMainWorker; }
 
-	bool RunFunction(const std::string& funName);
-
-
 	std::string _sErrorMsgDetail;
 	std::string _pErrorMsg;
 
@@ -266,29 +263,21 @@ public:
 	static void RegObjLibrary();
 	static void InitLib();
 	void SetError(const std::string& msg);
-	virtual int FindFunction(const std::string& name);
 public:
 	CNeoVMImpl();
 	virtual ~CNeoVMImpl();
 
-	virtual u32 CreateWorker(int iStackSize);
-	virtual bool ReleaseWorker(u32 id);
-	virtual bool BindWorkerFunction(u32 id, const std::string& funName);
-	virtual bool SetTimeout(u32 id, int iTimeout, int iCheckOpCount);
-	virtual bool IsWorking(u32 id);
-	virtual bool UpdateWorker(u32 id);
+	virtual bool ReleaseWorker(INeoVMWorker* worker);
 
 
 	virtual const char* GetLastErrorMsg() { return _sErrorMsgDetail.c_str();  }
 	virtual bool IsLastErrorMsg() { return (_sErrorMsgDetail.empty() == false); }
-	// _pErrorMsg 까지 비운다: 이게 남아 있으면 SetError 가 계속 무시되고(첫 에러 고정),
-	// UpdateWorker 가 영구히 false 를 반환한다(시분할 실행이 첫 에러 이후 죽어버림).
+	// _pErrorMsg 까지 비운다: 이게 남아 있으면 SetError 가 계속 무시되어 첫 에러가 고정된다.
 	virtual void ClearLastErrorMsg() { _bError = false; _sErrorMsgDetail.clear(); _pErrorMsg.clear(); }
 	virtual void SetLastErrorMsg(const char* msg) { SetError(msg != nullptr ? std::string(msg) : std::string()); }
 
 	virtual INeoVMWorker*	LoadVM(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, bool blMainWorker, bool init, int iStackSize); // 0 is error
 	virtual INeoVMWorker*	LoadVM(const NeoLoadVMParam* vparam, CNeoVMProgram* pProgram, bool blMainWorker, bool init, int iStackSize);
-	virtual bool PCall(int iModule);
 };
 
 };

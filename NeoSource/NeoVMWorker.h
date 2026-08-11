@@ -93,6 +93,7 @@ private:
 	int m_iTimeout = -1;
 	int m_iCheckOpCount = NEO_DEFAULT_CHECKOP;
 	int m_op_process = 0;
+	bool m_bSliceExpired = false; // 시간 제한으로 다음 ResumeTop까지 보류됨
 	int m_iBreakingCallStack = 0;
 	bool m_bTopExec = false;   // 최상위 실행/재개 중(=완료까지 실행)인지
 	// 인터프리터 루프(Run) 안인지. 중첩 Run 을 고려해 저장/복원한다.
@@ -193,11 +194,6 @@ private:
 	void    ReleaseExecution();                         // 최상위+코루틴 컨텍스트 전부 풀로 반납
 	int     RunSettle();                                // Run() 후 완료/정지/에러 판정 (NeoExecStatus)
 
-	bool	Initialize(int iFunctionID, std::vector<VarInfo>& _args);
-
-	virtual bool RunFunctionResume(int iFID, std::vector<VarInfo>& _args);
-	virtual bool RunFunction(int iFID, std::vector<VarInfo>& _args);
-	virtual bool RunFunction(const std::string& funName, std::vector<VarInfo>& _args);
     virtual void DebugSetListener(INeoVMDebugListener* listener);
     virtual void DebugSetBreakpoints(const std::vector<int>& lines);
     virtual void DebugSetBreakpoints(const std::vector<NeoDebugBreakpoint>& breakpoints);
@@ -215,8 +211,6 @@ private:
 
 	bool	IsMainCoroutine(CoroutineInfo* p) { return (m_pMainCtx == p); }
 	virtual bool	Setup(int iFunctionID, std::vector<VarInfo>& _args);
-	virtual bool	Start(int iFunctionID, std::vector<VarInfo>& _args);
-	virtual bool IsWorking();
 	virtual bool	Run();
 	virtual int	ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args);
 	virtual int	ResumeTop();
@@ -226,6 +220,7 @@ private:
 	virtual void EndHostCall(NeoHostCallBegin begin);
 	virtual void BeginNestedScriptCall();
 	virtual void EndNestedScriptCall();
+	virtual int RunHostCall(int iFunctionID, std::vector<VarInfo>& _args);
 	virtual bool CancelExecution();
 
 	template<bool TIMEOUT, bool DEBUG>
@@ -266,7 +261,6 @@ public:
 		m_iTimeout = iTimeout;
 		m_iCheckOpCount = iCheckOpCount;
 	}
-	virtual bool BindWorkerFunction(const std::string& funName);
 private:
 
 
@@ -424,33 +418,6 @@ public:
 
 
 
-
-	bool CallN_TL()
-	{
-		if (m_pMainCtx == nullptr)
-			return true;
-		if (_iSP_Vars == _iSP_VarsMax)
-		{
-			ReleaseExecution();
-			return true;
-		}
-
-		if (Run() == false)
-		{
-			ReleaseExecution();
-			return true;
-		}
-		if (_iSP_Vars != _iSP_VarsMax)
-		{	// yet ... not completed
-			//GC();
-			return false;
-		}
-
-		//GC();
-		//ReturnValue();
-		ReleaseExecution();
-		return true;
-	}
 
 	virtual VarInfo* GetVar(const std::string& name)
 	{

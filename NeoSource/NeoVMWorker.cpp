@@ -732,7 +732,7 @@ void CNeoVMWorker::ResetFaultStateForNewExecution()
 	m_bDebugFaulted = false;
 	// 에러 위치는 실행 단위로 리셋해야 한다. SetError 는 _isErrorOPIndex 가 0 일 때만 기록하므로
 	// (= 가장 안쪽 원인 보존), 여기서 안 지우면 다음 실행의 에러가 이전 에러의 함수/라인/스택으로
-	// 보고된다. 이 함수는 새 실행 시작 지점(ExecuteTop/BeginHostCall/BindWorkerFunction)에서만 불린다.
+	// 보고된다. 이 함수는 새 실행 시작 지점(ExecuteTop/BeginHostCall)에서만 불린다.
 	_isErrorOPIndex = 0;
 }
 const char* g_sNeoRuntimeErrors[RTE_COUNT] =
@@ -797,44 +797,6 @@ void CNeoVMWorker::SetErrorFormat(const char* fmt, ...)
 	SetError(buff);
 }
 
-bool	CNeoVMWorker::Initialize(int iFunctionID, std::vector<VarInfo>& _args)
-{
-	_iSP_Vars = 0;// _header._iStaticVarCount;
-	_iSP_VarsMax = 0;
-	_iSP_Vars_Max2 = 0;
-	if (false == Setup(iFunctionID, _args))
-		return false;
-	_isInitialized = true;
-	bool result = Run();
-	GetVM()->PublishAllocStats();
-	return result;
-}
-
-
-bool	CNeoVMWorker::Start(int iFunctionID, std::vector<VarInfo>& _args)
-{
-	if (m_pMainCtx == nullptr)
-		return ExecuteTop(iFunctionID, _args) != NEOEXEC_ERROR;
-
-	// Script A -> native API -> Script B는 동일한 코드 버퍼를 공유한다.
-	// Script B가 정상 반환하면 Script A의 다음 opcode부터 계속 실행해야 한다.
-	const bool isNestedScriptCall = (m_iNativeScriptCallDepth > 0);
-	if (isNestedScriptCall && m_iTimeout >= 0)
-	{
-		SetErrorFormat(RTE_NESTED_NOT_ALLOWED, "time-limited execution");
-		return false;
-	}
-	const int returnCodePtr = isNestedScriptCall ? GetCodeptr() : 0;
-	if(false == Setup(iFunctionID, _args))
-		return false;
-
-	bool result = Run();
-	if (result && isNestedScriptCall)
-		SetCodePtr(returnCodePtr);
-	GetVM()->PublishAllocStats();
-	return result;
-}
-
 // ─── 실행 컨텍스트(풀) 기반 최상위 실행/재개 ──────────────────────────────
 void CNeoVMWorker::BindContext(CoroutineInfo* ctx)
 {
@@ -864,7 +826,7 @@ void CNeoVMWorker::ReleaseExecution()
 		if (m_pCur == m_pMainCtx)
 		{
 			usedMax = _iSP_Vars_Max2;
-			// 호스트콜(Call/iCall)은 GC() 가 _iSP_Vars_Max2 를 _iSP_Vars 로 줄이고 리턴 슬롯[_iSP_Vars]을
+			// 호스트 Invocation은 GC() 가 _iSP_Vars_Max2 를 _iSP_Vars 로 줄이고 리턴 슬롯[_iSP_Vars]을
 			// 남긴다. GC 는 그 위를 이미 해제했으므로 리턴 슬롯까지 포함해 정리하면 컨텍스트가 완전히 clean.
 			if (usedMax < _iSP_Vars + 1)
 				usedMax = _iSP_Vars + 1;
@@ -882,6 +844,7 @@ void CNeoVMWorker::ReleaseExecution()
 	m_sCoroutines.clear();
 	ClearSP();
 	_iRemainSleep = 0;
+	m_bSliceExpired = false;
 	m_pVarStack_Base = nullptr;
 	m_pCallStack = nullptr;
 	m_pVarStack_Pointer = nullptr;
@@ -899,7 +862,7 @@ int CNeoVMWorker::RunSettle()
 		ReleaseExecution();
 		status = NEOEXEC_ERROR;
 	}
-	// 정지(retain) 조건: sleep 대기 또는 디버거 pause.
+	// 정지(retain) 조건: sleep, debugger pause, 또는 시간 제한 슬라이스.
 	else if (IsSuspended())
 	{
 		status = NEOEXEC_SUSPENDED;
@@ -929,6 +892,7 @@ int CNeoVMWorker::ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args)
 	_iSP_VarsMax = 0;
 	_iSP_Vars_Max2 = 0;
 	_iRemainSleep = 0;
+	m_bSliceExpired = false;
 	_isInitialized = true;
 
 	if (Setup(iFunctionID, _args) == false)
@@ -960,16 +924,20 @@ NeoExecutionState CNeoVMWorker::GetExecutionState()
 		return NeoExecutionState::SuspendedDebugger;
 	if (_iRemainSleep > 0)
 		return NeoExecutionState::SuspendedSleep;
+	if (m_bSliceExpired)
+		return NeoExecutionState::SuspendedSlice;
 	return NeoExecutionState::Running;
 }
 
 bool CNeoVMWorker::IsSuspended()
 {
 	NeoExecutionState state = GetExecutionState();
-	return state == NeoExecutionState::SuspendedSleep || state == NeoExecutionState::SuspendedDebugger;
+	return state == NeoExecutionState::SuspendedSleep ||
+		state == NeoExecutionState::SuspendedDebugger ||
+		state == NeoExecutionState::SuspendedSlice;
 }
 
-// 호스트→스크립트 함수 호출(Call/CallN/iCall/iCallN)용 컨텍스트 대여.
+// 호스트 Invocation용 컨텍스트 대여.
 NeoHostCallBegin CNeoVMWorker::BeginHostCall()
 {
 	if (m_pMainCtx != nullptr)
@@ -980,6 +948,7 @@ NeoHostCallBegin CNeoVMWorker::BeginHostCall()
 			return NeoHostCallBegin::Nested;
 		case NeoExecutionState::SuspendedSleep:
 		case NeoExecutionState::SuspendedDebugger:
+		case NeoExecutionState::SuspendedSlice:
 			return NeoHostCallBegin::Suspended;
 		default:
 			return NeoHostCallBegin::InvalidState;
@@ -997,6 +966,7 @@ NeoHostCallBegin CNeoVMWorker::BeginHostCall()
 	_iSP_VarsMax = 0;
 	_iSP_Vars_Max2 = 0;
 	_iRemainSleep = 0;
+	m_bSliceExpired = false;
 	_isInitialized = true;
 	return NeoHostCallBegin::Acquired;
 }
@@ -1050,6 +1020,34 @@ void CNeoVMWorker::EndNestedScriptCall()
 	--m_iNativeScriptCallDepth;
 }
 
+int CNeoVMWorker::RunHostCall(int iFunctionID, std::vector<VarInfo>& _args)
+{
+	// BeginHostCall이 실행 컨텍스트를 확보한 뒤에만 이 경로로 진입한다. ExecuteTop은
+	// 완료 시 컨텍스트를 즉시 반납하므로, 반환 슬롯을 읽어야 하는 Invocation에는 맞지 않는다.
+	if (m_pMainCtx == nullptr)
+		return NEOEXEC_ERROR;
+
+	// Script A -> native API -> Script B는 동일한 코드 버퍼를 공유한다.
+	// Script B가 정상 반환하면 Script A의 다음 opcode부터 계속 실행해야 한다.
+	const bool isNestedScriptCall = (m_iNativeScriptCallDepth > 0);
+	if (isNestedScriptCall && m_iTimeout >= 0)
+	{
+		SetErrorFormat(RTE_NESTED_NOT_ALLOWED, "time-limited execution");
+		return NEOEXEC_ERROR;
+	}
+	const int returnCodePtr = isNestedScriptCall ? GetCodeptr() : 0;
+	if (Setup(iFunctionID, _args) == false)
+		return NEOEXEC_ERROR;
+
+	const bool ok = Run();
+	if (ok && isNestedScriptCall)
+		SetCodePtr(returnCodePtr);
+	GetVM()->PublishAllocStats();
+	if (ok == false)
+		return NEOEXEC_ERROR;
+	return IsSuspended() ? NEOEXEC_SUSPENDED : NEOEXEC_COMPLETED;
+}
+
 bool	CNeoVMWorker::Setup(int iFunctionID, std::vector<VarInfo>& _args)
 {
 	if (iFunctionID < 0 || iFunctionID >= (int)Functions().size())
@@ -1082,36 +1080,6 @@ bool	CNeoVMWorker::Setup(int iFunctionID, std::vector<VarInfo>& _args)
 	return true;
 }
 
-bool CNeoVMWorker::IsWorking()
-{
-	//return _isInitialized;
-	return _iSP_VarsMax > 0;
-}
-
-bool CNeoVMWorker::BindWorkerFunction(const std::string& funName)
-{
-	int iFID = FindFunction(funName);
-	if (iFID == -1)
-		return false;
-
-	// 시분할 워커(CreateWorker+UpdateWorker) 경로: 실행 컨텍스트를 풀에서 대여해 바인딩한다.
-	// (엔진 스크립트는 ExecuteTop 경로를 쓰고 이 API 는 사용하지 않는다.)
-	if (m_pMainCtx == nullptr && m_pPool != nullptr)
-	{
-		m_pMainCtx = m_pPool->Acquire();
-		BindContext(m_pMainCtx);
-		ResetFaultStateForNewExecution();
-		_iSP_Vars = 0;
-		_iSP_VarsMax = 0;
-		_iSP_Vars_Max2 = 0;
-		_isInitialized = true;
-	}
-	if (m_pMainCtx == nullptr)
-		return false;
-
-	std::vector<VarInfo> _args;
-	return Setup(iFID, _args);
-}
 void CNeoVMWorker::DebugSetListener(INeoVMDebugListener* listener)
 {
 	m_pDebugListener = listener;
@@ -1553,6 +1521,17 @@ void CNeoVMWorker::DebugGetFrameVariables(int frameId, std::vector<NeoDebugVaria
 bool	CNeoVMWorker::Run()
 {
 	bool b = true;
+	const bool nestedRun = m_bInRun;
+	const bool previousSliceExpired = m_bSliceExpired;
+	if (!nestedRun)
+		m_bSliceExpired = false;
+	struct SliceStateGuard
+	{
+		bool* flag;
+		bool restore;
+		bool previous;
+		~SliceStateGuard() { if (restore) *flag = previous; }
+	} sliceStateGuard{ &m_bSliceExpired, nestedRun, previousSliceExpired };
 	// 인터프리터 진입 표시(중첩 Run 대비 저장/복원). CancelExecution 이 이걸 보고 거부한다.
 	struct InRunGuard
 	{
@@ -1673,7 +1652,10 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 					auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
 						std::chrono::steady_clock::now() - _preClock).count();
 					if (elapsed >= m_iTimeout || elapsed < 0)
+					{
+						m_bSliceExpired = true;
 						break;
+					}
 				}
 			}
 		}
@@ -1816,33 +1798,6 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		}
 	}
 	return true;
-}
-
-bool CNeoVMWorker::RunFunctionResume(int iFID, std::vector<VarInfo>& _args)
-{
-	//Start(iFID, _args);
-	VarInfo r;
-	testCall(iFID, _args.empty() ? NULL : &_args[0], (int)_args.size());
-	return true;
-}
-bool CNeoVMWorker::RunFunction(int iFID, std::vector<VarInfo>& _args)
-{
-	return Start(iFID, _args);
-}
-bool CNeoVMWorker::RunFunction(const std::string& funName, std::vector<VarInfo>& _args)
-{
-	int iID = _pProgram->FindFunction(funName);
-	if (iID < 0)
-	{
-		SetError(RTE_FUNCTION_NOT_FOUND);
-		GetVM()->_sErrorMsgDetail = GetVM()->_pErrorMsg;
-		GetVM()->_sErrorMsgDetail += "(";
-		GetVM()->_sErrorMsgDetail += funName;
-		GetVM()->_sErrorMsgDetail += ")";
-		return false;
-	}
-
-	return RunFunction(iID, _args);
 }
 
 void	CNeoVMWorker::DeadCoroutine(CoroutineInfo* pCI)
