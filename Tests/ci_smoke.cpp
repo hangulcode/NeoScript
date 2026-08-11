@@ -220,15 +220,22 @@ static bool ContainerDestroyRegression()
     return stats.maps == 0;
 }
 
-static bool CycleTrimRegression()
+static void DrainCycles(NeoScript::CNeoVMImpl& vm)
+{
+    while (vm.CollectCycles() != 0)
+    {
+    }
+}
+
+static bool CycleCollectionRegression()
 {
     using namespace NeoScript;
 
     CNeoVMImpl vm;
     SNeoVMAllocStats stats{};
 
-    // self / list / set cycle must remain alive before TrimMemory and be
-    // reclaimed by its forced cycle-candidate pass.
+    // self / list / set cycle is collected by the VM's internal safe-point
+    // scheduler, without the host calling TrimMemory.
     VarInfo self;
     vm.Var_SetTable(&self, vm.TableAlloc());
     self._tbl->Insert("self", &self);
@@ -248,27 +255,33 @@ static bool CycleTrimRegression()
 
     vm.GetAllocStats(stats);
     const bool queuedCyclesRemain = stats.maps == 1 && stats.lists == 1 && stats.sets == 1;
+    // TrimMemory is pool-page policy only; it must not consume cycle tickets.
     vm.CollectEmptyPages(true);
     vm.GetAllocStats(stats);
-    const bool forcedCollectionOk = stats.maps == 0 && stats.lists == 0 && stats.sets == 0;
+    const bool trimDoesNotCollectCycles = stats.maps == 1 && stats.lists == 1 && stats.sets == 1;
+    // A direct-use VM has no workers, so its next safe point immediately
+    // reaches the worker-round boundary and runs the cycle collector.
+    vm.OnVMSafePoint();
+    vm.GetAllocStats(stats);
+    const bool scheduledCollectionOk = stats.maps == 0 && stats.lists == 0 && stats.sets == 0;
 
     // An external holder keeps the same self-cycle alive.  Releasing that
-    // holder queues it again, and the next TrimMemory may collect it.
+    // holder queues it again, and the next VM cycle pass may collect it.
     VarInfo root;
     VarInfo hold;
     vm.Var_SetTable(&root, vm.TableAlloc());
     root._tbl->Insert("self", &root);
     Move_DestNoRelease(&hold, &root);
     vm.Var_Release(&root);
-    vm.CollectEmptyPages(true);
+    DrainCycles(vm);
     vm.GetAllocStats(stats);
     const bool externalReferencePreserved = stats.maps == 1;
     vm.Var_Release(&hold);
-    vm.CollectEmptyPages(true);
+    DrainCycles(vm);
     vm.GetAllocStats(stats);
     const bool releasedAfterExternalGone = stats.maps == 0;
 
-    // A queued candidate can die before TrimMemory when its cycle is broken.
+    // A queued candidate can die before the VM's next cycle pass when its cycle is broken.
     VarInfo stale;
     VarInfo staleHold;
     vm.Var_SetTable(&stale, vm.TableAlloc());
@@ -279,7 +292,7 @@ static bool CycleTrimRegression()
     vm.Var_Release(&stale);
     staleMap->Remove(&staleKey);
     vm.Var_Release(&staleHold);
-    vm.CollectEmptyPages(true);
+    DrainCycles(vm);
     vm.GetAllocStats(stats);
     const bool staleTicketSafe = stats.maps == 0;
 
@@ -294,7 +307,7 @@ static bool CycleTrimRegression()
     ++metaA._tbl->_refCount;
     vm.Var_Release(&metaA);
     vm.Var_Release(&metaB);
-    vm.CollectEmptyPages(true);
+    DrainCycles(vm);
     vm.GetAllocStats(stats);
     const bool metaCycleCollected = stats.maps == 0;
 
@@ -309,13 +322,13 @@ static bool CycleTrimRegression()
     nestedB._tbl->Insert("back", &nestedA);
     nestedB._tbl->Insert("self", &nestedB);
     vm.Var_Release(&nestedB);
-    vm.CollectEmptyPages(true);
+    DrainCycles(vm);
     vm.Var_Release(&nestedA);
-    vm.CollectEmptyPages(true);
+    DrainCycles(vm);
     vm.GetAllocStats(stats);
     const bool nestedWhiteSetCollected = stats.maps == 0;
 
-    // Non-forced TrimMemory processes max(16, ceil(queue_size * 0.5%)).
+    // Each automatic cycle pass processes max(16, ceil(queue_size * 2%)).
     constexpr int kCandidateCount = 4000;
     for (int i = 0; i < kCandidateCount; ++i)
     {
@@ -326,13 +339,13 @@ static bool CycleTrimRegression()
     }
     vm.GetAllocStats(stats);
     const int before = stats.maps;
-    vm.CollectEmptyPages(false);
+    const int processed = vm.CollectCycles();
     vm.GetAllocStats(stats);
-    const bool percentageBudgetOk = before == kCandidateCount && stats.maps <= before - 20;
-    vm.CollectEmptyPages(true);
+    const bool percentageBudgetOk = before == kCandidateCount && processed == 80 && stats.maps <= before - 80;
+    DrainCycles(vm);
     vm.GetAllocStats(stats);
 
-    return queuedCyclesRemain && forcedCollectionOk && externalReferencePreserved
+    return queuedCyclesRemain && trimDoesNotCollectCycles && scheduledCollectionOk && externalReferencePreserved
         && releasedAfterExternalGone && staleTicketSafe && metaCycleCollected && nestedWhiteSetCollected && percentageBudgetOk
         && stats.maps == 0;
 }
@@ -347,6 +360,9 @@ int main()
         std::fputs("CreateRuntime failed\n", stderr);
         return 1;
     }
+    runtime->SetCycleCollectIntervalSeconds(0.125f);
+    const bool cycleIntervalApiOk = runtime->GetCycleCollectIntervalSeconds() == 0.125f;
+    runtime->SetCycleCollectIntervalSeconds(0.02f);
 
     const char* source =
 		"var sortMutationMap = null;\n"
@@ -446,7 +462,7 @@ int main()
 
 	const bool setOk = SetStorageRegression();
 	const bool containerDestroyOk = ContainerDestroyRegression();
-	const bool cycleTrimOk = CycleTrimRegression();
+	const bool cycleTrimOk = CycleCollectionRegression();
 	const bool stringHashOk = StringHashRegression();
 	const bool stringInternOk = StringInternRegression();
 	const bool stringInternChurnOk = StringInternChurnRegression();
@@ -457,7 +473,7 @@ int main()
     DestroyRuntime(runtime);
 
     const bool asmOk = asmOutput.str().find("Fun -") != std::string::npos;
-    if (!addOk || !literalOk || !mapOk || !mapDeleteReinsertOk || !mapSortNormalOk || !mapSortMutationOk || !setOk || !containerDestroyOk || !cycleTrimOk || !stringHashOk || !stringInternOk || !stringInternChurnOk || !hashLoadFactorOk || !asmOk)
+    if (!addOk || !literalOk || !mapOk || !mapDeleteReinsertOk || !mapSortNormalOk || !mapSortMutationOk || !setOk || !containerDestroyOk || !cycleTrimOk || !cycleIntervalApiOk || !stringHashOk || !stringInternOk || !stringInternChurnOk || !hashLoadFactorOk || !asmOk)
     {
         std::fputs("NeoScript API smoke failed\n", stderr);
         return 1;

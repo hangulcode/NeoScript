@@ -248,37 +248,41 @@ rt->DestroyProgram(cr.program);
 DestroyRuntime(rt);
 ```
 
-#### ⚠ Required: call `TrimMemory(false)` every frame
+#### Memory: cycles are collected by the VM, pages are returned by you
 
-> **This is not an optional optimization. A host that runs scripts must call
-> `rt->TrimMemory(false)` once per frame.** Skip it and memory grows without bound.
+Containers are reference counted, and reference counting cannot reclaim a **cycle** — `m["self"] = m`,
+or a parent/child pair that point at each other, keeps a non-zero count forever. The VM handles those
+itself: whenever a container's reference count drops without reaching zero it is recorded as a cycle
+candidate, and the VM examines candidates incrementally at its own **safe points** — the moments a
+top-level script call returns, suspends, or is cancelled. **The host does not have to call anything
+for this.**
+
+`TrimMemory` is a separate, optional concern: returning already-empty pool pages to the OS.
 
 ```cpp
-// In your frame loop, after script updates:
-rt->TrimMemory(false);
+// Optional. Call it when you actually want the reserved memory back —
+// scene transition, loading screen, memory-pressure callback.
+rt->TrimMemory(false);   // pages past the hold time, up to SetTrimPagesPerCall() of them
+rt->TrimMemory(true);    // collect every pending cycle first, then return every empty page
 ```
 
-Two jobs happen only inside this call, and nowhere else:
+- `force = false` returns empty pages whose hold time (default 5 s) has elapsed, at most
+  `SetTrimPagesPerCall()` pages (4 by default). It does **not** touch cycle candidates.
+- `force = true` first drains the whole cycle-candidate queue, then ignores hold time and page
+  budget. Because it processes the entire backlog it is not a per-frame call — use it at an explicit
+  cleanup point.
 
-1. **Cycle collection.** Containers are reference counted, and reference counting cannot reclaim a
-   cycle — `m["self"] = m`, or a parent/child pair that point at each other, keeps a non-zero count
-   forever. Those objects are found and freed here. Never calling `TrimMemory` means every cycle a
-   script creates leaks for the process lifetime.
-2. **Draining the cycle-candidate queue.** Whenever a container's reference count drops without
-   reaching zero, the object is recorded as a candidate. That queue is consumed only here, so it
-   grows monotonically until the call happens.
+Two knobs tune the automatic pass:
 
-Empty pool pages are also returned to the OS by the same call, in bounded increments
-(`SetTrimPagesPerCall()`, 4 pages per call by default).
+| | |
+| :-- | :-- |
+| `SetCycleCollectIntervalSeconds(sec)` | time fallback between incremental collections (default 0.02 s) |
+| `GetAllocStats(out)` | live `maps` / `lists` / `sets` counts — watch these to confirm cycles are actually being reclaimed in your title |
 
-**Cost.** The page-return half has a per-call ceiling. The cycle half caps only the *number* of
-candidates examined per call (`max(16, 0.5% of the queue)`) — a single candidate has **no** cost
-ceiling, because checking it walks the whole container graph reachable from that candidate. If a
-candidate reaches a large shared table, that one check scales with the graph. Titles that hold many
-containers should measure frame time, and can move the work to a safe point with `TrimMemory(true)`,
-which processes everything with no budget at all. Never call the `true` form mid-frame.
-
-If the queue is empty and there are no empty pages, the call returns immediately.
+**Cost.** Each pass examines a bounded *number* of candidates, but a single candidate has no cost
+ceiling: checking it walks the whole container graph reachable from that candidate, so a candidate
+that reaches a large shared table scales with that graph. Titles holding many containers should
+measure worst-case frame time, not just the average.
 
 > Some `IRuntime` members are intentionally not implemented yet and are marked `[미구현]` in the header
 > (`RegisterFunction`, `ResetInstance`, `Cancel`, the `async` family, `CallContext::fail`,

@@ -411,6 +411,8 @@ public:
     int64_t TrimMemory(bool force) override;
     void SetEmptyPageHoldSeconds(float sec) override;
     float GetEmptyPageHoldSeconds() const override;
+    void SetCycleCollectIntervalSeconds(float sec) override;
+    float GetCycleCollectIntervalSeconds() const override;
     void SetTrimPagesPerCall(int pages) override;
     int GetTrimPagesPerCall() const override;
 
@@ -1760,7 +1762,16 @@ IDebugger* RuntimeImpl::GetDebugger()
 int64_t RuntimeImpl::TrimMemory(bool force)
 {
     if (m_vm == nullptr) return 0;
-    return ((CNeoVMImpl*)m_vm)->CollectEmptyPages(force);
+    CNeoVMImpl* vm = (CNeoVMImpl*)m_vm;
+    if (force)
+    {
+        // 강제 정리는 순환 객체를 먼저 pool로 돌린다. CollectCycles는 증분 예산을
+        // 지키므로, 여기서만 큐가 빌 때까지 반복해 페이지 회수 대상까지 만든다.
+        while (vm->CollectCycles() != 0)
+        {
+        }
+    }
+    return vm->CollectEmptyPages(force);
 }
 void RuntimeImpl::SetEmptyPageHoldSeconds(float sec)
 {
@@ -1770,6 +1781,15 @@ float RuntimeImpl::GetEmptyPageHoldSeconds() const
 {
     if (m_vm == nullptr) return 0.0f;
     return ((CNeoVMImpl*)m_vm)->GetEmptyPageHoldSeconds();
+}
+void RuntimeImpl::SetCycleCollectIntervalSeconds(float sec)
+{
+    if (m_vm != nullptr) ((CNeoVMImpl*)m_vm)->SetCycleCollectIntervalSeconds(sec);
+}
+float RuntimeImpl::GetCycleCollectIntervalSeconds() const
+{
+    if (m_vm == nullptr) return 0.0f;
+    return ((CNeoVMImpl*)m_vm)->GetCycleCollectIntervalSeconds();
 }
 void RuntimeImpl::SetTrimPagesPerCall(int pages)
 {

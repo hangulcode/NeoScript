@@ -80,46 +80,31 @@ bool GetNeoVMAllocStats(INeoVM* pVM, SNeoVMAllocStats& outStats)
 }
 
 // 빈 페이지 회수.
-//  force=false : 보유 시간이 지난 페이지를 "한 번에 m_iTrimPagesPerCall 장까지" 만
-//                돌려준다. 매 프레임 불러서 조금씩 반납하는 용도다.
+//  force=false : 보유 시간이 지난 페이지를 "한 번에 m_iTrimPagesPerCall 장까지"만
+//                돌려준다. 호스트가 필요할 때 조금씩 반납하는 용도다.
 //  force=true  : 보유 시간도 예산도 무시하고 지금 비어 있는 페이지를 전부 회수한다.
 //                맵 전환처럼 "지금 확실히 정리" 가 필요한 시점용.
 //
-// [왜 스로틀이 없나]
-// 예전에는 "가끔(보유 시간의 1/4) 크게" 훑었고, 그래서 회수가 걸리는 프레임에만 부하가
-// 몰렸다. 지금은 반대로 "매번 아주 조금" 이다. 풀이 빈 페이지를 비워진 순서 FIFO 로
-// 들고 있어서 (1) 만료 판정이 head 하나 보는 O(1) 이고 (2) 해제도 예산 장수만큼만
-// 하므로, 호출 한 번의 비용에 상한이 있다. 스로틀로 미룰 이유가 없어졌다.
+// 호출 빈도는 호스트의 메모리 반환 정책이다. 풀은 빈 페이지를 FIFO로 들고 있어
+// (1) 만료 판정은 head 하나를 보는 O(1), (2) 해제는 페이지 예산만큼이므로
+// 호출 한 번의 비용에는 상한이 있다.
 //
 // [보유 시계 기준점]
 // "페이지가 실제로 빈 순간" 이 아니라 "Collect 가 빈 걸 처음 본 순간" 부터 잰다.
-// Confer 에서 시계를 읽지 않으려고 기록을 여기까지 미루기 때문이다. 매 프레임 도는
-// 지금은 최대 한 프레임 늦는 정도이고, 늦는 방향이라 안전하다.
+// Confer 에서 시계를 읽지 않으려고 기록을 여기까지 미룬다. 호출이 늦을수록
+// 실제 유지 시간은 더 길어지는 방향이라 안전하다.
 long long CNeoVMImpl::CollectEmptyPages(bool force)
 {
-	// 순환 후보는 페이지가 비어 있지 않아도 검사해야 한다. 따라서 아래의 빈 페이지
-	// 조기 반환보다 먼저 처리한다.
+	// 순환 참조 회수는 VM 안전 지점에서 자동으로 수행한다.
+	// 이 함수는 pool 페이지 반환만 담당한다.
 	//
-	// [비용 계약이 두 갈래라는 점에 주의]
-	// 아래 페이지 회수는 "장수 예산" 으로 호출당 비용에 상한이 있다. 반면 순환 검사는
-	// **검사할 후보 개수** 에만 상한이 있고(max(16, 0.5%)), 후보 하나의 비용에는 상한이
-	// 없다 — CollectUnreachableCycleCandidate 가 그 후보에서 도달 가능한 컨테이너
-	// 그래프를 전부 훑기 때문이다. 후보가 큰 전역 테이블에 닿으면 그 한 번이 그래프
-	// 크기에 비례한다. 프레임 예산을 엄격히 지켜야 하는 호스트라면 여기서 재보고,
-	// 필요하면 안전한 시점에 force=true 로 몰아 처리하는 쪽을 택해야 한다.
+	// 페이지 반환 비용은 "장수 예산"으로 호출당 상한이 있다.
+	// force=false는 보유 시간이 지난 페이지만 예산만큼 반환한다. force=true는
+	// 보유 시간과 예산을 무시하는 명시적 메모리 압박/씬 전환 경로다.
 	//
-	// 그리고 이 함수는 순환 후보 대기열을 비우는 **유일한** 경로다. 호스트가 매 프레임
-	// TrimMemory 를 부르지 않으면 후보가 무한히 쌓인다(NeoScript.h 의 호스트 의무 참고).
-	const int collectedCycles = CollectCycleCandidates(force);
-
-	// 매 프레임 불리는 경로다. 빈 페이지가 하나도 없으면 시계도 읽지 않고 나간다
-	// (풀 8개의 포인터 비교뿐 — QueryPerformanceCounter 보다 싸다).
+	// 빈 페이지가 하나도 없으면 시계도 읽지 않고 나간다(풀 포인터 비교뿐).
 	if (force == false && AnyEmptyPages() == false)
-	{
-		if (collectedCycles != 0)
-			PublishAllocStats();
 		return 0;
-	}
 
 	const NeoPoolClock::time_point now = NeoPoolClock::now();
 	const int hold = force ? 0 : m_iEmptyPageHoldMs;   // force 는 보유 시간도 무시한다
@@ -139,7 +124,7 @@ long long CNeoVMImpl::CollectEmptyPages(bool force)
 		// 버퍼를 다시 재서 전역 통계를 맞춰 둔다 — 매 프레임 경로에서는 절대 하지 않는다.
 		m_sAllocStats.stringIdleBytes = StringIdleBytes();
 	}
-	if (freed != 0 || force || collectedCycles != 0)
+	if (freed != 0 || force)
 		PublishAllocStats();
 	return freed;
 }
@@ -1232,17 +1217,20 @@ bool CNeoVMImpl::CollectUnreachableCycleCandidate(VAR_TYPE candidateType, void* 
 	return true;
 }
 
-int CNeoVMImpl::CollectCycleCandidates(bool force)
+int CNeoVMImpl::CollectCycles()
 {
-	if (_sCycleCandidates.empty())
+	// 다음 수집은 현재 VM의 모든 worker가 한 번씩 안전 지점에 도달한 뒤에 한다.
+	// worker가 없는 직접 사용 VM은 0으로 설정되어 다음 안전 지점에서 바로 수집된다.
+	_cycleSafePointRemainCount = (_sVMWorkers.size() > (size_t)INT_MAX) ? INT_MAX : (int)_sVMWorkers.size();
+	_cycleLastCollectTime = std::chrono::steady_clock::now();
+
+	if (_isTearingDown || _sCycleCandidates.empty())
 		return 0;
 
 	const size_t total = _sCycleCandidates.size();
-	const size_t budget = force
-		? (size_t)-1
-		: std::max<size_t>(16, (total + 199) / 200); // max(16, 전체의 0.5%), 올림
+	const size_t budget = std::max<size_t>(16, (total + 49) / 50); // max(16, 전체의 2%), 올림
 	int processed = 0;
-	while (_sCycleCandidates.empty() == false && (force || (size_t)processed < budget))
+	while (_sCycleCandidates.empty() == false && (size_t)processed < budget)
 	{
 		CycleCandidate* ticket = _sCycleCandidates.front();
 		_sCycleCandidates.pop_front();
@@ -1260,7 +1248,38 @@ int CNeoVMImpl::CollectCycleCandidates(bool force)
 		delete ticket;
 		++processed;
 	}
+	if (processed != 0)
+		PublishAllocStats();
 	return processed;
+}
+
+void CNeoVMImpl::OnVMSafePoint()
+{
+	if (_isTearingDown)
+		return;
+
+	// 후보가 없는 동안에도 worker 라운드는 진행하되, 0 아래로는 내리지 않는다.
+	// 이후 후보가 생겼을 때 이미 라운드가 끝났다면 다음 안전 지점에서 바로 수집한다.
+	if (_cycleSafePointRemainCount > 0)
+		--_cycleSafePointRemainCount;
+
+	if (_sCycleCandidates.empty())
+		return;
+
+	if (_cycleSafePointRemainCount <= 0)
+	{
+		CollectCycles();
+		return;
+	}
+
+	// steady_clock 조회는 hot path에서 매번 하지 않는다. 남은 worker 수가 256의
+	// 배수인 지점에서만 설정된 시간 fallback을 확인한다.
+	constexpr int kTimeCheckRemainModulo = 256;
+	if ((_cycleSafePointRemainCount % kTimeCheckRemainModulo) == 0
+		&& std::chrono::steady_clock::now() - _cycleLastCollectTime >= std::chrono::milliseconds(_cycleCollectIntervalMs))
+	{
+		CollectCycles();
+	}
 }
 
 
@@ -1685,6 +1704,7 @@ bool CNeoVMImpl::UpdateWorker(u32 id)
 		return false;
 	auto pWorker = pFound;
 	bool result = pWorker->Run();// iTimeout >= 0, iTimeout, iCheckOpCount);
+	OnVMSafePoint();
 	PublishAllocStats();
 	return result;
 }

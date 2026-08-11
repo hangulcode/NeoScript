@@ -893,17 +893,24 @@ int CNeoVMWorker::RunSettle()
 	m_bTopExec = true;
 	bool ok = Run();
 	m_bTopExec = false;
+	int status;
 	if (ok == false)
 	{
 		ReleaseExecution();
-		return NEOEXEC_ERROR;
+		status = NEOEXEC_ERROR;
 	}
 	// 정지(retain) 조건: sleep 대기 또는 디버거 pause.
-	if (IsSuspended())
-		return NEOEXEC_SUSPENDED;
-
-	ReleaseExecution();
-	return NEOEXEC_COMPLETED;
+	else if (IsSuspended())
+	{
+		status = NEOEXEC_SUSPENDED;
+	}
+	else
+	{
+		ReleaseExecution();
+		status = NEOEXEC_COMPLETED;
+	}
+	GetVM()->OnVMSafePoint();
+	return status;
 }
 
 // 최상위 실행: 풀에서 컨텍스트를 대여해 iFID 를 처음부터 실행.
@@ -1003,15 +1010,18 @@ void CNeoVMWorker::EndHostCall(NeoHostCallBegin begin)
 	if (m_bDebugFaulted)
 	{
 		ReleaseExecution();
-		GetVM()->PublishAllocStats();
-		return;
 	}
-	if (IsSuspended())
+	else if (IsSuspended())
 	{
+		GetVM()->OnVMSafePoint();
 		GetVM()->PublishAllocStats();
 		return;   // 호출이 정지(sleep/브레이크)됐으면 컨텍스트 retain
 	}
-	ReleaseExecution();
+	else
+	{
+		ReleaseExecution();
+	}
+	GetVM()->OnVMSafePoint();
 	GetVM()->PublishAllocStats();
 }
 
@@ -1835,7 +1845,7 @@ bool CNeoVMWorker::RunFunction(const std::string& funName, std::vector<VarInfo>&
 		return false;
 	}
 
-	return Start(iID, _args);
+	return RunFunction(iID, _args);
 }
 
 void	CNeoVMWorker::DeadCoroutine(CoroutineInfo* pCI)

@@ -562,4 +562,9 @@ export fun CycleLeaking()
     MetaSelf();
 }
 
-CycleRun();
+// VM 안전 지점만 공급하는 빈 진입점.
+// 순환도 컨테이너도 만들지 않으므로, 이 함수를 반복 호출한 뒤 컨테이너 수가 줄었다면
+// 그건 VM 이 스스로 수집했다는 뜻이다(드라이버는 TrimMemory 를 부르지 않는다).
+export fun CycleTick()
+{
+}

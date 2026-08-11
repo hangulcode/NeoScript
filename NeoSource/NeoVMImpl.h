@@ -2,6 +2,7 @@
 
 #include <thread>
 #include <deque>
+#include <chrono>
 
 #include "NeoVMInternal.h"
 
@@ -37,6 +38,10 @@ private:
 	// refcount가 남은 컨테이너의 약한 순환 후보 티켓. 티켓은 객체를 AddRef하지 않으며,
 	// 객체가 먼저 죽으면 Free*가 object=null으로 만들어 stale entry를 무효화한다.
 	std::deque<CycleCandidate*> _sCycleCandidates;
+	// 한 순환 수집 뒤 현재 worker 수만큼 안전 지점을 기다린다. 다만 마지막 수집에서
+	// 20ms가 지나면 worker 수와 무관하게 다음 안전 지점에서 증분 수집한다.
+	int _cycleSafePointRemainCount = 0;
+	std::chrono::steady_clock::time_point _cycleLastCollectTime{};
 	u32 _dwLastIDVMWorker = 0;
 
 
@@ -64,15 +69,16 @@ public:
 	// 빈 페이지를 Collect 가 처음 본 뒤 m_iEmptyPageHoldMs 가 지나야 대상이 된다
 	// (경계에서 free/malloc 반복 방지). 빈 시각 기록이 지연되는 이유는 .cpp 참고.
 	// force=false 는 한 번에 m_iTrimPagesPerCall 장까지만 해제하고, 빈 페이지가 없으면
-	// 시계도 안 읽고 빠진다 — 매 프레임 불러서 조금씩 돌려주는 용도다.
-	// 순환 수집도 여기서 같이 돈다(CollectCycleCandidates). 호스트는 매 프레임 이걸
-	// 불러야 한다 — 순환 회수와 후보 대기열 소진이 모두 여기서만 일어난다.
+	// 시계도 안 읽고 빠진다. 순환 참조 회수는 이 함수와 독립적으로 VM 안전 지점에서
+	// OnVMSafePoint가 처리한다.
 	long long CollectEmptyPages(bool force = false);
-	// 순환 후보를 검사·회수한다. 반환값 = 이번에 꺼내 처리한 후보 수.
-	// force=false 면 max(16, 후보 전체의 0.5%) 개까지만 본다. **후보 개수에만 상한이
-	// 있고 후보 하나의 비용에는 상한이 없다** — 그 후보에서 도달 가능한 컨테이너
-	// 그래프 전체를 훑기 때문이다.
-	int CollectCycleCandidates(bool force);
+	// VM 내부 수명 관리. 한 번에 max(16, 후보 전체의 2%)개만 순환 그래프를
+	// 검사·회수한다. IRuntime::TrimMemory(true)의 강제 정리와 안전 지점 스케줄러가 쓴다.
+	int CollectCycles();
+	// 최상위 스크립트 실행이 반환한 뒤 호출하는 스케줄러. 매 호출마다 남은 worker
+	// 카운트를 0까지 줄이고, 모두 소진되었거나 256 단위 지점의 시간 확인에서 마지막
+	// 수집 뒤 설정된 fallback 시간이 지났으면 수집한다.
+	void OnVMSafePoint();
 	// 어느 풀이든 완전히 빈 페이지가 있는가(포인터 비교 8번). 매 프레임 경로의 조기 반환용.
 	bool AnyEmptyPages() const
 	{
@@ -85,6 +91,10 @@ public:
 	}
 	void SetEmptyPageHoldSeconds(float sec) { m_iEmptyPageHoldMs = (sec <= 0.0f) ? 0 : (int)(sec * 1000.0f); }
 	float GetEmptyPageHoldSeconds() const { return m_iEmptyPageHoldMs / 1000.0f; }
+	// 순환 참조 수집의 시간 fallback 간격(초). 기본 0.02초, 0 이하면 다음
+	// 256-worker 확인 지점에서 즉시 수집한다.
+	void SetCycleCollectIntervalSeconds(float sec = 0.02f) { _cycleCollectIntervalMs = (sec <= 0.0f) ? 0 : (int)(sec * 1000.0f); }
+	float GetCycleCollectIntervalSeconds() const { return _cycleCollectIntervalMs / 1000.0f; }
 	// 한 번의 CollectEmptyPages(false) 가 해제할 페이지 수 상한. 0 이하 = 상한 없음.
 	void SetTrimPagesPerCall(int pages) { m_iTrimPagesPerCall = pages; }
 	int GetTrimPagesPerCall() const { return m_iTrimPagesPerCall; }
@@ -203,6 +213,8 @@ public:
 
 	// 빈 페이지 보유 시간(기본 5초).
 	int m_iEmptyPageHoldMs = 5000;
+	// 순환 후보가 남아 있을 때 worker 라운드 완료를 기다리는 최대 시간. 기본 20ms.
+	int _cycleCollectIntervalMs = 20;
 	// 매 프레임 호출을 전제로 한 회수 예산. 4장/호출 = 60fps 에서 초당 240장이니
 	// 9MB 규모(약 700장)도 3초 남짓에 다 돌아가면서 프레임당 비용은 상한선 안이다.
 	int m_iTrimPagesPerCall = 4;
