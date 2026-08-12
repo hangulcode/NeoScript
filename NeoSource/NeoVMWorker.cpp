@@ -198,8 +198,6 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 		return v1->_bl ? "true" : "false";
 	case VAR_NONE:
 		return "null";
-	case VAR_CHAR:
-		return std::string(v1->_c.c, v1->_charLen);
 	case VAR_STRING:
 		return v1->_str->_str;
 	case VAR_VEC:
@@ -241,8 +239,6 @@ int CNeoVMWorker::ToInt(VarInfo* v1)
 		return v1->_bl ? 1 : 0;
 	case VAR_NONE:
 		return -1;
-	case VAR_CHAR:
-		return ::atoi(std::string(v1->_c.c, v1->_charLen).c_str());
 	case VAR_STRING:
 		return ::atoi(v1->_str->_str.c_str());
 	case VAR_FP_NATIVE:
@@ -266,8 +262,6 @@ NS_FLOAT CNeoVMWorker::ToFloat(VarInfo* v1)
 		return v1->_bl ? (NS_FLOAT)1 : (NS_FLOAT)0;
 	case VAR_NONE:
 		return -1;
-	case VAR_CHAR:
-		return (NS_FLOAT)atof(std::string(v1->_c.c, v1->_charLen).c_str());
 	case VAR_STRING:
 		return (NS_FLOAT)atof(v1->_str->_str.c_str());
 	case VAR_FP_NATIVE:
@@ -291,10 +285,8 @@ int CNeoVMWorker::ToSize(VarInfo* v1)
 		return 0;
 	case VAR_NONE:
 		return 0;
-	case VAR_CHAR: // 문자열 길이
-		return v1->_charLen == 0 ? 0 : 1;
-	case VAR_STRING: // 문자열 길이
-		return (int)v1->_str->_str.length();
+	case VAR_STRING: // UTF-8 문자 수(string.len()과 동일)
+		return v1->_str->_StringLen;
 	case VAR_VEC:
 		return v1->VectorComponentCount();
 	case VAR_FP_NATIVE:
@@ -328,8 +320,6 @@ VarInfo* CNeoVMWorker::GetType(VarInfo* v1)
 		break;
 	case VAR_FUN_NATIVE:
 		return &GetVM()->m_sDefaultValue[NDF_FUNCTION];
-	case VAR_CHAR:
-		return &GetVM()->m_sDefaultValue[NDF_STRING];
 	case VAR_STRING:
 		return &GetVM()->m_sDefaultValue[NDF_STRING];
 	case VAR_VEC:
@@ -1272,10 +1262,6 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 	case VAR_FUN_NATIVE:
 		out.type = "native_function";
 		out.value = "native_function";
-		break;
-	case VAR_CHAR:
-		out.type = "char";
-		out.value.assign(pVar->_c.c, pVar->CharByteLength());
 		break;
 	case VAR_STRING:
 		out.type = "string";
@@ -2239,7 +2225,6 @@ std::string GetDataType(VAR_TYPE t)
 		return "iterator";
 	case VAR_FUN_NATIVE:
 		return "fun";
-	case VAR_CHAR:
 	case VAR_STRING:
 		return "string";
 	case VAR_VEC:

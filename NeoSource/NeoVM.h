@@ -138,8 +138,6 @@ enum VAR_TYPE : u8
 	VAR_ITERATOR,
 	VAR_FUN_NATIVE,
 
-	VAR_CHAR,
-
 	// =====================================================================
 	// 여기부터 alloc 타입 — IsAllocType() == (_type >= VAR_STRING)
 	//
@@ -199,7 +197,6 @@ enum VAR_TYPE : u8
 // 배치 계약을 코드로 고정한다. IsAllocType()/IsContainerType() 이 단일 비교인 근거가
 // 순전히 열거 순서라서, 주석만 두면 다음 사람이 구간 사이에 새 타입을 끼워 넣는다.
 // 새 타입은 반드시 해당 구간의 **끝**에 추가할 것.
-static_assert(VAR_CHAR < VAR_STRING, "VAR_TYPE: non-alloc 구간이 alloc 구간보다 앞이어야 한다");
 static_assert(VAR_FP_NATIVE + 1 == VAR_MAP, "VAR_TYPE: 리프 alloc 구간 바로 뒤에 컨테이너 구간이 와야 한다");
 static_assert(VAR_MAP < VAR_ASYNC, "VAR_TYPE: 컨테이너 구간이 열거 맨 뒤여야 한다");
 
@@ -294,10 +291,7 @@ struct VarInfo
 {
 private:
 	VAR_TYPE	_type;
-	// VAR_CHAR 의 UTF-8 바이트 수(1~4). SUtf8One 자체는 VarInfo 를 Win32 에서
-	// 8바이트로 유지하기 위해 NUL 종결자를 담을 공간이 없으므로 길이를 여기 둔다.
-	u8			_charLen;
-	// VAR_VEC 의 성분 수(1~4). 두 u8은 _type 뒤 정렬 패딩을 쓰므로 VarInfo 크기를
+	// VAR_VEC 의 성분 수(1~4). _type 뒤 정렬 패딩을 쓰므로 VarInfo 크기를
 	// 늘리지 않는다(x64 7바이트, Win32 3바이트 패딩). 설정은 VecStoreFor() 한 곳뿐이고,
 	// 복사는 Move_DestNoRelease 가 _vec 과 함께 옮긴다.
 	u8			_vecCount;
@@ -324,7 +318,6 @@ public:
 		bool		_bl;
 		CoroutineInfo* _cor;
 		StringInfo* _str;
-		SUtf8One	_c;
 		MapInfo* _tbl;
 		ListInfo* _lst;
 		SetInfo* _set;
@@ -344,7 +337,6 @@ public:
 	NEOS_FORCEINLINE VarInfo(int v) { _type = VAR_INT; _int = v; }
 
 	NEOS_FORCEINLINE VAR_TYPE GetType() { return _type; }
-	NEOS_FORCEINLINE u8 CharByteLength() { return _type == VAR_CHAR ? _charLen : 0; }
 	// 풀 객체 + refcount 를 쓰는 타입인가. 대입/해제 때 참조 카운트를 만져야 하는지 판정.
 	NEOS_FORCEINLINE bool IsAllocType()
 	{
@@ -635,7 +627,6 @@ public:
 	void Var_SetQuat(VarInfo* d, float w, float x, float y, float z);
 	void Var_SetCoroutine(VarInfo* d, CoroutineInfo* p);
 	void Var_SetString(VarInfo* d, const char* str);
-	void Var_SetString(VarInfo* d, SUtf8One c, u8 charLen);
 	void Var_SetStringA(VarInfo* d, const std::string& str);
 	void Var_SetTable(VarInfo* d, MapInfo* p);
 	void Var_SetList(VarInfo* d, ListInfo* p);

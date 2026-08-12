@@ -99,8 +99,6 @@ NEOS_FORCEINLINE bool handle_PTRCALL_impl(const SVMOperation& OP, VarInfo* pVar1
         if ((OP.argFlag & NEOS_ARG_N2_LOCAL) == 0 && -1 == OP.n2)
             Call(pVar1->_funPtr, OP.n3);
         break;
-    case VAR_CHAR:
-        Var_SetStringA(pVar1, std::string(pVar1->_c.c, pVar1->_charLen)); // char -> string
     case VAR_STRING:
         pFunName = pFunNamePre ? pFunNamePre : GetVarPtr2(OP);
         CallNative(GetVM()->_funLib_String, pVar1, pFunName->_str, n3);
@@ -155,10 +153,6 @@ NEOS_FORCEINLINE bool handle_PTRCALL_L(const SVMOperation& OP) {
 
 // 본문 공용. pRet 은 NORESULT 를 이미 반영한 반환 슬롯(없으면 nullptr).
 NEOS_FORCEINLINE bool handle_PTRCALL2_impl(short n2, VarInfo* pFunName, VarInfo* pRet) {
-    if (pFunName->GetType() == VAR_CHAR)
-    {
-        GetVM()->Var_SetStringA(pFunName, std::string(pFunName->_c.c, pFunName->_charLen));
-    }
     if (pFunName->GetType() == VAR_STRING)
     {
         CallNative(GetVM()->_funLib_Default, NULL, pFunName->_str, n2, pRet);

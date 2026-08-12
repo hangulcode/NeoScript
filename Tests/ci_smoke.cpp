@@ -407,6 +407,8 @@ int main()
         "export fun add(var a, var b) { return a + b; }\n"
         "export fun literal() { return 1.25 + 2.75; }\n"
 		"export fun utf8Char() { foreach (var c in \"\xF0\x9F\x98\x80\") { if (c == \"\xF0\x9F\x98\x80\" && c >= \"\xF0\x9F\x98\x80\") return c + c; } return \"\"; }\n"
+		"export fun utf8MapKey() { var m = {}; foreach (var c in \"\xF0\x9F\x98\x80\") { m[c] = 77; } return m[\"\xF0\x9F\x98\x80\"]; }\n"
+		"export fun utf8Size() { return tosize(\"\xED\x95\x9C\xEA\xB8\x80\xF0\x9F\x98\x80\"); }\n"
 		"var suspendedArg = \"\";\n"
 		"export fun suspendEcho(var value) { sleep(1); suspendedArg = value; return value; }\n"
 		"export fun suspendedArgValue() { return suspendedArg; }\n"
@@ -485,6 +487,18 @@ int main()
 			&& std::string(result.data(), result.size()) == "\xF0\x9F\x98\x80\xF0\x9F\x98\x80";
 	}
 
+	bool utf8MapKeyOk = false;
+	{
+		Invocation utf8MapKey = runtime->Call(instance, "utf8MapKey");
+		utf8MapKeyOk = utf8MapKey.invoke() == RunStatus::Completed && utf8MapKey.retInt() == 77;
+	}
+
+	bool utf8SizeOk = false;
+	{
+		Invocation utf8Size = runtime->Call(instance, "utf8Size");
+		utf8SizeOk = utf8Size.invoke() == RunStatus::Completed && utf8Size.retInt() == 3;
+	}
+
     // Host execution must distinguish completion from sleep suspension.
     // The string argument must still survive after Resume.
     bool suspendedCallOk = false;
@@ -543,7 +557,7 @@ int main()
     DestroyRuntime(runtime);
 
     const bool asmOk = asmOutput.str().find("Fun -") != std::string::npos;
-    if (!addOk || !literalOk || !utf8CharOk || !suspendedCallOk || !mapOk || !mapDeleteReinsertOk || !mapSortNormalOk || !mapSortMutationOk || !setOk || !containerDestroyOk || !cycleTrimOk || !cycleCollectApiOk || !stringHashOk || !stringInternOk || !stringInternChurnOk || !hashLoadFactorOk || !asmOk)
+	if (!addOk || !literalOk || !utf8CharOk || !utf8MapKeyOk || !utf8SizeOk || !suspendedCallOk || !mapOk || !mapDeleteReinsertOk || !mapSortNormalOk || !mapSortMutationOk || !setOk || !containerDestroyOk || !cycleTrimOk || !cycleCollectApiOk || !stringHashOk || !stringInternOk || !stringInternChurnOk || !hashLoadFactorOk || !asmOk)
     {
         std::fputs("NeoScript API smoke failed\n", stderr);
         return 1;

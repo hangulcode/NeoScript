@@ -78,8 +78,6 @@ bool	INeoVM::RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFuncti
 //	case VAR_NONE: break;
 //	case VAR_FUN: v1->_fun_index = v2->_fun_index; break;
 //	case VAR_FUN_NATIVE: v1->_funPtr = v2->_funPtr; break;
-//	case VAR_CHAR: v1->_c = v2->_c; break;
-//
 //	case VAR_STRING: v1->_str = v2->_str; ++v1->_str->_refCount; break;
 //	case VAR_MAP: v1->_tbl = v2->_tbl; ++v1->_tbl->_refCount; break;
 //	case VAR_LIST: v1->_lst = v2->_lst; ++v1->_lst->_refCount; break;
@@ -195,12 +193,6 @@ const char* INeoVMWorker::PopString(VarInfo* V)
 {
 	if (V->GetType() == VAR_STRING)
 		return V->_str->_str.c_str();
-	else if (V->GetType() == VAR_CHAR)
-	{
-		const std::string text(V->_c.c, V->_charLen);
-		Var_SetStringA(V, text);
-		return V->_str->_str.c_str();
-	}
 
 	return NULL;
 }
@@ -208,12 +200,6 @@ const std::string* INeoVMWorker::PopStlString(VarInfo* V)
 {
 	if (V->GetType() == VAR_STRING)
 		return &V->_str->_str;
-	else if (V->GetType() == VAR_CHAR)
-	{
-		const std::string text(V->_c.c, V->_charLen);
-		Var_SetStringA(V, text);
-		return &V->_str->_str;
-	}
 
 	return NULL;
 }

@@ -22,24 +22,6 @@ namespace NeoScript
 
 void NVM_QuickSort(CNeoVMWorker* pN, int compare, std::vector<VarInfo*>& lst);
 
-/*
-		int len;
-		std::string* p;
-		std::string tempStr;
-		if (pVar->GetType() == VAR_STRING)
-		{
-			len = pVar->_str->_StringLen;
-			p = &pVar->_str->_str;
-		}
-		else if (pVar->GetType() == VAR_CHAR)
-		{
-			len = pVar->_c.c[0] == 0 ? 0 : 1;
-			tempStr = pVar->_c.c;
-			p = &tempStr;
-		}
-		else
-			return false;
-*/
 struct neo_libs
 {
 	static bool Str_sub(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -884,7 +866,7 @@ struct neo_libs
 			return false;
 
 		VarInfo* v2 = pN->GetStack(2);
-		if (v2->GetType() != VAR_STRING) // VAR_CHAR is error 
+		if (v2->GetType() != VAR_STRING)
 			return false;
 
 		VarInfo* v3 = pN->GetStack(3);
@@ -924,7 +906,7 @@ struct neo_libs
 			return false;
 
 		VarInfo* v2 = pN->GetStack(2);
-		if (v2->GetType() != VAR_STRING) // VAR_CHAR is error 
+		if (v2->GetType() != VAR_STRING)
 			return false;
 
 		VarInfo* v3 = pN->GetStack(3);
@@ -961,11 +943,11 @@ struct neo_libs
 		if (pAsync->_state != ASYNC_READY) return false;
 
 		VarInfo* v1 = pN->GetStack(1);
-		if (v1->GetType() != VAR_STRING) // VAR_CHAR is error 
+		if (v1->GetType() != VAR_STRING)
 			return false;
 
 		VarInfo* v2 = pN->GetStack(2);
-		if (v2->GetType() != VAR_STRING) // VAR_CHAR is error 
+		if (v2->GetType() != VAR_STRING)
 			return false;
 
 		std::pair<std::string, std::string> header = { v1->_str->_str, v2->_str->_str };

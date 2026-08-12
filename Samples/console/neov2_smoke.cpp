@@ -118,7 +118,9 @@ int NeoScriptV2Smoke()
         "\xED\x95\x9C\xEA\xB8\x80 \xF0\x9F\x98\x80"
         "\"; }\n"
         "export fun unicodeFirst() { foreach (var c in \"\xF0\x9F\x98\x80\") { return c; } return \"\"; }\n"
-        "export fun unicodeConcat() { foreach (var c in \"\xF0\x9F\x98\x80\") { if (c == \"\xF0\x9F\x98\x80\" && c >= \"\xF0\x9F\x98\x80\") return c + c; } return \"\"; }\n";
+        "export fun unicodeConcat() { foreach (var c in \"\xF0\x9F\x98\x80\") { if (c == \"\xF0\x9F\x98\x80\" && c >= \"\xF0\x9F\x98\x80\") return c + c; } return \"\"; }\n"
+        "export fun unicodeMapKey() { var m = {}; foreach (var c in \"\xF0\x9F\x98\x80\") { m[c] = 77; } return m[\"\xF0\x9F\x98\x80\"]; }\n"
+        "export fun unicodeSize() { return tosize(\"\xED\x95\x9C\xEA\xB8\x80 \xF0\x9F\x98\x80\"); }\n";
     CompileDesc unicodeDesc;
     unicodeDesc.source = unicodeSource;
     unicodeDesc.sourceName = "utf8_unicode_smoke.ns";
@@ -137,6 +139,12 @@ int NeoScriptV2Smoke()
         Invocation unicodeConcat = rt->Call(unicodeInstance, "unicodeConcat");
         Check(unicodeConcat.invoke() == RunStatus::Completed && Eq(unicodeConcat.retString(), "\xF0\x9F\x98\x80\xF0\x9F\x98\x80"),
             "UTF-8 foreach character compares and concatenates safely");
+        Invocation unicodeMapKey = rt->Call(unicodeInstance, "unicodeMapKey");
+        Check(unicodeMapKey.invoke() == RunStatus::Completed && unicodeMapKey.retInt() == 77,
+            "UTF-8 foreach character is a normal string map key");
+        Invocation unicodeSize = rt->Call(unicodeInstance, "unicodeSize");
+        Check(unicodeSize.invoke() == RunStatus::Completed && unicodeSize.retInt() == 4,
+            "tosize(string) returns UTF-8 character count like string.len");
         rt->DestroyInstance(unicodeInstance);
         rt->DestroyProgram(unicodeProgram.program);
     }

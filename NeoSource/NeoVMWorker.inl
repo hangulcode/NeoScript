@@ -572,25 +572,8 @@ NEOS_NOINLINE void CNeoVMWorker::Add3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
 	{
-	case VAR_CHAR:
-		if (v2->GetType() == VAR_CHAR)
-		{
-			Var_SetStringA(r, std::string(v1->_c.c, v1->_charLen) + std::string(v2->_c.c, v2->_charLen));
-			return;
-		}
-		else if (v2->GetType() == VAR_STRING)
-		{
-			Var_SetStringA(r, std::string(v1->_c.c, v1->_charLen) + v2->_str->_str);
-			return;
-		}
-		break;
 	case VAR_STRING:
-		if (v2->GetType() == VAR_CHAR)
-		{
-			Var_SetStringA(r, v1->_str->_str + std::string(v2->_c.c, v2->_charLen));
-			return;
-		}
-		else if (v2->GetType() == VAR_STRING)
+		if (v2->GetType() == VAR_STRING)
 		{
 			Var_SetStringA(r, v1->_str->_str + v2->_str->_str);
 			return;
@@ -638,8 +621,6 @@ NEOS_NOINLINE void CNeoVMWorker::Sub3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
 	{
-	case VAR_CHAR:
-		break;
 	case VAR_STRING:
 		break;
 	case VAR_VEC:
@@ -684,8 +665,6 @@ NEOS_NOINLINE void CNeoVMWorker::Mul3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
 	{
-	case VAR_CHAR:
-		break;
 	case VAR_STRING:
 		break;
 	case VAR_VEC:
@@ -728,8 +707,6 @@ NEOS_NOINLINE void CNeoVMWorker::Div3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
 	{
-	case VAR_CHAR:
-		break;
 	case VAR_STRING:
 		break;
 	case VAR_VEC:
@@ -776,8 +753,6 @@ NEOS_FORCEINLINE void CNeoVMWorker::LSh3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		return;
 	case VAR_FLOAT:
 		break;
-	case VAR_CHAR:
-		break;
 	case VAR_STRING:
 		break;
 	case VAR_MAP:
@@ -804,8 +779,6 @@ NEOS_FORCEINLINE void CNeoVMWorker::RSh3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		break;
 	case VAR_FLOAT:
 		break;
-	case VAR_CHAR:
-		break;
 	case VAR_STRING:
 		break;
 	case VAR_MAP:
@@ -829,8 +802,6 @@ NEOS_FORCEINLINE void CNeoVMWorker::And3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		}
 		break;
 	case VAR_FLOAT:
-		break;
-	case VAR_CHAR:
 		break;
 	case VAR_STRING:
 		break;
@@ -858,8 +829,6 @@ NEOS_FORCEINLINE void CNeoVMWorker::Or3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		break;
 	case VAR_FLOAT:
 		break;
-	case VAR_CHAR:
-		break;
 	case VAR_STRING:
 		break;
 	case VAR_MAP:
@@ -883,8 +852,6 @@ NEOS_FORCEINLINE void CNeoVMWorker::Xor3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		}
 		break;
 	case VAR_FLOAT:
-		break;
-	case VAR_CHAR:
 		break;
 	case VAR_STRING:
 		break;
@@ -1102,18 +1069,8 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
 		if (v2->GetType() == VAR_NONE)
 			return true;
 		break;
-	case VAR_CHAR:
-		if (v2->GetType() == VAR_CHAR)
-			return v1->_charLen == v2->_charLen && 0 == memcmp(v1->_c.c, v2->_c.c, v1->_charLen);
-		else if (v2->GetType() == VAR_STRING)
-			return v1->_charLen == v2->_str->_str.size()
-				&& 0 == memcmp(v1->_c.c, v2->_str->_str.data(), v1->_charLen);
-		break;
 	case VAR_STRING:
-		if (v2->GetType() == VAR_CHAR)
-			return v1->_str->_str.size() == v2->_charLen
-				&& 0 == memcmp(v1->_str->_str.data(), v2->_c.c, v2->_charLen);
-		else if (v2->GetType() == VAR_STRING)
+		if (v2->GetType() == VAR_STRING)
 			return v1->_str->_str == v2->_str->_str;
 		break;
 	case VAR_VEC:
@@ -1147,16 +1104,8 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareGR(VarInfo* v1, VarInfo* v2)
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float > v2->_float;
 		break;
-	case VAR_CHAR:
-		if (v2->GetType() == VAR_CHAR)
-			return std::string(v1->_c.c, v1->_charLen) > std::string(v2->_c.c, v2->_charLen);
-		else if (v2->GetType() == VAR_STRING)
-			return std::string(v1->_c.c, v1->_charLen) > v2->_str->_str;
-		break;
 	case VAR_STRING:
-		if (v2->GetType() == VAR_CHAR)
-			return v1->_str->_str > std::string(v2->_c.c, v2->_charLen);
-		else if (v2->GetType() == VAR_STRING)
+		if (v2->GetType() == VAR_STRING)
 			return v1->_str->_str > v2->_str->_str;
 		break;
 	default:
@@ -1181,16 +1130,8 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareGE(VarInfo* v1, VarInfo* v2)
 		if (v2->GetType() == VAR_FLOAT)
 			return v1->_float >= v2->_float;
 		break;
-	case VAR_CHAR:
-		if (v2->GetType() == VAR_CHAR)
-			return std::string(v1->_c.c, v1->_charLen) >= std::string(v2->_c.c, v2->_charLen);
-		else if (v2->GetType() == VAR_STRING)
-			return std::string(v1->_c.c, v1->_charLen) >= v2->_str->_str;
-		break;
 	case VAR_STRING:
-		if (v2->GetType() == VAR_CHAR)
-			return v1->_str->_str >= std::string(v2->_c.c, v2->_charLen);
-		else if (v2->GetType() == VAR_STRING)
+		if (v2->GetType() == VAR_STRING)
 			return v1->_str->_str >= v2->_str->_str;
 		break;
 	default:
@@ -1224,25 +1165,8 @@ NEOS_NOINLINE void CNeoVMWorker::Add2Rare(VarInfo* r, VarInfo* v2)
 {
 	switch (r->GetType())
 	{
-	case VAR_CHAR:
-		if (v2->GetType() == VAR_CHAR)
-		{
-			Var_SetStringA(r, std::string(r->_c.c, r->_charLen) + std::string(v2->_c.c, v2->_charLen));
-			return;
-		}
-		else if (v2->GetType() == VAR_STRING)
-		{
-			Var_SetStringA(r, std::string(r->_c.c, r->_charLen) + v2->_str->_str);
-			return;
-		}
-		break;
 	case VAR_STRING:
-		if (v2->GetType() == VAR_CHAR)
-		{
-			Var_SetStringA(r, r->_str->_str + std::string(v2->_c.c, v2->_charLen));
-			return;
-		}
-		else if (v2->GetType() == VAR_STRING)
+		if (v2->GetType() == VAR_STRING)
 		{
 			Var_SetStringA(r, r->_str->_str + v2->_str->_str);
 			return;
@@ -1281,8 +1205,6 @@ NEOS_NOINLINE void CNeoVMWorker::Sub2Rare(VarInfo* r, VarInfo* v2)
 {
 	switch (r->GetType())
 	{
-	case VAR_CHAR:
-		break;
 	case VAR_STRING:
 		break;
 	case VAR_MAP:
@@ -1318,8 +1240,6 @@ NEOS_NOINLINE void CNeoVMWorker::Mul2Rare(VarInfo* r, VarInfo* v2)
 {
 	switch (r->GetType())
 	{
-	case VAR_CHAR:
-		break;
 	case VAR_STRING:
 		break;
 	case VAR_MAP:
@@ -1355,8 +1275,6 @@ NEOS_NOINLINE void CNeoVMWorker::Div2Rare(VarInfo* r, VarInfo* v2)
 {
 	switch (r->GetType())
 	{
-	case VAR_CHAR:
-		break;
 	case VAR_STRING:
 		break;
 	case VAR_MAP:
@@ -1381,8 +1299,6 @@ NEOS_FORCEINLINE void CNeoVMWorker::Per2(VarInfo* r, VarInfo* v2)
 		break;
 	case VAR_FLOAT:
 		break;
-	case VAR_CHAR:
-		break;
 	case VAR_STRING:
 		break;
 	case VAR_MAP:
@@ -1404,8 +1320,6 @@ NEOS_FORCEINLINE void CNeoVMWorker::LSh2(VarInfo* r, VarInfo* v2)
 		}
 		break;
 	case VAR_FLOAT:
-		break;
-	case VAR_CHAR:
 		break;
 	case VAR_STRING:
 		break;
@@ -1429,8 +1343,6 @@ NEOS_FORCEINLINE void CNeoVMWorker::RSh2(VarInfo* r, VarInfo* v2)
 		break;
 	case VAR_FLOAT:
 		break;
-	case VAR_CHAR:
-		break;
 	case VAR_STRING:
 		break;
 	case VAR_MAP:
@@ -1452,8 +1364,6 @@ NEOS_FORCEINLINE void CNeoVMWorker::And2(VarInfo* r, VarInfo* v2)
 		}
 		break;
 	case VAR_FLOAT:
-		break;
-	case VAR_CHAR:
 		break;
 	case VAR_STRING:
 		break;
@@ -1477,8 +1387,6 @@ NEOS_FORCEINLINE void CNeoVMWorker::Or2(VarInfo* r, VarInfo* v2)
 		break;
 	case VAR_FLOAT:
 		break;
-	case VAR_CHAR:
-		break;
 	case VAR_STRING:
 		break;
 	case VAR_MAP:
@@ -1500,8 +1408,6 @@ NEOS_FORCEINLINE void CNeoVMWorker::Xor2(VarInfo* r, VarInfo* v2)
 		}
 		break;
 	case VAR_FLOAT:
-		break;
-	case VAR_CHAR:
 		break;
 	case VAR_STRING:
 		break;
@@ -1564,32 +1470,6 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool b
 
 	switch (pClt->GetType())
 	{
-	case VAR_CHAR:
-	{
-		int str_len = pClt->_charLen == 0 ? 0 : 1;
-		if (pIterator->GetType() != VAR_ITERATOR)
-		{
-			Var_Release(pIterator);
-			if (0 < str_len)
-			{
-				pIterator->_it._iStringOffset = 0;
-				pIterator->SetType(VAR_ITERATOR);
-			}
-			else
-				return false;
-		}
-		if (pIterator->_it._iStringOffset < str_len)
-		{
-			Var_SetString(pKey, pClt->_c, pClt->_charLen);
-			return true;
-		}
-		else
-		{
-			pIterator->ClearType();
-			return false;
-		}
-		break;
-	}
 	case VAR_STRING:
 	{
 		std::string* str = &pClt->_str->_str;
@@ -1607,9 +1487,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool b
 
 		if (pIterator->_it._iStringOffset < (int)str->length())
 		{
-			const int start = pIterator->_it._iStringOffset;
-			SUtf8One s = utf_string::UTF8_ONE(*str, pIterator->_it._iStringOffset);
-			Var_SetString(pKey, s, (u8)(pIterator->_it._iStringOffset - start));
+			Var_SetStringA(pKey, utf_string::UTF8_ONE(*str, pIterator->_it._iStringOffset));
 			return true;
 		}
 		else

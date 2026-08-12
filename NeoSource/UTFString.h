@@ -312,24 +312,7 @@ public:
 		return iIndex;
 	}
 
-	static SUtf8One UTF8_ONE(std::string& utf8Str, int& iIndex)
-	{
-		SUtf8One result{};
-		const int length = static_cast<int>(utf8Str.size());
-		if (iIndex < 0 || iIndex >= length)
-			return result;
-
-		const u8* bytes = reinterpret_cast<const u8*>(utf8Str.data());
-		const int start = iIndex;
-		u32 codePoint = 0;
-		if (!DecodeUTF8CodePoint(bytes, length, iIndex, codePoint))
-			iIndex = start + 1;
-		const int byteCount = iIndex - start;
-		memcpy(result.c, utf8Str.data() + start, byteCount);
-		return result;
-	}
-
-	static std::string UTF8_ONE_STR(std::string& utf8Str, int& iIndex)
+	static std::string UTF8_ONE(std::string& utf8Str, int& iIndex)
 	{
 		const int length = static_cast<int>(utf8Str.size());
 		if (iIndex < 0 || iIndex >= length)

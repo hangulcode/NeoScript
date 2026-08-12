@@ -72,15 +72,6 @@ NEOS_FORCEINLINE void INeoVMWorker::Var_SetString(VarInfo* d, const char* str)
 {
 	Var_SetStringA(d, str);
 }
-NEOS_FORCEINLINE void INeoVMWorker::Var_SetString(VarInfo* d, SUtf8One c, u8 charLen)
-{
-	if (d->IsAllocType())
-		Var_Release(d);
-
-	d->SetType(VAR_CHAR);
-	d->_c = c;
-	d->_charLen = charLen;
-}
 
 NEOS_FORCEINLINE void INeoVMWorker::Var_SetStringA(VarInfo* d, const std::string& str)
 {
@@ -143,9 +134,6 @@ inline bool INeoVMWorker::GetArg_StlString(int idx, std::string& r)
 	if (p == nullptr) return false;
 	switch (p->GetType())
 	{
-	case VAR_CHAR:
-		r.assign(p->_c.c, p->_charLen);
-		return true;
 	case VAR_STRING:
 		r = p->_str->_str;
 		return true;

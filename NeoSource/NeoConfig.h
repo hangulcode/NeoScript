@@ -47,17 +47,6 @@ struct debug_info
 		_lineseq = line;
 	}
 };
-struct SUtf8One
-{
-	// UTF-8 최대 시퀀스가 4바이트라 4 로 고정한다. 절대 늘리지 말 것 —
-	// 이 구조체는 VarInfo 익명 유니온의 멤버(NeoVM.h)라서, 5바이트로 넓히면
-	// Win32 에서 유니온이 4->8 로 커지며 VarInfo 가 8->12 바이트가 되고
-	// NeoVM.h 의 static_assert(sizeof(VarInfo)==8) 이 깨져 32비트 빌드가 전부 실패한다.
-	// (x64 는 유니온 최대 멤버가 포인터 8바이트라 증상이 안 보인다.)
-	// VAR_CHAR 의 바이트 수는 VarInfo::_charLen 에 별도로 보관한다. NUL 종료가
-	// 필요하면 쓰는 쪽에서 지역 버퍼 또는 길이 기반 std::string 으로 처리할 것.
-	char c[4];
-};
 #pragma pack()
 
 
@@ -70,7 +59,9 @@ struct SUtf8One
 // 0112: 벡터 타입 통합 — VAR_VEC2/3/4/QUAT -> VAR_VEC(+성분수), VEC*_MAKE 4개 -> VEC_MAKE.
 //       VAR_TYPE / opcode 번호가 모두 밀리므로 이전 이미지와 호환되지 않는다.
 // 0113: NOP_MOVI_L 뒤에 NOP_MOVF/_L 삽입. 이후 opcode 번호가 바뀌므로 캐시를 재생성한다.
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('1' << 8) | ('3'))
+// 0114: 인라인 문자 타입을 제거하고 foreach 문자열 원소도 VAR_STRING 으로 통합.
+//       VAR_TYPE 값이 바뀌므로 이전 캐시 이미지는 읽을 수 없다.
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('1' << 8) | ('4'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline
