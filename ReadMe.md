@@ -217,7 +217,7 @@ not yet invoked) returns a falsy `Invocation`; and a value read with `retX` is o
 instance of a different program is rejected.
 
 **Cooperative / time-sliced execution** for long or infinite functions (replaces the old
-`BindWorkerFunction` + per-frame `Run` loop):
+bind-a-worker-function + per-frame `Run` loop):
 
 ```cpp
 rt->StartSliced(inst, "run", /*timeoutMs*/0, /*budget*/10);   // 10 instructions per slice
@@ -302,9 +302,10 @@ that still has no fixed ceiling: a candidate embedded in a large graph of contai
 graph. Call it at a host safe point where a variable-cost pass is acceptable, and measure worst-case
 frame time rather than the average if your title keeps many containers cross-referenced.
 
-> Some `IRuntime` members are intentionally not implemented yet and are marked `[미구현]` in the header
-> (`RegisterFunction`, `ResetInstance`, `Cancel`, the `async` family, `CallContext::fail`,
-> `Invocation::error`). They return `false` / a no-op until supported; don't rely on them.
+> There is deliberately **no API for registering a standalone global function**. Native bindings go
+> through `RegisterObject` only; if you need a global entry point, expose it as an object method
+> (`Services.Foo()`). Native async (`beginAsync` / `CompleteAsync`) is likewise absent — the VM
+> execution model does not support it.
 
 ### Compile-time defines
 Host applications can provide C-style compile-time defines through `CompileDesc::defines`
@@ -413,19 +414,19 @@ NeoScript::NeoExecContextPool_Destroy(pool);     // after all VMs that used it a
 ```
 
 Host entry points:
-- `INeoVMWorker::GetExecutionState()` returns `Idle`, `Running`, `SuspendedSleep`, or
-  `SuspendedDebugger`. It is derived from the live worker context, so it cannot drift from the actual
-  execution state.
-- `INeoVM::CompileAndLoadRunVM` / `CompileAndLoadVM` + `INeoVM::PCall` — run the script body (top level).
+- `INeoVMWorker::GetExecutionState()` returns `Idle`, `Running`, `SuspendedSleep`,
+  `SuspendedDebugger`, or `SuspendedSlice`. It is derived from the live worker context, so it cannot
+  drift from the actual execution state.
+- `INeoVM::CompileAndLoadRunVM` / `CompileAndLoadVM` — load a program and run its script body.
 - `INeoVMWorker::ExecuteTop(fid, args)` — run a function as a fresh top-level execution.
   Returns `NeoExecStatus`: `NEOEXEC_COMPLETED`, `NEOEXEC_SUSPENDED`, or `NEOEXEC_ERROR`.
 - `INeoVMWorker::ResumeTop()` — continue a suspended top-level execution.
 - `INeoVMWorker::IsSuspended()` — a retained (suspended) execution is pending. A per-frame host loop should
-  do `if (w->IsSuspended()) w->ResumeTop(); else w->ExecuteN(fid, args...);` so a breakpoint/sleep resumes
+  do `if (w->IsSuspended()) w->ResumeTop(); else w->ExecuteTop(fid, args);` so a breakpoint/sleep resumes
   instead of restarting.
-- `Call` / `CallN` / `iCall` / `iCallN` (host → script function) auto-acquire a context when the VM is idle
-  and return it when done; when called from inside a running script (native callback) they reuse the current
-  context (nested call).
+
+This is the low-level `INeoVM` surface. Host code should prefer the `IRuntime` API above
+(`Call` / `Invocation` / `StartSliced`), which manages context acquisition and nesting for you.
 
 #### Synchronous native-to-script callbacks
 

@@ -144,7 +144,62 @@ int SAMPLE_cycle_ref(INeoLoader* pLoader, std::string filename)
     }
 
     // ---------------------------------------------------------------------
-    // 3) 전체 순환 참조 스크립트 검증 뒤 파괴한다.
+    // 3) native root 가 붙든 순환은 회수되면 안 된다 — 조기 해제 검출.
+    //
+    // 위 1)/2) 는 수집기가 **덜** 회수할 때만 실패한다. 수집기를 통째로 비활성화해도
+    // 통과하고, 반대로 너무 공격적이어서 살아있는 객체를 해제해도 통과한다. 이 검사가
+    // 그 반대 방향이다: 모듈 전역과 서스펜드된 코루틴이 붙든 순환을 강제 수집 뒤에도
+    // 읽어보고, 컨테이너 수가 줄지 않았는지도 같이 본다.
+    // ---------------------------------------------------------------------
+    {
+        SNeoVMAllocStats before{}, held{}, after{}, dropped{};
+        GetNeoVMAllocStats(before);
+        rt->Call(inst, "CycleNativeRootHold").invoke();
+        GetNeoVMAllocStats(held);
+
+        for (int i = 0; i < 8; ++i)
+            rt->CollectCycles(true);
+        GetNeoVMAllocStats(after);
+
+        CycOk(ContainerCount(after) == ContainerCount(held),
+              "native-root-held cycles survive forced collection (no premature free)");
+        if (ContainerCount(after) != ContainerCount(held))
+            printf("    held %d -> after %d\n", ContainerCount(held), ContainerCount(after));
+
+        // 값까지 읽는다 — 해제된 객체를 읽으면 여기서 죽거나 틀린 값이 나온다.
+        CallResult touch = rt->Call(inst, "CycleNativeRootTouch").invokeR();
+        CycOk(touch.ok() && touch.asInt() == 1,
+              "global- and coroutine-held cycles are still intact after collection");
+
+        // 놓으면 회수돼야 한다. 이 방향이 빠지면 위 검사는 "아무것도 회수 안 함" 으로도 통과한다.
+        CallResult drop = rt->Call(inst, "CycleNativeRootDrop").invokeR();
+        CycOk(drop.ok() && drop.asInt() == 2, "held coroutine ran to completion after collection");
+        rt->CollectCycles(true);
+        GetNeoVMAllocStats(dropped);
+        CycOk(ContainerCount(dropped) < ContainerCount(after),
+              "cycles become collectable once the native root releases them");
+    }
+
+    // ---------------------------------------------------------------------
+    // 4) 리프를 매단 순환 — 그래프에서 제외된 리프도 부모와 함께 회수되는가.
+    // ---------------------------------------------------------------------
+    {
+        SNeoVMAllocStats before{}, peak{}, after{};
+        GetNeoVMAllocStats(before);
+        rt->Call(inst, "CycleLeafParents").argInt(200).invoke();
+        GetNeoVMAllocStats(peak);
+        CycOk(peak.lists - before.lists >= 200, "leaf lists accumulated inside cycles");
+
+        rt->CollectCycles(true);
+        GetNeoVMAllocStats(after);
+        CycOk(after.lists <= before.lists,
+              "pruned leaf lists are reclaimed with their cyclic parents");
+        if (after.lists > before.lists)
+            printf("    lst %d -> %d (peak %d)\n", before.lists, after.lists, peak.lists);
+    }
+
+    // ---------------------------------------------------------------------
+    // 5) 전체 순환 참조 스크립트 검증 뒤 파괴한다.
     //    정상 반환하는 것이 판정이다.
     // ---------------------------------------------------------------------
     rt->Call(inst, "CycleRun").invoke();

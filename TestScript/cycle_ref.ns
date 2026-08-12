@@ -562,3 +562,93 @@ export fun CycleLeaking()
     MetaSelf();
 }
 
+// ---------------------------------------------------------------------------
+// 8. native root 가 붙든 순환 — 절대 회수되면 안 된다(조기 해제 검출).
+//
+// 수집기는 참조 그래프 밖에서 객체를 소유하는 것들(모듈 전역, 활성 코루틴)을 root 로
+// 보고 **전개하지 않는다**. 전개해 버리면 그 참조가 내부 간선으로 차감되어 순환이
+// 도달 불가로 오판되고, 스크립트가 아직 쓰고 있는 객체가 해제된다.
+//
+// 이 검사가 없으면 "수집기가 너무 공격적" 인 회귀를 아무것도 잡지 못한다. 아래 3)의
+// 도달 불가 순환 검사는 수집기가 **덜** 회수할 때만 실패하므로 방향이 반대다.
+// ---------------------------------------------------------------------------
+var cycRootBox = {};        // 모듈 전역 — 그 자체가 native root 다
+var cycRootCo = null;
+var cycRootStep = 0;
+
+fun CycleRootCoroutineBody()
+{
+    var a = {};
+    var b = {};
+    a["b"] = b;
+    b["a"] = a;             // 코루틴 지역이 잡은 2노드 순환
+    a["mark"] = 11;
+    cycRootBox["fromCo"] = a;
+    cycRootStep = 1;
+    yield;                  // 여기서 멈춘 채로 남는다 = 활성 코루틴
+    cycRootStep = 2;
+}
+
+// 전역과 서스펜드된 코루틴이 각각 순환을 하나씩 붙든다.
+export fun CycleNativeRootHold()
+{
+    var a = {};
+    var b = {};
+    a["b"] = b;
+    b["a"] = a;
+    a["mark"] = 7;
+    cycRootBox["cycle"] = a;   // 전역이 붙든 순환
+
+    cycRootStep = 0;
+    cycRootCo = coroutine.create(CycleRootCoroutineBody);
+    coroutine.resume(cycRootCo);
+    CycCheck(cycRootStep == 1, __LINE__);   // yield 에서 멈췄다
+}
+
+// 수집 뒤에도 살아 있고 값이 온전한가. 해제됐다면 여기서 죽거나 값이 틀린다.
+export fun CycleNativeRootTouch()
+{
+    var a = cycRootBox["cycle"];
+    if (a == null) { return -1; }
+    if (a["mark"] != 7) { return -2; }
+    if (a["b"]["a"]["mark"] != 7) { return -3; }
+
+    var c = cycRootBox["fromCo"];
+    if (c == null) { return -4; }
+    if (c["mark"] != 11) { return -5; }
+    if (c["b"]["a"]["mark"] != 11) { return -6; }
+    return 1;
+}
+
+// root 를 놓는다. 이제부터는 회수 대상이어야 한다.
+export fun CycleNativeRootDrop()
+{
+    coroutine.resume(cycRootCo);            // 완주시켜 활성 목록에서 뺀다
+    cycRootCo = null;
+    cycRootBox["cycle"] = null;
+    cycRootBox["fromCo"] = null;
+    return cycRootStep;                     // 2 면 완주
+}
+
+// ---------------------------------------------------------------------------
+// 9. 리프를 매단 순환 — 프루닝된 리프도 부모와 함께 회수되어야 한다.
+//
+// 수집기는 컨테이너 자식을 담은 적 없는 컨테이너(= 나가는 간선이 0)를 그래프에서
+// 제외한다. 제외된 리프는 흰 부모가 슬롯을 놓을 때 일반 refcount 경로로 회수돼야
+// 하는데, 그게 깨지면 리스트만 조용히 쌓인다.
+// ---------------------------------------------------------------------------
+export fun CycleLeafParents(var n)
+{
+    for (var i in 0, n, 1)
+    {
+        var a = {};
+        var b = {};
+        var leaf = [];
+        for (var k in 0, 8, 1)
+            leaf.append(k * 1.5);   // float 만 담는다 = 리프
+        a["b"] = b;
+        b["a"] = a;
+        a["leaf"] = leaf;
+    }
+}
+
