@@ -172,7 +172,9 @@ int NeoScriptV2Smoke()
         "export fun spawnTag() { var r = Host.spawn(); return r[\"entity\"].tag(); }\n"  // 8
         "export fun boom() { var z = 0; return 10 / z; }\n"                              // 9 (런타임 에러)
         "export fun callBoom() { return Host.boomHost(); }\n"                            // 10 (네이티브 fail)
-        "export fun vec2() { return Host.vec2(); }\n";                                   // 11
+        "export fun vec2() { return Host.vec2(); }\n"                                    // 11
+        "export fun badNativeRead() { return Host[3]; }\n"                               // 12
+        "export fun badNativeWrite() { Host[3] = 1; }\n";                                 // 13
     // ※ 새 함수는 반드시 뒤에 덧붙일 것 — 아래 디버거 테스트가 line 3(compute 본문)에 BP 를 건다.
 
     CompileDesc cd;
@@ -299,6 +301,19 @@ int NeoScriptV2Smoke()
         bool called = false;
         RunStatus st = rt->Call(a, "boom").invokeReadMap([&](MapReader){ called = true; });
         Check(st != RunStatus::Completed && !called, "invokeReadMap on failure: callback not invoked");
+    }
+
+    // 네이티브 객체 프로퍼티 이름은 문자열만 허용한다. 숫자 키가 VarInfo 유니온의 _str로
+    // 해석되면 크래시하므로, 읽기와 쓰기 모두 런타임 오류로 끝나야 한다.
+    {
+        Invocation read = rt->Call(a, "badNativeRead");
+        Check(read.invoke() == RunStatus::Failed
+              && read.error().message.find("native object property name must be a string") != std::string::npos,
+              "native property numeric read reports an error");
+        Invocation write = rt->Call(a, "badNativeWrite");
+        Check(write.invoke() == RunStatus::Failed
+              && write.error().message.find("native object property name must be a string") != std::string::npos,
+              "native property numeric write reports an error");
     }
 
     // 저수준 소유권(토큰): 이전 Invocation 의 소멸자가 "나중 호출"의 pending 컨텍스트를 닫으면 안 된다.

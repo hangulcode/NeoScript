@@ -14,6 +14,7 @@ namespace NeoScript
 	/* 컨테이너 접근 */ \
 	X(RTE_INDEX_READ,              "cannot read by index from %s") \
 	X(RTE_INDEX_WRITE,             "cannot assign by index to %s") \
+	X(RTE_NATIVE_PROPERTY_KEY,     "native object property name must be a string") \
 	X(RTE_KEY_NOT_FOUND,           "key not found in map") \
 	X(RTE_VECTOR_INDEX_READ,       "vector index out of range on read") \
 	X(RTE_VECTOR_INDEX_WRITE,      "vector index out of range on assign") \

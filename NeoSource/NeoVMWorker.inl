@@ -100,6 +100,11 @@ NEOS_NOINLINE void CNeoVMWorker::CltInsertRare(VarInfo* pClt, VarInfo* pKey, Var
 		return;
 	case VAR_FP_NATIVE:
 	{
+		if (pKey->GetType() != VAR_STRING)
+		{
+			SetError(RTE_NATIVE_PROPERTY_KEY);
+			return;
+		}
 		FunctionPropertyInfo* fp = pClt->_fpNative;
 		PropertyNative(fp->_fun, fp->_pUserData, pKey->_str, pValue, false);
 		return;
@@ -293,6 +298,11 @@ NEOS_NOINLINE void CNeoVMWorker::CltReadRare(VarInfo* pClt, VarInfo* pKey, VarIn
 		return;
 	case VAR_FP_NATIVE:
 		{
+			if (pKey->GetType() != VAR_STRING)
+			{
+				SetError(RTE_NATIVE_PROPERTY_KEY);
+				return;
+			}
 			FunctionPropertyInfo* fp = pClt->_fpNative;
 			PropertyNative(fp->_fun, fp->_pUserData, pKey->_str, pValue, true);
 			return;
