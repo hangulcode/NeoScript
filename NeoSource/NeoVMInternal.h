@@ -493,7 +493,7 @@ NEOS_FORCEINLINE void Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
 	case VAR_NONE: break;
 	case VAR_FUN: v1->_fun_index = v2->_fun_index; break;
 	case VAR_FUN_NATIVE: v1->_funPtr = v2->_funPtr; break;
-	case VAR_CHAR: v1->_c = v2->_c; break;
+	case VAR_CHAR: v1->_c = v2->_c; v1->_charLen = v2->_charLen; break;
 
 	case VAR_STRING: v1->_str = v2->_str; ++v1->_str->_refCount; break;
 	case VAR_VEC:

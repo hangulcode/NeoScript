@@ -116,7 +116,9 @@ int NeoScriptV2Smoke()
     const char* unicodeSource =
         "export fun unicodeText() { return \""
         "\xED\x95\x9C\xEA\xB8\x80 \xF0\x9F\x98\x80"
-        "\"; }\n";
+        "\"; }\n"
+        "export fun unicodeFirst() { foreach (var c in \"\xF0\x9F\x98\x80\") { return c; } return \"\"; }\n"
+        "export fun unicodeConcat() { foreach (var c in \"\xF0\x9F\x98\x80\") { if (c == \"\xF0\x9F\x98\x80\" && c >= \"\xF0\x9F\x98\x80\") return c + c; } return \"\"; }\n";
     CompileDesc unicodeDesc;
     unicodeDesc.source = unicodeSource;
     unicodeDesc.sourceName = "utf8_unicode_smoke.ns";
@@ -128,6 +130,13 @@ int NeoScriptV2Smoke()
         Invocation unicodeCall = rt->Call(unicodeInstance, "unicodeText");
         Check(unicodeCall.invoke() == RunStatus::Completed && Eq(unicodeCall.retString(), unicodeText),
             "UTF-8 Korean/emoji source round-trips through parser");
+        const char* emoji = "\xF0\x9F\x98\x80";
+        Invocation unicodeFirst = rt->Call(unicodeInstance, "unicodeFirst");
+        Check(unicodeFirst.invoke() == RunStatus::Completed && Eq(unicodeFirst.retString(), emoji),
+            "UTF-8 four-byte foreach character returns safely");
+        Invocation unicodeConcat = rt->Call(unicodeInstance, "unicodeConcat");
+        Check(unicodeConcat.invoke() == RunStatus::Completed && Eq(unicodeConcat.retString(), "\xF0\x9F\x98\x80\xF0\x9F\x98\x80"),
+            "UTF-8 foreach character compares and concatenates safely");
         rt->DestroyInstance(unicodeInstance);
         rt->DestroyProgram(unicodeProgram.program);
     }

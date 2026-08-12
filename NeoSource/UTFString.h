@@ -326,7 +326,6 @@ public:
 			iIndex = start + 1;
 		const int byteCount = iIndex - start;
 		memcpy(result.c, utf8Str.data() + start, byteCount);
-		result.c[byteCount] = 0;
 		return result;
 	}
 

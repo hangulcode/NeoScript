@@ -54,7 +54,8 @@ struct SUtf8One
 	// Win32 에서 유니온이 4->8 로 커지며 VarInfo 가 8->12 바이트가 되고
 	// NeoVM.h 의 static_assert(sizeof(VarInfo)==8) 이 깨져 32비트 빌드가 전부 실패한다.
 	// (x64 는 유니온 최대 멤버가 포인터 8바이트라 증상이 안 보인다.)
-	// NUL 종료가 필요하면 쓰는 쪽에서 지역 버퍼로 처리할 것.
+	// VAR_CHAR 의 바이트 수는 VarInfo::_charLen 에 별도로 보관한다. NUL 종료가
+	// 필요하면 쓰는 쪽에서 지역 버퍼 또는 길이 기반 std::string 으로 처리할 것.
 	char c[4];
 };
 #pragma pack()

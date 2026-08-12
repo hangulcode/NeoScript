@@ -199,7 +199,7 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 	case VAR_NONE:
 		return "null";
 	case VAR_CHAR:
-		return std::string(v1->_c.c);
+		return std::string(v1->_c.c, v1->_charLen);
 	case VAR_STRING:
 		return v1->_str->_str;
 	case VAR_VEC:
@@ -242,7 +242,7 @@ int CNeoVMWorker::ToInt(VarInfo* v1)
 	case VAR_NONE:
 		return -1;
 	case VAR_CHAR:
-		return ::atoi(v1->_c.c);
+		return ::atoi(std::string(v1->_c.c, v1->_charLen).c_str());
 	case VAR_STRING:
 		return ::atoi(v1->_str->_str.c_str());
 	case VAR_FP_NATIVE:
@@ -267,7 +267,7 @@ NS_FLOAT CNeoVMWorker::ToFloat(VarInfo* v1)
 	case VAR_NONE:
 		return -1;
 	case VAR_CHAR:
-		return (NS_FLOAT)atof(v1->_c.c);
+		return (NS_FLOAT)atof(std::string(v1->_c.c, v1->_charLen).c_str());
 	case VAR_STRING:
 		return (NS_FLOAT)atof(v1->_str->_str.c_str());
 	case VAR_FP_NATIVE:
@@ -292,7 +292,7 @@ int CNeoVMWorker::ToSize(VarInfo* v1)
 	case VAR_NONE:
 		return 0;
 	case VAR_CHAR: // 문자열 길이
-		return (v1->_c.c[0] == 0) ? 0 : 1;
+		return v1->_charLen == 0 ? 0 : 1;
 	case VAR_STRING: // 문자열 길이
 		return (int)v1->_str->_str.length();
 	case VAR_VEC:
@@ -1275,7 +1275,7 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 		break;
 	case VAR_CHAR:
 		out.type = "char";
-		out.value = pVar->_c.c;
+		out.value.assign(pVar->_c.c, pVar->CharByteLength());
 		break;
 	case VAR_STRING:
 		out.type = "string";

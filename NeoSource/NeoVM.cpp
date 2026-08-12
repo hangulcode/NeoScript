@@ -196,7 +196,11 @@ const char* INeoVMWorker::PopString(VarInfo* V)
 	if (V->GetType() == VAR_STRING)
 		return V->_str->_str.c_str();
 	else if (V->GetType() == VAR_CHAR)
-		return V->_c.c;
+	{
+		const std::string text(V->_c.c, V->_charLen);
+		Var_SetStringA(V, text);
+		return V->_str->_str.c_str();
+	}
 
 	return NULL;
 }
@@ -204,13 +208,12 @@ const std::string* INeoVMWorker::PopStlString(VarInfo* V)
 {
 	if (V->GetType() == VAR_STRING)
 		return &V->_str->_str;
-/*	else if (V->GetType() == VAR_CHAR) // TODO
+	else if (V->GetType() == VAR_CHAR)
 	{
-		V->SetType(VAR_STRING);
-		V->_str = ((CNeoVMImpl*)_pVM)->StringAlloc(std::string(V->_c.c));
-		++V->_str->_refCount; // ?? TODO
+		const std::string text(V->_c.c, V->_charLen);
+		Var_SetStringA(V, text);
 		return &V->_str->_str;
-	}*/
+	}
 
 	return NULL;
 }

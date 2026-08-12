@@ -406,6 +406,7 @@ int main()
 		"fun sortMutating(var a, var b) { sortMutationMap[9] = 9; return a < b; }\n"
         "export fun add(var a, var b) { return a + b; }\n"
         "export fun literal() { return 1.25 + 2.75; }\n"
+		"export fun utf8Char() { foreach (var c in \"\xF0\x9F\x98\x80\") { if (c == \"\xF0\x9F\x98\x80\" && c >= \"\xF0\x9F\x98\x80\") return c + c; } return \"\"; }\n"
 		"var suspendedArg = \"\";\n"
 		"export fun suspendEcho(var value) { sleep(1); suspendedArg = value; return value; }\n"
 		"export fun suspendedArgValue() { return suspendedArg; }\n"
@@ -475,6 +476,15 @@ int main()
         literalOk = literal.invoke() == RunStatus::Completed && literal.retFloat() == 4.0f;
     }
 
+	bool utf8CharOk = false;
+	{
+		Invocation utf8Char = runtime->Call(instance, "utf8Char");
+		const RunStatus status = utf8Char.invoke();
+		const StringView result = utf8Char.retString();
+		utf8CharOk = status == RunStatus::Completed
+			&& std::string(result.data(), result.size()) == "\xF0\x9F\x98\x80\xF0\x9F\x98\x80";
+	}
+
     // Host execution must distinguish completion from sleep suspension.
     // The string argument must still survive after Resume.
     bool suspendedCallOk = false;
@@ -533,7 +543,7 @@ int main()
     DestroyRuntime(runtime);
 
     const bool asmOk = asmOutput.str().find("Fun -") != std::string::npos;
-    if (!addOk || !literalOk || !suspendedCallOk || !mapOk || !mapDeleteReinsertOk || !mapSortNormalOk || !mapSortMutationOk || !setOk || !containerDestroyOk || !cycleTrimOk || !cycleCollectApiOk || !stringHashOk || !stringInternOk || !stringInternChurnOk || !hashLoadFactorOk || !asmOk)
+    if (!addOk || !literalOk || !utf8CharOk || !suspendedCallOk || !mapOk || !mapDeleteReinsertOk || !mapSortNormalOk || !mapSortMutationOk || !setOk || !containerDestroyOk || !cycleTrimOk || !cycleCollectApiOk || !stringHashOk || !stringInternOk || !stringInternChurnOk || !hashLoadFactorOk || !asmOk)
     {
         std::fputs("NeoScript API smoke failed\n", stderr);
         return 1;

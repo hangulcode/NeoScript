@@ -100,7 +100,7 @@ NEOS_FORCEINLINE bool handle_PTRCALL_impl(const SVMOperation& OP, VarInfo* pVar1
             Call(pVar1->_funPtr, OP.n3);
         break;
     case VAR_CHAR:
-        Var_SetString(pVar1, pVar1->_c.c); // char -> string
+        Var_SetStringA(pVar1, std::string(pVar1->_c.c, pVar1->_charLen)); // char -> string
     case VAR_STRING:
         pFunName = pFunNamePre ? pFunNamePre : GetVarPtr2(OP);
         CallNative(GetVM()->_funLib_String, pVar1, pFunName->_str, n3);
@@ -157,7 +157,7 @@ NEOS_FORCEINLINE bool handle_PTRCALL_L(const SVMOperation& OP) {
 NEOS_FORCEINLINE bool handle_PTRCALL2_impl(short n2, VarInfo* pFunName, VarInfo* pRet) {
     if (pFunName->GetType() == VAR_CHAR)
     {
-        GetVM()->Var_SetStringA(pFunName, pFunName->_c.c);
+        GetVM()->Var_SetStringA(pFunName, std::string(pFunName->_c.c, pFunName->_charLen));
     }
     if (pFunName->GetType() == VAR_STRING)
     {

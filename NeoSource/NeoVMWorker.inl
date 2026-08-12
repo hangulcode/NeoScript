@@ -575,19 +575,19 @@ NEOS_NOINLINE void CNeoVMWorker::Add3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	case VAR_CHAR:
 		if (v2->GetType() == VAR_CHAR)
 		{
-			Var_SetStringA(r, std::string(v1->_c.c) + v2->_c.c);
+			Var_SetStringA(r, std::string(v1->_c.c, v1->_charLen) + std::string(v2->_c.c, v2->_charLen));
 			return;
 		}
 		else if (v2->GetType() == VAR_STRING)
 		{
-			Var_SetStringA(r, std::string(v1->_c.c) + v2->_str->_str);
+			Var_SetStringA(r, std::string(v1->_c.c, v1->_charLen) + v2->_str->_str);
 			return;
 		}
 		break;
 	case VAR_STRING:
 		if (v2->GetType() == VAR_CHAR)
 		{
-			Var_SetStringA(r, v1->_str->_str + v2->_c.c);
+			Var_SetStringA(r, v1->_str->_str + std::string(v2->_c.c, v2->_charLen));
 			return;
 		}
 		else if (v2->GetType() == VAR_STRING)
@@ -1104,13 +1104,15 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
 		break;
 	case VAR_CHAR:
 		if (v2->GetType() == VAR_CHAR)
-			return 0 == strcmp(v1->_c.c, v2->_c.c);
+			return v1->_charLen == v2->_charLen && 0 == memcmp(v1->_c.c, v2->_c.c, v1->_charLen);
 		else if (v2->GetType() == VAR_STRING)
-			return 0 == strcmp(v1->_c.c, v2->_str->_str.c_str());
+			return v1->_charLen == v2->_str->_str.size()
+				&& 0 == memcmp(v1->_c.c, v2->_str->_str.data(), v1->_charLen);
 		break;
 	case VAR_STRING:
 		if (v2->GetType() == VAR_CHAR)
-			return 0 == strcmp(v1->_str->_str.c_str(), v2->_c.c);
+			return v1->_str->_str.size() == v2->_charLen
+				&& 0 == memcmp(v1->_str->_str.data(), v2->_c.c, v2->_charLen);
 		else if (v2->GetType() == VAR_STRING)
 			return v1->_str->_str == v2->_str->_str;
 		break;
@@ -1147,13 +1149,13 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareGR(VarInfo* v1, VarInfo* v2)
 		break;
 	case VAR_CHAR:
 		if (v2->GetType() == VAR_CHAR)
-			return std::string(v1->_c.c) > std::string(v2->_c.c);
+			return std::string(v1->_c.c, v1->_charLen) > std::string(v2->_c.c, v2->_charLen);
 		else if (v2->GetType() == VAR_STRING)
-			return std::string(v1->_c.c) > v2->_str->_str;
+			return std::string(v1->_c.c, v1->_charLen) > v2->_str->_str;
 		break;
 	case VAR_STRING:
 		if (v2->GetType() == VAR_CHAR)
-			return v1->_str->_str > std::string(v2->_c.c);
+			return v1->_str->_str > std::string(v2->_c.c, v2->_charLen);
 		else if (v2->GetType() == VAR_STRING)
 			return v1->_str->_str > v2->_str->_str;
 		break;
@@ -1181,13 +1183,13 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareGE(VarInfo* v1, VarInfo* v2)
 		break;
 	case VAR_CHAR:
 		if (v2->GetType() == VAR_CHAR)
-			return std::string(v1->_c.c) >= std::string(v2->_c.c);
+			return std::string(v1->_c.c, v1->_charLen) >= std::string(v2->_c.c, v2->_charLen);
 		else if (v2->GetType() == VAR_STRING)
-			return std::string(v1->_c.c) >= v2->_str->_str;
+			return std::string(v1->_c.c, v1->_charLen) >= v2->_str->_str;
 		break;
 	case VAR_STRING:
 		if (v2->GetType() == VAR_CHAR)
-			return v1->_str->_str >= std::string(v2->_c.c);
+			return v1->_str->_str >= std::string(v2->_c.c, v2->_charLen);
 		else if (v2->GetType() == VAR_STRING)
 			return v1->_str->_str >= v2->_str->_str;
 		break;
@@ -1225,19 +1227,19 @@ NEOS_NOINLINE void CNeoVMWorker::Add2Rare(VarInfo* r, VarInfo* v2)
 	case VAR_CHAR:
 		if (v2->GetType() == VAR_CHAR)
 		{
-			Var_SetStringA(r, std::string(r->_c.c) + std::string(v2->_c.c));
+			Var_SetStringA(r, std::string(r->_c.c, r->_charLen) + std::string(v2->_c.c, v2->_charLen));
 			return;
 		}
 		else if (v2->GetType() == VAR_STRING)
 		{
-			Var_SetStringA(r, std::string(r->_c.c) + v2->_str->_str);
+			Var_SetStringA(r, std::string(r->_c.c, r->_charLen) + v2->_str->_str);
 			return;
 		}
 		break;
 	case VAR_STRING:
 		if (v2->GetType() == VAR_CHAR)
 		{
-			Var_SetStringA(r, r->_str->_str + v2->_c.c);
+			Var_SetStringA(r, r->_str->_str + std::string(v2->_c.c, v2->_charLen));
 			return;
 		}
 		else if (v2->GetType() == VAR_STRING)
@@ -1564,7 +1566,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool b
 	{
 	case VAR_CHAR:
 	{
-		int str_len = (pClt->_c.c[0] == 0) ? 0 : 1;
+		int str_len = pClt->_charLen == 0 ? 0 : 1;
 		if (pIterator->GetType() != VAR_ITERATOR)
 		{
 			Var_Release(pIterator);
@@ -1578,7 +1580,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool b
 		}
 		if (pIterator->_it._iStringOffset < str_len)
 		{
-			Var_SetString(pKey, pClt->_c);
+			Var_SetString(pKey, pClt->_c, pClt->_charLen);
 			return true;
 		}
 		else
@@ -1605,8 +1607,9 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool b
 
 		if (pIterator->_it._iStringOffset < (int)str->length())
 		{
+			const int start = pIterator->_it._iStringOffset;
 			SUtf8One s = utf_string::UTF8_ONE(*str, pIterator->_it._iStringOffset);
-			Var_SetString(pKey, s);
+			Var_SetString(pKey, s, (u8)(pIterator->_it._iStringOffset - start));
 			return true;
 		}
 		else

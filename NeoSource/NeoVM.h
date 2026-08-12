@@ -294,9 +294,12 @@ struct VarInfo
 {
 private:
 	VAR_TYPE	_type;
-	// VAR_VEC 의 성분 수(1~4). _type 뒤 패딩에 들어가므로 크기를 늘리지 않는다
-	// (u8 이라 x64 의 7바이트, Win32 의 3바이트 패딩 양쪽에 모두 맞는다).
-	// 설정은 VecStoreFor() 한 곳뿐이고, 복사는 Move_DestNoRelease 가 _vec 과 함께 옮긴다.
+	// VAR_CHAR 의 UTF-8 바이트 수(1~4). SUtf8One 자체는 VarInfo 를 Win32 에서
+	// 8바이트로 유지하기 위해 NUL 종결자를 담을 공간이 없으므로 길이를 여기 둔다.
+	u8			_charLen;
+	// VAR_VEC 의 성분 수(1~4). 두 u8은 _type 뒤 정렬 패딩을 쓰므로 VarInfo 크기를
+	// 늘리지 않는다(x64 7바이트, Win32 3바이트 패딩). 설정은 VecStoreFor() 한 곳뿐이고,
+	// 복사는 Move_DestNoRelease 가 _vec 과 함께 옮긴다.
 	u8			_vecCount;
 	NEOS_FORCEINLINE void SetType(VAR_TYPE t) { _type = t; }
 	NEOS_FORCEINLINE void SetVecType(int count) { _type = VAR_VEC; _vecCount = (u8)count; }
@@ -341,6 +344,7 @@ public:
 	NEOS_FORCEINLINE VarInfo(int v) { _type = VAR_INT; _int = v; }
 
 	NEOS_FORCEINLINE VAR_TYPE GetType() { return _type; }
+	NEOS_FORCEINLINE u8 CharByteLength() { return _type == VAR_CHAR ? _charLen : 0; }
 	// 풀 객체 + refcount 를 쓰는 타입인가. 대입/해제 때 참조 카운트를 만져야 하는지 판정.
 	NEOS_FORCEINLINE bool IsAllocType()
 	{
@@ -631,7 +635,7 @@ public:
 	void Var_SetQuat(VarInfo* d, float w, float x, float y, float z);
 	void Var_SetCoroutine(VarInfo* d, CoroutineInfo* p);
 	void Var_SetString(VarInfo* d, const char* str);
-	void Var_SetString(VarInfo* d, SUtf8One c);
+	void Var_SetString(VarInfo* d, SUtf8One c, u8 charLen);
 	void Var_SetStringA(VarInfo* d, const std::string& str);
 	void Var_SetTable(VarInfo* d, MapInfo* p);
 	void Var_SetList(VarInfo* d, ListInfo* p);
