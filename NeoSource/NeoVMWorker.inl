@@ -1047,20 +1047,29 @@ NEOS_FORCEINLINE void CNeoVMWorker::Dec(VarInfo* v1)
 
 NEOS_FORCEINLINE bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
 {
+	const VAR_TYPE t1 = v1->GetType();
+	const VAR_TYPE t2 = v2->GetType();
+	if (t1 == VAR_INT)
+	{
+		if (t2 == VAR_INT)
+			return v1->_int == v2->_int;
+		if (t2 == VAR_FLOAT)
+			return v1->_int == v2->_float;
+	}
+	else if (t1 == VAR_FLOAT)
+	{
+		if (t2 == VAR_INT)
+			return v1->_float == v2->_int;
+		if (t2 == VAR_FLOAT)
+			return v1->_float == v2->_float;
+	}
+	return CompareEQRare(v1, v2);
+}
+
+NEOS_NOINLINE bool CNeoVMWorker::CompareEQRare(VarInfo* v1, VarInfo* v2)
+{
 	switch (v1->GetType())
 	{
-	case VAR_INT:
-		if (v2->GetType() == VAR_INT)
-			return v1->_int == v2->_int;
-		if (v2->GetType() == VAR_FLOAT)
-			return v1->_int == v2->_float;
-		break;
-	case VAR_FLOAT:
-		if (v2->GetType() == VAR_INT)
-			return v1->_float == v2->_int;
-		if (v2->GetType() == VAR_FLOAT)
-			return v1->_float == v2->_float;
-		break;
 	case VAR_BOOL:
 		if (v2->GetType() == VAR_BOOL)
 			return v1->_bl == v2->_bl;
@@ -1088,55 +1097,61 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareEQ(VarInfo* v1, VarInfo* v2)
 	}
 	return false;
 }
+
 NEOS_FORCEINLINE bool CNeoVMWorker::CompareGR(VarInfo* v1, VarInfo* v2)
 {
-	switch (v1->GetType())
+	const VAR_TYPE t1 = v1->GetType();
+	const VAR_TYPE t2 = v2->GetType();
+	if (t1 == VAR_INT)
 	{
-	case VAR_INT:
-		if (v2->GetType() == VAR_INT)
+		if (t2 == VAR_INT)
 			return v1->_int > v2->_int;
-		if (v2->GetType() == VAR_FLOAT)
+		if (t2 == VAR_FLOAT)
 			return v1->_int > v2->_float;
-		break;
-	case VAR_FLOAT:
-		if (v2->GetType() == VAR_INT)
-			return v1->_float > v2->_int;
-		if (v2->GetType() == VAR_FLOAT)
-			return v1->_float > v2->_float;
-		break;
-	case VAR_STRING:
-		if (v2->GetType() == VAR_STRING)
-			return v1->_str->_str > v2->_str->_str;
-		break;
-	default:
-		break;
 	}
+	else if (t1 == VAR_FLOAT)
+	{
+		if (t2 == VAR_INT)
+			return v1->_float > v2->_int;
+		if (t2 == VAR_FLOAT)
+			return v1->_float > v2->_float;
+	}
+	return CompareGRRare(v1, v2);
+}
+
+NEOS_NOINLINE bool CNeoVMWorker::CompareGRRare(VarInfo* v1, VarInfo* v2)
+{
+	if (v1->GetType() == VAR_STRING && v2->GetType() == VAR_STRING)
+		return v1->_str->_str > v2->_str->_str;
 	SetErrorOperator(">", v1, v2);
 	return false;
 }
+
 NEOS_FORCEINLINE bool CNeoVMWorker::CompareGE(VarInfo* v1, VarInfo* v2)
 {
-	switch (v1->GetType())
+	const VAR_TYPE t1 = v1->GetType();
+	const VAR_TYPE t2 = v2->GetType();
+	if (t1 == VAR_INT)
 	{
-	case VAR_INT:
-		if (v2->GetType() == VAR_INT)
+		if (t2 == VAR_INT)
 			return v1->_int >= v2->_int;
-		if (v2->GetType() == VAR_FLOAT)
+		if (t2 == VAR_FLOAT)
 			return v1->_int >= v2->_float;
-		break;
-	case VAR_FLOAT:
-		if (v2->GetType() == VAR_INT)
-			return v1->_float >= v2->_int;
-		if (v2->GetType() == VAR_FLOAT)
-			return v1->_float >= v2->_float;
-		break;
-	case VAR_STRING:
-		if (v2->GetType() == VAR_STRING)
-			return v1->_str->_str >= v2->_str->_str;
-		break;
-	default:
-		break;
 	}
+	else if (t1 == VAR_FLOAT)
+	{
+		if (t2 == VAR_INT)
+			return v1->_float >= v2->_int;
+		if (t2 == VAR_FLOAT)
+			return v1->_float >= v2->_float;
+	}
+	return CompareGERare(v1, v2);
+}
+
+NEOS_NOINLINE bool CNeoVMWorker::CompareGERare(VarInfo* v1, VarInfo* v2)
+{
+	if (v1->GetType() == VAR_STRING && v2->GetType() == VAR_STRING)
+		return v1->_str->_str >= v2->_str->_str;
 	SetErrorOperator(">=", v1, v2);
 	return false;
 }

@@ -328,6 +328,11 @@ private:
 	bool CompareEQ(VarInfo* v1, VarInfo* v2);
 	bool CompareGR(VarInfo* v1, VarInfo* v2);
 	bool CompareGE(VarInfo* v1, VarInfo* v2);
+	// 숫자 외 비교는 interpreter switch 안에 복제하지 않는다. 문자열/벡터/오류 처리는
+	// 드문 경로라 noinline으로 두어 숫자 비교 opcode의 기계 코드가 안정적으로 유지된다.
+	NEOS_NOINLINE bool CompareEQRare(VarInfo* v1, VarInfo* v2);
+	NEOS_NOINLINE bool CompareGRRare(VarInfo* v1, VarInfo* v2);
+	NEOS_NOINLINE bool CompareGERare(VarInfo* v1, VarInfo* v2);
 	bool For(VarInfo* v1);
 	bool ForRare(VarInfo* v1, int step);   // step<0 / step==0 (드문 경로, For 에서 분리)
 	// bTwoVar: foreach(var k, v in ...) 형태(컴파일러가 op argFlag 로 전달).

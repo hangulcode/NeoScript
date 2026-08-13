@@ -152,6 +152,9 @@ fun TestExpressions()
     Check(tofloat(3) == 3.0, __LINE__);
     Check(tosize("neo") == 3, __LINE__);
     Check("Neo" .. "Script" == "NeoScript", __LINE__);
+    // 숫자 fast path와 분리된 문자열 비교 경로.
+    Check("alpha" < "beta", __LINE__);
+    Check("beta" >= "beta", __LINE__);
     Check(REG_SOURCE_LINE > 0, __LINE__);
 }
 
