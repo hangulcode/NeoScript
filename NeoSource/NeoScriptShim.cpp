@@ -985,6 +985,7 @@ InstanceState RuntimeImpl::GetState(InstanceHandle h) const
 {
     InstanceRec* inst = resolveInstance(h);
     if (!inst) return InstanceState::Failed;
+    if (inst->worker->IsOutOfMemoryPoisoned()) return InstanceState::Failed;
     switch (inst->worker->GetExecutionState())
     {
     case NeoExecutionState::Idle:              return InstanceState::Idle;
@@ -1131,6 +1132,11 @@ RunStatus RuntimeImpl::UpdateSliced(InstanceHandle h)
 {
     InstanceRec* inst = resolveInstance(h);
     if (!inst) return RunStatus::Failed;
+    if (inst->worker->IsOutOfMemoryPoisoned())
+    {
+        CaptureCallError(inst, RunStatus::Failed);
+        return RunStatus::Failed;
+    }
     if (inst->worker->GetExecutionState() == NeoExecutionState::Idle)
         return RunStatus::Completed;
 
@@ -1211,6 +1217,23 @@ void RuntimeImpl::BeginCallError(InstanceRec* inst)
 void RuntimeImpl::CaptureCallError(InstanceRec* inst, RunStatus status)
 {
     if (status == RunStatus::Completed) return;
+    // OOM은 VM 공유 오류 버퍼에 넣지 않는다. 같은 Runtime의 다른 워커가 계속
+    // 실행될 수 있어야 하므로, 실패 워커를 가진 이 인스턴스에만 기록한다.
+    if (inst && inst->worker && inst->worker->IsOutOfMemoryPoisoned())
+    {
+        inst->callError.code = 1;
+        try
+        {
+            // 짧은 리터럴은 일반적인 STL SSO 경로지만, OOM 중에도 절대 예외가 VM
+            // 밖으로 새지 않도록 방어한다.
+            inst->callError.message = "out of memory";
+        }
+        catch (const std::bad_alloc&)
+        {
+            inst->callError.message.clear();
+        }
+        return;
+    }
     const char* detail = (m_vm && m_vm->IsLastErrorMsg()) ? m_vm->GetLastErrorMsg() : nullptr;
     inst->callError.message = detail ? detail : "script call failed";
     inst->callError.code = (inst->failCode != 0) ? inst->failCode : 1;   // 1 = 일반 런타임 에러
@@ -1543,8 +1566,17 @@ RunStatus Invocation::invoke()
     {
         w->ReleaseArgs(inst->callArgs); inst->callArgs.clear();
         inst->callStatus = RunStatus::Failed;
-        inst->callError.code = 1;
-        inst->callError.message = "instance is not callable (suspended or invalid state)";
+        if (begin == NeoHostCallBegin::OutOfMemory)
+        {
+            // BeginHostCall의 컨텍스트 대여 자체가 실패해도 worker-local OOM
+            // 상태를 이 인스턴스의 오류로 스냅샷한다.
+            inst->runtime->CaptureCallError(inst, inst->callStatus);
+        }
+        else
+        {
+            inst->callError.code = 1;
+            inst->callError.message = "instance is not callable (suspended or invalid state)";
+        }
         return RunStatus::Failed;
     }
     const bool nested = (begin == NeoHostCallBegin::Nested);

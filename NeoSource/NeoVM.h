@@ -63,6 +63,7 @@ enum class NeoHostCallBegin : u8
 	Suspended,
 	NoPool,
 	InvalidState,
+	OutOfMemory,
 };
 
 enum NeoCompileDefineTokenType
@@ -689,6 +690,9 @@ public:
 	virtual int	ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args) = 0;
 	virtual int	ResumeTop() = 0;
 	virtual NeoExecutionState GetExecutionState() = 0;
+	// OOM은 이 워커의 실행 상태를 복구 불가로 만든다. 호스트는 워커를 가진
+	// 인스턴스를 폐기하거나 ResetInstance로 새 워커를 만들어야 한다.
+	virtual bool IsOutOfMemoryPoisoned() const = 0;
 	// sleep/debugger/slice 제한 정지일 때 true. Running 상태는 포함하지 않는다.
 	virtual bool IsSuspended() = 0;
 	// 호스트 Invocation 호출용. idle 이면 최상위 컨텍스트를 대여하고

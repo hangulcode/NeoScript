@@ -1,6 +1,7 @@
 ﻿#include <math.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <new>
 #include <thread>
 #include <chrono>
 #include "NeoVMImpl.h"
@@ -530,6 +531,13 @@ int CNeoVMWorker::GetFunctionIndexFromCodeOffset(int codeOffset)
 }
 std::string CNeoVMWorker::FormatStackTrace(int currentOpIndex)
 {
+	// 오류 보고가 다시 대량 할당을 일으키지 않도록 총 64 프레임까지만 보인다.
+	// 현재 프레임을 포함한 앞 32개와 가장 오래된 뒤 32개를 남겨 재귀의 양 끝을
+	// 모두 볼 수 있게 한다.
+	static const int kMaxFrames = 64;
+	static const int kHeadFrames = 32;
+	static const int kTailFrames = kMaxFrames - kHeadFrames;
+
 	std::string trace;
 	trace.reserve(512);
 	trace += "\nScript Call Stack:";
@@ -615,13 +623,43 @@ std::string CNeoVMWorker::FormatStackTrace(int currentOpIndex)
 	if (m_pCallStack == nullptr)
 		return trace;
 
-	for (int i = (int)m_pCallStack->size() - 1, frameIndex = 1; i >= 0; --i, ++frameIndex)
+	const int callFrameCount = (int)m_pCallStack->size();
+	const int totalFrameCount = callFrameCount + 1; // 현재 실행 프레임 포함
+	const int headCallFrameCount = kHeadFrames - 1;
+	if (totalFrameCount <= kMaxFrames)
+	{
+		for (int i = callFrameCount - 1; i >= 0; --i)
+		{
+			SCallStack& cs = (*m_pCallStack)[i];
+			int opIndex = cs._iReturnOffset / (int)sizeof(SVMOperation);
+			if (opIndex > 0)
+				--opIndex;
+			appendFrame(callFrameCount - i, opIndex, cs._iSP_Vars);
+		}
+		return trace;
+	}
+
+	for (int i = callFrameCount - 1; i >= callFrameCount - headCallFrameCount; --i)
 	{
 		SCallStack& cs = (*m_pCallStack)[i];
 		int opIndex = cs._iReturnOffset / (int)sizeof(SVMOperation);
 		if (opIndex > 0)
 			--opIndex;
-		appendFrame(frameIndex, opIndex, cs._iSP_Vars);
+		appendFrame(callFrameCount - i, opIndex, cs._iSP_Vars);
+	}
+
+	const int omitted = totalFrameCount - kMaxFrames;
+	trace += "\n  ... ";
+	trace += std::to_string(omitted);
+	trace += " frames omitted";
+
+	for (int i = kTailFrames - 1; i >= 0; --i)
+	{
+		SCallStack& cs = (*m_pCallStack)[i];
+		int opIndex = cs._iReturnOffset / (int)sizeof(SVMOperation);
+		if (opIndex > 0)
+			--opIndex;
+		appendFrame(callFrameCount - i, opIndex, cs._iSP_Vars);
 	}
 	return trace;
 }
@@ -868,42 +906,69 @@ int CNeoVMWorker::RunSettle()
 // 최상위 실행: 풀에서 컨텍스트를 대여해 iFID 를 처음부터 실행.
 int CNeoVMWorker::ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args)
 {
-	if (m_pPool == nullptr)
-		return NEOEXEC_ERROR;
-	if (m_pMainCtx != nullptr)
-		return NEOEXEC_ERROR;   // 이미 정지된 실행이 있음 → ResumeTop 을 써야 함
-
-	m_pMainCtx = m_pPool->Acquire();
-	BindContext(m_pMainCtx);
-	m_pRegisterActive = nullptr;
-	m_sCoroutines.clear();
-	ResetFaultStateForNewExecution();
-	_iSP_Vars = 0;
-	_iSP_VarsMax = 0;
-	_iSP_Vars_Max2 = 0;
-	_iRemainSleep = 0;
-	m_bSliceExpired = false;
-	_isInitialized = true;
-
-	if (Setup(iFunctionID, _args) == false)
+	try
 	{
-		ReleaseExecution();
+		if (m_bOutOfMemoryPoisoned)
+			return NEOEXEC_ERROR;
+		if (m_pPool == nullptr)
+			return NEOEXEC_ERROR;
+		if (m_pMainCtx != nullptr)
+			return NEOEXEC_ERROR;   // 이미 정지된 실행이 있음 → ResumeTop 을 써야 함
+
+		m_pMainCtx = m_pPool->Acquire();
+		BindContext(m_pMainCtx);
+		m_pRegisterActive = nullptr;
+		m_sCoroutines.clear();
+		ResetFaultStateForNewExecution();
+		_iSP_Vars = 0;
+		_iSP_VarsMax = 0;
+		_iSP_Vars_Max2 = 0;
+		_iRemainSleep = 0;
+		m_bSliceExpired = false;
+		_isInitialized = true;
+
+		if (Setup(iFunctionID, _args) == false)
+		{
+			ReleaseExecution();
+			GetVM()->PublishAllocStats();
+			return NEOEXEC_ERROR;
+		}
+		int status = RunSettle();
+		GetVM()->PublishAllocStats();
+		return status;
+	}
+	catch (const std::bad_alloc&)
+	{
+		// Acquire/Setup은 Run()의 보호 범위보다 앞에 있으므로 여기서도 잡는다.
+		if (m_pMainCtx != nullptr)
+			ReleaseExecution();
+		PoisonOutOfMemory();
 		GetVM()->PublishAllocStats();
 		return NEOEXEC_ERROR;
 	}
-	int status = RunSettle();
-	GetVM()->PublishAllocStats();
-	return status;
 }
 
 // 정지된 최상위 실행을 이어서 재개 (retain 된 컨텍스트/레지스터로 계속).
 int CNeoVMWorker::ResumeTop()
 {
-	if (m_pMainCtx == nullptr)
-		return NEOEXEC_COMPLETED;   // 정지 상태 아님
-	int status = RunSettle();
-	GetVM()->PublishAllocStats();
-	return status;
+	try
+	{
+		if (m_bOutOfMemoryPoisoned)
+			return NEOEXEC_ERROR;
+		if (m_pMainCtx == nullptr)
+			return NEOEXEC_COMPLETED;   // 정지 상태 아님
+		int status = RunSettle();
+		GetVM()->PublishAllocStats();
+		return status;
+	}
+	catch (const std::bad_alloc&)
+	{
+		if (m_pMainCtx != nullptr)
+			ReleaseExecution();
+		PoisonOutOfMemory();
+		GetVM()->PublishAllocStats();
+		return NEOEXEC_ERROR;
+	}
 }
 
 NeoExecutionState CNeoVMWorker::GetExecutionState()
@@ -930,6 +995,8 @@ bool CNeoVMWorker::IsSuspended()
 // 호스트 Invocation용 컨텍스트 대여.
 NeoHostCallBegin CNeoVMWorker::BeginHostCall()
 {
+	if (m_bOutOfMemoryPoisoned)
+		return NeoHostCallBegin::OutOfMemory;
 	if (m_pMainCtx != nullptr)
 	{
 		switch (GetExecutionState())
@@ -947,7 +1014,19 @@ NeoHostCallBegin CNeoVMWorker::BeginHostCall()
 	if (m_pPool == nullptr)
 		return NeoHostCallBegin::NoPool;
 
-	m_pMainCtx = m_pPool->Acquire();
+	try
+	{
+		m_pMainCtx = m_pPool->Acquire();
+	}
+	catch (const std::bad_alloc&)
+	{
+		PoisonOutOfMemory();
+		// Script -> native -> Script 재진입 중이면 이 예외를 최외곽 Run까지
+		// 전파해야 바깥 스크립트가 이후 opcode를 계속 실행하지 않는다.
+		if (m_bInRun)
+			throw;
+		return NeoHostCallBegin::OutOfMemory;
+	}
 	BindContext(m_pMainCtx);
 	m_pRegisterActive = nullptr;
 	m_sCoroutines.clear();
@@ -1014,32 +1093,49 @@ int CNeoVMWorker::RunHostCall(int iFunctionID, std::vector<VarInfo>& _args)
 {
 	// BeginHostCall이 실행 컨텍스트를 확보한 뒤에만 이 경로로 진입한다. ExecuteTop은
 	// 완료 시 컨텍스트를 즉시 반납하므로, 반환 슬롯을 읽어야 하는 Invocation에는 맞지 않는다.
-	if (m_pMainCtx == nullptr)
-		return NEOEXEC_ERROR;
-
-	// Script A -> native API -> Script B는 동일한 코드 버퍼를 공유한다.
-	// Script B가 정상 반환하면 Script A의 다음 opcode부터 계속 실행해야 한다.
-	const bool isNestedScriptCall = (m_iNativeScriptCallDepth > 0);
-	if (isNestedScriptCall && m_iTimeout >= 0)
+	try
 	{
-		SetErrorFormat(RTE_NESTED_NOT_ALLOWED, "time-limited execution");
+		if (m_bOutOfMemoryPoisoned)
+			return NEOEXEC_ERROR;
+		if (m_pMainCtx == nullptr)
+			return NEOEXEC_ERROR;
+
+		// Script A -> native API -> Script B는 동일한 코드 버퍼를 공유한다.
+		// Script B가 정상 반환하면 Script A의 다음 opcode부터 계속 실행해야 한다.
+		const bool isNestedScriptCall = (m_iNativeScriptCallDepth > 0);
+		if (isNestedScriptCall && m_iTimeout >= 0)
+		{
+			SetErrorFormat(RTE_NESTED_NOT_ALLOWED, "time-limited execution");
+			return NEOEXEC_ERROR;
+		}
+		const int returnCodePtr = isNestedScriptCall ? GetCodeptr() : 0;
+		if (Setup(iFunctionID, _args) == false)
+			return NEOEXEC_ERROR;
+
+		const bool ok = Run();
+		if (ok && isNestedScriptCall)
+			SetCodePtr(returnCodePtr);
+		GetVM()->PublishAllocStats();
+		if (ok == false)
+			return NEOEXEC_ERROR;
+		return IsSuspended() ? NEOEXEC_SUSPENDED : NEOEXEC_COMPLETED;
+	}
+	catch (const std::bad_alloc&)
+	{
+		PoisonOutOfMemory();
+		// 중첩 스크립트 호출의 OOM은 호출한 native 함수만 실패시키는 것으로
+		// 끝내면 바깥 인터프리터가 손상 가능 상태에서 계속 돈다.
+		if (m_bInRun)
+			throw;
+		GetVM()->PublishAllocStats();
 		return NEOEXEC_ERROR;
 	}
-	const int returnCodePtr = isNestedScriptCall ? GetCodeptr() : 0;
-	if (Setup(iFunctionID, _args) == false)
-		return NEOEXEC_ERROR;
-
-	const bool ok = Run();
-	if (ok && isNestedScriptCall)
-		SetCodePtr(returnCodePtr);
-	GetVM()->PublishAllocStats();
-	if (ok == false)
-		return NEOEXEC_ERROR;
-	return IsSuspended() ? NEOEXEC_SUSPENDED : NEOEXEC_COMPLETED;
 }
 
 bool	CNeoVMWorker::Setup(int iFunctionID, std::vector<VarInfo>& _args)
 {
+	if (m_bOutOfMemoryPoisoned)
+		return false;
 	if (iFunctionID < 0 || iFunctionID >= (int)Functions().size())
 		return false;
 
@@ -1506,6 +1602,8 @@ void CNeoVMWorker::DebugGetFrameVariables(int frameId, std::vector<NeoDebugVaria
 }
 bool	CNeoVMWorker::Run()
 {
+	if (m_bOutOfMemoryPoisoned)
+		return false;
 	bool b = true;
 	const bool nestedRun = m_bInRun;
 	const bool previousSliceExpired = m_bSliceExpired;
@@ -1525,10 +1623,8 @@ bool	CNeoVMWorker::Run()
 		InRunGuard(bool* f) : p(f), prev(*f) { *f = true; }
 		~InRunGuard() { *p = prev; }
 	} inRunGuard(&m_bInRun);
-#ifdef _WIN32
 	try
 	{
-#endif
 		bool debugActive = (m_iDebugSuppressCount == 0) &&
 			(m_iNativeScriptCallDepth == 0) &&
 			(m_iDebugBreakCount > 0 ||
@@ -1545,35 +1641,45 @@ bool	CNeoVMWorker::Run()
 			b = debugActive ? RunInternal<false, true>(breakingCallStack) : RunInternal<false, false>(breakingCallStack);
 		// handle_ERROR reports the source location to the debugger, but the VM result
 		// must remain an error so RunSettle releases this failed execution context.
-#ifdef _WIN32
+	}
+	catch (const std::bad_alloc&)
+	{
+		// OOM 직후에는 stack trace/detail 문자열을 만들지 않는다. 그 자체가 다시
+		// bad_alloc을 던져 프로세스를 종료시킬 수 있기 때문이다.
+		PoisonOutOfMemory();
+		if (nestedRun)
+			throw;
+		return false;
 	}
 	catch (...)
 	{
-		//int idx = int((u8*)_pCodeCurrent - _pCodeBegin - 1) / sizeof(SVMOperation);
-		SetError(RTE_EXCEPTION);
-		bool blDebugInfo = IsDebugInfo();
-		int _lineseq = -1;
-		if (blDebugInfo)
-			_lineseq = GetDebugLine(_isErrorOPIndex);
-
-		char chMsg[256];
-
-#ifdef _WIN32
-		snprintf(chMsg, _countof(chMsg), "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), _isErrorOPIndex, _lineseq);
-#else
-		sprintf(chMsg, "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), idx, _lineseq);
-#endif
-
-		GetVM()->_sErrorMsgDetail = std::string(chMsg) + FormatStackTrace(_isErrorOPIndex);
-		if (m_pDebugListener || m_iDebugBreakCount > 0 || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
+		try
 		{
-			if (_isErrorOPIndex >= 0 && _isErrorOPIndex < (int)DebugData().size())
-				StopDebug(_isErrorOPIndex, NEO_DEBUG_STOP_EXCEPTION);
-			return false;
+			SetError(RTE_EXCEPTION);
+			bool blDebugInfo = IsDebugInfo();
+			int _lineseq = -1;
+			if (blDebugInfo)
+				_lineseq = GetDebugLine(_isErrorOPIndex);
+
+			char chMsg[256];
+			snprintf(chMsg, _countof(chMsg), "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), _isErrorOPIndex, _lineseq);
+
+			GetVM()->_sErrorMsgDetail = std::string(chMsg) + FormatStackTrace(_isErrorOPIndex);
+			if (m_pDebugListener || m_iDebugBreakCount > 0 || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
+			{
+				if (_isErrorOPIndex >= 0 && _isErrorOPIndex < (int)DebugData().size())
+					StopDebug(_isErrorOPIndex, NEO_DEBUG_STOP_EXCEPTION);
+			}
+		}
+		catch (const std::bad_alloc&)
+		{
+			// 일반 예외의 상세 메시지를 만드는 도중에도 OOM이 날 수 있다.
+			PoisonOutOfMemory();
+			if (nestedRun)
+				throw;
 		}
 		return false;
 	}
-#endif
 	return b;
 }
 void CNeoVMWorker::JumpAsyncMsg()

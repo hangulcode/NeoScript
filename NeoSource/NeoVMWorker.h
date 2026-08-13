@@ -96,6 +96,9 @@ private:
 	bool m_bSliceExpired = false; // 시간 제한으로 다음 ResumeTop까지 보류됨
 	int m_iBreakingCallStack = 0;
 	bool m_bTopExec = false;   // 최상위 실행/재개 중(=완료까지 실행)인지
+	// std::bad_alloc이 실행 중 발생한 워커는 중간 상태의 안전성을 보장할 수 없다.
+	// 이 플래그는 worker-local이며 VM 전체나 다른 인스턴스에는 영향을 주지 않는다.
+	bool m_bOutOfMemoryPoisoned = false;
 	// 인터프리터 루프(Run) 안인지. 중첩 Run 을 고려해 저장/복원한다.
 	// 실행 중에는 실행 컨텍스트를 해제할 수 없으므로 CancelExecution 이 이 플래그로 거부한다.
 	bool m_bInRun = false;
@@ -193,6 +196,7 @@ private:
 	void    CleanupContextVars(CoroutineInfo* ctx, int usedMax);  // 반납 전 VarInfo 참조 정리
 	void    ReleaseExecution();                         // 최상위+코루틴 컨텍스트 전부 풀로 반납
 	int     RunSettle();                                // Run() 후 완료/정지/에러 판정 (NeoExecStatus)
+	void    PoisonOutOfMemory() noexcept { m_bOutOfMemoryPoisoned = true; }
 
     virtual void DebugSetListener(INeoVMDebugListener* listener);
     virtual void DebugSetBreakpoints(const std::vector<int>& lines);
@@ -215,6 +219,7 @@ private:
 	virtual int	ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args);
 	virtual int	ResumeTop();
 	virtual NeoExecutionState GetExecutionState();
+	virtual bool IsOutOfMemoryPoisoned() const { return m_bOutOfMemoryPoisoned; }
 	virtual bool IsSuspended();
 	virtual NeoHostCallBegin BeginHostCall();
 	virtual void EndHostCall(NeoHostCallBegin begin);
