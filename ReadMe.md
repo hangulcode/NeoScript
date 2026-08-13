@@ -462,26 +462,29 @@ Lower is better. **ms**, best of 5 runs after a warm-up. `x Neo` = how many time
 
 | Benchmark | What it stresses | Neo (ms) | Lua (ms) | C++ (ms) | Lua vs Neo | C++ vs Neo |
 | :-------- | :--------------- | -------: | -------: | -------: | ---------: | ---------: |
-| `loop_sum`      | integer loop, VM dispatch floor | **168** | 189 |  12.9 | 0.89x | 13.1x |
-| `float_math`    | float mul/add/sub chain         | **167** | 302 |  57.8 | 0.55x |  2.9x |
-| `func_call`     | script function call overhead   | **113** | 154 |   4.1 | 0.73x | 27.5x |
-| `fib_recursive` | recursion, fib(32)              |  **76** |  87 |   6.7 | 0.87x | 11.4x |
-| `array_rw`      | sequential array write + read   |  **44** |  46 |   2.4 | 0.96x | 18.6x |
-| `map_str`       | string-key hash lookup          |  **44** |  38 |  68.7 | 1.16x |  0.6x |
-| `string_ops`    | string build + length           |  **76** | 147 |  13.2 | 0.52x |  5.8x |
-| `particles`     | game-style float + array sim    |  **44** |  49 |   3.3 | 0.90x | 13.4x |
-| **total**       |                                 | **732** | 1012 | 168.9 | 0.72x |  4.3x |
+| `loop_sum`      | integer loop, VM dispatch floor | **164** | 187 |  12.8 | 0.88x | 12.8x |
+| `float_math`    | float mul/add/sub chain         | **192** | 299 |  56.8 | 0.64x |  3.4x |
+| `func_call`     | script function call overhead   | **116** | 151 |   4.1 | 0.77x | 28.2x |
+| `fib_recursive` | recursion, fib(32)              |  **77** |  86 |   6.7 | 0.90x | 11.5x |
+| `array_rw`      | sequential array write + read   |  **43** |  45 |   2.4 | 0.96x | 17.9x |
+| `map_str`       | string-key hash lookup          |  **43** |  38 |  66.3 | 1.13x |  0.6x |
+| `string_ops`    | string build + length           |  **80** | 144 |  13.1 | 0.56x |  6.1x |
+| `particles`     | game-style float + array sim    |  **49** |  47 |   3.3 | 1.04x | 14.8x |
+| **total**       |                                 | **764** |  997 | 165.5 | 0.77x |  4.6x |
 
 **Reading the numbers.**
-- **Neo is ~28% faster than Lua overall** and leads on 7 of 8 benchmarks. All 8 checksums match
+- **Neo is ~23% faster than Lua overall** and leads on 6 of 8 benchmarks. All 8 checksums match
   across the three languages, which is what proves they did the same work.
-- `map_str` is the only row Lua wins, and the margin is small: 1.16x on best-of-5, **1.08x on the
-  median** (Neo 43, Lua 40). Lua interns *every* short string, so a table lookup is a pointer
-  compare. Neo interns only map/set keys and program constants, which keeps temporary string
-  creation cheap at the cost of this one case.
+- `map_str` is the row Lua wins clearly: 1.13x on best-of-5, **1.18x on the median** (Neo 46,
+  Lua 39). Lua interns *every* short string, so a table lookup is a pointer compare. Neo interns
+  only map/set keys and program constants, which keeps temporary string creation cheap at the cost
+  of this one case.
 - `map_str` has only 8 keys, so which slot each key lands in — and therefore the score — shifts with
-  any change to the hash. Lua is also the noisier side here (38-42 ms across runs, against Neo's
-  44-46). Treat differences under ~10% on this row as noise.
+  any change to the hash. Lua is also the noisier side here (38-40 ms across runs, against Neo's
+  43-48). Treat differences under ~10% on this row as noise.
+- `particles` reads as a 1.04x Lua win here, but that is inside the layout band described under
+  *Methodology* below — the same source has measured anywhere from 44 to 57 ms across builds. Treat
+  this row as a tie, not a loss.
 - C++ is a **reference ceiling**, not a peer: 3-28x faster on compute-bound loops. The exception is
   `map_str`, where `std::unordered_map<std::string,…>` is *slower* than both VMs — the interpreters
   cache the string hash; the C++ map rehashes on every lookup.
@@ -496,10 +499,19 @@ Lower is better. **ms**, best of 5 runs after a warm-up. `x Neo` = how many time
 3. **Best of 5** after a warm-up run, to drop scheduler noise.
 4. **Compare within one run, not across runs.** Re-measuring on a differently loaded machine moved
    *Lua's* numbers by 20-30% with its source untouched. Every figure above comes from one session.
-5. **A/B any change.** Build-to-build variation is ~3-4% on this suite even with identical source,
-   so a change is only accepted when two builds measured alternately in one session agree.
+5. **A/B any change.** Build-to-build variation on this suite is large and it is *not* measurement
+   noise — it is code layout. Deleting cold code from the interpreter, or anything else that moves
+   the hot blocks, reshuffles branch-target alignment and uop-cache packing. Measured across five
+   builds whose float-arithmetic source was byte-identical, an isolated float loop ranged 0.030 s to
+   0.042 s (40%), while an integer loop stayed inside 0.013-0.014 s. `float_math` and `particles` are
+   the two rows that feel this most; `loop_sum` and `array_rw` are the stable ones.
 
-All compiler and VM changes are covered by the 2,783-case regression suite (`console.exe --smoke`).
+   So: accept a change only when two builds measured alternately in one session agree, and treat a
+   move of under ~10% on `float_math`, `particles` or `map_str` as layout, not as a real regression.
+   The durable fix is PGO (`/LTCG:PGINSTRUMENT` → run the bench → `/LTCG:PGOPTIMIZE`), which makes
+   block placement deliberate instead of accidental.
+
+All compiler and VM changes are covered by the 2,785-case regression suite (`console.exe --smoke`).
 
 ### Sample
 	- console / hello: prints "hello"

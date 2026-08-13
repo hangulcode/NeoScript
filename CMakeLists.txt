@@ -2,6 +2,16 @@ cmake_minimum_required(VERSION 3.21)
 
 project(NeoScript LANGUAGES CXX)
 
+# Single-config generators (for example Ninja and Unix Makefiles) otherwise
+# leave CMAKE_BUILD_TYPE empty, which means no optimization flags by default.
+# Multi-config generators select their configuration at build time, so leave
+# those untouched.
+if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+        Debug Release RelWithDebInfo MinSizeRel)
+endif()
+
 option(NEOSCRIPT_BUILD_SMOKE "Build the cross-platform API smoke test" ON)
 
 set(NEOSCRIPT_SOURCES
