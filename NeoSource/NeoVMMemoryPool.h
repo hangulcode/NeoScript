@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include <chrono>
+#include <cstdlib>
 #include <deque>
 #include <new>
 #include <type_traits>
@@ -174,11 +175,48 @@ class CNVMAllocPool
 		m_nReservedBytes = 0;
 	}
 
+	// alloc()이 장부 확장 중 예외를 전파해도 malloc 블록을 자동으로 놓는다.
+	// unique_ptr의 배열/커스텀 deleter 문법을 피하고 풀에 필요한 동작만 둔다.
+	struct AllocDataGuard
+	{
+		SNodePool* pData;
+
+		explicit AllocDataGuard(int count)
+			: pData((SNodePool*)malloc(sizeof(SNodePool) * count))
+		{
+			if (pData == NULL)
+				throw std::bad_alloc();
+		}
+		~AllocDataGuard() { free(pData); }
+		AllocDataGuard(const AllocDataGuard&) = delete;
+		AllocDataGuard& operator=(const AllocDataGuard&) = delete;
+
+		SNodePool* release()
+		{
+			SNodePool* result = pData;
+			pData = NULL;
+			return result;
+		}
+	};
+
 	void alloc()
 	{
+		// [순서가 예외 안전을 만든다] 페이지 데이터를 **먼저** 잡고, 장부
+		// (m_sPages / m_sPageSlots / m_sFreeSlots)는 **나중에** 건드린다.
+		// 그러면 어느 쪽이 실패해도 되돌릴 것이 없어 try/catch 가 필요 없다.
+		//   - 데이터 확보 실패 → 장부를 아직 안 만졌으므로 그냥 던진다.
+		//   - 장부 확장 실패(deque/vector 증설) → 지역 소유 가드가 데이터를 해제한다.
+		// malloc 은 던지지 않고 null 을 주므로, 검사해서 new[] 쪽(CNVMInstPool)과
+		// 같은 계약(std::bad_alloc)으로 맞춘다. 검사하지 않으면 아래 free-list
+		// 초기화가 널을 역참조해 프로세스가 죽는다.
+		AllocDataGuard data(m_iBlkSize);
+
 		STPool* page;
 		if (m_sFreeSlots.empty())
 		{
+			// m_sPageSlots가 먼저 용량을 확보하게 한다. 이 단계가 던지면 아직
+			// deque 헤더도 늘지 않았고 data가 자동 해제된다.
+			m_sPageSlots.reserve(m_sPageSlots.size() + 1);
 			// deque 는 push_back 으로 기존 원소의 주소를 무효화하지 않는다.
 			m_sPages.push_back(STPool());
 			page = &m_sPages.back();
@@ -188,12 +226,13 @@ class CNVMAllocPool
 		else
 		{
 			const u32 slot = m_sFreeSlots.back();
-			m_sFreeSlots.pop_back();
 			page = m_sPageSlots[slot];   // 데이터만 해제됐던 헤더를 그대로 다시 쓴다
 			page->slot = slot;
+			m_sFreeSlots.pop_back();     // 던질 일이 끝난 뒤에 슬롯을 소비한다
 		}
 
-		page->pData = (SNodePool*)malloc(sizeof(SNodePool) * m_iBlkSize);
+		// 여기서부터는 던지는 연산이 없다 — 소유권을 페이지로 넘긴다.
+		page->pData = data.release();
 		page->usedCount = 0;
 
 		SNodePool* pData = page->pData;
@@ -284,12 +323,14 @@ public:
 			if (emptyMs < holdMs)
 				break;                     // 뒤쪽은 더 최근이다 — 볼 필요가 없다
 
+			// 슬롯을 먼저 기록한다. push_back이 던지면 페이지는 아직 어느 체인도
+			// 바뀌지 않았으므로 그대로 남는다. 성공 뒤의 unlink/free는 no-throw다.
+			m_sFreeSlots.push_back(page->slot);
 			UnlinkEmpty(page);
 			UnlinkAvail(page);
 			ReleasePageData(*page);
 			page->pData = NULL;
 			page->pFreeHead = NULL;
-			m_sFreeSlots.push_back(page->slot);
 			freed += sizeof(SNodePool) * (size_t)m_iBlkSize;
 			m_nReservedBytes -= sizeof(SNodePool) * (size_t)m_iBlkSize;
 			--pageBudget;
@@ -433,11 +474,54 @@ class CNVMInstPool
 		m_nReservedBytes = 0;
 	}
 
+	// raw SNodePool 배열은 T를 자동 생성하지 않는다. placement new가 중간에
+	// 던져도 이미 생성된 T만 정확히 파괴하고 배열을 해제하기 위한 가드다.
+	// alloc() 본문은 try/catch 없이 이 가드의 스코프 소멸만으로 정리한다.
+	struct InstDataGuard
+	{
+		SNodePool* pData;
+		int constructed = 0;
+
+		explicit InstDataGuard(int count) : pData(new SNodePool[count]) {}
+		~InstDataGuard()
+		{
+			for (int i = constructed - 1; i >= 0; --i)
+				GetData(&pData[i])->~T();
+			delete [] pData;
+		}
+		InstDataGuard(const InstDataGuard&) = delete;
+		InstDataGuard& operator=(const InstDataGuard&) = delete;
+
+		void ConstructAll(int count)
+		{
+			for (; constructed < count; ++constructed)
+				::new (static_cast<void*>(pData[constructed].m_sObj.data)) T();
+		}
+
+		SNodePool* release()
+		{
+			SNodePool* result = pData;
+			pData = NULL;
+			constructed = 0; // 이후 페이지가 모든 T의 소멸을 책임진다.
+			return result;
+		}
+	};
+
 	void alloc()
 	{
+		// CNVMAllocPool::alloc 과 같은 순서 규칙 — 데이터를 먼저, 장부를 나중에.
+		// new[] 는 스스로 던지므로 null 검사는 필요 없지만, 던진 시점에 장부를 이미
+		// 건드렸다면 재사용 슬롯이 free 목록에서 영구히 사라진다. 순서를 뒤집어 그
+		// 문제 자체를 없앤다(try/catch 불필요).
+		InstDataGuard data(m_iBlkSize);
+		data.ConstructAll(m_iBlkSize);
+
 		STPool* page;
 		if (m_sFreeSlots.empty())
 		{
+			// reserve가 실패하면 data 가드가 완성된 T와 raw 배열을 함께 정리한다.
+			// 이후 push_back은 포인터 한 개의 no-throw 삽입이다.
+			m_sPageSlots.reserve(m_sPageSlots.size() + 1);
 			m_sPages.push_back(STPool());
 			page = &m_sPages.back();
 			page->slot = (u32)m_sPageSlots.size();
@@ -446,17 +530,17 @@ class CNVMInstPool
 		else
 		{
 			const u32 slot = m_sFreeSlots.back();
-			m_sFreeSlots.pop_back();
 			page = m_sPageSlots[slot];
 			page->slot = slot;
+			m_sFreeSlots.pop_back();     // 던질 일이 끝난 뒤에 슬롯을 소비한다
 		}
 
-		page->pData = new SNodePool[m_iBlkSize];
+		// 여기서부터는 던지는 연산이 없다. 모든 T가 생성됐으므로 이제 페이지로
+		// 소유권을 넘겨 이후 Collect/clear가 전체 소멸을 담당하게 한다.
+		page->pData = data.release();
 		page->usedCount = 0;
 
 		SNodePool* pData = page->pData;
-		for (int i = 0; i < m_iBlkSize; ++i)
-			::new (static_cast<void*>(pData[i].m_sObj.data)) T();
 		for (int i = m_iBlkSize - 2; i >= 0; i--)
 			pData[i].m_pNext = &pData[i + 1];
 		pData[m_iBlkSize - 1].m_pNext = NULL;
@@ -541,12 +625,14 @@ public:
 			if (emptyMs < holdMs)
 				break;
 
+			// 슬롯 기록이 실패하면 페이지는 아직 intact다. 성공 뒤에는 페이지
+			// unlink와 T 소멸만 남고, 이 경로에서는 더 이상 할당하지 않는다.
+			m_sFreeSlots.push_back(page->slot);
 			UnlinkEmpty(page);
 			UnlinkAvail(page);
 			ReleasePageData(*page);
 			page->pData = NULL;
 			page->pFreeHead = NULL;
-			m_sFreeSlots.push_back(page->slot);
 			freed += sizeof(SNodePool) * (size_t)m_iBlkSize;
 			m_nReservedBytes -= sizeof(SNodePool) * (size_t)m_iBlkSize;
 			--pageBudget;
