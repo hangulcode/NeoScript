@@ -197,6 +197,7 @@ private:
 	void    ReleaseExecution();                         // 최상위+코루틴 컨텍스트 전부 풀로 반납
 	int     RunSettle();                                // Run() 후 완료/정지/에러 판정 (NeoExecStatus)
 	void    PoisonOutOfMemory() noexcept { m_bOutOfMemoryPoisoned = true; }
+	NEOS_NOINLINE bool ReportRunException();
 
     virtual void DebugSetListener(INeoVMDebugListener* listener);
     virtual void DebugSetBreakpoints(const std::vector<int>& lines);

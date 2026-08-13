@@ -370,6 +370,31 @@ struct NeoExecContextPool
 	std::vector<NeoExecContext*> _warmCtx;
 	long long _publishedBytes = 0;
 
+	// Acquire 중 vector 확장이 실패해도 Receive한 슬롯을 되돌린다. 예외 경계는
+	// 정상 경로의 코드 배치를 키우므로, catch 대신 소멸자에서 처리한다.
+	struct AcquiredContextGuard
+	{
+		CNVMInstPool<CoroutineInfo, 16>* pool;
+		NeoExecContext* context;
+
+		AcquiredContextGuard(CNVMInstPool<CoroutineInfo, 16>* p, NeoExecContext* c)
+			: pool(p), context(c) {}
+		~AcquiredContextGuard()
+		{
+			if (context != NULL)
+				pool->Confer(context);
+		}
+		AcquiredContextGuard(const AcquiredContextGuard&) = delete;
+		AcquiredContextGuard& operator=(const AcquiredContextGuard&) = delete;
+
+		NeoExecContext* Release()
+		{
+			NeoExecContext* result = context;
+			context = NULL;
+			return result;
+		}
+	};
+
 	NeoExecContextPool(int varStackSize = 50 * 1024) : _varStackSize(varStackSize < 100 ? 100 : varStackSize) {}
 	~NeoExecContextPool()
 	{
@@ -379,42 +404,33 @@ struct NeoExecContextPool
 	NeoExecContext* Acquire()
 	{
 		NeoExecContext* p = _pool.Receive();
-		try
-		{
-			const bool cold = p->m_sVarStack.capacity() == 0;   // 처음 대여되는 노드 = 스택 힙이 지금 잡힌다
-			// cold 컨텍스트는 성공 시 반드시 warm 목록에도 등록돼야 한다. 용량 확보를
-			// 먼저 해 두면 아래 모든 스택 할당이 성공한 뒤 push_back은 던지지 않는다.
-			if (cold)
-				_warmCtx.reserve(_warmCtx.size() + 1);
+		AcquiredContextGuard guard(&_pool, p);
+		const bool cold = p->m_sVarStack.capacity() == 0;   // 처음 대여되는 노드 = 스택 힙이 지금 잡힌다
+		// cold 컨텍스트는 성공 시 반드시 warm 목록에도 등록돼야 한다. 용량 확보를
+		// 먼저 해 두면 아래 모든 스택 할당이 성공한 뒤 push_back은 던지지 않는다.
+		if (cold)
+			_warmCtx.reserve(_warmCtx.size() + 1);
 
-			// 실행 컨텍스트 풀은 VM 사이에서도 재사용된다. 이전 코루틴의 약한 순환
-			// 후보/파괴 상태가 남아 있으면 새 대여자가 stale ticket을 건드릴 수 있으므로
-			// 대여 경계에서 항상 초기화한다.
-			p->_cycleState.Init(p);
-			p->_cycleState._mayContainContainerChild = true;
-			p->_info._pCodeCurrent = NULL;
-			p->_info.ClearSP();
-			p->m_sAsyncResumeCodePtrs.clear();
-			p->_state = COROUTINE_STATE_RUNNING;
-			p->_sub_state = COROUTINE_SUB_NORMAL;
-			p->m_sCallStack.reserve(1000);
-			p->m_sCallStack.clear();
-			p->m_sVarStack.resize(_varStackSize);
-			if (cold)
-			{
-				// reserve를 위에서 끝냈으므로 포인터 삽입은 no-throw다.
-				_warmCtx.push_back(p);
-				PublishBytes();
-			}
-			return p;
-		}
-		catch (...)
+		// 실행 컨텍스트 풀은 VM 사이에서도 재사용된다. 이전 코루틴의 약한 순환
+		// 후보/파괴 상태가 남아 있으면 새 대여자가 stale ticket을 건드릴 수 있으므로
+		// 대여 경계에서 항상 초기화한다.
+		p->_cycleState.Init(p);
+		p->_cycleState._mayContainContainerChild = true;
+		p->_info._pCodeCurrent = NULL;
+		p->_info.ClearSP();
+		p->m_sAsyncResumeCodePtrs.clear();
+		p->_state = COROUTINE_STATE_RUNNING;
+		p->_sub_state = COROUTINE_SUB_NORMAL;
+		p->m_sCallStack.reserve(1000);
+		p->m_sCallStack.clear();
+		p->m_sVarStack.resize(_varStackSize);
+		if (cold)
 		{
-			// Receive 뒤 reserve/resize/warm 등록이 실패하면 이 컨텍스트는 아직
-			// 워커에 전달되지 않았다. 반드시 풀로 돌려 놓아 usedCount가 새지 않게 한다.
-			_pool.Confer(p);
-			throw;
+			// reserve를 위에서 끝냈으므로 포인터 삽입은 no-throw다.
+			_warmCtx.push_back(p);
+			PublishBytes();
 		}
+		return guard.Release();
 	}
 	// 반납 전 사용 슬롯의 VarInfo 참조 정리는 호출측(워커)이 수행한다(Var_Release 가 워커 멤버라서).
 	void Release(NeoExecContext* p)

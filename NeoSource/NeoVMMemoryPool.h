@@ -199,7 +199,7 @@ class CNVMAllocPool
 		}
 	};
 
-	void alloc()
+	NEOPOOL_COLD void alloc()
 	{
 		// [순서가 예외 안전을 만든다] 페이지 데이터를 **먼저** 잡고, 장부
 		// (m_sPages / m_sPageSlots / m_sFreeSlots)는 **나중에** 건드린다.
@@ -507,7 +507,7 @@ class CNVMInstPool
 		}
 	};
 
-	void alloc()
+	NEOPOOL_COLD void alloc()
 	{
 		// CNVMAllocPool::alloc 과 같은 순서 규칙 — 데이터를 먼저, 장부를 나중에.
 		// new[] 는 스스로 던지므로 null 검사는 필요 없지만, 던진 시점에 장부를 이미

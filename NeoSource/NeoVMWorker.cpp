@@ -1600,6 +1600,35 @@ void CNeoVMWorker::DebugGetFrameVariables(int frameId, std::vector<NeoDebugVaria
 		}
 	}
 }
+NEOS_NOINLINE bool CNeoVMWorker::ReportRunException()
+{
+	try
+	{
+		SetError(RTE_EXCEPTION);
+		bool blDebugInfo = IsDebugInfo();
+		int _lineseq = -1;
+		if (blDebugInfo)
+			_lineseq = GetDebugLine(_isErrorOPIndex);
+
+		char chMsg[256];
+		snprintf(chMsg, sizeof(chMsg), "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), _isErrorOPIndex, _lineseq);
+
+		GetVM()->_sErrorMsgDetail = std::string(chMsg) + FormatStackTrace(_isErrorOPIndex);
+		if (m_pDebugListener || m_iDebugBreakCount > 0 || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
+		{
+			if (_isErrorOPIndex >= 0 && _isErrorOPIndex < (int)DebugData().size())
+				StopDebug(_isErrorOPIndex, NEO_DEBUG_STOP_EXCEPTION);
+		}
+		return false;
+	}
+	catch (const std::bad_alloc&)
+	{
+		// 일반 예외의 상세 메시지를 만드는 도중에도 OOM이 날 수 있다.
+		PoisonOutOfMemory();
+		return true;
+	}
+}
+
 bool	CNeoVMWorker::Run()
 {
 	if (m_bOutOfMemoryPoisoned)
@@ -1642,42 +1671,35 @@ bool	CNeoVMWorker::Run()
 		// handle_ERROR reports the source location to the debugger, but the VM result
 		// must remain an error so RunSettle releases this failed execution context.
 	}
-	catch (const std::bad_alloc&)
-	{
-		// OOM 직후에는 stack trace/detail 문자열을 만들지 않는다. 그 자체가 다시
-		// bad_alloc을 던져 프로세스를 종료시킬 수 있기 때문이다.
-		PoisonOutOfMemory();
-		if (nestedRun)
-			throw;
-		return false;
-	}
 	catch (...)
 	{
+		// 정상 실행 경로에는 기준 버전과 같이 하나의 예외 경계만 남긴다. OOM 판별과
+		// 오류 detail 생성은 catch funclet/콜드 함수로 밀어 opcode 코드 배치를 보존한다.
+		bool outOfMemory = false;
 		try
 		{
-			SetError(RTE_EXCEPTION);
-			bool blDebugInfo = IsDebugInfo();
-			int _lineseq = -1;
-			if (blDebugInfo)
-				_lineseq = GetDebugLine(_isErrorOPIndex);
-
-			char chMsg[256];
-			snprintf(chMsg, sizeof(chMsg), "%s : IP(%d), Line(%d)", GetVM()->_pErrorMsg.c_str(), _isErrorOPIndex, _lineseq);
-
-			GetVM()->_sErrorMsgDetail = std::string(chMsg) + FormatStackTrace(_isErrorOPIndex);
-			if (m_pDebugListener || m_iDebugBreakCount > 0 || m_eDebugRunMode != DBG_CONTINUE || m_bDebugPauseRequested)
-			{
-				if (_isErrorOPIndex >= 0 && _isErrorOPIndex < (int)DebugData().size())
-					StopDebug(_isErrorOPIndex, NEO_DEBUG_STOP_EXCEPTION);
-			}
+			throw;
 		}
 		catch (const std::bad_alloc&)
 		{
-			// 일반 예외의 상세 메시지를 만드는 도중에도 OOM이 날 수 있다.
+			outOfMemory = true;
+		}
+		catch (...)
+		{
+		}
+
+		if (outOfMemory)
+		{
+			// OOM 직후에는 stack trace/detail 문자열을 만들지 않는다. 그 자체가 다시
+			// bad_alloc을 던져 프로세스를 종료시킬 수 있기 때문이다.
 			PoisonOutOfMemory();
 			if (nestedRun)
 				throw;
+			return false;
 		}
+
+		if (ReportRunException() && nestedRun)
+			throw std::bad_alloc();
 		return false;
 	}
 	return b;
