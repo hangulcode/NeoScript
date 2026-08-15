@@ -251,6 +251,27 @@ NEOS_FORCEINLINE bool handle_CLT_READ_L(const SVMOperation& OP) {
     return false;
 }
 
+// Program 로드 시 n2가 static 문자열 상수인 READ만 이 경로로 바뀐다.
+// 키는 워커별 static 슬롯에서 매번 읽고 FindString도 매번 수행한다. 따라서 맵 수정이나
+// 풀 재사용 뒤의 value 포인터를 보관하는 inline cache와 달리 수명/무효화 상태가 없다.
+NEOS_FORCEINLINE bool handle_CLT_READ_STATIC_STRING(const SVMOperation& OP) {
+    VarInfo* pClt = GetVarPtrF1(OP);
+    VarInfo* pKey = GetVarPtr_G(OP.n2);
+    VarInfo* pValue = GetVarPtr3(OP);
+    if (pClt->GetType() == VAR_MAP) {
+        VarInfo* pFind = pClt->_tbl->FindString(pKey->_str);
+        if (pFind)
+            Move(pValue, pFind);
+        else
+            Var_Release(pValue);
+        return false;
+    }
+
+    // static 문자열로 가능한 나머지 컨테이너/프로퍼티 의미론은 범용 경로와 같다.
+    CltReadRare(pClt, pKey, pValue);
+    return false;
+}
+
 NEOS_NOINLINE bool handle_TABLE_REMOVE(const SVMOperation& OP) {
     TableRemove(GetVarPtrF1(OP), GetVarPtr2(OP));
     return false;

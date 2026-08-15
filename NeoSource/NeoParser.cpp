@@ -4856,15 +4856,15 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 // ---------------------------------------------------------------------------
 // 루프 상수 hoisting
 //
-// 루프 안에서 쓰이는 static 상수(리터럴/const)를 함수 프롤로그에서 hidden 지역변수로
+// 루프 안에서 쓰이는 숫자 static 상수(리터럴/const)를 함수 프롤로그에서 hidden 지역변수로
 // 한 번 로드해두고, 함수 내 해당 상수 참조를 전부 그 슬롯 참조로 바꾼다.
 // 목적은 로드 시 PatchLocalOps 가 그 op 들을 _L(전 오퍼랜드 로컬)로 승격시킬 수 있게
 // 만드는 것 — 새 opcode 를 늘리지 않고 승격률을 올리는 방식이다.
 // (상수는 static 풀 = 전역 배열에 있어서 'x * 1.5' 는 절대 전 오퍼랜드 로컬이 될 수 없다)
 //
-//  - 대상 : static 이면서 숫자/bool/문자열. script-global 은 루프 안에서 값이 바뀔 수 있으므로 제외.
-//           문자열은 프롤로그에서 한 번만 공유(refcount 증감)하므로, 루프 본문에서의
-//           반복적인 static 슬롯 접근을 없애는 편이 이득이다.
+//  - 대상 : static 숫자/bool. script-global 은 루프 안에서 값이 바뀔 수 있으므로 제외.
+//           문자열은 로드 시 READ_STATIC_STRING opcode가 static 슬롯을 직접 사용하므로
+//           hidden 지역변수로 올리지 않는다.
 //  - 게이팅 : 루프 구간 안에서 1회 이상 쓰인 상수만. 루프가 없는 함수(fib 류)가 호출당
 //           MOV 만 무는 순손실을 막는다.
 //  - 배치 : 함수 프롤로그. 모든 제어흐름을 지배하므로 다중/조건부 루프군에서도 안전하다.
@@ -4972,7 +4972,7 @@ static void HoistLoopConstants(SFunctions& funs, u8* pCode, int codeSize,
 	if (useInLoop.empty())
 		return;
 
-	// 3) 숫자/bool/문자열만 남기고 사용 횟수 순으로 상위 NEOS_HOIST_MAX 개 선택.
+	// 3) 숫자/bool만 남기고 사용 횟수 순으로 상위 NEOS_HOIST_MAX 개 선택.
 	std::vector<std::pair<int, short> > cand;	// (사용횟수, static 오퍼랜드)
 	for (std::map<short, int>::iterator it = useInLoop.begin(); it != useInLoop.end(); ++it)
 	{
@@ -4980,7 +4980,7 @@ static void HoistLoopConstants(SFunctions& funs, u8* pCode, int codeSize,
 		if (idx < 0 || idx >= (int)funs._staticVars.size())
 			continue;
 		const VAR_TYPE t = funs._staticVars[idx].GetType();
-		if (t != VAR_INT && t != VAR_FLOAT && t != VAR_BOOL && t != VAR_STRING)
+		if (t != VAR_INT && t != VAR_FLOAT && t != VAR_BOOL)
 			continue;
 		cand.push_back(std::make_pair(it->second, it->first));
 	}

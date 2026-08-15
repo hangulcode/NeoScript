@@ -1883,6 +1883,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_TABLE_ALLOC:   handle_TABLE_ALLOC(OP); break;
 		case NOP_CLT_READ:      handle_CLT_READ(OP); break;
 		case NOP_CLT_READ_L:    handle_CLT_READ_L(OP); break;
+		case NOP_CLT_READ_STATIC_STRING: handle_CLT_READ_STATIC_STRING(OP); break;
 		case NOP_TABLE_REMOVE:  handle_TABLE_REMOVE(OP); break;
 		case NOP_CLT_MOV:       handle_CLT_MOV(OP); break;
 		case NOP_CLT_MOV_L:     handle_CLT_MOV_L(OP); break;

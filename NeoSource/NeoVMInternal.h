@@ -230,6 +230,10 @@ enum eNOperation : OpType
 
 	NOP_NONE,
 	NOP_ERROR,
+	// 새 opcode는 끝에 붙여 기존 저장 스크립트 이미지의 opcode 값을 보존한다.
+	// 로드 시 n2가 static 문자열 상수인 READ만 이 opcode로 치환한다.
+	// 키 StringInfo는 워커별 static 슬롯에서 매번 얻으며 Map/value 포인터는 보관하지 않는다.
+	NOP_CLT_READ_STATIC_STRING,
 	NOP_MAX,
 }; // Operation length
 

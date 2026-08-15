@@ -107,6 +107,9 @@ class CNeoVMProgram
 	// PTRCALL2(native 이름) → NATIVECALL(native index) / intrinsic opcode 치환.
 	// Create() 안에서 딱 한 번만 실행된다.
 	void PatchNativeCalls();
+	// n2가 static 문자열인 READ를 문자열 키 전용 opcode로 치환한다.
+	// Program은 여러 VM이 공유하므로 StringInfo/MapInfo 포인터는 코드에 저장하지 않는다.
+	void PatchStaticStringReads();
 	// 오퍼랜드가 전부 로컬인 op 를 _L 변형으로 치환한다(런타임 argFlag 테스트 제거).
 	// 컴파일러/이미지는 건드리지 않고 로드 후 메모리 코드만 바꾸므로 저장 바이트코드는 그대로다.
 	// 이 순회에서 구성 의존 opcode도 검증한다. false면 Program 생성 실패다.

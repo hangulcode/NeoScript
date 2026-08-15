@@ -134,7 +134,8 @@ CNeoVMProgram* CNeoVMProgram::Create(const void* pBuffer, int iSize, std::string
 		return nullptr;
 	}
 	p->PatchNativeCalls();
-	// NATIVECALL/intrinsic 치환 뒤에 돌린다 — PTRCALL2 가 먼저 확정되어야 한다.
+	p->PatchStaticStringReads();
+	// native/정적 문자열 치환 뒤에 돌린다 — 원본 opcode 판정이 먼저 확정되어야 한다.
 	if (p->PatchLocalOps(err) == false)
 	{
 		p->Release();
@@ -415,6 +416,29 @@ void CNeoVMProgram::PatchNativeCalls()
 
 		op.op = NOP_NATIVECALL;
 		op.n1 = (short)nativeIndex;
+	}
+}
+
+void CNeoVMProgram::PatchStaticStringReads()
+{
+	const int staticCount = (int)staticValues.size();
+	const int opCount = (int)code.size();
+	for (int i = 0; i < opCount; ++i)
+	{
+		SVMOperation& op = code[i];
+		if (op.op != NOP_CLT_READ)
+			continue;
+
+		// READ의 n2가 static 영역의 문자열 상수여야 한다. local/global 변수와
+		// immediate key는 값이 바뀔 수 있으므로 범용 경로를 유지한다.
+		if ((op.argFlag & (NEOS_ARG_N2_LOCAL | NEOS_ARG_N2_IMMEDIATE)) != 0)
+			continue;
+		if (op.n2 < 0 || op.n2 >= staticCount)
+			continue;
+		if (staticValues[op.n2]._type != VAR_STRING)
+			continue;
+
+		op.op = NOP_CLT_READ_STATIC_STRING;
 	}
 }
 
@@ -937,6 +961,10 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 	case NOP_CLT_READ:
 		byteCount = OpFlagByteChars + 2 * 3;
 		outAssembly = FormatAsm("READ %s = %s.%s", context.operand(3).c_str(), context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_CLT_READ_STATIC_STRING:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("READ.S %s = %s.%s", context.operand(3).c_str(), context.operand(1).c_str(), context.operand(2).c_str());
 		break;
 	case NOP_TABLE_REMOVE:
 		byteCount = OpFlagByteChars + 2 * 2;

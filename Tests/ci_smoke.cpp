@@ -409,6 +409,7 @@ int main()
 		"export fun utf8Char() { foreach (var c in \"\xF0\x9F\x98\x80\") { if (c == \"\xF0\x9F\x98\x80\" && c >= \"\xF0\x9F\x98\x80\") return c + c; } return \"\"; }\n"
 		"export fun utf8MapKey() { var m = {}; foreach (var c in \"\xF0\x9F\x98\x80\") { m[c] = 77; } return m[\"\xF0\x9F\x98\x80\"]; }\n"
 		"export fun utf8Size() { return tosize(\"\xED\x95\x9C\xEA\xB8\x80\xF0\x9F\x98\x80\"); }\n"
+		"export fun staticMapStringRead() { var m = {}; m[\"static-key\"] = 41; return m[\"static-key\"] + 1; }\n"
 		"var suspendedArg = \"\";\n"
 		"export fun suspendEcho(var value) { sleep(1); suspendedArg = value; return value; }\n"
 		"export fun suspendedArgValue() { return suspendedArg; }\n"
@@ -457,6 +458,15 @@ int main()
         return 1;
     }
 
+	std::vector<DebugInstruction> instructions;
+	runtime->GetDebugInstructions(compiled.program, instructions);
+	bool staticStringReadOpcodeOk = false;
+	for (int i = 0; i < (int)instructions.size(); ++i)
+	{
+		if (instructions[i].assembly.find("READ.S ") != std::string::npos)
+			staticStringReadOpcodeOk = true;
+	}
+
     InstanceHandle instance = runtime->CreateInstance(compiled.program);
     if (!instance)
     {
@@ -497,6 +507,13 @@ int main()
 	{
 		Invocation utf8Size = runtime->Call(instance, "utf8Size");
 		utf8SizeOk = utf8Size.invoke() == RunStatus::Completed && utf8Size.retInt() == 3;
+	}
+
+	bool staticMapStringReadOk = false;
+	{
+		Invocation staticMapStringRead = runtime->Call(instance, "staticMapStringRead");
+		staticMapStringReadOk = staticMapStringRead.invoke() == RunStatus::Completed
+			&& staticMapStringRead.retInt() == 42;
 	}
 
     // Host execution must distinguish completion from sleep suspension.
@@ -557,7 +574,7 @@ int main()
     DestroyRuntime(runtime);
 
     const bool asmOk = asmOutput.str().find("Fun -") != std::string::npos;
-	if (!addOk || !literalOk || !utf8CharOk || !utf8MapKeyOk || !utf8SizeOk || !suspendedCallOk || !mapOk || !mapDeleteReinsertOk || !mapSortNormalOk || !mapSortMutationOk || !setOk || !containerDestroyOk || !cycleTrimOk || !cycleCollectApiOk || !stringHashOk || !stringInternOk || !stringInternChurnOk || !hashLoadFactorOk || !asmOk)
+	if (!addOk || !literalOk || !utf8CharOk || !utf8MapKeyOk || !utf8SizeOk || !staticStringReadOpcodeOk || !staticMapStringReadOk || !suspendedCallOk || !mapOk || !mapDeleteReinsertOk || !mapSortNormalOk || !mapSortMutationOk || !setOk || !containerDestroyOk || !cycleTrimOk || !cycleCollectApiOk || !stringHashOk || !stringInternOk || !stringInternChurnOk || !hashLoadFactorOk || !asmOk)
     {
         std::fputs("NeoScript API smoke failed\n", stderr);
         return 1;
