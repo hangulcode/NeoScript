@@ -1,5 +1,5 @@
 // 디버그 스텝오버 회귀용 모듈.
-// Heavy 는 tunnel_walls.EnsureUpTo 처럼 내부 루프 + 리스트 조작 + native 호출을 한다.
+// Heavy 는 실제 게임 스크립트의 무거운 함수처럼 내부 루프 + 리스트 조작 + native 호출을 한다.
 // Take 는 그 다음 줄에서 호출되며, 인자가 null 이면 런타임 에러가 난다.
 import math;
 

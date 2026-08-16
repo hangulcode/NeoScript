@@ -520,7 +520,7 @@ static int RunPoolTrim(INeoLoader* pLoader)
 		"{\n"
 		"    for(var i in 0, 30000, 1)\n"
 		"    {\n"
-		"        var m = { \"path\": \"map/tunnel/segment/\" .. toint(i) .. \"/mesh.bin\", \"id\": toint(i) };\n"
+		"        var m = { \"path\": \"map/area/segment/\" .. toint(i) .. \"/mesh.bin\", \"id\": toint(i) };\n"
 		"        keep.append(m);\n"
 		"    }\n"
 		"    return keep.len();\n"
