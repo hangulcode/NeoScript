@@ -639,6 +639,23 @@ struct neo_libs
 		pN->ReturnValue(pN->m_sRand.rnd());
 		return true;
 	}
+	// 실수를 왕복 가능한 문자열로 만든다.
+	//
+	// 보통의 문자열 변환(".." 연결 포함)은 "%g" 라 유효숫자 6자리에서 잘린다. 화면과 로그에는
+	// 그게 읽기 좋지만, 데이터 파일로 내보내면 원래 값을 되찾을 수 없다. float 는 9자리를
+	// 적어야 정확히 왕복하므로 여기서는 "%.9g" 를 쓴다.
+	//
+	// 필요할 때만 지수 표기로 넘어가고(1.5e-07), 그 형태도 JSON 숫자 문법에 맞으므로
+	// 그대로 파일에 넣어도 된다.
+	static bool	Math_ToStr(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1) return false;
+
+		char ch[64];
+		snprintf(ch, sizeof(ch), "%.9g", (double)pN->read<NS_FLOAT>(1));
+		pN->ReturnValue(ch);
+		return true;
+	}
 	static bool Math_Rand01(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 0) return false;
@@ -1455,6 +1472,7 @@ static void AddGlobalLibFun()
 	AddSystemFun("quat_slerp", &neo_libs::Math_quat_slerp, "Quaternion", "Quaternion a", "Quaternion b", "float t");
 	AddSystemFun("srand", &neo_libs::Math_srand, "void", "int seed");
 	AddSystemFun("rand", &neo_libs::Math_rand, "int");
+	AddSystemFun("tostr", &neo_libs::Math_ToStr, "string", "float value");
 	AddSystemFun("Rand01", &neo_libs::Math_Rand01, "float");
 	AddSystemFun("RandRange", &neo_libs::Math_RandRange, "float", "float min", "float max");
 	AddSystemFun("Hash32", &neo_libs::Math_Hash32, "int", "int value");
