@@ -94,6 +94,24 @@ build switch for `double`; it was removed rather than carried as an untested sec
 since `sizeof(VarInfo)` and therefore the var stack, every list, and both halves of every map
 entry (`MapData`) all depend on it.)
 
+### Integer arithmetic follows C, not the scripting-language convention
+`int / int` yields an `int`, so `1 / 100` is `0`. Division promotes to float only when at
+least one side already is one.
+
+```
+var a = 1 / 100;        // 0
+var b = 1.0 / 100;      // 0.01
+var c = (n * 1.0) / m;  // float, whatever n and m are
+```
+
+This is what C, C++, Java and Go do, but it differs from Lua 5.3+, Python 3 and JavaScript,
+where `/` always produces a float. Nothing reports the difference: the result is a valid
+number, so there is no error to catch and no warning to read — a ratio meant to be
+fractional simply comes out as `0` and whatever it drives stays at its starting value.
+
+Multiply one side by `1.0` when a fraction is intended, particularly when the operands come
+from `len()` or a `const`, which are integers and easy to miss.
+
 ### Vector value types
 `math.Vector2`, `math.Vector3`, `math.Vector4`, and `math.Quaternion` create dedicated
 value types. They are not Lists and are passed directly to native engine APIs that read
