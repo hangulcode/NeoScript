@@ -845,6 +845,21 @@ bool GetQuotationString(CArchiveRdWC& ar, std::string& str, u16 quote)
 				c1 = '\t';
 				ar.GetData(true);
 				break;
+			// 따옴표와 역슬래시 자체를 넣는 이스케이프. 이게 없으면 "\"" 가 종료 따옴표로
+			// 읽혀 문자열이 거기서 끊기고, 뒤에 남은 글자가 식별자로 해석된다. JSON 처럼
+			// 따옴표가 든 텍스트를 스크립트에서 만들 때 반드시 필요하다.
+			case '"':
+				c1 = '"';
+				ar.GetData(true);
+				break;
+			case '\'':
+				c1 = '\'';
+				ar.GetData(true);
+				break;
+			case '\\':
+				c1 = '\\';
+				ar.GetData(true);
+				break;
 			}
 		}
 
