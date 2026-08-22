@@ -869,6 +869,20 @@ void CNeoVMWorker::CleanupContextVars(CoroutineInfo* ctx, int usedMax)
 		Var_Release(&s[i]);
 }
 
+void CNeoVMWorker::ReleaseDetachedClosureWithoutSync(ClosureInfo*& closure)
+{
+	if (closure == nullptr)
+		return;
+	if (m_pActiveClosure == closure)
+		m_pActiveClosure = nullptr;
+	if (m_pCur && m_pCur->_activeClosure == closure)
+		m_pCur->_activeClosure = nullptr;
+	VarInfo active(VAR_CLOSURE);
+	active._closure = closure;
+	closure = nullptr;
+	Var_Release(&active);
+}
+
 void CNeoVMWorker::UnwindActiveClosures()
 {
 	if (m_pVarStack_Base == nullptr) return;
@@ -1217,8 +1231,16 @@ int CNeoVMWorker::RunHostCall(int iFunctionID, std::vector<VarInfo>& _args, VarI
 		// sleep/debugger로 정지한 closure는 실행 컨텍스트와 함께 active 환경도
 		// 보존해야 ResumeTop의 RET/ERROR가 변경분을 동기화하고 실행 보유분을 반납한다.
 		const bool suspended = IsSuspended();
-		if (!suspended)
+		if (ok == false)
+		{
+			// Run의 오류 handler는 자식 프레임과 call stack을 이미 버렸다. 여기서
+			// outer를 되살리면 이후 ReleaseExecution이 base 0에서 그 캡처를 sync한다.
+			ReleaseDetachedClosureWithoutSync(outerClosure);
+		}
+		else if (!suspended)
+		{
 			m_pActiveClosure = outerClosure;
+		}
 		GetVM()->PublishAllocStats();
 		if (ok == false)
 			return NEOEXEC_ERROR;
@@ -1228,7 +1250,9 @@ int CNeoVMWorker::RunHostCall(int iFunctionID, std::vector<VarInfo>& _args, VarI
 	{
 		if (debugSuppressed)
 			--m_iDebugSuppressCount;
-		m_pActiveClosure = outerClosure;
+		// OOM은 부모 Run까지 전파되어 해당 실행을 폐기한다. 부모 프레임을 복원해
+		// ReleaseExecution이 잘못된 stack base로 write-back하지 않게 한다.
+		ReleaseDetachedClosureWithoutSync(outerClosure);
 		PoisonOutOfMemory();
 		// 중첩 스크립트 호출의 OOM은 호출한 native 함수만 실패시키는 것으로
 		// 끝내면 바깥 인터프리터가 손상 가능 상태에서 계속 돈다.

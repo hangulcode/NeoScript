@@ -13,6 +13,7 @@ using namespace NeoScript;
 
 static int g_fail = 0;
 static FunctionHandle g_deferredCallback;
+static int g_nestedFailureCalls = 0;
 static void Check(bool cond, const char* msg)
 {
     printf(cond ? "  ok  : %s\n" : "  FAIL: %s\n", msg);
@@ -77,6 +78,20 @@ static bool HostMethod(CallContext& ctx, StringView method)
         // 네이티브 실패 보고: fail() 로 사유를 남기고 반드시 false 반환.
         ctx.fail(4242, "host said no");
         return false;
+    }
+    if (m == "nestedFailureOnce")
+    {
+        if (g_nestedFailureCalls++ == 0)
+        {
+            CallResult nested = ctx.runtime()->Call(ctx.instance(), "nestedChildFailure").invokeR();
+            if (!nested.ok())
+            {
+                ctx.fail(4243, "nested script failed");
+                return false;
+            }
+        }
+        ctx.retBool(true);
+        return true;
     }
     if (m == "defer")
     {
@@ -200,7 +215,9 @@ int NeoScriptV2Smoke()
         "export fun badNativeRead() { return Host[3]; }\n"                               // 12
         "export fun badNativeWrite() { Host[3] = 1; }\n"                                  // 13
         "fun closureExplode() { return Host.boomHost(); }\n"
+        "export fun nestedChildFailure() { var z = 0; return 1 / z; }\n"
         "export fun queueCounter(var start) { var value = start; Host.defer(fun() { value = value + 1; return value; }); }\n"
+        "export fun queueNestedFailureClosure() { var tag = \"KEEP-ME\"; var n = 0; Host.defer(fun() { n = n + 1; Host.nestedFailureOnce(); return tag .. \"/\" .. n; }); }\n"
         "export fun queueStringCounter() { var text = \"a\"; Host.defer(fun() { text = text + \"x\"; return text.len(); }); }\n"
         "export fun queueErrorCounter(var start) { var value = start; Host.defer(fun() { value = value + 1; if (value == 11) closureExplode(); return value; }); }\n"
         "export fun queueSleepCounter(var start) { var value = start; Host.defer(fun() { value = value + 1; if (value == 11) { sleep(1); } return value; }); }\n"
@@ -242,6 +259,21 @@ int NeoScriptV2Smoke()
         CallResult two = rt->Call(a, g_deferredCallback).invokeR();
         Check(one.ok() && one.asInt() == 11, "closure callback: first delayed call sees captured 10");
         Check(two.ok() && two.asInt() == 12, "closure callback: second delayed call preserves updated capture");
+        g_deferredCallback = FunctionHandle();
+    }
+
+    // 람다 -> native -> 중첩 스크립트 오류 뒤에는 부모 프레임이 무효다. 첫 호출의
+    // write-back을 버리고, 다음 호출이 원래 보관함에서 다시 시작해야 한다.
+    {
+        g_nestedFailureCalls = 0;
+        g_deferredCallback = FunctionHandle();
+        Check(rt->Call(a, "queueNestedFailureClosure").invoke() == RunStatus::Completed,
+            "nested error: script creates retained lambda");
+        CallResult failed = rt->Call(a, g_deferredCallback).invokeR();
+        CallResult after = rt->Call(a, g_deferredCallback).invokeR();
+        Check(!failed.ok(), "nested error: inner script failure aborts outer lambda");
+        Check(after.ok() && std::string(after.asString().data(), after.asString().size()) == "KEEP-ME/1",
+            "nested error: invalid outer frame does not overwrite closure captures");
         g_deferredCallback = FunctionHandle();
     }
 

@@ -197,6 +197,8 @@ private:
 
 	void    BindContext(CoroutineInfo* ctx);            // 컨텍스트를 활성 스택으로 바인딩
 	void    CleanupContextVars(CoroutineInfo* ctx, int usedMax);  // 반납 전 VarInfo 참조 정리
+	// 이미 무효가 된 프레임의 closure는 sync하지 않는다. 실행 보유분만 반납한다.
+	void    ReleaseDetachedClosureWithoutSync(ClosureInfo*& closure);
 	void    UnwindActiveClosures();                    // return을 거치지 않는 error/cancel 정리
 	void    ReleaseExecution();                         // 최상위+코루틴 컨텍스트 전부 풀로 반납
 	int     RunSettle();                                // Run() 후 완료/정지/에러 판정 (NeoExecStatus)
