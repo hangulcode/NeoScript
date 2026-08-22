@@ -103,14 +103,22 @@ NEOS_FORCEINLINE bool handle_FMOV2(const SVMOperation& OP) {
     return false;
 }
 
+NEOS_FORCEINLINE int GetCallReturnValueIndex(const SVMOperation& OP) {
+    if (OP.argFlag & NEOS_OP_CALL_NORESULT)
+        return -1;
+    if (OP.argFlag & NEOS_ARG_N3_LOCAL)
+        return _iSP_Vars + OP.n3;
+    return -2 - OP.n3;
+}
+
 NEOS_FORCEINLINE bool handle_CALL(const SVMOperation& OP) {
-    Call(OP.n1, OP.n2, (OP.argFlag & NEOS_OP_CALL_NORESULT) ? nullptr : GetVarPtr3(OP));
+    Call(OP.n1, OP.n2, GetCallReturnValueIndex(OP));
     return false;
 }
 
 NEOS_FORCEINLINE bool handle_CALL_L(const SVMOperation& OP) {
     // NORESULT 면 반환 슬롯 자체를 안 뽑으므로 PatchLocalOps 가 _L 로 바꾸지 않는다.
-    Call(OP.n1, OP.n2, GetVarPtr_L(OP.n3));
+    Call(OP.n1, OP.n2, _iSP_Vars + OP.n3);
     return false;
 }
 
@@ -225,6 +233,10 @@ NEOS_FORCEINLINE bool handle_NATIVECALL(const SVMOperation& OP) {
 NEOS_FORCEINLINE bool handle_RETURN_impl(VarInfo* pSrc) {
     if (m_iBreakingCallStack == (int)m_pCallStack->size())
     {
+		// 최상위/코루틴 시작 closure는 호출 프레임이 없으므로 active 상태로 판별한다.
+		if (m_pActiveClosure != nullptr)
+			FinishClosureReturn(pSrc);
+
         if (pSrc == nullptr)
             Var_Release(m_pVarStack_Pointer); // Clear
         else
@@ -240,13 +252,18 @@ NEOS_FORCEINLINE bool handle_RETURN_impl(VarInfo* pSrc) {
     }
 
     SCallStack& callStack = m_pCallStack->pop_back();
+	if (m_pActiveClosure != nullptr)
+		FinishClosureReturn(pSrc);
 
-    if (callStack._pReturnValue)
+    if (callStack._iReturnValueIndex != -1)
     {
+        VarInfo* pReturnValue = (callStack._iReturnValueIndex >= 0)
+            ? &(*m_pVarStack_Base)[callStack._iReturnValueIndex]
+            : NEOS_GLOBAL_VAR(-callStack._iReturnValueIndex - 2);
         if (pSrc == nullptr)
-            Var_Release(callStack._pReturnValue); // Clear
+            Var_Release(pReturnValue); // Clear
         else
-            Move(callStack._pReturnValue, pSrc);
+            Move(pReturnValue, pSrc);
     }
     else
     {
@@ -256,15 +273,22 @@ NEOS_FORCEINLINE bool handle_RETURN_impl(VarInfo* pSrc) {
             Move(m_pVarStack_Pointer, pSrc);
     }
 
-    if (callStack._pAsyncWaitReturnValue != nullptr)
-        Var_SetBool(callStack._pAsyncWaitReturnValue, callStack._asyncWaitReturnValue);
+    if (callStack._restoreAsyncWaitReturnValue)
+    {
+        if (m_pCur == nullptr || m_pCur->m_sAsyncWaitReturnStack.size() == 0)
+        {
+            SetError(RTE_ASYNC_RESUME_STATE);
+            return false;
+        }
+        SAsyncWaitReturnState& state = m_pCur->m_sAsyncWaitReturnStack.pop_back();
+        Var_SetBool(state._pReturnValue, state._returnValue);
+    }
 
-	const int returnOffset = callStack._iReturnOffset;
-	SetCodePtr(GetCallReturnCodeOffset(returnOffset));
+	SetCodePtr(callStack._iReturnOffset);
 	_iSP_Vars = callStack._iSP_Vars;
 	SetStackPointer(_iSP_Vars);
 	_iSP_VarsMax = callStack._iSP_VarsMax;
-	if (IsClosureCallReturnOffset(returnOffset))
+	if (callStack._restoreActiveClosure)
 	{
 		SClosureCallState& state = m_pClosureCallStack->pop_back();
 		m_pActiveClosure = state._closure;
@@ -281,12 +305,6 @@ NEOS_FORCEINLINE bool handle_RETURN(const SVMOperation& OP) {
 NEOS_FORCEINLINE bool handle_RETURN_L(const SVMOperation& OP) {
     // NORESULT 면 슬롯을 안 뽑으므로 PatchLocalOps 가 _L 로 바꾸지 않는다.
     return handle_RETURN_impl(GetVarPtr_L(OP.n1));
-}
-
-NEOS_FORCEINLINE bool handle_RETURN_CLOSURE(const SVMOperation& OP) {
-	VarInfo* pSrc = (OP.argFlag & NEOS_OP_CALL_NORESULT) ? nullptr : GetVarPtrF1(OP);
-	FinishClosureReturn(pSrc);
-	return handle_RETURN_impl(pSrc);
 }
 
 NEOS_FORCEINLINE bool handle_TABLE_ALLOC(const SVMOperation& OP) {
@@ -438,15 +456,17 @@ NEOS_NOINLINE bool handle_IDLE(const SVMOperation& OP) {
         Var_SetStringA(GetStackFromBase(_iSP_VarsMax + 2), p->_resultValue);
 		VarInfo callback;
 		Move_DestNoRelease(&callback, &p->_callback);
+		const int callStackSize = m_pCallStack->size();
 		if (callback.GetType() == VAR_CLOSURE)
 			Call(callback._closure, 2);
 		else
 			Call(callback._fun_index, 2);
-        if (resumeInfo.pReturnValue != nullptr && m_pCallStack->size() > 0)
+        if (resumeInfo.pReturnValue != nullptr && m_pCallStack->size() == callStackSize + 1)
         {
-            SCallStack& callStack = (*m_pCallStack)[m_pCallStack->size() - 1];
-            callStack._pAsyncWaitReturnValue = resumeInfo.pReturnValue;
-            callStack._asyncWaitReturnValue = resumeInfo.returnValue;
+            SAsyncWaitReturnState& state = m_pCur->m_sAsyncWaitReturnStack.push_back();
+            state._pReturnValue = resumeInfo.pReturnValue;
+            state._returnValue = resumeInfo.returnValue;
+            (*m_pCallStack)[callStackSize]._restoreAsyncWaitReturnValue = true;
         }
 		GetVM()->Var_Release(&p->_LockReferance);
 		GetVM()->Var_Release(&p->_callback);

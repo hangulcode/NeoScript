@@ -267,7 +267,7 @@ int NeoScriptV2Smoke()
     }
 
     // 캡처 람다 안의 일반 함수 CALL은 RET에서 부모 closure를 복원해야 하며,
-    // 바깥 RET_CLOSURE가 그 갱신값을 보관함에 동기화한다.
+    // 바깥 closure 반환이 그 갱신값을 보관함에 동기화한다.
     {
         g_deferredCallback = FunctionHandle();
         Check(rt->Call(a, "queueNamedCallCounter").argInt(10).invoke() == RunStatus::Completed,
@@ -280,7 +280,7 @@ int NeoScriptV2Smoke()
     }
 
     // 캡처 람다가 다시 캡처 람다를 호출하면, 자식 RET 뒤에 부모 보관함을
-    // 복원해야 바깥 RET_CLOSURE가 변경된 value를 다음 호출까지 유지한다.
+    // 복원해야 바깥 closure 반환이 변경된 value를 다음 호출까지 유지한다.
     {
         g_deferredCallback = FunctionHandle();
         Check(rt->Call(a, "queueNestedClosureCounter").argInt(10).invoke() == RunStatus::Completed,
@@ -292,15 +292,15 @@ int NeoScriptV2Smoke()
         g_deferredCallback = FunctionHandle();
     }
 
-    // 캡처 람다의 static 반환도 RET_CLOSURE 경로에서 보관함을 동기화한다.
+    // 캡처 람다의 static 반환도 일반 RET 경로에서 보관함을 동기화한다.
     {
         g_deferredCallback = FunctionHandle();
         Check(rt->Call(a, "queueStaticReturnCounter").argInt(10).invoke() == RunStatus::Completed,
             "closure static return: script creates retained lambda");
         CallResult one = rt->Call(a, g_deferredCallback).invokeR();
         CallResult two = rt->Call(a, g_deferredCallback).invokeR();
-        Check(one.ok() && Eq(one.asString(), "FIRST"), "closure static return: RET_CLOSURE returns first static value");
-        Check(two.ok() && Eq(two.asString(), "NEXT"), "closure static return: RET_CLOSURE keeps captured state");
+        Check(one.ok() && Eq(one.asString(), "FIRST"), "closure static return: generic RET returns first static value");
+        Check(two.ok() && Eq(two.asString(), "NEXT"), "closure static return: generic RET keeps captured state");
         g_deferredCallback = FunctionHandle();
     }
 

@@ -350,8 +350,8 @@ private:
 	bool ForEach(VarInfo* v1, VarInfo* v2, bool bTwoVar);
 	int Sleep(int iTimeout, VarInfo* v1);
 	void Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue = NULL);
-	void Call(int n1, int n2, VarInfo* pReturnValue = NULL);
-	void Call(ClosureInfo* closure, int n2, VarInfo* pReturnValue = NULL);
+	void Call(int n1, int n2, int returnValueIndex = -1);
+	void Call(ClosureInfo* closure, int n2, int returnValueIndex = -1);
 	// return 값 슬롯은 Sync 뒤에도 caller가 읽으므로 보존한다. 나머지 캡처
 	// 슬롯은 closure 보관함으로 소유권을 넘긴다.
 	void SyncActiveClosure(const VarInfo* keepOnStack = nullptr);

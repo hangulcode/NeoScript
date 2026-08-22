@@ -397,7 +397,7 @@ void CNeoVMWorker::Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue)
 	m_iBreakingCallStack = iSaveBreakingCallStack;
 }
 
-// CNeoVMWorker::Call(int,int,VarInfo*) 는 NeoVMWorker_Move.inl 로 옮겼다(핫패스 인라인 실험).
+// CNeoVMWorker::Call(int,int,int) 는 NeoVMWorker_Move.inl 로 옮겼다(핫패스 인라인 실험).
 
 bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, CNeoVMProgram* pProgram, int iStackSize)
 {
@@ -585,7 +585,7 @@ std::string CNeoVMWorker::FormatStackTrace(int currentOpIndex)
 		for (int i = callFrameCount - 1; i >= 0; --i)
 		{
 			SCallStack& cs = (*m_pCallStack)[i];
-			int opIndex = GetCallReturnCodeOffset(cs._iReturnOffset) / (int)sizeof(SVMOperation);
+			int opIndex = cs._iReturnOffset / (int)sizeof(SVMOperation);
 			if (opIndex > 0)
 				--opIndex;
 			appendFrame(callFrameCount - i, opIndex, cs._iSP_Vars);
@@ -596,7 +596,7 @@ std::string CNeoVMWorker::FormatStackTrace(int currentOpIndex)
 	for (int i = callFrameCount - 1; i >= callFrameCount - headCallFrameCount; --i)
 	{
 		SCallStack& cs = (*m_pCallStack)[i];
-		int opIndex = GetCallReturnCodeOffset(cs._iReturnOffset) / (int)sizeof(SVMOperation);
+		int opIndex = cs._iReturnOffset / (int)sizeof(SVMOperation);
 		if (opIndex > 0)
 			--opIndex;
 		appendFrame(callFrameCount - i, opIndex, cs._iSP_Vars);
@@ -610,7 +610,7 @@ std::string CNeoVMWorker::FormatStackTrace(int currentOpIndex)
 	for (int i = kTailFrames - 1; i >= 0; --i)
 	{
 		SCallStack& cs = (*m_pCallStack)[i];
-		int opIndex = GetCallReturnCodeOffset(cs._iReturnOffset) / (int)sizeof(SVMOperation);
+		int opIndex = cs._iReturnOffset / (int)sizeof(SVMOperation);
 		if (opIndex > 0)
 			--opIndex;
 		appendFrame(callFrameCount - i, opIndex, cs._iSP_Vars);
@@ -840,6 +840,8 @@ void CNeoVMWorker::UnwindActiveClosures()
 	}
 	if (m_pCallStack != nullptr)
 		m_pCallStack->clear();
+	if (m_pCur != nullptr)
+		m_pCur->m_sAsyncWaitReturnStack.clear();
 }
 
 // 최상위 실행 종료: 메인 컨텍스트를 풀로 반납한다.
@@ -1605,9 +1607,8 @@ void CNeoVMWorker::DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames)
 		NeoDebugStackFrame frame;
 		frame.frameId = (int)frames.size();
 		frame.stackBase = cs._iSP_Vars;
-		const int returnOffset = GetCallReturnCodeOffset(cs._iReturnOffset);
-		frame.opIndex = returnOffset / (int)sizeof(SVMOperation);
-		frame.functionId = GetFunctionIndexFromCodeOffset(returnOffset);
+		frame.opIndex = cs._iReturnOffset / (int)sizeof(SVMOperation);
+		frame.functionId = GetFunctionIndexFromCodeOffset(cs._iReturnOffset);
 		if (frame.functionId >= 0)
 		{
 			auto itName = _pProgram->debugFunctionNames.find(frame.functionId);
@@ -1976,9 +1977,6 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_RETURN_L:
 			if (handle_RETURN_L(OP)) return true;
 			break;
-		case NOP_RETURN_CLOSURE:
-			if (handle_RETURN_CLOSURE(OP)) return true;
-			break;
 		case NOP_TABLE_ALLOC:   handle_TABLE_ALLOC(OP); break;
 		case NOP_CLT_READ:      handle_CLT_READ(OP); break;
 		case NOP_CLT_READ_L:    handle_CLT_READ_L(OP); break;
@@ -2033,6 +2031,7 @@ void	CNeoVMWorker::DeadCoroutine(CoroutineInfo* pCI)
 		Var_Release(&(sVarStack)[i]);
 
 	pCI->_info.ClearSP();
+	pCI->m_sAsyncWaitReturnStack.clear();
 }
 bool CNeoVMWorker::StopCoroutine(bool doDead)
 {
@@ -2238,7 +2237,7 @@ VarInfo* CNeoVMWorker::testCall(VarInfo* function, VarInfo* args, int argc)
 	return result;
 }
 
-void CNeoVMWorker::Call(ClosureInfo* closure, int n2, VarInfo* pReturnValue)
+void CNeoVMWorker::Call(ClosureInfo* closure, int n2, int returnValueIndex)
 {
 	if (closure == nullptr || closure->_funIndex < 0 ||
 		closure->_funIndex >= (int)Functions().size())
@@ -2259,27 +2258,26 @@ void CNeoVMWorker::Call(ClosureInfo* closure, int n2, VarInfo* pReturnValue)
 	callStack._iReturnOffset = GetCodeptr();
 	callStack._iSP_Vars = _iSP_Vars;
 	callStack._iSP_VarsMax = _iSP_VarsMax;
-	callStack._pReturnValue = pReturnValue;
-	callStack._pAsyncWaitReturnValue = nullptr;
-	callStack._asyncWaitReturnValue = false;
+	callStack._iReturnValueIndex = returnValueIndex;
+	callStack._restoreAsyncWaitReturnValue = false;
+	callStack._restoreActiveClosure = (m_pActiveClosure != nullptr);
 	m_pCallStack->push_back(callStack);
 #else
 	SCallStack& callStack = m_pCallStack->push_back();
 	callStack._iReturnOffset = GetCodeptr();
 	callStack._iSP_Vars = _iSP_Vars;
 	callStack._iSP_VarsMax = _iSP_VarsMax;
-	callStack._pReturnValue = pReturnValue;
-	callStack._pAsyncWaitReturnValue = nullptr;
-	callStack._asyncWaitReturnValue = false;
+	callStack._iReturnValueIndex = returnValueIndex;
+	callStack._restoreAsyncWaitReturnValue = false;
+	callStack._restoreActiveClosure = (m_pActiveClosure != nullptr);
 #endif
 	// 캡처 함수 안에서 다른 캡처 함수를 호출한 경우에도 부모 프레임은
-	// 일반 Call과 같은 보조 스택/반환 IP 표식으로 복원한다.
-	if (m_pActiveClosure != nullptr)
+	// 일반 Call과 같은 보조 스택으로 복원한다.
+	if (callStack._restoreActiveClosure)
 	{
 		SClosureCallState& state = m_pClosureCallStack->push_back();
 		state._closure = m_pActiveClosure;
 		state._iSP_Vars = callStack._iSP_Vars;
-		callStack._iReturnOffset |= NEO_CALLSTACK_CLOSURE_RETURN_FLAG;
 		m_pActiveClosure = nullptr;
 	}
 
@@ -2306,7 +2304,7 @@ void CNeoVMWorker::SyncActiveClosure(const VarInfo* keepOnStack)
 
 NEOS_NOINLINE void CNeoVMWorker::FinishClosureReturn(const VarInfo* keepOnStack)
 {
-	// RET_CLOSURE만 여기로 온다. 반환값 슬롯은 caller가 Move할 때까지 남겨 두고,
+	// closure 반환만 여기로 온다. 반환값 슬롯은 caller가 Move할 때까지 남겨 두고,
 	// 나머지 캡처 슬롯은 보관함으로 되돌려 실행 보유 참조도 함께 반납한다.
 	ClosureInfo* closure = m_pActiveClosure;
 	if (closure == nullptr)

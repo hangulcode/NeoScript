@@ -385,6 +385,7 @@ void CNeoVMImpl::FreeCoroutine(VarInfo *d)
 	}
 	pCI->_info.ClearSP();
 	pCI->m_sAsyncResumeCodePtrs.clear();
+	pCI->m_sAsyncWaitReturnStack.clear();
 	_pExecPool->Release(pCI);
 }
 

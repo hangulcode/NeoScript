@@ -66,7 +66,9 @@ struct debug_info
 //       0115 이미지에는 그 중간 슬롯이 없으므로 캐시를 다시 만들어야 한다.
 // 0118: RET_CLOSURE의 _L 변형을 제거한다. 0117 캐시는 서로 다른 opcode 번호를 쓰므로
 //       다시 만들어야 한다.
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('1' << 8) | ('8'))
+// 0119: RET_CLOSURE opcode를 제거하고 closure 반환 여부를 SCallStack에 기록한다.
+//       이후 opcode 번호가 바뀌므로 캐시를 다시 만들어야 한다.
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('1' << 8) | ('9'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline

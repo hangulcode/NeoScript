@@ -33,7 +33,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::MoveTake(VarInfo* v1, VarInfo* v2)
 // [핫패스] 스크립트 함수 호출. 측정상 호출 비용의 78%가 이 프레임 push/pop 에 있어
 // (bench_call.ns: 프레임 6.80ns / 반환 0.40ns / 인자 1.50ns) 인라인 대상으로 옮겼다.
 // Move 와 같은 이유로 .cpp 가 아니라 헤더에서 보이는 .inl 에 둔다.
-NEOS_FORCEINLINE void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
+NEOS_FORCEINLINE void CNeoVMWorker::Call(int n1, int n2, int returnValueIndex)
 {
 	const SFunctionTable& fun = Functions()[n1];
 	// n2 is Arg Count not use
@@ -45,27 +45,25 @@ NEOS_FORCEINLINE void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 	callStack._iReturnOffset = GetCodeptr();
 	callStack._iSP_Vars = _iSP_Vars;
 	callStack._iSP_VarsMax = _iSP_VarsMax;
-	callStack._pReturnValue = pReturnValue;
-	callStack._pAsyncWaitReturnValue = nullptr;
-	callStack._asyncWaitReturnValue = false;
+	callStack._iReturnValueIndex = returnValueIndex;
+	callStack._restoreAsyncWaitReturnValue = false;
+	callStack._restoreActiveClosure = (m_pActiveClosure != nullptr);
 	m_pCallStack->push_back(callStack);
 #else
 	SCallStack& callStack = m_pCallStack->push_back();
 	callStack._iReturnOffset = GetCodeptr();
 	callStack._iSP_Vars = _iSP_Vars;
 	callStack._iSP_VarsMax = _iSP_VarsMax;
-	callStack._pReturnValue = pReturnValue;
-	callStack._pAsyncWaitReturnValue = nullptr;
-	callStack._asyncWaitReturnValue = false;
+	callStack._iReturnValueIndex = returnValueIndex;
+	callStack._restoreAsyncWaitReturnValue = false;
+	callStack._restoreActiveClosure = (m_pActiveClosure != nullptr);
 #endif
 	// 캡처 함수가 일반 함수를 호출할 때만 부모 closure를 보조 스택에 넣는다.
-	// return IP에는 표식만 남기므로 캡처와 무관한 CALL/RET에는 포인터 load/store가 없다.
-	if (m_pActiveClosure != nullptr)
+	if (callStack._restoreActiveClosure)
 	{
 		SClosureCallState& state = m_pClosureCallStack->push_back();
 		state._closure = m_pActiveClosure;
 		state._iSP_Vars = callStack._iSP_Vars;
-		callStack._iReturnOffset |= NEO_CALLSTACK_CLOSURE_RETURN_FLAG;
 		m_pActiveClosure = nullptr;
 	}
 

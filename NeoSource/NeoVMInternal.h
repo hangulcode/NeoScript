@@ -1,6 +1,5 @@
 ﻿#pragma once
 
-#include <limits>
 #include <thread>
 #include <time.h>
 
@@ -185,8 +184,6 @@ enum eNOperation : OpType
 	NOP_NATIVECALL,	// Native Call (patched at LoadVM)
 	NOP_RETURN,
 	NOP_RETURN_L,
-	// 캡처 람다 전용 RET. 일반 RET hot path에서 closure 동기화/반납 분기를 제거한다.
-	NOP_RETURN_CLOSURE,
 	//	NOP_FUNEND,
 
 	NOP_TABLE_ALLOC,
@@ -265,31 +262,32 @@ struct SCallStack
 	int		_iSP_Vars;
 	int		_iSP_VarsMax;
 	int		_iReturnOffset;
-	bool	 _asyncWaitReturnValue = false;
-	VarInfo* _pReturnValue;
-	// async.wait가 callback 실행 전에 기록한 native 반환값을 callback return 직전에 복원한다.
-	VarInfo* _pAsyncWaitReturnValue = nullptr;
+	// async.wait가 callback 실행 전에 기록한 native 반환값을 callback return 직전에
+	// 컨텍스트 보조 스택에서 복원해야 할 때만 true다.
+	bool	 _restoreAsyncWaitReturnValue = false;
+	// 이 호출이 끝난 뒤 보조 스택의 부모 closure를 다시 active 상태로
+	// 복원해야 한다. 즉 caller가 closure였던 경우에만 true다.
+	bool	 _restoreActiveClosure = false;
+	// >= 0: 절대 실행 스택 인덱스, -1: 반환값 무시,
+	// <= -2: 전역 인덱스(-_iReturnValueIndex - 2).
+	int	 _iReturnValueIndex = -1;
 };
 
 // 일반 호출 프레임에는 closure 포인터를 넣지 않는다. 캡처 함수가 다른 함수를
-// 호출할 때만 이 보조 스택에 부모 프레임을 보관한다. 반환 IP의 부호 비트가
-// 이 항목을 꺼내 복원해야 함을 표시하므로, 일반 RET는 추가 필드 load 없이
-// 이미 읽는 IP만 검사하면 된다.
+// 호출할 때만 이 보조 스택에 부모 프레임을 보관한다.
 struct SClosureCallState
 {
 	ClosureInfo* _closure = nullptr;
 	int		_iSP_Vars = 0;
 };
 
-static constexpr int NEO_CALLSTACK_CLOSURE_RETURN_FLAG = std::numeric_limits<int>::min();
-NEOS_FORCEINLINE bool IsClosureCallReturnOffset(int offset)
+// async.wait가 시작한 callback 프레임만 원래 native 반환 슬롯을 되돌린다.
+// 일반 호출 프레임의 공통 필드가 아니라 실행 컨텍스트별 LIFO 보관함에 둔다.
+struct SAsyncWaitReturnState
 {
-	return (offset & NEO_CALLSTACK_CLOSURE_RETURN_FLAG) != 0;
-}
-NEOS_FORCEINLINE int GetCallReturnCodeOffset(int offset)
-{
-	return offset & ~NEO_CALLSTACK_CLOSURE_RETURN_FLAG;
-}
+	VarInfo* _pReturnValue = nullptr;
+	bool	 _returnValue = false;
+};
 
 enum COROUTINE_STATE
 {
@@ -362,6 +360,7 @@ struct CoroutineInfo : AllocBase
 	std::vector<VarInfo>	m_sVarStack;
 	SimpleVector<SCallStack>	m_sCallStack;
 	SimpleVector<SClosureCallState>	m_sClosureCallStack;
+	SimpleVector<SAsyncWaitReturnState>	m_sAsyncWaitReturnStack;
 
 	// 파괴 재진입 방지와 순환 후보 intrusive FIFO 링크. 실행 스택의 저장 경로가
 	// 여러 곳에 분산돼 있어 대여 시 _mayContainContainerChild는 보수적으로 true로 둔다.
@@ -443,6 +442,8 @@ struct NeoExecContextPool
 		p->m_sCallStack.clear();
 		p->m_sClosureCallStack.reserve(8);
 		p->m_sClosureCallStack.clear();
+		p->m_sAsyncWaitReturnStack.reserve(8);
+		p->m_sAsyncWaitReturnStack.clear();
 		p->m_sVarStack.resize(_varStackSize);
 		if (cold)
 		{
@@ -467,6 +468,7 @@ struct NeoExecContextPool
 			n += (long long)p->m_sVarStack.capacity() * sizeof(VarInfo);
 			n += (long long)p->m_sCallStack.capacity() * sizeof(SCallStack);
 			n += (long long)p->m_sClosureCallStack.capacity() * sizeof(SClosureCallState);
+			n += (long long)p->m_sAsyncWaitReturnStack.capacity() * sizeof(SAsyncWaitReturnState);
 			n += (long long)p->m_sAsyncResumeCodePtrs.capacity() * sizeof(AsyncResumeInfo);
 		}
 		return n;

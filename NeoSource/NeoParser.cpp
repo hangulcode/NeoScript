@@ -5043,19 +5043,6 @@ void FinalizeFuction(SFunctions& funs)
 	funs._codeTemp.SetBufferOffset(iCode_Begin);
 	u8* pSrc = (u8*)funs._codeTemp.GetDataCurrent();
 
-	// 캡처 여부는 함수 본문 전체를 파싱해야 확정된다. 이 시점에만 RET를 분리하면
-	// 뒤쪽에서 처음 캡처한 람다도 앞쪽 return까지 빠짐없이 RET_CLOSURE가 된다.
-	if (funs._cur->_captures.empty() == false)
-	{
-		SVMOperation* ops = (SVMOperation*)pSrc;
-		const int opCount = funs._cur->_iCode_Size / (int)sizeof(SVMOperation);
-		for (int i = 0; i < opCount; ++i)
-		{
-			if (ops[i].op == NOP_RETURN)
-				ops[i].op = NOP_RETURN_CLOSURE;
-		}
-	}
-
 	// 루프 상수를 hidden 지역변수로 올리고 본문 참조를 재작성한다(제자리 수정).
 	// 점프가 op 단위 상대라 앞에 프롤로그를 붙여도 함수 내부 점프는 보정이 필요 없다.
 	std::vector<std::pair<short, short> > prologue;
