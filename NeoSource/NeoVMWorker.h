@@ -283,6 +283,7 @@ public:
 		Move(v1, v2);
 	}
 	void Move(VarInfo* v1, VarInfo* v2);
+	void MoveTake(VarInfo* v1, VarInfo* v2);
 	void MoveI(VarInfo* v1, int v);
 	void MoveF(VarInfo* v1, int bits);
 
@@ -352,8 +353,10 @@ private:
 	void Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue = NULL);
 	void Call(int n1, int n2, VarInfo* pReturnValue = NULL);
 	void Call(ClosureInfo* closure, int n2, VarInfo* pReturnValue = NULL);
-	void SyncActiveClosure();
-	void SyncClosureAtFrame(ClosureInfo* closure, int stackBase);
+	// return 값 슬롯은 Sync 뒤에도 caller가 읽으므로 보존한다. 나머지 캡처
+	// 슬롯은 closure 보관함으로 소유권을 넘긴다.
+	void SyncActiveClosure(const VarInfo* keepOnStack = nullptr);
+	void SyncClosureAtFrame(ClosureInfo* closure, int stackBase, const VarInfo* keepOnStack = nullptr);
 	bool Call_MetaTable(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, VarInfo* b);
 	bool Call_MetaTable2(VarInfo* pTable, std::string&, VarInfo* a, VarInfo* b);
 //	bool Call_MetaTableI(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, int b);

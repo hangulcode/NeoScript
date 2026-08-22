@@ -2311,12 +2311,12 @@ void CNeoVMWorker::Call(ClosureInfo* closure, int n2, VarInfo* pReturnValue)
 	(void)n2; // 호출 인자는 기존 Call과 동일하게 부모 프레임의 arg 슬롯에 이미 배치돼 있다.
 }
 
-void CNeoVMWorker::SyncActiveClosure()
+void CNeoVMWorker::SyncActiveClosure(const VarInfo* keepOnStack)
 {
-	SyncClosureAtFrame(m_pActiveClosure, _iSP_Vars);
+	SyncClosureAtFrame(m_pActiveClosure, _iSP_Vars, keepOnStack);
 }
 
-void CNeoVMWorker::SyncClosureAtFrame(ClosureInfo* closure, int stackBase)
+void CNeoVMWorker::SyncClosureAtFrame(ClosureInfo* closure, int stackBase, const VarInfo* keepOnStack)
 {
 	if (closure == nullptr || closure->_funIndex < 0 ||
 		closure->_funIndex >= (int)Functions().size())
@@ -2324,13 +2324,22 @@ void CNeoVMWorker::SyncClosureAtFrame(ClosureInfo* closure, int stackBase)
 	const SFunctionTable& fun = Functions()[closure->_funIndex];
 	if (closure->_captures.size() != fun._captures.size())
 		return;
+	bool mayContainContainerChild = false;
 	for (size_t i = 0; i < fun._captures.size(); ++i)
 	{
 		VarInfo* source = &(*m_pVarStack_Base)[stackBase + fun._captures[i].second];
-		Move(&closure->_captures[i], source);
-		if (closure->_captures[i].IsContainerType())
-			closure->_cycleState._mayContainContainerChild = true;
+		// 반환값으로 아직 사용될 슬롯만 복사로 남긴다. 나머지 캡처 슬롯은 호출
+		// 프레임이 끝난 뒤 쓰이지 않으므로 보관함에 소유권을 넘긴다.
+		if (source->IsContainerType())
+			mayContainContainerChild = true;
+
+		if (source == keepOnStack)
+			Move(&closure->_captures[i], source);
+		else
+			MoveTake(&closure->_captures[i], source);
 	}
+	if (mayContainContainerChild)
+		closure->_cycleState._mayContainContainerChild = true;
 }
 
 bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserData, StringInfo* pStr, int n3, VarInfo* pRet)

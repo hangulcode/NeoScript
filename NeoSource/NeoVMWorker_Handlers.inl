@@ -70,12 +70,16 @@ NEOS_FORCEINLINE void set_script_function_value(VarInfo* dst, int functionIndex)
     }
 
     ClosureInfo* closure = GetVM()->ClosureAlloc(functionIndex, (int)fun._captures.size());
+    bool mayContainContainerChild = false;
     for (size_t i = 0; i < fun._captures.size(); ++i)
     {
-        Move(&closure->_captures[i], GetVarPtr_L(fun._captures[i].first));
-        if (closure->_captures[i].IsContainerType())
-            closure->_cycleState._mayContainContainerChild = true;
+        VarInfo* source = GetVarPtr_L(fun._captures[i].first);
+        if (source->IsContainerType())
+            mayContainContainerChild = true;
+        Move(&closure->_captures[i], source);
     }
+    if (mayContainContainerChild)
+        closure->_cycleState._mayContainContainerChild = true;
 
     // f = fun() { return f; } 처럼 목적지와 캡처 원본이 같은 경우가 있다.
     // 캡처를 먼저 복사해야 기존 alloc 값을 지우고 난 뒤 null을 보관하지 않는다.
@@ -223,7 +227,9 @@ NEOS_FORCEINLINE bool handle_RETURN_impl(VarInfo* pSrc) {
 	// 변경분을 ClosureInfo로 되돌려 다음 호출에서도 같은 람다 상태가 이어지게 한다.
 	if (m_pActiveClosure != nullptr)
 	{
-		SyncActiveClosure();
+		// pSrc가 캡처 슬롯일 수 있다. 반환값을 caller로 옮기기 전까지는 이 슬롯의
+		// 소유권을 closure로 넘기면 안 된다.
+		SyncActiveClosure(pSrc);
 		if (m_pCur && m_pCur->_activeClosure == m_pActiveClosure)
 			m_pCur->_activeClosure = nullptr;
 		VarInfo active(VAR_CLOSURE);

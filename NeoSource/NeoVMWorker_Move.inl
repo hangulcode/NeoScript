@@ -18,6 +18,18 @@ NEOS_FORCEINLINE void CNeoVMWorker::Move(VarInfo* v1, VarInfo* v2)
 		Move_DestNoRelease(v1, v2);
 }
 
+// source가 들고 있던 값을 destination으로 넘긴다. source는 release하지 않고
+// none으로만 만들어, 호출 프레임 종료 뒤에도 소유권이 closure 보관함 하나에만 남는다.
+NEOS_FORCEINLINE void CNeoVMWorker::MoveTake(VarInfo* v1, VarInfo* v2)
+{
+	if (v1 == v2)
+		return;
+	if (v1->IsAllocType())
+		Var_Release(v1);
+	*v1 = *v2;
+	v2->ClearType();
+}
+
 // [핫패스] 스크립트 함수 호출. 측정상 호출 비용의 78%가 이 프레임 push/pop 에 있어
 // (bench_call.ns: 프레임 6.80ns / 반환 0.40ns / 인자 1.50ns) 인라인 대상으로 옮겼다.
 // Move 와 같은 이유로 .cpp 가 아니라 헤더에서 보이는 .inl 에 둔다.
