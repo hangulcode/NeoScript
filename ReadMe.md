@@ -569,30 +569,35 @@ Neo's time; `0.88x` means it was slower than Neo).
 
 | Benchmark | What it stresses | Neo (ms) | Lua (ms) | C++ (ms) | Lua vs Neo | C++ vs Neo |
 | :-------- | :--------------- | -------: | -------: | -------: | ---------: | ---------: |
-| `loop_sum`      | integer loop, VM dispatch floor | **167** | 192 |  12.8 | 0.87x | 13.1x |
-| `float_math`    | float mul/add/sub chain         | **183** | 307 |  58.3 | 0.60x |  3.1x |
-| `func_call`     | script function call overhead   | **115** | 157 |   4.2 | 0.73x | 27.4x |
-| `fib_recursive` | recursion, fib(32)              |  **78** |  88 |   6.7 | 0.89x | 11.6x |
-| `array_rw`      | sequential array write + read   |  **43** |  46 |   2.4 | 0.93x | 17.8x |
-| `map_str`       | string-key hash lookup          |  46 |  **37** |  71.5 | 1.24x |  0.6x |
-| `string_ops`    | string build + length           |  **82** | 148 |  13.5 | 0.55x |  6.1x |
-| `particles`     | game-style float + array sim    |  53 |  **49** |   3.4 | 1.08x | 15.8x |
-| **total**       |                                 | **767** | 1024 | 172.7 | 0.75x |  4.4x |
+| `loop_sum`      | integer loop, VM dispatch floor | **172** | 202 |  12.6 | 0.85x | 13.6x |
+| `float_math`    | float mul/add/sub chain         | **167** | 305 |  57.3 | 0.55x |  2.9x |
+| `func_call`     | script function call overhead   | **126** | 154 |   4.2 | 0.82x | 30.2x |
+| `fib_recursive` | recursion, fib(32)              |   87 |  87 |   6.6 | 1.00x | 13.1x |
+| `array_rw`      | sequential array write + read   |  **44** |  46 |   2.4 | 0.96x | 18.1x |
+| `map_str`       | string-key hash lookup          |  42 |  **40** |  69.7 | 1.05x |  0.6x |
+| `string_ops`    | string build + length           |  **81** | 148 |  13.2 | 0.55x |  6.1x |
+| `particles`     | game-style float + array sim    |  49 |  **48** |   3.4 | 1.02x | 14.5x |
+| **total**       |                                 | **768** | 1030 | 169.3 | 0.75x |  4.5x |
 
 **Reading the numbers.**
-- **Neo is ~33% faster than Lua overall** and leads on 6 of 8 benchmarks. All 8 checksums match
-  across the three languages, which is what proves they did the same work.
-- `map_str` is the row Lua wins clearly: 1.24x on the minimum, **1.15x on the median** (Neo 46,
-  Lua 40). Lua interns *every* short string, so a table lookup is a pointer compare. Neo interns
-  only map/set keys and program constants, which keeps temporary string creation cheap at the cost
-  of this one case.
+- **Neo is ~34% faster than Lua overall.** It leads clearly on 5 of 8 benchmarks, ties
+  `fib_recursive`, and trails on `map_str` and `particles` by margins inside those rows' own noise —
+  see below. All 8 checksums match across the three languages, which is what proves they did the
+  same work.
+- `map_str` is the row Lua still wins, but only by 1.05x on both the minimum and the median
+  (Neo 43, Lua 41). Lua interns *every* short string, so a table lookup is a pointer compare. Neo
+  interns only map/set keys and program constants, which keeps temporary string creation cheap at
+  the cost of this one case.
 - `map_str` has only 8 keys, so which slot each key lands in — and therefore the score — shifts with
-  any change to the hash. Lua is also the noisier side here (37-41 ms across runs, against Neo's
-  46-48). Treat differences under ~10% on this row as noise.
-- `particles` reads as a 1.08x Lua win here, but that is inside the layout band described under
-  *Methodology* below — the same source has measured anywhere from 44 to 59 ms across builds. Treat
-  this row as a tie, not a loss.
-- C++ is a **reference ceiling**, not a peer: 3-27x faster on compute-bound loops. The exception is
+  any change to the hash. The two languages' run ranges now overlap (Neo 42-44 ms, Lua 40-44), so
+  treat this row as a tie and differences under ~10% on it as noise.
+- `particles` reads as a 1.02x Lua win on the minimum and an exact tie on the median (both 49 ms).
+  That is well inside the layout band described under *Methodology* below — the same source has
+  measured anywhere from 44 to 59 ms across builds. Treat this row as a tie, not a loss.
+- `fib_recursive` lands on the same millisecond for both languages (87 ms minimum, 88 ms median).
+  It is the row where Neo's call-path advantage is smallest, because almost all of its work *is*
+  call and return — there is no loop body for Neo's cheaper dispatch to win back.
+- C++ is a **reference ceiling**, not a peer: 3-30x faster on compute-bound loops. The exception is
   `map_str`, where `std::unordered_map<std::string,…>` is *slower* than both VMs — the interpreters
   cache the string hash; the C++ map rehashes on every lookup.
 
