@@ -324,9 +324,9 @@ component-wise add rather than an error. Compose rotations with `math.quat_slerp
 `type()` on an inline lambda literal (`type(fun() { })`) reports `"null"`; assign it to a variable
 first if you need the type.
 
-A host-bound native object also reports `"null"`, and `GameObject == null` is `true` for a live
-one as well, so **there is no way to tell a bound object from a real null** by type or comparison.
-Call a method on it instead.
+A host-bound native object also reports `"null"`, so `type()` cannot identify one. Comparison
+still works, though: `obj == null` is false for a live object and true for one the host never
+produced, so `!= null` is the presence test to use.
 
 ## 12. Gotchas worth knowing before writing script
 
