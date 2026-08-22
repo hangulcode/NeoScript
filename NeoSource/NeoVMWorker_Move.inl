@@ -42,24 +42,24 @@ NEOS_FORCEINLINE void CNeoVMWorker::Call(int n1, int n2, int returnValueIndex)
 		return;
 #if _DEBUG
 	SCallStack callStack;
-	callStack._iReturnOffset = GetCodeptr();
+	callStack._ReturnIP = (u32)GetCodeptr();
 	callStack._iSP_Vars = _iSP_Vars;
 	callStack._iSP_VarsMax = _iSP_VarsMax;
 	callStack._iReturnValueIndex = returnValueIndex;
-	callStack._restoreAsyncWaitReturnValue = false;
-	callStack._restoreActiveClosure = (m_pActiveClosure != nullptr);
+	if (m_pActiveClosure != nullptr)
+		callStack._ReturnIP |= FLAG_CLOSURE;
 	m_pCallStack->push_back(callStack);
 #else
 	SCallStack& callStack = m_pCallStack->push_back();
-	callStack._iReturnOffset = GetCodeptr();
+	callStack._ReturnIP = (u32)GetCodeptr();
 	callStack._iSP_Vars = _iSP_Vars;
 	callStack._iSP_VarsMax = _iSP_VarsMax;
 	callStack._iReturnValueIndex = returnValueIndex;
-	callStack._restoreAsyncWaitReturnValue = false;
-	callStack._restoreActiveClosure = (m_pActiveClosure != nullptr);
+	if (m_pActiveClosure != nullptr)
+		callStack._ReturnIP |= FLAG_CLOSURE;
 #endif
 	// 캡처 함수가 일반 함수를 호출할 때만 부모 closure를 보조 스택에 넣는다.
-	if (callStack._restoreActiveClosure)
+	if (callStack._ReturnIP & FLAG_CLOSURE)
 	{
 		SClosureCallState& state = m_pClosureCallStack->push_back();
 		state._closure = m_pActiveClosure;

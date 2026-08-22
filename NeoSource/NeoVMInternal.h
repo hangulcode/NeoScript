@@ -261,17 +261,15 @@ struct SCallStack
 {
 	int		_iSP_Vars;
 	int		_iSP_VarsMax;
-	int		_iReturnOffset;
-	// async.wait가 callback 실행 전에 기록한 native 반환값을 callback return 직전에
-	// 컨텍스트 보조 스택에서 복원해야 할 때만 true다.
-	bool	 _restoreAsyncWaitReturnValue = false;
-	// 이 호출이 끝난 뒤 보조 스택의 부모 closure를 다시 active 상태로
-	// 복원해야 한다. 즉 caller가 closure였던 경우에만 true다.
-	bool	 _restoreActiveClosure = false;
+	u32		_ReturnIP;
 	// >= 0: 절대 실행 스택 인덱스, -1: 반환값 무시,
 	// <= -2: 전역 인덱스(-_iReturnValueIndex - 2).
 	int	 _iReturnValueIndex = -1;
 };
+
+static constexpr u32 FLAG_CLOSURE = 1u << 31;  // 호출자가 closure였음 → 보조스택에서 복원
+static constexpr u32 FLAG_ASYNCWAIT = 1u << 30; // async 콜백 프레임 → wait() 반환슬롯 복원
+static constexpr u32 IP_MASK = 0x3fffffffu;
 
 // 일반 호출 프레임에는 closure 포인터를 넣지 않는다. 캡처 함수가 다른 함수를
 // 호출할 때만 이 보조 스택에 부모 프레임을 보관한다.

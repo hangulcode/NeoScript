@@ -585,7 +585,7 @@ std::string CNeoVMWorker::FormatStackTrace(int currentOpIndex)
 		for (int i = callFrameCount - 1; i >= 0; --i)
 		{
 			SCallStack& cs = (*m_pCallStack)[i];
-			int opIndex = cs._iReturnOffset / (int)sizeof(SVMOperation);
+			int opIndex = (int)(cs._ReturnIP & IP_MASK) / (int)sizeof(SVMOperation);
 			if (opIndex > 0)
 				--opIndex;
 			appendFrame(callFrameCount - i, opIndex, cs._iSP_Vars);
@@ -596,7 +596,7 @@ std::string CNeoVMWorker::FormatStackTrace(int currentOpIndex)
 	for (int i = callFrameCount - 1; i >= callFrameCount - headCallFrameCount; --i)
 	{
 		SCallStack& cs = (*m_pCallStack)[i];
-		int opIndex = cs._iReturnOffset / (int)sizeof(SVMOperation);
+		int opIndex = (int)(cs._ReturnIP & IP_MASK) / (int)sizeof(SVMOperation);
 		if (opIndex > 0)
 			--opIndex;
 		appendFrame(callFrameCount - i, opIndex, cs._iSP_Vars);
@@ -610,7 +610,7 @@ std::string CNeoVMWorker::FormatStackTrace(int currentOpIndex)
 	for (int i = kTailFrames - 1; i >= 0; --i)
 	{
 		SCallStack& cs = (*m_pCallStack)[i];
-		int opIndex = cs._iReturnOffset / (int)sizeof(SVMOperation);
+		int opIndex = (int)(cs._ReturnIP & IP_MASK) / (int)sizeof(SVMOperation);
 		if (opIndex > 0)
 			--opIndex;
 		appendFrame(callFrameCount - i, opIndex, cs._iSP_Vars);
@@ -1607,8 +1607,9 @@ void CNeoVMWorker::DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames)
 		NeoDebugStackFrame frame;
 		frame.frameId = (int)frames.size();
 		frame.stackBase = cs._iSP_Vars;
-		frame.opIndex = cs._iReturnOffset / (int)sizeof(SVMOperation);
-		frame.functionId = GetFunctionIndexFromCodeOffset(cs._iReturnOffset);
+		const int returnIP = (int)(cs._ReturnIP & IP_MASK);
+		frame.opIndex = returnIP / (int)sizeof(SVMOperation);
+		frame.functionId = GetFunctionIndexFromCodeOffset(returnIP);
 		if (frame.functionId >= 0)
 		{
 			auto itName = _pProgram->debugFunctionNames.find(frame.functionId);
@@ -2255,25 +2256,25 @@ void CNeoVMWorker::Call(ClosureInfo* closure, int n2, int returnValueIndex)
 
 #if _DEBUG
 	SCallStack callStack;
-	callStack._iReturnOffset = GetCodeptr();
+	callStack._ReturnIP = (u32)GetCodeptr();
 	callStack._iSP_Vars = _iSP_Vars;
 	callStack._iSP_VarsMax = _iSP_VarsMax;
 	callStack._iReturnValueIndex = returnValueIndex;
-	callStack._restoreAsyncWaitReturnValue = false;
-	callStack._restoreActiveClosure = (m_pActiveClosure != nullptr);
+	if (m_pActiveClosure != nullptr)
+		callStack._ReturnIP |= FLAG_CLOSURE;
 	m_pCallStack->push_back(callStack);
 #else
 	SCallStack& callStack = m_pCallStack->push_back();
-	callStack._iReturnOffset = GetCodeptr();
+	callStack._ReturnIP = (u32)GetCodeptr();
 	callStack._iSP_Vars = _iSP_Vars;
 	callStack._iSP_VarsMax = _iSP_VarsMax;
 	callStack._iReturnValueIndex = returnValueIndex;
-	callStack._restoreAsyncWaitReturnValue = false;
-	callStack._restoreActiveClosure = (m_pActiveClosure != nullptr);
+	if (m_pActiveClosure != nullptr)
+		callStack._ReturnIP |= FLAG_CLOSURE;
 #endif
 	// 캡처 함수 안에서 다른 캡처 함수를 호출한 경우에도 부모 프레임은
 	// 일반 Call과 같은 보조 스택으로 복원한다.
-	if (callStack._restoreActiveClosure)
+	if (callStack._ReturnIP & FLAG_CLOSURE)
 	{
 		SClosureCallState& state = m_pClosureCallStack->push_back();
 		state._closure = m_pActiveClosure;

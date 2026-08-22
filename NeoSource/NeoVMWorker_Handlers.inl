@@ -252,6 +252,7 @@ NEOS_FORCEINLINE bool handle_RETURN_impl(VarInfo* pSrc) {
     }
 
     SCallStack& callStack = m_pCallStack->pop_back();
+	const u32 returnIP = callStack._ReturnIP;
 	if (m_pActiveClosure != nullptr)
 		FinishClosureReturn(pSrc);
 
@@ -273,7 +274,7 @@ NEOS_FORCEINLINE bool handle_RETURN_impl(VarInfo* pSrc) {
             Move(m_pVarStack_Pointer, pSrc);
     }
 
-    if (callStack._restoreAsyncWaitReturnValue)
+    if (returnIP & FLAG_ASYNCWAIT)
     {
         if (m_pCur == nullptr || m_pCur->m_sAsyncWaitReturnStack.size() == 0)
         {
@@ -284,11 +285,11 @@ NEOS_FORCEINLINE bool handle_RETURN_impl(VarInfo* pSrc) {
         Var_SetBool(state._pReturnValue, state._returnValue);
     }
 
-	SetCodePtr(callStack._iReturnOffset);
+	SetCodePtr((int)(returnIP & IP_MASK));
 	_iSP_Vars = callStack._iSP_Vars;
 	SetStackPointer(_iSP_Vars);
 	_iSP_VarsMax = callStack._iSP_VarsMax;
-	if (callStack._restoreActiveClosure)
+	if (returnIP & FLAG_CLOSURE)
 	{
 		SClosureCallState& state = m_pClosureCallStack->pop_back();
 		m_pActiveClosure = state._closure;
@@ -466,7 +467,7 @@ NEOS_NOINLINE bool handle_IDLE(const SVMOperation& OP) {
             SAsyncWaitReturnState& state = m_pCur->m_sAsyncWaitReturnStack.push_back();
             state._pReturnValue = resumeInfo.pReturnValue;
             state._returnValue = resumeInfo.returnValue;
-            (*m_pCallStack)[callStackSize]._restoreAsyncWaitReturnValue = true;
+            (*m_pCallStack)[callStackSize]._ReturnIP |= FLAG_ASYNCWAIT;
         }
 		GetVM()->Var_Release(&p->_LockReferance);
 		GetVM()->Var_Release(&p->_callback);
