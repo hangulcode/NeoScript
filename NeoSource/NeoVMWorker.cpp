@@ -41,18 +41,6 @@ void SVarWrapper::SetBool(bool v) { _vmw->Var_SetBool(_var, v); }
 void SVarWrapper::SetString(const char* str) { _vmw->Var_SetString(_var, str); }
 //void SVarWrapper::SetTableFun(FunctionPtrNative fun) { _vmw->Var_SetTableFun(_var, fun); }
 
-static std::string g_meta_Add3 = "+";
-static std::string g_meta_Sub3 = "-";
-static std::string g_meta_Mul3 = "*";
-static std::string g_meta_Div3 = "/";
-static std::string g_meta_Per3 = "%";
-
-static std::string g_meta_Add2 = "+=";
-static std::string g_meta_Sub2 = "-=";
-static std::string g_meta_Mul2 = "*=";
-static std::string g_meta_Div2 = "/=";
-static std::string g_meta_Per2 = "%=";
-
 #include "NeoVMWorker.inl"
 
 // 벡터 세터 (native 호출 내부에서만 쓰이므로 non-inline. NeoLib.cpp 에서 링크됨)
@@ -409,67 +397,6 @@ void CNeoVMWorker::Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue)
 }
 
 // CNeoVMWorker::Call(int,int,VarInfo*) 는 NeoVMWorker_Move.inl 로 옮겼다(핫패스 인라인 실험).
-
-bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo* r, VarInfo* a, VarInfo* b)
-{
-	MapInfo* table = pTable->_tbl;
-	if (table->_meta == NULL)
-		return false;
-	VarInfo* pVarItem = table->_meta->Find(funName);
-	if (pVarItem == NULL)
-		return false;
-	if (pVarItem->GetType() != VAR_FUN && pVarItem->GetType() != VAR_CLOSURE)
-		return false;
-
-	int n3 = 2;
-	if (!EnsureStackRange(_iSP_VarsMax, n3))
-		return false;
-
-	Move(&(*m_pVarStack_Base)[_iSP_VarsMax + 1], a);
-	Move(&(*m_pVarStack_Base)[_iSP_VarsMax + 2], b);
-
-	if (_iSP_Vars_Max2 < _iSP_VarsMax + (1 + n3))
-		_iSP_Vars_Max2 = _iSP_VarsMax + (1 + n3);
-
-	if (pVarItem->GetType() == VAR_CLOSURE)
-		Call(pVarItem->_closure, n3, r);
-	else
-		Call(pVarItem->_fun_index, n3, r);
-
-	//Move(r, &(*m_pVarStack)[iSP_VarsMax]); ???
-	return true;
-}
-
-
-bool CNeoVMWorker::Call_MetaTable2(VarInfo* pTable, std::string& funName, VarInfo* r, VarInfo* b)
-{
-	MapInfo* table = pTable->_tbl;
-	if (table->_meta == NULL)
-		return false;
-	VarInfo* pVarItem = table->_meta->Find(funName);
-	if (pVarItem == NULL)
-		return false;
-	if (pVarItem->GetType() != VAR_FUN && pVarItem->GetType() != VAR_CLOSURE)
-		return false;
-
-	int n3 = 2;
-	if (!EnsureStackRange(_iSP_VarsMax, n3))
-		return false;
-
-	Move(&(*m_pVarStack_Base)[_iSP_VarsMax + 1], r);
-	Move(&(*m_pVarStack_Base)[_iSP_VarsMax + 2], b);
-
-	if (_iSP_Vars_Max2 < _iSP_VarsMax + (1 + n3))
-		_iSP_Vars_Max2 = _iSP_VarsMax + (1 + n3);
-
-	if (pVarItem->GetType() == VAR_CLOSURE)
-		Call(pVarItem->_closure, n3, NULL);
-	else
-		Call(pVarItem->_fun_index, n3, NULL);
-
-	return true;
-}
-
 
 bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, CNeoVMProgram* pProgram, int iStackSize)
 {

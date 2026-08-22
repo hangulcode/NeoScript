@@ -635,7 +635,6 @@ All compiler and VM changes are covered by the 2,785-case regression suite (`con
 	- console / time_limit: executes a script for a fixed time budget and resumes it later
 	- console / divide_by_zero: divide-by-zero exception handling
 	- console / delegate: function pointer examples
-	- console / meta: meta function examples
 	- console / coroutine: coroutine examples
 	- console / module: module import and usage
 

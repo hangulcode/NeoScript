@@ -709,28 +709,6 @@ struct neo_libs
 		return true;
 	}
 
-	static bool sys_meta(CNeoVMWorker* pN, VarInfo* pVar, short args)
-	{
-		if (args != 2) return false; // table, meta
-
-		VarInfo *pTable = pN->GetStack(1);
-		VarInfo *pMeta = pN->GetStack(2);
-		if (pTable->GetType() != VAR_MAP) return false;
-		if (pMeta->GetType() != VAR_MAP) return false;
-
-		VarInfo var;
-		if (pTable->_tbl->_meta)
-		{
-			var = VarInfo(VAR_MAP);
-			var._tbl = pTable->_tbl->_meta;
-		}
-
-		pN->Move(&var, pMeta); // for Referance
-		pTable->_tbl->_meta = pMeta->_tbl;
-		pTable->_tbl->MarkContainerChild();
-		pN->ReturnValue();
-		return true;
-	}
 	static bool map_len(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (pVar->GetType() != VAR_MAP) return false;
@@ -1491,7 +1469,6 @@ static void AddGlobalLibFun()
 	AddSystemFun("time", &neo_libs::sys_time, "int");
 	AddSystemFun("date", &neo_libs::sys_date, "string", "string format", "int time");
 	AddSystemFun("clock", &neo_libs::sys_clock, "float");
-	AddSystemFun("meta", &neo_libs::sys_meta, "void", "map table", "map meta");
 	// 인자 순서는 sys_load 구현 기준: arg1=컴파일할 소스, arg2=청크 이름.
 	// name 은 현재 타입 검사만 하고 사용하지 않는다(진단 메시지/모듈 식별용 예약).
 	AddSystemFun("load", &neo_libs::sys_load, "module", "string source", "string name");

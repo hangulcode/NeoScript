@@ -112,7 +112,6 @@ static void PrintSampleList()
 	printf("time_limit\n");
 	printf("divide_by_zero\n");
 	printf("delegate\n");
-	printf("meta\n");
 	printf("coroutine\n");
 	printf("module\n");
 	printf("http\n");
@@ -137,13 +136,12 @@ static int RunSample(INeoLoader* pLoader, const std::string& key)
 	if (key == "10" || key == "time_limit") return SAMPLE_time_limit(pLoader, s_path + "time_limit.ns");
 	if (key == "11" || key == "divide_by_zero") return SAMPLE_etc(pLoader, s_path + "etc.ns", "divide_by_zero");
 	if (key == "12" || key == "delegate") return SAMPLE_etc(pLoader, s_path + "delegate.ns", nullptr);
-	if (key == "13" || key == "meta") return SAMPLE_etc(pLoader, s_path + "meta.ns", "meta");
-	if (key == "14" || key == "coroutine") return SAMPLE_etc(pLoader, s_path + "coroutine.ns", "test");
-	if (key == "15" || key == "module") return SAMPLE_etc(pLoader, s_path + "module.ns", nullptr);
-	if (key == "16" || key == "http") return SAMPLE_etc(pLoader, s_path + "http.ns", nullptr);
-	if (key == "17" || key == "regression") return SAMPLE_etc(pLoader, s_path + "compiler_regression.ns", nullptr);
-	if (key == "18" || key == "literal_totype") return SAMPLE_etc(pLoader, s_path + "literal_totype.ns", nullptr);
-	if (key == "19" || key == "cycle") return SAMPLE_cycle_ref(pLoader, s_path + "cycle_ref.ns");
+	if (key == "13" || key == "coroutine") return SAMPLE_etc(pLoader, s_path + "coroutine.ns", "test");
+	if (key == "14" || key == "module") return SAMPLE_etc(pLoader, s_path + "module.ns", nullptr);
+	if (key == "15" || key == "http") return SAMPLE_etc(pLoader, s_path + "http.ns", nullptr);
+	if (key == "16" || key == "regression") return SAMPLE_etc(pLoader, s_path + "compiler_regression.ns", nullptr);
+	if (key == "17" || key == "literal_totype") return SAMPLE_etc(pLoader, s_path + "literal_totype.ns", nullptr);
+	if (key == "18" || key == "cycle") return SAMPLE_cycle_ref(pLoader, s_path + "cycle_ref.ns");
 
 	printf("unknown sample: %s\n", key.c_str());
 	return -1;
@@ -151,7 +149,7 @@ static int RunSample(INeoLoader* pLoader, const std::string& key)
 
 static int RunSmokeSamples(INeoLoader* pLoader)
 {
-	const char* samples[] = { "hello", "string", "list", "map", "delegate", "meta", "coroutine", "regression", "literal_totype" };
+	const char* samples[] = { "hello", "string", "list", "map", "delegate", "coroutine", "regression", "literal_totype" };
 	for (const char* sample : samples)
 	{
 		printf("\n[smoke] %s\n", sample);
@@ -2337,7 +2335,6 @@ int main(int argc, char* argv[])
 		printf("%d time_limit\n", idx++);
 		printf("%d divide_by_zero\n", idx++);
 		printf("%d delegate\n", idx++);
-		printf("%d meta\n", idx++);
 		printf("%d coroutine\n", idx++);
 		printf("%d module\n", idx++);
 		printf("%d http\n", idx++);

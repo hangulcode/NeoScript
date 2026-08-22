@@ -31,7 +31,7 @@
 ```
 빌드 : Samples\console\console.sln   Configuration=Release Platform=x64
 회귀 : console.exe --smoke                      (compiler regression 2785)
-       console.exe --run cycle                  (cycle_ref 393)
+       console.exe --run cycle                  (cycle_ref 368)
        console.exe --v2smoke                    (0 failures)
        console.exe --compiler-error-regression   (20/20)
 ```

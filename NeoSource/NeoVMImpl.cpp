@@ -593,7 +593,6 @@ MapInfo* CNeoVMImpl::TableAlloc(int cnt)
 	pTable->_BucketCapa = 0;
 	pTable->_lastFree = -1;
 	pTable->_Bucket = nullptr;
-	pTable->_meta = NULL;
 
 	LiveList_Insert(_sTableHead, pTable);
 	if (cnt > 0) pTable->Reserve(cnt);
@@ -607,17 +606,6 @@ void CNeoVMImpl::FreeTable(MapInfo* tbl)
 		return;
 	tbl->_cycleState._destroying = true;
 	LiveList_Remove(_sTableHead, tbl);
-
-	if (tbl->_meta)
-	{
-		if (--tbl->_meta->_refCount <= 0)
-		{
-			VarInfo meta(VAR_MAP);
-			meta._tbl = tbl->_meta;
-			QueueContainerForDestroy(meta);
-		}
-		tbl->_meta = NULL;
-	}
 	tbl->Free();
 
 	//delete tbl;
@@ -681,7 +669,6 @@ SetInfo* CNeoVMImpl::SetAlloc()
 	pSet->_BucketCapa = 0;
 	pSet->_lastFree = -1;
 	pSet->_Bucket = nullptr;
-	pSet->_meta = NULL;
 
 	LiveList_Insert(_sSetHead, pSet);
 	++m_sAllocStats.sets;
@@ -694,16 +681,6 @@ void CNeoVMImpl::FreeSet(SetInfo* set)
 		return;
 	set->_cycleState._destroying = true;
 	LiveList_Remove(_sSetHead, set);
-	if (set->_meta)
-	{
-		if (--set->_meta->_refCount <= 0)
-		{
-			VarInfo meta(VAR_SET);
-			meta._set = set->_meta;
-			QueueContainerForDestroy(meta);
-		}
-		set->_meta = NULL;
-	}
 	set->Free();
 
 	//delete tbl;
@@ -977,7 +954,6 @@ void CNeoVMImpl::VisitCycleContainerChildren(VarInfo source, Visitor visitor)
 	case VAR_MAP:
 	{
 		MapInfo* map = source._tbl;
-		if (map->_meta) visitor(VAR_MAP, map->_meta);
 		for (int i = 0; i < map->_BucketCapa; ++i)
 		{
 			MapNode& node = map->_Bucket[i];
@@ -1004,7 +980,6 @@ void CNeoVMImpl::VisitCycleContainerChildren(VarInfo source, Visitor visitor)
 	case VAR_SET:
 	{
 		SetInfo* set = source._set;
-		if (set->_meta) visitor(VAR_SET, set->_meta);
 		for (int i = 0; i < set->_BucketCapa; ++i)
 		{
 			SetNode& node = set->_Bucket[i];
@@ -1335,34 +1310,6 @@ int CNeoVMImpl::CollectUnreachableCycleCandidates(size_t rootBudget)
 		Var_Release(&value);
 	};
 
-	auto releaseMapMeta = [this](MapInfo*& meta)
-	{
-		if (meta == nullptr)
-			return;
-		if (GetCycleCollectingFlag(VAR_MAP, meta))
-			--GetContainerRefCountRef(VAR_MAP, meta);
-		else
-		{
-			VarInfo value = MakeContainerVar(VAR_MAP, meta);
-			Var_Release(&value);
-		}
-		meta = nullptr;
-	};
-
-	auto releaseSetMeta = [this](SetInfo*& meta)
-	{
-		if (meta == nullptr)
-			return;
-		if (GetCycleCollectingFlag(VAR_SET, meta))
-			--GetContainerRefCountRef(VAR_SET, meta);
-		else
-		{
-			VarInfo value = MakeContainerVar(VAR_SET, meta);
-			Var_Release(&value);
-		}
-		meta = nullptr;
-	};
-
 	// 모든 white 객체가 살아 있는 상태에서만 소유 간선을 제거한다. 이 단계가 끝나면
 	// 컨테이너 사이에 dangling pointer가 남지 않으므로 이후에는 기존 Free*를 써도 된다.
 	//
@@ -1380,7 +1327,6 @@ int CNeoVMImpl::CollectUnreachableCycleCandidates(size_t rootBudget)
 		case VAR_MAP:
 		{
 			MapInfo* map = owner._tbl;
-			releaseMapMeta(map->_meta);
 			for (int i = 0; i < map->_BucketCapa; ++i)
 			{
 				MapNode& node = map->_Bucket[i];
@@ -1402,7 +1348,6 @@ int CNeoVMImpl::CollectUnreachableCycleCandidates(size_t rootBudget)
 		case VAR_SET:
 		{
 			SetInfo* set = owner._set;
-			releaseSetMeta(set->_meta);
 			for (int i = 0; i < set->_BucketCapa; ++i)
 			{
 				SetNode& node = set->_Bucket[i];

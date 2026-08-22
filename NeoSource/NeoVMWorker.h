@@ -293,7 +293,6 @@ public:
 	void Swap(VarInfo* v1, VarInfo* v2);
 private:
 	void MoveMinus(VarInfo* v1, VarInfo* v2);
-//	void Add2(eNOperationSub op, VarInfo* r, VarInfo* v2);
 
 	void Add2(VarInfo* r, VarInfo* v2);
 	void Sub2(VarInfo* r, VarInfo* v2);
@@ -332,10 +331,6 @@ private:
 	void Or3(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Xor3(VarInfo* r, VarInfo* v1, VarInfo* v2);
 
-//	void Add(eNOperationSub op, VarInfo* r, VarInfo* v1, int v2);
-//	void Add(eNOperationSub op, VarInfo* r, int v1, VarInfo* v2);
-//	void Add(eNOperationSub op, VarInfo* r, int v1, int v2);
-
 	void Inc(VarInfo* v1);
 	void Dec(VarInfo* v1);
 	bool CompareEQ(VarInfo* v1, VarInfo* v2);
@@ -359,9 +354,6 @@ private:
 	// 슬롯은 closure 보관함으로 소유권을 넘긴다.
 	void SyncActiveClosure(const VarInfo* keepOnStack = nullptr);
 	void SyncClosureAtFrame(ClosureInfo* closure, int stackBase, const VarInfo* keepOnStack = nullptr);
-	bool Call_MetaTable(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, VarInfo* b);
-	bool Call_MetaTable2(VarInfo* pTable, std::string&, VarInfo* a, VarInfo* b);
-//	bool Call_MetaTableI(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, int b);
 
 	bool CallNative(FunctionPtrNative functionPtrNative, void* pUserData, StringInfo *pStr, int n3, VarInfo* pRet = nullptr);
 	bool CallDefaultNativeByIndex(int nativeIndex, int n3, VarInfo* pRet = nullptr);
@@ -384,29 +376,6 @@ private:
 	VarInfo* GetTableItem(VarInfo *pTable, VarInfo *pArray);
 	VarInfo* GetTableItemValid(VarInfo *pTable, VarInfo *pArray);
 	VarInfo* GetTableItemValid(VarInfo *pTable, int Array);
-
-	//void TableAdd2(eNOperationSub op, VarInfo *pTable, VarInfo *pArray, VarInfo *pValue)
-	//{
-	//	VarInfo* p = GetTableItemValid(pTable, pArray);
-	//	if (p) Add2(op, p, pValue);
-	//}
-	//void TableAdd2(eNOperationSub op, VarInfo *pTable, VarInfo *pArray, int v)
-	//{
-	//	VarInfo* p = GetTableItemValid(pTable, pArray);
-	//	VarInfo temp(v);
-	//	if (p) Add2(op, p, &temp);
-	//}
-	//void TableAdd2(eNOperationSub op, VarInfo *pTable, int Array, VarInfo *pValue)
-	//{
-	//	VarInfo* p = GetTableItemValid(pTable, Array);
-	//	if (p) Add2(op, p, pValue);
-	//}
-	//void TableAdd2(eNOperationSub op, VarInfo *pTable, int Array, int v)
-	//{
-	//	VarInfo* p = GetTableItemValid(pTable, Array);
-	//	VarInfo temp(v);
-	//	if (p) Add2(op, p, &temp);
-	//}
 
 
 	bool VerifyType(VarInfo *p, VAR_TYPE t);

@@ -582,10 +582,6 @@ NEOS_NOINLINE void CNeoVMWorker::Add3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	case VAR_VEC:
 		if (VecArith(r, v1, v2, 0)) return;
 		break;
-	case VAR_MAP:
-		if (Call_MetaTable(v1, g_meta_Add3, r, v1, v2))
-			return;
-		break;
 	case VAR_LIST:
 		if (neo_DCalllibs::List_Add(this, r, v1, v2)) 
 			return;
@@ -625,10 +621,6 @@ NEOS_NOINLINE void CNeoVMWorker::Sub3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		break;
 	case VAR_VEC:
 		if (VecArith(r, v1, v2, 1)) return;
-		break;
-	case VAR_MAP:
-		if (Call_MetaTable(v1, g_meta_Sub3, r, v1, v2))
-			return;
 		break;
 	case VAR_LIST:
 		break;
@@ -670,10 +662,6 @@ NEOS_NOINLINE void CNeoVMWorker::Mul3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	case VAR_VEC:
 		if (VecArith(r, v1, v2, 2)) return;
 		break;
-	case VAR_MAP:
-		if (Call_MetaTable(v1, g_meta_Mul3, r, v1, v2))
-			return;
-		break;
 	case VAR_LIST:
 		break;
 	case VAR_SET:
@@ -712,10 +700,6 @@ NEOS_NOINLINE void CNeoVMWorker::Div3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	case VAR_VEC:
 		if (VecArith(r, v1, v2, 3)) return;
 		break;
-	case VAR_MAP:
-		if (Call_MetaTable(v1, g_meta_Div3, r, v1, v2))
-			return;
-		break;
 	case VAR_LIST:
 		break;
 	default:
@@ -734,10 +718,6 @@ NEOS_FORCEINLINE void CNeoVMWorker::Per3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			Var_SetInt(r, v1->_int % v2->_int);
 			return;
 		}
-		break;
-	case VAR_MAP:
-		if (Call_MetaTable(v1, g_meta_Per3, r, v1, v2)) 
-			return;
 		break;
 	default:
 		break;
@@ -866,154 +846,6 @@ NEOS_FORCEINLINE void CNeoVMWorker::Xor3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	}
 	SetErrorOperator("^", v1, v2);
 }
-//
-//NEOS_FORCEINLINE void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, VarInfo* v1, int v2)
-//{
-//	switch (v1->GetType())
-//	{
-//	case VAR_INT:
-//		switch (op)
-//		{
-//		case eOP_ADD: Var_SetInt(r, v1->_int + v2); return;
-//		case eOP_SUB: Var_SetInt(r, v1->_int - v2); return;
-//		case eOP_MUL: Var_SetInt(r, v1->_int * v2); return;
-//		case eOP_DIV: Var_SetInt(r, v1->_int / v2); return;
-//		case eOP_PER: Var_SetInt(r, v1->_int % v2); return;
-//		case eOP_LSH: Var_SetInt(r, v1->_int << v2); return;
-//		case eOP_RSH: Var_SetInt(r, v1->_int >> v2); return;
-//		case eOP_AND: Var_SetInt(r, v1->_int & v2); return;
-//		case eOP__OR: Var_SetInt(r, v1->_int | v2); return;
-//		case eOP_XOR: Var_SetInt(r, v1->_int ^ v2); return;
-//		default: break;
-//		}
-//		SetError("operator Error");
-//		return;
-//	case VAR_FLOAT:
-//		switch (op)
-//		{
-//		case eOP_ADD: Var_SetFloat(r, v1->_float + v2); return;
-//		case eOP_SUB: Var_SetFloat(r, v1->_float - v2); return;
-//		case eOP_MUL: Var_SetFloat(r, v1->_float * v2); return;
-//		case eOP_DIV: Var_SetFloat(r, v1->_float / v2); return;
-//		default: break;
-//		}
-//		SetError("operator Error");
-//		return;
-//	case VAR_STRING:
-//		break;
-//	case VAR_MAP:
-//	{
-//		VarInfo vv2 = v2;
-//		switch (op)
-//		{
-//		case eOP_ADD:
-//			if (Call_MetaTable(v1, g_meta_Add3, r, v1, &vv2)) return;
-//			SetError("unsupported operand + Error"); return;
-//		case eOP_SUB:
-//			if (Call_MetaTable(v1, g_meta_Sub3, r, v1, &vv2)) return;
-//			SetError("unsupported operand - Error"); return;
-//		case eOP_MUL:
-//			if (Call_MetaTable(v1, g_meta_Mul3, r, v1, &vv2)) return;
-//			SetError("unsupported operand * Error"); return;
-//		case eOP_DIV:
-//			if (Call_MetaTable(v1, g_meta_Div3, r, v1, &vv2)) return;
-//			SetError("unsupported operand / Error"); return;
-//		case eOP_PER:
-//			if (Call_MetaTable(v1, g_meta_Per3, r, v1, &vv2)) return;
-//			SetError("unsupported operand % Error"); return;
-//		default: break;
-//		}
-//		SetError("operator Error");
-//		return;
-//	}
-//	case VAR_LIST:
-//	{
-//		VarInfo vv2 = v2;
-//		switch (op)
-//		{
-//		case eOP_ADD:
-//			if (neo_DCalllibs::List_Add(this, r, v1, &vv2)) return;
-//			SetError("unsupported operand + Error"); return;
-//		default: break;
-//		}
-//		SetError("operator Error");
-//		return;
-//	}
-//	case VAR_SET:
-//	{
-//		VarInfo vv2 = v2;
-//		switch (op)
-//		{
-//		case eOP_ADD:
-//			SetError("unsupported operand + Error"); return;
-//		case eOP_SUB:
-//			if (neo_DCalllibs::Set_Sub(this, r, v1, &vv2)) return;
-//			SetError("unsupported operand - Error"); return;
-//		default: break;
-//		}
-//		SetError("operator Error");
-//		return;
-//	}
-//	default:
-//		break;
-//	}
-//	SetError("unsupported operand Error");
-//}
-//
-//NEOS_FORCEINLINE void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, int v1, VarInfo* v2)
-//{
-//	if (v2->GetType() == VAR_INT)
-//	{
-//		switch (op)
-//		{
-//		case eOP_ADD: Var_SetInt(r, v1 + v2->_int); return;
-//		case eOP_SUB: Var_SetInt(r, v1 - v2->_int); return;
-//		case eOP_MUL: Var_SetInt(r, v1 * v2->_int); return;
-//		case eOP_DIV: Var_SetInt(r, v1 / v2->_int); return;
-//		case eOP_PER: Var_SetInt(r, v1 % v2->_int); return;
-//		case eOP_LSH: Var_SetInt(r, v1 << v2->_int); return;
-//		case eOP_RSH: Var_SetInt(r, v1 >> v2->_int); return;
-//		case eOP_AND: Var_SetInt(r, v1 & v2->_int); return;
-//		case eOP__OR: Var_SetInt(r, v1 | v2->_int); return;
-//		case eOP_XOR: Var_SetInt(r, v1 ^ v2->_int); return;
-//		default: break;
-//		}
-//		SetError("operator Error");
-//		return;
-//	}
-//	else if (v2->GetType() == VAR_FLOAT)
-//	{
-//		switch (op)
-//		{
-//		case eOP_ADD: Var_SetFloat(r, v1 + v2->_float); return;
-//		case eOP_SUB: Var_SetFloat(r, v1 - v2->_float); return;
-//		case eOP_MUL: Var_SetFloat(r, v1 * v2->_float); return;
-//		case eOP_DIV: Var_SetFloat(r, v1 / v2->_float); return;
-//		default: break;
-//		}
-//		SetError("operator Error");
-//		return;
-//	}
-//	SetError("unsupported operand Error");
-//}
-//NEOS_FORCEINLINE void CNeoVMWorker::Add(eNOperationSub op, VarInfo* r, int v1, int v2)
-//{
-//	switch (op)
-//	{
-//	case eOP_ADD: Var_SetInt(r, v1 + v2); return;
-//	case eOP_SUB: Var_SetInt(r, v1 - v2); return;
-//	case eOP_MUL: Var_SetInt(r, v1 * v2); return;
-//	case eOP_DIV: Var_SetInt(r, v1 / v2); return;
-//	case eOP_PER: Var_SetInt(r, v1 % v2); return;
-//	case eOP_LSH: Var_SetInt(r, v1 << v2); return;
-//	case eOP_RSH: Var_SetInt(r, v1 >> v2); return;
-//	case eOP_AND: Var_SetInt(r, v1 & v2); return;
-//	case eOP__OR: Var_SetInt(r, v1 | v2); return;
-//	case eOP_XOR: Var_SetInt(r, v1 ^ v2); return;
-//	default: break;
-//	}
-//	SetError("unsupported operand Error");
-//}
 NEOS_FORCEINLINE void CNeoVMWorker::Inc(VarInfo* v1)
 {
 	switch (v1->GetType())
@@ -1187,10 +1019,6 @@ NEOS_NOINLINE void CNeoVMWorker::Add2Rare(VarInfo* r, VarInfo* v2)
 			return;
 		}
 		break;
-	case VAR_MAP:
-		if (Call_MetaTable(r, g_meta_Add2, r, r, v2)) 
-			return;
-		break;
 	default:
 		break;
 	}
@@ -1221,10 +1049,6 @@ NEOS_NOINLINE void CNeoVMWorker::Sub2Rare(VarInfo* r, VarInfo* v2)
 	switch (r->GetType())
 	{
 	case VAR_STRING:
-		break;
-	case VAR_MAP:
-		if (Call_MetaTable(r, g_meta_Sub2, r, r, v2)) 
-			return;
 		break;
 	default:
 		break;
@@ -1257,10 +1081,6 @@ NEOS_NOINLINE void CNeoVMWorker::Mul2Rare(VarInfo* r, VarInfo* v2)
 	{
 	case VAR_STRING:
 		break;
-	case VAR_MAP:
-		if (Call_MetaTable(r, g_meta_Mul2, r, r, v2))
-			return;
-		break;
 	default:
 		break;
 	}
@@ -1291,10 +1111,6 @@ NEOS_NOINLINE void CNeoVMWorker::Div2Rare(VarInfo* r, VarInfo* v2)
 	switch (r->GetType())
 	{
 	case VAR_STRING:
-		break;
-	case VAR_MAP:
-		if (Call_MetaTable(r, g_meta_Div2, r, r, v2))
-			return;
 		break;
 	default:
 		break;

@@ -1,4 +1,4 @@
-# NeoScript Script API Reference
+﻿# NeoScript Script API Reference
 
 Everything a `.ns` script can call: keyword intrinsics, the three built-in modules
 (`math` / `system` / `coroutine`), and the method sets of `string` / `list` / `map` / `async`.
@@ -15,7 +15,6 @@ Everything a `.ns` script can call: keyword intrinsics, the three built-in modul
 | module functions, type methods | `NeoSource/NeoLib.cpp` - `AddGlobalLibFun()` and `RegObjLibrary()` |
 | keyword intrinsics | `NeoSource/NeoParser.cpp` - `InitDefaultTokenString()` |
 | `type()` result strings | `NeoSource/NeoVMImpl.cpp` - the `NDF_*` switch |
-| metatable operator keys | `NeoSource/NeoVMWorker.cpp` - the `g_meta_*` statics |
 
 Every signature and behavioural note below was verified by running it through
 `Samples/console/console.exe --file`.
@@ -45,7 +44,7 @@ callback.
 | `toint(x)` | `int` | Truncates a float toward zero; parses a numeric string. |
 | `tofloat(x)` | `float` | Parses a numeric string. |
 | `tosize(x)` | `int` | string: UTF-8 character count. list/map/set: element count. Vector2/3/4/Quaternion: component count. Anything else: `0`. |
-| `type(x)` | `string` | Exact strings in section 12. |
+| `type(x)` | `string` | Exact strings in section 11. |
 | `sleep(ms: int)` | `void` | Suspends the instance. Rejected inside a nested native -> script call. |
 | `yield` | - | Statement, not a call. Suspends the current coroutine. |
 | `__LINE__` | `int` | Current source line, substituted at compile time. |
@@ -154,7 +153,6 @@ behaviour documented here is what runs.
 | `system.time()` | `int` | Unix seconds |
 | `system.date(format: string, time: int)` | `string` | `strftime` + `localtime`, output capped at 79 chars |
 | `system.clock()` | `float` | `clock() / CLOCKS_PER_SEC` in seconds. Use for deltas, not wall time |
-| `system.meta(table: map, meta: map)` | `void` | Installs `meta` as `table`'s operator table - see section 11 |
 | `system.load(source: string, name: string)` | `module` | Compiles `source` at run time. `name` is type-checked but unused. A compile failure raises `invalid function call`; it does not return `null` |
 | `system.pcall(m: module)` | `void` | Runs the module's top-level code |
 | `system.set(l: list)` | `set` | Builds a set from a list; duplicates collapse |
@@ -302,27 +300,7 @@ count. A quaternion is just a 4-component vector, so `type(q)` is `"Vector4"` an
 component-wise add rather than an error. Compose rotations with `math.quat_slerp` /
 `math.quat_from_basis` / `math.RotateVectorByQuat`, never with `*`.
 
-## 11. Metatable operator keys
-
-`system.meta(table, meta)` turns `meta`'s entries into operator overloads for `table`. The keys are
-the **operator spellings**, not `__add`-style names:
-
-| Key | Fires on | Handler shape |
-| :--- | :--- | :--- |
-| `"+"` | `a + b` | `fun(a, b) -> result` |
-| `"-"` | `a - b` | `fun(a, b) -> result` |
-| `"*"` | `a * b` | `fun(a, b) -> result` |
-| `"/"` | `a / b` | `fun(a, b) -> result` |
-| `"%"` | `a % b` | `fun(a, b) -> result` |
-| `"+="` | `a += b` | `fun(a, b)` - mutates `a` |
-| `"-="` | `a -= b` | `fun(a, b)` |
-| `"*="` | `a *= b` | `fun(a, b)` |
-| `"/="` | `a /= b` | `fun(a, b)` |
-
-Handlers may be named functions or capturing lambdas. `"%="` exists in the engine but no opcode
-dispatches to it yet. There are no comparison, index, call, or tostring metamethods.
-
-## 12. `type()` return strings
+## 11. `type()` return strings
 
 | Value | `type(x)` |
 | :--- | :--- |
@@ -344,7 +322,7 @@ dispatches to it yet. There are no comparison, index, call, or tostring metameth
 `type()` on an inline lambda literal (`type(fun() { })`) reports `"null"`; assign it to a variable
 first if you need the type.
 
-## 13. Gotchas worth knowing before writing script
+## 12. Gotchas worth knowing before writing script
 
 - **Declare before use.** The compiler makes one top-to-bottom pass. A function must be defined
   above its first call site or the file - and every file importing it - fails with

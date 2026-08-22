@@ -80,20 +80,6 @@ typedef u8	ArgFlag;
 // PatchLocalOps 도 이 비트를 봐야 해서 argFlag 비트 정의와 같은 곳에 둔다.
 #define NEOS_OP_CALL_NORESULT	(1 << 7) // 0x80
 
-enum eNOperationSub : u8
-{
-	eOP_ADD,
-	eOP_SUB,
-	eOP_MUL,
-	eOP_DIV,
-	eOP_PER,
-	eOP_LSH,
-	eOP_RSH,
-	eOP_AND,
-	eOP__OR,
-	eOP_XOR,
-};
-
 enum eNOperation : OpType
 {
 	NOP_MOV,

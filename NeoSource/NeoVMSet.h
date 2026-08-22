@@ -47,7 +47,6 @@ struct SetInfo : AllocBase
 	int	_lastFree;
 	int _itemCount;
 	u32 _mutationVersion;
-	SetInfo*		_meta;
 
 	// 살아있는 객체 추적용 intrusive 이중연결 리스트 (std::map 레지스트리 대체)
 	SetInfo* _liveNext;
