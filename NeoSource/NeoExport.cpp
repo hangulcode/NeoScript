@@ -354,6 +354,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			argFlag |= GetArgIndexToCode(argFlag, nullptr, nullptr, &v.n3);
 			break;
 		case NOP_RETURN:
+		case NOP_RETURN_CLOSURE:
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
 			if((argFlag & NEOS_ARG_N1_LOCAL) && v.n1 == 0)

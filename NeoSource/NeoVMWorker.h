@@ -354,6 +354,7 @@ private:
 	// 슬롯은 closure 보관함으로 소유권을 넘긴다.
 	void SyncActiveClosure(const VarInfo* keepOnStack = nullptr);
 	void SyncClosureAtFrame(ClosureInfo* closure, int stackBase, const VarInfo* keepOnStack = nullptr);
+	NEOS_NOINLINE void FinishClosureReturn(const VarInfo* keepOnStack);
 
 	bool CallNative(FunctionPtrNative functionPtrNative, void* pUserData, StringInfo *pStr, int n3, VarInfo* pRet = nullptr);
 	bool CallDefaultNativeByIndex(int nativeIndex, int n3, VarInfo* pRet = nullptr);

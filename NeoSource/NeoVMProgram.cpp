@@ -1001,6 +1001,7 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		}
 		break;
 	case NOP_RETURN:
+	case NOP_RETURN_CLOSURE:
 		// NORESULT = 값 없는 'return;'. n1(반환값 슬롯)을 쓰지 않으므로 op/flag 2바이트만 덤프한다.
 		if (v.argFlag & NEOS_OP_CALL_NORESULT)
 		{

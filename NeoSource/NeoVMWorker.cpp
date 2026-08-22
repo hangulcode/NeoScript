@@ -1969,10 +1969,12 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_RETURN_L:
 			if (handle_RETURN_L(OP)) return true;
 			break;
+		case NOP_RETURN_CLOSURE:
+			if (handle_RETURN_CLOSURE(OP)) return true;
+			break;
 		case NOP_TABLE_ALLOC:   handle_TABLE_ALLOC(OP); break;
 		case NOP_CLT_READ:      handle_CLT_READ(OP); break;
 		case NOP_CLT_READ_L:    handle_CLT_READ_L(OP); break;
-		case NOP_CLT_READ_STATIC_STRING: handle_CLT_READ_STATIC_STRING(OP); break;
 		case NOP_TABLE_REMOVE:  handle_TABLE_REMOVE(OP); break;
 		case NOP_CLT_MOV:       handle_CLT_MOV(OP); break;
 		case NOP_CLT_MOV_L:     handle_CLT_MOV_L(OP); break;
@@ -1996,6 +1998,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_ERROR:
 			handle_ERROR(OP);
 			return false;
+		case NOP_CLT_READ_STATIC_STRING: handle_CLT_READ_STATIC_STRING(OP); break;
 		default:
 			SetError(RTE_UNKNOWN_OP);
 			break;
@@ -2282,6 +2285,22 @@ void CNeoVMWorker::Call(ClosureInfo* closure, int n2, VarInfo* pReturnValue)
 void CNeoVMWorker::SyncActiveClosure(const VarInfo* keepOnStack)
 {
 	SyncClosureAtFrame(m_pActiveClosure, _iSP_Vars, keepOnStack);
+}
+
+NEOS_NOINLINE void CNeoVMWorker::FinishClosureReturn(const VarInfo* keepOnStack)
+{
+	// RET_CLOSURE만 여기로 온다. 반환값 슬롯은 caller가 Move할 때까지 남겨 두고,
+	// 나머지 캡처 슬롯은 보관함으로 되돌려 실행 보유 참조도 함께 반납한다.
+	ClosureInfo* closure = m_pActiveClosure;
+	if (closure == nullptr)
+		return;
+	SyncClosureAtFrame(closure, _iSP_Vars, keepOnStack);
+	if (m_pCur && m_pCur->_activeClosure == closure)
+		m_pCur->_activeClosure = nullptr;
+	m_pActiveClosure = nullptr;
+	VarInfo active(VAR_CLOSURE);
+	active._closure = closure;
+	Var_Release(&active);
 }
 
 void CNeoVMWorker::SyncClosureAtFrame(ClosureInfo* closure, int stackBase, const VarInfo* keepOnStack)

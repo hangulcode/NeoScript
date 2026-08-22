@@ -215,8 +215,11 @@ int NeoScriptV2Smoke()
         "export fun badNativeRead() { return Host[3]; }\n"                               // 12
         "export fun badNativeWrite() { Host[3] = 1; }\n"                                  // 13
         "fun closureExplode() { return Host.boomHost(); }\n"
+        "fun namedClosureChild(var value) { return value + 1; }\n"
         "export fun nestedChildFailure() { var z = 0; return 1 / z; }\n"
         "export fun queueCounter(var start) { var value = start; Host.defer(fun() { value = value + 1; return value; }); }\n"
+        "export fun queueNamedCallCounter(var start) { var value = start; Host.defer(fun() { value = value + 1; namedClosureChild(value); return value; }); }\n"
+        "export fun queueStaticReturnCounter(var start) { var value = start; Host.defer(fun() { value = value + 1; if (value == 11) return \"FIRST\"; return \"NEXT\"; }); }\n"
         "export fun queueNestedFailureClosure() { var tag = \"KEEP-ME\"; var n = 0; Host.defer(fun() { n = n + 1; Host.nestedFailureOnce(); return tag .. \"/\" .. n; }); }\n"
         "export fun queueStringCounter() { var text = \"a\"; Host.defer(fun() { text = text + \"x\"; return text.len(); }); }\n"
         "export fun queueErrorCounter(var start) { var value = start; Host.defer(fun() { value = value + 1; if (value == 11) closureExplode(); return value; }); }\n"
@@ -259,6 +262,31 @@ int NeoScriptV2Smoke()
         CallResult two = rt->Call(a, g_deferredCallback).invokeR();
         Check(one.ok() && one.asInt() == 11, "closure callback: first delayed call sees captured 10");
         Check(two.ok() && two.asInt() == 12, "closure callback: second delayed call preserves updated capture");
+        g_deferredCallback = FunctionHandle();
+    }
+
+    // 캡처 람다 안의 일반 함수 CALL은 RET에서 부모 closure를 복원해야 하며,
+    // 바깥 RET_CLOSURE가 그 갱신값을 보관함에 동기화한다.
+    {
+        g_deferredCallback = FunctionHandle();
+        Check(rt->Call(a, "queueNamedCallCounter").argInt(10).invoke() == RunStatus::Completed,
+            "closure named call: script creates retained lambda");
+        CallResult one = rt->Call(a, g_deferredCallback).invokeR();
+        CallResult two = rt->Call(a, g_deferredCallback).invokeR();
+        Check(one.ok() && one.asInt() == 11, "closure named call: first callback restores outer closure");
+        Check(two.ok() && two.asInt() == 12, "closure named call: second callback preserves updated capture");
+        g_deferredCallback = FunctionHandle();
+    }
+
+    // 캡처 람다의 static 반환도 RET_CLOSURE 경로에서 보관함을 동기화한다.
+    {
+        g_deferredCallback = FunctionHandle();
+        Check(rt->Call(a, "queueStaticReturnCounter").argInt(10).invoke() == RunStatus::Completed,
+            "closure static return: script creates retained lambda");
+        CallResult one = rt->Call(a, g_deferredCallback).invokeR();
+        CallResult two = rt->Call(a, g_deferredCallback).invokeR();
+        Check(one.ok() && Eq(one.asString(), "FIRST"), "closure static return: RET_CLOSURE returns first static value");
+        Check(two.ok() && Eq(two.asString(), "NEXT"), "closure static return: RET_CLOSURE keeps captured state");
         g_deferredCallback = FunctionHandle();
     }
 

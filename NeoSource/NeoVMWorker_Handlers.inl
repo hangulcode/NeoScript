@@ -223,20 +223,6 @@ NEOS_FORCEINLINE bool handle_NATIVECALL(const SVMOperation& OP) {
 
 // 본문 공용. pSrc = 반환값 슬롯(NORESULT 면 nullptr).
 NEOS_FORCEINLINE bool handle_RETURN_impl(VarInfo* pSrc) {
-	// 값 캡처 closure는 호출 프레임의 숨은 지역 슬롯에서 실행된다. 종료 직전에
-	// 변경분을 ClosureInfo로 되돌려 다음 호출에서도 같은 람다 상태가 이어지게 한다.
-	if (m_pActiveClosure != nullptr)
-	{
-		// pSrc가 캡처 슬롯일 수 있다. 반환값을 caller로 옮기기 전까지는 이 슬롯의
-		// 소유권을 closure로 넘기면 안 된다.
-		SyncActiveClosure(pSrc);
-		if (m_pCur && m_pCur->_activeClosure == m_pActiveClosure)
-			m_pCur->_activeClosure = nullptr;
-		VarInfo active(VAR_CLOSURE);
-		active._closure = m_pActiveClosure;
-		m_pActiveClosure = nullptr;
-		Var_Release(&active);
-	}
     if (m_iBreakingCallStack == (int)m_pCallStack->size())
     {
         if (pSrc == nullptr)
@@ -274,12 +260,15 @@ NEOS_FORCEINLINE bool handle_RETURN_impl(VarInfo* pSrc) {
         Var_SetBool(callStack._pAsyncWaitReturnValue, callStack._asyncWaitReturnValue);
 
     SetCodePtr(callStack._iReturnOffset);
-    _iSP_Vars = callStack._iSP_Vars;
-    SetStackPointer(_iSP_Vars);
+	_iSP_Vars = callStack._iSP_Vars;
+	SetStackPointer(_iSP_Vars);
 	_iSP_VarsMax = callStack._iSP_VarsMax;
-	m_pActiveClosure = callStack._activeClosure;
-	if (m_pCur)
-		m_pCur->_activeClosure = m_pActiveClosure;
+	if (callStack._activeClosure != nullptr)
+	{
+		m_pActiveClosure = callStack._activeClosure;
+		if (m_pCur)
+			m_pCur->_activeClosure = m_pActiveClosure;
+	}
     return false; // break, continue loop
 }
 
@@ -290,6 +279,12 @@ NEOS_FORCEINLINE bool handle_RETURN(const SVMOperation& OP) {
 NEOS_FORCEINLINE bool handle_RETURN_L(const SVMOperation& OP) {
     // NORESULT 면 슬롯을 안 뽑으므로 PatchLocalOps 가 _L 로 바꾸지 않는다.
     return handle_RETURN_impl(GetVarPtr_L(OP.n1));
+}
+
+NEOS_FORCEINLINE bool handle_RETURN_CLOSURE(const SVMOperation& OP) {
+	VarInfo* pSrc = (OP.argFlag & NEOS_OP_CALL_NORESULT) ? nullptr : GetVarPtrF1(OP);
+	FinishClosureReturn(pSrc);
+	return handle_RETURN_impl(pSrc);
 }
 
 NEOS_FORCEINLINE bool handle_TABLE_ALLOC(const SVMOperation& OP) {

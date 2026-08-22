@@ -40,6 +40,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 	// 호출 스택을 push하거나 현재 프레임을 변경하기 전에 새 프레임 전체를 검증한다.
 	if (!EnsureStackRange(_iSP_VarsMax, fun._localAddCount - 1))
 		return;
+	ClosureInfo* const outerClosure = m_pActiveClosure;
 #if _DEBUG
 	SCallStack callStack;
 	callStack._iReturnOffset = GetCodeptr();
@@ -48,7 +49,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 	callStack._pReturnValue = pReturnValue;
 	callStack._pAsyncWaitReturnValue = nullptr;
 	callStack._asyncWaitReturnValue = false;
-	callStack._activeClosure = m_pActiveClosure;
+	callStack._activeClosure = outerClosure;
 	m_pCallStack->push_back(callStack);
 #else
 	SCallStack& callStack = m_pCallStack->push_back();
@@ -58,7 +59,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 	callStack._pReturnValue = pReturnValue;
 	callStack._pAsyncWaitReturnValue = nullptr;
 	callStack._asyncWaitReturnValue = false;
-	callStack._activeClosure = m_pActiveClosure;
+	callStack._activeClosure = outerClosure;
 #endif
 
 	SetCodePtr(fun._codePtr);
@@ -69,6 +70,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 		_iSP_Vars_Max2 = _iSP_VarsMax;
 	// 일반 함수 호출은 캡처 환경을 갖지 않는다. 부모 closure의 active 참조는
 	// callStack에 보관돼 return/error에서 다시 복원된다.
-	m_pActiveClosure = nullptr;
+	if (outerClosure != nullptr)
+		m_pActiveClosure = nullptr;
 
 }

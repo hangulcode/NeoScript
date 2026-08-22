@@ -184,6 +184,8 @@ enum eNOperation : OpType
 	NOP_NATIVECALL,	// Native Call (patched at LoadVM)
 	NOP_RETURN,
 	NOP_RETURN_L,
+	// 캡처 람다 전용 RET. 일반 RET hot path에서 closure 동기화/반납 분기를 제거한다.
+	NOP_RETURN_CLOSURE,
 	//	NOP_FUNEND,
 
 	NOP_TABLE_ALLOC,
@@ -262,10 +264,10 @@ struct SCallStack
 	int		_iSP_Vars;
 	int		_iSP_VarsMax;
 	int		_iReturnOffset;
+	bool	 _asyncWaitReturnValue = false;
 	VarInfo* _pReturnValue;
 	// async.wait가 callback 실행 전에 기록한 native 반환값을 callback return 직전에 복원한다.
 	VarInfo* _pAsyncWaitReturnValue = nullptr;
-	bool	 _asyncWaitReturnValue = false;
 	// 이 프레임을 실행하던 캡처 함수. 호출 프레임 전환 중에도 보존해
 	// return/error에서 캡처 지역의 변경분을 원래 ClosureInfo로 되돌린다.
 	ClosureInfo* _activeClosure = nullptr;

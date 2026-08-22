@@ -64,7 +64,9 @@ struct debug_info
 // 0115: 함수 테이블에 익명 함수의 지역 VarInfo 캡처 슬롯을 추가.
 // 0116: 다단계 익명 함수 캡처가 중간 부모 프레임의 숨은 슬롯을 경유하도록 컴파일된다.
 //       0115 이미지에는 그 중간 슬롯이 없으므로 캐시를 다시 만들어야 한다.
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('1' << 8) | ('6'))
+// 0118: RET_CLOSURE의 _L 변형을 제거한다. 0117 캐시는 서로 다른 opcode 번호를 쓰므로
+//       다시 만들어야 한다.
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('1' << 8) | ('8'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline
