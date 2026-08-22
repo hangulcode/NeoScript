@@ -442,7 +442,6 @@ int InitDefaultTokenString()
 	TOKEN_STR2(TK_VAR, "var");
 	TOKEN_STR2(TK_CONST, "const");
 	TOKEN_STR2(TK_FUN, "fun");
-	TOKEN_STR2(TK_CLASS, "class");
 	TOKEN_STR2(TK_IMPORT, "import");
 	TOKEN_STR2(TK_EXPORT, "export");
 
@@ -4430,51 +4429,6 @@ bool ParseConstDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	ar.m_sScriptDefines.values[name] = d;
 	return true;
 }
-
-bool ParseClass(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
-{
-	std::string tk1;
-	TK_TYPE tkType1;
-//	TK_TYPE r;
-
-	tkType1 = GetToken(ar, tk1);
-	if (tkType1 != TK_STRING)
-	{
-		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "class name", tk1.c_str());
-		return false;
-	}
-	if (false == UseableName(ar, funs, vars, tk1, true))
-	{
-		//SetCompileError(ar, "Error (%d, %d): Ununable Class Name (%s)", ar.CurLine(), ar.CurCol(), tk1.c_str());
-		return false;
-	}
-
-	SLayerVar* pCurLayer = vars.GetCurrentLayer();
-	/*
-	tkType1 = GetToken(ar, tk1);
-	if (tkType1 == TK_STRING)
-	{
-		int iLocalVar = AddLocalVarName(ar, funs, vars, blExport, tk1);
-		if (iLocalVar == -1)
-			return false;
-
-		ar.PushToken(tkType1, tk1);
-
-		SOperand iTempLocalVar;
-		r = ParseJob(false, iTempLocalVar, NULL, ar, funs, vars);
-		if (TK_SEMICOLON != r)
-		{
-			//SetCompileError(ar, "Error (%d, %d): ", ar.CurLine(), ar.CurCol());
-			return false;
-		}
-	}
-	else
-	{
-		SetCompileError(ar, "Error (%d, %d): Function Local Var (%s) %d", ar.CurLine(), ar.CurCol(), funs.GetCurFunName().c_str(), tk1.c_str());
-		return false;
-	}*/
-	return true;
-}
 bool ParseSleep(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	std::string tk1;
@@ -4785,10 +4739,6 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			if (false == ParseConstDef(ar, funs, vars))
 				return false;
 			if (lastOPReturn) *lastOPReturn = false;
-			break;
-		case TK_CLASS:
-			if (false == ParseClass(ar, funs, vars))
-				return false;
 			break;
 		case TK_BREAK:
 			if (pJumps == NULL)

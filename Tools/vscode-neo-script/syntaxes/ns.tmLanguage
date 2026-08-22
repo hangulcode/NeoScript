@@ -15,7 +15,6 @@
 		<dict><key>include</key><string>#comments</string></dict>
 		<dict><key>include</key><string>#strings</string></dict>
 		<dict><key>include</key><string>#function-declarations</string></dict>
-		<dict><key>include</key><string>#class-declarations</string></dict>
 		<dict><key>include</key><string>#variable-declarations</string></dict>
 		<dict><key>include</key><string>#const-declarations</string></dict>
 		<dict><key>include</key><string>#keywords</string></dict>
@@ -104,20 +103,6 @@
 				<dict><key>name</key><string>entity.name.function.neoscript</string></dict>
 			</dict>
 		</dict>
-		<key>class-declarations</key>
-		<dict>
-			<key>name</key>
-			<string>meta.class.neoscript</string>
-			<key>match</key>
-			<string>\b(class)\s+([A-Za-z_][A-Za-z0-9_]*)</string>
-			<key>captures</key>
-			<dict>
-				<key>1</key>
-				<dict><key>name</key><string>storage.type.class.neoscript</string></dict>
-				<key>2</key>
-				<dict><key>name</key><string>entity.name.type.class.neoscript</string></dict>
-			</dict>
-		</dict>
 		<key>variable-declarations</key>
 		<dict>
 			<key>name</key>
@@ -160,13 +145,13 @@
 					<key>name</key>
 					<string>keyword.control.loop.neoscript</string>
 					<key>match</key>
-					<string>\b(for|foreach|while|do|in|break|continue)\b</string>
+					<string>\b(for|foreach|while|in|break|continue)\b</string>
 				</dict>
 				<dict>
 					<key>name</key>
 					<string>keyword.control.neoscript</string>
 					<key>match</key>
-					<string>\b(return|import|as|export|delegate|async|await)\b</string>
+					<string>\b(return|import|as|export|yield)\b</string>
 				</dict>
 				<dict>
 					<key>name</key>
@@ -196,7 +181,7 @@
 					<key>name</key>
 					<string>constant.language.neoscript</string>
 					<key>match</key>
-					<string>\b(true|false|none|null|this)\b</string>
+					<string>\b(true|false|null|__LINE__)\b</string>
 				</dict>
 				<dict>
 					<key>name</key>
@@ -218,7 +203,7 @@
 			<key>name</key>
 			<string>support.function.builtin.neoscript</string>
 			<key>match</key>
-			<string>\b(print|tostring|toint|tofloat|tosize|totype|sleep)\b(?=\s*\()</string>
+			<string>\b(print|tostring|toint|tofloat|tosize|type|sleep)\b(?=\s*\()</string>
 		</dict>
 		<key>function-calls</key>
 		<dict>

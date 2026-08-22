@@ -44,19 +44,6 @@
     ],
     "description": "Create an if block."
   },
-  "Class": {
-    "prefix": "class",
-    "body": [
-      "class ${1:Name}",
-      "{",
-      "\tfun __Init__(var self${2:, var arg})",
-      "\t{",
-      "\t\t$0",
-      "\t}",
-      "};"
-    ],
-    "description": "Create a class."
-  },
   "Import": {
     "prefix": "import",
     "body": "import ${1:system};",

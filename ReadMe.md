@@ -642,15 +642,24 @@ All compiler and VM changes are covered by the 2,785-case regression suite (`con
 	- null: represents no value; uninitialized variables are null
 	- bool: stores true or false
 	- int: stores a 4-byte integer
-	- double: stores a 4-byte float (`NS_FLOAT`)
-	- string: stores text
+	- float: stores a 4-byte single-precision float (`NS_FLOAT` is `typedef float`).
+	  `type()` reports "float"; there is no double type
+	- string: stores UTF-8 text; length and index positions count characters, not bytes
 	- list: an array-like container
 	- map: a key/value container
-	- set: a key-only container
+	- set: a key-only container, built with `system.set(list)`
+	- Vector2 / Vector3 / Vector4 / Quaternion: inline value types, not lists
+	  - see "Vector value types" above
+	- function: a named function or a captured anonymous function
+	- coroutine / module / async: engine object handles
+	- native object: a symbol the host bound with `RegisterObject`/`BindObject`
+	  (`GameObject`, `Host`, ...). `type()` reports "null" for one and `== null` is true,
+	  so it cannot be told apart from a real null - call a method on it instead
 
 
 ### Neo Script reserved words
 	- var: declares a variable
+	- const: declares a compile-time constant - see "Script `const`" above
 	- fun: declares a function. `fun(...) { ... }` without a name is an anonymous function; it
 	  captures the enclosing function's locals **by value** — see "Captured anonymous functions"
 	  in the Host API section for what that does and does not share
@@ -661,8 +670,12 @@ All compiler and VM changes are covered by the 2,785-case regression suite (`con
 	  [`docs/API.md`](docs/API.md) section 1
 	- return [x]: returns from the current function, optionally with x
 	- break: exits the current loop
+	- yield: suspends the current coroutine; execution resumes at the next
+	  `coroutine.resume`
 	- continue: starts the next loop iteration
-	- if (x) / else / else if: C-style conditional chain; the legacy `elif` syntax is removed
+	- if (x) / else / else if: C-style conditional chain; the legacy `elif` syntax is removed.
+	  **x must be a bool** - only `true` takes the branch. `if (1)`, `if ("a")` and
+	  `if (someMap)` are all false; there is no truthiness conversion. Same for `while`
 	- switch / case / default: see "switch statement" below
 	- for: `for (var a in start, end [, step])` — see "for loop" below. `end` is **exclusive**
 	  and `step` is optional (defaults to 1)
@@ -670,8 +683,10 @@ All compiler and VM changes are covered by the 2,785-case regression suite (`con
 		- map: `foreach (var key, value in map)` or `foreach (var key in map)`
 		- list / set: single variable only, `foreach (var value in list)`
 		  (two-variable form is not supported and reports a runtime error)
+	- while: `while (condition) { ... }`, C semantics. There is no `do ... while`
 	- true / false: boolean values
 	- null: no value
+	- __LINE__: the current source line, substituted at compile time
 	- ++ / --: increments or decrements a variable by one
 	- && / ||: logical operators, equivalent to C semantics (short-circuit evaluation:
 	  the right operand is not evaluated when the result is already decided)

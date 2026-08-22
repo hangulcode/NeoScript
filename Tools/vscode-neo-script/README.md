@@ -64,6 +64,5 @@ Common snippets include:
 - `for`
 - `foreach`
 - `if`
-- `class`
 - `import`
 - `print`

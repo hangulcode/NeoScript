@@ -15,6 +15,7 @@ Everything a `.ns` script can call: keyword intrinsics, the three built-in modul
 | module functions, type methods | `NeoSource/NeoLib.cpp` - `AddGlobalLibFun()` and `RegObjLibrary()` |
 | keyword intrinsics | `NeoSource/NeoParser.cpp` - `InitDefaultTokenString()` |
 | `type()` result strings | `NeoSource/NeoVMImpl.cpp` - the `NDF_*` switch |
+| editor keyword / builtin lists | `Tools/vscode-neo-script/syntaxes/ns.tmLanguage` - hand-maintained, update it with this file |
 
 Every signature and behavioural note below was verified by running it through
 `Samples/console/console.exe --file`.
@@ -318,12 +319,20 @@ component-wise add rather than an error. Compose rotations with `math.quat_slerp
 | async object | `"asynchronous"` |
 | Vector2 / Vector3 / Vector4 | `"Vector2"` / `"Vector3"` / `"Vector4"` |
 | Quaternion | `"Vector4"` - there is no distinct quaternion type at run time |
+| bound native object (`RegisterObject` / `BindObject`) | `"null"` - **not distinguishable from a real null** |
 
 `type()` on an inline lambda literal (`type(fun() { })`) reports `"null"`; assign it to a variable
 first if you need the type.
 
+A host-bound native object also reports `"null"`, and `GameObject == null` is `true` for a live
+one as well, so **there is no way to tell a bound object from a real null** by type or comparison.
+Call a method on it instead.
+
 ## 12. Gotchas worth knowing before writing script
 
+- **Only `bool` is truthy.** `if (x)` and `while (x)` take the branch **only** when `x` is a
+  boolean `true`. `if (1)`, `if ("a")`, `if (someMap)` are all false - there is no truthiness
+  conversion. Write the comparison out: `if (count > 0)`, `if (name != "")`.
 - **Declare before use.** The compiler makes one top-to-bottom pass. A function must be defined
   above its first call site or the file - and every file importing it - fails with
   `unknown identifier`.
