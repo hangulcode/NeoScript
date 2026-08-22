@@ -7,10 +7,14 @@
 	- It was developed in Visual Studio Pro 2026 C++.
 	- After some more features are added, port to C#
 
-> **Looking for a specific function?** [`docs/API.md`](docs/API.md) is the complete
-> script-side API reference — every `math` / `system` / `coroutine` function and every
-> `string` / `list` / `map` / `async` method, with exact signatures and argument types.
-> This file covers the language itself and the C++ host API.
+### Script API reference
+
+**[docs/API.md](docs/API.md)**
+
+Every function a script can call — the keyword intrinsics, `print`, the `math` / `system` /
+`coroutine` modules, and the `string` / `list` / `map` / `async` method sets — with exact
+signatures, argument types and return types. Look there first when you need a function; this
+file covers the language itself and the C++ host API.
 
 ### License
 	MIT license
@@ -654,7 +658,8 @@ All compiler and VM changes are covered by the 2,785-case regression suite (`con
 	- import: imports a module from the Lib directory
 	- export: makes a variable or function available to C++
 	- tostring (x) / toint (x) / tofloat (x) / tosize (x) / type (x) / sleep (x):
-	  built-in intrinsics. Return types and exact semantics: docs/API.md section 1
+	  built-in intrinsics. Return types and exact semantics:
+	  [`docs/API.md`](docs/API.md) section 1
 	- return [x]: returns from the current function, optionally with x
 	- break: exits the current loop
 	- continue: starts the next loop iteration
@@ -734,10 +739,8 @@ Rules:
 	  the `default` branch is taken.
 
 ### Built-in functions
-Every function a script can call - `print`, the `math` / `system` / `coroutine` modules, and the
-`string` / `list` / `map` / `async` method sets - is listed with exact signatures and argument
-types in [`docs/API.md`](docs/API.md). That file is generated from `NeoSource/NeoLib.cpp`, so it
-stays complete; this one deliberately does not repeat it.
+See **[`docs/API.md`](docs/API.md)** — the full list with signatures and argument types, kept in
+step with `NeoSource/NeoLib.cpp`. It is deliberately not repeated here.
 
 ### Comment
 	- //: single-line comment
