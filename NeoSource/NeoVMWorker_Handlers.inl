@@ -62,13 +62,11 @@ NEOS_NOINLINE bool handle_SLEEP(const SVMOperation& OP) {
     return false; // Continue RunInternal
 }
 
-NEOS_FORCEINLINE void set_script_function_value(VarInfo* dst, int functionIndex) {
+// 캡처 closure 생성(할당 + 캡처 복사 루프)은 함수값 대입에서만 실행되는 드문 경로다.
+// FORCEINLINE으로 두면 FMOV1/FMOV2 두 곳에 전개돼 디스패치 루프의 인라인 크기만 키우므로
+// 콜드 헬퍼로 밀어낸다 — RunInternal 의 인라인 크기가 곧 성능이다(For/Add3 에서 실측).
+NEOS_NOINLINE void set_script_closure_value(VarInfo* dst, int functionIndex) {
     const SFunctionTable& fun = Functions()[functionIndex];
-    if (fun._captures.empty()) {
-        Var_SetFun(dst, functionIndex);
-        return;
-    }
-
     ClosureInfo* closure = GetVM()->ClosureAlloc(functionIndex, (int)fun._captures.size());
     bool mayContainContainerChild = false;
     for (size_t i = 0; i < fun._captures.size(); ++i)
@@ -88,6 +86,15 @@ NEOS_FORCEINLINE void set_script_function_value(VarInfo* dst, int functionIndex)
     dst->SetType(VAR_CLOSURE);
     dst->_closure = closure;
     ++closure->_refCount;
+}
+
+// 캡처 없는 함수값 대입(대부분의 FMOV)만 인라인에 남긴다.
+NEOS_FORCEINLINE void set_script_function_value(VarInfo* dst, int functionIndex) {
+    if (Functions()[functionIndex]._captures.empty()) {
+        Var_SetFun(dst, functionIndex);
+        return;
+    }
+    set_script_closure_value(dst, functionIndex);
 }
 
 NEOS_FORCEINLINE bool handle_FMOV1(const SVMOperation& OP) {
