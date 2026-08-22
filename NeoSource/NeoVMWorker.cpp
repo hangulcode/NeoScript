@@ -16,6 +16,24 @@ namespace NeoScript
 
 void	SetCompileError(const char*	lpszString, ...);
 
+// 네이티브가 보조 스크립트 프레임을 직접 실행할 때, 호출자 람다의 캡처를
+// 자식 RET가 동기화하거나 반납하지 못하게 한다. 이 포인터는 실행 보유 참조를
+// 나타내므로 AddRef/Release 없이 실행 범위에서만 분리한다.
+class ActiveClosureIsolation
+{
+	ClosureInfo*& _active;
+	ClosureInfo* const _saved;
+public:
+	explicit ActiveClosureIsolation(ClosureInfo*& active) : _active(active), _saved(active)
+	{
+		_active = nullptr;
+	}
+	~ActiveClosureIsolation()
+	{
+		_active = _saved;
+	}
+};
+
 void SVarWrapper::SetNone() { _vmw->Var_SetNone(_var); }
 void SVarWrapper::SetInt(int v) { _vmw->Var_SetInt(_var, v); }
 void SVarWrapper::SetFloat(NS_FLOAT v) { _vmw->Var_SetFloat(_var, v); }
@@ -2167,6 +2185,7 @@ VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 	int save_Code = GetCodeptr();
 	int save_iSP_Vars = _iSP_Vars;
 	int save__iSP_VarsMax = _iSP_VarsMax;
+	ActiveClosureIsolation activeClosureIsolation(m_pActiveClosure);
 
 	SetCodePtr(fun._codePtr);
 
@@ -2227,8 +2246,7 @@ VarInfo* CNeoVMWorker::testCall(VarInfo* function, VarInfo* args, int argc)
 	const int save_Code = GetCodeptr();
 	const int save_iSP_Vars = _iSP_Vars;
 	const int save__iSP_VarsMax = _iSP_VarsMax;
-	ClosureInfo* const saveActiveClosure = m_pActiveClosure;
-	m_pActiveClosure = nullptr;
+	ActiveClosureIsolation activeClosureIsolation(m_pActiveClosure);
 
 	SetCodePtr(fun._codePtr);
 	_iSP_Vars = _iSP_VarsMax;
@@ -2253,7 +2271,6 @@ VarInfo* CNeoVMWorker::testCall(VarInfo* function, VarInfo* args, int argc)
 	_iSP_Vars = save_iSP_Vars;
 	_iSP_VarsMax = save__iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);
-	m_pActiveClosure = saveActiveClosure;
 	_isInitialized = true;
 	return result;
 }

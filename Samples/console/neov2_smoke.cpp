@@ -206,7 +206,9 @@ int NeoScriptV2Smoke()
         "export fun queueSleepCounter(var start) { var value = start; Host.defer(fun() { value = value + 1; if (value == 11) { sleep(1); } return value; }); }\n"
         "export fun nestedCapture() { var v = \"V-outer\"; var mid = fun() { var pad1 = 111; var pad2 = 222; return fun() { return v; }; }; var inner = mid(); return inner(); }\n"
         "export fun selfCaptureSource() { var f = \"some-long-heap-string-value\"; f = fun() { return f; }; return f(); }\n"
-        "export fun sortCapture() { var direction = 1; var m = { 5, 3, 7 }; m.sort(fun(var a, var b) { return a * direction > b * direction; }); return m[0] * 100 + m[1] * 10 + m[2]; }\n";
+        "export fun sortCapture() { var direction = 1; var m = { 5, 3, 7 }; m.sort(fun(var a, var b) { return a * direction > b * direction; }); return m[0] * 100 + m[1] * 10 + m[2]; }\n"
+        "fun PlainSortCmp(var a, var b) { return a < b; }\n"
+        "export fun namedSortInsideClosure() { var tag = \"KEEP-ME\"; var n = 0; var f = fun() { n = n + 1; var m = { 3, 1, 2 }; m.sort(PlainSortCmp); return tag .. \"/\" .. n; }; var first = f(); var second = f(); return first .. \"|\" .. second; }\n";
     // ※ 새 함수는 반드시 뒤에 덧붙일 것 — 아래 디버거 테스트가 line 3(compute 본문)에 BP 를 건다.
 
     CompileDesc cd;
@@ -266,6 +268,9 @@ int NeoScriptV2Smoke()
         CallResult sorted = rt->Call(a, "sortCapture").invokeR();
         Check(sorted.ok() && sorted.asInt() == 753,
             "map.sort invokes captured closure with its stored values");
+        CallResult namedSort = rt->Call(a, "namedSortInsideClosure").invokeR();
+        Check(namedSort.ok() && std::string(namedSort.asString().data(), namedSort.asString().size()) == "KEEP-ME/1|KEEP-ME/2",
+            "map.sort named function does not overwrite active closure captures");
     }
 
     {
