@@ -7,6 +7,11 @@
 	- It was developed in Visual Studio Pro 2026 C++.
 	- After some more features are added, port to C#
 
+> **Looking for a specific function?** [`docs/API.md`](docs/API.md) is the complete
+> script-side API reference — every `math` / `system` / `coroutine` function and every
+> `string` / `list` / `map` / `async` method, with exact signatures and argument types.
+> This file covers the language itself and the C++ host API.
+
 ### License
 	MIT license
 	NeoScript is free software.
@@ -126,11 +131,10 @@ var moved = position + direction * 2.0;
 - Components can be read and written with indexing (`position[0]`, `position[1] = 5.0`).
 - Vector assignment is a value copy; assigning `b = a` does not alias `a`.
 - Vector arithmetic supports component-wise `+`, `-`, `*`, `/` and scalar multiplication/division.
-- `tosize(vector)` returns the component count. List-only operations such as `append`,
-  `insert`, `len`, and `foreach` are not supported for vector values.
-- Vector math APIs (`Lerp3`, `Normalize3`, `Cross3`, `DistanceSquared3`,
-  `RotateVectorByQuat`, and quaternion helpers) require vector value types, not `[x, y, z]`
-  List literals.
+- `tosize(vector)` returns the component count. List operations (`append`, `insert`, `len`,
+  `foreach`) are not supported for vector values.
+- The `math` vector and quaternion functions require vector value types, not `[x, y, z]` List
+  literals. Full list: [`docs/API.md`](docs/API.md#35-vector-math).
 - Quaternion component order is `w, x, y, z`: `math.Quaternion(w, x, y, z)`.
 - **There is one vector type, not four.** Internally all of these are `VAR_VEC` plus a component
   count of 1-4; the count lives in unused padding in `VarInfo`, so it costs no memory. A
@@ -241,11 +245,66 @@ On each call NeoScript copies that storage into the lambda's normal local stack 
 capture slots back when the call returns (or is unwound/cancelled). This keeps bytecode and ordinary local
 access on the VM stack.
 
+Nesting works to any depth: a lambda inside a lambda still sees the outermost local, because every
+intermediate lambda captures it as well. Each frame in that chain must itself be an anonymous function —
+a *named* function declared between them does not forward outer locals, and the reference is rejected at
+compile time with `unknown identifier`.
+
 This is deliberately **value capture with call-boundary write-back**, not Lua/JavaScript shared upvalues.
 Two lambdas created from the same outer local do not share later writes, while repeated non-overlapping
 calls through the *same* lambda retain its updated captured values. Re-entering the same captured lambda
 recursively or through a callback is also defined by that copy-back order: the later return writes its
-snapshot last. Use an explicit map/list/object if shared mutable state is required.
+snapshot last. Three consequences are worth spelling out, because they differ from what Lua or JavaScript
+would do with the same source:
+
+```cpp
+// 1. Two lambdas over the same local do not share it.
+fun MakePair()
+{
+    var n = 0;
+    return [ fun() { n = n + 1; return n; }, fun() { return n; } ];
+}
+var p = MakePair();
+var inc = p[0];   var get = p[1];
+inc();   inc();          // 1, 2 — the first lambda's own copy
+print(get());            // 0    — the second lambda still holds its creation-time snapshot
+
+// 2. A lambda's writes never reach the frame that created it.
+fun Run() { var n = 0; var f = fun() { n = 5; }; f(); print(n); }   // prints 0, not 5
+
+// 3. A lambda cannot name itself: the capture is taken before the assignment completes.
+fun MakeBroken()
+{
+    var self = 0;
+    self = fun(var k) { if (k <= 1) return 1; return self(k - 1); };   // `self` captured as 0
+    return self;                                                      // "invalid function call"
+}
+```
+
+Case 1 usually shows up in callbacks that count. `m.sort(fun(var a, var b) { hits = hits + 1; ... })`
+accumulates into the comparator's own capture storage; `hits` in the enclosing function never moves.
+
+For shared mutable state — and for recursion — capture a container instead. The capture copies the
+*reference*, so every holder sees the same map or list:
+
+```cpp
+fun MakePair()
+{
+    var state = { "n" : 0 };
+    return [ fun() { state["n"] = state["n"] + 1; return state["n"]; },
+             fun() { return state["n"]; } ];          // reads 2 after two increments
+}
+
+fun MakeFact()
+{
+    var box = {};
+    box["f"] = fun(var k) { if (k <= 1) return 1; return k * box.f(k - 1); };
+    return box["f"];                                  // f(5) == 120
+}
+```
+
+The recursion idiom stores the lambda in the very container it captured, which is a reference cycle —
+see *Memory: cycles and pool pages are collected separately* below.
 
 `FunctionHandle` is no longer a POD type because captured handles retain an internal reference. Copy, move,
 and destroy it normally; do not put it in a `union`, `memcpy` it, or serialize its object bytes. Runtime and
@@ -295,6 +354,13 @@ chooses when to examine those candidates with `CollectCycles`.
 `CollectCycles` leaks every cycle its scripts create, silently and forever. Put it in the frame loop
 next to your other per-frame housekeeping. A host with no frame (a server, a tool) still needs a
 periodic call: once per server tick, not once per script instance.
+
+Captured lambdas are part of the same graph: a lambda's capture storage holds container children
+just like a map value does. `m["cb"] = fun() { return m["n"]; }` is a cycle in exactly the way
+`m["self"] = m` is, and so is the `box["f"] = fun(...) { ... box.f(...) ... }` recursion idiom.
+Passing a capturing lambda to `coroutine.create` extends such a cycle to the coroutine, and a leaked
+coroutine pins an entire execution context (a 50K-entry var stack by default) rather than one small
+pool slot — a missed `CollectCycles` costs orders of magnitude more there than with plain containers.
 
 `TrimMemory` is a separate, optional concern: returning already-empty pool pages to the OS. It never
 examines or collects cycles.
@@ -582,18 +648,13 @@ All compiler and VM changes are covered by the 2,785-case regression suite (`con
 
 ### Neo Script reserved words
 	- var: declares a variable
-	- fun: declares a function
+	- fun: declares a function. `fun(...) { ... }` without a name is an anonymous function; it
+	  captures the enclosing function's locals **by value** — see "Captured anonymous functions"
+	  in the Host API section for what that does and does not share
 	- import: imports a module from the Lib directory
 	- export: makes a variable or function available to C++
-	- tostring (x): converts x to a string
-	- toint (x): converts x to an integer
-	- tofloat (x): converts x to a floating-point value
-	- tosize (x): 
-		x is a string: returns its length
-		x is a list, map, or set: returns its element count
-		otherwise: returns 0
-	- totype (x): returns the container type of x as a string
-	- sleep (x): pauses execution for x milliseconds; 1000 is one second
+	- tostring (x) / toint (x) / tofloat (x) / tosize (x) / type (x) / sleep (x):
+	  built-in intrinsics. Return types and exact semantics: docs/API.md section 1
 	- return [x]: returns from the current function, optionally with x
 	- break: exits the current loop
 	- continue: starts the next loop iteration
@@ -672,57 +733,11 @@ Rules:
 	- If the switch value is a type that cannot be a case key (float, map, list, vector, null, ...),
 	  the `default` branch is taken.
 
-### Built-in system function use system.
-	## Basic
-	- print (x): prints x as a string
-
-	## system
-	- clock (): returns the current time
-	- load (): compiles and loads a script, then returns it as a module
-	- pcall (x): executes module x
-	- meta(x, y): binds meta function y to variable x
-	- set(x): converts list x to a set
-	
-	## coroutine
-	- create (): creates and returns a coroutine in suspended mode
-	- resume (x): activates coroutine x
-	- status (x): returns the coroutine status as a string
-	- close ([x]): closes a coroutine
-
-	## math
-	- abs (x): returns the absolute value of x
-	- acos (x), asin (x), atan (x), ceil (x), floor (x), round (x)
-	- sin (x), cos (x), tan (x), log (x), log10 (x), exp (x)
-	- pow (x, y), sqrt (x), srand (x), rand (): equivalent to their C library counterparts
-	- deg (x): converts radians to degrees
-	- radian (x): converts degrees to radians
-
-	## string
-	- len (): returns the string length
-	- find (x): returns the index of string x
-	- sub (x, y): returns y characters beginning at index x
-	- upper (): converts lowercase English letters to uppercase
-	- lower (): converts uppercase English letters to lowercase
-	- trim (): removes whitespace from both ends of a string
-	- ltrim (): removes leading whitespace
-	- rtrim (): removes trailing whitespace
-	- replace (x, y): replaces x with y
-	- split (x): splits on x and returns a list
-
-	## list
-	- len (): returns the number of list items
-	- resize (x): changes the list item count
-	- append (x, [y]): appends x; y optionally specifies the position
-
-	## map
-	- len (): returns the number of map items
-	- reserve (x): reserves capacity for x items without changing the item count
-	- sort (): sorts map values
-	- keys(): returns map keys in a list
-	- values(): returns map values in a list
-
-	## set
-	- len (): returns the number of set items
+### Built-in functions
+Every function a script can call - `print`, the `math` / `system` / `coroutine` modules, and the
+`string` / `list` / `map` / `async` method sets - is listed with exact signatures and argument
+types in [`docs/API.md`](docs/API.md). That file is generated from `NeoSource/NeoLib.cpp`, so it
+stays complete; this one deliberately does not repeat it.
 
 ### Comment
 	- //: single-line comment

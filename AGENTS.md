@@ -66,4 +66,6 @@ NDK clang : %LOCALAPPDATA%\Android\Sdk\ndk\25.1.8937393\toolchains\llvm\prebuilt
 ## 문서
 
 - `ReadMe.md` — 언어 문법, 호스트 API, 성능 결과와 측정 방법
+- `docs/API.md` — 스크립트가 부를 수 있는 모든 함수(math/system/coroutine, string/list/map/async 메서드, 키워드 intrinsic)
+  — 라이브러리를 고치면 `NeoLib.cpp` 기준으로 같이 갱신한다
 - `docs/` — 보조 자료
