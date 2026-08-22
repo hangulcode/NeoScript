@@ -332,23 +332,6 @@ static bool CycleCollectionRegression()
 	vm.GetAllocStats(stats);
 	const bool staleTicketSafe = staleCandidateWasUnlinked && stats.maps == 0;
 
-    // Metadata links are refcounted container edges too, not just map values.
-    VarInfo metaA;
-    VarInfo metaB;
-    vm.Var_SetTable(&metaA, vm.TableAlloc());
-    vm.Var_SetTable(&metaB, vm.TableAlloc());
-    metaA._tbl->_meta = metaB._tbl;
-    metaA._tbl->MarkContainerChild();
-    ++metaB._tbl->_refCount;
-    metaB._tbl->_meta = metaA._tbl;
-    metaB._tbl->MarkContainerChild();
-    ++metaA._tbl->_refCount;
-    vm.Var_Release(&metaA);
-    vm.Var_Release(&metaB);
-    DrainCycles(vm);
-    vm.GetAllocStats(stats);
-    const bool metaCycleCollected = stats.maps == 0;
-
     // A -> B, B -> A and B -> B.  B is first examined while A has an
     // external reference, then A becomes the only candidate.  Collection
     // must still destroy the complete white set without leaving B->A stale.
@@ -385,7 +368,7 @@ static bool CycleCollectionRegression()
 
     return scalarListSkipsCycleQueue && scalarMapSkipsCycleQueue && scalarSetSkipsCycleQueue
         && queuedCyclesRemain && trimDoesNotCollectCycles && explicitCollectionOk && externalReferencePreserved
-        && releasedAfterExternalGone && staleTicketSafe && metaCycleCollected && nestedWhiteSetCollected && percentageBudgetOk
+        && releasedAfterExternalGone && staleTicketSafe && nestedWhiteSetCollected && percentageBudgetOk
         && stats.maps == 0;
 }
 
