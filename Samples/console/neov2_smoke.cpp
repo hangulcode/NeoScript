@@ -219,6 +219,7 @@ int NeoScriptV2Smoke()
         "export fun nestedChildFailure() { var z = 0; return 1 / z; }\n"
         "export fun queueCounter(var start) { var value = start; Host.defer(fun() { value = value + 1; return value; }); }\n"
         "export fun queueNamedCallCounter(var start) { var value = start; Host.defer(fun() { value = value + 1; namedClosureChild(value); return value; }); }\n"
+        "export fun queueNestedClosureCounter(var start) { var value = start; Host.defer(fun() { value = value + 1; var child = fun() { return value; }; child(); return value; }); }\n"
         "export fun queueStaticReturnCounter(var start) { var value = start; Host.defer(fun() { value = value + 1; if (value == 11) return \"FIRST\"; return \"NEXT\"; }); }\n"
         "export fun queueNestedFailureClosure() { var tag = \"KEEP-ME\"; var n = 0; Host.defer(fun() { n = n + 1; Host.nestedFailureOnce(); return tag .. \"/\" .. n; }); }\n"
         "export fun queueStringCounter() { var text = \"a\"; Host.defer(fun() { text = text + \"x\"; return text.len(); }); }\n"
@@ -275,6 +276,19 @@ int NeoScriptV2Smoke()
         CallResult two = rt->Call(a, g_deferredCallback).invokeR();
         Check(one.ok() && one.asInt() == 11, "closure named call: first callback restores outer closure");
         Check(two.ok() && two.asInt() == 12, "closure named call: second callback preserves updated capture");
+        g_deferredCallback = FunctionHandle();
+    }
+
+    // 캡처 람다가 다시 캡처 람다를 호출하면, 자식 RET 뒤에 부모 보관함을
+    // 복원해야 바깥 RET_CLOSURE가 변경된 value를 다음 호출까지 유지한다.
+    {
+        g_deferredCallback = FunctionHandle();
+        Check(rt->Call(a, "queueNestedClosureCounter").argInt(10).invoke() == RunStatus::Completed,
+            "nested closure call: script creates retained lambda");
+        CallResult one = rt->Call(a, g_deferredCallback).invokeR();
+        CallResult two = rt->Call(a, g_deferredCallback).invokeR();
+        Check(one.ok() && one.asInt() == 11, "nested closure call: child return restores parent closure");
+        Check(two.ok() && two.asInt() == 12, "nested closure call: restored parent capture persists");
         g_deferredCallback = FunctionHandle();
     }
 

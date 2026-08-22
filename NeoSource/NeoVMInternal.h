@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include <limits>
 #include <thread>
 #include <time.h>
 
@@ -268,10 +269,27 @@ struct SCallStack
 	VarInfo* _pReturnValue;
 	// async.wait가 callback 실행 전에 기록한 native 반환값을 callback return 직전에 복원한다.
 	VarInfo* _pAsyncWaitReturnValue = nullptr;
-	// 이 프레임을 실행하던 캡처 함수. 호출 프레임 전환 중에도 보존해
-	// return/error에서 캡처 지역의 변경분을 원래 ClosureInfo로 되돌린다.
-	ClosureInfo* _activeClosure = nullptr;
 };
+
+// 일반 호출 프레임에는 closure 포인터를 넣지 않는다. 캡처 함수가 다른 함수를
+// 호출할 때만 이 보조 스택에 부모 프레임을 보관한다. 반환 IP의 부호 비트가
+// 이 항목을 꺼내 복원해야 함을 표시하므로, 일반 RET는 추가 필드 load 없이
+// 이미 읽는 IP만 검사하면 된다.
+struct SClosureCallState
+{
+	ClosureInfo* _closure = nullptr;
+	int		_iSP_Vars = 0;
+};
+
+static constexpr int NEO_CALLSTACK_CLOSURE_RETURN_FLAG = std::numeric_limits<int>::min();
+NEOS_FORCEINLINE bool IsClosureCallReturnOffset(int offset)
+{
+	return (offset & NEO_CALLSTACK_CLOSURE_RETURN_FLAG) != 0;
+}
+NEOS_FORCEINLINE int GetCallReturnCodeOffset(int offset)
+{
+	return offset & ~NEO_CALLSTACK_CLOSURE_RETURN_FLAG;
+}
 
 enum COROUTINE_STATE
 {
@@ -343,6 +361,7 @@ struct CoroutineInfo : AllocBase
 
 	std::vector<VarInfo>	m_sVarStack;
 	SimpleVector<SCallStack>	m_sCallStack;
+	SimpleVector<SClosureCallState>	m_sClosureCallStack;
 
 	// 파괴 재진입 방지와 순환 후보 intrusive FIFO 링크. 실행 스택의 저장 경로가
 	// 여러 곳에 분산돼 있어 대여 시 _mayContainContainerChild는 보수적으로 true로 둔다.
@@ -422,6 +441,8 @@ struct NeoExecContextPool
 		p->_sub_state = COROUTINE_SUB_NORMAL;
 		p->m_sCallStack.reserve(1000);
 		p->m_sCallStack.clear();
+		p->m_sClosureCallStack.reserve(8);
+		p->m_sClosureCallStack.clear();
 		p->m_sVarStack.resize(_varStackSize);
 		if (cold)
 		{
@@ -445,6 +466,7 @@ struct NeoExecContextPool
 		{
 			n += (long long)p->m_sVarStack.capacity() * sizeof(VarInfo);
 			n += (long long)p->m_sCallStack.capacity() * sizeof(SCallStack);
+			n += (long long)p->m_sClosureCallStack.capacity() * sizeof(SClosureCallState);
 			n += (long long)p->m_sAsyncResumeCodePtrs.capacity() * sizeof(AsyncResumeInfo);
 		}
 		return n;

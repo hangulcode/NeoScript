@@ -181,8 +181,10 @@ private:
 	std::vector<VarInfo>*	m_pVarStack_Base;
 	VarInfo*				m_pVarStack_Pointer;
 	SimpleVector<SCallStack>* m_pCallStack;
+	SimpleVector<SClosureCallState>* m_pClosureCallStack;
 	// 현재 실행 프레임이 어떤 값 캡처 closure에서 시작됐는지. 호출 중에는
-	// 독립 참조 하나를 잡고, return/error에서 캡처 슬롯 변경을 동기화한 뒤 푼다.
+	// 보조 closure 스택이 부모 프레임을 보존하고, return/error에서 캡처 슬롯
+	// 변경을 동기화한 뒤 실행 보유 참조를 푼다.
 	ClosureInfo* m_pActiveClosure = nullptr;
 
 	std::vector<VarInfo>*	m_pVarGlobal;

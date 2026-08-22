@@ -259,13 +259,15 @@ NEOS_FORCEINLINE bool handle_RETURN_impl(VarInfo* pSrc) {
     if (callStack._pAsyncWaitReturnValue != nullptr)
         Var_SetBool(callStack._pAsyncWaitReturnValue, callStack._asyncWaitReturnValue);
 
-    SetCodePtr(callStack._iReturnOffset);
+	const int returnOffset = callStack._iReturnOffset;
+	SetCodePtr(GetCallReturnCodeOffset(returnOffset));
 	_iSP_Vars = callStack._iSP_Vars;
 	SetStackPointer(_iSP_Vars);
 	_iSP_VarsMax = callStack._iSP_VarsMax;
-	if (callStack._activeClosure != nullptr)
+	if (IsClosureCallReturnOffset(returnOffset))
 	{
-		m_pActiveClosure = callStack._activeClosure;
+		SClosureCallState& state = m_pClosureCallStack->pop_back();
+		m_pActiveClosure = state._closure;
 		if (m_pCur)
 			m_pCur->_activeClosure = m_pActiveClosure;
 	}
