@@ -181,6 +181,9 @@ private:
 	std::vector<VarInfo>*	m_pVarStack_Base;
 	VarInfo*				m_pVarStack_Pointer;
 	SimpleVector<SCallStack>* m_pCallStack;
+	// 현재 실행 프레임이 어떤 값 캡처 closure에서 시작됐는지. 호출 중에는
+	// 독립 참조 하나를 잡고, return/error에서 캡처 슬롯 변경을 동기화한 뒤 푼다.
+	ClosureInfo* m_pActiveClosure = nullptr;
 
 	std::vector<VarInfo>*	m_pVarGlobal;
 	VarInfo* m_pVarGlobal_Pointer;
@@ -194,6 +197,7 @@ private:
 
 	void    BindContext(CoroutineInfo* ctx);            // 컨텍스트를 활성 스택으로 바인딩
 	void    CleanupContextVars(CoroutineInfo* ctx, int usedMax);  // 반납 전 VarInfo 참조 정리
+	void    UnwindActiveClosures();                    // return을 거치지 않는 error/cancel 정리
 	void    ReleaseExecution();                         // 최상위+코루틴 컨텍스트 전부 풀로 반납
 	int     RunSettle();                                // Run() 후 완료/정지/에러 판정 (NeoExecStatus)
 	void    PoisonOutOfMemory() noexcept { m_bOutOfMemoryPoisoned = true; }
@@ -226,7 +230,7 @@ private:
 	virtual void EndHostCall(NeoHostCallBegin begin);
 	virtual void BeginNestedScriptCall();
 	virtual void EndNestedScriptCall();
-	virtual int RunHostCall(int iFunctionID, std::vector<VarInfo>& _args);
+	virtual int RunHostCall(int iFunctionID, std::vector<VarInfo>& _args, VarInfo* closureValue = nullptr);
 	virtual bool CancelExecution();
 
 	template<bool TIMEOUT, bool DEBUG>
@@ -347,6 +351,9 @@ private:
 	int Sleep(int iTimeout, VarInfo* v1);
 	void Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue = NULL);
 	void Call(int n1, int n2, VarInfo* pReturnValue = NULL);
+	void Call(ClosureInfo* closure, int n2, VarInfo* pReturnValue = NULL);
+	void SyncActiveClosure();
+	void SyncClosureAtFrame(ClosureInfo* closure, int stackBase);
 	bool Call_MetaTable(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, VarInfo* b);
 	bool Call_MetaTable2(VarInfo* pTable, std::string&, VarInfo* a, VarInfo* b);
 //	bool Call_MetaTableI(VarInfo* pTable, std::string&, VarInfo* r, VarInfo* a, int b);
@@ -439,6 +446,7 @@ public:
 	}
 
 	VarInfo* testCall(int iFID, VarInfo* args, int argc);
+	VarInfo* testCall(VarInfo* function, VarInfo* args, int argc);
 	bool StartCoroutione(int argSP_Vars, int n3);
 
 	void SetError(const char* pErrMsg);
@@ -487,6 +495,9 @@ public:
 			break;
 		case VAR_ASYNC:
 			++d->_async->_refCount;
+			break;
+		case VAR_CLOSURE:
+			++d->_closure->_refCount;
 			break;
 		default:
 			break;

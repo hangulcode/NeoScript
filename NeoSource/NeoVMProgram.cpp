@@ -204,6 +204,28 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 			return false;
 		}
 		ar >> fun._codePtr >> fun._argsCount >> fun._localTempMax >> fun._localVarCount >> fun._funType;
+		if (fun._argsCount < 0 || fun._localTempMax < 0 || fun._localVarCount < 0)
+		{
+			SetLoadError(err, "Invalid function local counts");
+			return false;
+		}
+		u16 captureCount = 0;
+		ar >> captureCount;
+		if (captureCount > (u16)fun._localVarCount)
+		{
+			SetLoadError(err, "Invalid function closure capture count");
+			return false;
+		}
+		fun._captures.resize(captureCount);
+		for (u16 c = 0; c < captureCount; ++c)
+		{
+			ar >> fun._captures[c].first >> fun._captures[c].second;
+			if (fun._captures[c].first <= 0 || fun._captures[c].second <= 0)
+			{
+				SetLoadError(err, "Invalid function closure capture slot");
+				return false;
+			}
+		}
 		if (iID < 0 || iID >= header._iFunctionCount)
 		{
 			SetLoadError(err, "Invalid function id");
@@ -220,7 +242,73 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 		}
 
 		fun._localAddCount = 1 + fun._argsCount + fun._localVarCount + fun._localTempMax;
+		if (fun._localAddCount <= 0)
+		{
+			SetLoadError(err, "Invalid function local range");
+			return false;
+		}
+		for (const std::pair<short, short>& capture : fun._captures)
+		{
+			if (capture.second >= fun._localAddCount)
+			{
+				SetLoadError(err, "Invalid function closure local slot");
+				return false;
+			}
+		}
 		functions[iID] = fun;
+	}
+
+	// FMOV가 읽는 capture sourceSlot은 생성한 함수(직속 부모)의 스택 기준이다.
+	// 이미지가 손상돼 슬롯/함수 번호가 어긋나면 호출 전에 거부해 프레임 밖 읽기나
+	// 쓰기로 이어지지 않게 한다.
+	std::vector<std::pair<int, int>> functionStarts;
+	functionStarts.reserve(functions.size());
+	for (int i = 0; i < (int)functions.size(); ++i)
+	{
+		const int codePtr = functions[i]._codePtr;
+		if (codePtr < 0 || codePtr > header._iCodeSize ||
+			(codePtr % (int)sizeof(SVMOperation)) != 0)
+		{
+			SetLoadError(err, "Invalid function code offset");
+			return false;
+		}
+		functionStarts.push_back(std::make_pair(codePtr / (int)sizeof(SVMOperation), i));
+	}
+	std::sort(functionStarts.begin(), functionStarts.end());
+	std::vector<int> codeOwners(code.size(), -1);
+	for (size_t i = 0; i < functionStarts.size(); ++i)
+	{
+		const int begin = functionStarts[i].first;
+		const int end = (i + 1 < functionStarts.size()) ? functionStarts[i + 1].first : (int)code.size();
+		if (begin > end)
+		{
+			SetLoadError(err, "Invalid function code range");
+			return false;
+		}
+		for (int opIndex = begin; opIndex < end; ++opIndex)
+			codeOwners[opIndex] = functionStarts[i].second;
+	}
+	for (int opIndex = 0; opIndex < (int)code.size(); ++opIndex)
+	{
+		const SVMOperation& op = code[opIndex];
+		int functionID = -1;
+		if (op.op == NOP_FMOV1) functionID = op.n2;
+		else if (op.op == NOP_FMOV2) functionID = op.n3;
+		else continue;
+		if (functionID < 0 || functionID >= (int)functions.size() || codeOwners[opIndex] < 0)
+		{
+			SetLoadError(err, "Invalid closure function reference");
+			return false;
+		}
+		const SFunctionTable& parent = functions[codeOwners[opIndex]];
+		for (const std::pair<short, short>& capture : functions[functionID]._captures)
+		{
+			if (capture.first >= parent._localAddCount)
+			{
+				SetLoadError(err, "Invalid closure source slot");
+				return false;
+			}
+		}
 	}
 
 	for (int i = 0; i < header._iExportVarCount; i++)

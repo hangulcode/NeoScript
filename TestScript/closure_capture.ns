@@ -1,0 +1,34 @@
+fun MakeCounter(var start)
+{
+    var value = start;
+    return fun()
+    {
+        print(value);
+        value = value + 1;
+    };
+}
+
+var first = MakeCounter(10);
+var second = MakeCounter(20);
+
+first();
+first();
+second();
+
+fun MakeNestedCounter(var start)
+{
+    var value = start;
+    return fun()
+    {
+        return fun()
+        {
+            value = value + 1;
+            return value;
+        };
+    };
+}
+
+var makeInner = MakeNestedCounter(30);
+var inner = makeInner();
+print(inner());
+print(inner());

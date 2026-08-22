@@ -12,6 +12,7 @@
 using namespace NeoScript;
 
 static int g_fail = 0;
+static FunctionHandle g_deferredCallback;
 static void Check(bool cond, const char* msg)
 {
     printf(cond ? "  ok  : %s\n" : "  FAIL: %s\n", msg);
@@ -76,6 +77,12 @@ static bool HostMethod(CallContext& ctx, StringView method)
         // 네이티브 실패 보고: fail() 로 사유를 남기고 반드시 false 반환.
         ctx.fail(4242, "host said no");
         return false;
+    }
+    if (m == "defer")
+    {
+        g_deferredCallback = ctx.argFunction(0);
+        ctx.retBool(static_cast<bool>(g_deferredCallback));
+        return static_cast<bool>(g_deferredCallback);
     }
     if (m == "spawn")
     {
@@ -191,7 +198,14 @@ int NeoScriptV2Smoke()
         "export fun callBoom() { return Host.boomHost(); }\n"                            // 10 (네이티브 fail)
         "export fun vec2() { return Host.vec2(); }\n"                                    // 11
         "export fun badNativeRead() { return Host[3]; }\n"                               // 12
-        "export fun badNativeWrite() { Host[3] = 1; }\n";                                 // 13
+        "export fun badNativeWrite() { Host[3] = 1; }\n"                                  // 13
+        "fun closureExplode() { return Host.boomHost(); }\n"
+        "export fun queueCounter(var start) { var value = start; Host.defer(fun() { value = value + 1; return value; }); }\n"
+        "export fun queueErrorCounter(var start) { var value = start; Host.defer(fun() { value = value + 1; if (value == 11) closureExplode(); return value; }); }\n"
+        "export fun queueSleepCounter(var start) { var value = start; Host.defer(fun() { value = value + 1; if (value == 11) { sleep(1); } return value; }); }\n"
+        "export fun nestedCapture() { var v = \"V-outer\"; var mid = fun() { var pad1 = 111; var pad2 = 222; return fun() { return v; }; }; var inner = mid(); return inner(); }\n"
+        "export fun selfCaptureSource() { var f = \"some-long-heap-string-value\"; f = fun() { return f; }; return f(); }\n"
+        "export fun sortCapture() { var direction = 1; var m = { 5, 3, 7 }; m.sort(fun(var a, var b) { return a * direction > b * direction; }); return m[0] * 100 + m[1] * 10 + m[2]; }\n";
     // ※ 새 함수는 반드시 뒤에 덧붙일 것 — 아래 디버거 테스트가 line 3(compute 본문)에 BP 를 건다.
 
     CompileDesc cd;
@@ -214,6 +228,97 @@ int NeoScriptV2Smoke()
         RunStatus st = call.argInt(10).argInt(20).invoke();
         Check(st == RunStatus::Completed, "compute status Completed");
         Check(call.retInt() == 30, "Host.add(10,20) == 30");
+    }
+
+    {
+        g_deferredCallback = FunctionHandle();
+        Check(rt->Call(a, "queueCounter").argInt(10).invoke() == RunStatus::Completed,
+            "closure callback: script creates and host retains lambda");
+        Check(static_cast<bool>(g_deferredCallback), "closure callback: FunctionHandle is valid");
+        CallResult one = rt->Call(a, g_deferredCallback).invokeR();
+        CallResult two = rt->Call(a, g_deferredCallback).invokeR();
+        Check(one.ok() && one.asInt() == 11, "closure callback: first delayed call sees captured 10");
+        Check(two.ok() && two.asInt() == 12, "closure callback: second delayed call preserves updated capture");
+        g_deferredCallback = FunctionHandle();
+    }
+
+    {
+        CallResult nested = rt->Call(a, "nestedCapture").invokeR();
+        Check(nested.ok() && std::string(nested.asString().data(), nested.asString().size()) == "V-outer",
+            "closure nested capture uses each direct parent frame slot");
+        CallResult self = rt->Call(a, "selfCaptureSource").invokeR();
+        Check(self.ok() && std::string(self.asString().data(), self.asString().size()) == "some-long-heap-string-value",
+            "closure creation copies alloc capture before replacing destination");
+        CallResult sorted = rt->Call(a, "sortCapture").invokeR();
+        Check(sorted.ok() && sorted.asInt() == 753,
+            "map.sort invokes captured closure with its stored values");
+    }
+
+    {
+        const char* coroutineSrc =
+            "import coroutine;\n"
+            "var captured = 0;\n"
+            "export fun closureCoroutine() { var v = 37; var co = coroutine.create(fun() { captured = v; yield; captured = captured + v; }); coroutine.resume(co); coroutine.resume(co); return captured; }\n";
+        CompileDesc coroutineDesc;
+        coroutineDesc.source = coroutineSrc;
+        coroutineDesc.sourceName = "closure_coroutine.ns";
+        CompileResult coroutineProgram = rt->Compile(coroutineDesc);
+        Check(static_cast<bool>(coroutineProgram.program), "coroutine closure: compile");
+        if (coroutineProgram.program)
+        {
+            InstanceHandle coroutineInstance = rt->CreateInstance(coroutineProgram.program);
+            CallResult coroutine = rt->Call(coroutineInstance, "closureCoroutine").invokeR();
+            Check(coroutine.ok() && coroutine.asInt() == 74,
+                "coroutine.create preserves captured closure values across yield/resume");
+            rt->DestroyInstance(coroutineInstance);
+            rt->DestroyProgram(coroutineProgram.program);
+        }
+    }
+
+    // 오류 unwind도 정상 RET처럼 부모 람다 프레임의 변경분을 closure로 반영해야 한다.
+    // closureExplode는 람다 안에서 일반 스크립트 함수를 한 단계 더 호출해, 상위 스택의
+    // active closure 동기화까지 검증한다.
+    {
+        Check(rt->Call(a, "queueErrorCounter").argInt(10).invoke() == RunStatus::Completed,
+            "closure error: script creates retained lambda");
+        CallResult failed = rt->Call(a, g_deferredCallback).invokeR();
+        CallResult after = rt->Call(a, g_deferredCallback).invokeR();
+        Check(!failed.ok(), "closure error: first delayed call fails after increment");
+        Check(after.ok() && after.asInt() == 12, "closure error: unwind preserved captured increment");
+        g_deferredCallback = FunctionHandle();
+    }
+
+    // timeout 모드의 sleep은 컨텍스트를 retain한다. Resume 후에도 active closure가
+    // 살아 있어야 RET가 값을 되쓰고 두 번째 지연 호출이 12를 반환한다.
+    {
+        Check(rt->Call(a, "queueSleepCounter").argInt(10).invoke() == RunStatus::Completed,
+            "closure sleep: script creates retained lambda");
+        Invocation suspended = rt->Call(a, g_deferredCallback);
+        suspended.timeout(10);
+        Check(suspended.invoke() == RunStatus::Suspended, "closure sleep: delayed call suspends");
+        ::Sleep(5);
+        Check(rt->Resume(a) == RunStatus::Completed, "closure sleep: resume completes closure");
+        Invocation afterResume = rt->Call(a, g_deferredCallback);
+        afterResume.timeout(10);
+        Check(afterResume.invoke() == RunStatus::Completed && afterResume.retInt() == 12,
+            "closure sleep: resume preserved capture for next delayed call");
+        g_deferredCallback = FunctionHandle();
+    }
+
+    // Cancel도 RET를 밟지 않으므로 같은 정리가 필요하다. 취소 직전의 value=11을
+    // closure에 동기화해야 다음 호출이 12로 이어진다.
+    {
+        Check(rt->Call(a, "queueSleepCounter").argInt(10).invoke() == RunStatus::Completed,
+            "closure cancel: script creates retained lambda");
+        Invocation suspended = rt->Call(a, g_deferredCallback);
+        suspended.timeout(10);
+        Check(suspended.invoke() == RunStatus::Suspended, "closure cancel: delayed call suspends");
+        Check(rt->Cancel(a), "closure cancel: cancels suspended closure");
+        Invocation afterCancel = rt->Call(a, g_deferredCallback);
+        afterCancel.timeout(10);
+        Check(afterCancel.invoke() == RunStatus::Completed && afterCancel.retInt() == 12,
+            "closure cancel: capture survives cancel cleanup");
+        g_deferredCallback = FunctionHandle();
     }
 
     // per-instance userData (BindObject)
@@ -390,6 +495,7 @@ int NeoScriptV2Smoke()
             "var counter = 5;\n"
             "export fun bump() { counter = counter + 1; return counter; }\n"
             "export fun get() { return counter; }\n"
+            "export fun holdLambda() { var n = 10; Host.defer(fun() { return n; }); }\n"
             "export fun uid2() { return Host.uid(); }\n";
         CompileDesc rcd; rcd.source = rsrc; rcd.sourceName = "reset.ns";
         CompileResult rcr = rt->Compile(rcd);
@@ -399,10 +505,16 @@ int NeoScriptV2Smoke()
             InstanceHandle r = rt->CreateInstance(rcr.program);
             rt->BindObject(r, "Host", reinterpret_cast<void*>(static_cast<intptr_t>(55)));
             FunctionHandle getFn = rt->FindFunction(rcr.program, "get");
+            g_deferredCallback = FunctionHandle();
+            Check(rt->Call(r, "holdLambda").invoke() == RunStatus::Completed && static_cast<bool>(g_deferredCallback),
+                "reset: retained closure FunctionHandle valid before reset");
+            FunctionHandle capturedBeforeReset = g_deferredCallback;
             rt->Call(r, "bump").invoke();
             Check(rt->Call(r, "get").invokeR().asInt() == 6, "reset: global mutated to 6");
             Check(rt->ResetInstance(r), "reset: ResetInstance succeeded");
             Check(rt->IsAlive(r), "reset: InstanceHandle still valid");
+            Check(!static_cast<bool>(capturedBeforeReset), "reset: captured closure FunctionHandle invalidated safely");
+            g_deferredCallback = FunctionHandle();
             CallResult after = rt->Call(r, "get").invokeR();
             Check(after.ok() && after.asInt() == 5, "reset: global back to initial 5");
             CallResult viaHandle = rt->Call(r, getFn).invokeR();

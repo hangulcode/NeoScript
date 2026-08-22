@@ -36,6 +36,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 	callStack._pReturnValue = pReturnValue;
 	callStack._pAsyncWaitReturnValue = nullptr;
 	callStack._asyncWaitReturnValue = false;
+	callStack._activeClosure = m_pActiveClosure;
 	m_pCallStack->push_back(callStack);
 #else
 	SCallStack& callStack = m_pCallStack->push_back();
@@ -45,6 +46,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 	callStack._pReturnValue = pReturnValue;
 	callStack._pAsyncWaitReturnValue = nullptr;
 	callStack._asyncWaitReturnValue = false;
+	callStack._activeClosure = m_pActiveClosure;
 #endif
 
 	SetCodePtr(fun._codePtr);
@@ -53,5 +55,8 @@ NEOS_FORCEINLINE void CNeoVMWorker::Call(int n1, int n2, VarInfo* pReturnValue)
 	_iSP_VarsMax = _iSP_Vars + fun._localAddCount;
 	if (_iSP_Vars_Max2 < _iSP_VarsMax)
 		_iSP_Vars_Max2 = _iSP_VarsMax;
+	// 일반 함수 호출은 캡처 환경을 갖지 않는다. 부모 closure의 active 참조는
+	// callStack에 보관돼 return/error에서 다시 복원된다.
+	m_pActiveClosure = nullptr;
 
 }

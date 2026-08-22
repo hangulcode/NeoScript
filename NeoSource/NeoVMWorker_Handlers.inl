@@ -62,14 +62,40 @@ NEOS_NOINLINE bool handle_SLEEP(const SVMOperation& OP) {
     return false; // Continue RunInternal
 }
 
+NEOS_FORCEINLINE void set_script_function_value(VarInfo* dst, int functionIndex) {
+    const SFunctionTable& fun = Functions()[functionIndex];
+    if (fun._captures.empty()) {
+        Var_SetFun(dst, functionIndex);
+        return;
+    }
+
+    ClosureInfo* closure = GetVM()->ClosureAlloc(functionIndex, (int)fun._captures.size());
+    for (size_t i = 0; i < fun._captures.size(); ++i)
+    {
+        Move(&closure->_captures[i], GetVarPtr_L(fun._captures[i].first));
+        if (closure->_captures[i].IsContainerType())
+            closure->_cycleState._mayContainContainerChild = true;
+    }
+
+    // f = fun() { return f; } 처럼 목적지와 캡처 원본이 같은 경우가 있다.
+    // 캡처를 먼저 복사해야 기존 alloc 값을 지우고 난 뒤 null을 보관하지 않는다.
+    if (dst->IsAllocType())
+        Var_Release(dst);
+    dst->SetType(VAR_CLOSURE);
+    dst->_closure = closure;
+    ++closure->_refCount;
+}
+
 NEOS_FORCEINLINE bool handle_FMOV1(const SVMOperation& OP) {
-    Var_SetFun(GetVarPtrF1(OP), OP.n2);
+    set_script_function_value(GetVarPtrF1(OP), OP.n2);
     return false;
 }
 
 NEOS_FORCEINLINE bool handle_FMOV2(const SVMOperation& OP) {
-    _funA3._fun_index = OP.n3;
-    CltInsert(GetVarPtrF1(OP), GetVarPtr2(OP), &_funA3);
+    VarInfo fun;
+    set_script_function_value(&fun, OP.n3);
+    CltInsert(GetVarPtrF1(OP), GetVarPtr2(OP), &fun);
+    Var_Release(&fun);
     return false;
 }
 
@@ -121,6 +147,11 @@ NEOS_FORCEINLINE bool handle_PTRCALL_impl(const SVMOperation& OP, VarInfo* pVar1
                 Call(pVarMeta->_fun_index, n3);
                 break;
             }
+            if (pVarMeta->GetType() == VAR_CLOSURE)
+            {
+                Call(pVarMeta->_closure, n3);
+                break;
+            }
         }
         CallNative(GetVM()->_funLib_Map, pVar1, pFunName->_str, n3);
         break;
@@ -134,6 +165,10 @@ NEOS_FORCEINLINE bool handle_PTRCALL_impl(const SVMOperation& OP, VarInfo* pVar1
     case VAR_ASYNC:
         pFunName = pFunNamePre ? pFunNamePre : GetVarPtr2(OP);
         CallNative(GetVM()->_funLib_Async, pVar1, pFunName->_str, n3);
+        break;
+    case VAR_CLOSURE:
+        if ((OP.argFlag & NEOS_ARG_N2_LOCAL) == 0 && -1 == OP.n2)
+            Call(pVar1->_closure, OP.n3);
         break;
     default:
         SetError(RTE_CALL_INVALID);
@@ -184,6 +219,18 @@ NEOS_FORCEINLINE bool handle_NATIVECALL(const SVMOperation& OP) {
 
 // 본문 공용. pSrc = 반환값 슬롯(NORESULT 면 nullptr).
 NEOS_FORCEINLINE bool handle_RETURN_impl(VarInfo* pSrc) {
+	// 값 캡처 closure는 호출 프레임의 숨은 지역 슬롯에서 실행된다. 종료 직전에
+	// 변경분을 ClosureInfo로 되돌려 다음 호출에서도 같은 람다 상태가 이어지게 한다.
+	if (m_pActiveClosure != nullptr)
+	{
+		SyncActiveClosure();
+		if (m_pCur && m_pCur->_activeClosure == m_pActiveClosure)
+			m_pCur->_activeClosure = nullptr;
+		VarInfo active(VAR_CLOSURE);
+		active._closure = m_pActiveClosure;
+		m_pActiveClosure = nullptr;
+		Var_Release(&active);
+	}
     if (m_iBreakingCallStack == (int)m_pCallStack->size())
     {
         if (pSrc == nullptr)
@@ -223,7 +270,10 @@ NEOS_FORCEINLINE bool handle_RETURN_impl(VarInfo* pSrc) {
     SetCodePtr(callStack._iReturnOffset);
     _iSP_Vars = callStack._iSP_Vars;
     SetStackPointer(_iSP_Vars);
-    _iSP_VarsMax = callStack._iSP_VarsMax;
+	_iSP_VarsMax = callStack._iSP_VarsMax;
+	m_pActiveClosure = callStack._activeClosure;
+	if (m_pCur)
+		m_pCur->_activeClosure = m_pActiveClosure;
     return false; // break, continue loop
 }
 
@@ -376,20 +426,28 @@ NEOS_NOINLINE bool handle_IDLE(const SVMOperation& OP) {
         if (!EnsureStackRange(_iSP_VarsMax, 2))
         {
             GetVM()->Var_Release(&p->_LockReferance);
+			GetVM()->Var_Release(&p->_callback);
 			// EnsureStackRange redirected execution to the error opcode.
 			// Continue the loop so RunInternal reports the VM error.
             return false;
         }
         Var_SetBool(GetStackFromBase(_iSP_VarsMax + 1), p->_success);
         Var_SetStringA(GetStackFromBase(_iSP_VarsMax + 2), p->_resultValue);
-        Call(p->_fun_index, 2);
+		VarInfo callback;
+		Move_DestNoRelease(&callback, &p->_callback);
+		if (callback.GetType() == VAR_CLOSURE)
+			Call(callback._closure, 2);
+		else
+			Call(callback._fun_index, 2);
         if (resumeInfo.pReturnValue != nullptr && m_pCallStack->size() > 0)
         {
             SCallStack& callStack = (*m_pCallStack)[m_pCallStack->size() - 1];
             callStack._pAsyncWaitReturnValue = resumeInfo.pReturnValue;
             callStack._asyncWaitReturnValue = resumeInfo.returnValue;
         }
-        GetVM()->Var_Release(&p->_LockReferance);
+		GetVM()->Var_Release(&p->_LockReferance);
+		GetVM()->Var_Release(&p->_callback);
+		GetVM()->Var_Release(&callback);
     }
     return false;
 }
@@ -476,7 +534,9 @@ NEOS_NOINLINE bool handle_ERROR(const SVMOperation& OP) {
     }
 
     _isErrorOPIndex = 0;
-    m_pCallStack->clear();
+	// 오류 unwind는 정상 return을 거치지 않는다. 현재/부모 closure의 캡처 슬롯을
+	// 먼저 동기화하고 실행 보유분을 모두 놓는다.
+	UnwindActiveClosures();
     _iSP_Vars = 0;
     SetStackPointer(_iSP_Vars);
 

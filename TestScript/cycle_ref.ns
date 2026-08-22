@@ -204,6 +204,13 @@ fun MetaSelf()
     CycCheck((m + m) == 999, __LINE__);   // meta 가 걸렸음을 연산자로 확인
 }
 
+// map -> closure -> map cycle. The collector must traverse closure captures.
+fun ClosureMapCycle()
+{
+    var m = { "n" : 1 };
+    m["self"] = fun() { return m["n"]; };
+}
+
 fun MetaMutual()
 {
     var a = {};
@@ -560,6 +567,7 @@ export fun CycleLeaking()
     MutualMapMap();
     Cycle3Nodes();
     MetaSelf();
+    ClosureMapCycle();
 }
 
 // ---------------------------------------------------------------------------

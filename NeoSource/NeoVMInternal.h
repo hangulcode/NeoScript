@@ -280,6 +280,9 @@ struct SCallStack
 	// async.wait가 callback 실행 전에 기록한 native 반환값을 callback return 직전에 복원한다.
 	VarInfo* _pAsyncWaitReturnValue = nullptr;
 	bool	 _asyncWaitReturnValue = false;
+	// 이 프레임을 실행하던 캡처 함수. 호출 프레임 전환 중에도 보존해
+	// return/error에서 캡처 지역의 변경분을 원래 ClosureInfo로 되돌린다.
+	ClosureInfo* _activeClosure = nullptr;
 };
 
 enum COROUTINE_STATE
@@ -338,6 +341,10 @@ struct CoroutineInfo : AllocBase
 {
 	//	int	_CoroutineID;
 	int	_fun_index;
+	// coroutine.create가 받은 호출 가능 값. VAR_CLOSURE면 캡처 보관함의 소유권도 가진다.
+	VarInfo	_function;
+	// yield로 컨텍스트를 바꿀 때 현재 값-캡처 프레임 보유분을 함께 옮긴다.
+	ClosureInfo*	_activeClosure = nullptr;
 	COROUTINE_STATE _state;
 	COROUTINE_SUB_STATE _sub_state;
 
@@ -492,6 +499,9 @@ struct AsyncInfo : AllocBase
 	std::vector< std::pair<std::string, std::string> > _headers;
 
 	int			_fun_index;
+	// 일반 함수와 캡처 lambda를 모두 보관한다. _fun_index는 작업 스레드가
+	// 바이트코드를 식별할 때만 쓰고, 호출 시에는 이 값으로 실제 환경을 복원한다.
+	VarInfo		_callback;
 	int			_timeout;
 
 	ASYNC_STATE _state;
@@ -504,6 +514,19 @@ struct AsyncInfo : AllocBase
 
 	// 파괴 재진입 방지와 순환 후보 intrusive FIFO 링크.
 	CycleState<AsyncInfo> _cycleState;
+};
+
+// 값 캡처 익명 함수 인스턴스. _captures는 람다 생성 시 부모의 지역 VarInfo를
+// 정식 AddRef 복사한 값이며, 호출 종료 시 람다 프레임의 capture 슬롯에서 다시
+// 갱신된다. alloc 타입의 자식을 들 수 있어 순환 수집 대상이다.
+struct ClosureInfo : AllocBase
+{
+	CNeoVMImpl*	_pVM = nullptr;
+	int			_funIndex = -1;
+	std::vector<VarInfo> _captures;
+	CycleState<ClosureInfo> _cycleState;
+	ClosureInfo*	_livePrev = nullptr;
+	ClosureInfo*	_liveNext = nullptr;
 };
 
 
@@ -537,6 +560,7 @@ NEOS_FORCEINLINE void Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
 	case VAR_COROUTINE: v1->_cor = v2->_cor; ++v1->_cor->_refCount; break;
 	case VAR_MODULE: v1->_module = v2->_module; ++GetModuleRefCount(v1); break;
 	case VAR_ASYNC: v1->_async = v2->_async; ++v1->_async->_refCount; break;
+	case VAR_CLOSURE: v1->_closure = v2->_closure; ++v1->_closure->_refCount; break;
 	default: break;
 	}
 }

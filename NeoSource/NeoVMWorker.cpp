@@ -342,6 +342,8 @@ VarInfo* CNeoVMWorker::GetType(VarInfo* v1)
 		return &GetVM()->m_sDefaultValue[NDF_MODULE];
 	case VAR_ASYNC:
 		return &GetVM()->m_sDefaultValue[NDF_ASYNC];
+	case VAR_CLOSURE:
+		return &GetVM()->m_sDefaultValue[NDF_FUNCTION];
 	default:
 		break;
 	}
@@ -398,7 +400,7 @@ bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo
 	VarInfo* pVarItem = table->_meta->Find(funName);
 	if (pVarItem == NULL)
 		return false;
-	if (pVarItem->GetType() != VAR_FUN)
+	if (pVarItem->GetType() != VAR_FUN && pVarItem->GetType() != VAR_CLOSURE)
 		return false;
 
 	int n3 = 2;
@@ -411,7 +413,10 @@ bool CNeoVMWorker::Call_MetaTable(VarInfo* pTable, std::string& funName, VarInfo
 	if (_iSP_Vars_Max2 < _iSP_VarsMax + (1 + n3))
 		_iSP_Vars_Max2 = _iSP_VarsMax + (1 + n3);
 
-	Call(pVarItem->_fun_index, n3, r);
+	if (pVarItem->GetType() == VAR_CLOSURE)
+		Call(pVarItem->_closure, n3, r);
+	else
+		Call(pVarItem->_fun_index, n3, r);
 
 	//Move(r, &(*m_pVarStack)[iSP_VarsMax]); ???
 	return true;
@@ -426,7 +431,7 @@ bool CNeoVMWorker::Call_MetaTable2(VarInfo* pTable, std::string& funName, VarInf
 	VarInfo* pVarItem = table->_meta->Find(funName);
 	if (pVarItem == NULL)
 		return false;
-	if (pVarItem->GetType() != VAR_FUN)
+	if (pVarItem->GetType() != VAR_FUN && pVarItem->GetType() != VAR_CLOSURE)
 		return false;
 
 	int n3 = 2;
@@ -439,7 +444,10 @@ bool CNeoVMWorker::Call_MetaTable2(VarInfo* pTable, std::string& funName, VarInf
 	if (_iSP_Vars_Max2 < _iSP_VarsMax + (1 + n3))
 		_iSP_Vars_Max2 = _iSP_VarsMax + (1 + n3);
 
-	Call(pVarItem->_fun_index, n3, NULL);
+	if (pVarItem->GetType() == VAR_CLOSURE)
+		Call(pVarItem->_closure, n3, NULL);
+	else
+		Call(pVarItem->_fun_index, n3, NULL);
 
 	return true;
 }
@@ -843,10 +851,40 @@ void CNeoVMWorker::CleanupContextVars(CoroutineInfo* ctx, int usedMax)
 		Var_Release(&s[i]);
 }
 
+void CNeoVMWorker::UnwindActiveClosures()
+{
+	if (m_pVarStack_Base == nullptr) return;
+	if (m_pActiveClosure != nullptr)
+	{
+		SyncActiveClosure();
+		if (m_pCur && m_pCur->_activeClosure == m_pActiveClosure)
+			m_pCur->_activeClosure = nullptr;
+		VarInfo active(VAR_CLOSURE);
+		active._closure = m_pActiveClosure;
+		m_pActiveClosure = nullptr;
+		Var_Release(&active);
+	}
+	if (m_pCallStack == nullptr) return;
+	for (int i = (int)m_pCallStack->size() - 1; i >= 0; --i)
+	{
+		const SCallStack& callStack = (*m_pCallStack)[i];
+		ClosureInfo* closure = callStack._activeClosure;
+		if (closure == nullptr) continue;
+		SyncClosureAtFrame(closure, callStack._iSP_Vars);
+		VarInfo active(VAR_CLOSURE);
+		active._closure = closure;
+		Var_Release(&active);
+	}
+	m_pCallStack->clear();
+}
+
 // 최상위 실행 종료: 메인 컨텍스트를 풀로 반납한다.
 // (코루틴 컨텍스트는 각자의 VarInfo 가 GC/스택 해제될 때 FreeCoroutine 으로 반납된다.)
 void CNeoVMWorker::ReleaseExecution()
 {
+	// cancel/강제 정리는 RET를 밟지 않으므로, 아직 프레임에 남은 closure 참조와
+	// 캡처 슬롯을 실행 컨텍스트 반납 전에 정리한다.
+	UnwindActiveClosures();
 	if (m_pMainCtx != nullptr && m_pPool != nullptr)
 	{
 		// 정상 완료 시 m_pCur == m_pMainCtx 이며 high-water 는 워커의 _iSP_Vars_Max2.
@@ -1089,10 +1127,12 @@ void CNeoVMWorker::EndNestedScriptCall()
 	--m_iNativeScriptCallDepth;
 }
 
-int CNeoVMWorker::RunHostCall(int iFunctionID, std::vector<VarInfo>& _args)
+int CNeoVMWorker::RunHostCall(int iFunctionID, std::vector<VarInfo>& _args, VarInfo* closureValue)
 {
 	// BeginHostCall이 실행 컨텍스트를 확보한 뒤에만 이 경로로 진입한다. ExecuteTop은
 	// 완료 시 컨텍스트를 즉시 반납하므로, 반환 슬롯을 읽어야 하는 Invocation에는 맞지 않는다.
+	ClosureInfo* outerClosure = nullptr;
+	bool debugSuppressed = false;
 	try
 	{
 		if (m_bOutOfMemoryPoisoned)
@@ -1109,19 +1149,68 @@ int CNeoVMWorker::RunHostCall(int iFunctionID, std::vector<VarInfo>& _args)
 			return NEOEXEC_ERROR;
 		}
 		const int returnCodePtr = isNestedScriptCall ? GetCodeptr() : 0;
+		// 네이티브에서 재진입한 일반 함수는 부모 람다의 active closure를 공유하면
+		// 안 된다. 자식 RET가 부모 프레임 슬롯을 동기화하는 것을 막기 위해 실행 중
+		// 잠시 분리하고, Run이 끝난 뒤 원래 프레임에 복원한다.
+		outerClosure = m_pActiveClosure;
+		m_pActiveClosure = nullptr;
 		if (Setup(iFunctionID, _args) == false)
+		{
+			m_pActiveClosure = outerClosure;
 			return NEOEXEC_ERROR;
+		}
+		if (closureValue != nullptr)
+		{
+			if (closureValue->GetType() != VAR_CLOSURE || closureValue->_closure == nullptr ||
+				closureValue->_closure->_funIndex != iFunctionID)
+			{
+				m_pActiveClosure = outerClosure;
+				return NEOEXEC_ERROR;
+			}
+			ClosureInfo* closure = closureValue->_closure;
+			const SFunctionTable& fun = Functions()[iFunctionID];
+			if (closure->_captures.size() != fun._captures.size())
+			{
+				m_pActiveClosure = outerClosure;
+				return NEOEXEC_ERROR;
+			}
+			for (size_t i = 0; i < fun._captures.size(); ++i)
+				Move(GetVarPtr_L(fun._captures[i].second), &closure->_captures[i]);
+			++closure->_refCount; // 실행 프레임이 closure를 잡는다; RET/ERROR에서 반납.
+			m_pActiveClosure = closure;
+		}
 
+		// 중첩 호출은 sleep/yield와 시간 제한 정지를 이미 거부한다. 여기서 디버거
+		// 정지도 막아야 부모 native 프레임으로 돌아온 뒤에 자식 closure만 남은
+		// suspended 컨텍스트가 생기지 않는다.
+		if (isNestedScriptCall)
+		{
+			++m_iDebugSuppressCount;
+			debugSuppressed = true;
+		}
 		const bool ok = Run();
+		if (debugSuppressed)
+		{
+			--m_iDebugSuppressCount;
+			debugSuppressed = false;
+		}
 		if (ok && isNestedScriptCall)
 			SetCodePtr(returnCodePtr);
+		// sleep/debugger로 정지한 closure는 실행 컨텍스트와 함께 active 환경도
+		// 보존해야 ResumeTop의 RET/ERROR가 변경분을 동기화하고 실행 보유분을 반납한다.
+		const bool suspended = IsSuspended();
+		if (!suspended)
+			m_pActiveClosure = outerClosure;
 		GetVM()->PublishAllocStats();
 		if (ok == false)
 			return NEOEXEC_ERROR;
-		return IsSuspended() ? NEOEXEC_SUSPENDED : NEOEXEC_COMPLETED;
+		return suspended ? NEOEXEC_SUSPENDED : NEOEXEC_COMPLETED;
 	}
 	catch (const std::bad_alloc&)
 	{
+		if (debugSuppressed)
+			--m_iDebugSuppressCount;
+		m_pActiveClosure = outerClosure;
 		PoisonOutOfMemory();
 		// 중첩 스크립트 호출의 OOM은 호출한 native 함수만 실패시키는 것으로
 		// 끝내면 바깥 인터프리터가 손상 가능 상태에서 계속 돈다.
@@ -1464,6 +1553,37 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 	case VAR_ASYNC:
 		out.type = "async";
 		out.value = "async";
+		break;
+	case VAR_CLOSURE:
+		out.type = "function";
+		if (pVar->_closure == nullptr)
+		{
+			out.value = "invalid closure";
+			break;
+		}
+		snprintf(buf, sizeof(buf), "#%d", pVar->_closure->_funIndex);
+		out.value = buf;
+		if (collectionDepth < NEO_DEBUG_MAX_COLLECTION_DEPTH)
+		{
+			std::vector<VarInfo>& captures = pVar->_closure->_captures;
+			const int childCount = (int)std::min<size_t>(captures.size(), NEO_DEBUG_MAX_COLLECTION_ITEMS);
+			out.children.reserve(childCount + (captures.size() > (size_t)childCount ? 1 : 0));
+			for (int i = 0; i < childCount; ++i)
+			{
+				NeoDebugVariable child;
+				child.name = "capture[" + std::to_string(i) + "]";
+				NeoDebugFormatValue(&captures[i], child, collectionDepth + 1);
+				out.children.push_back(std::move(child));
+			}
+			if (captures.size() > (size_t)childCount)
+			{
+				NeoDebugVariable more;
+				more.name = "...";
+				more.type = "function";
+				more.value = std::to_string(captures.size() - childCount) + " more captures";
+				out.children.push_back(std::move(more));
+			}
+		}
 		break;
 	default:
 		out.type = "unknown";
@@ -1917,6 +2037,16 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 
 void	CNeoVMWorker::DeadCoroutine(CoroutineInfo* pCI)
 {
+	if (pCI->_activeClosure && pCI == m_pCur)
+	{
+		SyncClosureAtFrame(pCI->_activeClosure, _iSP_Vars);
+		VarInfo active(VAR_CLOSURE);
+		active._closure = pCI->_activeClosure;
+		if (m_pActiveClosure == pCI->_activeClosure)
+			m_pActiveClosure = nullptr;
+		pCI->_activeClosure = nullptr;
+		Var_Release(&active);
+	}
 	pCI->_state = COROUTINE_STATE_DEAD;
 	int iSP_Vars_Max2 = pCI->_info._iSP_Vars_Max2;
 	std::vector<VarInfo>& sVarStack = pCI->m_sVarStack;
@@ -1929,6 +2059,8 @@ bool CNeoVMWorker::StopCoroutine(bool doDead)
 {
 	CoroutineBase* pThis = (CoroutineBase*)this;
 	m_pCur->_info = *pThis;
+	m_pCur->_activeClosure = m_pActiveClosure;
+	m_pActiveClosure = nullptr;
 	if (doDead)
 		DeadCoroutine(m_pCur);
 	else
@@ -1951,6 +2083,7 @@ bool CNeoVMWorker::StopCoroutine(bool doDead)
 		m_pCur->_state = COROUTINE_STATE_RUNNING;
 		m_pVarStack_Base = &m_pCur->m_sVarStack;
 		m_pCallStack = &m_pCur->m_sCallStack;
+		m_pActiveClosure = m_pCur->_activeClosure;
 
 		*pThis = m_pCur->_info;
 		SetStackPointer(_iSP_Vars);
@@ -1965,6 +2098,7 @@ bool CNeoVMWorker::StartCoroutione(int argSP_Vars, int n3)
 	{
 		// Back up
 		m_pCur->_info = *pThis;
+		m_pCur->_activeClosure = m_pActiveClosure;
 		//m_pCur->_info._iSP_Vars = sp;// _iSP_Vars;
 		m_pCur->_state = COROUTINE_STATE_NORMAL;
 		m_sCoroutines.push_front(m_pCur);
@@ -1975,6 +2109,7 @@ bool CNeoVMWorker::StartCoroutione(int argSP_Vars, int n3)
 		m_pCur->_sub_state = COROUTINE_SUB_NORMAL;
 		m_pVarStack_Base = &m_pCur->m_sVarStack;
 		m_pCallStack = &m_pCur->m_sCallStack;
+		m_pActiveClosure = m_pCur->_activeClosure;
 
 		if (m_pCur->_info._pCodeCurrent == NULL) // first run
 		{
@@ -1993,6 +2128,18 @@ bool CNeoVMWorker::StartCoroutione(int argSP_Vars, int n3)
 			_iSP_Vars = 0;// iSP_VarsMax;
 			_iSP_VarsMax = _iSP_Vars + fun._localAddCount;
 			_iSP_Vars_Max2 = _iSP_VarsMax;
+			if (m_pCur->_function.GetType() == VAR_CLOSURE)
+			{
+				ClosureInfo* closure = m_pCur->_function._closure;
+				if (closure == nullptr || closure->_funIndex != m_pCur->_fun_index ||
+					closure->_captures.size() != fun._captures.size())
+					return false;
+				for (size_t i = 0; i < fun._captures.size(); ++i)
+					Move(&m_pCur->m_sVarStack[fun._captures[i].second], &closure->_captures[i]);
+				++closure->_refCount;
+				m_pActiveClosure = closure;
+				m_pCur->_activeClosure = closure;
+			}
 			m_pCur->_info._pCodeCurrent = _pCodeCurrent;
 		}
 		else
@@ -2058,6 +2205,134 @@ VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 	_isInitialized = true;
 	return r;
 }
+
+VarInfo* CNeoVMWorker::testCall(VarInfo* function, VarInfo* args, int argc)
+{
+	if (function == nullptr)
+		return NULL;
+	if (function->GetType() == VAR_FUN)
+		return testCall(function->_fun_index, args, argc);
+	if (function->GetType() != VAR_CLOSURE || function->_closure == nullptr ||
+		_isInitialized == false)
+		return NULL;
+
+	ClosureInfo* closure = function->_closure;
+	if (closure->_funIndex < 0 || closure->_funIndex >= (int)Functions().size())
+		return NULL;
+	const SFunctionTable& fun = Functions()[closure->_funIndex];
+	if (argc != fun._argsCount || closure->_captures.size() != fun._captures.size() ||
+		!EnsureStackRange(_iSP_VarsMax, fun._localAddCount - 1))
+		return NULL;
+
+	const int save_Code = GetCodeptr();
+	const int save_iSP_Vars = _iSP_Vars;
+	const int save__iSP_VarsMax = _iSP_VarsMax;
+	ClosureInfo* const saveActiveClosure = m_pActiveClosure;
+	m_pActiveClosure = nullptr;
+
+	SetCodePtr(fun._codePtr);
+	_iSP_Vars = _iSP_VarsMax;
+	SetStackPointer(_iSP_Vars);
+	_iSP_VarsMax = _iSP_Vars + fun._localAddCount;
+	if (_iSP_Vars_Max2 < _iSP_VarsMax)
+		_iSP_Vars_Max2 = _iSP_VarsMax;
+
+	for (int i = 0; i < argc; ++i)
+		Move(&(*m_pVarStack_Base)[1 + _iSP_Vars + i], &args[i]);
+	for (size_t i = 0; i < fun._captures.size(); ++i)
+		Move(GetVarPtr_L(fun._captures[i].second), &closure->_captures[i]);
+
+	++closure->_refCount; // RET/ERROR가 Sync 후 반납한다.
+	m_pActiveClosure = closure;
+	++m_iDebugSuppressCount;
+	Run();
+	--m_iDebugSuppressCount;
+
+	VarInfo* result = &(*m_pVarStack_Base)[_iSP_Vars];
+	SetCodePtr(save_Code);
+	_iSP_Vars = save_iSP_Vars;
+	_iSP_VarsMax = save__iSP_VarsMax;
+	SetStackPointer(_iSP_Vars);
+	m_pActiveClosure = saveActiveClosure;
+	_isInitialized = true;
+	return result;
+}
+
+void CNeoVMWorker::Call(ClosureInfo* closure, int n2, VarInfo* pReturnValue)
+{
+	if (closure == nullptr || closure->_funIndex < 0 ||
+		closure->_funIndex >= (int)Functions().size())
+	{
+		SetError(RTE_CALL_INVALID);
+		return;
+	}
+	const SFunctionTable& fun = Functions()[closure->_funIndex];
+	if (closure->_captures.size() != fun._captures.size() ||
+		!EnsureStackRange(_iSP_VarsMax, fun._localAddCount - 1))
+	{
+		SetError(RTE_CALL_INVALID);
+		return;
+	}
+
+#if _DEBUG
+	SCallStack callStack;
+	callStack._iReturnOffset = GetCodeptr();
+	callStack._iSP_Vars = _iSP_Vars;
+	callStack._iSP_VarsMax = _iSP_VarsMax;
+	callStack._pReturnValue = pReturnValue;
+	callStack._pAsyncWaitReturnValue = nullptr;
+	callStack._asyncWaitReturnValue = false;
+	callStack._activeClosure = m_pActiveClosure;
+	m_pCallStack->push_back(callStack);
+#else
+	SCallStack& callStack = m_pCallStack->push_back();
+	callStack._iReturnOffset = GetCodeptr();
+	callStack._iSP_Vars = _iSP_Vars;
+	callStack._iSP_VarsMax = _iSP_VarsMax;
+	callStack._pReturnValue = pReturnValue;
+	callStack._pAsyncWaitReturnValue = nullptr;
+	callStack._asyncWaitReturnValue = false;
+	callStack._activeClosure = m_pActiveClosure;
+#endif
+
+	SetCodePtr(fun._codePtr);
+	_iSP_Vars = _iSP_VarsMax;
+	SetStackPointer(_iSP_Vars);
+	_iSP_VarsMax = _iSP_Vars + fun._localAddCount;
+	if (_iSP_Vars_Max2 < _iSP_VarsMax)
+		_iSP_Vars_Max2 = _iSP_VarsMax;
+
+	for (size_t i = 0; i < fun._captures.size(); ++i)
+		Move(GetVarPtr_L(fun._captures[i].second), &closure->_captures[i]);
+
+	// 호출 중 콜백 값이 컨테이너에서 제거돼도 현재 실행 프레임은 살아 있어야 한다.
+	++closure->_refCount;
+	m_pActiveClosure = closure;
+	(void)n2; // 호출 인자는 기존 Call과 동일하게 부모 프레임의 arg 슬롯에 이미 배치돼 있다.
+}
+
+void CNeoVMWorker::SyncActiveClosure()
+{
+	SyncClosureAtFrame(m_pActiveClosure, _iSP_Vars);
+}
+
+void CNeoVMWorker::SyncClosureAtFrame(ClosureInfo* closure, int stackBase)
+{
+	if (closure == nullptr || closure->_funIndex < 0 ||
+		closure->_funIndex >= (int)Functions().size())
+		return;
+	const SFunctionTable& fun = Functions()[closure->_funIndex];
+	if (closure->_captures.size() != fun._captures.size())
+		return;
+	for (size_t i = 0; i < fun._captures.size(); ++i)
+	{
+		VarInfo* source = &(*m_pVarStack_Base)[stackBase + fun._captures[i].second];
+		Move(&closure->_captures[i], source);
+		if (closure->_captures[i].IsContainerType())
+			closure->_cycleState._mayContainContainerChild = true;
+	}
+}
+
 bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserData, StringInfo* pStr, int n3, VarInfo* pRet)
 {
 	Neo_NativeFunction func = functionPtrNative._func;
@@ -2373,6 +2648,8 @@ std::string GetDataType(VAR_TYPE t)
 		return "module";
 	case VAR_ASYNC:
 		return "async";
+	case VAR_CLOSURE:
+		return "fun";
 	default:
 		break;
 	}

@@ -105,14 +105,32 @@ struct InstanceHandle
     explicit operator bool() const noexcept { return id != 0; }
 };
 
-struct FunctionHandle
+class FunctionHandle
 {
+public:
     uint32_t index = UINT32_MAX;
     // 이 핸들이 속한 Program(교차 검증용). 0 = 미지정 → Call 이 검증 생략(하위호환).
     // FindFunction/argFunction 이 채운다. Call 은 non-zero 면 인스턴스의 Program 과 일치 검사.
     uint32_t programId = 0;
     uint32_t programGeneration = 0;
-    explicit operator bool() const noexcept { return index != UINT32_MAX; }
+
+    FunctionHandle() noexcept = default;
+    FunctionHandle(uint32_t i, uint32_t program = 0, uint32_t generation = 0) noexcept
+        : index(i), programId(program), programGeneration(generation) {}
+    FunctionHandle(const FunctionHandle& other);
+    FunctionHandle(FunctionHandle&& other) noexcept;
+    FunctionHandle& operator=(const FunctionHandle& other);
+    FunctionHandle& operator=(FunctionHandle&& other) noexcept;
+    ~FunctionHandle();
+    explicit operator bool() const noexcept;
+
+private:
+    // 캡처 람다일 때만 내부 참조 카운트 객체를 가리킨다. 따라서 FunctionHandle은
+    // 더 이상 POD가 아니다: memcpy/union/raw serialization 대신 정상 복사·이동·소멸을
+    // 사용해야 한다. 일반 함수는 nullptr 이므로 기존의 정수 함수 호출 비용은 유지된다.
+    void* m_impl = nullptr;
+    friend class CallContext;
+    friend struct NeoScriptInternal;
 };
 
 //------------------------------------------------------------------------------
@@ -295,8 +313,11 @@ public:
     void        argVec(std::size_t i, float out[4]) const;
     bool        argAsMap(std::size_t i, MapReader& out) const;
     bool        argAsList(std::size_t i, ListReader& out) const;
-    // [콜백] 스크립트 함수(VAR_FUN) 인자를 FunctionHandle 로 캡처 → 나중에 IRuntime::Call 로 호출.
-    // 함수 인자가 아니면 무효 핸들. (구 VarInfo::_fun_index 저장 패턴의 v2 대체.)
+    // [콜백] 스크립트 함수 또는 캡처 람다 인자를 보관 가능한 FunctionHandle 로 얻는다.
+    // 람다는 생성 시점의 지역값 보관함을 핸들이 소유한다. 호출마다 보관함을 람다 프레임에
+    // 복사하고 종료 시 다시 저장한다. FunctionHandle 자체를 보관해야 하며
+    // index만 따로 저장하면 캡처 환경이 사라진다. 핸들은 원본 Instance 전용이며 그 Instance
+    // 가 Destroy/Reset되면 자동으로 무효가 된다(엔진 보관분도 즉시 버릴 것).
     FunctionHandle argFunction(std::size_t i) const;
     // 바인딩된 네이티브 객체 인자에서 그 객체의 userData 를 얻는다(setObject/BindObject 로 준 값).
     // 예: 스크립트가 넘긴 GameObject 인자 → 그 eventID. 객체가 아니면 nullptr.
@@ -674,8 +695,9 @@ public:
     virtual void DestroyInstance(InstanceHandle instance) = 0;
     virtual bool IsAlive(InstanceHandle instance) const = 0;   // 핸들이 아직 유효한 인스턴스인지(파괴 후 false)
     // 인스턴스를 **핸들을 유지한 채** 갓 생성된 상태로 되돌린다(전역변수 초기화 + 바인딩 재구성 +
-    // CreateInstance 때의 runGlobalInit 재실행). 호스트가 들고 있던 InstanceHandle/FunctionHandle 이
-    // 그대로 유효하다는 점이 DestroyInstance→CreateInstance 와의 차이다.
+    // CreateInstance 때의 runGlobalInit 재실행). FindFunction으로 얻은 일반 FunctionHandle은
+    // 그대로 유효하다. argFunction으로 얻은 캡처 람다 핸들은 이전 실행 프레임을 가리키므로
+    // Reset 뒤에는 자동으로 무효다.
     // BindObject 로 준 인스턴스별 userData 는 보존된다. 살아있는 Invocation 이 있으면 실패(false).
     // 실패 시 인스턴스는 파괴되고 핸들이 무효화된다(IsAlive 로 확인할 것).
     virtual bool ResetInstance(InstanceHandle instance) = 0;

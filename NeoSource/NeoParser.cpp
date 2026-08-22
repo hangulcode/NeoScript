@@ -1177,6 +1177,47 @@ int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExp
 	}
 	return iLocalVar;
 }
+
+// 이름을 읽는 함수가 익명 함수이고 이름이 상위 함수의 지역이라면, 부모의
+// 물리 스택 슬롯을 본문에 박지 않는다. 람다 생성 시 그 슬롯의 VarInfo를
+// ClosureRecord에 복사하고, 호출 시 이 함수의 숨은 지역 슬롯으로 주입한다.
+// 전역(음수 compile 슬롯)은 기존처럼 런타임 전역 조회로 둔다.
+static int FindReadableVar(SFunctions& funs, SVars& vars, const std::string& name)
+{
+	SLayerVar* owner = nullptr;
+	int slot = vars.FindVar(name, &owner);
+	if (slot == -1)
+		return -1;
+	if (owner == nullptr || owner == vars.GetCurrentLayer() || slot <= 0 ||
+		funs._cur == nullptr || funs._cur->_funType != FUNT_ANONYMOUS)
+		return slot;
+
+	int ownerIndex = -1;
+	for (int i = 0; i < (int)vars._varsFunction.size(); ++i)
+	{
+		if (vars._varsFunction[i] == owner)
+		{
+			ownerIndex = i;
+			break;
+		}
+	}
+	if (ownerIndex == -1)
+		return -1;
+
+	// FMOV는 언제나 직속 부모 프레임에서 sourceSlot을 읽는다. 따라서
+	// Outer -> mid -> inner가 Outer의 v를 참조하면 mid에도 v를 먼저 캡처하고,
+	// inner는 mid의 숨은 슬롯을 캡처해야 한다.
+	for (int i = ownerIndex + 1; i < (int)vars._varsFunction.size(); ++i)
+	{
+		SLayerVar* layer = vars._varsFunction[i];
+		SFunctionInfo* function = layer->_function;
+		if (function == nullptr || function->_funType != FUNT_ANONYMOUS)
+			return -1; // 일반 함수 프레임은 바깥 지역을 보관하지 않는다.
+		slot = function->AddCapture(name, slot, layer);
+	}
+	return slot;
+}
+
 int  AddLocalVar(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	SLayerVar* pCurLayer = vars.GetCurrentLayer();
@@ -1720,7 +1761,7 @@ bool ParseNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArch
 
 	ParsedNumber num;
 
-	iResultStack = vars.FindVar(tk1);
+	iResultStack = FindReadableVar(funs, vars, tk1);
 	if (iResultStack._iVar != -1)
 		return true;
 
@@ -2077,7 +2118,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 	bool lastSelectorWasDot = false;
 	//SOperand iArrayIndex = INVALID_ERROR_PARSEJOB;
 	if(pOtherModule == nullptr)
-		iTempOffset._iVar = vars.FindVar(tk1);
+		iTempOffset._iVar = FindReadableVar(funs, vars, tk1);
 
 	if (iTempOffset._iVar != -1)
 	{
@@ -2418,7 +2459,16 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			}
 			if(iTempOffset.IsInvalidValue() == false)
 			{
-				if (iTempOffset.IsArray())
+				if (iTempOffset.IsFun())
+				{
+					// 익명 함수 식은 함수 ID를 담은 컴파일 전용 operand다. 그대로
+					// RET 하면 ID 숫자가 반환되므로, 먼저 FMOV로 런타임 함수값
+					// (캡처가 있으면 ClosureInfo 인스턴스)을 만든 뒤 반환한다.
+					int iTempOffset2 = funs._cur->AllocLocalTempVar();
+					funs._cur->Push_OP2(ar, NOP_FMOV1, iTempOffset2, iTempOffset._iVar, false);
+					funs._cur->Push_RETURN(ar, iTempOffset2, false);
+				}
+				else if (iTempOffset.IsArray())
 				{
 					int iTempOffset2 = funs._cur->AllocLocalTempVar();
 					funs._cur->Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iTempOffset2, iTempOffset.IsHaveShort());
@@ -5134,6 +5184,7 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string&
 	TK_TYPE tkType1;
 
 	SLayerVar* pCurLayer = AddVarsFunction(vars);
+	pCurLayer->_function = pF;
 	if (false == ParseFunctionArg(ar, funs, pCurLayer))
 		return false;
 
@@ -5229,6 +5280,7 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	funs._cur->Clear();*/
 
 	SLayerVar* pCurLayer = AddVarsFunction(vars);
+	pCurLayer->_function = funs._cur;
 
 //	funs.AddStaticString("system");
 

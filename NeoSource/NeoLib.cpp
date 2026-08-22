@@ -20,7 +20,7 @@ namespace NeoScript
 {
 
 
-void NVM_QuickSort(CNeoVMWorker* pN, int compare, std::vector<VarInfo*>& lst);
+void NVM_QuickSort(CNeoVMWorker* pN, VarInfo* compare, std::vector<VarInfo*>& lst);
 
 struct neo_libs
 {
@@ -756,12 +756,14 @@ struct neo_libs
 		VarInfo *pFun = pN->GetStack(1);
 		if (pVar->GetType() != VAR_MAP) return false;
 
-		if (pFun->GetType() != VAR_FUN) return false;
+		if (pFun->GetType() != VAR_FUN && pFun->GetType() != VAR_CLOSURE) return false;
 
 		// Keep the receiver alive across script callbacks. The callback can replace
 		// the variable that originally held this map.
 		VarInfo mapHold;
 		Move_DestNoRelease(&mapHold, pVar);
+		VarInfo callbackHold;
+		Move_DestNoRelease(&callbackHold, pFun);
 		MapInfo* const table = mapHold._tbl;
 
 		// [주의] _Bucket 내부 포인터를 스크립트 콜백 너머로 들고 있으면 안 된다.
@@ -772,6 +774,7 @@ struct neo_libs
 		if (false == table->ToListValues(slots))
 		{
 			pN->Var_Release(&mapHold);
+			pN->Var_Release(&callbackHold);
 			return false;
 		}
 
@@ -789,7 +792,7 @@ struct neo_libs
 			sorted.resize(snapshot.size());
 			for (size_t i = 0; i < snapshot.size(); i++)
 				sorted[i] = &snapshot[i];
-			NVM_QuickSort(pN, pFun->_fun_index, sorted);   // 지역 벡터만 만진다
+			NVM_QuickSort(pN, &callbackHold, sorted);      // 지역 벡터만 만진다
 
 			// A structural mutation makes the previous ordering meaningless. Do not
 			// overwrite values (including values inserted by the callback) with a
@@ -799,6 +802,7 @@ struct neo_libs
 				for (size_t i = 0; i < snapshot.size(); i++)
 					pN->Var_Release(&snapshot[i]);
 				pN->Var_Release(&mapHold);
+				pN->Var_Release(&callbackHold);
 				pN->SetError("map was modified during sort");
 				return true;
 			}
@@ -814,6 +818,7 @@ struct neo_libs
 				pN->Var_Release(&snapshot[i]);
 		}
 		pN->Var_Release(&mapHold);
+		pN->Var_Release(&callbackHold);
 		pN->ReturnValue();
 		return true;
 	}
@@ -887,20 +892,21 @@ struct neo_libs
 			return false;
 
 		VarInfo* v3 = pN->GetStack(3);
-		if (v3->GetType() != VAR_FUN) // 
+		if (v3->GetType() != VAR_FUN && v3->GetType() != VAR_CLOSURE)
 			return false;
 
 		pAsync->_type = ASYNC_GET;
 		pAsync->_timeout = v1->_int;
 		pAsync->_request = v2->_str->_str;
-		pAsync->_fun_index = v3->_fun_index;
+		pAsync->_fun_index = (v3->GetType() == VAR_FUN) ? v3->_fun_index : v3->_closure->_funIndex;
+		pN->Move(&pAsync->_callback, v3);
 		if (pAsync->_timeout == -1) pAsync->_timeout = 0x7fffffff;
 
 		pAsync->_ownerWorkerId = pN->GetWorkerID();
 		++pN->_asyncPendingCount;
 		pAsync->_event.reset();
 		pAsync->_state = ASYNC_PENDING;
-		if (pVar->IsContainerType()) pAsync->_cycleState._mayContainContainerChild = true;
+		if (pVar->IsContainerType() || v3->IsContainerType()) pAsync->_cycleState._mayContainContainerChild = true;
 		pN->Move(&pAsync->_LockReferance, pVar);
 		pN->GetVM()->AddHttp_Request(pAsync);
 		pN->ReturnValue();
@@ -931,21 +937,22 @@ struct neo_libs
 			return false;
 
 		VarInfo* v4 = pN->GetStack(4);
-		if (v4->GetType() != VAR_FUN) // 
+		if (v4->GetType() != VAR_FUN && v4->GetType() != VAR_CLOSURE)
 			return false;
 
 		pAsync->_type = ASYNC_POST;
 		pAsync->_timeout = v1->_int;
 		pAsync->_request = v2->_str->_str;
 		pAsync->_body = v3->_str->_str;
-		pAsync->_fun_index = v4->_fun_index;
+		pAsync->_fun_index = (v4->GetType() == VAR_FUN) ? v4->_fun_index : v4->_closure->_funIndex;
+		pN->Move(&pAsync->_callback, v4);
 		if (pAsync->_timeout == -1) pAsync->_timeout = 0x7fffffff;
 
 		pAsync->_ownerWorkerId = pN->GetWorkerID();
 		++pN->_asyncPendingCount;
 		pAsync->_event.reset();
 		pAsync->_state = ASYNC_PENDING;
-		if (pVar->IsContainerType()) pAsync->_cycleState._mayContainContainerChild = true;
+		if (pVar->IsContainerType() || v4->IsContainerType()) pAsync->_cycleState._mayContainContainerChild = true;
 		pN->Move(&pAsync->_LockReferance, pVar);
 		pN->GetVM()->AddHttp_Request(pAsync);
 		pN->ReturnValue();
@@ -1124,13 +1131,14 @@ struct neo_libs
 		if (args != 1) return false;
 
 		VarInfo* v = pN->GetStack(1);
-		if (v->GetType() != VAR_FUN)
+		if (v->GetType() != VAR_FUN && v->GetType() != VAR_CLOSURE)
 			return false;
 
 		CNeoVMImpl* pVM = pN->GetVM();
 		CoroutineInfo* pCI = pVM->CoroutineAlloc();
 		pCI->_refCount = 0;
-		pCI->_fun_index = v->_fun_index;
+		pCI->_fun_index = (v->GetType() == VAR_FUN) ? v->_fun_index : v->_closure->_funIndex;
+		pN->Move(&pCI->_function, v);
 		pCI->_state = COROUTINE_STATE_SUSPENDED;
 
 		pN->ReturnValue(pCI);

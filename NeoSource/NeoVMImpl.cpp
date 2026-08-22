@@ -24,6 +24,7 @@ static std::atomic<int> g_iNeoVMAllocSets{ 0 };
 static std::atomic<int> g_iNeoVMAllocCoroutines{ 0 };
 static std::atomic<int> g_iNeoVMAllocModules{ 0 };
 static std::atomic<int> g_iNeoVMAllocAsyncs{ 0 };
+static std::atomic<int> g_iNeoVMAllocClosures{ 0 };
 static std::atomic<int> g_iNeoVMAllocVectors{ 0 };
 static std::atomic<long long> g_iNeoVMPoolBytes{ 0 };       // 모든 VM 의 오브젝트 풀 합계
 static std::atomic<long long> g_iNeoVMStringIdleBytes{ 0 };  // 유휴 문자열 노드가 붙든 문자 버퍼
@@ -64,6 +65,7 @@ void GetNeoVMAllocStats(SNeoVMAllocStats& outStats)
 	outStats.coroutines = g_iNeoVMAllocCoroutines.load(std::memory_order_relaxed);
 	outStats.modules = g_iNeoVMAllocModules.load(std::memory_order_relaxed);
 	outStats.asyncs = g_iNeoVMAllocAsyncs.load(std::memory_order_relaxed);
+	outStats.closures = g_iNeoVMAllocClosures.load(std::memory_order_relaxed);
 	outStats.vectors = g_iNeoVMAllocVectors.load(std::memory_order_relaxed);
 	outStats.poolBytes = g_iNeoVMPoolBytes.load(std::memory_order_relaxed)
 	                   + g_iNeoVMExecPoolBytes.load(std::memory_order_relaxed);
@@ -143,7 +145,8 @@ size_t CNeoVMImpl::CollectPoolAt(int idx, NeoPoolClock::time_point now, int hold
 	case 5:  return m_sPool_ListInfo.Collect(now, holdMs, pageBudget);
 	case 6:  return m_sPool_Vec.Collect(now, holdMs, pageBudget);
 	case 7:  return m_sPool_Async.Collect(now, holdMs, pageBudget);
-	default: return m_sPool_String.Collect(now, holdMs, pageBudget);
+	case 8:  return m_sPool_String.Collect(now, holdMs, pageBudget);
+	default: return m_sPool_Closure.Collect(now, holdMs, pageBudget);
 	}
 }
 
@@ -157,7 +160,8 @@ long long CNeoVMImpl::PoolBytes() const
 	     + (long long)m_sPool_ListInfo.ReservedBytes()
 	     + (long long)m_sPool_Vec.ReservedBytes()
 	     + (long long)m_sPool_Async.ReservedBytes()
-	     + (long long)m_sPool_String.ReservedBytes();
+	     + (long long)m_sPool_String.ReservedBytes()
+	     + (long long)m_sPool_Closure.ReservedBytes();
 	// _pExecPool 은 스레드별 공유(엔진 소유)라 여기서 세면 VM 수만큼 중복된다 → 자기가 직접 publish.
 }
 
@@ -204,6 +208,7 @@ void CNeoVMImpl::PublishAllocStats()
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocCoroutines, m_sPublishedAllocStats.coroutines, m_sAllocStats.coroutines);
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocModules, m_sPublishedAllocStats.modules, m_sAllocStats.modules);
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocAsyncs, m_sPublishedAllocStats.asyncs, m_sAllocStats.asyncs);
+	PublishNeoVMAllocStatValue(g_iNeoVMAllocClosures, m_sPublishedAllocStats.closures, m_sAllocStats.closures);
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocVectors, m_sPublishedAllocStats.vectors, m_sAllocStats.vectors);
 }
 
@@ -349,6 +354,8 @@ CoroutineInfo* CNeoVMImpl::CoroutineAlloc()
 {
 	// 코루틴 컨텍스트도 default 실행 컨텍스트와 동일한 공유 풀에서 대여한다.
 	CoroutineInfo* p = _pExecPool->Acquire();
+	p->_function.ClearType();
+	p->_activeClosure = nullptr;
 	++m_sAllocStats.coroutines;
 	return p;
 }
@@ -368,6 +375,14 @@ void CNeoVMImpl::FreeCoroutine(VarInfo *d)
 	if (n > (int)s.size()) n = (int)s.size();
 	for (int i = 0; i < n; i++)
 		Var_Release(&s[i]);
+	Var_Release(&pCI->_function);
+	if (pCI->_activeClosure)
+	{
+		VarInfo active(VAR_CLOSURE);
+		active._closure = pCI->_activeClosure;
+		pCI->_activeClosure = nullptr;
+		Var_Release(&active);
+	}
 	pCI->_info.ClearSP();
 	pCI->m_sAsyncResumeCodePtrs.clear();
 	_pExecPool->Release(pCI);
@@ -719,6 +734,7 @@ AsyncInfo* CNeoVMImpl::AsyncAlloc()
 	p->_body.clear();
 	p->_resultValue.clear();
 	p->_success = false;
+	p->_callback.ClearType();
 	++m_sAllocStats.asyncs;
 	return p;
 }
@@ -737,7 +753,39 @@ void CNeoVMImpl::FreeAsync(VarInfo* d)
 	ReleaseIfLarge(p->_resultValue);
 	// 헤더는 요청마다 새로 쌓이고 재사용 이득이 없다 — 배열째 돌려준다.
 	std::vector< std::pair<std::string, std::string> >().swap(p->_headers);
+	Var_ReleaseInternal(&p->_callback);
 	m_sPool_Async.Confer(p);
+}
+
+ClosureInfo* CNeoVMImpl::ClosureAlloc(int functionIndex, int captureCount)
+{
+	ClosureInfo* closure = m_sPool_Closure.Receive();
+	closure->_pVM = this;
+	closure->_funIndex = functionIndex;
+	closure->_refCount = 0;
+	closure->_cycleState.Init(closure);
+	closure->_captures.clear();
+	closure->_captures.resize(captureCount);
+	LiveList_Insert(_sClosureHead, closure);
+	++m_sAllocStats.closures;
+	return closure;
+}
+
+void CNeoVMImpl::FreeClosure(ClosureInfo* closure)
+{
+	if (closure == nullptr)
+		return;
+	CancelCycleCandidate(VAR_CLOSURE, closure);
+	if (closure->_cycleState._destroying)
+		return;
+	closure->_cycleState._destroying = true;
+	LiveList_Remove(_sClosureHead, closure);
+	for (VarInfo& value : closure->_captures)
+		Var_ReleaseInternal(&value);
+	closure->_captures.clear();
+	closure->_pVM = nullptr;
+	m_sPool_Closure.Confer(closure);
+	--m_sAllocStats.closures;
 }
 
 void CNeoVMImpl::QueueContainerForDestroy(const VarInfo& value)
@@ -762,6 +810,7 @@ void CNeoVMImpl::QueueContainerForDestroy(const VarInfo& value)
 		case VAR_COROUTINE: FreeCoroutine(&next); break;
 		case VAR_MODULE:    FreeWorker((CNeoVMWorker*)next._module); break;
 		case VAR_ASYNC:     FreeAsync(&next); break;
+		case VAR_CLOSURE:   FreeClosure(next._closure); break;
 		default: break;
 		}
 	}
@@ -778,6 +827,7 @@ static void* GetContainerObject(VarInfo value)
 	case VAR_COROUTINE: return value._cor;
 	case VAR_MODULE:    return value._module;
 	case VAR_ASYNC:     return value._async;
+	case VAR_CLOSURE:   return value._closure;
 	default:             return nullptr;
 	}
 }
@@ -792,6 +842,7 @@ static bool MayContainContainerChild(VAR_TYPE type, void* object)
 	case VAR_COROUTINE: return ((CoroutineInfo*)object)->_cycleState._mayContainContainerChild;
 	case VAR_MODULE:    return ((CNeoVMWorker*)object)->_cycleState._mayContainContainerChild;
 	case VAR_ASYNC:     return ((AsyncInfo*)object)->_cycleState._mayContainContainerChild;
+	case VAR_CLOSURE:   return ((ClosureInfo*)object)->_cycleState._mayContainContainerChild;
 	default:             return false;
 	}
 }
@@ -807,6 +858,7 @@ static bool& GetCycleCollectingFlag(VAR_TYPE type, void* object)
 	case VAR_COROUTINE: return ((CoroutineInfo*)object)->_cycleState._cycleCollecting;
 	case VAR_MODULE:    return ((CNeoVMWorker*)object)->_cycleState._cycleCollecting;
 	case VAR_ASYNC:     return ((AsyncInfo*)object)->_cycleState._cycleCollecting;
+	case VAR_CLOSURE:   return ((ClosureInfo*)object)->_cycleState._cycleCollecting;
 	default:             return invalid;
 	}
 }
@@ -832,6 +884,7 @@ static u8& GetCycleColor(VAR_TYPE type, void* object)
 	case VAR_COROUTINE: return ((CoroutineInfo*)object)->_cycleState._cycleColor;
 	case VAR_MODULE:    return ((CNeoVMWorker*)object)->_cycleState._cycleColor;
 	case VAR_ASYNC:     return ((AsyncInfo*)object)->_cycleState._cycleColor;
+	case VAR_CLOSURE:   return ((ClosureInfo*)object)->_cycleState._cycleColor;
 	default:             return invalid;
 	}
 }
@@ -847,6 +900,7 @@ static int& GetCycleScratchRefCount(VAR_TYPE type, void* object)
 	case VAR_COROUTINE: return ((CoroutineInfo*)object)->_cycleState._cycleScratchRefCount;
 	case VAR_MODULE:    return ((CNeoVMWorker*)object)->_cycleState._cycleScratchRefCount;
 	case VAR_ASYNC:     return ((AsyncInfo*)object)->_cycleState._cycleScratchRefCount;
+	case VAR_CLOSURE:   return ((ClosureInfo*)object)->_cycleState._cycleScratchRefCount;
 	default:             return invalid;
 	}
 }
@@ -886,6 +940,7 @@ static int& GetContainerRefCountRef(VAR_TYPE type, void* object)
 	case VAR_COROUTINE: return ((CoroutineInfo*)object)->_refCount;
 	case VAR_MODULE:    return ((CNeoVMWorker*)object)->_refCount;
 	case VAR_ASYNC:     return ((AsyncInfo*)object)->_refCount;
+	case VAR_CLOSURE:   return ((ClosureInfo*)object)->_refCount;
 	default:             return invalid;
 	}
 }
@@ -906,6 +961,7 @@ static VarInfo MakeContainerVar(VAR_TYPE type, void* object)
 	case VAR_COROUTINE: value._cor = (CoroutineInfo*)object; break;
 	case VAR_MODULE:    value._module = (CNeoVMWorker*)object; break;
 	case VAR_ASYNC:     value._async = (AsyncInfo*)object; break;
+	case VAR_CLOSURE:   value._closure = (ClosureInfo*)object; break;
 	default: break;
 	}
 	return value;
@@ -971,6 +1027,9 @@ void CNeoVMImpl::VisitCycleContainerChildren(VarInfo source, Visitor visitor)
 			VarInfo value = coroutine->m_sVarStack[i];
 			if (value.IsContainerType()) visitor(value.GetType(), GetContainerObject(value));
 		}
+		VarInfo function = coroutine->_function;
+		if (function.IsContainerType()) visitor(function.GetType(), GetContainerObject(function));
+		if (coroutine->_activeClosure) visitor(VAR_CLOSURE, coroutine->_activeClosure);
 		break;
 	}
 	case VAR_MODULE:
@@ -986,6 +1045,14 @@ void CNeoVMImpl::VisitCycleContainerChildren(VarInfo source, Visitor visitor)
 	{
 		VarInfo value = source._async->_LockReferance;
 		if (value.IsContainerType()) visitor(value.GetType(), GetContainerObject(value));
+		value = source._async->_callback;
+		if (value.IsContainerType()) visitor(value.GetType(), GetContainerObject(value));
+		break;
+	}
+	case VAR_CLOSURE:
+	{
+		for (VarInfo& value : source._closure->_captures)
+			if (value.IsContainerType()) visitor(value.GetType(), GetContainerObject(value));
 		break;
 	}
 	default:
@@ -1024,6 +1091,7 @@ void CNeoVMImpl::QueueContainerForCycleCheck(const VarInfo& source)
 	case VAR_SET:       appended = CycleList_Append(_sCycleSetHead, _sCycleSetTail, (SetInfo*)object); break;
 	case VAR_COROUTINE: appended = CycleList_Append(_sCycleCoroutineHead, _sCycleCoroutineTail, (CoroutineInfo*)object); break;
 	case VAR_ASYNC:     appended = CycleList_Append(_sCycleAsyncHead, _sCycleAsyncTail, (AsyncInfo*)object); break;
+	case VAR_CLOSURE:   appended = CycleList_Append(_sCycleClosureHead, _sCycleClosureTail, (ClosureInfo*)object); break;
 	default:             break;
 	}
 	if (appended)
@@ -1044,6 +1112,7 @@ void CNeoVMImpl::CancelCycleCandidate(VAR_TYPE type, void* object)
 	case VAR_COROUTINE: removed = CycleList_Remove(_sCycleCoroutineHead, _sCycleCoroutineTail, (CoroutineInfo*)object); break;
 	case VAR_MODULE:    removed = CycleList_Remove(_sCycleModuleHead, _sCycleModuleTail, (CNeoVMWorker*)object); break;
 	case VAR_ASYNC:     removed = CycleList_Remove(_sCycleAsyncHead, _sCycleAsyncTail, (AsyncInfo*)object); break;
+	case VAR_CLOSURE:   removed = CycleList_Remove(_sCycleClosureHead, _sCycleClosureTail, (ClosureInfo*)object); break;
 	default:             break;
 	}
 	if (removed && _cycleCandidateCount != 0)
@@ -1055,10 +1124,10 @@ bool CNeoVMImpl::PopCycleCandidate(VAR_TYPE& type, void*& object)
 	if (_cycleCandidateCount == 0)
 		return false;
 
-	for (int checked = 0; checked < 6; ++checked)
+	for (int checked = 0; checked < 7; ++checked)
 	{
 		const int queueIndex = _cycleQueueRoundRobin;
-		_cycleQueueRoundRobin = (_cycleQueueRoundRobin + 1) % 6;
+		_cycleQueueRoundRobin = (_cycleQueueRoundRobin + 1) % 7;
 		switch (queueIndex)
 		{
 		case 0:
@@ -1078,6 +1147,9 @@ bool CNeoVMImpl::PopCycleCandidate(VAR_TYPE& type, void*& object)
 			break;
 		case 5:
 			if (AsyncInfo* p = CycleList_PopFront(_sCycleAsyncHead, _sCycleAsyncTail)) { type = VAR_ASYNC; object = p; --_cycleCandidateCount; return true; }
+			break;
+		case 6:
+			if (ClosureInfo* p = CycleList_PopFront(_sCycleClosureHead, _sCycleClosureTail)) { type = VAR_CLOSURE; object = p; --_cycleCandidateCount; return true; }
 			break;
 		}
 	}
@@ -1347,6 +1419,14 @@ int CNeoVMImpl::CollectUnreachableCycleCandidates(size_t rootBudget)
 			if (count > (int)coroutine->m_sVarStack.size()) count = (int)coroutine->m_sVarStack.size();
 			for (int i = 0; i < count; ++i)
 				releaseVar(coroutine->m_sVarStack[i]);
+			releaseVar(coroutine->_function);
+			if (coroutine->_activeClosure)
+			{
+				VarInfo active(VAR_CLOSURE);
+				active._closure = coroutine->_activeClosure;
+				releaseVar(active);
+				coroutine->_activeClosure = nullptr;
+			}
 			break;
 		}
 		case VAR_MODULE:
@@ -1358,6 +1438,11 @@ int CNeoVMImpl::CollectUnreachableCycleCandidates(size_t rootBudget)
 		}
 		case VAR_ASYNC:
 			releaseVar(owner._async->_LockReferance);
+			releaseVar(owner._async->_callback);
+			break;
+		case VAR_CLOSURE:
+			for (VarInfo& value : owner._closure->_captures)
+				releaseVar(value);
 			break;
 		default:
 			break;
@@ -1631,24 +1716,28 @@ CNeoVMImpl::~CNeoVMImpl()
 	for (int i = 0; i < NDF_MAX; i++)
 		Var_Release(&m_sDefaultValue[i]);
 
-	// 살아남은 List/Map/Set 의 _Bucket 을 해제 (intrusive live 리스트 순회).
+	// 살아남은 컨테이너와 closure의 내부 저장소를 해제 (intrusive live 리스트 순회).
 	// String 은 CNVMInstPool 소멸자가 std::str 을 정리하므로 별도 처리 없음.
 	// Free* 는 먼저 파괴 표식을 세우고 live 리스트에서 뺀다. 내부 항목의
 	// Var_Release 가 같은 객체로 되돌아와도 재진입하지 않는다.
-	while (_sTableHead)
+	while (_sClosureHead || _sTableHead || _sListHead || _sSetHead)
 	{
-		MapInfo* p = _sTableHead;
-		FreeTable(p);
-	}
-	while (_sListHead)
-	{
-		ListInfo* p = _sListHead;
-		FreeList(p);
-	}
-	while (_sSetHead)
-	{
-		SetInfo* p = _sSetHead;
-		FreeSet(p);
+		if (_sClosureHead)
+		{
+			FreeClosure(_sClosureHead);
+			continue;
+		}
+		if (_sTableHead)
+		{
+			FreeTable(_sTableHead);
+			continue;
+		}
+		if (_sListHead)
+		{
+			FreeList(_sListHead);
+			continue;
+		}
+		FreeSet(_sSetHead);
 	}
 
 	// _isTearingDown guard 때문에 보통 비어 있다. 종료 경로가 확장돼도 객체가

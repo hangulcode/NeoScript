@@ -21,12 +21,13 @@ class CNeoVMImpl : public INeoVM
 private:
 
 
-	// 살아있는 List/Map/Set 를 intrusive 이중연결 리스트로 추적 (종료 시 _Bucket 해제용).
+	// 살아있는 List/Map/Set/Closure 를 intrusive 이중연결 리스트로 추적한다.
 	// 기존 std::map<ID,ptr> 레지스트리 대체 — 할당/해제당 트리 연산 2~3회를 O(1) 링크로 교체.
 	// String 은 CNVMInstPool(소멸자 지원)이라 별도 추적 불필요 → 레지스트리 제거.
 	ListInfo* _sListHead = nullptr;
 	MapInfo* _sTableHead = nullptr;
 	SetInfo* _sSetHead = nullptr;
+	ClosureInfo* _sClosureHead = nullptr;
 	// 컨테이너 파괴는 자식 Var_Release 로 다시 컨테이너 파괴를 유발한다. 호출 스택 대신
 	// 이 대기열을 깊이 우선으로 비워서, 깊은 트리와 순환 모두 안전하게 처리한다.
 	std::vector<VarInfo> _sDestroyQueue;
@@ -58,6 +59,8 @@ private:
 	CNeoVMWorker* _sCycleModuleTail = nullptr;
 	AsyncInfo* _sCycleAsyncHead = nullptr;
 	AsyncInfo* _sCycleAsyncTail = nullptr;
+	ClosureInfo* _sCycleClosureHead = nullptr;
+	ClosureInfo* _sCycleClosureTail = nullptr;
 	size_t _cycleCandidateCount = 0;
 	int _cycleQueueRoundRobin = 0;
 	// 후보 루트, graph node, black work, white set을 구간별로 재사용한다.
@@ -95,7 +98,7 @@ public:
 	// 순환 참조 수집. force=false면 max(16, 후보 전체의 2%)개만 처리하고,
 	// force=true면 후보가 빌 때까지 모두 처리한다. 반환값은 처리한 후보 수.
 	int CollectCycles(bool force = false);
-	// 어느 풀이든 완전히 빈 페이지가 있는가(포인터 비교 8번). 매 프레임 경로의 조기 반환용.
+	// 어느 풀이든 완전히 빈 페이지가 있는가. 매 프레임 경로의 조기 반환용.
 	bool AnyEmptyPages() const
 	{
 		return m_sPool_TableData.HasEmptyPages() || m_sPool_TableInfo.HasEmptyPages()
@@ -103,7 +106,8 @@ public:
 			|| m_sPool_SetData.HasEmptyPages()
 			|| m_sPool_SetInfo.HasEmptyPages()
 			|| m_sPool_ListInfo.HasEmptyPages()  || m_sPool_Vec.HasEmptyPages()
-			|| m_sPool_Async.HasEmptyPages()     || m_sPool_String.HasEmptyPages();
+			|| m_sPool_Async.HasEmptyPages()     || m_sPool_String.HasEmptyPages()
+			|| m_sPool_Closure.HasEmptyPages();
 	}
 	void SetEmptyPageHoldSeconds(float sec) { m_iEmptyPageHoldMs = (sec <= 0.0f) ? 0 : (int)(sec * 1000.0f); }
 	float GetEmptyPageHoldSeconds() const { return m_iEmptyPageHoldMs / 1000.0f; }
@@ -111,7 +115,7 @@ public:
 	void SetTrimPagesPerCall(int pages) { m_iTrimPagesPerCall = pages; }
 	int GetTrimPagesPerCall() const { return m_iTrimPagesPerCall; }
 
-	long long PoolBytes() const;   // 이 VM 의 오브젝트 풀 8개가 확보한 총 바이트
+	long long PoolBytes() const;   // 이 VM 의 오브젝트 풀이 확보한 총 바이트
 	// 유휴 문자열 노드가 붙들고 있는 문자 버퍼 합계(풀 페이지 밖의 힙).
 	// free 리스트를 훑으므로 통계 조회 시점에만 부른다.
 	long long StringIdleBytes();
@@ -168,6 +172,8 @@ public:
 
 	AsyncInfo* AsyncAlloc();
 	void FreeAsync(VarInfo* d);
+	ClosureInfo* ClosureAlloc(int functionIndex, int captureCount);
+	void FreeClosure(ClosureInfo* closure);
 
 	FunctionPtr* FunctionPtrAlloc(FunctionPtr* pOld);
 
@@ -226,6 +232,7 @@ public:
 
 	CNVMInstPool< AsyncInfo, 16> m_sPool_Async;
 	CNVMInstPool< StringInfo, 128> m_sPool_String;
+	CNVMInstPool< ClosureInfo, 64> m_sPool_Closure;
 
 	// 빈 페이지 보유 시간(기본 5초).
 	int m_iEmptyPageHoldMs = 5000;
@@ -234,7 +241,7 @@ public:
 	int m_iTrimPagesPerCall = 4;
 	// 라운드로빈 시작 풀. 앞쪽 풀이 예산을 독식해 뒤쪽이 굶는 것을 막는다.
 	int m_iTrimPoolCursor = 0;
-	static const int kTrimPoolCount = 9;
+	static const int kTrimPoolCount = 10;
 	size_t CollectPoolAt(int idx, NeoPoolClock::time_point now, int holdMs, int& pageBudget);
 	// 코루틴 컨텍스트는 공유 실행 컨텍스트 풀(_pExecPool)로 통합됨 → per-VM 풀 제거.
 

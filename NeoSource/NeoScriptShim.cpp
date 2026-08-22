@@ -24,6 +24,7 @@
 #include <new>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -118,6 +119,9 @@ struct RegisteredObject
 };
 
 struct InstanceRec;
+// 캡처 람다 FunctionHandle의 실제 소유물. 공개 핸들은 이 객체 포인터만 불투명하게
+// 들고 복사 시 refs를 공유한다. 일반 함수 핸들은 이 객체를 만들지 않는다.
+struct FunctionRef;
 
 // (instance, object) 바인딩 1건. RegisterTableCallBack 의 void* userData 로 넘긴다.
 // 트램폴린이 이걸로 Runtime/Instance/디스패처/userData 를 복원한다.
@@ -231,6 +235,9 @@ struct InstanceRec
 
     // Invocation 스크래치 (한 인스턴스에 동시 1개 Invocation). 인자를 VM VarInfo 로 직접 축적.
     int                  callFID = -1;
+    // 캡처 람다 호출이면 이 임시 보유분이 RunHostCall 시작 전까지 ClosureInfo를 지킨다.
+    // 일반 함수 호출은 VAR_NONE이다.
+    VarInfo              callClosure;
     std::vector<VarInfo> callArgs;
     int32_t              callTimeoutMs = -1;
     uint32_t             callBudget = 0;
@@ -247,9 +254,116 @@ struct InstanceRec
     Error                callError;
     // 이번 호출 중 네이티브가 CallContext::fail 로 준 코드(0=없음). 첫 호출만 유효.
     int32_t              failCode = 0;
+    // 외부 엔진이 보관 중인 캡처 콜백. Instance Reset/Destroy 전에 무효화해 핸들
+    // 소멸자가 이미 파괴된 worker를 건드리지 않게 한다.
+    std::unordered_set<FunctionRef*> closureHandles;
 };
 
+struct FunctionRef
+{
+    uint32_t refs = 1;
+    InstanceRec* owner = nullptr;
+    ClosureInfo* closure = nullptr;
+};
+
+static void ReleaseClosureRef(INeoVMWorker* worker, ClosureInfo* closure)
+{
+    if (worker == nullptr || closure == nullptr) return;
+    VarInfo value(VAR_CLOSURE);
+    value._closure = closure;
+    worker->Var_Release(&value);
+}
+
+static void FunctionRefAdd(FunctionRef* ref)
+{
+    if (ref) ++ref->refs;
+}
+
+static void FunctionRefRelease(FunctionRef* ref)
+{
+    if (ref == nullptr || --ref->refs != 0) return;
+    if (ref->owner != nullptr)
+    {
+        ref->owner->closureHandles.erase(ref);
+        ReleaseClosureRef(ref->owner->worker, ref->closure);
+    }
+    delete ref;
+}
+
+static void InvalidateFunctionRefs(InstanceRec* inst)
+{
+    if (inst == nullptr) return;
+    while (!inst->closureHandles.empty())
+    {
+        FunctionRef* ref = *inst->closureHandles.begin();
+        inst->closureHandles.erase(inst->closureHandles.begin());
+        ReleaseClosureRef(inst->worker, ref->closure);
+        ref->closure = nullptr;
+        ref->owner = nullptr;
+    }
+}
+
+static void ClearCallClosure(InstanceRec* inst)
+{
+    if (inst == nullptr || inst->callClosure.GetType() != VAR_CLOSURE) return;
+    inst->worker->Var_Release(&inst->callClosure);
+}
+
 } // namespace
+
+FunctionHandle::FunctionHandle(const FunctionHandle& other)
+    : index(other.index), programId(other.programId), programGeneration(other.programGeneration), m_impl(other.m_impl)
+{
+    FunctionRefAdd(static_cast<FunctionRef*>(m_impl));
+}
+
+FunctionHandle::FunctionHandle(FunctionHandle&& other) noexcept
+    : index(other.index), programId(other.programId), programGeneration(other.programGeneration), m_impl(other.m_impl)
+{
+    other.index = UINT32_MAX;
+    other.programId = 0;
+    other.programGeneration = 0;
+    other.m_impl = nullptr;
+}
+
+FunctionHandle& FunctionHandle::operator=(const FunctionHandle& other)
+{
+    if (this == &other) return *this;
+    FunctionRefRelease(static_cast<FunctionRef*>(m_impl));
+    index = other.index;
+    programId = other.programId;
+    programGeneration = other.programGeneration;
+    m_impl = other.m_impl;
+    FunctionRefAdd(static_cast<FunctionRef*>(m_impl));
+    return *this;
+}
+
+FunctionHandle& FunctionHandle::operator=(FunctionHandle&& other) noexcept
+{
+    if (this == &other) return *this;
+    FunctionRefRelease(static_cast<FunctionRef*>(m_impl));
+    index = other.index;
+    programId = other.programId;
+    programGeneration = other.programGeneration;
+    m_impl = other.m_impl;
+    other.index = UINT32_MAX;
+    other.programId = 0;
+    other.programGeneration = 0;
+    other.m_impl = nullptr;
+    return *this;
+}
+
+FunctionHandle::~FunctionHandle()
+{
+    FunctionRefRelease(static_cast<FunctionRef*>(m_impl));
+}
+
+FunctionHandle::operator bool() const noexcept
+{
+    if (index == UINT32_MAX) return false;
+    FunctionRef* ref = static_cast<FunctionRef*>(m_impl);
+    return ref == nullptr || (ref->owner != nullptr && ref->closure != nullptr);
+}
 
 //------------------------------------------------------------------------------
 // 타입드 직접 마샬링 (owning Value 없음 — 규칙 통일, zero-copy).
@@ -344,6 +458,7 @@ static ValueType VarTypeToValueType(VarInfo* v)
     case VAR_MAP:    return ValueType::Map;
     case VAR_LIST:   return ValueType::List;
     case VAR_SET:    return ValueType::Set;
+    case VAR_CLOSURE: return ValueType::Function;
     default:         return ValueType::None;
     }
 }
@@ -362,6 +477,7 @@ struct NeoScriptInternal
     static ListReader  listR(const void* i) { ListReader r;   r.m_impl = i; return r; }
     static Invocation  inv(void* i, uint32_t seq) { Invocation v; v.m_impl = i; v.m_seq = seq; return v; }
     static void*       invImpl(const Invocation& v) { return v.m_impl; }
+    static void*       funImpl(const FunctionHandle& f) { return f.m_impl; }
     // ObjectType 은 불투명 void*(RegisteredObject*) — 구성/해석은 여기서만(공개 API 에 노출 안 함).
     static ObjectType  objType(void* i)     { ObjectType t; t.m_impl = i; return t; }
     static void*       objImpl(ObjectType t) { return t.m_impl; }
@@ -536,6 +652,9 @@ RuntimeImpl::~RuntimeImpl()
         FlushPendingCall(inst);                       // 지연된 borrowed 컨텍스트 반납(pool 아직 살아있음)
         if (inst->worker)
         {
+            ClearCallClosure(inst);
+            InvalidateFunctionRefs(inst);
+            if (!inst->callArgs.empty()) inst->worker->ReleaseArgs(inst->callArgs);
             m_workerHandle.erase(inst->worker);
             if (m_vm) m_vm->ReleaseWorker(inst->worker);
         }
@@ -840,6 +959,9 @@ void RuntimeImpl::DestroyInstance(InstanceHandle h)
     InstanceRec* inst = resolveInstance(h);
     if (!inst) return;
     FlushPendingCall(inst); // 지연된 borrowed 컨텍스트 반납
+    ClearCallClosure(inst);
+    InvalidateFunctionRefs(inst);
+    if (!inst->callArgs.empty()) inst->worker->ReleaseArgs(inst->callArgs);
     m_workerHandle.erase(inst->worker);
     m_vm->ReleaseWorker(inst->worker);
     delete inst;
@@ -927,6 +1049,8 @@ bool RuntimeImpl::ResetInstance(InstanceHandle h)
     FlushPendingCall(inst);
     if (inst->worker)
     {
+        ClearCallClosure(inst);
+        InvalidateFunctionRefs(inst);
         if (!inst->callArgs.empty()) inst->worker->ReleaseArgs(inst->callArgs);
         m_workerHandle.erase(inst->worker);
         m_vm->ReleaseWorker(inst->worker);
@@ -1047,7 +1171,19 @@ Invocation RuntimeImpl::Call(InstanceHandle h, FunctionHandle fn)
     // 겹침 방지: 이전 Invocation 이 arm 된 채(invoke/파괴 전)면 두 번째 Call 을 안전 거부(상태 파괴 회피).
     if (inst->armedSeq != 0) return Invocation();
     FlushPendingCall(inst);
+    ClearCallClosure(inst);
     inst->callFID = static_cast<int>(fn.index);
+    // 캡처 람다는 이를 만든 Instance의 worker/전역 상태에 귀속된다. 같은 Program이라도
+    // 다른 Instance에서 호출하면 capture 값이 어느 VM 소유인지 모호하므로 거부한다.
+    FunctionRef* ref = static_cast<FunctionRef*>(NeoScriptInternal::funImpl(fn));
+    if (ref != nullptr)
+    {
+        if (ref->owner != inst || ref->closure == nullptr || ref->closure->_funIndex != inst->callFID)
+            return Invocation();
+        inst->callClosure = VarInfo(VAR_CLOSURE);
+        inst->callClosure._closure = ref->closure;
+        ++ref->closure->_refCount; // arm 상태의 Invocation이 호출 전까지 보유
+    }
     inst->callArgs.clear();
     inst->callTimeoutMs = -1;
     inst->callBudget = 0;
@@ -1349,14 +1485,33 @@ StringView CallContext::argString(std::size_t i) const { CallContextImpl* c=Ctx(
 void CallContext::argVec(std::size_t i, float out[4]) const { CallContextImpl* c=Ctx(m_impl); ReadVec(CtxArgVar(c,i), out); }
 FunctionHandle CallContext::argFunction(std::size_t i) const
 {
-    // [콜백] 스크립트 함수 인자 → FunctionHandle{_fun_index}. FunctionHandle.index 는 IRuntime::Call 의 iFID 와 동일 공간.
-    // 캡처된 함수는 이 인스턴스의 Program 소속 → program 식별자를 채워 Call 교차검증 대상이 되게 한다.
+    // 일반 함수는 기존처럼 정수 function index만 든다. 캡처 람다는 ClosureInfo를
+    // FunctionHandle의 내부 보유분으로 AddRef해, 네이티브가 호출 프레임 밖에 오래
+    // 저장해도 생성 시점의 지역 VarInfo 복사본이 살아 있게 한다.
     CallContextImpl* c=Ctx(m_impl); VarInfo* v=CtxArgVar(c,i);
-    if (!v || v->GetType() != VAR_FUN) return FunctionHandle{};
-    FunctionHandle fh; fh.index = static_cast<uint32_t>(v->_fun_index);
-    if (c->runtime)
-        if (InstanceRec* inst = static_cast<RuntimeImpl*>(c->runtime)->resolveInstance(c->instance))
-        { fh.programId = inst->program.id; fh.programGeneration = inst->program.generation; }
+    if (!v || (v->GetType() != VAR_FUN && v->GetType() != VAR_CLOSURE)) return FunctionHandle{};
+    InstanceRec* inst = c->runtime ? static_cast<RuntimeImpl*>(c->runtime)->resolveInstance(c->instance) : nullptr;
+    if (!inst) return FunctionHandle{};
+    const int funIndex = (v->GetType() == VAR_FUN) ? v->_fun_index : v->_closure->_funIndex;
+    FunctionHandle fh(static_cast<uint32_t>(funIndex), inst->program.id, inst->program.generation);
+    if (v->GetType() == VAR_CLOSURE)
+    {
+        FunctionRef* ref = new FunctionRef();
+        ref->owner = inst;
+        ref->closure = v->_closure;
+        ++ref->closure->_refCount;
+        try
+        {
+            inst->closureHandles.insert(ref);
+        }
+        catch (...)
+        {
+            ReleaseClosureRef(inst->worker, ref->closure);
+            delete ref;
+            return FunctionHandle{};
+        }
+        fh.m_impl = ref;
+    }
     return fh;
 }
 bool CallContext::argAsMap(std::size_t i, MapReader& out) const
@@ -1514,6 +1669,7 @@ static void InvFinish(void* p, uint32_t seq)
         // invoke 없이 파괴된 경우: 쌓아둔 인자는 VM 참조(문자열/맵)를 들고 있으므로 여기서 반납.
         // (vector::clear 는 VarInfo 참조를 풀지 않는다 → 누수)
         if (!i->callArgs.empty() && i->worker) { i->worker->ReleaseArgs(i->callArgs); i->callArgs.clear(); }
+        ClearCallClosure(i);
     }
     if (i->pendingSeq == seq && i->runtime) i->runtime->FlushPendingCall(i); // 내 pending 만 반납
 }
@@ -1565,6 +1721,7 @@ RunStatus Invocation::invoke()
     if (begin != NeoHostCallBegin::Acquired && begin != NeoHostCallBegin::Nested)
     {
         w->ReleaseArgs(inst->callArgs); inst->callArgs.clear();
+        ClearCallClosure(inst);
         inst->callStatus = RunStatus::Failed;
         if (begin == NeoHostCallBegin::OutOfMemory)
         {
@@ -1583,7 +1740,9 @@ RunStatus Invocation::invoke()
     if (nested) w->BeginNestedScriptCall();
     if (inst->callTimeoutMs >= 0 || inst->callBudget > 0)
         w->SetTimeout(inst->callTimeoutMs, inst->callBudget > 0 ? static_cast<int>(inst->callBudget) : NEO_DEFAULT_CHECKOP);
-    const int execStatus = w->RunHostCall(inst->callFID, inst->callArgs);
+    VarInfo* closureValue = inst->callClosure.GetType() == VAR_CLOSURE ? &inst->callClosure : nullptr;
+    const int execStatus = w->RunHostCall(inst->callFID, inst->callArgs, closureValue);
+    ClearCallClosure(inst); // 실행 프레임은 별도 보유분을 가졌으므로 arm 보유분은 즉시 반납
     if (execStatus == NEOEXEC_SUSPENDED)
     {
         // Setup은 callArgs의 alloc 참조를 실행 스택에 AddRef해 복사했다. 이 벡터를

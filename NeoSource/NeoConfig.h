@@ -61,7 +61,10 @@ struct debug_info
 // 0113: NOP_MOVI_L 뒤에 NOP_MOVF/_L 삽입. 이후 opcode 번호가 바뀌므로 캐시를 재생성한다.
 // 0114: 인라인 문자 타입을 제거하고 foreach 문자열 원소도 VAR_STRING 으로 통합.
 //       VAR_TYPE 값이 바뀌므로 이전 캐시 이미지는 읽을 수 없다.
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('1' << 8) | ('4'))
+// 0115: 함수 테이블에 익명 함수의 지역 VarInfo 캡처 슬롯을 추가.
+// 0116: 다단계 익명 함수 캡처가 중간 부모 프레임의 숨은 슬롯을 경유하도록 컴파일된다.
+//       0115 이미지에는 그 중간 슬롯이 없으므로 캐시를 다시 만들어야 한다.
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('1' << 8) | ('6'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline

@@ -47,6 +47,10 @@ struct SFunctionTable
 	int					_localVarCount;
 	int					_localAddCount; // No Save (로드 시 계산)
 	FUNCTION_TYPE		_funType;
+	// 익명 함수 생성 시 부모 프레임에서 복사할 슬롯과, 호출 프레임에서
+	// 값을 받을 숨은 지역 슬롯. 캡처가 없으면 빈 벡터라 기존 함수 호출은
+	// 추가 비용이 없다.
+	std::vector<std::pair<short, short>> _captures;
 };
 
 // static(상수) 슬롯 1개. VarInfo 가 아니라 원시 값으로 들고 있는다.

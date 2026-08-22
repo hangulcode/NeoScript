@@ -64,9 +64,18 @@ struct SLocalVar
 	}
 };
 
+struct SFunctionInfo;
+
 struct SLayerVar
 {
+	// 이 lexical scope를 소유한 함수. 다단계 캡처에서 각 중간 익명 함수에
+	// 부모 프레임 기준의 숨은 슬롯을 만들 때 사용한다.
+	SFunctionInfo*	_function = nullptr;
 	std::vector<SLocalVar*>	_varsLayer;
+	// 상위 함수의 지역 변수를 읽는 익명 함수는 이름을 자기 숨은 로컬 슬롯으로
+	// 해석한다. 선언 로컬과 달리 이 맵은 현재 블록의 중복 선언 검사에는 넣지
+	// 않는다. `var x`가 그 뒤에 나오면 정상적인 lexical shadowing이 가능하다.
+	std::map<std::string, int>	_captures;
 
 	~SLayerVar()
 	{
@@ -95,7 +104,21 @@ struct SLayerVar
 			if(r != -1)
 				return r;
 		}
+		auto it = _captures.find(name);
+		if (it != _captures.end())
+			return it->second;
 		return -1;
+	}
+
+	int FindCapture(const std::string& name)
+	{
+		auto it = _captures.find(name);
+		return it != _captures.end() ? it->second : -1;
+	}
+
+	void AddCapture(const std::string& name, int offset)
+	{
+		_captures[name] = offset;
 	}
 
 	void	AddLocalVar(const std::string& name, int offset)
@@ -136,6 +159,22 @@ struct SVars
 		}
 		return -1;
 	}
+	// 반환값이 어느 함수 lexical scope에서 왔는지도 함께 알려 준다. 익명 함수
+	// 본문에서 상위 함수의 지역만 캡처하고, 전역은 기존 전역 경로로 남긴다.
+	int FindVar(const std::string& name, SLayerVar** outLayer)
+	{
+		if (outLayer) *outLayer = nullptr;
+		for (int i = (int)_varsFunction.size() - 1; i >= 0; i--)
+		{
+			int r = _varsFunction[i]->FindVar(name);
+			if (r != -1)
+			{
+				if (outLayer) *outLayer = _varsFunction[i];
+				return r;
+			}
+		}
+		return -1;
+	}
 	SLayerVar* GetCurrentLayer()
 	{
 		return _varsFunction[_varsFunction.size() - 1];
@@ -152,6 +191,15 @@ struct SFunctionTableForWriter
 	short						_argsCount;
 	short						_localTempMax;
 	int							_localVarCount;
+	std::vector<std::pair<short, short>> _captures;
+};
+
+// 익명 함수 한 개가 생성될 때 부모 프레임에서 복사할 지역 슬롯과, 그 값을
+// 받는 익명 함수 프레임의 숨은 지역 슬롯 쌍이다.
+struct SClosureCapture
+{
+	short _sourceSlot = 0;
+	short _localSlot = 0;
 };
 
 
@@ -165,6 +213,7 @@ struct SFunctionInfo
 	FUNCTION_TYPE				_funType = FUNT_NORMAL;
 	std::string					_moduleName;
 	std::map<int, std::string>	_debugVarNames;
+	std::vector<SClosureCapture>	_captures;
 
 
 	int							_localVarCount;
@@ -184,12 +233,29 @@ struct SFunctionInfo
 	{
 		_args.clear();
 		_debugVarNames.clear();
+		_captures.clear();
 		_localVarCount = 0;
 		_localTempMax = _localTempCount = 0;
 
 		_iCode_Begin = 0;
 		_iCode_Size = 0;
 		_jumpTargetOffsets.clear();
+	}
+
+	int AddCapture(const std::string& name, int sourceSlot, SLayerVar* layer)
+	{
+		int existing = layer->FindCapture(name);
+		if (existing != -1)
+			return existing;
+
+		const int slot = 1 + (int)_args.size() + _localVarCount++;
+		layer->AddCapture(name, slot);
+		_debugVarNames[slot] = name;
+		SClosureCapture capture;
+		capture._sourceSlot = (short)sourceSlot;
+		capture._localSlot = (short)slot;
+		_captures.push_back(capture);
+		return slot;
 	}
 
 	std::string	GetFullName() { if(_moduleName.empty() == true) return _name; return _moduleName + "." + _name; }

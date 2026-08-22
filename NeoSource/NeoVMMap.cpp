@@ -81,6 +81,7 @@ static bool MapKeyEquals(MapNode& node, VarInfo* pKey, u32 hash)
 	case VAR_LIST:      return data->key._lst == pKey->_lst;
 	case VAR_SET:       return data->key._set == pKey->_set;
 	case VAR_COROUTINE: return data->key._cor == pKey->_cor;
+	case VAR_CLOSURE:   return data->key._closure == pKey->_closure;
 	default:             return false;
 	}
 }
@@ -467,9 +468,9 @@ bool MapInfo::ToListValues(std::vector<VarInfo*>& lst)
 struct NeoSortLocal
 {
 	CNeoVMWorker* m_pN;
-	int m_compare;
+	VarInfo* m_compare;
 
-	NeoSortLocal(CNeoVMWorker* pN, int compare) : m_pN(pN), m_compare(compare) {}
+	NeoSortLocal(CNeoVMWorker* pN, VarInfo* compare) : m_pN(pN), m_compare(compare) {}
 	bool operator () (VarInfo* a, VarInfo* b)
 	{
 		VarInfo args[2];
@@ -480,7 +481,7 @@ struct NeoSortLocal
 	}
 };
 
-void NVM_QuickSort(CNeoVMWorker* pN, int compare, std::vector<VarInfo*>& lst)
+void NVM_QuickSort(CNeoVMWorker* pN, VarInfo* compare, std::vector<VarInfo*>& lst)
 {
 	std::sort(lst.begin(), lst.end(), NeoSortLocal(pN, compare));
 }

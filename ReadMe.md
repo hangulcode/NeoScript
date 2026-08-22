@@ -234,6 +234,24 @@ not yet invoked) returns a falsy `Invocation`; and a value read with `retX` is o
 `invoke()` are still allowed.) `FunctionHandle` also carries its owning program, so passing a handle to an
 instance of a different program is rejected.
 
+**Captured anonymous functions.** An anonymous function captures only the surrounding function's local
+values that it reads; globals retain their normal global lookup. A captured `FunctionHandle` owns its
+capture storage, so keep and call the handle itself rather than saving only `FunctionHandle::index`.
+On each call NeoScript copies that storage into the lambda's normal local stack slots, then copies the
+capture slots back when the call returns (or is unwound/cancelled). This keeps bytecode and ordinary local
+access on the VM stack.
+
+This is deliberately **value capture with call-boundary write-back**, not Lua/JavaScript shared upvalues.
+Two lambdas created from the same outer local do not share later writes, while repeated non-overlapping
+calls through the *same* lambda retain its updated captured values. Re-entering the same captured lambda
+recursively or through a callback is also defined by that copy-back order: the later return writes its
+snapshot last. Use an explicit map/list/object if shared mutable state is required.
+
+`FunctionHandle` is no longer a POD type because captured handles retain an internal reference. Copy, move,
+and destroy it normally; do not put it in a `union`, `memcpy` it, or serialize its object bytes. Runtime and
+its handles remain thread-confined like the execution context pool; transfer work between threads through
+your own synchronization and recreate/call handles on the owning runtime thread.
+
 **Cooperative / time-sliced execution** for long or infinite functions (replaces the old
 bind-a-worker-function + per-frame `Run` loop):
 

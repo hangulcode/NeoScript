@@ -15,6 +15,7 @@ class CNeoVMWorker;
 class CNeoVMProgram;
 struct FunctionPtr;
 struct VarInfo;
+struct ClosureInfo;
 struct NeoExecContextPool;
 struct SFunctionLayer;
 struct SFunctions;
@@ -193,13 +194,16 @@ enum VAR_TYPE : u8
 	VAR_COROUTINE,
 	VAR_MODULE,
 	VAR_ASYNC,
+	// 익명 함수가 생성 시점에 복사한 상위 지역 VarInfo 묶음. 함수 인덱스만
+	// 가진 VAR_FUN과 달리 호출 가능한 인스턴스이며, 자식 VarInfo를 소유한다.
+	VAR_CLOSURE,
 };
 
 // 배치 계약을 코드로 고정한다. IsAllocType()/IsContainerType() 이 단일 비교인 근거가
 // 순전히 열거 순서라서, 주석만 두면 다음 사람이 구간 사이에 새 타입을 끼워 넣는다.
 // 새 타입은 반드시 해당 구간의 **끝**에 추가할 것.
 static_assert(VAR_FP_NATIVE + 1 == VAR_MAP, "VAR_TYPE: 리프 alloc 구간 바로 뒤에 컨테이너 구간이 와야 한다");
-static_assert(VAR_MAP < VAR_ASYNC, "VAR_TYPE: 컨테이너 구간이 열거 맨 뒤여야 한다");
+static_assert(VAR_MAP < VAR_CLOSURE, "VAR_TYPE: 컨테이너 구간이 열거 맨 뒤여야 한다");
 
 struct SNeoVMAllocStats
 {
@@ -210,6 +214,7 @@ struct SNeoVMAllocStats
 	int coroutines = 0;
 	int modules = 0;
 	int asyncs = 0;
+	int closures = 0;
 	int vectors = 0;
 	// VM 메모리풀이 OS 에서 확보해 들고 있는 총 바이트(사용중 + 여유). 풀은 반납해도 페이지를
 	// 돌려주지 않으므로 이 값이 곧 실제 점유량이다. 전역 조회면 모든 VM 의 오브젝트 풀 +
@@ -329,6 +334,7 @@ public:
 		int			_fun_index;
 		INeoVMWorker* _module;
 		AsyncInfo*	_async;
+		ClosureInfo*	_closure;
 		CollectionIterator	_it;
 		VecInfo*	_vec; // VAR_VEC 성분(유효 성분 수는 _vecCount)
 	};
@@ -702,7 +708,9 @@ public:
 	virtual void BeginNestedScriptCall() = 0;
 	virtual void EndNestedScriptCall() = 0;
 	// BeginHostCall로 확보한 컨텍스트에서 실행하고 상태를 반환한다.
-	virtual int RunHostCall(int iFunctionID, std::vector<VarInfo>& _args) = 0;
+	// closureValue가 있으면(VAR_CLOSURE), 함수 번호뿐 아니라 생성 시점에 보관한
+	// 캡처 환경까지 최상위 호출 프레임에 주입한다. nullptr은 기존 일반 함수 경로.
+	virtual int RunHostCall(int iFunctionID, std::vector<VarInfo>& _args, VarInfo* closureValue = nullptr) = 0;
 	// 정지(sleep/디버거/슬라이스 제한)된 실행을 버리고 컨텍스트를 풀로 반납한다.
 	// 전역 변수는 보존된다(워커는 그대로 살아있고 idle 로 돌아감).
 	// 인터프리터 실행 중(네이티브 콜백 안 등)에는 컨텍스트를 해제할 수 없으므로 false 를 반환한다.

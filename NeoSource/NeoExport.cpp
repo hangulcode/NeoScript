@@ -131,6 +131,10 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 	fun._localVarCount = fi._localVarCount;
 	fun._funType = fi._funType;
 	fun._name = fi._name;
+	fun._captures.clear();
+	fun._captures.reserve(fi._captures.size());
+	for (const SClosureCapture& capture : fi._captures)
+		fun._captures.push_back(std::make_pair(capture._sourceSlot, capture._localSlot));
 
 	int curFunStatkSize = 1 + fun._argsCount + fun._localVarCount + fun._localTempMax;
 
@@ -807,6 +811,10 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 		int iID = (*it).first;
 		SFunctionTableForWriter fun = (*it).second;
 		ar << iID << fun._codePtr << fun._argsCount << fun._localTempMax << fun._localVarCount << fun._funType;
+		const u16 captureCount = (u16)fun._captures.size();
+		ar << captureCount;
+		for (const auto& capture : fun._captures)
+			ar << capture.first << capture.second;
 		if (fun._funType != FUNT_NORMAL && fun._funType != FUNT_ANONYMOUS)
 		{
 			WriteString(ar, fun._name);

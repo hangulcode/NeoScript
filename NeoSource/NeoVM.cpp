@@ -152,6 +152,13 @@ void INeoVM::Var_ReleaseInternal(VarInfo* d)
 			((CNeoVMImpl*)this)->QueueContainerForCycleCheck(*d);
 		d->_async = NULL;
 		break;
+	case VAR_CLOSURE:
+		if (--d->_closure->_refCount <= 0)
+			((CNeoVMImpl*)this)->QueueContainerForDestroy(*d);
+		else if (d->_closure->_cycleState._mayContainContainerChild)
+			((CNeoVMImpl*)this)->QueueContainerForCycleCheck(*d);
+		d->_closure = NULL;
+		break;
 	default:
 		break;
 	}

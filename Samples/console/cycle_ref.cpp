@@ -34,7 +34,7 @@ static void CycOk(bool cond, const char* msg)
 
 static int ContainerCount(const SNeoVMAllocStats& s)
 {
-    return s.maps + s.lists + s.sets;
+    return s.maps + s.lists + s.sets + s.closures;
 }
 
 int SAMPLE_cycle_ref(INeoLoader* pLoader, std::string filename)
