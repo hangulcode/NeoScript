@@ -656,6 +656,77 @@ int NeoScriptV2Smoke()
         }
     }
 
+    // 캡처 람다의 수명. 호스트가 핸들을 오래 들고 있을 때 alloc 캡처(문자열/맵)가
+    // 함께 살아 있어야 하고, Runtime 이 죽으면 핸들은 무효가 되되 해제는 새어나가면 안 된다.
+    {
+        SNeoVMAllocStats base{}, held{}, afterRuntime{}, afterHandle{};
+        GetNeoVMAllocStats(base);
+        FunctionHandle kept;
+        {
+            RuntimeDesc rd2;
+            IRuntime* rt2 = CreateRuntime(rd2);
+            NativeObjectDesc od2; od2.name = "Host"; od2.method = &HostMethod;
+            rt2->RegisterObject(od2);
+            rt2->FreezeBindings();
+            const char* src2 =
+                "export fun hold() { var s = \"LIFE\"; var m = { \"n\" : 1 };"
+                " Host.defer(fun() { m[\"n\"] = m[\"n\"] + 1; return s .. m[\"n\"]; }); }" "\n";
+            CompileDesc cd2; cd2.source = src2; cd2.sourceName = "life.ns";
+            CompileResult cr2 = rt2->Compile(cd2);
+            Check(static_cast<bool>(cr2.program), "lifetime: compile");
+            InstanceHandle i2 = rt2->CreateInstance(cr2.program);
+            rt2->BindObject(i2, "Host", nullptr);
+            g_deferredCallback = FunctionHandle();
+            rt2->Call(i2, "hold").invoke();
+            kept = g_deferredCallback;              // 호스트가 오래 들고 있는 사본
+            g_deferredCallback = FunctionHandle();
+            GetNeoVMAllocStats(held);
+            CallResult r1 = rt2->Call(i2, kept).invokeR();
+            Check(r1.ok() && std::string(r1.asString().data(), r1.asString().size()) == "LIFE2",
+                "lifetime: host handle keeps the alloc captures alive");
+            Check(held.strings > base.strings || held.maps > base.maps,
+                "lifetime: captured string/map are still allocated while the handle lives");
+            rt2->DestroyProgram(cr2.program);
+            DestroyRuntime(rt2);                    // 핸들을 든 채로 Runtime 파괴
+        }
+        GetNeoVMAllocStats(afterRuntime);
+        Check(!static_cast<bool>(kept), "lifetime: handle goes invalid when the runtime dies");
+        Check(afterRuntime.maps <= base.maps && afterRuntime.strings <= base.strings,
+            "lifetime: captures are released with the runtime, not leaked");
+        kept = FunctionHandle();                    // 죽은 런타임의 핸들 소멸 — 크래시 없어야 한다
+        GetNeoVMAllocStats(afterHandle);
+        Check(afterHandle.maps <= base.maps, "lifetime: destroying a stale handle is safe");
+    }
+
+    // 순환에 속한 closure 라도 호스트 핸들이 살아 있으면 수집기가 가져가면 안 된다.
+    {
+        RuntimeDesc rd3;
+        IRuntime* rt3 = CreateRuntime(rd3);
+        NativeObjectDesc od3; od3.name = "Host"; od3.method = &HostMethod;
+        rt3->RegisterObject(od3);
+        rt3->FreezeBindings();
+        const char* src3 =
+            "export fun holdCyclic() { var m = { \"n\" : 7 };"
+            " m[\"self\"] = fun() { return m[\"n\"]; };"
+            " Host.defer(m[\"self\"]); }" "\n";
+        CompileDesc cd3; cd3.source = src3; cd3.sourceName = "cyc.ns";
+        CompileResult cr3 = rt3->Compile(cd3);
+        InstanceHandle i3 = rt3->CreateInstance(cr3.program);
+        rt3->BindObject(i3, "Host", nullptr);
+        g_deferredCallback = FunctionHandle();
+        rt3->Call(i3, "holdCyclic").invoke();
+        FunctionHandle cyclic = g_deferredCallback;
+        g_deferredCallback = FunctionHandle();
+        for (int i = 0; i < 64 && rt3->CollectCycles(true) != 0; ++i) {}
+        CallResult r3 = rt3->Call(i3, cyclic).invokeR();
+        Check(r3.ok() && r3.asInt() == 7,
+            "lifetime: a host handle protects its closure from the cycle collector");
+        cyclic = FunctionHandle();
+        rt3->DestroyInstance(i3);
+        rt3->DestroyProgram(cr3.program);
+        DestroyRuntime(rt3);
+    }
+
     rt->DestroyInstance(a);
     rt->DestroyInstance(b);
     rt->DestroyProgram(cr.program);
