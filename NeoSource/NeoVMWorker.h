@@ -355,8 +355,10 @@ private:
 	// return 값 슬롯은 Sync 뒤에도 caller가 읽으므로 보존한다. 나머지 캡처
 	// 슬롯은 closure 보관함으로 소유권을 넘긴다.
 	void SyncActiveClosure(const VarInfo* keepOnStack = nullptr);
-	void SyncClosureAtFrame(ClosureInfo* closure, int stackBase, const VarInfo* keepOnStack = nullptr);
+	void SyncClosureAtFrame(ClosureInfo* closure, int stackBase, const VarInfo* keepOnStack = nullptr,
+		std::vector<VarInfo>* varStack = nullptr);
 	NEOS_NOINLINE void FinishClosureReturn(const VarInfo* keepOnStack);
+	void DrainCoroutineClosures(CoroutineInfo* pCI); // close/cancel 시 실행 보유 closure를 동기화·반납
 
 	bool CallNative(FunctionPtrNative functionPtrNative, void* pUserData, StringInfo *pStr, int n3, VarInfo* pRet = nullptr);
 	bool CallDefaultNativeByIndex(int nativeIndex, int n3, VarInfo* pRet = nullptr);

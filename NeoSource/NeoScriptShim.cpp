@@ -1440,6 +1440,7 @@ void GetAllocStats(AllocStats& out)
     out.coroutines = s.coroutines; out.modules = s.modules; out.asyncs = s.asyncs;
     out.vectors = s.vectors; out.poolBytes = s.poolBytes;
     out.stringIdleBytes = s.stringIdleBytes;
+    out.closures = s.closures;
 }
 
 //==============================================================================

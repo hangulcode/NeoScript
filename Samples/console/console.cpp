@@ -165,7 +165,8 @@ static double ElapsedMs(std::chrono::steady_clock::time_point start, std::chrono
 	return std::chrono::duration<double, std::milli>(end - start).count();
 }
 
-static int RunFile(CNeoLoader* pLoader, const std::string& filename, bool putASM, bool debug)
+static int RunFile(CNeoLoader* pLoader, const std::string& filename, bool putASM, bool debug,
+	NeoScript::SNeoVMAllocStats* liveStats = nullptr)
 {
 	void* pFileBuffer = nullptr;
 	int iFileLen = 0;
@@ -209,6 +210,10 @@ static int RunFile(CNeoLoader* pLoader, const std::string& filename, bool putASM
 
 	rt->DestroyInstance(inst);
 	rt->DestroyProgram(cr.program);
+	// Runtime 파괴 전의 live registry를 읽는다. 그래야 실행 컨텍스트 풀에 남은
+	// closure 같은 장기 누수가 VM 소멸자의 강제 sweep으로 가려지지 않는다.
+	if (liveStats)
+		NeoScript::GetNeoVMAllocStats(*liveStats);
 	DestroyRuntime(rt);
 	return exitCode;
 }
@@ -2260,14 +2265,12 @@ int main(int argc, char* argv[])
 				else if (opt == "--debug") debug = true;
 				else if (opt == "--stats") stats = true;
 			}
-			exitCode = RunFile(pLoader, argv[2], putASM, debug);
+			NeoScript::SNeoVMAllocStats s;
+			exitCode = RunFile(pLoader, argv[2], putASM, debug, stats ? &s : nullptr);
 			if (stats)
 			{
-				// 스크립트/VM 정리 후 남아있는 할당 수. 전부 0 이어야 누수가 없다.
-				NeoScript::SNeoVMAllocStats s;
-				NeoScript::GetNeoVMAllocStats(s);
-				printf("[ALLOC] str=%d map=%d list=%d set=%d cor=%d mod=%d async=%d vec=%d pool=%lld bytes\n",
-					s.strings, s.maps, s.lists, s.sets, s.coroutines, s.modules, s.asyncs, s.vectors,
+				printf("[ALLOC] str=%d map=%d list=%d set=%d cor=%d mod=%d async=%d closure=%d vec=%d pool=%lld bytes\n",
+					s.strings, s.maps, s.lists, s.sets, s.coroutines, s.modules, s.asyncs, s.closures, s.vectors,
 					s.poolBytes);
 				// 풀 페이지 밖의 문자열 힙. 계속 크면 유지 임계값을 낮춰야 한다.
 				printf("[ALLOC] stringIdle=%lld bytes\n", s.stringIdleBytes);

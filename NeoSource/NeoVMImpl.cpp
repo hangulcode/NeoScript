@@ -375,6 +375,19 @@ void CNeoVMImpl::FreeCoroutine(VarInfo *d)
 	if (n > (int)s.size()) n = (int)s.size();
 	for (int i = 0; i < n; i++)
 		Var_Release(&s[i]);
+	// coroutine이 일반 함수 안에서 yield하면 부모 closure의 실행 참조는 여기로
+	// 옮겨진다. 풀 반납 전 반드시 풀어야 다음 Acquire의 clear()가 소유권을 잃지 않는다.
+	for (int i = 0; i < (int)pCI->m_sClosureCallStack.size(); ++i)
+	{
+		SClosureCallState& state = pCI->m_sClosureCallStack[i];
+		if (state._closure == nullptr)
+			continue;
+		VarInfo active(VAR_CLOSURE);
+		active._closure = state._closure;
+		state._closure = nullptr;
+		Var_Release(&active);
+	}
+	pCI->m_sClosureCallStack.clear();
 	Var_Release(&pCI->_function);
 	if (pCI->_activeClosure)
 	{
@@ -1006,6 +1019,11 @@ void CNeoVMImpl::VisitCycleContainerChildren(VarInfo source, Visitor visitor)
 		VarInfo function = coroutine->_function;
 		if (function.IsContainerType()) visitor(function.GetType(), GetContainerObject(function));
 		if (coroutine->_activeClosure) visitor(VAR_CLOSURE, coroutine->_activeClosure);
+		for (int i = 0; i < (int)coroutine->m_sClosureCallStack.size(); ++i)
+		{
+			const SClosureCallState& state = coroutine->m_sClosureCallStack[i];
+			if (state._closure) visitor(VAR_CLOSURE, state._closure);
+		}
 		break;
 	}
 	case VAR_MODULE:
@@ -1373,6 +1391,17 @@ int CNeoVMImpl::CollectUnreachableCycleCandidates(size_t rootBudget)
 				releaseVar(active);
 				coroutine->_activeClosure = nullptr;
 			}
+			for (int i = 0; i < (int)coroutine->m_sClosureCallStack.size(); ++i)
+			{
+				SClosureCallState& state = coroutine->m_sClosureCallStack[i];
+				if (state._closure == nullptr)
+					continue;
+				VarInfo active(VAR_CLOSURE);
+				active._closure = state._closure;
+				releaseVar(active);
+				state._closure = nullptr;
+			}
+			coroutine->m_sClosureCallStack.clear();
 			break;
 		}
 		case VAR_MODULE:

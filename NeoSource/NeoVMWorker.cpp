@@ -2015,24 +2015,52 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 
 void	CNeoVMWorker::DeadCoroutine(CoroutineInfo* pCI)
 {
-	if (pCI->_activeClosure && pCI == m_pCur)
-	{
-		SyncClosureAtFrame(pCI->_activeClosure, _iSP_Vars);
-		VarInfo active(VAR_CLOSURE);
-		active._closure = pCI->_activeClosure;
-		if (m_pActiveClosure == pCI->_activeClosure)
-			m_pActiveClosure = nullptr;
-		pCI->_activeClosure = nullptr;
-		Var_Release(&active);
-	}
+	if (pCI == nullptr)
+		return;
+	DrainCoroutineClosures(pCI);
 	pCI->_state = COROUTINE_STATE_DEAD;
 	int iSP_Vars_Max2 = pCI->_info._iSP_Vars_Max2;
 	std::vector<VarInfo>& sVarStack = pCI->m_sVarStack;
+	if (iSP_Vars_Max2 > (int)sVarStack.size())
+		iSP_Vars_Max2 = (int)sVarStack.size();
 	for (int i = 0; i < iSP_Vars_Max2; i++)
 		Var_Release(&(sVarStack)[i]);
 
 	pCI->_info.ClearSP();
 	pCI->m_sAsyncWaitReturnStack.clear();
+}
+
+void CNeoVMWorker::DrainCoroutineClosures(CoroutineInfo* pCI)
+{
+	if (pCI == nullptr)
+		return;
+
+	// cancel/close는 RET를 밟지 않는다. 캡처 슬롯을 먼저 보관함으로 돌린 뒤,
+	// active 또는 일반 호출 프레임이 들고 있던 실행 참조를 정확히 한 번 반납한다.
+	ClosureInfo*& activeClosure = pCI->_activeClosure;
+	if (activeClosure != nullptr)
+	{
+		SyncClosureAtFrame(activeClosure, pCI->_info._iSP_Vars, nullptr, &pCI->m_sVarStack);
+		VarInfo active(VAR_CLOSURE);
+		active._closure = activeClosure;
+		if (m_pActiveClosure == activeClosure)
+			m_pActiveClosure = nullptr;
+		activeClosure = nullptr;
+		Var_Release(&active);
+	}
+
+	for (int i = (int)pCI->m_sClosureCallStack.size() - 1; i >= 0; --i)
+	{
+		SClosureCallState& state = pCI->m_sClosureCallStack[i];
+		if (state._closure == nullptr)
+			continue;
+		SyncClosureAtFrame(state._closure, state._iSP_Vars, nullptr, &pCI->m_sVarStack);
+		VarInfo active(VAR_CLOSURE);
+		active._closure = state._closure;
+		state._closure = nullptr;
+		Var_Release(&active);
+	}
+	pCI->m_sClosureCallStack.clear();
 }
 bool CNeoVMWorker::StopCoroutine(bool doDead)
 {
@@ -2319,18 +2347,29 @@ NEOS_NOINLINE void CNeoVMWorker::FinishClosureReturn(const VarInfo* keepOnStack)
 	Var_Release(&active);
 }
 
-void CNeoVMWorker::SyncClosureAtFrame(ClosureInfo* closure, int stackBase, const VarInfo* keepOnStack)
+void CNeoVMWorker::SyncClosureAtFrame(ClosureInfo* closure, int stackBase, const VarInfo* keepOnStack,
+	std::vector<VarInfo>* varStack)
 {
 	if (closure == nullptr || closure->_funIndex < 0 ||
 		closure->_funIndex >= (int)Functions().size())
 		return;
+	if (varStack == nullptr)
+		varStack = m_pVarStack_Base;
+	if (varStack == nullptr || stackBase < 0)
+		return;
 	const SFunctionTable& fun = Functions()[closure->_funIndex];
 	if (closure->_captures.size() != fun._captures.size())
 		return;
+	for (size_t i = 0; i < fun._captures.size(); ++i)
+	{
+		const int sourceIndex = stackBase + fun._captures[i].second;
+		if (sourceIndex < 0 || sourceIndex >= (int)varStack->size())
+			return;
+	}
 	bool mayContainContainerChild = false;
 	for (size_t i = 0; i < fun._captures.size(); ++i)
 	{
-		VarInfo* source = &(*m_pVarStack_Base)[stackBase + fun._captures[i].second];
+		VarInfo* source = &(*varStack)[stackBase + fun._captures[i].second];
 		// 반환값으로 아직 사용될 슬롯만 복사로 남긴다. 나머지 캡처 슬롯은 호출
 		// 프레임이 끝난 뒤 쓰이지 않으므로 보관함에 소유권을 넘긴다.
 		if (source->IsContainerType())

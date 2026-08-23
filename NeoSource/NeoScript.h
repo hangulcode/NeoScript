@@ -812,6 +812,7 @@ struct AllocStats
     int64_t poolBytes = 0;
     // 반납되어 놀고 있는 문자열 노드가 아직 들고 있는 문자 버퍼 합계(poolBytes 밖의 힙).
     int64_t stringIdleBytes = 0;
+    int32_t closures = 0;  // 캡처 람다 보관함(ClosureInfo)
 };
 void GetAllocStats(AllocStats& out);
 

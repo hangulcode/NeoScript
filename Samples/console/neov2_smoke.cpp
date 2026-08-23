@@ -368,6 +368,42 @@ int NeoScriptV2Smoke()
         }
     }
 
+    // 캡처 람다가 일반 함수를 호출한 안쪽에서 yield한 뒤 코루틴을 close한다.
+    // 부모 closure의 실행 참조는 m_sClosureCallStack에 park되므로, close/free 경로가
+    // 이를 반납하지 않으면 live closure 수가 호출마다 하나씩 증가한다.
+    {
+        const char* parkedClosureSrc =
+            "import coroutine;\n"
+            "fun PauseOnce() { yield; }\n"
+            "export fun closeParkedClosure() { var tag = \"parked\"; var cb = fun() { PauseOnce(); return tag; }; var co = coroutine.create(cb); coroutine.resume(co); coroutine.close(co); return 1; }\n"
+            "export fun dropParkedClosure() { var tag = \"parked\"; var cb = fun() { PauseOnce(); return tag; }; var co = coroutine.create(cb); coroutine.resume(co); return 2; }\n";
+        CompileDesc parkedClosureDesc;
+        parkedClosureDesc.source = parkedClosureSrc;
+        parkedClosureDesc.sourceName = "closure_parked_coroutine.ns";
+        CompileResult parkedClosureProgram = rt->Compile(parkedClosureDesc);
+        Check(static_cast<bool>(parkedClosureProgram.program), "parked closure coroutine: compile");
+        if (parkedClosureProgram.program)
+        {
+            InstanceHandle parkedClosureInstance = rt->CreateInstance(parkedClosureProgram.program);
+            SNeoVMAllocStats before{}, after{};
+            GetNeoVMAllocStats(before);
+            CallResult closed = rt->Call(parkedClosureInstance, "closeParkedClosure").invokeR();
+            GetNeoVMAllocStats(after);
+            Check(closed.ok() && closed.asInt() == 1,
+                "parked closure coroutine: close succeeds");
+            Check(after.closures == before.closures,
+                "parked closure coroutine: close releases parked parent closure");
+            CallResult dropped = rt->Call(parkedClosureInstance, "dropParkedClosure").invokeR();
+            GetNeoVMAllocStats(after);
+            Check(dropped.ok() && dropped.asInt() == 2,
+                "parked closure coroutine: drop succeeds");
+            Check(after.closures == before.closures,
+                "parked closure coroutine: drop releases parked parent closure");
+            rt->DestroyInstance(parkedClosureInstance);
+            rt->DestroyProgram(parkedClosureProgram.program);
+        }
+    }
+
     // 오류 unwind도 정상 RET처럼 부모 람다 프레임의 변경분을 closure로 반영해야 한다.
     // closureExplode는 람다 안에서 일반 스크립트 함수를 한 단계 더 호출해, 상위 스택의
     // active closure 동기화까지 검증한다.
