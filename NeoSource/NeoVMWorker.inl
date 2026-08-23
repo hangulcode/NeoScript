@@ -2,7 +2,9 @@
 
 NEOS_FORCEINLINE bool CNeoVMWorker::EnsureStackRange(int base, int lastOffset)
 {
-	const int stackSize = (int)m_pVarStack_Base->size();
+	// SetVarStackBase 가 유지하는 캐시. 옛 코드는 여기서 m_pVarStack_Base->size() 를
+	// 읽어 의존 로드가 두 단이었다 — 호출 빈도가 높아 그 자체로 비용이었다.
+	const int stackSize = m_iVarStackSize;
 	if (base > stackSize - 1 - lastOffset)
 	{
 		SetError(RTE_CALL_STACK_OVERFLOW);

@@ -98,7 +98,7 @@ CNeoVMWorker::CNeoVMWorker(CNeoVM* pVM, u32 id, int iStackSize)
 	// 실행 스택은 더 이상 워커가 소유하지 않는다. 실행 시 풀에서 컨텍스트를 대여해 바인딩한다.
 	m_pCur = nullptr;
 	m_pMainCtx = nullptr;
-	m_pVarStack_Base = nullptr;
+	SetVarStackBase(nullptr);
 	m_pCallStack = nullptr;
 	m_pClosureCallStack = nullptr;
 	m_pVarStack_Pointer = nullptr;
@@ -783,7 +783,7 @@ void CNeoVMWorker::SetErrorFormat(const char* fmt, ...)
 void CNeoVMWorker::BindContext(CoroutineInfo* ctx)
 {
 	m_pCur = ctx;
-	m_pVarStack_Base = &ctx->m_sVarStack;
+	SetVarStackBase(&ctx->m_sVarStack);
 	m_pCallStack = &ctx->m_sCallStack;
 	m_pClosureCallStack = &ctx->m_sClosureCallStack;
 	m_pVarStack_Pointer = &(*m_pVarStack_Base)[0];
@@ -924,7 +924,7 @@ void CNeoVMWorker::ReleaseExecution(bool discardParkedClosuresWithoutSync)
 	ClearSP();
 	_iRemainSleep = 0;
 	m_bSliceExpired = false;
-	m_pVarStack_Base = nullptr;
+	SetVarStackBase(nullptr);
 	m_pCallStack = nullptr;
 	m_pClosureCallStack = nullptr;
 	m_pVarStack_Pointer = nullptr;
@@ -2141,7 +2141,7 @@ bool CNeoVMWorker::StopCoroutine(bool doDead)
 			return false;
 		}
 		m_pCur->_state = COROUTINE_STATE_RUNNING;
-		m_pVarStack_Base = &m_pCur->m_sVarStack;
+		SetVarStackBase(&m_pCur->m_sVarStack);
 		m_pCallStack = &m_pCur->m_sCallStack;
 		m_pClosureCallStack = &m_pCur->m_sClosureCallStack;
 		m_pActiveClosure = m_pCur->_activeClosure;
@@ -2168,7 +2168,7 @@ bool CNeoVMWorker::StartCoroutione(int argSP_Vars, int n3)
 		m_pCur = m_pRegisterActive;
 		m_pCur->_state = COROUTINE_STATE_RUNNING;
 		m_pCur->_sub_state = COROUTINE_SUB_NORMAL;
-		m_pVarStack_Base = &m_pCur->m_sVarStack;
+		SetVarStackBase(&m_pCur->m_sVarStack);
 		m_pCallStack = &m_pCur->m_sCallStack;
 		m_pClosureCallStack = &m_pCur->m_sClosureCallStack;
 		m_pActiveClosure = m_pCur->_activeClosure;

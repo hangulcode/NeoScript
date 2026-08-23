@@ -202,7 +202,19 @@ private:
 	}
 
 	std::vector<VarInfo>*	m_pVarStack_Base;
+	// m_pVarStack_Base->size() 를 캐시한다. EnsureStackRange 는 호출마다 도는데(프로파일상
+	// 7억 회) 매번 포인터 → 벡터 → size 로 의존 로드를 두 단 탔다. 스택은 실행 컨텍스트를
+	// 대여할 때 한 번만 resize 되고 실행 중에는 절대 커지지 않으므로(EnsureStackRange 는
+	// 넘치면 에러를 낼 뿐 늘리지 않는다) 베이스가 바뀔 때만 갱신하면 된다.
+	int						m_iVarStackSize;
 	VarInfo*				m_pVarStack_Pointer;
+
+	// 둘이 어긋나면 스택 범위 검사가 조용히 틀리므로 항상 함께 바꾼다.
+	NEOS_FORCEINLINE void SetVarStackBase(std::vector<VarInfo>* p)
+	{
+		m_pVarStack_Base = p;
+		m_iVarStackSize = (p != nullptr) ? (int)p->size() : 0;
+	}
 	SimpleVector<SCallStack>* m_pCallStack;
 	SimpleVector<SClosureCallState>* m_pClosureCallStack;
 	// 현재 실행 프레임이 어떤 값 캡처 closure에서 시작됐는지. 호출 중에는
