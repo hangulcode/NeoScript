@@ -131,19 +131,14 @@ NEOS_FORCEINLINE bool handle_CALL_L(const SVMOperation& OP) {
 
 // 본문은 base/_L 공용. pFunNamePre 가 있으면 그것을 쓰고(=_L, 로컬 확정),
 // nullptr 이면 기존대로 필요한 분기에서만 늦게 뽑는다(n2 == -1 센티널 보호).
-NEOS_FORCEINLINE bool handle_PTRCALL_impl(const SVMOperation& OP, VarInfo* pVar1, VarInfo* pFunNamePre) {
+// 네이티브 라이브러리 디스패치. 본문 명령어의 대부분이 여기이고 PTRCALL/PTRCALL_L 두 곳에
+// 전개되므로 루프 밖으로 뺀다 — CltInsert/Add3 와 같은 fast/rare 분리다.
+// pFunName 은 원본과 같이 분기 안에서 늦게 뽑는다(n2 == -1 센티널 보호).
+NEOS_NOINLINE bool handle_PTRCALL_native(const SVMOperation& OP, VarInfo* pVar1, VarInfo* pFunNamePre) {
     short n3 = OP.n3;
     VarInfo* pFunName = nullptr;
     switch (pVar1->GetType())
     {
-    case VAR_FUN:
-        if ((OP.argFlag & NEOS_ARG_N2_LOCAL) == 0 && -1 == OP.n2)
-            Call(pVar1->_fun_index, OP.n3);
-        break;
-    case VAR_FUN_NATIVE:
-        if ((OP.argFlag & NEOS_ARG_N2_LOCAL) == 0 && -1 == OP.n2)
-            Call(pVar1->_funPtr, OP.n3);
-        break;
     case VAR_STRING:
         pFunName = pFunNamePre ? pFunNamePre : GetVarPtr2(OP);
         CallNative(GetVM()->_funLib_String, pVar1, pFunName->_str, n3);
@@ -185,15 +180,34 @@ NEOS_FORCEINLINE bool handle_PTRCALL_impl(const SVMOperation& OP, VarInfo* pVar1
         pFunName = pFunNamePre ? pFunNamePre : GetVarPtr2(OP);
         CallNative(GetVM()->_funLib_Async, pVar1, pFunName->_str, n3);
         break;
-    case VAR_CLOSURE:
-        if ((OP.argFlag & NEOS_ARG_N2_LOCAL) == 0 && -1 == OP.n2)
-            Call(pVar1->_closure, OP.n3);
-        break;
     default:
         SetError(RTE_CALL_INVALID);
         break;
     }
     return false;
+}
+
+// 스크립트/네이티브 함수값을 바로 부르는 세 경우만 인라인에 남긴다. 각 두 줄이라
+// 디스패치 루프를 거의 키우지 않으면서, 호출당 분기 하나로 끝난다.
+NEOS_FORCEINLINE bool handle_PTRCALL_impl(const SVMOperation& OP, VarInfo* pVar1, VarInfo* pFunNamePre) {
+    switch (pVar1->GetType())
+    {
+    case VAR_FUN:
+        if ((OP.argFlag & NEOS_ARG_N2_LOCAL) == 0 && -1 == OP.n2)
+            Call(pVar1->_fun_index, OP.n3);
+        return false;
+    case VAR_FUN_NATIVE:
+        if ((OP.argFlag & NEOS_ARG_N2_LOCAL) == 0 && -1 == OP.n2)
+            Call(pVar1->_funPtr, OP.n3);
+        return false;
+    case VAR_CLOSURE:
+        if ((OP.argFlag & NEOS_ARG_N2_LOCAL) == 0 && -1 == OP.n2)
+            Call(pVar1->_closure, OP.n3);
+        return false;
+    default:
+        break;
+    }
+    return handle_PTRCALL_native(OP, pVar1, pFunNamePre);
 }
 
 NEOS_FORCEINLINE bool handle_PTRCALL(const SVMOperation& OP) {
