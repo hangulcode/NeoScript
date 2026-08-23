@@ -9,8 +9,7 @@ namespace NeoScript
 class CNArchive;
 
 struct INeoVMWorker;
-struct INeoVM;
-class CNeoVMImpl;
+class CNeoVM;
 class CNeoVMWorker;
 class CNeoVMProgram;
 struct FunctionPtr;
@@ -226,9 +225,8 @@ struct SNeoVMAllocStats
 	long long stringIdleBytes = 0;
 };
 
-struct INeoVM;
 void GetNeoVMAllocStats(SNeoVMAllocStats& outStats);
-bool GetNeoVMAllocStats(INeoVM* pVM, SNeoVMAllocStats& outStats);
+bool GetNeoVMAllocStats(CNeoVM* pVM, SNeoVMAllocStats& outStats);
 
 struct CoroutineInfo;
 struct StringInfo;
@@ -309,8 +307,7 @@ private:
 	}
 
 	friend struct INeoVMWorker;
-	friend struct INeoVM;
-	friend class CNeoVMImpl;
+	friend class CNeoVM;
 	friend class CNeoVMWorker;
 	friend struct MapInfo;
 	friend struct ListInfo;
@@ -460,7 +457,7 @@ struct INeoVMWorker
 {
 protected:
 	std::vector<VarInfo>* _args = NULL;
-	INeoVM* _pVM;
+	CNeoVM* _pVM;
 
 	u32						_idWorker;
 	int	_BytesSize = 0;
@@ -779,13 +776,10 @@ struct NeoLoadVMParam
 };
 
 
-struct INeoVM
+// 컴파일러/빌트인/로그 훅처럼 VM 인스턴스에 속하지 않는 프로세스 전역 서비스.
+// 실행 상태와 메모리 풀은 CNeoVM 하나가 소유한다.
+struct NeoVMSystem
 {
-protected:
-	INeoVMWorker* _pMainWorker = NULL;
-	bool _bError = false;
-public:
-	inline bool IsLocalErrorMsg() { return _bError; }
 	static FunctionPtrNative RegisterNative(Neo_NativeFunction func);
 
 	// 프로세스 전역 print/error 훅. 최초 초기화(1회) 때만 설정한다(VM 생성마다 X).
@@ -794,35 +788,10 @@ public:
 	static IO_Print m_pFunPrint;
 	static IO_Print m_pFunError;
 
-//	void Var_AddRef(VarInfo* d);
-//	static void Move_DestNoRelease(VarInfo* v1, VarInfo* v2);
-
-	void Var_ReleaseInternal(VarInfo* d);
-
 	static bool	RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFunction func, Neo_NativeProperty property);
 
-	virtual bool ReleaseWorker(INeoVMWorker* worker) = 0;
-
-	inline INeoVMWorker* GetMainWorker() { return _pMainWorker; }
-	inline int GetBytesSize() { return _pMainWorker->GetBytesSize(); }
-
-	virtual  const char* GetLastErrorMsg() = 0;
-	virtual  bool IsLastErrorMsg() = 0;
-	virtual  void ClearLastErrorMsg() = 0;
-	// 네이티브(호스트 바인딩 함수)가 자기 실패 사유를 남긴다. 이 뒤에 네이티브가 false 를 반환하면
-	// CallNative/PropertyNative 가 에러 opcode 로 점프하고, 여기 남긴 메시지가 IP/Line/스택트레이스와
-	// 함께 최종 에러 상세로 조립된다(메시지를 안 남기면 "invalid call" 로 뭉개짐).
-	// 이미 에러가 잡혀 있으면(먼저 난 원인 보존) 무시된다.
-	virtual  void SetLastErrorMsg(const char* msg) = 0;
-
-	virtual  INeoVMWorker*	LoadVM(const NeoLoadVMParam* vparam, void* pBuffer, int iSize, bool blMainWorker = true, bool init = false, int iStackSize = 50 * 1024) =0; // 0 is error
-	// 미리 만들어 둔 프로그램으로 워커를 붙인다. 같은 스크립트를 쓰는 워커 N 개가
-	// 코드/함수테이블/디버그정보를 공유하고, 파싱과 코드 패치는 프로그램 생성 시 1회만 일어난다.
-	// 소유권은 넘어가지 않는다 — 워커가 자체적으로 AddRef 하므로 호출측은 자기 참조를 Release 하면 된다.
-	virtual  INeoVMWorker*	LoadVM(const NeoLoadVMParam* vparam, CNeoVMProgram* pProgram, bool blMainWorker = true, bool init = false, int iStackSize = 50 * 1024) = 0;
-
-	static INeoVM* 	CreateVM();
-	static void		ReleaseVM(INeoVM* pVM);
+	static CNeoVM* 	CreateVM();
+	static void		ReleaseVM(CNeoVM* pVM);
 	static bool		Compile(CNArchive& arw, const NeoCompilerParam& param);
 
 	// 컴파일 이미지 → 공유 가능한 프로그램. 실패하면 nullptr(err 에 사유).
@@ -841,8 +810,8 @@ public:
 	// Initialize() 이후 유효. 코드어시스트가 이 목록을 당겨 자동완성 소스로 쓴다(하드코딩 불필요).
 	static void		GetBuiltins(std::vector<NeoBuiltinInfo>& out);
 
-	static INeoVM*	CompileAndLoadVM(const NeoCompilerParam& param, const NeoLoadVMParam* vparam = nullptr);
-	static INeoVM*  CompileAndLoadRunVM(const NeoCompilerParam& param, const NeoLoadVMParam* vparam = nullptr);
+	static CNeoVM*	CompileAndLoadVM(const NeoCompilerParam& param, const NeoLoadVMParam* vparam = nullptr);
+	static CNeoVM*  CompileAndLoadRunVM(const NeoCompilerParam& param, const NeoLoadVMParam* vparam = nullptr);
 
 	static bool		IsSinglePrecision() 
 	{

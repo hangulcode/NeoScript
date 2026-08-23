@@ -2063,7 +2063,7 @@ public:
 
 	NeoLspSession()
 	{
-		INeoVM::GetBuiltins(builtins);
+		NeoVMSystem::GetBuiltins(builtins);
 	}
 
 	void SendResponse(int id, const std::string& result)
@@ -2241,7 +2241,7 @@ int main(int argc, char* argv[])
 	activateVirtualTerminal();
 #endif
 	CNeoLoader* pLoader = new CNeoLoader();
-	NeoScript::INeoVM::Initialize(pLoader);
+	NeoScript::NeoVMSystem::Initialize(pLoader);
 
 	if (argc >= 2)
 	{
@@ -2315,7 +2315,7 @@ int main(int argc, char* argv[])
 			exitCode = -1;
 		}
 
-		NeoScript::INeoVM::Shutdown();
+		NeoScript::NeoVMSystem::Shutdown();
 		delete pLoader;
 		return exitCode;
 	}
@@ -2357,7 +2357,7 @@ int main(int argc, char* argv[])
 
 		system("pause");
 	}
-	NeoScript::INeoVM::Shutdown();
+	NeoScript::NeoVMSystem::Shutdown();
 	delete pLoader;
     return 0;
 }

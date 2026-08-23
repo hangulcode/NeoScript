@@ -543,17 +543,17 @@ NEOS_NOINLINE bool handle_ERROR(const SVMOperation& OP) {
     // Report the VM error even when a debugger converts execution into a
     // fault snapshot.  Keep the VM log payload bounded as well; the editor
     // log stores only its first line.
-    if (INeoVM::m_pFunError) {
+    if (NeoVMSystem::m_pFunError) {
         static const size_t kMaxErrorLogLength = 4096;
         if (detail.size() > kMaxErrorLogLength)
         {
             std::string logDetail = detail.substr(0, kMaxErrorLogLength);
             logDetail += "\n... Script call stack truncated in log (see debugger for full stack)";
-            INeoVM::m_pFunError(logDetail.c_str());
+            NeoVMSystem::m_pFunError(logDetail.c_str());
         }
         else
         {
-            INeoVM::m_pFunError(detail.c_str());
+            NeoVMSystem::m_pFunError(detail.c_str());
         }
     }
 

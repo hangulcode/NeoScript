@@ -54,7 +54,7 @@ struct SFunctionTable
 };
 
 // static(상수) 슬롯 1개. VarInfo 가 아니라 원시 값으로 들고 있는다.
-// VAR_STRING 의 StringInfo 는 CNeoVMImpl 별 풀에서 나오고 같은 풀로 반납되어야 하므로,
+// VAR_STRING 의 StringInfo 는 CNeoVM 별 풀에서 나오고 같은 풀로 반납되어야 하므로,
 // VM 경계를 넘어 공유되는 Program 이 소유하면 안 된다. 워커가 자기 VM 할당자로 실체화한다.
 struct SStaticConst
 {
@@ -106,7 +106,7 @@ struct ProgramRangeJump
 
 // 컴파일된 스크립트 이미지.
 // Create() 에서 1회 파싱 + 1회 코드 패치되고 이후 완전 불변이다.
-// 여러 CNeoVMWorker / 여러 CNeoVMImpl / 여러 스레드가 refcount 로 공유한다.
+// 여러 CNeoVMWorker / 여러 CNeoVM / 여러 스레드가 refcount 로 공유한다.
 class CNeoVMProgram
 {
 	std::atomic<int> _refCount{ 1 };

@@ -6,8 +6,8 @@ see [API.md](API.md).
 
 ## Embedding the engine — Host API (`NeoScript.h`)
 The public host API is a **3-concept facade: Runtime / Program / Instance**, declared in `NeoScript.h`.
-It hides the internal VM (`INeoVM` / `INeoVMWorker`, the execution-context pool, the bytecode image);
-host code only sees opaque handles. Embed through this header — the internal `INeoVM` API described in
+It hides the internal VM (`CNeoVM` / `INeoVMWorker`, the execution-context pool, the bytecode image);
+host code only sees opaque handles. Embed through this header — the internal `NeoVMSystem` / `CNeoVM` API described in
 *Execution context pool* below is not the public surface.
 
 - **Runtime** (`IRuntime`, `CreateRuntime` / `DestroyRuntime`) — owns native bindings and produces programs
@@ -310,7 +310,7 @@ Supported define kinds (`DefineKind`):
 
 
 ## Execution context pool
-> **Internal / advanced.** This section describes the low-level `INeoVM` engine and its pool. The public
+> **Internal / advanced.** This section describes the low-level `NeoVMSystem` / `CNeoVM` engine and its pool. The public
 > host API (see *Embedding the engine* above) hides all of it — the Runtime owns and injects the pool for
 > you. Read on only if you work on the engine internals rather than embedding it.
 
@@ -343,9 +343,9 @@ NeoScript::NeoLoadVMParam vparam;
 vparam.execPool          = pool;                 // required
 vparam.NeoGlobalInterface = myGlobalBind;        // optional
 
-NeoScript::INeoVM* vm = NeoScript::INeoVM::CompileAndLoadRunVM(param, &vparam);
+NeoScript::CNeoVM* vm = NeoScript::NeoVMSystem::CompileAndLoadRunVM(param, &vparam);
 // ... use vm ...
-NeoScript::INeoVM::ReleaseVM(vm);
+NeoScript::NeoVMSystem::ReleaseVM(vm);
 
 NeoScript::NeoExecContextPool_Destroy(pool);     // after all VMs that used it are released
 ```
@@ -354,7 +354,7 @@ Host entry points:
 - `INeoVMWorker::GetExecutionState()` returns `Idle`, `Running`, `SuspendedSleep`,
   `SuspendedDebugger`, or `SuspendedSlice`. It is derived from the live worker context, so it cannot
   drift from the actual execution state.
-- `INeoVM::CompileAndLoadRunVM` / `CompileAndLoadVM` — load a program and run its script body.
+- `NeoVMSystem::CompileAndLoadRunVM` / `CompileAndLoadVM` — load a program and run its script body.
 - `INeoVMWorker::ExecuteTop(fid, args)` — run a function as a fresh top-level execution.
   Returns `NeoExecStatus`: `NEOEXEC_COMPLETED`, `NEOEXEC_SUSPENDED`, or `NEOEXEC_ERROR`.
 - `INeoVMWorker::ResumeTop()` — continue a suspended top-level execution.
@@ -362,7 +362,7 @@ Host entry points:
   do `if (w->IsSuspended()) w->ResumeTop(); else w->ExecuteTop(fid, args);` so a breakpoint/sleep resumes
   instead of restarting.
 
-This is the low-level `INeoVM` surface. Host code should prefer the `IRuntime` API above
+This is the low-level `NeoVMSystem` / `CNeoVM` surface. Host code should prefer the `IRuntime` API above
 (`Call` / `Invocation` / `StartSliced`), which manages context acquisition and nesting for you.
 
 ### Synchronous native-to-script callbacks

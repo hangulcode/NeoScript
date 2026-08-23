@@ -1,10 +1,7 @@
 ﻿//==============================================================================
-// NeoScript v2 공개 API 구현 (shim) — 기존 INeoVM/INeoVMWorker/CNeoVMProgram 위에 얹음.
-// 내부 VM 은 손대지 않는다. 공개 헤더(NeoScript.h)는 내부 타입을 노출하지 않으므로
-// 이 .cpp 만 내부 헤더를 include 한다.
+// NeoScript v2 공개 API 구현. 공개 헤더(NeoScript.h)는 내부 타입을 노출하지 않으므로
+// 이 번역 단위에서만 VM/Worker/Program 내부를 연결한다.
 //
-// [상태] 골격: 핸들 인프라 + Runtime 수명주기(확정 내부 API)는 구현. 마샬링/디스패치/
-//       빌더 본문은 "TODO(build)" 로 표시하고 의도한 내부 호출을 주석에 못박음.
 //==============================================================================
 
 #include "NeoScript.h"
@@ -95,7 +92,7 @@ struct DefineSetRec
     NeoCompileDefines defines; // 한 번 빌드해두고 여러 Compile 에서 재사용
 };
 
-// INeoVM::Initialize 는 프로세스-1회 불변 테이블(토큰 문자열/빌트인 lib) 구축이다.
+// NeoVMSystem::Initialize 는 프로세스-1회 불변 테이블(토큰 문자열/빌트인 lib) 구축이다.
 // Runtime 수명에 refcount 하지 않고 call_once 로 최초 1회만 실행 → 스레드 안전.
 // per-Runtime auto-Shutdown 은 폐지(마지막 dtor 가 전역을 wipe → 타 스레드 compile 과
 // 레이스 나던 문제 제거). Shutdown 은 필요 시 앱 종료 시점에 명시적으로 1회.
@@ -478,6 +475,15 @@ struct NeoScriptInternal
     static Invocation  inv(void* i, uint32_t seq) { Invocation v; v.m_impl = i; v.m_seq = seq; return v; }
     static void*       invImpl(const Invocation& v) { return v.m_impl; }
     static void*       funImpl(const FunctionHandle& f) { return f.m_impl; }
+    static FunctionHandle fun(uint32_t index, uint32_t programId, uint32_t programGeneration)
+    {
+        return FunctionHandle(index, programId, programGeneration);
+    }
+    static uint32_t funIndex(const FunctionHandle& f) { return f.index; }
+    static bool functionMatchesProgram(const FunctionHandle& f, ProgramHandle p)
+    {
+        return f.programId == p.id && f.programGeneration == p.generation;
+    }
     // ObjectType 은 불투명 void*(RegisteredObject*) — 구성/해석은 여기서만(공개 API 에 노출 안 함).
     static ObjectType  objType(void* i)     { ObjectType t; t.m_impl = i; return t; }
     static void*       objImpl(ObjectType t) { return t.m_impl; }
@@ -608,7 +614,7 @@ private:
 
     RuntimeDesc m_desc;
     LoaderAdapter m_loaderAdapter;   // 공개 ILoader* 배선(nativeLoader 없을 때 사용)
-    INeoVM* m_vm = nullptr;
+    CNeoVM* m_vm = nullptr;
     NeoExecContextPool* m_pool = nullptr;
     bool m_frozen = false;
     DebuggerImpl* m_debugger = nullptr;                              // 지연 생성
@@ -633,13 +639,13 @@ RuntimeImpl::RuntimeImpl(const RuntimeDesc& desc) : m_desc(desc)
     // 호출 Runtime 의 것이 프로세스 전체에 적용됨(스레드별 다른 import loader 는 별도 축).
     m_loaderAdapter.user = m_desc.loader; // 공개 ILoader* 배선(Compile 에서 nativeLoader 없으면 이걸 사용)
     std::call_once(g_vmInitOnce, [this] {
-        INeoVM::Initialize();   // 토큰/빌트인 lib 1회 구축(loader 는 Compile 마다 param.loader 로 전달)
+        NeoVMSystem::Initialize();   // 토큰/빌트인 lib 1회 구축(loader 는 Compile 마다 param.loader 로 전달)
         // print/error 는 내부 VM 의 프로세스-전역 훅(Runtime별 아님). g_once 안에서만 설정 → write 레이스 없음.
         // 즉 최초 생성 Runtime 의 printFn/errorFn 이 프로세스 전체에 적용된다(헤더에 명시).
-        if (m_desc.printFn) { g_userPrint = m_desc.printFn; INeoVM::m_pFunPrint = &PrintTrampoline; }
-        if (m_desc.errorFn) { g_userError = m_desc.errorFn; INeoVM::m_pFunError = &ErrorTrampoline; }
+        if (m_desc.printFn) { g_userPrint = m_desc.printFn; NeoVMSystem::m_pFunPrint = &PrintTrampoline; }
+        if (m_desc.errorFn) { g_userError = m_desc.errorFn; NeoVMSystem::m_pFunError = &ErrorTrampoline; }
     });
-    m_vm = INeoVM::CreateVM();
+    m_vm = NeoVMSystem::CreateVM();
     m_pool = NeoExecContextPool_Create();
 }
 
@@ -660,13 +666,13 @@ RuntimeImpl::~RuntimeImpl()
         }
         delete inst;
     });
-    if (m_vm) INeoVM::ReleaseVM(m_vm);
+    if (m_vm) NeoVMSystem::ReleaseVM(m_vm);
     m_programs.forEachLive([](ProgramRec* rec) {      // 인스턴스가 refcount 반납한 뒤라 여기서 실제 free
-        if (rec->program) INeoVM::ProgramRelease(rec->program);
+        if (rec->program) NeoVMSystem::ProgramRelease(rec->program);
         delete rec;
     });
     if (m_pool) NeoExecContextPool_Destroy(m_pool);
-    // INeoVM::Shutdown 은 프로세스 전역(토큰/lib) 파괴라 per-Runtime 에서 부르지 않는다
+    // NeoVMSystem::Shutdown 은 프로세스 전역(토큰/lib) 파괴라 per-Runtime 에서 부르지 않는다
     // (타 스레드가 compile 중일 수 있음). 필요 시 앱 종료 시점에 명시적으로 1회.
 }
 
@@ -742,8 +748,6 @@ void RuntimeImpl::SetupCompilerParam(const CompileDesc& desc, NeoCompilerParam& 
     param.putASM = desc.emitAsm;   // ASM 덤프(진단): 내부 컴파일러가 OutAsm 으로 stdout 출력
     gtab = NeoGlobalSymbolTable{ m_globalSymbols.data(), static_cast<int>(m_globalSymbols.size()) };
     param.globalSymbols = m_globalSymbols.empty() ? nullptr : &gtab;
-    // TODO(build): desc.sourceName -> param.debugSourcePath, optimize 플래그 매핑
-
     if (desc.defineSet)
     {
         // 재사용 집합: 미리 빌드된 맵을 그대로 가리킨다 → 매 Compile 재구성 0.
@@ -756,9 +760,10 @@ void RuntimeImpl::SetupCompilerParam(const CompileDesc& desc, NeoCompilerParam& 
         param.defines = &inlineDefines;
     }
 
-    if (desc.debugSourcePath.data() != nullptr && desc.debugSourcePath.size() > 0)
+    const StringView debugSourcePath = !desc.debugSourcePath.empty() ? desc.debugSourcePath : desc.sourceName;
+    if (!debugSourcePath.empty())
     {
-        dbgPath.assign(desc.debugSourcePath.data(), desc.debugSourcePath.size());
+        dbgPath.assign(debugSourcePath.data(), debugSourcePath.size());
         param.debugSourcePath = dbgPath.c_str();
     }
     param.debugSourceFiles = desc.debugSourceFiles;
@@ -777,7 +782,7 @@ CompileResult RuntimeImpl::Compile(const CompileDesc& desc)
     NeoCompilerParam param(desc.source.data(), static_cast<int>(desc.source.size()));
     SetupCompilerParam(desc, param, err, gtab, inlineDefines, dbgPath);
 
-    CNeoVMProgram* prog = INeoVM::CompileToProgram(param);
+    CNeoVMProgram* prog = NeoVMSystem::CompileToProgram(param);
     if (prog == nullptr)
     {
         r.error.code = 1;
@@ -801,8 +806,8 @@ Error RuntimeImpl::CompileToBytecode(const CompileDesc& desc, std::vector<uint8_
     NeoCompilerParam param(desc.source.data(), static_cast<int>(desc.source.size()));
     SetupCompilerParam(desc, param, err, gtab, inlineDefines, dbgPath);
 
-    CNArchive arw;   // 자체 버퍼(성장). INeoVM::Compile 이 여기 바이트코드를 쓴다.
-    if (!INeoVM::Compile(arw, param))
+    CNArchive arw;   // 자체 버퍼(성장). NeoVMSystem::Compile 이 여기 바이트코드를 쓴다.
+    if (!NeoVMSystem::Compile(arw, param))
     {
         Error e; e.code = 1; e.message = err; e.sourceName = desc.sourceName.str();
         return e;
@@ -816,7 +821,7 @@ Error RuntimeImpl::CompileToBytecode(const CompileDesc& desc, std::vector<uint8_
 ProgramHandle RuntimeImpl::LoadProgram(Span<const uint8_t> bytecode, Error* error)
 {
     std::string err;
-    CNeoVMProgram* prog = INeoVM::CreateProgram(bytecode.data(), static_cast<int>(bytecode.size()), &err);
+    CNeoVMProgram* prog = NeoVMSystem::CreateProgram(bytecode.data(), static_cast<int>(bytecode.size()), &err);
     if (prog == nullptr)
     {
         if (error) { error->code = 1; error->message = err; }
@@ -847,7 +852,7 @@ void RuntimeImpl::DestroyProgram(ProgramHandle h)
 {
     ProgramRec* rec = resolveProgram(h);
     if (!rec) return;
-    INeoVM::ProgramRelease(rec->program); // 인스턴스가 AddRef 했으면 실제 free 는 지연
+    NeoVMSystem::ProgramRelease(rec->program); // 인스턴스가 AddRef 했으면 실제 free 는 지연
     delete rec;
     m_programs.remove(h.id, h.generation);
 }
@@ -939,7 +944,7 @@ void RuntimeImpl::BindRegisteredObjects(INeoVMWorker* worker, InstanceRec* inst)
         binding.handle = inst->handle;   // 훅 전에 확보한 핸들(트램폴린이 ctx.instance() 로 노출)
         inst->bindings.push_back(binding);
         ObjectBinding* b = &inst->bindings.back(); // reserve() 로 주소 안정
-        INeoVM::RegisterTableCallBack(pVar, b,
+        NeoVMSystem::RegisterTableCallBack(pVar, b,
             (o.method != nullptr) ? &MethodTrampoline : nullptr,
             (o.property != nullptr) ? &PropertyTrampoline : nullptr);
     }
@@ -1012,7 +1017,7 @@ void RuntimeImpl::BindObjectInto(void* worker, void* mapVar, StringView key, Obj
     if (!bind) return;
     VarInfo v{};
     w->ResetVarType(&v, VAR_FP_NATIVE);
-    INeoVM::RegisterTableCallBack(&v, bind,
+    NeoVMSystem::RegisterTableCallBack(&v, bind,
         (ro->method)   ? &MethodTrampoline   : nullptr,
         (ro->property) ? &PropertyTrampoline : nullptr);
     pMap->_tbl->Insert(std::string(key.data(), key.size()), &v);
@@ -1031,7 +1036,7 @@ void RuntimeImpl::BindObjectToVar(void* worker, void* varInfo, ObjectType type, 
     if (!w->ResetVarType(pVar, VAR_FP_NATIVE)) return;
     ObjectBinding* bind = AcquireNestedBinding(it->second, ro, userData);
     if (!bind) return;
-    INeoVM::RegisterTableCallBack(pVar, bind,
+    NeoVMSystem::RegisterTableCallBack(pVar, bind,
         (ro->method)   ? &MethodTrampoline   : nullptr,
         (ro->property) ? &PropertyTrampoline : nullptr);
 }
@@ -1145,7 +1150,7 @@ FunctionHandle RuntimeImpl::FindFunction(ProgramHandle h, StringView name) const
     if (!rec || !rec->program) return {};
     int idx = rec->program->FindFunction(std::string(name.data(), name.size()));
     if (idx < 0) return {};
-    return FunctionHandle{ static_cast<uint32_t>(idx), h.id, h.generation };
+    return NeoScriptInternal::fun(static_cast<uint32_t>(idx), h.id, h.generation);
 }
 
 void RuntimeImpl::FlushPendingCall(InstanceRec* inst)
@@ -1163,16 +1168,15 @@ Invocation RuntimeImpl::Call(InstanceHandle h, FunctionHandle fn)
 {
     InstanceRec* inst = resolveInstance(h);
     if (!inst || !fn) return Invocation();
-    // 핸들이 Program 식별자를 지니면(FindFunction/argFunction), 이 인스턴스의 Program 과 일치 검증
-    // (타 프로그램에서 얻은 함수핸들을 다른 인스턴스에 넘기는 오용 차단). 0=미지정이면 생략(하위호환).
-    if (fn.programId != 0 &&
-        (inst->program.id != fn.programId || inst->program.generation != fn.programGeneration))
+    // 모든 v2 함수 핸들은 Runtime이 Program 소유권과 함께 발급한다. 다른 Program의
+    // 인스턴스에 넘기면 호출 전 거부한다.
+    if (!NeoScriptInternal::functionMatchesProgram(fn, inst->program))
         return Invocation();
     // 겹침 방지: 이전 Invocation 이 arm 된 채(invoke/파괴 전)면 두 번째 Call 을 안전 거부(상태 파괴 회피).
     if (inst->armedSeq != 0) return Invocation();
     FlushPendingCall(inst);
     ClearCallClosure(inst);
-    inst->callFID = static_cast<int>(fn.index);
+    inst->callFID = static_cast<int>(NeoScriptInternal::funIndex(fn));
     // 캡처 람다는 이를 만든 Instance의 worker/전역 상태에 귀속된다. 같은 Program이라도
     // 다른 Instance에서 호출하면 capture 값이 어느 VM 소유인지 모호하므로 거부한다.
     FunctionRef* ref = static_cast<FunctionRef*>(NeoScriptInternal::funImpl(fn));
@@ -1198,7 +1202,7 @@ Invocation RuntimeImpl::Call(InstanceHandle h, StringView functionName)
     if (!inst) return Invocation();
     int iFID = inst->worker->FindFunction(functionName.str());
     if (iFID < 0) return Invocation();
-    return Call(h, FunctionHandle{ static_cast<uint32_t>(iFID) });
+    return Call(h, NeoScriptInternal::fun(static_cast<uint32_t>(iFID), inst->program.id, inst->program.generation));
 }
 
 RunStatus RuntimeImpl::Resume(InstanceHandle h, const ResumeDesc&)
@@ -1407,7 +1411,7 @@ bool RuntimeImpl::PeekLastError(StringView& out) const
 void RuntimeImpl::GetBuiltins(std::vector<BuiltinInfo>& out) const
 {
     std::vector<NeoBuiltinInfo> src;
-    INeoVM::GetBuiltins(src);
+    NeoVMSystem::GetBuiltins(src);
     out.clear(); out.reserve(src.size());
     for (const NeoBuiltinInfo& b : src)
     {
@@ -1423,13 +1427,13 @@ void RuntimeImpl::GetBuiltins(std::vector<BuiltinInfo>& out) const
 IRuntime* CreateRuntime(const RuntimeDesc& desc) { return new RuntimeImpl(desc); }
 void      DestroyRuntime(IRuntime* runtime) { delete runtime; }
 
-// 전역 로그 싱크 — 내부 INeoVM::m_pFunPrint/m_pFunError(IO_Print=void(*)(const char*)) 를 직접 설정.
+// 전역 로그 싱크 — 내부 NeoVMSystem::m_pFunPrint/m_pFunError(IO_Print=void(*)(const char*)) 를 직접 설정.
 // 콜백 시그니처가 동일해 트램폴린 없이 그대로 연결(널 종료 보장). RuntimeDesc.printFn 과 같은 전역을
 // 공유하므로 last-writer-wins(호스트 전역 로깅과 런타임별 print 를 섞지 말 것).
 void SetLogHandler(void (*print)(const char*), void (*error)(const char*))
 {
-    INeoVM::m_pFunPrint = print;
-    INeoVM::m_pFunError = error;
+    NeoVMSystem::m_pFunPrint = print;
+    NeoVMSystem::m_pFunError = error;
 }
 
 void GetAllocStats(AllocStats& out)
@@ -1494,7 +1498,7 @@ FunctionHandle CallContext::argFunction(std::size_t i) const
     InstanceRec* inst = c->runtime ? static_cast<RuntimeImpl*>(c->runtime)->resolveInstance(c->instance) : nullptr;
     if (!inst) return FunctionHandle{};
     const int funIndex = (v->GetType() == VAR_FUN) ? v->_fun_index : v->_closure->_funIndex;
-    FunctionHandle fh(static_cast<uint32_t>(funIndex), inst->program.id, inst->program.generation);
+    FunctionHandle fh = NeoScriptInternal::fun(static_cast<uint32_t>(funIndex), inst->program.id, inst->program.generation);
     if (v->GetType() == VAR_CLOSURE)
     {
         FunctionRef* ref = new FunctionRef();
@@ -1564,7 +1568,7 @@ void CallContext::retObject(ObjectType type, void* userData) {
     c->worker->ResetVarType(r, VAR_FP_NATIVE);
     RuntimeImpl* rt=static_cast<RuntimeImpl*>(c->runtime);
     ObjectBinding* b=rt->AcquireNestedBinding(c->instance, ro, userData); if(!b) return;
-    INeoVM::RegisterTableCallBack(r, b, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr);
+    NeoVMSystem::RegisterTableCallBack(r, b, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr);
 }
 void CallContext::retNull() { CallContextImpl* c=Ctx(m_impl); c->worker->ResetVarType(CtxRetVar(c), VAR_NONE); }
 void CallContext::fail(int32_t code, StringView message)
@@ -1602,7 +1606,7 @@ void MapBuilder::setObject(StringView key, ObjectType type, void* userData) {
     VarInfo* slot=MapInsertKey(b, key); b->w->ResetVarType(slot, VAR_FP_NATIVE);
     RuntimeImpl* rt=static_cast<RuntimeImpl*>(b->ctx->runtime);
     ObjectBinding* bind=rt->AcquireNestedBinding(b->ctx->instance, ro, userData); if(!bind) return;
-    INeoVM::RegisterTableCallBack(slot, bind, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr);
+    NeoVMSystem::RegisterTableCallBack(slot, bind, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr);
 }
 
 void ListBuilder::reserve(int count) { static_cast<ListBuilderImpl*>(m_impl)->list->Reserve(count); }
@@ -1625,7 +1629,7 @@ void ListBuilder::pushObject(ObjectType type, void* userData) {
     VarInfo* slot=b->list->GetValue(idx); b->w->ResetVarType(slot, VAR_FP_NATIVE);
     RuntimeImpl* rt=static_cast<RuntimeImpl*>(b->ctx->runtime);
     ObjectBinding* bind=rt->AcquireNestedBinding(b->ctx->instance, ro, userData); if(!bind) return;
-    INeoVM::RegisterTableCallBack(slot, bind, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr);
+    NeoVMSystem::RegisterTableCallBack(slot, bind, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr);
 }
 
 //==============================================================================
@@ -1700,7 +1704,7 @@ Invocation& Invocation::argObject(ObjectType type, void* userData)
         {
             ObjectBinding* bind = i->runtime->AcquireNestedBinding(i->handle, ro, userData);
             if (bind)
-                INeoVM::RegisterTableCallBack(pVar, bind,
+                NeoVMSystem::RegisterTableCallBack(pVar, bind,
                     (ro->method)   ? &MethodTrampoline   : nullptr,
                     (ro->property) ? &PropertyTrampoline : nullptr);
         }
@@ -2040,30 +2044,30 @@ IDebugger* RuntimeImpl::GetDebugger()
 int64_t RuntimeImpl::TrimMemory(bool force)
 {
     if (m_vm == nullptr) return 0;
-    return ((CNeoVMImpl*)m_vm)->CollectEmptyPages(force);
+    return ((CNeoVM*)m_vm)->CollectEmptyPages(force);
 }
 int RuntimeImpl::CollectCycles(bool force)
 {
     if (m_vm == nullptr) return 0;
-    return ((CNeoVMImpl*)m_vm)->CollectCycles(force);
+    return ((CNeoVM*)m_vm)->CollectCycles(force);
 }
 void RuntimeImpl::SetEmptyPageHoldSeconds(float sec)
 {
-    if (m_vm != nullptr) ((CNeoVMImpl*)m_vm)->SetEmptyPageHoldSeconds(sec);
+    if (m_vm != nullptr) ((CNeoVM*)m_vm)->SetEmptyPageHoldSeconds(sec);
 }
 float RuntimeImpl::GetEmptyPageHoldSeconds() const
 {
     if (m_vm == nullptr) return 0.0f;
-    return ((CNeoVMImpl*)m_vm)->GetEmptyPageHoldSeconds();
+    return ((CNeoVM*)m_vm)->GetEmptyPageHoldSeconds();
 }
 void RuntimeImpl::SetTrimPagesPerCall(int pages)
 {
-    if (m_vm != nullptr) ((CNeoVMImpl*)m_vm)->SetTrimPagesPerCall(pages);
+    if (m_vm != nullptr) ((CNeoVM*)m_vm)->SetTrimPagesPerCall(pages);
 }
 int RuntimeImpl::GetTrimPagesPerCall() const
 {
     if (m_vm == nullptr) return 0;
-    return ((CNeoVMImpl*)m_vm)->GetTrimPagesPerCall();
+    return ((CNeoVM*)m_vm)->GetTrimPagesPerCall();
 }
 
 static void DestroyDebugger(DebuggerImpl* d) { delete d; }

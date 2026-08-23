@@ -1,13 +1,13 @@
 ﻿#pragma once
 //==============================================================================
-// NeoScript 공개 API (v2 초안) — Runtime / Program / Instance 3-개념 파사드
+// NeoScript 공개 API v2 — Runtime / Program / Instance 3-개념 파사드
 //------------------------------------------------------------------------------
 // 목표: 외부에는 Runtime·Program·Instance 만 노출. Worker/ExecContext/코드포인터/
 //       스택풀/refcount 는 전부 내부 구현으로 은닉.
 //
-// 이 헤더는 "봉인 대상" 리뷰용 초안이다. 실제 구현은 기존 내부(INeoVM/CNeoVMProgram/
-// INeoVMWorker) 위에 shim 으로 얹는다(내부 재작성 아님):
-//     Runtime  ≈ INeoVM (+ Initialize)         — 이미 존재
+// 실제 구현은 내부 CNeoVM/CNeoVMProgram/INeoVMWorker 위에 얹고, 외부에는 아래 세
+// 개념만 노출한다:
+//     Runtime  ≈ NeoVMSystem + CNeoVM           — 컴파일 전역 상태와 인스턴스 상태를 분리
 //     Program  ≈ CNeoVMProgram                 — 이미 refcount 공유 불변 이미지
 //     Instance ≈ INeoVMWorker — 핸들 모델 반쯤 존재
 //
@@ -108,15 +108,7 @@ struct InstanceHandle
 class FunctionHandle
 {
 public:
-    uint32_t index = UINT32_MAX;
-    // 이 핸들이 속한 Program(교차 검증용). 0 = 미지정 → Call 이 검증 생략(하위호환).
-    // FindFunction/argFunction 이 채운다. Call 은 non-zero 면 인스턴스의 Program 과 일치 검사.
-    uint32_t programId = 0;
-    uint32_t programGeneration = 0;
-
     FunctionHandle() noexcept = default;
-    FunctionHandle(uint32_t i, uint32_t program = 0, uint32_t generation = 0) noexcept
-        : index(i), programId(program), programGeneration(generation) {}
     FunctionHandle(const FunctionHandle& other);
     FunctionHandle(FunctionHandle&& other) noexcept;
     FunctionHandle& operator=(const FunctionHandle& other);
@@ -125,6 +117,13 @@ public:
     explicit operator bool() const noexcept;
 
 private:
+    // Runtime만 유효한 함수 인덱스와 Program 소유권을 함께 발급한다. 임의의 정수
+    // 인덱스로 다른 Program/Instance를 호출하는 레거시 우회는 v2에서 지원하지 않는다.
+    FunctionHandle(uint32_t i, uint32_t program, uint32_t generation) noexcept
+        : index(i), programId(program), programGeneration(generation) {}
+    uint32_t index = UINT32_MAX;
+    uint32_t programId = 0;
+    uint32_t programGeneration = 0;
     // 캡처 람다일 때만 내부 참조 카운트 객체를 가리킨다. 따라서 FunctionHandle은
     // 더 이상 POD가 아니다: memcpy/union/raw serialization 대신 정상 복사·이동·소멸을
     // 사용해야 한다. 일반 함수는 nullptr 이므로 기존의 정수 함수 호출 비용은 유지된다.
@@ -403,8 +402,8 @@ struct DefineSetHandle
 struct CompileDesc
 {
     StringView source;
+    // 컴파일 진단과, debugSourcePath가 비어 있을 때 디버그 소스 경로에 쓰는 식별자.
     StringView sourceName;
-    bool optimize = true;
     bool includeDebugInfo = false;
     bool emitAsm = false;   // true 면 컴파일 시 디스어셈블(ASM)을 stdout 으로 덤프(진단용)
     // define 은 둘 중 하나로. 재사용이면 defineSet(빌드 1회), 매번 다르면 defines(인라인).

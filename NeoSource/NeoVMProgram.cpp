@@ -1,7 +1,7 @@
 ﻿#include <limits.h>
 
 #include "NeoVMProgram.h"
-#include "NeoVMImpl.h"
+#include "NeoVMInternal.h"
 #include "NeoArchive.h"
 #include "NeoTextLoader.h"   // FormatAsm / FormatBytes
 #include <algorithm>
@@ -123,7 +123,7 @@ CNeoVMProgram* CNeoVMProgram::Create(const void* pBuffer, int iSize, std::string
 
 	// 코드 패치가 전역 native 등록부(InitLib)에 의존한다. Initialize() 보다 먼저
 	// 프로그램을 만들어도 패치가 누락되지 않도록 여기서 보장한다(재진입 무해).
-	CNeoVMImpl::InitLib();
+	CNeoVM::InitLib();
 
 	CNArchive ar(const_cast<void*>(pBuffer), iSize);
 	CNeoVMProgram* p = new CNeoVMProgram();
@@ -165,7 +165,7 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 	}
 
 	bool IsDataSinglePrecision = (header._dwFlag & NEO_HEADER_FLAG_SINGLE_PRECISION) ? true : false;
-	if (IsDataSinglePrecision != INeoVM::IsSinglePrecision())
+	if (IsDataSinglePrecision != NeoVMSystem::IsSinglePrecision())
 	{
 		SetLoadError(err, "NeoScript image float precision mismatch");
 		return false;
@@ -540,12 +540,12 @@ void CNeoVMProgram::PatchNativeCalls()
 		if (sc._type != VAR_STRING)
 			continue;
 
-		int nativeIndex = CNeoVMImpl::FindDefaultNativeIndex(sc._str);
+		int nativeIndex = CNeoVM::FindDefaultNativeIndex(sc._str);
 		if (nativeIndex < 0 || nativeIndex > SHRT_MAX)
 			continue;
 
 		// intrinsic 이 지정된 native(벡터 생성 등)는 전용 opcode 로 패치 (n2=인자수, n3=결과 유지).
-		eNOperation intrinsic = (eNOperation)CNeoVMImpl::GetDefaultNativeIntrinsic(nativeIndex);
+		eNOperation intrinsic = (eNOperation)CNeoVM::GetDefaultNativeIntrinsic(nativeIndex);
 		if (intrinsic != NOP_NONE)
 		{
 			op.op = intrinsic;
@@ -679,7 +679,7 @@ bool CNeoVMProgram::PatchLocalOps(std::string* err)
 	return true;
 }
 
-CNeoVMProgram* INeoVM::CreateProgram(const void* pBuffer, int iSize, std::string* err)
+CNeoVMProgram* NeoVMSystem::CreateProgram(const void* pBuffer, int iSize, std::string* err)
 {
 	return CNeoVMProgram::Create(pBuffer, iSize, err);
 }
@@ -1363,22 +1363,22 @@ void FormatDebugInstruction(const CNeoVMProgram& program, int opIndex,
 }
 
 
-void INeoVM::ProgramAddRef(CNeoVMProgram* pProgram)
+void NeoVMSystem::ProgramAddRef(CNeoVMProgram* pProgram)
 {
 	if (pProgram != nullptr)
 		pProgram->AddRef();
 }
 
-void INeoVM::ProgramRelease(CNeoVMProgram* pProgram)
+void NeoVMSystem::ProgramRelease(CNeoVMProgram* pProgram)
 {
 	if (pProgram != nullptr)
 		pProgram->Release();
 }
 
-CNeoVMProgram* INeoVM::CompileToProgram(const NeoCompilerParam& param)
+CNeoVMProgram* NeoVMSystem::CompileToProgram(const NeoCompilerParam& param)
 {
 	CNArchive ar;
-	if (INeoVM::Compile(ar, param) == false)
+	if (NeoVMSystem::Compile(ar, param) == false)
 		return nullptr;
 
 	// 옛 CompileAndLoadVM 과 동일: putASM(진단) 시 컴파일 성공 + 코드 용량 출력.

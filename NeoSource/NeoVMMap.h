@@ -3,7 +3,7 @@
 namespace NeoScript
 {
 class CNeoVMWorker;
-class CNeoVMImpl;
+class CNeoVM;
 
 // 키와 값은 메타데이터 배열 밖의 VM 풀 객체다. 충돌 체인을 훑을 때는
 // hash/next/data 포인터만 읽고, 실제 키 비교가 필요한 경우에만 MapData로 간다.
@@ -45,7 +45,7 @@ struct MapInfo : AllocBase
 	// 버킷당 체인 헤드 포인터를 따로 두지 않고 충돌은 next 인덱스로 연결한다.
 	MapNode*	_Bucket;
 
-	CNeoVMImpl*	_pVM;
+	CNeoVM*	_pVM;
 	int	_HashBase;
 	int _BucketCapa;
 	// Former _TableID slot (never used): next collision-node candidate. It moves

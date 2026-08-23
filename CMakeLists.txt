@@ -21,7 +21,6 @@ set(NEOSCRIPT_SOURCES
     NeoSource/NeoScriptShim.cpp
     NeoSource/NeoTextLoader.cpp
     NeoSource/NeoVM.cpp
-    NeoSource/NeoVMImpl.cpp
     NeoSource/NeoVMList.cpp
     NeoSource/NeoVMMap.cpp
     NeoSource/NeoVMProgram.cpp

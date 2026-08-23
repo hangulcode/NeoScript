@@ -14,7 +14,7 @@ Everything a `.ns` script can call: keyword intrinsics, the three built-in modul
 | :--- | :--- |
 | module functions, type methods | `NeoSource/NeoLib.cpp` - `AddGlobalLibFun()` and `RegObjLibrary()` |
 | keyword intrinsics | `NeoSource/NeoParser.cpp` - `InitDefaultTokenString()` |
-| `type()` result strings | `NeoSource/NeoVMImpl.cpp` - the `NDF_*` switch |
+| `type()` result strings | `NeoSource/NeoVM.cpp` - the `NDF_*` switch |
 | editor keyword / builtin lists | `Tools/vscode-neo-script/syntaxes/ns.tmLanguage` - hand-maintained, update it with this file |
 
 Every signature and behavioural note below was verified by running it through
@@ -60,7 +60,7 @@ callback.
 | `print(x, y)` | `void` | Writes both concatenated, **without** a trailing newline (default sink). |
 
 `print` is the only global native. Three or more arguments raise `invalid function call`. When the
-host installs a print sink (`INeoVM::m_pFunPrint`), both forms go through it as one string and no
+host installs a print sink (`NeoVMSystem::m_pFunPrint`), both forms go through it as one string and no
 newline is added.
 
 ---

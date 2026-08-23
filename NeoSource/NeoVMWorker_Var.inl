@@ -129,7 +129,7 @@ NEOS_FORCEINLINE void INeoVMWorker::Var_SetStringA(VarInfo* d, const std::string
 		Var_Release(d);
 
 	d->SetType(VAR_STRING);
-	d->_str = ((CNeoVMImpl*)_pVM)->StringAlloc(str);
+	d->_str = _pVM->StringAlloc(str);
 	++d->_str->_refCount;
 }
 NEOS_FORCEINLINE void INeoVMWorker::Var_SetTable(VarInfo* d, MapInfo* p)

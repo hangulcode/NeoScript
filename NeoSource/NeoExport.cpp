@@ -811,7 +811,7 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	header._dwNeoVersion = NEO_VER;
 	header._iFunctionCount = (int)(funs.GetFunCountAll());
 	header._dwFlag = arText._debug ? NEO_HEADER_FLAG_DEBUG : 0;
-	if (INeoVM::IsSinglePrecision())
+	if (NeoVMSystem::IsSinglePrecision())
 		header._dwFlag |= NEO_HEADER_FLAG_SINGLE_PRECISION;
 	
 	std::map<int, SFunctionTableForWriter> funPos;

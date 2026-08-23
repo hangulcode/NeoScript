@@ -1,5 +1,5 @@
 ﻿#include "NeoParser.h"
-#include "NeoVMImpl.h"
+#include "NeoVMInternal.h"
 #include "NeoExport.h"
 #include "UTFString.h"
 #include <algorithm>
@@ -73,7 +73,7 @@ void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 	X(PCE_SWITCH_INVALID_CASE_VALUE, "Error (%d, %d): case value must be a compile-time constant of type bool, int or string") \
 	X(PCE_SWITCH_FLOAT_CASE, "Error (%d, %d): float is not allowed as a case value (exact comparison is unreliable). use int or string") \
 	X(PCE_SWITCH_TOO_MANY, "Error (%d, %d): too many switch statements in one program") \
-	X(PCE_VM_NOT_INITIALIZED, "Please call NeoScript::INeoVM::Initialize() before compiling scripts")
+	X(PCE_VM_NOT_INITIALIZED, "Please call NeoScript::NeoVMSystem::Initialize() before compiling scripts")
 
 enum EParserCompileError
 {
@@ -1361,7 +1361,7 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	if(pFileBuffer == nullptr)
 	{
-		const std::list< SystemFun>* p = CNeoVMImpl::GetSystemModule(fileName);
+		const std::list< SystemFun>* p = CNeoVM::GetSystemModule(fileName);
 		if (p) // Built-in Import
 		{
 			SFunctionLayer* pLayerBackup = funs._curModule;
@@ -2305,7 +2305,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 				iTempOffset._operandType = Data_Fun;
 			}
 		}
-		else if (pOtherModule == nullptr && CNeoVMImpl::IsGlobalLibFun(tk1))
+		else if (pOtherModule == nullptr && CNeoVM::IsGlobalLibFun(tk1))
 		{
 			tkType2 = GetToken(ar, tk2);
 			if (tkType2 == TK_L_SMALL)
@@ -5485,9 +5485,9 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 	return r;
 }
 
-bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
+bool NeoVMSystem::Compile(CNArchive& arw, const NeoCompilerParam& param)
 {
-	//CNeoVMImpl::InitLib();
+	//CNeoVM::InitLib();
 
 	CArchiveRdWC ar2;
 	ar2._allowGlobalInitLogic = param.allowGlobalInitLogic;
@@ -5516,21 +5516,21 @@ bool INeoVM::Compile(CNArchive& arw, const NeoCompilerParam& param)
 
 	return b;
 }
-bool INeoVM::Initialize(INeoLoader* loader)
+bool NeoVMSystem::Initialize(INeoLoader* loader)
 {
 	(void)loader;   // import loader 는 컴파일마다 NeoCompilerParam.loader 로 전달(전역 아님)
 	InitDefaultTokenString();
-	CNeoVMImpl::InitLib();
+	CNeoVM::InitLib();
 	g_bInitVM = true;
 	return true;
 }
-bool	INeoVM::Shutdown()
+bool	NeoVMSystem::Shutdown()
 {
 	g_bInitVM = false;
 	return true;
 }
 
-INeoVM* INeoVM::CompileAndLoadVM(const NeoCompilerParam& param, const NeoLoadVMParam* vparam)
+CNeoVM* NeoVMSystem::CompileAndLoadVM(const NeoCompilerParam& param, const NeoLoadVMParam* vparam)
 {
 	if (vparam == nullptr || vparam->execPool == nullptr)
 	{
@@ -5553,11 +5553,11 @@ INeoVM* INeoVM::CompileAndLoadVM(const NeoCompilerParam& param, const NeoLoadVMP
 	//if(putASM)
 	//	SetCompileError(ar, "Comile Success. Code : %d bytes !!\n\n", arCode.GetBufferOffset());
 
-	INeoVM* pVM = INeoVM::CreateVM();
+	CNeoVM* pVM = NeoVMSystem::CreateVM();
 	// (실행 스택은 더 이상 워커가 소유하지 않으므로 iStackSize 로 크기를 주지 않는다.)
 	if (pVM->LoadVM(vparam, arCode.GetData(), arCode.GetBufferOffset()) == NULL)
 	{
-		INeoVM::ReleaseVM(pVM);
+		NeoVMSystem::ReleaseVM(pVM);
 		return NULL;
 	}
 
@@ -5566,7 +5566,7 @@ INeoVM* INeoVM::CompileAndLoadVM(const NeoCompilerParam& param, const NeoLoadVMP
 
 	return pVM;
 }
-INeoVM* INeoVM::CompileAndLoadRunVM(const NeoCompilerParam& param, const NeoLoadVMParam* vparam)
+CNeoVM* NeoVMSystem::CompileAndLoadRunVM(const NeoCompilerParam& param, const NeoLoadVMParam* vparam)
 {
 	auto pVM = CompileAndLoadVM(param, vparam);
 
@@ -5574,7 +5574,7 @@ INeoVM* INeoVM::CompileAndLoadRunVM(const NeoCompilerParam& param, const NeoLoad
 		return nullptr;
 
 	std::vector<VarInfo> args;
-	pVM->GetMainWorker()->ExecuteTop(0, args);
+	static_cast<INeoVMWorker*>(pVM->GetMainWorker())->ExecuteTop(0, args);
 
 	return pVM;
 }

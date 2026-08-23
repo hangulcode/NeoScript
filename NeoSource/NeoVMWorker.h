@@ -6,7 +6,6 @@
 #include "NeoVMError.h"
 
 #include "NeoVMProgram.h"
-#include "NeoVMImpl.h"
 
 
 
@@ -68,10 +67,10 @@ protected:
 
 struct neo_DCalllibs;
 struct neo_libs;
-class CNeoVMImpl;
+class CNeoVM;
 class CNeoVMWorker : public INeoVMWorker, public AllocBase, public CoroutineBase
 {
-	friend		CNeoVMImpl;
+	friend		CNeoVM;
 	friend		SVarWrapper;
 	friend		MapInfo;
 	friend		neo_libs;
@@ -296,7 +295,7 @@ private:
 	// base부터 lastOffset까지(반환값 슬롯은 offset 0) 접근 가능한지 확인한다.
 	bool EnsureStackRange(int base, int lastOffset);
 public:
-	NEOS_FORCEINLINE CNeoVMImpl* GetVM() { return (CNeoVMImpl*)_pVM;  }
+	NEOS_FORCEINLINE CNeoVM* GetVM() { return _pVM;  }
 	bool IsNativeScriptCallActive() const { return m_iNativeScriptCallDepth > 0; }
 	virtual void SetTimeout(int iTimeout, int iCheckOpCount) {
 		m_iTimeout = iTimeout;
@@ -463,7 +462,7 @@ public:
 	void SetErrorFormat(int error, ...);
 	void SetErrorOperator(const char* op, VarInfo* v1, VarInfo* v2 = nullptr);
 public:
-	CNeoVMWorker(INeoVM* pVM, u32 id, int iStackSize);
+	CNeoVMWorker(CNeoVM* pVM, u32 id, int iStackSize);
 	virtual ~CNeoVMWorker();
 
 	// pProgram 은 호출측이 소유권 지분을 넘기지 않는다. 성공 시 워커가 AddRef 한다.

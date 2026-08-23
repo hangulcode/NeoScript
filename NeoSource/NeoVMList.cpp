@@ -4,7 +4,7 @@
 #include <chrono>
 #include <algorithm>
 
-#include "NeoVMImpl.h"
+#include "NeoVMInternal.h"
 #include "NeoVMWorker.h"
 #include "NeoVMList.h"
 

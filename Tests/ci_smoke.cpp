@@ -1,5 +1,5 @@
-#include "NeoScript.h"
-#include "NeoVMImpl.h"
+﻿#include "NeoScript.h"
+#include "NeoVMInternal.h"
 
 #include <cstdio>
 #include <chrono>
@@ -12,7 +12,7 @@ static bool SetStorageRegression()
 {
     using namespace NeoScript;
 
-    CNeoVMImpl vm;
+    CNeoVM vm;
     SetInfo* set = vm.SetAlloc();
     if (set == nullptr)
         return false;
@@ -89,7 +89,7 @@ static bool StringInternRegression()
 {
     using namespace NeoScript;
 
-    CNeoVMImpl vm;
+    CNeoVM vm;
     VarInfo first;
     VarInfo second;
     std::string key = "a canonical string key";
@@ -131,7 +131,7 @@ static bool StringInternChurnRegression()
 {
     using namespace NeoScript;
 
-    CNeoVMImpl vm;
+    CNeoVM vm;
     std::vector<VarInfo> values(256);
 	MapInfo* map = vm.TableAlloc();
     bool ok = true;
@@ -162,7 +162,7 @@ static bool HashLoadFactorRegression()
 {
     using namespace NeoScript;
 
-    CNeoVMImpl vm;
+    CNeoVM vm;
     MapInfo* map = vm.TableAlloc();
     SetInfo* set = vm.SetAlloc();
     map->Reserve(8);
@@ -195,7 +195,7 @@ static bool ContainerDestroyRegression()
     // Dropping the external reference leaves this self-cycle for the VM's
     // live-list sweep, which must return without re-entering its destruction.
     {
-        CNeoVMImpl vm;
+        CNeoVM vm;
         VarInfo self;
         vm.Var_SetTable(&self, vm.TableAlloc());
         self._tbl->Insert("self", &self);
@@ -204,7 +204,7 @@ static bool ContainerDestroyRegression()
 
     // A deep acyclic graph must be collected immediately without consuming
     // one native stack frame per container.
-    CNeoVMImpl vm;
+    CNeoVM vm;
     VarInfo root;
     vm.Var_SetTable(&root, vm.TableAlloc());
     MapInfo* current = root._tbl;
@@ -223,7 +223,7 @@ static bool ContainerDestroyRegression()
     return stats.maps == 0;
 }
 
-static void DrainCycles(NeoScript::CNeoVMImpl& vm)
+static void DrainCycles(NeoScript::CNeoVM& vm)
 {
     vm.CollectCycles(true);
 }
@@ -232,7 +232,7 @@ static bool CycleCollectionRegression()
 {
     using namespace NeoScript;
 
-    CNeoVMImpl vm;
+    CNeoVM vm;
     SNeoVMAllocStats stats{};
 
     // Scalar-only map/list/set values cannot participate in a reference cycle.

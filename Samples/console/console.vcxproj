@@ -175,7 +175,6 @@
     <ClInclude Include="..\..\NeoSource\NeoTextLoader.h" />
     <ClInclude Include="..\..\NeoSource\NeoVM.h" />
     <ClInclude Include="..\..\NeoSource\NeoVMHash.h" />
-    <ClInclude Include="..\..\NeoSource\NeoVMImpl.h" />
     <ClInclude Include="..\..\NeoSource\NeoVMInternal.h" />
     <ClInclude Include="..\..\NeoSource\NeoVMList.h" />
     <ClInclude Include="..\..\NeoSource\NeoVMMemoryPool.h" />
@@ -220,12 +219,6 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="..\..\NeoSource\NeoVMProgram.cpp">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-    </ClCompile>
-    <ClCompile Include="..\..\NeoSource\NeoVMImpl.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>

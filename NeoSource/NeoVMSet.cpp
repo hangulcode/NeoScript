@@ -4,7 +4,7 @@
 #include <chrono>
 #include <algorithm>
 
-#include "NeoVMImpl.h"
+#include "NeoVMInternal.h"
 #include "NeoVMWorker.h"
 #include "NeoVMSet.h"
 
@@ -118,7 +118,7 @@ static bool SetKeyEquals(SetNode& node, VarInfo* pKey, u32 hash)
 	}
 }
 
-static VarInfo* NormalizeSetStringKey(CNeoVMImpl* vm, VarInfo* pKey, VarInfo& normalized, bool forInsert)
+static VarInfo* NormalizeSetStringKey(CNeoVM* vm, VarInfo* pKey, VarInfo& normalized, bool forInsert)
 {
 	if (pKey->GetType() != VAR_STRING || pKey->_str->_interned)
 		return pKey;

@@ -31,14 +31,14 @@ struct SetSortInfo
 	int				_compareFunction;
 };
 
-class CNeoVMImpl;
+class CNeoVM;
 class CNeoVMWorker;
 struct SetInfo : AllocBase
 {
 	// Lua-style hash part: each primary bucket is a slot in this node array.
 	SetNode*	_Bucket;
 
-	CNeoVMImpl*	_pVM;
+	CNeoVM*	_pVM;
 
 	int	_HashBase;
 	int _BucketCapa;

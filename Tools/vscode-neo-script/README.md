@@ -49,7 +49,7 @@ Supported debugger actions:
 
 The extension includes TextMate highlighting, snippets, and completion for common Neo Script patterns.
 
-Completion and signature help are provided by `console.exe --lsp` and use the engine's `INeoVM::GetBuiltins()` reflection data. The extension suggests registered module functions with return types and parameter details, shows parameter hints after `(` and `,`, suggests type methods after `.` when the receiver type is not known, and completes language keywords, modules, and functions declared in the current document.
+Completion and signature help are provided by `console.exe --lsp` and use the engine's `NeoVMSystem::GetBuiltins()` reflection data. The extension suggests registered module functions with return types and parameter details, shows parameter hints after `(` and `,`, suggests type methods after `.` when the receiver type is not known, and completes language keywords, modules, and functions declared in the current document.
 
 Set `neoScript.languageServerPath` when `console.exe` is not found automatically. It may point to the same executable as `neoScript.debugAdapterPath`; no debug session is required for completion.
 

@@ -4,7 +4,7 @@
 
 # Neo Script Documentation
 	- The grammar uses a C-like syntax, but it is somewhat similar to Lua script.
-	- It was developed in Visual Studio Pro 2026 C++.
+	- It was developed in Visual Studio 2026 C++.
 	- After some more features are added, port to C#
 
 ### Script API reference
@@ -150,8 +150,8 @@ var moved = position + direction * 2.0;
 
 ### Embedding the engine
 
-The C++ host API — Runtime / Program / Instance, host↔script calls, captured lambdas,
-cycle collection, and the internal execution-context pool — has its own document:
+The public v2 C++ host API in `NeoScript.h` — Runtime / Program / Instance, host↔script calls,
+captured lambdas, cycle collection, and the internal execution-context pool — has its own document:
 
 **[docs/Embedding.md](docs/Embedding.md)**
 

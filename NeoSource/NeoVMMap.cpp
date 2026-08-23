@@ -4,7 +4,7 @@
 #include <chrono>
 #include <algorithm>
 
-#include "NeoVMImpl.h"
+#include "NeoVMInternal.h"
 #include "NeoVMWorker.h"
 #include "NeoVMMap.h"
 
@@ -20,7 +20,7 @@ static u32 GetMapKeyHash(VarInfo* pKey)
 	return pKey->GetType() == VAR_STRING ? pKey->_str->GetHash() : GetHashCode(pKey);
 }
 
-static VarInfo* NormalizeMapStringKey(CNeoVMImpl* vm, VarInfo* pKey, VarInfo& normalized, bool forInsert)
+static VarInfo* NormalizeMapStringKey(CNeoVM* vm, VarInfo* pKey, VarInfo& normalized, bool forInsert)
 {
 	if (pKey->GetType() != VAR_STRING || pKey->_str->_interned)
 		return pKey;

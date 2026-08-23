@@ -4,7 +4,7 @@
 #include <new>
 #include <thread>
 #include <chrono>
-#include "NeoVMImpl.h"
+#include "NeoVMInternal.h"
 #include "NeoVMWorker.h"
 #include "NeoArchive.h"
 #include "NeoLibDCall.h"
@@ -55,7 +55,7 @@ VecInfo* INeoVMWorker::VecStoreFor(VarInfo* d, int count)
 		return d->_vec;
 	}
 	if (d->IsAllocType()) Var_Release(d);
-	VecInfo* p = ((CNeoVMImpl*)_pVM)->VecAlloc();
+	VecInfo* p = _pVM->VecAlloc();
 	p->_refCount = 1;
 	d->SetVecType(count);
 	d->_vec = p;
@@ -87,7 +87,7 @@ int& GetModuleRefCount(VarInfo* p)
 	return ((CNeoVMWorker*)(p->_module))->_refCount;
 }
 
-CNeoVMWorker::CNeoVMWorker(INeoVM* pVM, u32 id, int iStackSize)
+CNeoVMWorker::CNeoVMWorker(CNeoVM* pVM, u32 id, int iStackSize)
 {
 	_pVM = pVM;
 	_idWorker = id;
@@ -2530,7 +2530,7 @@ bool CNeoVMWorker::CallDefaultNativeByIndex(int nativeIndex, int n3, VarInfo* pR
 	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1 + n3)
 		_iSP_Vars_Max2 = _iSP_VarsMax + 1 + n3;
 
-	bool nativeResult = CNeoVMImpl::CallDefaultNativeByIndex(nativeIndex, this, (short)n3);
+	bool nativeResult = CNeoVM::CallDefaultNativeByIndex(nativeIndex, this, (short)n3);
 	if (nativeResult == false)
 	{
 		_iSP_Vars = iSave;

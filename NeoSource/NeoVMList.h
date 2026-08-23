@@ -2,7 +2,7 @@
 
 namespace NeoScript
 {
-class CNeoVMImpl;
+class CNeoVM;
 class CNeoVMWorker;
 
 // 작은 리스트 인라인 버킷(SBO): 원소 수가 이 값 이하면 힙 할당 없이 struct 내부에 담는다.
@@ -13,7 +13,7 @@ struct ListInfo : AllocBase
 {
 	VarInfo*	_Bucket;
 
-	CNeoVMImpl*	_pVM;
+	CNeoVM*	_pVM;
 
 
 	int	_ListID;

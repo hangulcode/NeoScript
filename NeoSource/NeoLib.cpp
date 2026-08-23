@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <cstring>
 
-#include "NeoVMImpl.h"
+#include "NeoVMInternal.h"
 #include "NeoVMWorker.h"
 #include "NeoArchive.h"
 //#include "NeoTime.h"
@@ -13,8 +13,8 @@
 #include <chrono>
 
 #define MATH_PI				3.14159265358979323846f // Pi
-NeoScript::INeoVM::IO_Print NeoScript::INeoVM::m_pFunPrint = nullptr;
-NeoScript::INeoVM::IO_Print NeoScript::INeoVM::m_pFunError = nullptr;
+NeoScript::NeoVMSystem::IO_Print NeoScript::NeoVMSystem::m_pFunPrint = nullptr;
+NeoScript::NeoVMSystem::IO_Print NeoScript::NeoVMSystem::m_pFunError = nullptr;
 
 namespace NeoScript
 {
@@ -989,10 +989,10 @@ struct neo_libs
 		{
 			VarInfo* pArg1 = pN->GetStack(1);
 			std::string str = CNeoVMWorker::ToString(pArg1);
-			if(INeoVM::m_pFunPrint == nullptr)
+			if(NeoVMSystem::m_pFunPrint == nullptr)
 				std::cout << str.c_str() << '\n';
 			else
-				INeoVM::m_pFunPrint(str.c_str());
+				NeoVMSystem::m_pFunPrint(str.c_str());
 			pN->ReturnValue();
 			return true;
 		}
@@ -1002,10 +1002,10 @@ struct neo_libs
 			VarInfo* pArg2 = pN->GetStack(2);
 			std::string str1 = CNeoVMWorker::ToString(pArg1);
 			std::string str2 = CNeoVMWorker::ToString(pArg2);
-			if (INeoVM::m_pFunPrint == nullptr)
+			if (NeoVMSystem::m_pFunPrint == nullptr)
 				std::cout << str1.c_str() << str2.c_str();
 			else
-				INeoVM::m_pFunPrint((str1 + str2).c_str());
+				NeoVMSystem::m_pFunPrint((str1 + str2).c_str());
 			pN->ReturnValue();
 			return true;
 		}
@@ -1074,7 +1074,7 @@ struct neo_libs
 		param.putASM = false;
 		param.debug = false;
 
-		if (false == INeoVM::Compile(arCode, param))
+		if (false == NeoVMSystem::Compile(arCode, param))
 		{
 			return false;
 		}
@@ -1112,7 +1112,7 @@ struct neo_libs
 		if (v->GetType() != VAR_FUN && v->GetType() != VAR_CLOSURE)
 			return false;
 
-		CNeoVMImpl* pVM = pN->GetVM();
+		CNeoVM* pVM = pN->GetVM();
 		CoroutineInfo* pCI = pVM->CoroutineAlloc();
 		pCI->_refCount = 0;
 		pCI->_fun_index = (v->GetType() == VAR_FUN) ? v->_fun_index : v->_closure->_funIndex;
@@ -1144,7 +1144,7 @@ struct neo_libs
 		VarInfo* v = pN->GetStack(1);
 		if (v->GetType() != VAR_COROUTINE) return false;
 
-		CNeoVMImpl* pVM = pN->GetVM();
+		CNeoVM* pVM = pN->GetVM();
 		switch (v->_cor->_state)
 		{
 		case COROUTINE_STATE_SUSPENDED:
@@ -1248,12 +1248,12 @@ static std::vector<TYPE_NeoLib> g_sNeoFunLib_DefaultNative;
 static std::vector<u8> g_sNeoFunLib_DefaultIntrinsic; // native index 별 intrinsic opcode (기본 NOP_NONE)
 static std::unordered_map<std::string, int> g_sNeoFunLib_DefaultNativeIndex;
 
-bool CNeoVMImpl::_funInitLib = false;
-FunctionPtrNative CNeoVMImpl::_funLib_Default;
-FunctionPtrNative CNeoVMImpl::_funLib_List;
-FunctionPtrNative CNeoVMImpl::_funLib_String;
-FunctionPtrNative CNeoVMImpl::_funLib_Map;
-FunctionPtrNative CNeoVMImpl::_funLib_Async;
+bool CNeoVM::_funInitLib = false;
+FunctionPtrNative CNeoVM::_funLib_Default;
+FunctionPtrNative CNeoVM::_funLib_List;
+FunctionPtrNative CNeoVM::_funLib_String;
+FunctionPtrNative CNeoVM::_funLib_Map;
+FunctionPtrNative CNeoVM::_funLib_Async;
 
 
 static bool Fun_Default(INeoVMWorker* pN, void* pUserData, const VMString* pStr, short args)
@@ -1373,7 +1373,7 @@ static void AddSystemFun(const std::string& fname, TYPE_NeoLib fun, const char* 
 	AddSystemFunImpl(fname, fun, { ret, params... });
 }
 
-int CNeoVMImpl::FindDefaultNativeIndex(const VMString* pStr)
+int CNeoVM::FindDefaultNativeIndex(const VMString* pStr)
 {
 	if (pStr == nullptr)
 		return -1;
@@ -1388,7 +1388,7 @@ int CNeoVMImpl::FindDefaultNativeIndex(const VMString* pStr)
 	return it->second;
 }
 
-int CNeoVMImpl::FindDefaultNativeIndex(const std::string& name)
+int CNeoVM::FindDefaultNativeIndex(const std::string& name)
 {
 	auto it = g_sNeoFunLib_DefaultNativeIndex.find(name);
 	if (it == g_sNeoFunLib_DefaultNativeIndex.end())
@@ -1396,14 +1396,14 @@ int CNeoVMImpl::FindDefaultNativeIndex(const std::string& name)
 	return it->second;
 }
 
-bool CNeoVMImpl::CallDefaultNativeByIndex(int nativeIndex, CNeoVMWorker* pWorker, short args)
+bool CNeoVM::CallDefaultNativeByIndex(int nativeIndex, CNeoVMWorker* pWorker, short args)
 {
 	if (nativeIndex < 0 || nativeIndex >= (int)g_sNeoFunLib_DefaultNative.size())
 		return false;
 	return (*g_sNeoFunLib_DefaultNative[nativeIndex])(pWorker, nullptr, args);
 }
 // 로드 시 PTRCALL2 를 대체할 intrinsic opcode. 없으면 NOP_NONE.
-int CNeoVMImpl::GetDefaultNativeIntrinsic(int nativeIndex)
+int CNeoVM::GetDefaultNativeIntrinsic(int nativeIndex)
 {
 	if (nativeIndex < 0 || nativeIndex >= (int)g_sNeoFunLib_DefaultIntrinsic.size())
 		return NOP_NONE;
@@ -1485,38 +1485,38 @@ static void AddGlobalLibFun()
 
 	g_sCurrentSystem.clear();
 }
-bool CNeoVMImpl::IsGlobalLibFun(std::string& FunName)
+bool CNeoVM::IsGlobalLibFun(std::string& FunName)
 {
 	//InitLib();
 	//return g_sNeoFunLib_Default.IsKey(FunName);
 	return FunName == "print";
 }
-const std::list< SystemFun>* CNeoVMImpl::GetSystemModule(const std::string& module)
+const std::list< SystemFun>* CNeoVM::GetSystemModule(const std::string& module)
 {
 	auto it = g_sSystemFuns.find(module);
 	if(it == g_sSystemFuns.end())
 		return nullptr;
 	return &(*it).second;
 }
-void CNeoVMImpl::RegLibrary(VarInfo* pSystem, const char* pLibName)
+void CNeoVM::RegLibrary(VarInfo* pSystem, const char* pLibName)
 {
 	if (pSystem && pSystem->GetType() == VAR_FP_NATIVE)
-		RegisterTableCallBack(pSystem, nullptr, Fun_Default, nullptr);
+		NeoVMSystem::RegisterTableCallBack(pSystem, nullptr, Fun_Default, nullptr);
 	//AddGlobalLibFun();
 
 	//_funDefaultLib = CNeoVM::RegisterNative(Fun);
 }
 
-void CNeoVMImpl::RegObjLibrary()
+void CNeoVM::RegObjLibrary()
 {
 	if (_funInitLib) return;
 	_funInitLib = true;
 
 	AddGlobalLibFun();
-	_funLib_Default = CNeoVMImpl::RegisterNative(Fun_Default);
+	_funLib_Default = NeoVMSystem::RegisterNative(Fun_Default);
 
 	// String Lib
-	_funLib_String = CNeoVMImpl::RegisterNative(Fun_String);
+	_funLib_String = NeoVMSystem::RegisterNative(Fun_String);
 	g_sNeoFunLib_String.Add("sub", &neo_libs::Str_sub);
 	g_sNeoFunLib_String.Add("len", &neo_libs::Str_len);
 	g_sNeoFunLib_String.Add("find", &neo_libs::Str_find);
@@ -1529,13 +1529,13 @@ void CNeoVMImpl::RegObjLibrary()
 	g_sNeoFunLib_String.Add("split", &neo_libs::Str_split);
 
 	// List Lib
-	_funLib_List = CNeoVMImpl::RegisterNative(Fun_List);
+	_funLib_List = NeoVMSystem::RegisterNative(Fun_List);
 	g_sNeoFunLib_List.Add("resize", &neo_libs::List_resize);
 	g_sNeoFunLib_List.Add("len", &neo_libs::List_len);
 	g_sNeoFunLib_List.Add("append", &neo_libs::List_append);
 
 	// Map Lib
-	_funLib_Map = CNeoVMImpl::RegisterNative(Fun_Map);
+	_funLib_Map = NeoVMSystem::RegisterNative(Fun_Map);
 	g_sNeoFunLib_Map.Add("len", &neo_libs::map_len);
 	g_sNeoFunLib_Map.Add("reserve", &neo_libs::map_reserve);
 	g_sNeoFunLib_Map.Add("sort", &neo_libs::map_sort);
@@ -1543,7 +1543,7 @@ void CNeoVMImpl::RegObjLibrary()
 	g_sNeoFunLib_Map.Add("values", &neo_libs::map_values);
 
 	// Async Lib
-	_funLib_Async = CNeoVMImpl::RegisterNative(Fun_Async);
+	_funLib_Async = NeoVMSystem::RegisterNative(Fun_Async);
 	g_sNeoFunLib_Async.Add("get", &neo_libs::async_get);
 	g_sNeoFunLib_Async.Add("post", &neo_libs::async_post);
 	g_sNeoFunLib_Async.Add("add_header", &neo_libs::async_add_header);
@@ -1551,7 +1551,7 @@ void CNeoVMImpl::RegObjLibrary()
 	g_sNeoFunLib_Async.Add("close", &neo_libs::async_close);
 }
 
-void CNeoVMImpl::InitLib()
+void CNeoVM::InitLib()
 {
 /*	VarInfo* pSystem = &m_sVarGlobal[0];
 	Var_SetTable(pSystem, TableAlloc());
@@ -1562,7 +1562,7 @@ void CNeoVMImpl::InitLib()
 
 // 등록된 빌트인 전체 열거 — 완성 데이터의 단일 진실원천은 위 등록 코드 그 자체.
 // AddSystemFun / g_sNeoFunLib_*.Add 한 줄만 추가하면 여기 열거에 자동 반영된다.
-void INeoVM::GetBuiltins(std::vector<NeoBuiltinInfo>& out)
+void NeoVMSystem::GetBuiltins(std::vector<NeoBuiltinInfo>& out)
 {
 	out.clear();
 
