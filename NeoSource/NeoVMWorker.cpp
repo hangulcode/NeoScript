@@ -1727,30 +1727,6 @@ NEOS_NOINLINE bool CNeoVMWorker::ReportRunException()
 	}
 }
 
-NEOS_NOINLINE bool CNeoVMWorker::IsRangeInside(const SVMOperation& op)
-{
-	const ProgramRangeJump& range = _pProgram->rangeJumps[(u16)op.n3];
-	VarInfo* test = GetVarPtr2(op);
-	VarInfo* lower = (range.flags & NEOS_RANGE_LOWER_LOCAL)
-		? GetVarPtr_L(range.lower) : GetVarPtr_G(range.lower);
-	VarInfo* upper = (range.flags & NEOS_RANGE_UPPER_LOCAL)
-		? GetVarPtr_L(range.upper) : GetVarPtr_G(range.upper);
-
-	const bool lowerInclusive = (range.flags & NEOS_RANGE_LOWER_INCLUSIVE) != 0;
-	const bool upperInclusive = (range.flags & NEOS_RANGE_UPPER_INCLUSIVE) != 0;
-	if (range.flags & NEOS_RANGE_UPPER_FIRST)
-	{
-		const bool upperPass = upperInclusive ? CompareGE(upper, test) : CompareGR(upper, test);
-		if (upperPass == false)
-			return false;
-		return lowerInclusive ? CompareGE(test, lower) : CompareGR(test, lower);
-	}
-	const bool lowerPass = lowerInclusive ? CompareGE(test, lower) : CompareGR(test, lower);
-	if (lowerPass == false)
-		return false;
-	return upperInclusive ? CompareGE(upper, test) : CompareGR(upper, test);
-}
-
 bool	CNeoVMWorker::Run()
 {
 	if (m_bOutOfMemoryPoisoned)
@@ -1910,8 +1886,8 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_MOV_L:         Move(GetVarPtr_L(OP.n1), GetVarPtr_L(OP.n2)); break;
 		case NOP_MOVI:          MoveI(GetVarPtrF1(OP), OP.n23); break;
 		case NOP_MOVI_L:        MoveI(GetVarPtr_L(OP.n1), OP.n23); break;
-		case NOP_MOVF:          MoveFMem(GetVarPtrF1(OP), OP.n23); break;
-		case NOP_MOVF_L:        MoveFMem(GetVarPtr_L(OP.n1), OP.n23); break;
+		case NOP_MOVF:          MoveF(GetVarPtrF1(OP), OP.n23); break;
+		case NOP_MOVF_L:        MoveF(GetVarPtr_L(OP.n1), OP.n23); break;
 		case NOP_MOV_MINUS:     MoveMinus(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
 		case NOP_MOV_MINUS_L:   MoveMinus(GetVarPtr_L(OP.n1), GetVarPtr_L(OP.n2)); break;
 		case NOP_LOG_NOT:       Var_SetBool(GetVarPtrF1(OP), !GetVarPtr2(OP)->IsTrue()); break;
@@ -2024,19 +2000,15 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 			break;
 		case NOP_IDLE:          handle_IDLE(OP); break;
 		case NOP_VEC_MAKE:      handle_VEC_MAKE(OP); break;
-
-		case NOP_CLT_READ_STATIC_INT: handle_CLT_READ_STATIC_INT(OP); break;
-		case NOP_CLT_READ_STATIC_STRING: handle_CLT_READ_STATIC_STRING(OP); break;
-		case NOP_JMP_RANGE_INSIDE: if (IsRangeInside(OP)) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_RANGE_OUTSIDE: if (IsRangeInside(OP) == false) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_RANGE_INSIDE_L: if (IsRangeInside_L(OP)) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_RANGE_OUTSIDE_L: if (IsRangeInside_L(OP) == false) SetCodeIncPtr(OP.n1); break;
-
 		case NOP_NONE:          handle_NONE(OP); break;
 		case NOP_ERROR:
 			handle_ERROR(OP);
 			return false;
-
+		case NOP_CLT_READ_STATIC_STRING: handle_CLT_READ_STATIC_STRING(OP); break;
+		case NOP_JMP_RANGE_INSIDE: if (IsRangeInside(OP, false)) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_RANGE_OUTSIDE: if (IsRangeInside(OP, false) == false) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_RANGE_INSIDE_L: if (IsRangeInside(OP, true)) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_RANGE_OUTSIDE_L: if (IsRangeInside(OP, true) == false) SetCodeIncPtr(OP.n1); break;
 		default:
 			SetError(RTE_UNKNOWN_OP);
 			break;

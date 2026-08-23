@@ -169,15 +169,14 @@ private:
 		outOffset = t[tableIndex].Find(pKey);
 		return true;
 	}
-	// 일반 range op는 global/local 혼합 피치와 descriptor flag 처리가 커서 dispatcher 밖으로 뺀다.
-	NEOS_NOINLINE bool IsRangeInside(const SVMOperation& op);
-	// _L은 로드 시 검사값·양 경계가 모두 local임이 확정된다. hot dispatcher에 작은 형태만 남긴다.
-	NEOS_FORCEINLINE bool IsRangeInside_L(const SVMOperation& op)
+	NEOS_FORCEINLINE bool IsRangeInside(const SVMOperation& op, bool allLocal)
 	{
 		const ProgramRangeJump& range = _pProgram->rangeJumps[(u16)op.n3];
-		VarInfo* test = GetVarPtr_L(op.n2);
-		VarInfo* lower = GetVarPtr_L(range.lower);
-		VarInfo* upper = GetVarPtr_L(range.upper);
+		VarInfo* test = allLocal ? GetVarPtr_L(op.n2) : GetVarPtr2(op);
+		VarInfo* lower = allLocal || (range.flags & NEOS_RANGE_LOWER_LOCAL)
+			? GetVarPtr_L(range.lower) : GetVarPtr_G(range.lower);
+		VarInfo* upper = allLocal || (range.flags & NEOS_RANGE_UPPER_LOCAL)
+			? GetVarPtr_L(range.upper) : GetVarPtr_G(range.upper);
 
 		const bool lowerInclusive = (range.flags & NEOS_RANGE_LOWER_INCLUSIVE) != 0;
 		const bool upperInclusive = (range.flags & NEOS_RANGE_UPPER_INCLUSIVE) != 0;
@@ -314,8 +313,7 @@ public:
 	void Move(VarInfo* v1, VarInfo* v2);
 	void MoveTake(VarInfo* v1, VarInfo* v2);
 	void MoveI(VarInfo* v1, int v);
-	void MoveF(VarInfo* v1, float v);
-	void MoveFMem(VarInfo* v1, int bits);
+	void MoveF(VarInfo* v1, int bits);
 
 
 	void Swap(VarInfo* v1, VarInfo* v2);

@@ -54,13 +54,7 @@ struct ListInfo : AllocBase
 	// 한 번이라도 컨테이너 자식을 저장했으면 pool 재대여 전까지 유지한다.
 	NEOS_FORCEINLINE void MarkContainerChild() { _cycleState._mayContainContainerChild = true; }
 	bool GetValue(int idx, VarInfo* pValue);
-	NEOS_FORCEINLINE VarInfo* GetValue(int idx)
-	{
-		if (idx < 0 || idx >= _itemCount)
-			return nullptr;
-		return &_Bucket[idx];
-	}
-
+	VarInfo* GetValue(int idx);
 	bool SetValue(int idx, VarInfo* pValue);
 	bool SetValue(int idx, int v);
 	bool SetValue(int idx, NS_FLOAT v);
