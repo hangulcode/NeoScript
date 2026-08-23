@@ -68,7 +68,9 @@ struct debug_info
 //       다시 만들어야 한다.
 // 0119: RET_CLOSURE opcode를 제거하고 closure 반환 여부를 SCallStack에 기록한다.
 //       이후 opcode 번호가 바뀌므로 캐시를 다시 만들어야 한다.
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('1' << 8) | ('9'))
+// 0120: 범위 조건 jump opcode와 'RNGE' 범위 descriptor chunk를 추가한다.
+//       이전 캐시는 새 opcode/chunk를 모르므로 다시 만들어야 한다.
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('2' << 8) | ('0'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline

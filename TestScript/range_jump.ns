@@ -1,0 +1,41 @@
+import system;
+
+fun Check(var x)
+{
+    var r = 0;
+    if (x < 1 || x >= 4) r += 1;
+    if (1 <= x && x < 4) r += 10;
+    if (x <= 1 || 4 < x) r += 100;
+    if (1 < x && x <= 4) r += 1000;
+    return r;
+}
+
+print(Check(0));
+print(Check(1));
+print(Check(2));
+print(Check(4));
+
+fun LoopCheck()
+{
+    var r = 0;
+    for (var x in 0, 6, 1)
+    {
+        if (x < 1 || x >= 4) r += 1;
+        if (1 <= x && x < 4) r += 10;
+    }
+    return r;
+}
+
+print(LoopCheck());
+
+fun ReverseOrder(var x)
+{
+    var r = 0;
+    if (x >= 4 || x < 1) r += 1;
+    if (x < 4 && 1 <= x) r += 10;
+    return r;
+}
+
+print(ReverseOrder(0));
+print(ReverseOrder(2));
+print(ReverseOrder(4));

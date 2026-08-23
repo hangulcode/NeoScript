@@ -95,6 +95,15 @@ struct ProgramSwitchTable
 	int  Find(VarInfo* pKey) const;           // 매칭 실패/지원 외 타입이면 defaultOffset
 };
 
+// NOP_JMP_RANGE_*의 lower/upper operand. Program은 여러 VM이 공유되므로
+// VarInfo/포인터가 아니라 슬롯 번호와 descriptor flag만 보관한다.
+struct ProgramRangeJump
+{
+	short	lower = 0;
+	short	upper = 0;
+	u8		flags = 0;
+};
+
 // 컴파일된 스크립트 이미지.
 // Create() 에서 1회 파싱 + 1회 코드 패치되고 이후 완전 불변이다.
 // 여러 CNeoVMWorker / 여러 CNeoVMImpl / 여러 스레드가 refcount 로 공유한다.
@@ -128,6 +137,7 @@ public:
 	std::map<std::string, int>	exportVariables;   // 전역 변수명 → 전역 슬롯 인덱스
 	std::vector<SStaticConst>	staticValues;
 	std::vector<ProgramSwitchTable>	switchTables;      // NOP_SWITCH.n1 이 이 배열의 인덱스
+	std::vector<ProgramRangeJump>	rangeJumps;          // NOP_JMP_RANGE_*.n3 이 이 배열의 인덱스
 
 	// 디버그 정보 (IsDebugInfo() 일 때만 채워진다)
 	std::vector<debug_info>		debugData;

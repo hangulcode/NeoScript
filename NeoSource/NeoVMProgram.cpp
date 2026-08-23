@@ -460,10 +460,60 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 				tbl.Build();
 			}
 		}
+		else if (magic == 0x45474E52)   // 'RNGE' : range jump descriptors
+		{
+			u32 rangeCount = 0;
+			if (false == ReadCount(ar, rangeCount) || rangeCount > (u32)USHRT_MAX + 1)
+				return true;
+			rangeJumps.resize(rangeCount);
+			for (u32 i = 0; i < rangeCount; ++i)
+			{
+				ProgramRangeJump& range = rangeJumps[i];
+				if (ar.Read(&range.lower, sizeof(range.lower)) == 0 ||
+					ar.Read(&range.upper, sizeof(range.upper)) == 0 ||
+					ar.Read(&range.flags, sizeof(range.flags)) == 0)
+				{
+					return true;
+				}
+				if (range.flags & ~(NEOS_RANGE_LOWER_LOCAL | NEOS_RANGE_UPPER_LOCAL |
+					NEOS_RANGE_LOWER_INCLUSIVE | NEOS_RANGE_UPPER_INCLUSIVE | NEOS_RANGE_UPPER_FIRST))
+					return true;
+			}
+		}
 		else
 		{
 			ar.SetBufferOffset(oldOffset);
 			break;
+		}
+	}
+
+	// range jump은 descriptor를 반드시 참조해야 한다. descriptor의 local slot은 해당
+	// opcode를 소유한 함수 프레임 기준이고, global slot은 static+global 배열 기준이다.
+	for (int opIndex = 0; opIndex < (int)code.size(); ++opIndex)
+	{
+		const SVMOperation& op = code[opIndex];
+		if (op.op != NOP_JMP_RANGE_INSIDE && op.op != NOP_JMP_RANGE_OUTSIDE)
+			continue;
+		const int rangeIndex = (int)(u16)op.n3;
+		if (rangeIndex < 0 || rangeIndex >= (int)rangeJumps.size() || codeOwners[opIndex] < 0)
+		{
+			SetLoadError(err, "Invalid range jump descriptor");
+			return false;
+		}
+		const SFunctionTable& fun = functions[codeOwners[opIndex]];
+		const ProgramRangeJump& range = rangeJumps[rangeIndex];
+		auto IsValidRangeOperand = [&](short slot, bool isLocal)
+		{
+			if (isLocal)
+				return slot >= 0 && slot < fun._localAddCount;
+			return slot >= 0 && slot < GetGlobalSlotCount();
+		};
+		if (IsValidRangeOperand(op.n2, (op.argFlag & NEOS_ARG_N2_LOCAL) != 0) == false ||
+			IsValidRangeOperand(range.lower, (range.flags & NEOS_RANGE_LOWER_LOCAL) != 0) == false ||
+			IsValidRangeOperand(range.upper, (range.flags & NEOS_RANGE_UPPER_LOCAL) != 0) == false)
+		{
+			SetLoadError(err, "Invalid range jump operand");
+			return false;
 		}
 	}
 	return true;
@@ -596,6 +646,24 @@ bool CNeoVMProgram::PatchLocalOps(std::string* err)
 		case NOP_PTRCALL2:
 			if ((f & L1) && (noResult || (f & L3))) to = NOP_PTRCALL2_L;
 			break;
+		case NOP_JMP_RANGE_INSIDE:
+			if ((f & L2) && (size_t)(u16)op.n3 < rangeJumps.size())
+			{
+				const ProgramRangeJump& range = rangeJumps[(u16)op.n3];
+				if ((range.flags & (NEOS_RANGE_LOWER_LOCAL | NEOS_RANGE_UPPER_LOCAL)) ==
+					(NEOS_RANGE_LOWER_LOCAL | NEOS_RANGE_UPPER_LOCAL))
+					to = NOP_JMP_RANGE_INSIDE_L;
+			}
+			break;
+		case NOP_JMP_RANGE_OUTSIDE:
+			if ((f & L2) && (size_t)(u16)op.n3 < rangeJumps.size())
+			{
+				const ProgramRangeJump& range = rangeJumps[(u16)op.n3];
+				if ((range.flags & (NEOS_RANGE_LOWER_LOCAL | NEOS_RANGE_UPPER_LOCAL)) ==
+					(NEOS_RANGE_LOWER_LOCAL | NEOS_RANGE_UPPER_LOCAL))
+					to = NOP_JMP_RANGE_OUTSIDE_L;
+			}
+			break;
 		default:
 			candidate = false;
 			break;
@@ -658,6 +726,8 @@ static eNOperation NormalizeLocalOp(eNOperation op, bool* outIsLocal)
 	case NOP_CLT_MOV_L:      base = NOP_CLT_MOV;      break;
 	case NOP_LIST_ALLOC_L:   base = NOP_LIST_ALLOC;   break;
 	case NOP_CHANGE_INT_L:   base = NOP_CHANGE_INT;   break;
+	case NOP_JMP_RANGE_INSIDE_L:  base = NOP_JMP_RANGE_INSIDE;  break;
+	case NOP_JMP_RANGE_OUTSIDE_L: base = NOP_JMP_RANGE_OUTSIDE; break;
 	default: break;
 	}
 	if (outIsLocal != nullptr)
@@ -896,7 +966,6 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		byteCount = OpFlagByteChars + 2 * 2;
 		outAssembly = FormatAsm("SWTC table[%u], key %s", (unsigned)(u16)v.n1, context.operand(2).c_str());
 		break;
-
 	case NOP_TOSTRING:
 		byteCount = OpFlagByteChars + 2 * 2;
 		outAssembly = FormatAsm("ToStr %s = %s", context.operand(1).c_str(), context.operand(2).c_str());
@@ -1053,6 +1122,16 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 	case NOP_CLT_READ_STATIC_STRING:
 		byteCount = OpFlagByteChars + 2 * 3;
 		outAssembly = FormatAsm("READ.S %s = %s.%s", context.operand(3).c_str(), context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_JMP_RANGE_INSIDE:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("JRIN %d%s,  %s in range[%u]", v.n1,
+			context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), (unsigned)(u16)v.n3);
+		break;
+	case NOP_JMP_RANGE_OUTSIDE:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("JROT %d%s,  %s outside range[%u]", v.n1,
+			context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), (unsigned)(u16)v.n3);
 		break;
 	case NOP_TABLE_REMOVE:
 		byteCount = OpFlagByteChars + 2 * 2;

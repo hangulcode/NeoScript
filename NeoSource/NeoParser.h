@@ -808,6 +808,16 @@ struct SSwitchTableCompile
 	int								_defaultOffset = 0;
 };
 
+// 컴파일 중에는 lower/upper가 compiler slot 표현이다. Export가 owning function의
+// stack/global slot으로 바꾼 뒤 'RNGE' chunk로 저장한다.
+struct SRangeJumpCompile
+{
+	short	_lower = 0;
+	short	_upper = 0;
+	u8		_flags = 0;
+	int		_ownerFunction = -1;
+};
+
 struct SFunctions
 {
 	std::vector<SFunctionLayer*>			_funLayers;
@@ -827,6 +837,8 @@ struct SFunctions
 	// NOP_SWITCH.n1 = 이 배열의 인덱스이고, Export 가 'SWIT' 청크로 써서
 	// 런타임에 CNeoVMProgram::switchTables 가 된다.
 	std::vector<SSwitchTableCompile>	_switchTables;
+	// NOP_JMP_RANGE_*.n3 = 이 배열의 인덱스. 인덱스는 unsigned short로 저장한다.
+	std::vector<SRangeJumpCompile>	_rangeJumps;
 
 	CNArchive		_codeFinal;
 	CNArchive		_codeTemp;

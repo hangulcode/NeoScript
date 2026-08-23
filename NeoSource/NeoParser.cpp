@@ -629,6 +629,10 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_VERIFY_TYPE, 2);
 	OP_STR1(NOP_CHANGE_INT, 1);
 	OP_STR1(NOP_YIELD, 1);
+	OP_STR1(NOP_JMP_RANGE_INSIDE, 3);
+	OP_STR1(NOP_JMP_RANGE_OUTSIDE, 3);
+	OP_STR1(NOP_JMP_RANGE_INSIDE_L, 3);
+	OP_STR1(NOP_JMP_RANGE_OUTSIDE_L, 3);
 
 	if (blError)
 	{
@@ -2998,6 +3002,180 @@ static bool TryFuseCompareJump(bool bJumpWhenTrue, const SOperand& operand, SFun
 	return true;
 }
 
+enum ERangeCompareRelation
+{
+	RANGE_REL_NONE,
+	RANGE_REL_LESS,
+	RANGE_REL_LESS_EQ,
+	RANGE_REL_GREAT,
+	RANGE_REL_GREAT_EQ,
+};
+
+struct SRangeBoundCandidate
+{
+	short	_test = 0;
+	short	_bound = 0;
+	bool	_lower = false;
+	bool	_inclusive = false;
+};
+
+static ERangeCompareRelation GetRangeCompareRelation(eNOperation op)
+{
+	switch (op)
+	{
+	case NOP_JMP_GREAT:    return RANGE_REL_GREAT;
+	case NOP_JMP_GREAT_EQ: return RANGE_REL_GREAT_EQ;
+	case NOP_JMP_LESS:     return RANGE_REL_LESS;
+	case NOP_JMP_LESS_EQ:  return RANGE_REL_LESS_EQ;
+	default:                return RANGE_REL_NONE;
+	}
+}
+
+static ERangeCompareRelation InvertRangeCompareRelation(ERangeCompareRelation relation)
+{
+	switch (relation)
+	{
+	case RANGE_REL_GREAT:    return RANGE_REL_LESS_EQ;
+	case RANGE_REL_GREAT_EQ: return RANGE_REL_LESS;
+	case RANGE_REL_LESS:     return RANGE_REL_GREAT_EQ;
+	case RANGE_REL_LESS_EQ:  return RANGE_REL_GREAT;
+	default:                 return RANGE_REL_NONE;
+	}
+}
+
+// `a < b`는 a의 upper bound 이면서 b의 lower bound 이기도 하다. 두 비교에서
+// 동일한 test slot을 찾은 뒤 lower/upper 한 쌍으로 맞춰, 피연산자 순서까지 포함한
+// 모든 < / <= / >= / > 표기를 처리한다.
+static int BuildRangeBoundCandidates(const SVMOperation& op, bool jumpWhenTrue, bool buildInsideRange,
+	SRangeBoundCandidate outCandidates[2])
+{
+	ERangeCompareRelation relation = GetRangeCompareRelation(op.op);
+	if (jumpWhenTrue == false)
+		relation = InvertRangeCompareRelation(relation);
+	// OR 형태는 두 "outside" 조건을 하나의 inside 판정으로 바꾼다. AND 형태는
+	// 두 조건이 이미 inside 경계이므로 그대로 쓴다.
+	if (buildInsideRange)
+		relation = InvertRangeCompareRelation(relation);
+	if (relation == RANGE_REL_NONE)
+		return 0;
+
+	const bool inclusive = relation == RANGE_REL_LESS_EQ || relation == RANGE_REL_GREAT_EQ;
+	const bool leftIsLower = relation == RANGE_REL_GREAT || relation == RANGE_REL_GREAT_EQ;
+
+	// n2 relation n3
+	outCandidates[0]._test = op.n2;
+	outCandidates[0]._bound = op.n3;
+	outCandidates[0]._lower = leftIsLower;
+	outCandidates[0]._inclusive = inclusive;
+	// 반대 피연산자를 test로 보면 bound 방향도 반대가 된다.
+	outCandidates[1]._test = op.n3;
+	outCandidates[1]._bound = op.n2;
+	outCandidates[1]._lower = !leftIsLower;
+	outCandidates[1]._inclusive = inclusive;
+	return 2;
+}
+
+// 분기 컨텍스트의 정확히 두 비교만 한 opcode로 바꾼다.
+//
+//   x < lo || x >= hi  -> JMP_RANGE_INSIDE (inside면 body를 건너뜀)
+//   lo <= x && x < hi  -> JMP_RANGE_OUTSIDE (outside면 body를 건너뜀)
+//
+// 두 점프 사이에 피연산자 계산 코드가 있으면 해당 코드는 short-circuit 순서 자체를
+// 보장해야 하므로 건드리지 않는다. 이 최적화는 인접 비교 op 두 개에만 적용한다.
+static bool TryFuseRangeJump(SFunctions& funs, const std::vector<SJumpValue>& trueJumps,
+	const std::vector<SJumpValue>& falseJumps, SJumpValue& outFalseJump)
+{
+	const SJumpValue* firstJump = nullptr;
+	const SJumpValue* secondJump = nullptr;
+	bool firstJumpWhenTrue = false;
+	bool secondJumpWhenTrue = false;
+	eNOperation rangeOp = NOP_NONE;
+
+	if (trueJumps.size() == 1 && falseJumps.size() == 1)
+	{
+		// OR: 첫 비교가 참이면 body, 마지막 비교는 거짓이면 body 밖으로 간다.
+		firstJump = &trueJumps[0];
+		secondJump = &falseJumps[0];
+		firstJumpWhenTrue = true;
+		secondJumpWhenTrue = false;
+		rangeOp = NOP_JMP_RANGE_INSIDE;
+	}
+	else if (trueJumps.empty() && falseJumps.size() == 2)
+	{
+		// AND: 두 비교 모두 거짓이면 body 밖으로 간다.
+		firstJump = &falseJumps[0];
+		secondJump = &falseJumps[1];
+		rangeOp = NOP_JMP_RANGE_OUTSIDE;
+	}
+	else
+	{
+		return false;
+	}
+
+	const int firstOpOffset = firstJump->_iCodePosOffset - (int)sizeof(OpType) - (int)sizeof(ArgFlag);
+	const int secondOpOffset = secondJump->_iCodePosOffset - (int)sizeof(OpType) - (int)sizeof(ArgFlag);
+	if (firstOpOffset < 0 || secondOpOffset != firstOpOffset + (int)sizeof(SVMOperation) ||
+		funs._cur->_code->GetBufferOffset() != secondOpOffset + (int)sizeof(SVMOperation))
+	{
+		return false;
+	}
+
+	SVMOperation* firstOp = funs._cur->GetOPPointer(firstOpOffset);
+	SVMOperation* secondOp = funs._cur->GetOPPointer(secondOpOffset);
+	SRangeBoundCandidate firstCandidates[2];
+	SRangeBoundCandidate secondCandidates[2];
+	const bool buildInsideRange = rangeOp == NOP_JMP_RANGE_INSIDE;
+	const int firstCount = BuildRangeBoundCandidates(*firstOp, firstJumpWhenTrue, buildInsideRange, firstCandidates);
+	const int secondCount = BuildRangeBoundCandidates(*secondOp, secondJumpWhenTrue, buildInsideRange, secondCandidates);
+	if (firstCount == 0 || secondCount == 0)
+		return false;
+
+	SRangeBoundCandidate lower;
+	SRangeBoundCandidate upper;
+	bool found = false;
+	bool firstIsLower = false;
+	for (int i = 0; i < firstCount && found == false; ++i)
+	{
+		for (int j = 0; j < secondCount; ++j)
+		{
+			if (firstCandidates[i]._test != secondCandidates[j]._test ||
+				firstCandidates[i]._lower == secondCandidates[j]._lower)
+				continue;
+			lower = firstCandidates[i]._lower ? firstCandidates[i] : secondCandidates[j];
+			upper = firstCandidates[i]._lower ? secondCandidates[j] : firstCandidates[i];
+			firstIsLower = firstCandidates[i]._lower;
+			found = true;
+			break;
+		}
+	}
+	if (found == false || funs._rangeJumps.size() > USHRT_MAX)
+		return false;
+
+	SRangeJumpCompile range;
+	range._lower = lower._bound;
+	range._upper = upper._bound;
+	range._flags = (lower._inclusive ? NEOS_RANGE_LOWER_INCLUSIVE : 0) |
+		(upper._inclusive ? NEOS_RANGE_UPPER_INCLUSIVE : 0) |
+		(firstIsLower ? 0 : NEOS_RANGE_UPPER_FIRST);
+	// 첫 논리 그룹의 비교 순서를 유지한다. 타입 오류가 나는 비교에서는 short-circuit
+	// 순서도 스크립트 관찰 가능 동작이므로, 상한을 먼저 본 표현은 상한부터 검사한다.
+	range._ownerFunction = funs._cur->_funID;
+	const short rangeIndex = (short)funs._rangeJumps.size();
+	funs._rangeJumps.push_back(range);
+
+	// 첫 opcode를 재사용하고, 아직 어느 곳에서도 참조하지 않은 마지막 opcode는
+	// write cursor를 되돌려 다음 emission이 덮어쓰게 한다. NOP_IDLE을 남기지 않는다.
+	firstOp->op = GetOpTypeFromOp(rangeOp);
+	firstOp->argFlag = 0;
+	firstOp->n1 = 0;
+	firstOp->n2 = lower._test;
+	firstOp->n3 = rangeIndex;
+	funs._cur->_code->SetBufferOffset(secondOpOffset);
+	outFalseJump.Set(firstOpOffset + (int)sizeof(OpType) + (int)sizeof(ArgFlag),
+		firstOpOffset + (int)sizeof(SVMOperation));
+	return true;
+}
+
 TK_TYPE ParseShortCircuitLogic(bool bReqReturn, SOperand& sResultStack, CArchiveRdWC& ar, SFunctions& funs, SVars& vars,
 	TK_TYPE tkEnd1, TK_TYPE tkEnd2, TK_TYPE tkEnd3, TK_TYPE tkEnd4, std::vector<SJumpValue>* pOutFalseJumps)
 {
@@ -3091,6 +3269,13 @@ TK_TYPE ParseShortCircuitLogic(bool bReqReturn, SOperand& sResultStack, CArchive
 	// 이것만으로 조건식에서 MOV true / JMP / MOV false / 재검사 JF 4개 명령이 사라진다.
 	if (pOutFalseJumps != NULL)
 	{
+		SJumpValue rangeFalseJump;
+		if (TryFuseRangeJump(funs, trueJumps, andFalseJumps, rangeFalseJump))
+		{
+			trueJumps.clear();
+			andFalseJumps.clear();
+			andFalseJumps.push_back(rangeFalseJump);
+		}
 		const int bodyPos = funs._cur->_code->GetBufferOffset();
 		for (const SJumpValue& jump : trueJumps)
 			funs._cur->Set_JumpOffet(jump, bodyPos);
@@ -4902,6 +5087,7 @@ static bool IsRelativeJumpOp(eNOperation op)
 	case NOP_JMP_AND:		case NOP_JMP_OR:
 	case NOP_JMP_NAND:		case NOP_JMP_NOR:
 	case NOP_JMP_FOR:		case NOP_JMP_FOREACH:
+	case NOP_JMP_RANGE_INSIDE:	case NOP_JMP_RANGE_OUTSIDE:
 		return true;
 	default:
 		return false;
@@ -4979,10 +5165,22 @@ static void HoistLoopConstants(SFunctions& funs, u8* pCode, int codeSize,
 		if (inLoop[i] == 0)
 			continue;
 		const int mask = HoistableOperandMask(ops[i].op);
-		if (mask == 0)
-			continue;
 		if ((mask & 0x2) && IsStaticOperand(ops[i].n2)) useInLoop[ops[i].n2]++;
 		if ((mask & 0x4) && IsStaticOperand(ops[i].n3)) useInLoop[ops[i].n3]++;
+
+		// range descriptor의 lower/upper는 opcode n3가 아니라 별도 테이블에 있다.
+		// 여기서 함께 hidden local로 올려야 load-time PatchLocalOps가 range _L을 고를 수 있다.
+		if (ops[i].op == NOP_JMP_RANGE_INSIDE || ops[i].op == NOP_JMP_RANGE_OUTSIDE)
+		{
+			const u16 rangeIndex = (u16)ops[i].n3;
+			if ((size_t)rangeIndex >= funs._rangeJumps.size())
+				continue;
+			const SRangeJumpCompile& range = funs._rangeJumps[rangeIndex];
+			if (range._ownerFunction != funs._cur->_funID)
+				continue;
+			if (IsStaticOperand(range._lower)) useInLoop[range._lower]++;
+			if (IsStaticOperand(range._upper)) useInLoop[range._upper]++;
+		}
 	}
 	if (useInLoop.empty())
 		return;
@@ -5020,8 +5218,6 @@ static void HoistLoopConstants(SFunctions& funs, u8* pCode, int codeSize,
 	for (int i = 0; i < n; i++)
 	{
 		const int mask = HoistableOperandMask(ops[i].op);
-		if (mask == 0)
-			continue;
 		if (mask & 0x2)
 		{
 			std::map<short, short>::iterator it = remap.find(ops[i].n2);
@@ -5031,6 +5227,20 @@ static void HoistLoopConstants(SFunctions& funs, u8* pCode, int codeSize,
 		{
 			std::map<short, short>::iterator it = remap.find(ops[i].n3);
 			if (it != remap.end()) ops[i].n3 = it->second;
+		}
+
+		if (ops[i].op == NOP_JMP_RANGE_INSIDE || ops[i].op == NOP_JMP_RANGE_OUTSIDE)
+		{
+			const u16 rangeIndex = (u16)ops[i].n3;
+			if ((size_t)rangeIndex >= funs._rangeJumps.size())
+				continue;
+			SRangeJumpCompile& range = funs._rangeJumps[rangeIndex];
+			if (range._ownerFunction != funs._cur->_funID)
+				continue;
+			std::map<short, short>::iterator lower = remap.find(range._lower);
+			if (lower != remap.end()) range._lower = lower->second;
+			std::map<short, short>::iterator upper = remap.find(range._upper);
+			if (upper != remap.end()) range._upper = upper->second;
 		}
 	}
 }

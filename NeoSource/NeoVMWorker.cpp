@@ -2005,6 +2005,10 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 			handle_ERROR(OP);
 			return false;
 		case NOP_CLT_READ_STATIC_STRING: handle_CLT_READ_STATIC_STRING(OP); break;
+		case NOP_JMP_RANGE_INSIDE: if (IsRangeInside(OP, false)) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_RANGE_OUTSIDE: if (IsRangeInside(OP, false) == false) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_RANGE_INSIDE_L: if (IsRangeInside(OP, true)) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_RANGE_OUTSIDE_L: if (IsRangeInside(OP, true) == false) SetCodeIncPtr(OP.n1); break;
 		default:
 			SetError(RTE_UNKNOWN_OP);
 			break;

@@ -104,6 +104,16 @@ u8 ChangeIndex(int staticCount, int localCount, int curFunStatkSize, SVMOperatio
 	else if (argIndex == 3) return NEOS_ARG_N3_LOCAL;
 	return 0;
 }
+
+static bool ChangeRangeOperand(int staticCount, int localCount, int curFunStatkSize, short& operand)
+{
+	SVMOperation temp;
+	memset(&temp, 0, sizeof(temp));
+	temp.n1 = operand;
+	const bool isLocal = (ChangeIndex(staticCount, localCount, curFunStatkSize, temp, 1) & NEOS_ARG_N1_LOCAL) != 0;
+	operand = temp.n1;
+	return isLocal;
+}
 struct STempDebug
 {
 	std::vector<VarInfo>				_staticVars;
@@ -290,7 +300,6 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
 			argFlag |= GetArgIndexToCode(argFlag, nullptr, &v.n2, nullptr);
 			break;
-
 		case NOP_TOSTRING:
 		case NOP_TOINT:
 		case NOP_TOFLOAT:
@@ -428,6 +437,29 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			break;
 		case NOP_ERROR:
 			break;
+		case NOP_JMP_RANGE_INSIDE:
+		case NOP_JMP_RANGE_OUTSIDE:
+		{
+			// n3는 operand가 아니라 전역 range descriptor index다. 검사 값(n2)만
+			// 일반 slot 변환을 하고, descriptor의 lower/upper는 여기서 같은 함수
+			// 기준으로 따로 변환한다.
+			const u16 rangeIndex = (u16)v.n3;
+			if ((size_t)rangeIndex < funs._rangeJumps.size())
+			{
+				SRangeJumpCompile& range = funs._rangeJumps[rangeIndex];
+				if (range._ownerFunction == fi._funID)
+				{
+					range._flags &= ~(NEOS_RANGE_LOWER_LOCAL | NEOS_RANGE_UPPER_LOCAL);
+					if (ChangeRangeOperand(staticCount, localCount, curFunStatkSize, range._lower))
+						range._flags |= NEOS_RANGE_LOWER_LOCAL;
+					if (ChangeRangeOperand(staticCount, localCount, curFunStatkSize, range._upper))
+						range._flags |= NEOS_RANGE_UPPER_LOCAL;
+				}
+			}
+			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+			argFlag |= GetArgIndexToCode(argFlag, nullptr, &v.n2, nullptr);
+			break;
+		}
 		default:
 			SetCompileError(arText, g_sExportCompileErrors[ECE_INVALID_OPCODE], v.op);
 			argFlag |= GetArgIndexToCode(argFlag, nullptr, nullptr, nullptr);
@@ -608,6 +640,8 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 		case NOP_JMP_NOR:	// !(||)
 		case NOP_JMP_FOR:	// for
 		case NOP_JMP_FOREACH:	// foreach
+		case NOP_JMP_RANGE_INSIDE:
+		case NOP_JMP_RANGE_OUTSIDE:
 			// op 인덱스로 기록 (다음 op = off/8 + 1, 거기에 op 단위 상대 offset n1)
 			sJumpMark[off / (int)sizeof(SVMOperation) + 1 + v.n1] = 0;
 			break;
@@ -700,6 +734,23 @@ static void WriteSwitchTables(CNArchive& ar, SFunctions& funs)
 			}
 			ar.Write((void*)&e._jumpOffset, sizeof(e._jumpOffset));
 		}
+	}
+}
+
+// range jump descriptor chunk ('RNGE'). n3에는 unsigned short index만 들어가므로
+// table 자체도 0~65535개로 제한된다(파서가 생성 시 이미 같은 한계를 검사한다).
+static void WriteRangeJumps(CNArchive& ar, const SFunctions& funs)
+{
+	if (funs._rangeJumps.empty())
+		return;
+
+	const u32 magic = 0x45474E52; // RNGE
+	ar << magic;
+	ar.WriteCount((u32)funs._rangeJumps.size());
+	for (size_t i = 0; i < funs._rangeJumps.size(); ++i)
+	{
+		const SRangeJumpCompile& range = funs._rangeJumps[i];
+		ar << range._lower << range._upper << range._flags;
 	}
 }
 
@@ -881,6 +932,7 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	}
 
 	WriteSwitchTables(ar, funs);
+	WriteRangeJumps(ar, funs);
 
 	int iSaveOffset2 = ar.GetBufferOffset();
 	ar.SetPointer(iSaveOffset1, SEEK_SET);

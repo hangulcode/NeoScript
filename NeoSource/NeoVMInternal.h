@@ -80,6 +80,14 @@ typedef u8	ArgFlag;
 // PatchLocalOps 도 이 비트를 봐야 해서 argFlag 비트 정의와 같은 곳에 둔다.
 #define NEOS_OP_CALL_NORESULT	(1 << 7) // 0x80
 
+// NOP_JMP_RANGE_* descriptor 전용 플래그. opcode의 argFlag와 분리해
+// lower/upper가 각각 stack인지 global/static인지와 경계 포함 여부를 보관한다.
+#define NEOS_RANGE_LOWER_LOCAL		(1 << 0)
+#define NEOS_RANGE_UPPER_LOCAL		(1 << 1)
+#define NEOS_RANGE_LOWER_INCLUSIVE	(1 << 2)
+#define NEOS_RANGE_UPPER_INCLUSIVE	(1 << 3)
+#define NEOS_RANGE_UPPER_FIRST		(1 << 4)
+
 enum eNOperation : OpType
 {
 	NOP_MOV,
@@ -220,6 +228,12 @@ enum eNOperation : OpType
 	// 로드 시 n2가 static 문자열 상수인 READ만 이 opcode로 치환한다.
 	// 키 StringInfo는 워커별 static 슬롯에서 매번 얻으며 Map/value 포인터는 보관하지 않는다.
 	NOP_CLT_READ_STATIC_STRING,
+	// n1 = relative jump, n2 = 검사 값, n3 = Program range descriptor index.
+	// _L 두 개는 Program load 시 검사 값과 양 경계가 모두 local일 때만 치환된다.
+	NOP_JMP_RANGE_INSIDE,
+	NOP_JMP_RANGE_OUTSIDE,
+	NOP_JMP_RANGE_INSIDE_L,
+	NOP_JMP_RANGE_OUTSIDE_L,
 	NOP_MAX,
 }; // Operation length
 

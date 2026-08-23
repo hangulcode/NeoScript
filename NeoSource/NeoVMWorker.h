@@ -169,6 +169,30 @@ private:
 		outOffset = t[tableIndex].Find(pKey);
 		return true;
 	}
+	NEOS_FORCEINLINE bool IsRangeInside(const SVMOperation& op, bool allLocal)
+	{
+		const ProgramRangeJump& range = _pProgram->rangeJumps[(u16)op.n3];
+		VarInfo* test = allLocal ? GetVarPtr_L(op.n2) : GetVarPtr2(op);
+		VarInfo* lower = allLocal || (range.flags & NEOS_RANGE_LOWER_LOCAL)
+			? GetVarPtr_L(range.lower) : GetVarPtr_G(range.lower);
+		VarInfo* upper = allLocal || (range.flags & NEOS_RANGE_UPPER_LOCAL)
+			? GetVarPtr_L(range.upper) : GetVarPtr_G(range.upper);
+
+		const bool lowerInclusive = (range.flags & NEOS_RANGE_LOWER_INCLUSIVE) != 0;
+		const bool upperInclusive = (range.flags & NEOS_RANGE_UPPER_INCLUSIVE) != 0;
+		const bool upperFirst = (range.flags & NEOS_RANGE_UPPER_FIRST) != 0;
+		if (upperFirst)
+		{
+			const bool upperPass = upperInclusive ? CompareGE(upper, test) : CompareGR(upper, test);
+			if (upperPass == false)
+				return false;
+			return lowerInclusive ? CompareGE(test, lower) : CompareGR(test, lower);
+		}
+		const bool lowerPass = lowerInclusive ? CompareGE(test, lower) : CompareGR(test, lower);
+		if (lowerPass == false)
+			return false;
+		return upperInclusive ? CompareGE(upper, test) : CompareGR(upper, test);
+	}
 	NEOS_FORCEINLINE const std::vector<debug_info>& DebugData() const { return _pProgram->debugData; }
 
 	inline bool IsDebugInfo() { return _pProgram->IsDebugInfo(); }
