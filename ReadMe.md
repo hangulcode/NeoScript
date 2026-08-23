@@ -201,21 +201,27 @@ Neo's time; `0.88x` means it was slower than Neo).
 
 | Benchmark | What it stresses | Neo (ms) | Lua (ms) | C++ (ms) | Lua vs Neo | C++ vs Neo |
 | :-------- | :--------------- | -------: | -------: | -------: | ---------: | ---------: |
-| `loop_sum`      | integer loop, VM dispatch floor | **166** | 204 |  13.1 | 0.81x | 12.7x |
-| `float_math`    | float mul/add/sub chain         | **169** | 309 |  58.4 | 0.55x |  2.9x |
-| `func_call`     | script function call overhead   | **122** | 157 |   4.2 | 0.78x | 29.0x |
-| `fib_recursive` | recursion, fib(32)              |  **84** |  89 |   6.8 | 0.94x | 12.4x |
-| `array_rw`      | sequential array write + read   |  **43** |  46 |   2.4 | 0.93x | 17.7x |
-| `map_str`       | string-key hash lookup          |  44 |  **37** |  71.1 | 1.19x |  0.6x |
-| `string_ops`    | string build + length           |  **84** | 151 |  13.6 | 0.56x |  6.2x |
-| `particles`     | game-style float + array sim    |  **47** |  49 |   3.4 | 0.96x | 13.8x |
-| **total**       |                                 | **759** | 1042 | 173.0 | 0.73x |  4.4x |
+| `loop_sum`      | integer loop, VM dispatch floor | **171** | 197 |  13.1 | 0.87x | 13.1x |
+| `float_math`    | float mul/add/sub chain         | **160** | 316 |  59.8 | 0.51x |  2.7x |
+| `func_call`     | script function call overhead   | **128** | 161 |   4.4 | 0.80x | 29.4x |
+| `fib_recursive` | recursion, fib(32)              |  **89** |  90 |   6.8 | 0.99x | 13.1x |
+| `array_rw`      | sequential array write + read   |  **42** |  47 |   2.5 | 0.89x | 17.0x |
+| `map_str`       | string-key hash lookup          |  46 |  **40** |  72.7 | 1.15x |  0.6x |
+| `string_ops`    | string build + length           |  **80** | 153 |  13.6 | 0.52x |  5.9x |
+| `particles`     | game-style float + array sim    |  **45** |  50 |   3.5 | 0.90x | 12.7x |
+| **total**       |                                 | **761** | 1054 | 176.3 | 0.72x |  4.3x |
 
 - Neo leads on 7 of 8 benchmarks; `map_str` is the one Lua wins, because Lua interns every short
   string so a table lookup is a pointer compare.
+- `fib_recursive` is where the lead is thinnest — 0.99x here and an exact tie on the median, against
+  0.72x overall. Almost all of its work is call and return, so there is no loop body for Neo's
+  cheaper dispatch to win back.
 - C++ is a reference ceiling, not a peer. The exception is `map_str`, where
   `std::unordered_map<std::string,…>` is slower than both VMs — the interpreters cache the string
   hash; the C++ map rehashes on every lookup.
+- These are ordinary `/LTCG` figures. A profile-guided build of the same sources
+  ([`Tools/pgo_build.bat`](Tools/pgo_build.bat)) measured faster on every row that is sensitive to
+  code layout; see *Method* below for why that matters more here than the level does.
 
 **Method.** The three files implement the same algorithm and each returns a checksum that must match
 across languages — that is what proves they did the same work. Each language times only the measured
@@ -225,7 +231,14 @@ repetitions, minimum across 7 runs, with the three languages interleaved inside 
 Two rules follow from how noisy this suite is. **Compare within one session, not across sessions** —
 machine load moved *Lua's* numbers 20-30% with its source untouched. And **A/B every change**:
 build-to-build variation is code layout, not measurement noise, so a move under ~10% on `float_math`,
-`particles` or `map_str` is layout rather than a real regression. The durable fix is PGO.
+`particles` or `map_str` is layout rather than a real regression.
+
+Layout moves for reasons that have nothing to do with the code being measured — moving a function
+between translation units, or marking one cold, reshuffles block placement across the whole
+interpreter. Those three rows react and `loop_sum` / `array_rw` do not, which is the signature to
+look for before calling something a regression. `/LTCG` places blocks from heuristics because it
+does not know which branches run; [`Tools/pgo_build.bat`](Tools/pgo_build.bat) builds the same
+sources from a measured profile instead. It is opt-in and leaves the ordinary build untouched.
 
 All compiler and VM changes are covered by the regression suites: `console.exe --smoke` (2,785
 compiler cases) and `console.exe --v2smoke` (host API, closure lifetime, leak counters).
