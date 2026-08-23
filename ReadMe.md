@@ -219,9 +219,7 @@ Neo's time; `0.88x` means it was slower than Neo).
 - C++ is a reference ceiling, not a peer. The exception is `map_str`, where
   `std::unordered_map<std::string,…>` is slower than both VMs — the interpreters cache the string
   hash; the C++ map rehashes on every lookup.
-- These are ordinary `/LTCG` figures. A profile-guided build of the same sources
-  ([`Tools/pgo_build.bat`](Tools/pgo_build.bat)) measured faster on every row that is sensitive to
-  code layout; see *Method* below for why that matters more here than the level does.
+- These are ordinary `/LTCG` figures, the same build anyone gets by default.
 
 **Method.** The three files implement the same algorithm and each returns a checksum that must match
 across languages — that is what proves they did the same work. Each language times only the measured
@@ -236,9 +234,8 @@ build-to-build variation is code layout, not measurement noise, so a move under 
 Layout moves for reasons that have nothing to do with the code being measured — moving a function
 between translation units, or marking one cold, reshuffles block placement across the whole
 interpreter. Those three rows react and `loop_sum` / `array_rw` do not, which is the signature to
-look for before calling something a regression. `/LTCG` places blocks from heuristics because it
-does not know which branches run; [`Tools/pgo_build.bat`](Tools/pgo_build.bat) builds the same
-sources from a measured profile instead. It is opt-in and leaves the ordinary build untouched.
+look for before calling something a regression. The durable fix is PGO, since `/LTCG` places blocks
+from heuristics while it has no idea which branches actually run.
 
 All compiler and VM changes are covered by the regression suites: `console.exe --smoke` (2,785
 compiler cases) and `console.exe --v2smoke` (host API, closure lifetime, leak counters).
