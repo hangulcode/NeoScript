@@ -1,3 +1,3 @@
-﻿Add any new TextMate Grammars for Visual Studio in the following folder:
+﻿Visual Studio TextMate grammar files belong in the following folder:
 
 "%userprofile%\.vs\Extensions\Syntaxes"

@@ -10,8 +10,8 @@
 /[Ll]ogs/
 /[Uu]ser[Ss]ettings/
 
-# Samples/bench: ReadMe 의 "Performance test results" 가 bench.ns / bench.lua / bench.cpp 를
-# 링크하므로 소스는 추적한다. 빌드 산출물과 실행 출력, 실험용 잔여 스크립트만 제외.
+# Benchmark source files are tracked; generated executables, objects, diagnostics,
+# and local profiling scripts are excluded.
 /Samples/bench/*.exe
 /Samples/bench/*.obj
 /Samples/bench/*.out
