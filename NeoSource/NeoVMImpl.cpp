@@ -744,7 +744,7 @@ void CNeoVMImpl::FreeAsync(VarInfo* d)
 	ReleaseIfLarge(p->_resultValue);
 	// 헤더는 요청마다 새로 쌓이고 재사용 이득이 없다 — 배열째 돌려준다.
 	std::vector< std::pair<std::string, std::string> >().swap(p->_headers);
-	Var_ReleaseInternal(&p->_callback);
+	Var_Release(&p->_callback);
 	m_sPool_Async.Confer(p);
 }
 
@@ -772,7 +772,7 @@ void CNeoVMImpl::FreeClosure(ClosureInfo* closure)
 	closure->_cycleState._destroying = true;
 	LiveList_Remove(_sClosureHead, closure);
 	for (VarInfo& value : closure->_captures)
-		Var_ReleaseInternal(&value);
+		Var_Release(&value);
 	closure->_captures.clear();
 	closure->_pVM = nullptr;
 	m_sPool_Closure.Confer(closure);

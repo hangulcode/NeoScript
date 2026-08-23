@@ -188,6 +188,42 @@ public:
 	// (워커를 자주 만들고 지워도, async 를 쓴 워커가 없으면 계속 0 이다)
 	int _orphanAsyncCount = 0;
 
+	NEOS_FORCEINLINE bool Var_ReleaseVecFast(VarInfo* d)
+	{
+		VecInfo* vec = d->_vec;
+		if (vec->_refCount <= 1)
+			return false;
+
+		--vec->_refCount;
+		d->_vec = nullptr;
+		d->ClearType();
+		return true;
+	}
+
+	NEOS_FORCEINLINE bool Var_ReleaseStringFast(VarInfo* d)
+	{
+		StringInfo* str = d->_str;
+		if (str->_refCount <= 1)
+			return false;
+
+		--str->_refCount;
+		d->_str = nullptr;
+		d->ClearType();
+		return true;
+	}
+
+	NEOS_FORCEINLINE bool Var_ReleaseListFast(VarInfo* d)
+	{
+		ListInfo* list = d->_lst;
+		if (list->_refCount <= 1 || list->_cycleState._mayContainContainerChild)
+			return false;
+
+		--list->_refCount;
+		d->_lst = nullptr;
+		d->ClearType();
+		return true;
+	}
+
 
 
 	NEOS_FORCEINLINE void Move(VarInfo* v1, VarInfo* v2)
@@ -196,7 +232,7 @@ public:
 		{
 			if (v1 == v2)
 				return;
-			Var_ReleaseInternal(v1);
+			Var_Release(v1);
 		}
 
 		if (v2->IsAllocType() == false)
@@ -208,10 +244,21 @@ public:
 
 	NEOS_FORCEINLINE void Var_Release(VarInfo *d)
 	{
-		if (d->IsAllocType())
-			Var_ReleaseInternal(d);
-		else
+		if (d->IsAllocType() == false)
+		{
 			d->ClearType();
+			return;
+		}
+
+		const VAR_TYPE type = d->GetType();
+		if (type == VAR_VEC && Var_ReleaseVecFast(d))
+			return;
+		if (type == VAR_STRING && Var_ReleaseStringFast(d))
+			return;
+		if (type == VAR_LIST && Var_ReleaseListFast(d))
+			return;
+
+		Var_ReleaseInternal(d);
 	}
 
 	VarInfo m_sDefaultValue[NDF_MAX];
