@@ -195,3 +195,4 @@ measure("string_ops", StringOps,    20, 50000)    -- 100만 문자열 생성
 measure("particles",  Particles, 10000, 200)      -- 200만 업데이트
 
 print("# lua bench end")
+

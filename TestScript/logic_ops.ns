@@ -79,3 +79,4 @@ Chk("var_or_T", P1(false,true), 1); Chk("var_or_F", P1(false,false), 0);
 
 if (fail == 0) print("LOGIC TESTS: ALL PASS");
 else print("LOGIC TESTS: " .. fail .. " FAILURES");
+

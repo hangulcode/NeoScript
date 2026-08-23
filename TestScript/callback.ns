@@ -44,3 +44,4 @@ export fun Sum(var a, var b)
 
 	return sum_2 + mul_1;
 }
+

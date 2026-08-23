@@ -62,3 +62,4 @@ fun ExprEnd(var n) { var c = 0; for (var i in 1, n * 2) c++; return c; }
 Chk("expr_end", ExprEnd(5), 9);
 
 if (f == 0) print("FOR LOOP TESTS: ALL PASS"); else print("FOR LOOP: " .. f .. " FAIL");
+

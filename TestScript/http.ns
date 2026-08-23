@@ -37,3 +37,4 @@ async.post(5000, "http://www.microsoft.com",  "sl=foo&s2=bar", Result);
 if(false == async.wait())
 	print("Time Out : " .. (system.clock() - tm));
 async.close();
+

@@ -114,3 +114,4 @@ Chk("empty_list", el.len(), 0);
 Chk("trailing_comma", tc.len(), 2);
 
 if (f == 0) print("LITERAL TOTYPE TESTS: ALL PASS"); else print("LITERAL TOTYPE: " .. f .. " FAIL");
+

@@ -224,3 +224,4 @@ fun BigSet(var n)
 Chk("set_grow_1000", BigSet(1000), 1000);
 
 if (f == 0) print("MAP/SET TESTS: ALL PASS"); else print("MAP/SET: " .. f .. " FAIL");
+

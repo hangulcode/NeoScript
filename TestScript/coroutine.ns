@@ -33,3 +33,4 @@ export fun test()
 {
 	test_multi();
 }
+

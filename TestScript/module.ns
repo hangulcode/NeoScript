@@ -11,3 +11,4 @@ fun test()
 print(m2.add(11, 22)); // 33
 print(m2.mul(11, 22)); // 242
 test();
+

@@ -88,3 +88,4 @@ Chk("utf8_eq",  kA == CharAt("가다", 0), true);
 Chk("utf8_ne",  kA != kB, true);
 
 if (f == 0) print("STRING COMPARE TESTS: ALL PASS"); else print("STRING COMPARE: " .. f .. " FAIL");
+

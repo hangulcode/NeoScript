@@ -81,3 +81,4 @@ Chk("two_loops",     TwoLoops("abc"), "a|abc");
 Chk("two_loops_rep", TwoLoops("abc"), "a|abc");
 
 if (f == 0) print("FOREACH EARLY EXIT TESTS: ALL PASS"); else print("FOREACH EARLY EXIT: " .. f .. " FAIL");
+

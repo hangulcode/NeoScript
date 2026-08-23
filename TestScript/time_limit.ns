@@ -12,3 +12,4 @@ export fun TimeTest()
 	print("sum : " .. sum);
 	return sum;
 }
+

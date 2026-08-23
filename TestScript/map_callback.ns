@@ -26,3 +26,4 @@ export fun update(var a, var b)
 
 	//return pos.x + pos.y + pos.z;
 }
+

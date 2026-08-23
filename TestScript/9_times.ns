@@ -8,3 +8,4 @@ export fun Time9(var n)
 		print(n.." x "..i.." = "..value);
 	}
 }
+
