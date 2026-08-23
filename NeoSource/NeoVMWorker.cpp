@@ -812,6 +812,33 @@ void CNeoVMWorker::ReleaseDetachedClosureWithoutSync(ClosureInfo*& closure)
 	Var_Release(&active);
 }
 
+void CNeoVMWorker::ReleaseCoroutineClosuresWithoutSync(CoroutineInfo* pCI)
+{
+	if (pCI == nullptr)
+		return;
+
+	// 스택 값을 보관함으로 되쓰지 않고, yield/일반 호출이 보유한 실행 참조만
+	// 각각 한 번 반납한다.
+	if (pCI->_activeClosure != nullptr)
+	{
+		VarInfo active(VAR_CLOSURE);
+		active._closure = pCI->_activeClosure;
+		pCI->_activeClosure = nullptr;
+		Var_Release(&active);
+	}
+	for (int i = (int)pCI->m_sClosureCallStack.size() - 1; i >= 0; --i)
+	{
+		SClosureCallState& state = pCI->m_sClosureCallStack[i];
+		if (state._closure == nullptr)
+			continue;
+		VarInfo active(VAR_CLOSURE);
+		active._closure = state._closure;
+		state._closure = nullptr;
+		Var_Release(&active);
+	}
+	pCI->m_sClosureCallStack.clear();
+}
+
 void CNeoVMWorker::UnwindActiveClosures()
 {
 	if (m_pVarStack_Base == nullptr) return;
@@ -846,11 +873,31 @@ void CNeoVMWorker::UnwindActiveClosures()
 
 // 최상위 실행 종료: 메인 컨텍스트를 풀로 반납한다.
 // (코루틴 컨텍스트는 각자의 VarInfo 가 GC/스택 해제될 때 FreeCoroutine 으로 반납된다.)
-void CNeoVMWorker::ReleaseExecution()
+void CNeoVMWorker::ReleaseExecution(bool discardParkedClosuresWithoutSync)
 {
 	// cancel/강제 정리는 RET를 밟지 않으므로, 아직 프레임에 남은 closure 참조와
 	// 캡처 슬롯을 실행 컨텍스트 반납 전에 정리한다.
 	UnwindActiveClosures();
+	// park되어 있던 컨텍스트도 이 실행과 함께 더 이상 재개되지 않는다. raw
+	// scheduler 목록을 clear하기 전에 실행 보유 closure를 해제해야 다음 pool
+	// Acquire의 clear()가 참조를 잃지 않는다. 오류일 때만 write-back을 생략한다.
+	if (m_pCur != nullptr)
+	{
+		if (discardParkedClosuresWithoutSync)
+			ReleaseCoroutineClosuresWithoutSync(m_pCur);
+		else
+			DrainCoroutineClosures(m_pCur);
+	}
+	for (CoroutineInfo* pCI : m_sCoroutines)
+	{
+		if (pCI != m_pCur)
+		{
+			if (discardParkedClosuresWithoutSync)
+				ReleaseCoroutineClosuresWithoutSync(pCI);
+			else
+				DrainCoroutineClosures(pCI);
+		}
+	}
 	if (m_pMainCtx != nullptr && m_pPool != nullptr)
 	{
 		// 정상 완료 시 m_pCur == m_pMainCtx 이며 high-water 는 워커의 _iSP_Vars_Max2.
@@ -892,7 +939,7 @@ int CNeoVMWorker::RunSettle()
 	int status;
 	if (ok == false)
 	{
-		ReleaseExecution();
+		ReleaseExecution(true);
 		status = NEOEXEC_ERROR;
 	}
 	// 정지(retain) 조건: sleep, debugger pause, 또는 시간 제한 슬라이스.
@@ -946,7 +993,7 @@ int CNeoVMWorker::ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args)
 	{
 		// Acquire/Setup은 Run()의 보호 범위보다 앞에 있으므로 여기서도 잡는다.
 		if (m_pMainCtx != nullptr)
-			ReleaseExecution();
+			ReleaseExecution(true);
 		PoisonOutOfMemory();
 		GetVM()->PublishAllocStats();
 		return NEOEXEC_ERROR;
@@ -969,7 +1016,7 @@ int CNeoVMWorker::ResumeTop()
 	catch (const std::bad_alloc&)
 	{
 		if (m_pMainCtx != nullptr)
-			ReleaseExecution();
+			ReleaseExecution(true);
 		PoisonOutOfMemory();
 		GetVM()->PublishAllocStats();
 		return NEOEXEC_ERROR;
@@ -1052,7 +1099,7 @@ void CNeoVMWorker::EndHostCall(NeoHostCallBegin begin)
 	// never retain the failed execution context for a later F5/F10/F11 resume.
 	if (m_bDebugFaulted)
 	{
-		ReleaseExecution();
+		ReleaseExecution(true);
 	}
 	else if (IsSuspended())
 	{

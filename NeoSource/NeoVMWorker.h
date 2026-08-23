@@ -225,8 +225,11 @@ private:
 	void    CleanupContextVars(CoroutineInfo* ctx, int usedMax);  // 반납 전 VarInfo 참조 정리
 	// 이미 무효가 된 프레임의 closure는 sync하지 않는다. 실행 보유분만 반납한다.
 	void    ReleaseDetachedClosureWithoutSync(ClosureInfo*& closure);
+	// 오류로 실행을 폐기할 때, 컨텍스트의 실행 보유 closure 참조를 write-back
+	// 없이 반납한다.
+	void    ReleaseCoroutineClosuresWithoutSync(CoroutineInfo* pCI);
 	void    UnwindActiveClosures();                    // return을 거치지 않는 error/cancel 정리
-	void    ReleaseExecution();                         // 최상위+코루틴 컨텍스트 전부 풀로 반납
+	void    ReleaseExecution(bool discardParkedClosuresWithoutSync = false); // 최상위 실행 컨텍스트를 풀로 반납
 	int     RunSettle();                                // Run() 후 완료/정지/에러 판정 (NeoExecStatus)
 	void    PoisonOutOfMemory() noexcept { m_bOutOfMemoryPoisoned = true; }
 	NEOS_NOINLINE bool ReportRunException();

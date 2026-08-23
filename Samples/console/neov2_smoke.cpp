@@ -375,8 +375,11 @@ int NeoScriptV2Smoke()
         const char* parkedClosureSrc =
             "import coroutine;\n"
             "fun PauseOnce() { yield; }\n"
+            "fun FailWhileParked() { var z = 0; return 1 / z; }\n"
+            "fun ResumeThenFail(var co) { coroutine.resume(co); }\n"
             "export fun closeParkedClosure() { var tag = \"parked\"; var cb = fun() { PauseOnce(); return tag; }; var co = coroutine.create(cb); coroutine.resume(co); coroutine.close(co); return 1; }\n"
-            "export fun dropParkedClosure() { var tag = \"parked\"; var cb = fun() { PauseOnce(); return tag; }; var co = coroutine.create(cb); coroutine.resume(co); return 2; }\n";
+            "export fun dropParkedClosure() { var tag = \"parked\"; var cb = fun() { PauseOnce(); return tag; }; var co = coroutine.create(cb); coroutine.resume(co); return 2; }\n"
+            "export fun errorParkedClosure() { var tag = \"parked\"; var cb = fun() { var co = coroutine.create(fun() { FailWhileParked(); }); ResumeThenFail(co); return tag; }; return cb(); }\n";
         CompileDesc parkedClosureDesc;
         parkedClosureDesc.source = parkedClosureSrc;
         parkedClosureDesc.sourceName = "closure_parked_coroutine.ns";
@@ -399,8 +402,47 @@ int NeoScriptV2Smoke()
                 "parked closure coroutine: drop succeeds");
             Check(after.closures == before.closures,
                 "parked closure coroutine: drop releases parked parent closure");
+            GetNeoVMAllocStats(before);
+            CallResult failed = rt->Call(parkedClosureInstance, "errorParkedClosure").invokeR();
+            GetNeoVMAllocStats(after);
+            Check(!failed.ok(),
+                "parked closure coroutine: child error propagates");
+            Check(after.closures == before.closures,
+                "parked closure coroutine: error releases parked parent closure");
             rt->DestroyInstance(parkedClosureInstance);
             rt->DestroyProgram(parkedClosureProgram.program);
+        }
+    }
+
+    // coroutine 객체 없이 최상위 실행 컨텍스트에서 캡처 lambda가 yield하면 active
+    // closure의 실행 보유분은 메인 컨텍스트에만 남는다. 이 컨텍스트를 풀로
+    // 돌려줄 때도 반드시 해제해야 한다.
+    {
+        const char* directYieldSrc =
+            "import coroutine;\n"
+            "fun DirectYield() { var values = []; var cb = fun() { values.append(1); yield; }; cb(); }\n"
+            "DirectYield();\n";
+        CompileDesc directYieldDesc;
+        directYieldDesc.source = directYieldSrc;
+        directYieldDesc.sourceName = "closure_direct_yield.ns";
+        CompileResult directYieldProgram = rt->Compile(directYieldDesc);
+        Check(static_cast<bool>(directYieldProgram.program), "direct yield closure: compile");
+        if (directYieldProgram.program)
+        {
+            SNeoVMAllocStats before{}, after{};
+            GetNeoVMAllocStats(before);
+            bool completed = true;
+            for (int i = 0; i < 5; ++i)
+            {
+                InstanceHandle instance = rt->CreateInstance(directYieldProgram.program);
+                completed = rt->RunGlobalInit(instance) == RunStatus::Completed && completed;
+                rt->DestroyInstance(instance);
+            }
+            GetNeoVMAllocStats(after);
+            Check(completed, "direct yield closure: top-level yield completes execution");
+            Check(after.closures == before.closures && after.lists == before.lists,
+                "direct yield closure: main context releases captured closure values");
+            rt->DestroyProgram(directYieldProgram.program);
         }
     }
 
