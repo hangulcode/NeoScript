@@ -85,3 +85,7 @@ crashlytics-build.properties
 
 
 /Samples/NeoDebugAdapter/
+
+# PGO profile artifacts (regenerate with Tools/pgo_build.bat)
+*.pgd
+*.pgc
