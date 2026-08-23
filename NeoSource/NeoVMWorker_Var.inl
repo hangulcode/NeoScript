@@ -8,12 +8,62 @@
 // (MSVC 는 LTCG 가 TU 경계를 넘어 찾아줘서 가려졌고, g++/ld 에서 undefined reference 로 드러났다)
 // 그래서 이 파일은 NeoVMWorker.h 끝에서 include 한다.
 
+NEOS_FORCEINLINE bool INeoVMWorker::Var_ReleaseVecFast(VarInfo* d)
+{
+	VecInfo* vec = d->_vec;
+	if (vec->_refCount <= 1)
+		return false;
+
+	--vec->_refCount;
+	d->_vec = nullptr;
+	d->ClearType();
+	return true;
+}
+
+NEOS_FORCEINLINE bool INeoVMWorker::Var_ReleaseStringFast(VarInfo* d)
+{
+	StringInfo* str = d->_str;
+	if (str->_refCount <= 1)
+		return false;
+
+	--str->_refCount;
+	d->_str = nullptr;
+	d->ClearType();
+	return true;
+}
+
+NEOS_FORCEINLINE bool INeoVMWorker::Var_ReleaseListFast(VarInfo* d)
+{
+	ListInfo* list = d->_lst;
+	// 컨테이너 자식이 있으면 감소 후 순환 후보 등록이 필요하다.
+	if (list->_refCount <= 1 || list->_cycleState._mayContainContainerChild)
+		return false;
+
+	--list->_refCount;
+	d->_lst = nullptr;
+	d->ClearType();
+	return true;
+}
+
 NEOS_FORCEINLINE void INeoVMWorker::Var_Release(VarInfo* d)
 {
-	if (d->IsAllocType())
-		_pVM->Var_ReleaseInternal(d);
-	else
+	if (d->IsAllocType() == false)
+	{
 		d->ClearType();
+		return;
+	}
+
+	// 게임 워크로드는 VAR_VEC 해제가 압도적이다. shared ref만 여기서 끝내고,
+	// 마지막 참조 및 순환 후보는 기존 dispatcher가 모든 부수 처리를 맡는다.
+	const VAR_TYPE type = d->GetType();
+	if (type == VAR_VEC && Var_ReleaseVecFast(d))
+		return;
+	if (type == VAR_STRING && Var_ReleaseStringFast(d))
+		return;
+	if (type == VAR_LIST && Var_ReleaseListFast(d))
+		return;
+
+	_pVM->Var_ReleaseInternal(d);
 }
 NEOS_FORCEINLINE void INeoVMWorker::Var_SetInt(VarInfo* d, int v)
 {

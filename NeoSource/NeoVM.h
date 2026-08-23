@@ -504,6 +504,15 @@ public:
 	void Var_Release(VarInfo* d);
 	void Var_SetNone(VarInfo* d);
 
+protected:
+	// 공유 중인 리프/비순환 list는 full release dispatcher를 거치지 않고
+	// refcount만 내린다. false면 마지막 참조 또는 순환 후보라 fallback한다.
+	NEOS_FORCEINLINE bool Var_ReleaseVecFast(VarInfo* d);
+	NEOS_FORCEINLINE bool Var_ReleaseStringFast(VarInfo* d);
+	NEOS_FORCEINLINE bool Var_ReleaseListFast(VarInfo* d);
+
+public:
+
 	virtual void Var_Move(VarInfo* v1, VarInfo* v2) =0;
 
 
