@@ -62,14 +62,6 @@ bool ListInfo::GetValue(int idx, VarInfo* pValue)
 	return true;
 }
 
-VarInfo* ListInfo::GetValue(int idx)
-{
-	if (idx < 0 || idx >= _itemCount)
-		return nullptr;
-	return &_Bucket[idx];
-}
-
-
 bool ListInfo::SetValue(int idx, VarInfo* pValue)
 {
 	if (idx < 0 || idx >= _itemCount)

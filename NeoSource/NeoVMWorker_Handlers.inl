@@ -329,7 +329,49 @@ NEOS_FORCEINLINE bool handle_CLT_READ_L(const SVMOperation& OP) {
     CltRead(GetVarPtr_L(OP.n1), GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3));
     return false;
 }
+// Program 로드 시 n2가 static 문자열 상수인 READ만 이 경로로 바뀐다.
+// 키는 워커별 static 슬롯에서 매번 읽고 FindString도 매번 수행한다. 따라서 맵 수정이나
+// 풀 재사용 뒤의 value 포인터를 보관하는 inline cache와 달리 수명/무효화 상태가 없다.
+NEOS_FORCEINLINE bool handle_CLT_READ_STATIC_INT(const SVMOperation& OP) {
+    VarInfo* pClt = GetVarPtrF1(OP);
+    VarInfo* pKey = GetVarPtr_G(OP.n2);
+    int key = pKey->_int;
+    VarInfo* pValue = GetVarPtr3(OP);
 
+    if (pClt->GetType() == VAR_VEC) {
+        if (key >= 0 && key < pClt->_vecCount)
+        {
+            MoveF(pValue, pClt->_vec->v[key]);
+            return true;
+        }
+        Var_Release(pValue);
+        return false;
+    }
+    if (pClt->GetType() == VAR_LIST) {
+        VarInfo* pFind = pClt->_lst->GetValue(key);
+        if (pFind)
+        {
+            Move(pValue, pFind);
+            return true;
+        }
+        Var_Release(pValue);
+        return false;
+    }
+    if (pClt->GetType() == VAR_MAP) {
+        VarInfo* pFind = pClt->_tbl->FindInt(key);
+        if (pFind)
+        {
+            Move(pValue, pFind);
+            return true;
+        }
+        Var_Release(pValue);
+        return false;
+    }
+
+    // static 문자열로 가능한 나머지 컨테이너/프로퍼티 의미론은 범용 경로와 같다.
+    CltReadRare(pClt, pKey, pValue);
+    return false;
+}
 // Program 로드 시 n2가 static 문자열 상수인 READ만 이 경로로 바뀐다.
 // 키는 워커별 static 슬롯에서 매번 읽고 FindString도 매번 수행한다. 따라서 맵 수정이나
 // 풀 재사용 뒤의 value 포인터를 보관하는 inline cache와 달리 수명/무효화 상태가 없다.
@@ -340,9 +382,11 @@ NEOS_FORCEINLINE bool handle_CLT_READ_STATIC_STRING(const SVMOperation& OP) {
     if (pClt->GetType() == VAR_MAP) {
         VarInfo* pFind = pClt->_tbl->FindString(pKey->_str);
         if (pFind)
+        {
             Move(pValue, pFind);
-        else
-            Var_Release(pValue);
+            return true;
+        }
+        Var_Release(pValue);
         return false;
     }
 

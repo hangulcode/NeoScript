@@ -573,10 +573,14 @@ void CNeoVMProgram::PatchStaticStringReads()
 			continue;
 		if (op.n2 < 0 || op.n2 >= staticCount)
 			continue;
-		if (staticValues[op.n2]._type != VAR_STRING)
-			continue;
-
-		op.op = NOP_CLT_READ_STATIC_STRING;
+		if (staticValues[op.n2]._type == VAR_STRING)
+		{
+			op.op = NOP_CLT_READ_STATIC_STRING;
+		}
+		else if (staticValues[op.n2]._type == VAR_INT)
+		{
+			op.op = NOP_CLT_READ_STATIC_INT;
+		}
 	}
 }
 
@@ -1118,6 +1122,10 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 	case NOP_CLT_READ:
 		byteCount = OpFlagByteChars + 2 * 3;
 		outAssembly = FormatAsm("READ %s = %s.%s", context.operand(3).c_str(), context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_CLT_READ_STATIC_INT:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("READ.S %s = %s.%s", context.operand(3).c_str(), context.operand(1).c_str(), context.operand(2).c_str());
 		break;
 	case NOP_CLT_READ_STATIC_STRING:
 		byteCount = OpFlagByteChars + 2 * 3;

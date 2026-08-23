@@ -20,8 +20,16 @@ NEOS_FORCEINLINE void CNeoVMWorker::MoveI(VarInfo* v1, int v)
 	v1->SetType(VAR_INT);
 	v1->_int = v;
 }
+NEOS_FORCEINLINE void CNeoVMWorker::MoveF(VarInfo* v1, float v)
+{
+	if (v1->IsAllocType())
+		Var_Release(v1);
 
-NEOS_FORCEINLINE void CNeoVMWorker::MoveF(VarInfo* v1, int bits)
+	v1->SetType(VAR_FLOAT);
+	v1->_float = v;
+}
+
+NEOS_FORCEINLINE void CNeoVMWorker::MoveFMem(VarInfo* v1, int bits)
 {
 	if (v1->IsAllocType())
 		Var_Release(v1);

@@ -222,8 +222,7 @@ enum eNOperation : OpType
 	// 성분 수가 타입이 아니라 데이터라 op 하나로 충분하다(넷을 두면 디스패치 루프만 커진다).
 	NOP_VEC_MAKE,
 
-	NOP_NONE,
-	NOP_ERROR,
+	NOP_CLT_READ_STATIC_INT,
 	// 새 opcode는 끝에 붙여 기존 저장 스크립트 이미지의 opcode 값을 보존한다.
 	// 로드 시 n2가 static 문자열 상수인 READ만 이 opcode로 치환한다.
 	// 키 StringInfo는 워커별 static 슬롯에서 매번 얻으며 Map/value 포인터는 보관하지 않는다.
@@ -234,6 +233,10 @@ enum eNOperation : OpType
 	NOP_JMP_RANGE_OUTSIDE,
 	NOP_JMP_RANGE_INSIDE_L,
 	NOP_JMP_RANGE_OUTSIDE_L,
+
+	NOP_NONE,
+	NOP_ERROR,
+
 	NOP_MAX,
 }; // Operation length
 
