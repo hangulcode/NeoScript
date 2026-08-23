@@ -2000,15 +2000,17 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 			break;
 		case NOP_IDLE:          handle_IDLE(OP); break;
 		case NOP_VEC_MAKE:      handle_VEC_MAKE(OP); break;
-		case NOP_NONE:          handle_NONE(OP); break;
-		case NOP_ERROR:
-			handle_ERROR(OP);
-			return false;
+
 		case NOP_CLT_READ_STATIC_STRING: handle_CLT_READ_STATIC_STRING(OP); break;
 		case NOP_JMP_RANGE_INSIDE: if (IsRangeInside(OP, false)) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_RANGE_OUTSIDE: if (IsRangeInside(OP, false) == false) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_RANGE_INSIDE_L: if (IsRangeInside(OP, true)) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_RANGE_OUTSIDE_L: if (IsRangeInside(OP, true) == false) SetCodeIncPtr(OP.n1); break;
+
+		case NOP_NONE:          handle_NONE(OP); break;
+		case NOP_ERROR:
+			handle_ERROR(OP);
+			return false;
 		default:
 			SetError(RTE_UNKNOWN_OP);
 			break;
