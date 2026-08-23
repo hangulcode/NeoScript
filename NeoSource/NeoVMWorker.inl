@@ -1294,11 +1294,12 @@ NEOS_NOINLINE bool CNeoVMWorker::ForRare(VarInfo* pCur, int step)
 	}
 	return false;
 }
-NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool bTwoVar)
+// foreach 의 드문 컨테이너. string/set 순회는 스크립트에서 거의 안 쓰이는데 본문이 커서
+// 디스패치 루프만 키운다 — CltInsert/PTRCALL 과 같은 fast/rare 분리다.
+NEOS_NOINLINE bool CNeoVMWorker::ForEachRare(VarInfo* pClt, VarInfo* pKey, bool bTwoVar)
 {
 	VarInfo* pValue = pKey + 1;
 	VarInfo* pIterator = pKey + 2;
-	// 컴파일러가 foreach마다 key/value/iterator/version 슬롯을 연속 배치한다.
 	VarInfo* pMutationVersion = pKey + 3;
 
 	switch (pClt->GetType())
@@ -1330,6 +1331,68 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool b
 		}
 		break;
 	}
+	case VAR_SET:
+	{
+		// set 도 값만 순회한다. foreach(var k, v in set) 는 미지원.
+		if (bTwoVar)
+		{
+			pIterator->ClearType();
+			SetError(RTE_FOREACH_SET_TWOVAR);
+			return false;
+		}
+		SetInfo* set = pClt->_set;
+		if (pIterator->GetType() != VAR_ITERATOR)
+		{
+			Var_Release(pIterator);
+			if (0 < set->GetCount())
+			{
+				pIterator->_it = set->FirstNode();
+				pIterator->SetType(VAR_ITERATOR);
+				Var_SetInt(pMutationVersion, (int)set->_mutationVersion);
+			}
+			else
+				return false;
+		}
+		else
+		{
+			if (pMutationVersion->GetType() != VAR_INT || (u32)pMutationVersion->_int != set->_mutationVersion)
+			{
+				pIterator->ClearType();
+				SetError(RTE_FOREACH_MODIFIED);
+				return false;
+			}
+			set->NextNode(pIterator->_it);
+		}
+
+		SetNode* n = pIterator->_it._pSetNode;
+		if (n)
+		{
+			Move(pKey, &n->data->key);
+			return true;
+		}
+		else
+		{
+			pIterator->ClearType();
+			return false;
+		}
+		break;
+	}
+	default:
+		break;
+	}
+	SetErrorFormat(RTE_FOREACH_UNSUPPORTED, GetDataType(pClt->GetType()).c_str());
+	return false;
+}
+
+NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool bTwoVar)
+{
+	VarInfo* pValue = pKey + 1;
+	VarInfo* pIterator = pKey + 2;
+	// 컴파일러가 foreach마다 key/value/iterator/version 슬롯을 연속 배치한다.
+	VarInfo* pMutationVersion = pKey + 3;
+
+	switch (pClt->GetType())
+	{
 	case VAR_MAP:
 	{
 		MapInfo* tbl = pClt->_tbl;
@@ -1416,56 +1479,10 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool b
 		}
 		break;
 	}
-	case VAR_SET:
-	{
-		// set 도 값만 순회한다. foreach(var k, v in set) 는 미지원.
-		if (bTwoVar)
-		{
-			pIterator->ClearType();
-			SetError(RTE_FOREACH_SET_TWOVAR);
-			return false;
-		}
-		SetInfo* set = pClt->_set;
-		if (pIterator->GetType() != VAR_ITERATOR)
-		{
-			Var_Release(pIterator);
-			if (0 < set->GetCount())
-			{
-				pIterator->_it = set->FirstNode();
-				pIterator->SetType(VAR_ITERATOR);
-				Var_SetInt(pMutationVersion, (int)set->_mutationVersion);
-			}
-			else
-				return false;
-		}
-		else
-		{
-			if (pMutationVersion->GetType() != VAR_INT || (u32)pMutationVersion->_int != set->_mutationVersion)
-			{
-				pIterator->ClearType();
-				SetError(RTE_FOREACH_MODIFIED);
-				return false;
-			}
-			set->NextNode(pIterator->_it);
-		}
-
-		SetNode* n = pIterator->_it._pSetNode;
-		if (n)
-		{
-			Move(pKey, &n->data->key);
-			return true;
-		}
-		else
-		{
-			pIterator->ClearType();
-			return false;
-		}
-		break;
-	}
 	default:
 		break;
 	}
-	SetErrorFormat(RTE_FOREACH_UNSUPPORTED, GetDataType(pClt->GetType()).c_str());
-	return false;
+	// string/set 과 미지원 타입은 콜드 경로로.
+	return ForEachRare(pClt, pKey, bTwoVar);
 }
 

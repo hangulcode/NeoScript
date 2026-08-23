@@ -386,6 +386,8 @@ private:
 	// bTwoVar: foreach(var k, v in ...) 형태(컴파일러가 op argFlag 로 전달).
 	// list 는 2변수 순회를 지원하지 않으므로 런타임에 여기서 에러를 낸다.
 	bool ForEach(VarInfo* v1, VarInfo* v2, bool bTwoVar);
+	// string/set 순회와 미지원 타입. 본문이 커서 디스패치 루프 밖으로 뺀다.
+	bool ForEachRare(VarInfo* v1, VarInfo* v2, bool bTwoVar);
 	int Sleep(int iTimeout, VarInfo* v1);
 	void Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue = NULL);
 	void Call(int n1, int n2, int returnValueIndex = -1);
