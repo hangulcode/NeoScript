@@ -10,7 +10,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Move(VarInfo* v1, VarInfo* v2)
 	{
 		if (v1 == v2)
 			return;
-		Var_Release(v1);
+		Var_ReleaseAlloc(v1);
 	}
 	if (v2->IsAllocType() == false)
 		*v1 = *v2;
@@ -25,7 +25,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::MoveTake(VarInfo* v1, VarInfo* v2)
 	if (v1 == v2)
 		return;
 	if (v1->IsAllocType())
-		Var_Release(v1);
+		Var_ReleaseAlloc(v1);
 	*v1 = *v2;
 	v2->ClearType();
 }

@@ -499,6 +499,8 @@ public:
 		pOut->_func = pFun;
 	}
 	void Var_Release(VarInfo* d);
+	// alloc 여부를 이미 확인한 호출자용 — 재검사를 건너뛴다.
+	void Var_ReleaseAlloc(VarInfo* d);
 	void Var_SetNone(VarInfo* d);
 
 protected:

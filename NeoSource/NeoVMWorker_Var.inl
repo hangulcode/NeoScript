@@ -45,14 +45,10 @@ NEOS_FORCEINLINE bool INeoVMWorker::Var_ReleaseListFast(VarInfo* d)
 	return true;
 }
 
-NEOS_FORCEINLINE void INeoVMWorker::Var_Release(VarInfo* d)
+// 호출자가 alloc 여부로 이미 분기한 자리용. Move/MoveTake/MoveI/MoveF 는 IsAllocType 이
+// 참인 가지에서만 해제하므로, Var_Release 로 들어가면 같은 비교를 한 번 더 한다.
+NEOS_FORCEINLINE void INeoVMWorker::Var_ReleaseAlloc(VarInfo* d)
 {
-	if (d->IsAllocType() == false)
-	{
-		d->ClearType();
-		return;
-	}
-
 	// 게임 워크로드는 VAR_VEC 해제가 압도적이다. shared ref만 여기서 끝내고,
 	// 마지막 참조 및 순환 후보는 기존 dispatcher가 모든 부수 처리를 맡는다.
 	const VAR_TYPE type = d->GetType();
@@ -64,6 +60,16 @@ NEOS_FORCEINLINE void INeoVMWorker::Var_Release(VarInfo* d)
 		return;
 
 	_pVM->Var_ReleaseInternal(d);
+}
+
+NEOS_FORCEINLINE void INeoVMWorker::Var_Release(VarInfo* d)
+{
+	if (d->IsAllocType() == false)
+	{
+		d->ClearType();
+		return;
+	}
+	Var_ReleaseAlloc(d);
 }
 NEOS_FORCEINLINE void INeoVMWorker::Var_SetInt(VarInfo* d, int v)
 {

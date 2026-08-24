@@ -17,7 +17,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::EnsureStackRange(int base, int lastOffset)
 NEOS_FORCEINLINE void CNeoVMWorker::MoveI(VarInfo* v1, int v)
 {
 	if (v1->IsAllocType())
-		Var_Release(v1);
+		Var_ReleaseAlloc(v1);
 
 	v1->SetType(VAR_INT);
 	v1->_int = v;
@@ -26,7 +26,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::MoveI(VarInfo* v1, int v)
 NEOS_FORCEINLINE void CNeoVMWorker::MoveF(VarInfo* v1, int bits)
 {
 	if (v1->IsAllocType())
-		Var_Release(v1);
+		Var_ReleaseAlloc(v1);
 
 	v1->SetType(VAR_FLOAT);
 	std::memcpy(&v1->_float, &bits, sizeof(bits));
