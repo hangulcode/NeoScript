@@ -79,6 +79,19 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 			return;
 		}
 	}
+	else if (t == VAR_VEC)
+	{
+		// v[i] = x. 공유 중이면 VecCopyOnWrite 가 복제한다(값 의미론).
+		if (pKey->GetType() == VAR_INT && pValue->IsNumber())
+		{
+			unsigned idx = (unsigned)pKey->_int;
+			if (idx < (unsigned)pClt->VectorComponentCount())
+			{
+				GetVM()->VecCopyOnWrite(pClt)->v[idx] = (float)pValue->GetFloatNumber();
+				return;
+			}
+		}
+	}
 	CltInsertRare(pClt, pKey, pValue);
 }
 
@@ -276,6 +289,19 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 			else
 				Var_Release(pValue);
 			return;
+		}
+	}
+	else if (t == VAR_VEC)
+	{
+		// v[i] 읽기. 범위 밖이거나 정수 인덱스가 아니면 그대로 떨어뜨려 rare 가 에러를 낸다.
+		if (pKey->GetType() == VAR_INT)
+		{
+			unsigned idx = (unsigned)pKey->_int;
+			if (idx < (unsigned)pClt->VectorComponentCount())
+			{
+				Var_SetFloat(pValue, pClt->_vec->v[idx]);
+				return;
+			}
 		}
 	}
 	CltReadRare(pClt, pKey, pValue);
