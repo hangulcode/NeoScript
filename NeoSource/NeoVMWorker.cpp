@@ -45,22 +45,6 @@ void SVarWrapper::SetString(const char* str) { _vmw->Var_SetString(_var, str); }
 
 // 벡터 세터 (native 호출 내부에서만 쓰이므로 non-inline. NeoLib.cpp 에서 링크됨)
 //
-// 대상이 이미 단독 소유(refCount<=1)인 같은 계열 벡터면 그 저장소를 재사용한다.
-// `v = v + d` 처럼 결과를 자기 자신에 되쓰는 패턴에서 할당/해제를 없애기 위한 것이다.
-VecInfo* INeoVMWorker::VecStoreFor(VarInfo* d, int count)
-{
-	if (d->IsVector() && d->_vec->_refCount <= 1)
-	{
-		d->SetVecType(count);    // 성분 수만 바뀌어도 저장소는 그대로 쓴다
-		return d->_vec;
-	}
-	if (d->IsAllocType()) Var_Release(d);
-	VecInfo* p = _pVM->VecAlloc();
-	p->_refCount = 1;
-	d->SetVecType(count);
-	d->_vec = p;
-	return p;
-}
 void INeoVMWorker::Var_SetVec2(VarInfo* d, float x, float y)
 {
 	VecInfo* p = VecStoreFor(d, 2);

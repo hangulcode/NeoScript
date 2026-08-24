@@ -499,7 +499,9 @@ NEOS_NOINLINE bool handle_IDLE(const SVMOperation& OP) {
 
 // 벡터 생성 intrinsic (LoadVM 에서 PTRCALL2(#Vector*) 패치). native 호출 프레임 없이
 // 인자 슬롯(_iSP_VarsMax+1..N)을 직접 읽어 값타입 세팅. n3=결과 슬롯.
-NEOS_FORCEINLINE bool handle_VEC_MAKE(const SVMOperation& OP) {
+// VecStoreFor 를 인라인으로 옮긴 뒤로는 이 핸들러가 디스패치 루프에 전개되면 그만큼
+// 루프가 커진다. 생성은 성분 쓰기·산술만큼 자주 돌지 않으므로 루프 밖에 둔다.
+NEOS_NOINLINE bool handle_VEC_MAKE(const SVMOperation& OP) {
     if (OP.argFlag & NEOS_OP_CALL_NORESULT) return false;
     // n2 = 인자 수 = 성분 수. Vector2/3/4/Quaternion 이 모두 이 op 으로 패치되며,
     // 무엇으로 해석할지는(예: wxyz 쿼터니언) 사용자 규약이지 VM 의 타입이 아니다.

@@ -8,6 +8,26 @@
 // (MSVC 는 LTCG 가 TU 경계를 넘어 찾아줘서 가려졌고, g++/ld 에서 undefined reference 로 드러났다)
 // 그래서 이 파일은 NeoVMWorker.h 끝에서 include 한다.
 
+// 대상이 이미 단독 소유(refCount<=1)인 같은 계열 벡터면 그 저장소를 재사용한다.
+// `v = v + d` 처럼 결과를 자기 자신에 되쓰는 패턴에서 할당/해제를 없애기 위한 것이다.
+//
+// 벡터를 쓰는 모든 경로(생성 intrinsic, 성분 쓰기, 산술 결과)가 여기를 지나므로
+// .cpp 의 아웃오브라인 정의로 두면 벡터 연산마다 호출이 하나 붙는다.
+NEOS_FORCEINLINE VecInfo* INeoVMWorker::VecStoreFor(VarInfo* d, int count)
+{
+	if (d->IsVector() && d->_vec->_refCount <= 1)
+	{
+		d->SetVecType(count);    // 성분 수만 바뀌어도 저장소는 그대로 쓴다
+		return d->_vec;
+	}
+	if (d->IsAllocType()) Var_Release(d);
+	VecInfo* p = _pVM->VecAlloc();
+	p->_refCount = 1;
+	d->SetVecType(count);
+	d->_vec = p;
+	return p;
+}
+
 NEOS_FORCEINLINE bool INeoVMWorker::Var_ReleaseVecFast(VarInfo* d)
 {
 	VecInfo* vec = d->_vec;
