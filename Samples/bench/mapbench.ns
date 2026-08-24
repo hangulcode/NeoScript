@@ -1,0 +1,101 @@
+// 대량 맵 벤치. bench.ns 의 map_str 은 키가 8개뿐이라 버킷 배열이 통째로 캐시에 들어간다 —
+// 즉 캐시에 다 들어가는 맵만 재고 있다. 항목이 수십만이면 배열이 L3 를 넘기 때문에 조회
+// 한 번이 캐시 미스 한 번이 되고, 노드 배치·재해시 복사량 같은 다른 성질이 지배한다.
+//
+// 실제로 이 파일이 없던 시절, MapNode 에 키/값을 인라인하는 변경이 map_str 을 6% 개선하고
+// 전체 벤치 합계도 그대로여서 통과할 뻔했다. 여기서 재 보니 대량 삽입 +100%, 조회 +40% 였다.
+// (노드가 16B -> 40B 가 되어 캐시라인당 노드 수가 4 -> 1.6 으로 떨어진 탓)
+//
+// 체크섬은 bench.ns 와 같은 이유로 마스킹해 작게 유지한다.
+import system;
+
+var REPS = 5;
+var N = 200000;
+
+fun Report(var name, var sec, var chk) { print(name .. "|" .. (sec * 1000000) .. "|" .. chk); }
+
+// 1) 정수 키 대량 삽입. 2 -> 4 -> ... -> N 으로 재해시가 18 회 일어나며 매번 전량 복사한다.
+fun InsertInt(var n)
+{
+    var m = {};
+    for (var i in 0, n, 1) m[i] = i;
+    return m.len();
+}
+
+// 2) 문자열 키 대량 삽입. 위에 더해 키 인터닝과 해시 계산이 붙는다.
+fun InsertStr(var n)
+{
+    var m = {};
+    for (var i in 0, n, 1) m["k" .. i] = i;
+    return m.len();
+}
+
+// 3) 대량 조회. 작업 집합이 캐시를 넘으므로 조회당 미스가 지배한다.
+fun LookupInt(var n, var reps)
+{
+    var m = {};
+    for (var i in 0, n, 1) m[i] = i;
+    var s = 0;
+    for (var r in 0, reps, 1)
+    {
+        for (var i in 0, n, 1) s = (s + m[i]) & 1048575;
+    }
+    return s;
+}
+
+// 4) 대량 순회. 버킷 배열을 처음부터 끝까지 훑으므로 노드 크기가 그대로 대역폭이 된다.
+fun IterBig(var n, var reps)
+{
+    var m = {};
+    for (var i in 0, n, 1) m[i] = i;
+    var s = 0;
+    for (var r in 0, reps, 1)
+    {
+        foreach (var k, v in m) s = (s + v) & 1048575;
+    }
+    return s;
+}
+
+// 5) 삽입/삭제 반복. 삭제는 용량을 줄이지 않으므로 빈 슬롯이 쌓인 상태의 재삽입을 잰다.
+fun Churn(var n, var reps)
+{
+    var m = {};
+    var t = 0;
+    for (var r in 0, reps, 1)
+    {
+        for (var i in 0, n, 1) m[i] = i;
+        t = (t + m.len()) & 1048575;
+        for (var i in 0, n, 1) m[i] = null;
+    }
+    return t;
+}
+
+print("# mapbench begin");
+var best; var chk;
+
+InsertInt(100);
+best = 1000000.0;
+for (var r in 0, REPS, 1) { var t0 = system.clock(); chk = InsertInt(N); var dt = system.clock() - t0; if (dt < best) best = dt; }
+Report("map_ins_int", best, chk);
+
+InsertStr(100);
+best = 1000000.0;
+for (var r in 0, REPS, 1) { var t0 = system.clock(); chk = InsertStr(N); var dt = system.clock() - t0; if (dt < best) best = dt; }
+Report("map_ins_str", best, chk);
+
+LookupInt(100, 1);
+best = 1000000.0;
+for (var r in 0, REPS, 1) { var t0 = system.clock(); chk = LookupInt(N, 5); var dt = system.clock() - t0; if (dt < best) best = dt; }
+Report("map_lookup", best, chk);
+
+IterBig(100, 1);
+best = 1000000.0;
+for (var r in 0, REPS, 1) { var t0 = system.clock(); chk = IterBig(N, 5); var dt = system.clock() - t0; if (dt < best) best = dt; }
+Report("map_iterate", best, chk);
+
+Churn(100, 1);
+best = 1000000.0;
+for (var r in 0, REPS, 1) { var t0 = system.clock(); chk = Churn(50000, 10); var dt = system.clock() - t0; if (dt < best) best = dt; }
+Report("map_churn", best, chk);
+
+print("# mapbench end");
