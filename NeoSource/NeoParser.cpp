@@ -2329,12 +2329,7 @@ bool ParseLogicNotOperand(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs,
 		SetParserCompileError(ar, PCE_EXPECTED_LOGIC_NOT_OPERAND);
 		return false;
 	}
-	if (operand.IsArray())
-	{
-		int iRead = funs._cur->AllocLocalTempVar();
-		funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iRead, operand.IsHaveShort());
-		operand = SOperand(iRead);
-	}
+	MaterializeContainerRead(operand, ar, funs);
 
 	int iNot = funs._cur->AllocLocalTempVar();
 	funs._cur->Push_OP2(ar, NOP_LOG_NOT, iNot, operand._iVar, operand.IsShort());
@@ -3176,12 +3171,7 @@ TK_TYPE ParseShortCircuitLogic(bool bReqReturn, SOperand& sResultStack, CArchive
 		hasLogicOperator = true;
 
 		// 그룹 결과가 배열 접근(m[k])이면 값을 읽어와야 진리값 검사가 가능하다
-		if (operand.IsArray())
-		{
-			int iRead = funs._cur->AllocLocalTempVar();
-			funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iRead, operand.IsHaveShort());
-			operand = SOperand(iRead);
-		}
+		MaterializeContainerRead(operand, ar, funs);
 
 		if (endToken == TK_AND2)
 		{
@@ -3216,12 +3206,7 @@ TK_TYPE ParseShortCircuitLogic(bool bReqReturn, SOperand& sResultStack, CArchive
 	}
 
 	// 마지막 그룹: false 분기는 false 값 생성으로 연결한다.
-	if (operand.IsArray())
-	{
-		int iRead = funs._cur->AllocLocalTempVar();
-		funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iRead, operand.IsHaveShort());
-		operand = SOperand(iRead);
-	}
+	MaterializeContainerRead(operand, ar, funs);
 	// 마지막 그룹의 false 분기도 비교식이면 결합 명령으로.
 	{
 		SJumpValue fused;
@@ -4615,14 +4600,10 @@ bool ParseSleep(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		funs._cur->Push_OP2(ar, NOP_SLEEP, 0, operand._iVar, true);
 	else
 	{
-		if (operand._iArrayIndex == INVALID_ERROR_PARSEJOB)
-			funs._cur->Push_OP2(ar, NOP_SLEEP, 0, operand._iVar, false);
-		else
-		{
-			int iTempVar = funs._cur->AllocLocalTempVar();
-			funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iTempVar, operand.IsHaveShort());
-			funs._cur->Push_OP2(ar, NOP_SLEEP, 0, operand._iVar, false);
-		}
+		// sleep(delays[0]) : 읽은 값을 넘겨야 한다. 컨테이너를 그대로 넘기면 런타임에
+		// invalid sleep value 로 죽는다.
+		MaterializeContainerRead(operand, ar, funs);
+		funs._cur->Push_OP2(ar, NOP_SLEEP, 0, operand._iVar, false);
 	}
 	return true;
 }

@@ -380,6 +380,16 @@ fun TestNestedIndexExpressions()
     Check(activeList[0], __LINE__);
     var functionIndices = [1, 0];
     Check(MakeMatrix()[functionIndices[0]][functionIndices[1]] == 20, __LINE__);
+
+    // 컨테이너 읽기를 값으로 받아야 하는 자리들 — !, &&/||, sleep.
+    // sleep 은 예전에 읽은 값을 버리고 컨테이너를 넘겨서 런타임에 죽었다.
+    var flags = [false, true];
+    Check(!flags[0], __LINE__);
+    Check(flags[1] && flags[indexList[1] + 1], __LINE__);
+    Check(flags[0] || flags[1], __LINE__);
+    var delays = [0];
+    sleep(delays[0]);
+    Check(true, __LINE__);
 }
 
 fun TestScopesAndReturns()
