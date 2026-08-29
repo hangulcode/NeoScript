@@ -2086,6 +2086,22 @@ TK_TYPE ParseTable(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs, SVars&
 	return r;
 }
 
+// 컨테이너 읽기(base + key)를 임시 슬롯 하나로 실체화한다. 테이블 op 은 베이스 1개와
+// 키 1개만 받으므로, 읽기 결과를 다시 피연산자로 써야 하는 자리는 먼저 값으로 만들어야 한다.
+//   - 바깥 인덱스의 키   : values[indexList[0]]
+//   - 호출 대상          : list[i]() / MakeMatrix()[0]()
+//   - 단항 마이너스 대상 : -values[0]
+// 이미 값이면(배열 읽기가 아니면) 아무것도 하지 않는다.
+static void MaterializeContainerRead(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs)
+{
+	if (false == operand.IsArray())
+		return;
+
+	const int iValue = funs._cur->AllocLocalTempVar();
+	funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iValue, operand.IsHaveShort());
+	operand = SOperand(iValue);
+}
+
 bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	std::string tk1, tk2;
@@ -2138,9 +2154,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 				{
 					// list[index]() / table[key](): PTRCALL은 컨테이너 메서드 호출용이므로
 					// 인덱스 결과의 함수값을 먼저 임시 슬롯으로 읽어 직접 호출한다.
-					int iCallable = funs._cur->AllocLocalTempVar();
-					funs._cur->Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iCallable, iTempOffset.IsHaveShort());
-					iTempOffset = SOperand(iCallable);
+					MaterializeContainerRead(iTempOffset, ar, funs);
 				}
 
 				//iTempOffset._iArrayIndex = iArrayIndex._iVar;
@@ -2172,57 +2186,17 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 				iTempOffset2 = funs.AddStaticString(str);
 			}
 
-			if (iTempOffset2.IsArray())
-			{
-				SetParserCompileError(ar, PCE_EXPECTED_MEMBER_NAME);
-				return false;
-				//int iTempOffset2 = funs._cur->AllocLocalTempVar();
-				//funs._cur->Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iTempOffset2);
-				//iTempOffset = iTempOffset2;
-			}
-			else
-			{
-				if (iTempOffset._iArrayIndex == INVALID_ERROR_PARSEJOB)
-				{
-					iTempOffset._iArrayIndex = iTempOffset2._iVar;
-					if (iTempOffset2._operandType == Data_NS)
-					{
-						iTempOffset._iArrayIndex = iTempOffset2._iVar;
-						iTempOffset._operandType = Data_TS;
-						//iTempOffset._iArrayIndex = funs.AddStaticInt(iTempOffset2._iVar);
-						//iTempOffset._operandType = Data_TR;
-					}
-				}
-				else
-				{
-					if (iTempOffset2._iArrayIndex == INVALID_ERROR_PARSEJOB)
-					{
-						int iTempOffset3 = funs._cur->AllocLocalTempVar();
-						funs._cur->Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iTempOffset3, iTempOffset.IsHaveShort());
-						iTempOffset._iVar = iTempOffset3;
-						iTempOffset._iArrayIndex = iTempOffset2._iVar;
-						iTempOffset._operandType = iTempOffset2.IsShort() ? Data_TS : Data_TR;
-					}
-					else
-					{
-						SetParserCompileError(ar, PCE_EXPECTED_MEMBER_NAME);
-						return false;
-					}
-				}
-			}
+			MaterializeContainerRead(iTempOffset2, ar, funs);
+			// 선택자가 이어지면(a[i][j]) 앞 단계 읽기를 값으로 만들고 그 위에 새 키를 얹는다.
+			MaterializeContainerRead(iTempOffset, ar, funs);
+			iTempOffset._iArrayIndex = iTempOffset2._iVar;
+			iTempOffset._operandType = iTempOffset2.IsShort() ? Data_TS : Data_TR;
 			lastSelectorWasDot = (tkType2 == TK_DOT);
 
 		}
 		if (tkTypePre == TK_MINUS)
 		{
-			if (iTempOffset.IsArray())
-			{
-				int iTempOffset2 = funs._cur->AllocLocalTempVar();
-				funs._cur->Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iTempOffset2, iTempOffset.IsHaveShort());
-				iTempOffset = iTempOffset2;
-
-				//iTempOffset._iArrayIndex = INVALID_ERROR_PARSEJOB;
-			}
+			MaterializeContainerRead(iTempOffset, ar, funs);
 
 			int iTempOffset3 = funs._cur->AllocLocalTempVar();
 			funs._cur->Push_OP2(ar, NOP_MOV_MINUS, iTempOffset3, iTempOffset._iVar, false);
@@ -2259,12 +2233,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 					if (tkType2 == TK_L_SMALL)
 					{
 						ar.PushToken(tkType2, tk2);
-						if (iTempOffset.IsArray())
-						{
-							int iCallable = funs._cur->AllocLocalTempVar();
-							funs._cur->Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iCallable, iTempOffset.IsHaveShort());
-							iTempOffset = SOperand(iCallable);
-						}
+						MaterializeContainerRead(iTempOffset, ar, funs);
 						if (false == ParseFunCall(iTempOffset, tkTypePre, NULL, ar, funs, vars))
 							return false;
 						continue;
@@ -2276,11 +2245,12 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 					}
 
 					SOperand iArrayIndex = INVALID_ERROR_PARSEJOB;
-					if (false == ParseTable(iArrayIndex, ar, funs, vars) || iArrayIndex.IsArray())
+					if (false == ParseTable(iArrayIndex, ar, funs, vars))
 					{
 						SetParserCompileError(ar, PCE_EXPECTED_MEMBER_NAME);
 						return false;
 					}
+					MaterializeContainerRead(iArrayIndex, ar, funs);
 
 					if (iTempOffset._iArrayIndex == INVALID_ERROR_PARSEJOB)
 					{

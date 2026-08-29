@@ -368,6 +368,20 @@ fun TestIndexedAssignments()
     Check(table["rows"][1][0] == 11, __LINE__);
 }
 
+fun TestNestedIndexExpressions()
+{
+    var indexList = [2, 0];
+    var activeList = [false, true, true];
+    Check(activeList[indexList[0]], __LINE__);
+
+    var matrix = [[10, 11], [20, 21], [30, 31]];
+    Check(matrix[indexList[0]][indexList[1]] == 30, __LINE__);
+    activeList[indexList[1]] = true;
+    Check(activeList[0], __LINE__);
+    var functionIndices = [1, 0];
+    Check(MakeMatrix()[functionIndices[0]][functionIndices[1]] == 20, __LINE__);
+}
+
 fun TestScopesAndReturns()
 {
     var value = 1;
@@ -822,6 +836,7 @@ fun RegressionRun()
     TestContainers();
     TestContainerOperations();
     TestIndexedAssignments();
+    TestNestedIndexExpressions();
     TestScopesAndReturns();
     TestNestedControlFlow();
     TestContainerAliases();
