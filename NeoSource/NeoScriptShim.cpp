@@ -1444,7 +1444,7 @@ void GetAllocStats(AllocStats& out)
     GetNeoVMAllocStats(s);   // 내부 전역 통계(NeoVM.h)
     out.strings = s.strings; out.maps = s.maps; out.lists = s.lists; out.sets = s.sets;
     out.coroutines = s.coroutines; out.modules = s.modules; out.asyncs = s.asyncs;
-    out.vectors = s.vectors; out.arrays = s.arrays; out.poolBytes = s.poolBytes;
+    out.vectors = s.vectors; out.arrays = s.arrays; out.bufferBytes = s.bufferBytes; out.poolBytes = s.poolBytes;
     out.stringIdleBytes = s.stringIdleBytes;
     out.closures = s.closures;
 }

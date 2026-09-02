@@ -309,6 +309,7 @@ static std::atomic<int> g_iNeoVMAllocAsyncs{ 0 };
 static std::atomic<int> g_iNeoVMAllocClosures{ 0 };
 static std::atomic<int> g_iNeoVMAllocVectors{ 0 };
 static std::atomic<int> g_iNeoVMAllocArrays{ 0 };
+static std::atomic<long long> g_iNeoVMBufferBytes{ 0 };
 static std::atomic<long long> g_iNeoVMPoolBytes{ 0 };       // 모든 VM 의 오브젝트 풀 합계
 static std::atomic<long long> g_iNeoVMStringIdleBytes{ 0 };  // 유휴 문자열 노드가 붙든 문자 버퍼
 static std::atomic<long long> g_iNeoVMExecPoolBytes{ 0 };   // 스레드별 실행 컨텍스트 풀 합계
@@ -351,6 +352,7 @@ void GetNeoVMAllocStats(SNeoVMAllocStats& outStats)
 	outStats.closures = g_iNeoVMAllocClosures.load(std::memory_order_relaxed);
 	outStats.vectors = g_iNeoVMAllocVectors.load(std::memory_order_relaxed);
 	outStats.arrays = g_iNeoVMAllocArrays.load(std::memory_order_relaxed);
+	outStats.bufferBytes = g_iNeoVMBufferBytes.load(std::memory_order_relaxed);
 	outStats.poolBytes = g_iNeoVMPoolBytes.load(std::memory_order_relaxed)
 	                   + g_iNeoVMExecPoolBytes.load(std::memory_order_relaxed);
 	outStats.stringIdleBytes = g_iNeoVMStringIdleBytes.load(std::memory_order_relaxed);
@@ -497,6 +499,7 @@ void CNeoVM::PublishAllocStats()
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocClosures, m_sPublishedAllocStats.closures, m_sAllocStats.closures);
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocVectors, m_sPublishedAllocStats.vectors, m_sAllocStats.vectors);
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocArrays, m_sPublishedAllocStats.arrays, m_sAllocStats.arrays);
+	PublishNeoVMAllocStatValue(g_iNeoVMBufferBytes, m_sPublishedAllocStats.bufferBytes, m_sAllocStats.bufferBytes);
 }
 
 NeoExecContextPool* NeoExecContextPool_Create(int varStackSize)
@@ -888,7 +891,7 @@ ArrayInfo* CNeoVM::ArrayAlloc(NeoArrayElementType elementType, int count, const 
 	catch (const std::bad_alloc&)
 	{
 		m_sPool_Array.Confer(array);
-		return nullptr;
+		throw;
 	}
 
 	if (count > 0)
@@ -909,6 +912,7 @@ ArrayInfo* CNeoVM::ArrayAlloc(NeoArrayElementType elementType, int count, const 
 
 	LiveList_Insert(_sArrayHead, array);
 	++m_sAllocStats.arrays;
+	m_sAllocStats.bufferBytes += (long long)array->DataBytes();
 	return array;
 }
 void CNeoVM::FreeArray(ArrayInfo* array)
@@ -916,6 +920,7 @@ void CNeoVM::FreeArray(ArrayInfo* array)
 	if (array == nullptr)
 		return;
 	LiveList_Remove(_sArrayHead, array);
+	m_sAllocStats.bufferBytes -= (long long)array->DataBytes();
 	array->Free();
 	m_sPool_Array.Confer(array);
 	--m_sAllocStats.arrays;

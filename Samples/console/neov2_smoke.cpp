@@ -273,6 +273,22 @@ int NeoScriptV2Smoke()
     if (arrayProgram.program)
     {
         InstanceHandle arrayInstance = rt->CreateInstance(arrayProgram.program);
+        AllocStats arrayStatsBefore;
+        GetAllocStats(arrayStatsBefore);
+        {
+            Invocation arrayStatsCall = rt->Call(arrayInstance, "makeInts");
+            Check(arrayStatsCall.invoke() == RunStatus::Completed, "array allocation stats call completes");
+            AllocStats arrayStatsLive;
+            GetAllocStats(arrayStatsLive);
+            Check(arrayStatsLive.arrays == arrayStatsBefore.arrays + 1 &&
+                arrayStatsLive.bufferBytes == arrayStatsBefore.bufferBytes + 4 * (int)sizeof(int32_t),
+                "array allocation stats count live payload bytes in the shared buffer total");
+        }
+        AllocStats arrayStatsReleased;
+        GetAllocStats(arrayStatsReleased);
+        Check(arrayStatsReleased.arrays == arrayStatsBefore.arrays &&
+            arrayStatsReleased.bufferBytes == arrayStatsBefore.bufferBytes,
+            "array allocation stats release payload bytes from the shared buffer total");
         {
         Invocation intCall = rt->Call(arrayInstance, "makeInts");
         Check(intCall.invoke() == RunStatus::Completed, "array int return status Completed");

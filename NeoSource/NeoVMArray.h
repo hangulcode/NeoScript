@@ -55,6 +55,8 @@ struct ArrayInfo : AllocBase
 			byte &= (u8)~bit;
 	}
 
+	// CNeoVM::ArrayAlloc only. It must initialize every element before publishing
+	// this ArrayInfo through the live list or a script value.
 	bool Allocate(NeoArrayElementType elementType, int count)
 	{
 		_data = nullptr;

@@ -2274,8 +2274,8 @@ int main(int argc, char* argv[])
 			exitCode = RunFile(pLoader, argv[2], putASM, debug, stats ? &s : nullptr);
 			if (stats)
 			{
-				printf("[ALLOC] str=%d map=%d list=%d array=%d set=%d cor=%d mod=%d async=%d closure=%d vec=%d pool=%lld bytes\n",
-					s.strings, s.maps, s.lists, s.arrays, s.sets, s.coroutines, s.modules, s.asyncs, s.closures, s.vectors,
+				printf("[ALLOC] str=%d map=%d list=%d array=%d buffer=%lld bytes set=%d cor=%d mod=%d async=%d closure=%d vec=%d pool=%lld bytes\n",
+					s.strings, s.maps, s.lists, s.arrays, s.bufferBytes, s.sets, s.coroutines, s.modules, s.asyncs, s.closures, s.vectors,
 					s.poolBytes);
 				// 풀 페이지 밖의 문자열 힙. 계속 크면 유지 임계값을 낮춰야 한다.
 				printf("[ALLOC] stringIdle=%lld bytes\n", s.stringIdleBytes);

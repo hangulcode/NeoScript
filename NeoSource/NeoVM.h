@@ -221,10 +221,14 @@ struct SNeoVMAllocStats
 	int closures = 0;
 	int vectors = 0;
 	int arrays = 0;
+	// VM이 풀 밖에서 직접 보유하는 가변 buffer의 논리적 바이트 합계. 현재는 ArrayInfo
+	// 원소 payload가 기여하며, 이후 같은 종류의 저장소도 이 카운터에 합산한다.
+	long long bufferBytes = 0;
 	// VM 메모리풀이 OS 에서 확보해 들고 있는 총 바이트(사용중 + 여유). 풀은 반납해도 페이지를
 	// 돌려주지 않으므로 이 값이 곧 실제 점유량이다. 전역 조회면 모든 VM 의 오브젝트 풀 +
 	// 스레드별 실행 컨텍스트 풀(var 스택 포함) 합계, VM 단위 조회면 그 VM 의 오브젝트 풀만.
-	// 컬렉션이 따로 잡는 힙(ListInfo/MapInfo 의 _Bucket, StringInfo 의 문자열 본문)은 풀 밖이라 제외.
+	// 컬렉션이 따로 잡는 힙(ListInfo/MapInfo 의 _Bucket, StringInfo 의 문자열 본문)과
+	// ArrayInfo의 원소 payload(bufferBytes)는 풀 밖이라 제외한다.
 	long long poolBytes = 0;
 	// 반납되어 놀고 있는 문자열 노드가 아직 붙들고 있는 문자 버퍼 합계.
 	// poolBytes 에는 안 잡히는 값이다(풀 밖 힙). 이게 계속 크면 유지 임계값을 낮춰야 한다.
