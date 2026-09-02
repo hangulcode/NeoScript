@@ -258,7 +258,7 @@ int NeoScriptV2Smoke()
     rt->BindObject(a, "Host", reinterpret_cast<void*>(static_cast<intptr_t>(7)));
     rt->BindObject(b, "Host", reinterpret_cast<void*>(static_cast<intptr_t>(99)));
 
-    // Fixed primitive arrays use the same borrowed v2 lifetime as map/list readers, while
+    // Primitive arrays use the same borrowed v2 lifetime as map/list readers, while
     // exposing their dense storage directly during that valid scope.
     const char* arraySource =
         "import system;\n"
@@ -269,7 +269,7 @@ int NeoScriptV2Smoke()
         "export fun touchArray() { var a = system.array(1, 3); var sum = Host.touchArray(a); return a[1] * 100 + sum; }\n";
     CompileDesc arrayDesc; arrayDesc.source = arraySource; arrayDesc.sourceName = "array_smoke.ns";
     CompileResult arrayProgram = rt->Compile(arrayDesc);
-    Check(static_cast<bool>(arrayProgram.program), "compile fixed primitive arrays");
+    Check(static_cast<bool>(arrayProgram.program), "compile primitive arrays");
     if (arrayProgram.program)
     {
         InstanceHandle arrayInstance = rt->CreateInstance(arrayProgram.program);
@@ -294,7 +294,7 @@ int NeoScriptV2Smoke()
         Check(intCall.invoke() == RunStatus::Completed, "array int return status Completed");
         ArrayView ints;
         Check(intCall.retArray(ints) && ints.elementType() == ArrayElementType::Int && ints.count() == 4,
-            "retArray exposes int type and fixed count");
+            "retArray exposes int type and count");
         int32_t* intData = ints.ints();
         Check(intData && intData[0] == 3 && intData[2] == 9 && ints.floats() == nullptr,
             "retArray exposes contiguous int storage only for the matching accessor");

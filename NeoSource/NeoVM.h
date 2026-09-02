@@ -173,7 +173,7 @@ enum VAR_TYPE : u8
 	// _pUserData 는 호스트 소유의 불투명 포인터라 VM 관점에서는 리프다.
 	VAR_FP_NATIVE,
 
-	// 고정 길이 원시 배열. bool/int/float 중 한 형식만 담으며, 다른 alloc 자식이 없어
+	// 밀집 원시 배열. bool/int/float 중 한 형식만 담으며, 다른 alloc 자식이 없어
 	// 리프다. List와 같은 참조 의미론(대입 뒤 같은 저장소 공유)을 쓴다.
 	VAR_ARRAY,
 
@@ -353,7 +353,7 @@ public:
 		ClosureInfo*	_closure;
 		CollectionIterator	_it;
 		VecInfo*	_vec; // VAR_VEC 성분(유효 성분 수는 _vecCount)
-		ArrayInfo*	_array; // VAR_ARRAY 고정 길이 원시 배열
+		ArrayInfo*	_array; // VAR_ARRAY 밀집 원시 배열
 	};
 
 	NEOS_FORCEINLINE VarInfo() { _type = VAR_NONE; }

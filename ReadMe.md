@@ -148,9 +148,9 @@ var moved = position + direction * 2.0;
   (quaternion multiplication is `math.quat_*`, which is what you want for composing rotations).
   Arithmetic between different component counts is still rejected.
 
-### Fixed primitive arrays
-`system.array(initial, size)` creates a fixed-size reference array for dense bool, integer, or
-float data. The type of `initial` selects the element type and also fills every element:
+### Primitive arrays
+`system.array(initial, size)` creates a reference array for dense bool, integer, or float data.
+The type of `initial` selects the element type and fills the initial elements:
 
 ```cpp
 import system;
@@ -164,10 +164,13 @@ var weights = system.array(0.0, 1024);   // float array
 - Indexes must be integers and must be in range. Invalid reads and writes are runtime errors.
 - Integer and float arrays convert between `int` and `float` on assignment; float-to-int truncates
   toward zero. Bool arrays accept only bool values.
-- `a[i] = value`, `+=`, `-=`, `*=`, `/=`, `%=`, `++`, and `--` are supported. There is no append,
-  remove, resize, or slice operation.
-- `a.len()` and `tosize(a)` both return the fixed element count. `foreach(var v in a)` yields a
-  value copy, just like List foreach; the two-variable form is not supported.
+- `a[i] = value`, `+=`, `-=`, `*=`, `/=`, `%=`, `++`, and `--` are supported.
+- `a.append(value)` adds one value at the tail. `a.resize(size)` changes the length; growth fills
+  new elements with the `initial` value used to create the array, and shrinking drops the tail.
+  A negative resize becomes zero, matching List. There is no middle insertion, remove, or slice.
+- `a.len()` and `tosize(a)` both return the current element count. `foreach(var v in a)` yields a
+  value copy, just like List foreach; the two-variable form is not supported. Structural changes
+  (`append` or a size-changing `resize`) during foreach raise a runtime error.
 - Bool arrays are bit-packed internally. The implementation detail is invisible to script code.
 
 ### Embedding the engine
@@ -303,9 +306,9 @@ compiler cases) and `console.exe --v2smoke` (host API, closure lifetime, leak co
 	- switch / case / default: see "switch statement" below
 	- for: `for (var a in start, end [, step])` — see "for loop" below. `end` is **exclusive**
 	  and `step` is optional (defaults to 1)
-	- foreach: iterates a map, list, or set
+	- foreach: iterates a map, list, array, or set
 		- map: `foreach (var key, value in map)` or `foreach (var key in map)`
-		- list / set: single variable only, `foreach (var value in list)`
+		- list / array / set: single variable only, `foreach (var value in list)`
 		  (two-variable form is not supported and reports a runtime error)
 	- while: `while (condition) { ... }`, C semantics. There is no `do ... while`
 	- true / false: boolean values

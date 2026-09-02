@@ -395,6 +395,32 @@ fun TestFixedArrays()
     alias[3] = 9;
     Check(ints[3] == 9, __LINE__);
 
+    var growInts = system.array(7, 0);
+    growInts.append(3.8);
+    growInts.append(4);
+    growInts.resize(5);
+    Check(growInts.len() == 5 && growInts[0] == 3 && growInts[1] == 4 && growInts[2] == 7 && growInts[4] == 7, __LINE__);
+    growInts[3] = 99;
+    growInts.resize(2);
+    growInts.resize(4);
+    Check(growInts[2] == 7 && growInts[3] == 7, __LINE__);
+    var growAlias = growInts;
+    growAlias.append(5);
+    Check(growInts.len() == 5 && growInts[4] == 5, __LINE__);
+
+    var growFloats = system.array(1.5, 1);
+    growFloats.append(3);
+    growFloats.resize(4);
+    Check(growFloats[0] == 1.5 && growFloats[1] == 3.0 && growFloats[2] == 1.5 && growFloats[3] == 1.5, __LINE__);
+
+    var growBools = system.array(true, 0);
+    growBools.append(false);
+    growBools.resize(10);
+    Check(!growBools[0] && growBools[1] && growBools[7] && growBools[8] && growBools[9], __LINE__);
+    growBools.resize(1);
+    growBools.resize(9);
+    Check(growBools[1] && growBools[8], __LINE__);
+
     var sum = 0;
     foreach(var value in ints)
         sum += value;

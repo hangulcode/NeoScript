@@ -82,7 +82,7 @@ rt->Call(inst, "GetInventory").invokeReadMap([&](MapReader inv){
     inv.getInt("gold", gold);
 });
 
-// ArrayView exposes the fixed primitive storage without a copy. Its view and raw pointer are
+// ArrayView exposes the primitive storage without a copy. Its view and raw pointer are
 // valid only inside this callback. Bool arrays use packed bits; int/float arrays expose elements.
 rt->Call(inst, "GetWeights").invokeReadArray([&](ArrayView weights){
     if (weights.elementType() == ArrayElementType::Float)
@@ -101,9 +101,11 @@ int score = a.retInt();  // ⚠️ no longer 100 — use invokeR() for this patt
 
 `ArrayView` follows exactly the same borrowed lifetime. `CallContext::argAsArray`, nested
 `MapReader::getArray`/`ListReader::getArray`, `Invocation::retArray`, and the `invokeReadArray`
-callback expose the VM's fixed storage directly. The raw pointer is valid only while its source
-callback or return view is valid, must not be retained or used from another thread, and is `nullptr`
-for the wrong element accessor. `boolBits()` is packed least-significant-bit first: bit `i` is
+callback expose the VM's storage directly. The raw pointer is valid only while its source callback
+or return view is valid, must not be retained or used from another thread, and is `nullptr` for the
+wrong element accessor. Script-side `append` or size-changing `resize` can reallocate the storage,
+so do not re-enter script and retain the pointer across a structural array change. `boolBits()` is
+packed least-significant-bit first: bit `i` is
 `(bits[i >> 3] >> (i & 7)) & 1`; `ints()` and `floats()` return contiguous element storage.
 
 So: **one live `Invocation` per instance** at a time — a second `Call` while one is still armed (built but

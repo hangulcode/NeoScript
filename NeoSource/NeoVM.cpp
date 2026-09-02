@@ -893,13 +893,14 @@ ArrayInfo* CNeoVM::ArrayAlloc(NeoArrayElementType elementType, int count, const 
 		m_sPool_Array.Confer(array);
 		throw;
 	}
+	array->SetInitialValue(initialValue);
 
 	if (count > 0)
 	{
 		switch (elementType)
 		{
 		case NeoArrayElementType::Bool:
-			memset(array->BoolBits(), initialValue._bl ? 0xFF : 0x00, array->DataBytes());
+			memset(array->BoolBits(), initialValue._bl ? 0xFF : 0x00, array->BufferBytes());
 			break;
 		case NeoArrayElementType::Int:
 			std::fill_n(array->IntData(), count, initialValue._int);
@@ -912,15 +913,22 @@ ArrayInfo* CNeoVM::ArrayAlloc(NeoArrayElementType elementType, int count, const 
 
 	LiveList_Insert(_sArrayHead, array);
 	++m_sAllocStats.arrays;
-	m_sAllocStats.bufferBytes += (long long)array->DataBytes();
+	m_sAllocStats.bufferBytes += (long long)array->BufferBytes();
 	return array;
+}
+bool CNeoVM::ArrayResize(ArrayInfo* array, int count)
+{
+	const long long oldBytes = (long long)array->BufferBytes();
+	const bool changed = array->Resize(count);
+	m_sAllocStats.bufferBytes += (long long)array->BufferBytes() - oldBytes;
+	return changed;
 }
 void CNeoVM::FreeArray(ArrayInfo* array)
 {
 	if (array == nullptr)
 		return;
 	LiveList_Remove(_sArrayHead, array);
-	m_sAllocStats.bufferBytes -= (long long)array->DataBytes();
+	m_sAllocStats.bufferBytes -= (long long)array->BufferBytes();
 	array->Free();
 	m_sPool_Array.Confer(array);
 	--m_sAllocStats.arrays;

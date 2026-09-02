@@ -192,6 +192,36 @@ struct neo_libs
 		pN->ReturnValue(pVar->_array->_count);
 		return true;
 	}
+	static bool Array_resize(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_ARRAY) return false;
+		if (args != 1) return false;
+
+		pN->GetVM()->ArrayResize(pVar->_array, pN->read<int>(1));
+		pN->ReturnValue();
+		return true;
+	}
+	static bool Array_append(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_ARRAY) return false;
+		if (args != 1) return false;
+
+		ArrayInfo* array = pVar->_array;
+		VarInfo* value = pN->GetStack(1);
+		if (array->CanAssignValue(value) == false)
+		{
+			pN->SetErrorFormat(RTE_ARRAY_VALUE_TYPE, GetDataType(value->GetType()).c_str(), GetArrayElementTypeName(array->_elementType));
+			return false;
+		}
+		if (array->_count == INT32_MAX)
+			return false;
+
+		const int index = array->_count;
+		pN->GetVM()->ArrayResize(array, index + 1);
+		array->AssignValue(index, value);
+		pN->ReturnValue();
+		return true;
+	}
 	static bool List_append(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (pVar->GetType() != VAR_LIST) return false;
@@ -1580,6 +1610,8 @@ void CNeoVM::RegObjLibrary()
 	// Array Lib
 	_funLib_Array = NeoVMSystem::RegisterNative(Fun_Array);
 	g_sNeoFunLib_Array.Add("len", &neo_libs::Array_len);
+	g_sNeoFunLib_Array.Add("resize", &neo_libs::Array_resize);
+	g_sNeoFunLib_Array.Add("append", &neo_libs::Array_append);
 
 	// Map Lib
 	_funLib_Map = NeoVMSystem::RegisterNative(Fun_Map);

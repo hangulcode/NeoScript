@@ -842,9 +842,9 @@ struct AllocStats
     int32_t modules = 0;
     int32_t asyncs = 0;
     int32_t vectors = 0;   // Vector2/3/4/Quaternion 성분 저장소(VecInfo)
-    int32_t arrays = 0;    // system.array 고정 길이 bool/int/float 저장소(ArrayInfo)
-    // VM이 풀 밖에서 직접 보유하는 가변 buffer의 논리적 바이트 합계. 현재는 array
-    // 원소 payload가 기여하며, 이후 같은 종류의 저장소도 이 카운터에 합산한다.
+    int32_t arrays = 0;    // system.array bool/int/float 저장소(ArrayInfo)
+    // VM이 풀 밖에서 직접 보유하는 가변 buffer 할당 바이트 합계. 현재는 array의
+    // 실제 capacity payload가 기여하며, 이후 같은 종류의 저장소도 이 카운터에 합산한다.
     int64_t bufferBytes = 0;
     // VM 메모리풀이 확보해 들고 있는 총 바이트(사용중 + 여유). 풀은 반납해도 페이지를 OS 에
     // 돌려주지 않으므로 이 값이 곧 실제 점유량이다. 모든 런타임의 오브젝트 풀 + 스레드별

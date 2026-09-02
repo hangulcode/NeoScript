@@ -156,7 +156,7 @@ Use `import system;` before calling these functions.
 | `system.time()` | `int` | Unix seconds |
 | `system.date(format: string, time: int)` | `string` | `strftime` + `localtime`, output capped at 79 chars |
 | `system.clock()` | `float` | `clock() / CLOCKS_PER_SEC` in seconds. Use for deltas, not wall time |
-| `system.array(initial: bool\|int\|float, size: int)` | `array` | Fixed-size primitive array. `initial` chooses the element type and fills every element; `size` must be non-negative |
+| `system.array(initial: bool\|int\|float, size: int)` | `array` | Dense primitive array. `initial` chooses the element type and fills the initial elements; `size` must be non-negative |
 | `system.load(source: string, name: string)` | `module` | Compiles `source` at run time. `name` is type-checked but unused. A compile failure raises `invalid function call`; it does not return `null` |
 | `system.pcall(m: module)` | `void` | Runs the module's top-level code |
 | `system.set(l: list)` | `set` | Builds a set from a list; duplicates collapse |
@@ -222,7 +222,7 @@ There is no `remove`, `insert`, `sort`, `find`, or `clear` on lists. Use `l.resi
 Index with `l[i]`; `l[i] = v` only works for an index that already exists, so grow with
 `resize`/`append` first.
 
-### 7.1 Fixed primitive arrays
+### 7.1 Primitive arrays
 
 ```cpp
 import system;
@@ -232,17 +232,22 @@ var ids = system.array(0, 1024);
 var weights = system.array(0.0, 1024);
 ```
 
-`system.array(initial, size)` creates an `array` whose fixed element type is selected by the first
+`system.array(initial, size)` creates an `array` whose element type is selected by the first
 argument. Arrays are reference values like List: assignment shares the same storage. `a.len()` and
-`tosize(a)` return the size. `foreach(var value in a)` is supported and yields a copy of each value;
-`foreach(var index, value in a)` is rejected.
+`tosize(a)` return the current size. `foreach(var value in a)` is supported and yields a copy of
+each value; `foreach(var index, value in a)` is rejected.
 
 - Only integer indexes in `[0, a.len())` are valid. Out-of-range reads and writes are runtime errors.
 - `=`, `+=`, `-=`, `*=`, `/=`, `%=`, `++`, and `--` work on an element.
 - int and float arrays convert between those two numeric types on assignment. Float to int truncates
   toward zero. Bool arrays accept only bool values.
-- Arrays have no `append`, `remove`, `resize`, or slice operations. Bool storage is bit-packed;
-  that is an implementation detail and does not change script indexing.
+- `a.append(value)` appends exactly one value. `a.resize(size)` changes the length; newly grown
+  elements receive the initial value passed to `system.array`, while shrinking drops the tail.
+  A negative size becomes zero, matching `list.resize`.
+- There is no middle insertion, remove, or slice operation. Changing the length with `append` or
+  `resize` during `foreach` raises `collection was modified during foreach`; assigning an existing
+  element is allowed. Bool storage is bit-packed, an implementation detail that does not change
+  script indexing.
 
 ## 8. `map` methods
 
@@ -337,7 +342,7 @@ component-wise add rather than an error. Compose rotations with `math.quat_slerp
 | string | `"string"` |
 | map | `"map"` |
 | list | `"list"` |
-| fixed primitive array | `"array"` |
+| primitive array | `"array"` |
 | set | `"set"` |
 | script function or lambda | `"function"` |
 | coroutine | `"coroutine"` |

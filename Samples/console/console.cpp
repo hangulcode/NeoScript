@@ -1171,7 +1171,10 @@ static int RunCompilerErrorRegression()
 		{ "array-write-out-of-range", "import system; var values = system.array(0, 1); values[1] = 3;", "array index out of range on assign" },
 		{ "array-index-type", "import system; var values = system.array(0, 1); var value = values[true];", "array index must be an int" },
 		{ "array-value-type", "import system; var values = system.array(false, 1); values[0] = 1;", "cannot assign int to bool array" },
+		{ "array-append-value-type", "import system; var values = system.array(false, 1); values.append(1);", "cannot assign int to bool array" },
 		{ "array-foreach-two-var", "import system; var values = system.array(0, 1); foreach(var index, value in values) {}", "foreach on array does not support two variables" },
+		{ "array-append-during-foreach", "import system; var values = system.array(1, 1); foreach(var value in values) values.append(2);", "modified during foreach" },
+		{ "array-resize-during-foreach", "import system; var values = system.array(1, 1); foreach(var value in values) values.resize(2);", "modified during foreach" },
 	};
 	for (const ErrorCase& test : mutationCases)
 	{

@@ -805,6 +805,7 @@ public:
 	ListInfo* ListAlloc(int cnt = 0);
 	void FreeList(ListInfo* tbl);
 	ArrayInfo* ArrayAlloc(NeoArrayElementType elementType, int count, const VarInfo& initialValue);
+	bool ArrayResize(ArrayInfo* array, int count);
 	void FreeArray(ArrayInfo* array);
 
 	SetInfo* SetAlloc();

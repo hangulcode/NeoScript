@@ -44,39 +44,7 @@ NEOS_FORCEINLINE void ArrayReadValue(CNeoVMWorker* worker, ArrayInfo* array, int
 
 NEOS_FORCEINLINE bool ArrayWriteValue(ArrayInfo* array, int index, VarInfo* value)
 {
-	switch (array->_elementType)
-	{
-	case NeoArrayElementType::Bool:
-		if (value->GetType() != VAR_BOOL)
-			return false;
-		array->SetBool(index, value->_bl);
-		return true;
-	case NeoArrayElementType::Int:
-		if (value->GetType() == VAR_INT)
-		{
-			array->IntData()[index] = value->_int;
-			return true;
-		}
-		if (value->GetType() == VAR_FLOAT)
-		{
-			array->IntData()[index] = (int)value->_float;
-			return true;
-		}
-		return false;
-	case NeoArrayElementType::Float:
-		if (value->GetType() == VAR_INT)
-		{
-			array->FloatData()[index] = (NS_FLOAT)value->_int;
-			return true;
-		}
-		if (value->GetType() == VAR_FLOAT)
-		{
-			array->FloatData()[index] = value->_float;
-			return true;
-		}
-		return false;
-	}
-	return false;
+	return array->AssignValue(index, value);
 }
 
 
@@ -1540,7 +1508,8 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool b
 	{
 	case VAR_ARRAY:
 	{
-		// array도 list처럼 값 하나만 순회한다. 고정 길이라 원소 대입은 iterator를 무효화하지 않는다.
+		// array도 list처럼 값 하나만 순회한다. 원소 대입은 iterator를 무효화하지 않지만,
+		// append/resize처럼 길이나 저장 위치를 바꾸는 연산은 다음 단계에서 거부한다.
 		if (bTwoVar)
 		{
 			pIterator->ClearType();
@@ -1555,12 +1524,21 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool b
 			{
 				pIterator->_it._iListOffset = 0;
 				pIterator->SetType(VAR_ITERATOR);
+				Var_SetInt(pMutationVersion, (int)array->_mutationVersion);
 			}
 			else
 				return false;
 		}
 		else
+		{
+			if (pMutationVersion->GetType() != VAR_INT || (u32)pMutationVersion->_int != array->_mutationVersion)
+			{
+				pIterator->ClearType();
+				SetError(RTE_FOREACH_MODIFIED);
+				return false;
+			}
 			++pIterator->_it._iListOffset;
+		}
 
 		if (pIterator->_it._iListOffset < array->_count)
 		{
