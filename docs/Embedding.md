@@ -76,10 +76,17 @@ CallResult r = rt->Call(inst, getScore).argInt(playerId).invokeR();
 if (r.ok()) int score = r.asInt();
 // r stays valid even after other Calls on the same instance — safe to hold several at once.
 
-// Collection: invokeReadMap / invokeReadList read inside a callback, where the context is guaranteed
+// Collection: invokeReadMap / invokeReadList / invokeReadArray read inside a callback, where the context is guaranteed
 // alive. Copy out what you need; do not keep the reader past the callback.
 rt->Call(inst, "GetInventory").invokeReadMap([&](MapReader inv){
     inv.getInt("gold", gold);
+});
+
+// ArrayView exposes the fixed primitive storage without a copy. Its view and raw pointer are
+// valid only inside this callback. Bool arrays use packed bits; int/float arrays expose elements.
+rt->Call(inst, "GetWeights").invokeReadArray([&](ArrayView weights){
+    if (weights.elementType() == ArrayElementType::Float)
+        ConsumeWeights(weights.floats(), weights.count());
 });
 ```
 
@@ -91,6 +98,13 @@ Invocation a = rt->Call(inst, "GetScore"); a.invoke();
 Invocation b = rt->Call(inst, "GetHp");    b.invoke();  // ← flushes a's return context
 int score = a.retInt();  // ⚠️ no longer 100 — use invokeR() for this pattern
 ```
+
+`ArrayView` follows exactly the same borrowed lifetime. `CallContext::argAsArray`, nested
+`MapReader::getArray`/`ListReader::getArray`, `Invocation::retArray`, and the `invokeReadArray`
+callback expose the VM's fixed storage directly. The raw pointer is valid only while its source
+callback or return view is valid, must not be retained or used from another thread, and is `nullptr`
+for the wrong element accessor. `boolBits()` is packed least-significant-bit first: bit `i` is
+`(bits[i >> 3] >> (i & 7)) & 1`; `ints()` and `floats()` return contiguous element storage.
 
 So: **one live `Invocation` per instance** at a time — a second `Call` while one is still armed (built but
 not yet invoked) returns a falsy `Invocation`; and a value read with `retX` is only valid until the next

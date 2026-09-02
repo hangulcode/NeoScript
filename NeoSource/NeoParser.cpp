@@ -2703,8 +2703,20 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 					SetParserCompileError(ar, PCE_INVALID_INCREMENT_TARGET, tk1.c_str());
 					return TK_NONE;
 				}
-				a._operandType = Increment_Prefix;
-				funs._cur->Push_OP1(ar, tkType1 == TK_PLUS2 ? NOP_INC : NOP_DEC, a._iVar);
+				if (a.IsArray())
+				{
+					const int one = funs.AddStaticInt(1);
+					funs._cur->Push_Table_MASMDP(ar, tkType1 == TK_PLUS2 ? NOP_ADD2 : NOP_SUB2,
+						a._iVar, a._iArrayIndex, one, false, a.IsHaveShort(), false);
+					const int value = funs._cur->AllocLocalTempVar();
+					funs._cur->Push_TableRead(ar, a._iVar, a._iArrayIndex, value, a.IsHaveShort());
+					a = SOperand(value);
+				}
+				else
+				{
+					a._operandType = Increment_Prefix;
+					funs._cur->Push_OP1(ar, tkType1 == TK_PLUS2 ? NOP_INC : NOP_DEC, a._iVar);
+				}
 
 				operands.push_back(a);
 				blApperOperator = true;
@@ -2712,14 +2724,9 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			else
 			{	// 후위
 				SOperand& a = operands[operands.size() - 1];
-				if (IsTempVar(a._iVar))
+				if (a.IsArray() == false && IsTempVar(a._iVar))
 				{
 					SetParserCompileError(ar, PCE_TEMP_VAR_UNSUPPORTED, tk1.c_str());
-					return TK_NONE;
-				}
-				if (a._iArrayIndex != INVALID_ERROR_PARSEJOB)
-				{
-					SetParserCompileError(ar, PCE_TABLE_VAR_UNSUPPORTED, tk1.c_str());
 					return TK_NONE;
 				}
 				if (a.IsConst() ||
@@ -2729,12 +2736,26 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 					return TK_NONE;
 				}
 				int iTempOffset2;
-				if (bReqReturn)
+				if (a.IsArray())
 				{
-					iTempOffset2 = funs._cur->AllocLocalTempVar();
-					funs._cur->Push_OP2(ar, NOP_MOV, iTempOffset2, a._iVar, false);
+					if (bReqReturn)
+					{
+						iTempOffset2 = funs._cur->AllocLocalTempVar();
+						funs._cur->Push_TableRead(ar, a._iVar, a._iArrayIndex, iTempOffset2, a.IsHaveShort());
+					}
+					const int one = funs.AddStaticInt(1);
+					funs._cur->Push_Table_MASMDP(ar, tkType1 == TK_PLUS2 ? NOP_ADD2 : NOP_SUB2,
+						a._iVar, a._iArrayIndex, one, false, a.IsHaveShort(), false);
 				}
-				funs._cur->Push_OP1(ar, tkType1 == TK_PLUS2 ? NOP_INC : NOP_DEC, a._iVar);
+				else
+				{
+					if (bReqReturn)
+					{
+						iTempOffset2 = funs._cur->AllocLocalTempVar();
+						funs._cur->Push_OP2(ar, NOP_MOV, iTempOffset2, a._iVar, false);
+					}
+					funs._cur->Push_OP1(ar, tkType1 == TK_PLUS2 ? NOP_INC : NOP_DEC, a._iVar);
+				}
 
 				if (bReqReturn)
 					a = SOperand(iTempOffset2);

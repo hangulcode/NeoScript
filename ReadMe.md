@@ -148,6 +148,28 @@ var moved = position + direction * 2.0;
   (quaternion multiplication is `math.quat_*`, which is what you want for composing rotations).
   Arithmetic between different component counts is still rejected.
 
+### Fixed primitive arrays
+`system.array(initial, size)` creates a fixed-size reference array for dense bool, integer, or
+float data. The type of `initial` selects the element type and also fills every element:
+
+```cpp
+import system;
+
+var visible = system.array(false, 1024); // packed bool array
+var ids = system.array(0, 1024);         // int array
+var weights = system.array(0.0, 1024);   // float array
+```
+
+- Arrays have List-style reference semantics: `var other = ids` shares the same storage.
+- Indexes must be integers and must be in range. Invalid reads and writes are runtime errors.
+- Integer and float arrays convert between `int` and `float` on assignment; float-to-int truncates
+  toward zero. Bool arrays accept only bool values.
+- `a[i] = value`, `+=`, `-=`, `*=`, `/=`, `%=`, `++`, and `--` are supported. There is no append,
+  remove, resize, or slice operation.
+- `a.len()` and `tosize(a)` both return the fixed element count. `foreach(var v in a)` yields a
+  value copy, just like List foreach; the two-variable form is not supported.
+- Bool arrays are bit-packed internally. The implementation detail is invisible to script code.
+
 ### Embedding the engine
 
 The public v2 C++ host API in `NeoScript.h` — Runtime / Program / Instance, host↔script calls,

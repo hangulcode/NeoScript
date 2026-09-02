@@ -12,6 +12,7 @@
 #include "NeoVMMap.h"
 #include "NeoVMSet.h"
 #include "NeoVMList.h"
+#include "NeoVMArray.h"
 
 
 namespace NeoScript
@@ -46,6 +47,7 @@ enum eNeoDefaultString
 	NDF_TABLE,
 	NDF_LIST,
 	NDF_SET,
+	NDF_ARRAY,
 	NDF_COROUTINE,
 	NDF_FUNCTION,
 	NDF_MODULE,
@@ -581,6 +583,7 @@ NEOS_FORCEINLINE void Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
 	case VAR_VEC:
 		v1->_vec = v2->_vec; v1->_vecCount = v2->_vecCount; ++v1->_vec->_refCount; break;
 	case VAR_FP_NATIVE: v1->_fpNative = v2->_fpNative; ++v1->_fpNative->_refCount; break;
+	case VAR_ARRAY: v1->_array = v2->_array; ++v1->_array->_refCount; break;
 	case VAR_MAP: v1->_tbl = v2->_tbl; ++v1->_tbl->_refCount; break;
 	case VAR_LIST: v1->_lst = v2->_lst; ++v1->_lst->_refCount; break;
 	case VAR_SET: v1->_set = v2->_set; ++v1->_set->_refCount; break;
@@ -652,6 +655,7 @@ class CNeoVM final
 	friend					MapInfo;
 	friend					ListInfo;
 	friend					SetInfo;
+	friend					ArrayInfo;
 	friend					neo_libs;
 	friend					neo_DCalllibs;
 private:
@@ -661,12 +665,13 @@ private:
 	bool _bError = false;
 
 
-	// 살아있는 List/Map/Set/Closure 를 intrusive 이중연결 리스트로 추적한다.
+	// 살아있는 List/Map/Set/Array/Closure 를 intrusive 이중연결 리스트로 추적한다.
 	// 기존 std::map<ID,ptr> 레지스트리 대체 — 할당/해제당 트리 연산 2~3회를 O(1) 링크로 교체.
 	// String 은 CNVMInstPool(소멸자 지원)이라 별도 추적 불필요 → 레지스트리 제거.
 	ListInfo* _sListHead = nullptr;
 	MapInfo* _sTableHead = nullptr;
 	SetInfo* _sSetHead = nullptr;
+	ArrayInfo* _sArrayHead = nullptr;
 	ClosureInfo* _sClosureHead = nullptr;
 	// 컨테이너 파괴는 자식 Var_Release 로 다시 컨테이너 파괴를 유발한다. 호출 스택 대신
 	// 이 대기열을 깊이 우선으로 비워서, 깊은 트리와 순환 모두 안전하게 처리한다.
@@ -746,6 +751,7 @@ public:
 			|| m_sPool_SetData.HasEmptyPages()
 			|| m_sPool_SetInfo.HasEmptyPages()
 			|| m_sPool_ListInfo.HasEmptyPages()  || m_sPool_Vec.HasEmptyPages()
+			|| m_sPool_Array.HasEmptyPages()
 			|| m_sPool_Async.HasEmptyPages()     || m_sPool_String.HasEmptyPages()
 			|| m_sPool_Closure.HasEmptyPages();
 	}
@@ -798,6 +804,8 @@ public:
 
 	ListInfo* ListAlloc(int cnt = 0);
 	void FreeList(ListInfo* tbl);
+	ArrayInfo* ArrayAlloc(NeoArrayElementType elementType, int count, const VarInfo& initialValue);
+	void FreeArray(ArrayInfo* array);
 
 	SetInfo* SetAlloc();
 	void FreeSet(SetInfo* tbl);
@@ -864,6 +872,18 @@ public:
 		return true;
 	}
 
+	NEOS_FORCEINLINE bool Var_ReleaseArrayFast(VarInfo* d)
+	{
+		ArrayInfo* array = d->_array;
+		if (array->_refCount <= 1)
+			return false;
+
+		--array->_refCount;
+		d->_array = nullptr;
+		d->ClearType();
+		return true;
+	}
+
 
 
 	NEOS_FORCEINLINE void Move(VarInfo* v1, VarInfo* v2)
@@ -897,6 +917,8 @@ public:
 			return;
 		if (type == VAR_LIST && Var_ReleaseListFast(d))
 			return;
+		if (type == VAR_ARRAY && Var_ReleaseArrayFast(d))
+			return;
 
 		Var_ReleaseInternal(d);
 	}
@@ -916,6 +938,7 @@ public:
 	CNVMAllocPool< ListInfo, 64> m_sPool_ListInfo;
 
 	CNVMAllocPool< VecInfo, 512> m_sPool_Vec;
+	CNVMAllocPool< ArrayInfo, 64> m_sPool_Array;
 
 	CNVMInstPool< AsyncInfo, 16> m_sPool_Async;
 	CNVMInstPool< StringInfo, 128> m_sPool_String;
@@ -928,7 +951,7 @@ public:
 	int m_iTrimPagesPerCall = 4;
 	// 라운드로빈 시작 풀. 앞쪽 풀이 예산을 독식해 뒤쪽이 굶는 것을 막는다.
 	int m_iTrimPoolCursor = 0;
-	static const int kTrimPoolCount = 10;
+	static const int kTrimPoolCount = 11;
 	size_t CollectPoolAt(int idx, NeoPoolClock::time_point now, int holdMs, int& pageBudget);
 	// 코루틴 컨텍스트는 공유 실행 컨텍스트 풀(_pExecPool)로 통합됨 → per-VM 풀 제거.
 
@@ -937,6 +960,7 @@ public:
 	static bool _funInitLib;
 	static FunctionPtrNative _funLib_Default;
 	static FunctionPtrNative _funLib_List;
+	static FunctionPtrNative _funLib_Array;
 	static FunctionPtrNative _funLib_String;
 	static FunctionPtrNative _funLib_Map;
 	static FunctionPtrNative _funLib_Async;

@@ -202,6 +202,8 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 	}
 	case VAR_FP_NATIVE:
 		return "native_object";
+	case VAR_ARRAY:
+		return "array";
 	case VAR_MAP:
 		return "map";
 	case VAR_LIST:
@@ -235,6 +237,8 @@ int CNeoVMWorker::ToInt(VarInfo* v1)
 		return ::atoi(v1->_str->_str.c_str());
 	case VAR_FP_NATIVE:
 		return -1;
+	case VAR_ARRAY:
+		return -1;
 	case VAR_MAP:
 		return -1;
 	default:
@@ -257,6 +261,8 @@ NS_FLOAT CNeoVMWorker::ToFloat(VarInfo* v1)
 	case VAR_STRING:
 		return (NS_FLOAT)atof(v1->_str->_str.c_str());
 	case VAR_FP_NATIVE:
+		return -1;
+	case VAR_ARRAY:
 		return -1;
 	case VAR_MAP:
 		return -1;
@@ -283,6 +289,8 @@ int CNeoVMWorker::ToSize(VarInfo* v1)
 		return v1->VectorComponentCount();
 	case VAR_FP_NATIVE:
 		return 0;
+	case VAR_ARRAY:
+		return v1->_array->_count;
 	case VAR_MAP:
 		return (int)v1->_tbl->_itemCount;
 	case VAR_LIST:
@@ -321,6 +329,8 @@ VarInfo* CNeoVMWorker::GetType(VarInfo* v1)
 	}
 	case VAR_FP_NATIVE:
 		return &GetVM()->m_sDefaultValue[NDF_NULL];
+	case VAR_ARRAY:
+		return &GetVM()->m_sDefaultValue[NDF_ARRAY];
 	case VAR_MAP:
 		return &GetVM()->m_sDefaultValue[NDF_TABLE];
 	case VAR_LIST:
@@ -1474,6 +1484,50 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 		out.type = "native_object";
 		out.value = "native_object";
 		break;
+	case VAR_ARRAY:
+	{
+		ArrayInfo* array = pVar->_array;
+		const int count = array ? array->_count : 0;
+		out.type = "array";
+		snprintf(buf, sizeof(buf), "array<%s>(%d)", array ? GetArrayElementTypeName(array->_elementType) : "?", count);
+		out.value = buf;
+		if (array != nullptr && collectionDepth < NEO_DEBUG_MAX_COLLECTION_DEPTH)
+		{
+			const int childCount = count < NEO_DEBUG_MAX_COLLECTION_ITEMS ? count : NEO_DEBUG_MAX_COLLECTION_ITEMS;
+			out.children.reserve(childCount + (count > childCount ? 1 : 0));
+			for (int i = 0; i < childCount; ++i)
+			{
+				NeoDebugVariable child;
+				child.name = "[" + std::to_string(i) + "]";
+				switch (array->_elementType)
+				{
+				case NeoArrayElementType::Bool:
+					child.type = "bool";
+					child.value = array->GetBool(i) ? "true" : "false";
+					break;
+				case NeoArrayElementType::Int:
+					child.type = "int";
+					child.value = std::to_string(array->IntData()[i]);
+					break;
+				case NeoArrayElementType::Float:
+					child.type = "float";
+					snprintf(buf, sizeof(buf), "%g", (double)array->FloatData()[i]);
+					child.value = buf;
+					break;
+				}
+				out.children.push_back(std::move(child));
+			}
+			if (count > childCount)
+			{
+				NeoDebugVariable more;
+				more.name = "...";
+				more.type = "array";
+				more.value = std::to_string(count - childCount) + " more items";
+				out.children.push_back(std::move(more));
+			}
+		}
+		break;
+	}
 	case VAR_MAP:
 		out.type = "map";
 		{
@@ -2699,6 +2753,42 @@ bool CNeoVMWorker::ChangeNumber(VarInfo* p)
 }
 
 
+bool CNeoVMWorker::ArrayModify(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue, eNOperation op)
+{
+	if (pClt->GetType() != VAR_ARRAY || pKey->GetType() != VAR_INT)
+	{
+		SetError(RTE_ARRAY_INDEX_TYPE);
+		return false;
+	}
+
+	ArrayInfo* array = pClt->_array;
+	const int index = pKey->_int;
+	if (array->IsValidIndex(index) == false)
+	{
+		SetError(RTE_ARRAY_INDEX_WRITE);
+		return false;
+	}
+
+	VarInfo value;
+	ArrayReadValue(this, array, index, &value);
+	switch (op)
+	{
+	case NOP_TABLE_ADD2:     Add2(&value, pValue); break;
+	case NOP_TABLE_SUB2:     Sub2(&value, pValue); break;
+	case NOP_TABLE_MUL2:     Mul2(&value, pValue); break;
+	case NOP_TABLE_DIV2:     Div2(&value, pValue); break;
+	case NOP_TABLE_PERSENT2: Per2(&value, pValue); break;
+	default:
+		SetError(RTE_UNKNOWN_OP);
+		return false;
+	}
+
+	if (ArrayWriteValue(array, index, &value))
+		return true;
+	SetErrorFormat(RTE_ARRAY_VALUE_TYPE, GetDataType(value.GetType()).c_str(), GetArrayElementTypeName(array->_elementType));
+	return false;
+}
+
 std::string GetDataType(VAR_TYPE t)
 {
 	switch (t)
@@ -2724,6 +2814,8 @@ std::string GetDataType(VAR_TYPE t)
 		return "vector";
 	case VAR_FP_NATIVE:
 		return "native_object";
+	case VAR_ARRAY:
+		return "array";
 	case VAR_MAP:
 		return "map";
 	case VAR_LIST:

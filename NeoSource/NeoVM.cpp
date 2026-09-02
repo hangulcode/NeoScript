@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <atomic>
+#include <new>
 #include "NeoVMInternal.h"
 #include "NeoVMWorker.h"
 #include "NeoArchive.h"
@@ -115,6 +116,11 @@ void CNeoVM::Var_ReleaseInternal(VarInfo* d)
 		if (--d->_fpNative->_refCount <= 0)
 			FreeFunctionProperty(d->_fpNative);
 		d->_fpNative = NULL;
+		break;
+	case VAR_ARRAY:
+		if (--d->_array->_refCount <= 0)
+			FreeArray(d->_array);
+		d->_array = NULL;
 		break;
 	case VAR_MAP:
 		if (--d->_tbl->_refCount <= 0)
@@ -302,6 +308,7 @@ static std::atomic<int> g_iNeoVMAllocModules{ 0 };
 static std::atomic<int> g_iNeoVMAllocAsyncs{ 0 };
 static std::atomic<int> g_iNeoVMAllocClosures{ 0 };
 static std::atomic<int> g_iNeoVMAllocVectors{ 0 };
+static std::atomic<int> g_iNeoVMAllocArrays{ 0 };
 static std::atomic<long long> g_iNeoVMPoolBytes{ 0 };       // 모든 VM 의 오브젝트 풀 합계
 static std::atomic<long long> g_iNeoVMStringIdleBytes{ 0 };  // 유휴 문자열 노드가 붙든 문자 버퍼
 static std::atomic<long long> g_iNeoVMExecPoolBytes{ 0 };   // 스레드별 실행 컨텍스트 풀 합계
@@ -343,6 +350,7 @@ void GetNeoVMAllocStats(SNeoVMAllocStats& outStats)
 	outStats.asyncs = g_iNeoVMAllocAsyncs.load(std::memory_order_relaxed);
 	outStats.closures = g_iNeoVMAllocClosures.load(std::memory_order_relaxed);
 	outStats.vectors = g_iNeoVMAllocVectors.load(std::memory_order_relaxed);
+	outStats.arrays = g_iNeoVMAllocArrays.load(std::memory_order_relaxed);
 	outStats.poolBytes = g_iNeoVMPoolBytes.load(std::memory_order_relaxed)
 	                   + g_iNeoVMExecPoolBytes.load(std::memory_order_relaxed);
 	outStats.stringIdleBytes = g_iNeoVMStringIdleBytes.load(std::memory_order_relaxed);
@@ -420,8 +428,9 @@ size_t CNeoVM::CollectPoolAt(int idx, NeoPoolClock::time_point now, int holdMs, 
 	case 4:  return m_sPool_SetInfo.Collect(now, holdMs, pageBudget);
 	case 5:  return m_sPool_ListInfo.Collect(now, holdMs, pageBudget);
 	case 6:  return m_sPool_Vec.Collect(now, holdMs, pageBudget);
-	case 7:  return m_sPool_Async.Collect(now, holdMs, pageBudget);
-	case 8:  return m_sPool_String.Collect(now, holdMs, pageBudget);
+	case 7:  return m_sPool_Array.Collect(now, holdMs, pageBudget);
+	case 8:  return m_sPool_Async.Collect(now, holdMs, pageBudget);
+	case 9:  return m_sPool_String.Collect(now, holdMs, pageBudget);
 	default: return m_sPool_Closure.Collect(now, holdMs, pageBudget);
 	}
 }
@@ -435,6 +444,7 @@ long long CNeoVM::PoolBytes() const
 	     + (long long)m_sPool_SetInfo.ReservedBytes()
 	     + (long long)m_sPool_ListInfo.ReservedBytes()
 	     + (long long)m_sPool_Vec.ReservedBytes()
+	     + (long long)m_sPool_Array.ReservedBytes()
 	     + (long long)m_sPool_Async.ReservedBytes()
 	     + (long long)m_sPool_String.ReservedBytes()
 	     + (long long)m_sPool_Closure.ReservedBytes();
@@ -486,6 +496,7 @@ void CNeoVM::PublishAllocStats()
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocAsyncs, m_sPublishedAllocStats.asyncs, m_sAllocStats.asyncs);
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocClosures, m_sPublishedAllocStats.closures, m_sAllocStats.closures);
 	PublishNeoVMAllocStatValue(g_iNeoVMAllocVectors, m_sPublishedAllocStats.vectors, m_sAllocStats.vectors);
+	PublishNeoVMAllocStatValue(g_iNeoVMAllocArrays, m_sPublishedAllocStats.arrays, m_sAllocStats.arrays);
 }
 
 NeoExecContextPool* NeoExecContextPool_Create(int varStackSize)
@@ -856,6 +867,58 @@ void CNeoVM::FreeVec(VecInfo* p)
 {
 	--m_sAllocStats.vectors;
 	m_sPool_Vec.Confer(p);
+}
+ArrayInfo* CNeoVM::ArrayAlloc(NeoArrayElementType elementType, int count, const VarInfo& initialValue)
+{
+	if (count < 0)
+		return nullptr;
+
+	ArrayInfo* array = m_sPool_Array.Receive();
+	array->_refCount = 0;
+	array->_liveNext = nullptr;
+	array->_livePrev = nullptr;
+	try
+	{
+		if (array->Allocate(elementType, count) == false)
+		{
+			m_sPool_Array.Confer(array);
+			return nullptr;
+		}
+	}
+	catch (const std::bad_alloc&)
+	{
+		m_sPool_Array.Confer(array);
+		return nullptr;
+	}
+
+	if (count > 0)
+	{
+		switch (elementType)
+		{
+		case NeoArrayElementType::Bool:
+			memset(array->BoolBits(), initialValue._bl ? 0xFF : 0x00, array->DataBytes());
+			break;
+		case NeoArrayElementType::Int:
+			std::fill_n(array->IntData(), count, initialValue._int);
+			break;
+		case NeoArrayElementType::Float:
+			std::fill_n(array->FloatData(), count, initialValue._float);
+			break;
+		}
+	}
+
+	LiveList_Insert(_sArrayHead, array);
+	++m_sAllocStats.arrays;
+	return array;
+}
+void CNeoVM::FreeArray(ArrayInfo* array)
+{
+	if (array == nullptr)
+		return;
+	LiveList_Remove(_sArrayHead, array);
+	array->Free();
+	m_sPool_Array.Confer(array);
+	--m_sAllocStats.arrays;
 }
 VecInfo* CNeoVM::VecCopyOnWrite(VarInfo* d)
 {
@@ -1922,6 +1985,7 @@ CNeoVM::CNeoVM()
 		case NDF_TABLE: Var_SetStringA(&m_sDefaultValue[i], "map"); break;
 		case NDF_LIST: Var_SetStringA(&m_sDefaultValue[i], "list"); break;
 		case NDF_SET: Var_SetStringA(&m_sDefaultValue[i], "set"); break;
+		case NDF_ARRAY: Var_SetStringA(&m_sDefaultValue[i], "array"); break;
 		case NDF_COROUTINE: Var_SetStringA(&m_sDefaultValue[i], "coroutine"); break;
 		case NDF_FUNCTION: Var_SetStringA(&m_sDefaultValue[i], "function"); break;
 		case NDF_MODULE: Var_SetStringA(&m_sDefaultValue[i], "module"); break;
@@ -1973,11 +2037,11 @@ CNeoVM::~CNeoVM()
 	for (int i = 0; i < NDF_MAX; i++)
 		Var_Release(&m_sDefaultValue[i]);
 
-	// 살아남은 컨테이너와 closure의 내부 저장소를 해제 (intrusive live 리스트 순회).
+	// 살아남은 컨테이너/array/closure의 내부 저장소를 해제 (intrusive live 리스트 순회).
 	// String 은 CNVMInstPool 소멸자가 std::str 을 정리하므로 별도 처리 없음.
 	// Free* 는 먼저 파괴 표식을 세우고 live 리스트에서 뺀다. 내부 항목의
 	// Var_Release 가 같은 객체로 되돌아와도 재진입하지 않는다.
-	while (_sClosureHead || _sTableHead || _sListHead || _sSetHead)
+	while (_sClosureHead || _sTableHead || _sListHead || _sSetHead || _sArrayHead)
 	{
 		if (_sClosureHead)
 		{
@@ -1994,7 +2058,12 @@ CNeoVM::~CNeoVM()
 			FreeList(_sListHead);
 			continue;
 		}
-		FreeSet(_sSetHead);
+		if (_sSetHead)
+		{
+			FreeSet(_sSetHead);
+			continue;
+		}
+		FreeArray(_sArrayHead);
 	}
 
 	// _isTearingDown guard 때문에 보통 비어 있다. 종료 경로가 확장돼도 객체가

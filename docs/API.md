@@ -44,7 +44,7 @@ callback.
 | `tostring(x)` | `string` | Same conversion `print` uses. |
 | `toint(x)` | `int` | Truncates a float toward zero; parses a numeric string. |
 | `tofloat(x)` | `float` | Parses a numeric string. |
-| `tosize(x)` | `int` | string: UTF-8 character count. list/map/set: element count. Vector2/3/4/Quaternion: component count. Anything else: `0`. |
+| `tosize(x)` | `int` | string: UTF-8 character count. list/map/set/array: element count. Vector2/3/4/Quaternion: component count. Anything else: `0`. |
 | `type(x)` | `string` | Exact strings in section 11. |
 | `sleep(ms: int)` | `void` | Suspends the instance. Rejected inside a nested native -> script call. |
 | `yield` | - | Statement, not a call. Suspends the current coroutine. |
@@ -149,11 +149,14 @@ behaviour documented here is what runs.
 
 ## 4. `system`
 
+Use `import system;` before calling these functions.
+
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
 | `system.time()` | `int` | Unix seconds |
 | `system.date(format: string, time: int)` | `string` | `strftime` + `localtime`, output capped at 79 chars |
 | `system.clock()` | `float` | `clock() / CLOCKS_PER_SEC` in seconds. Use for deltas, not wall time |
+| `system.array(initial: bool\|int\|float, size: int)` | `array` | Fixed-size primitive array. `initial` chooses the element type and fills every element; `size` must be non-negative |
 | `system.load(source: string, name: string)` | `module` | Compiles `source` at run time. `name` is type-checked but unused. A compile failure raises `invalid function call`; it does not return `null` |
 | `system.pcall(m: module)` | `void` | Runs the module's top-level code |
 | `system.set(l: list)` | `set` | Builds a set from a list; duplicates collapse |
@@ -218,6 +221,28 @@ Strings are **not** indexable. `s[0]` raises `cannot read by index from string`.
 There is no `remove`, `insert`, `sort`, `find`, or `clear` on lists. Use `l.resize(0)` to clear.
 Index with `l[i]`; `l[i] = v` only works for an index that already exists, so grow with
 `resize`/`append` first.
+
+### 7.1 Fixed primitive arrays
+
+```cpp
+import system;
+
+var flags = system.array(false, 1024);
+var ids = system.array(0, 1024);
+var weights = system.array(0.0, 1024);
+```
+
+`system.array(initial, size)` creates an `array` whose fixed element type is selected by the first
+argument. Arrays are reference values like List: assignment shares the same storage. `a.len()` and
+`tosize(a)` return the size. `foreach(var value in a)` is supported and yields a copy of each value;
+`foreach(var index, value in a)` is rejected.
+
+- Only integer indexes in `[0, a.len())` are valid. Out-of-range reads and writes are runtime errors.
+- `=`, `+=`, `-=`, `*=`, `/=`, `%=`, `++`, and `--` work on an element.
+- int and float arrays convert between those two numeric types on assignment. Float to int truncates
+  toward zero. Bool arrays accept only bool values.
+- Arrays have no `append`, `remove`, `resize`, or slice operations. Bool storage is bit-packed;
+  that is an implementation detail and does not change script indexing.
 
 ## 8. `map` methods
 
@@ -312,6 +337,7 @@ component-wise add rather than an error. Compose rotations with `math.quat_slerp
 | string | `"string"` |
 | map | `"map"` |
 | list | `"list"` |
+| fixed primitive array | `"array"` |
 | set | `"set"` |
 | script function or lambda | `"function"` |
 | coroutine | `"coroutine"` |

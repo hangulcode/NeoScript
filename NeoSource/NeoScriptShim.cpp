@@ -452,6 +452,7 @@ static ValueType VarTypeToValueType(VarInfo* v)
         const int n = v->VectorComponentCount();
         return (n <= 2) ? ValueType::Vec2 : (n == 3 ? ValueType::Vec3 : ValueType::Vec4);
     }
+    case VAR_ARRAY:  return ValueType::Array;
     case VAR_MAP:    return ValueType::Map;
     case VAR_LIST:   return ValueType::List;
     case VAR_SET:    return ValueType::Set;
@@ -472,6 +473,7 @@ struct NeoScriptInternal
     static ListBuilder listB(void* i)       { ListBuilder b;  b.m_impl = i; return b; }
     static MapReader   mapR(const void* i)  { MapReader r;    r.m_impl = i; return r; }
     static ListReader  listR(const void* i) { ListReader r;   r.m_impl = i; return r; }
+    static ArrayView   arrayV(const void* i) { ArrayView a;  a.m_impl = i; return a; }
     static Invocation  inv(void* i, uint32_t seq) { Invocation v; v.m_impl = i; v.m_seq = seq; return v; }
     static void*       invImpl(const Invocation& v) { return v.m_impl; }
     static void*       funImpl(const FunctionHandle& f) { return f.m_impl; }
@@ -1442,7 +1444,7 @@ void GetAllocStats(AllocStats& out)
     GetNeoVMAllocStats(s);   // 내부 전역 통계(NeoVM.h)
     out.strings = s.strings; out.maps = s.maps; out.lists = s.lists; out.sets = s.sets;
     out.coroutines = s.coroutines; out.modules = s.modules; out.asyncs = s.asyncs;
-    out.vectors = s.vectors; out.poolBytes = s.poolBytes;
+    out.vectors = s.vectors; out.arrays = s.arrays; out.poolBytes = s.poolBytes;
     out.stringIdleBytes = s.stringIdleBytes;
     out.closures = s.closures;
 }
@@ -1532,6 +1534,12 @@ bool CallContext::argAsList(std::size_t i, ListReader& out) const
     if (!v || v->GetType()!=VAR_LIST || v->_lst==nullptr) return false;
     c->listR.push_back(ListReaderImpl{ c->worker, v->_lst, &c->mapR, &c->listR });
     out = NeoScriptInternal::listR(&c->listR.back()); return true;
+}
+bool CallContext::argAsArray(std::size_t i, ArrayView& out) const
+{
+    CallContextImpl* c=Ctx(m_impl); VarInfo* v=CtxArgVar(c,i);
+    if (!v || v->GetType()!=VAR_ARRAY || v->_array==nullptr) return false;
+    out = NeoScriptInternal::arrayV(v->_array); return true;
 }
 void* CallContext::argObjectUserData(std::size_t i) const
 {
@@ -1646,6 +1654,7 @@ bool MapReader::getString(StringView key, StringView& out) const { const MapRead
 bool MapReader::getVec(StringView key, float out[4]) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v) return false; ReadVec(v,out); return v->IsVector(); }
 bool MapReader::getMap(StringView key, MapReader& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v||v->GetType()!=VAR_MAP||!v->_tbl) return false; r->mpool->push_back(MapReaderImpl{r->w,v->_tbl,r->mpool,r->lpool}); out=NeoScriptInternal::mapR(&r->mpool->back()); return true; }
 bool MapReader::getList(StringView key, ListReader& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v||v->GetType()!=VAR_LIST||!v->_lst) return false; r->lpool->push_back(ListReaderImpl{r->w,v->_lst,r->mpool,r->lpool}); out=NeoScriptInternal::listR(&r->lpool->back()); return true; }
+bool MapReader::getArray(StringView key, ArrayView& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v||v->GetType()!=VAR_ARRAY||!v->_array) return false; out=NeoScriptInternal::arrayV(v->_array); return true; }
 
 int ListReader::count() const { return static_cast<const ListReaderImpl*>(m_impl)->list->GetCount(); }
 ValueType ListReader::type(int index) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); return v?VarTypeToValueType(v):ValueType::None; }
@@ -1656,6 +1665,24 @@ bool ListReader::getString(int index, StringView& out) const { const ListReaderI
 bool ListReader::getVec(int index, float out[4]) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v) return false; ReadVec(v,out); return v->IsVector(); }
 bool ListReader::getMap(int index, MapReader& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v||v->GetType()!=VAR_MAP||!v->_tbl) return false; r->mpool->push_back(MapReaderImpl{r->w,v->_tbl,r->mpool,r->lpool}); out=NeoScriptInternal::mapR(&r->mpool->back()); return true; }
 bool ListReader::getList(int index, ListReader& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v||v->GetType()!=VAR_LIST||!v->_lst) return false; r->lpool->push_back(ListReaderImpl{r->w,v->_lst,r->mpool,r->lpool}); out=NeoScriptInternal::listR(&r->lpool->back()); return true; }
+bool ListReader::getArray(int index, ArrayView& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v||v->GetType()!=VAR_ARRAY||!v->_array) return false; out=NeoScriptInternal::arrayV(v->_array); return true; }
+
+ArrayElementType ArrayView::elementType() const
+{
+    const ArrayInfo* a=static_cast<const ArrayInfo*>(m_impl);
+    if (!a) return ArrayElementType::Bool;
+    switch (a->_elementType)
+    {
+    case NeoArrayElementType::Bool:  return ArrayElementType::Bool;
+    case NeoArrayElementType::Int:   return ArrayElementType::Int;
+    case NeoArrayElementType::Float: return ArrayElementType::Float;
+    }
+    return ArrayElementType::Bool;
+}
+int ArrayView::count() const { const ArrayInfo* a=static_cast<const ArrayInfo*>(m_impl); return a?a->_count:0; }
+uint8_t* ArrayView::boolBits() const { ArrayInfo* a=const_cast<ArrayInfo*>(static_cast<const ArrayInfo*>(m_impl)); return a&&a->_elementType==NeoArrayElementType::Bool?a->BoolBits():nullptr; }
+int32_t* ArrayView::ints() const { ArrayInfo* a=const_cast<ArrayInfo*>(static_cast<const ArrayInfo*>(m_impl)); return a&&a->_elementType==NeoArrayElementType::Int?reinterpret_cast<int32_t*>(a->IntData()):nullptr; }
+float* ArrayView::floats() const { ArrayInfo* a=const_cast<ArrayInfo*>(static_cast<const ArrayInfo*>(m_impl)); return a&&a->_elementType==NeoArrayElementType::Float?reinterpret_cast<float*>(a->FloatData()):nullptr; }
 
 //==============================================================================
 // Invocation (호스트→스크립트 호출 핸들) — 인자 VM 슬롯 직접, 반환 in-place zero-copy
@@ -1798,6 +1825,12 @@ bool Invocation::retList(ListReader& out) const
     i->readListPool.push_back(ListReaderImpl{ i->worker, rv->_lst, &i->readMapPool, &i->readListPool });
     out = NeoScriptInternal::listR(&i->readListPool.back()); return true;
 }
+bool Invocation::retArray(ArrayView& out) const
+{
+    if(!m_impl) return false; InstanceRec* i=Inv(m_impl); VarInfo* rv=i->worker->GetReturnVar();
+    if(!rv||rv->GetType()!=VAR_ARRAY||!rv->_array) return false;
+    out = NeoScriptInternal::arrayV(rv->_array); return true;
+}
 
 // 안전 반환: 스칼라를 값으로 스냅샷 → 컨텍스트 즉시 반납(리더 안 남김). Invocation 수명/다음 Call 과 무관.
 CallResult Invocation::invokeR()
@@ -1868,6 +1901,20 @@ RunStatus Invocation::invokeReadListImpl(void* ctx, void(*cb)(void*, ListReader)
             i->readListPool.push_back(ListReaderImpl{ i->worker, rv->_lst, &i->readMapPool, &i->readListPool });
             cb(ctx, NeoScriptInternal::listR(&i->readListPool.back()));
         }
+        i->runtime->FlushPendingCall(i);
+    }
+    return st;
+}
+
+RunStatus Invocation::invokeReadArrayImpl(void* ctx, void(*cb)(void*, ArrayView))
+{
+    RunStatus st = invoke();
+    if (m_impl)
+    {
+        InstanceRec* i = Inv(m_impl);
+        VarInfo* rv = (st == RunStatus::Completed) ? i->worker->GetReturnVar() : nullptr;
+        if (cb && rv && rv->GetType() == VAR_ARRAY && rv->_array)
+            cb(ctx, NeoScriptInternal::arrayV(rv->_array));
         i->runtime->FlushPendingCall(i);
     }
     return st;

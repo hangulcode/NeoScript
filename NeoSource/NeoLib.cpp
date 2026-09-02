@@ -184,6 +184,14 @@ struct neo_libs
 		pN->ReturnValue((int)pVar->_lst->GetCount());
 		return true;
 	}
+	static bool Array_len(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_ARRAY) return false;
+		if (args != 0) return false;
+
+		pN->ReturnValue(pVar->_array->_count);
+		return true;
+	}
 	static bool List_append(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (pVar->GetType() != VAR_LIST) return false;
@@ -1055,6 +1063,30 @@ struct neo_libs
 		pN->ReturnValue(NS_FLOAT((double)clock() / (double)CLOCKS_PER_SEC));
 		return true;
 	}
+	static bool sys_array(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+
+		VarInfo* initialValue = pN->GetStack(1);
+		VarInfo* sizeValue = pN->GetStack(2);
+		if (sizeValue->GetType() != VAR_INT || sizeValue->_int < 0)
+			return false;
+
+		NeoArrayElementType elementType;
+		switch (initialValue->GetType())
+		{
+		case VAR_INT:   elementType = NeoArrayElementType::Int; break;
+		case VAR_FLOAT: elementType = NeoArrayElementType::Float; break;
+		case VAR_BOOL:  elementType = NeoArrayElementType::Bool; break;
+		default:        return false;
+		}
+
+		ArrayInfo* array = pN->GetVM()->ArrayAlloc(elementType, sizeValue->_int, *initialValue);
+		if (array == nullptr)
+			return false;
+		pN->Var_SetArray(pN->GetStack(0), array);
+		return true;
+	}
 	// system.load(source, name) — arg1 = 컴파일할 소스 텍스트, arg2 = 청크 이름(현재 미사용).
 	static bool sys_load(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
@@ -1241,6 +1273,7 @@ typedef bool(*TYPE_NeoLib)(CNeoVMWorker* pN, VarInfo* pVar, short args);
 
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_Default;
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_List;
+static VMHash<TYPE_NeoLib> g_sNeoFunLib_Array;
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_String;
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_Map;
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_Async;
@@ -1251,6 +1284,7 @@ static std::unordered_map<std::string, int> g_sNeoFunLib_DefaultNativeIndex;
 bool CNeoVM::_funInitLib = false;
 FunctionPtrNative CNeoVM::_funLib_Default;
 FunctionPtrNative CNeoVM::_funLib_List;
+FunctionPtrNative CNeoVM::_funLib_Array;
 FunctionPtrNative CNeoVM::_funLib_String;
 FunctionPtrNative CNeoVM::_funLib_Map;
 FunctionPtrNative CNeoVM::_funLib_Async;
@@ -1276,6 +1310,14 @@ static bool Fun_List(INeoVMWorker* pN, void* pUserData, const VMString* pStr, sh
 {
 	TYPE_NeoLib f;
 	if (false == g_sNeoFunLib_List.TryGetValue(pStr, &f))
+		return false;
+
+	return (*f)((CNeoVMWorker*)pN, (VarInfo*)pUserData, args);
+}
+static bool Fun_Array(INeoVMWorker* pN, void* pUserData, const VMString* pStr, short args)
+{
+	TYPE_NeoLib f;
+	if (false == g_sNeoFunLib_Array.TryGetValue(pStr, &f))
 		return false;
 
 	return (*f)((CNeoVMWorker*)pN, (VarInfo*)pUserData, args);
@@ -1469,6 +1511,7 @@ static void AddGlobalLibFun()
 	AddSystemFun("time", &neo_libs::sys_time, "int");
 	AddSystemFun("date", &neo_libs::sys_date, "string", "string format", "int time");
 	AddSystemFun("clock", &neo_libs::sys_clock, "float");
+	AddSystemFun("array", &neo_libs::sys_array, "array", "var initial", "int size");
 	// 인자 순서는 sys_load 구현 기준: arg1=컴파일할 소스, arg2=청크 이름.
 	// name 은 현재 타입 검사만 하고 사용하지 않는다(진단 메시지/모듈 식별용 예약).
 	AddSystemFun("load", &neo_libs::sys_load, "module", "string source", "string name");
@@ -1534,6 +1577,10 @@ void CNeoVM::RegObjLibrary()
 	g_sNeoFunLib_List.Add("len", &neo_libs::List_len);
 	g_sNeoFunLib_List.Add("append", &neo_libs::List_append);
 
+	// Array Lib
+	_funLib_Array = NeoVMSystem::RegisterNative(Fun_Array);
+	g_sNeoFunLib_Array.Add("len", &neo_libs::Array_len);
+
 	// Map Lib
 	_funLib_Map = NeoVMSystem::RegisterNative(Fun_Map);
 	g_sNeoFunLib_Map.Add("len", &neo_libs::map_len);
@@ -1581,7 +1628,7 @@ void NeoVMSystem::GetBuiltins(std::vector<NeoBuiltinInfo>& out)
 		}
 	}
 
-	// 2) 타입 메서드 테이블 (string / list / map / async) — 이름만(argCount 미상)
+	// 2) 타입 메서드 테이블 (string / list / array / map / async) — 이름만(argCount 미상)
 	auto emitTable = [&out](const char* module, VMHash<TYPE_NeoLib>& tbl)
 	{
 		tbl.Enumerate([&out, module](const std::string& key, TYPE_NeoLib)
@@ -1595,6 +1642,7 @@ void NeoVMSystem::GetBuiltins(std::vector<NeoBuiltinInfo>& out)
 	};
 	emitTable("string", g_sNeoFunLib_String);
 	emitTable("list", g_sNeoFunLib_List);
+	emitTable("array", g_sNeoFunLib_Array);
 	emitTable("map", g_sNeoFunLib_Map);
 	emitTable("async", g_sNeoFunLib_Async);
 }

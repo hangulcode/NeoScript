@@ -32,8 +32,55 @@ NEOS_FORCEINLINE void CNeoVMWorker::MoveF(VarInfo* v1, int bits)
 	std::memcpy(&v1->_float, &bits, sizeof(bits));
 }
 
+NEOS_FORCEINLINE void ArrayReadValue(CNeoVMWorker* worker, ArrayInfo* array, int index, VarInfo* out)
+{
+	switch (array->_elementType)
+	{
+	case NeoArrayElementType::Bool:  worker->Var_SetBool(out, array->GetBool(index)); break;
+	case NeoArrayElementType::Int:   worker->Var_SetInt(out, array->IntData()[index]); break;
+	case NeoArrayElementType::Float: worker->Var_SetFloat(out, array->FloatData()[index]); break;
+	}
+}
 
-// 디스패치 루프에 인라인되는 것은 list[int] / map[string] 두 경로뿐이다.
+NEOS_FORCEINLINE bool ArrayWriteValue(ArrayInfo* array, int index, VarInfo* value)
+{
+	switch (array->_elementType)
+	{
+	case NeoArrayElementType::Bool:
+		if (value->GetType() != VAR_BOOL)
+			return false;
+		array->SetBool(index, value->_bl);
+		return true;
+	case NeoArrayElementType::Int:
+		if (value->GetType() == VAR_INT)
+		{
+			array->IntData()[index] = value->_int;
+			return true;
+		}
+		if (value->GetType() == VAR_FLOAT)
+		{
+			array->IntData()[index] = (int)value->_float;
+			return true;
+		}
+		return false;
+	case NeoArrayElementType::Float:
+		if (value->GetType() == VAR_INT)
+		{
+			array->FloatData()[index] = (NS_FLOAT)value->_int;
+			return true;
+		}
+		if (value->GetType() == VAR_FLOAT)
+		{
+			array->FloatData()[index] = value->_float;
+			return true;
+		}
+		return false;
+	}
+	return false;
+}
+
+
+// 디스패치 루프에 인라인되는 것은 list[int] / array[int] / map[string] 세 경로뿐이다.
 // 나머지(프로퍼티 맵, 벡터 성분 쓰기, 문자열 인덱서, 에러 포맷)는 CltInsertRare 로 밀어낸다 —
 // RunInternal 의 인라인 크기가 곧 성능이라(For/Add3 에서 실측) 드문 경로를 루프에 두지 않는다.
 NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue)
@@ -92,6 +139,25 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 			}
 		}
 	}
+	else if (t == VAR_ARRAY)
+	{
+		if (pKey->GetType() != VAR_INT)
+		{
+			SetError(RTE_ARRAY_INDEX_TYPE);
+			return;
+		}
+		ArrayInfo* array = pClt->_array;
+		const int index = pKey->_int;
+		if (array->IsValidIndex(index) == false)
+		{
+			SetError(RTE_ARRAY_INDEX_WRITE);
+			return;
+		}
+		if (ArrayWriteValue(array, index, pValue))
+			return;
+		SetErrorFormat(RTE_ARRAY_VALUE_TYPE, GetDataType(pValue->GetType()).c_str(), GetArrayElementTypeName(array->_elementType));
+		return;
+	}
 	CltInsertRare(pClt, pKey, pValue);
 }
 
@@ -122,6 +188,25 @@ NEOS_NOINLINE void CNeoVMWorker::CltInsertRare(VarInfo* pClt, VarInfo* pKey, Var
 		}
 		FunctionPropertyInfo* fp = pClt->_fpNative;
 		PropertyNative(fp->_fun, fp->_pUserData, pKey->_str, pValue, false);
+		return;
+	}
+	case VAR_ARRAY:
+	{
+		if (pKey->GetType() != VAR_INT)
+		{
+			SetError(RTE_ARRAY_INDEX_TYPE);
+			return;
+		}
+		ArrayInfo* array = pClt->_array;
+		const int index = pKey->_int;
+		if (array->IsValidIndex(index) == false)
+		{
+			SetError(RTE_ARRAY_INDEX_WRITE);
+			return;
+		}
+		if (ArrayWriteValue(array, index, pValue))
+			return;
+		SetErrorFormat(RTE_ARRAY_VALUE_TYPE, GetDataType(pValue->GetType()).c_str(), GetArrayElementTypeName(array->_elementType));
 		return;
 	}
 	case VAR_MAP:
@@ -258,7 +343,7 @@ NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItemValid(VarInfo* pTable, int A
 	return NULL;
 }
 
-// CltInsert 와 같은 이유로 list[int] / map[string] 만 인라인하고 나머지는 분리한다.
+// CltInsert 와 같은 이유로 list[int] / array[int] / map[string]만 인라인하고 나머지는 분리한다.
 NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue)
 {
 	const VAR_TYPE t = pClt->GetType();
@@ -304,6 +389,23 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 			}
 		}
 	}
+	else if (t == VAR_ARRAY)
+	{
+		if (pKey->GetType() != VAR_INT)
+		{
+			SetError(RTE_ARRAY_INDEX_TYPE);
+			return;
+		}
+		ArrayInfo* array = pClt->_array;
+		const int index = pKey->_int;
+		if (array->IsValidIndex(index) == false)
+		{
+			SetError(RTE_ARRAY_INDEX_READ);
+			return;
+		}
+		ArrayReadValue(this, array, index, pValue);
+		return;
+	}
 	CltReadRare(pClt, pKey, pValue);
 }
 
@@ -335,6 +437,23 @@ NEOS_NOINLINE void CNeoVMWorker::CltReadRare(VarInfo* pClt, VarInfo* pKey, VarIn
 			PropertyNative(fp->_fun, fp->_pUserData, pKey->_str, pValue, true);
 			return;
 		}
+	case VAR_ARRAY:
+	{
+		if (pKey->GetType() != VAR_INT)
+		{
+			SetError(RTE_ARRAY_INDEX_TYPE);
+			return;
+		}
+		ArrayInfo* array = pClt->_array;
+		const int index = pKey->_int;
+		if (array->IsValidIndex(index) == false)
+		{
+			SetError(RTE_ARRAY_INDEX_READ);
+			return;
+		}
+		ArrayReadValue(this, array, index, pValue);
+		return;
+	}
 	case VAR_MAP:
 		{
 			MapInfo* tbl = pClt->_tbl;
@@ -1419,6 +1538,38 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ForEach(VarInfo* pClt, VarInfo* pKey, bool b
 
 	switch (pClt->GetType())
 	{
+	case VAR_ARRAY:
+	{
+		// array도 list처럼 값 하나만 순회한다. 고정 길이라 원소 대입은 iterator를 무효화하지 않는다.
+		if (bTwoVar)
+		{
+			pIterator->ClearType();
+			SetError(RTE_FOREACH_ARRAY_TWOVAR);
+			return false;
+		}
+		ArrayInfo* array = pClt->_array;
+		if (pIterator->GetType() != VAR_ITERATOR)
+		{
+			Var_Release(pIterator);
+			if (array->_count > 0)
+			{
+				pIterator->_it._iListOffset = 0;
+				pIterator->SetType(VAR_ITERATOR);
+			}
+			else
+				return false;
+		}
+		else
+			++pIterator->_it._iListOffset;
+
+		if (pIterator->_it._iListOffset < array->_count)
+		{
+			ArrayReadValue(this, array, pIterator->_it._iListOffset, pKey);
+			return true;
+		}
+		pIterator->ClearType();
+		return false;
+	}
 	case VAR_MAP:
 	{
 		MapInfo* tbl = pClt->_tbl;

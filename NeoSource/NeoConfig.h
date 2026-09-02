@@ -70,7 +70,8 @@ struct debug_info
 //       이후 opcode 번호가 바뀌므로 캐시를 다시 만들어야 한다.
 // 0120: 범위 조건 jump opcode와 'RNGE' 범위 descriptor chunk를 추가한다.
 //       이전 캐시는 새 opcode/chunk를 모르므로 다시 만들어야 한다.
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('2' << 8) | ('0'))
+// 0121: 고정 길이 원시 배열(VAR_ARRAY)을 추가한다. 이전 캐시는 enum 번호가 달라 다시 만든다.
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('2' << 8) | ('1'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline

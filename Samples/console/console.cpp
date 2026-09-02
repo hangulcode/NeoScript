@@ -1116,7 +1116,7 @@ static int RunCompilerErrorRegression()
 	const ErrorCase cases[] =
 	{
 		{ "continue-semicolon", "for(var i in 0, 1, 1) { continue }", "';' after 'continue'" },
-		{ "indexed-increment", "var values = [1]; values[0]++;", "table values do not support '++'" },
+		{ "increment-literal", "var value = 1; 1++;", "invalid target for '++'" },
 		{ "argument-count", "fun F(var value) {} F();", "argument" },
 		{ "empty-if", "fun F() { if () {} }", "expected an expression" },
 		{ "empty-while", "fun F() { while () {} }", "expected an expression" },
@@ -1167,6 +1167,11 @@ static int RunCompilerErrorRegression()
 		{ "list-append-during-foreach", "var values = [1]; foreach(var value in values) values.append(2);", "modified during foreach" },
 		{ "map-insert-during-foreach", "var values = { \"a\": 1 }; foreach(var key, value in values) values[\"b\"] = 2;", "modified during foreach" },
 		{ "map-remove-during-foreach", "var values = { \"a\": 1 }; foreach(var key, value in values) values[key] = null;", "modified during foreach" },
+		{ "array-read-out-of-range", "import system; var values = system.array(0, 1); var value = values[1];", "array index out of range on read" },
+		{ "array-write-out-of-range", "import system; var values = system.array(0, 1); values[1] = 3;", "array index out of range on assign" },
+		{ "array-index-type", "import system; var values = system.array(0, 1); var value = values[true];", "array index must be an int" },
+		{ "array-value-type", "import system; var values = system.array(false, 1); values[0] = 1;", "cannot assign int to bool array" },
+		{ "array-foreach-two-var", "import system; var values = system.array(0, 1); foreach(var index, value in values) {}", "foreach on array does not support two variables" },
 	};
 	for (const ErrorCase& test : mutationCases)
 	{
@@ -2269,8 +2274,8 @@ int main(int argc, char* argv[])
 			exitCode = RunFile(pLoader, argv[2], putASM, debug, stats ? &s : nullptr);
 			if (stats)
 			{
-				printf("[ALLOC] str=%d map=%d list=%d set=%d cor=%d mod=%d async=%d closure=%d vec=%d pool=%lld bytes\n",
-					s.strings, s.maps, s.lists, s.sets, s.coroutines, s.modules, s.asyncs, s.closures, s.vectors,
+				printf("[ALLOC] str=%d map=%d list=%d array=%d set=%d cor=%d mod=%d async=%d closure=%d vec=%d pool=%lld bytes\n",
+					s.strings, s.maps, s.lists, s.arrays, s.sets, s.coroutines, s.modules, s.asyncs, s.closures, s.vectors,
 					s.poolBytes);
 				// 풀 페이지 밖의 문자열 힙. 계속 크면 유지 임계값을 낮춰야 한다.
 				printf("[ALLOC] stringIdle=%lld bytes\n", s.stringIdleBytes);

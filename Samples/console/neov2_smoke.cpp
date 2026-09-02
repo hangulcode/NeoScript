@@ -73,6 +73,18 @@ static bool HostMethod(CallContext& ctx, StringView method)
         ctx.retVec2(8.0f, 9.0f);
         return true;
     }
+    if (m == "touchArray")
+    {
+        ArrayView array;
+        if (!ctx.argAsArray(0, array) || array.elementType() != ArrayElementType::Int || array.count() != 3)
+            return false;
+        int32_t* values = array.ints();
+        if (!values)
+            return false;
+        values[1] = 20; // zero-copy write into the script array
+        ctx.retInt(values[0] + values[1] + values[2]);
+        return true;
+    }
     if (m == "boomHost")
     {
         // 네이티브 실패 보고: fail() 로 사유를 남기고 반드시 false 반환.
@@ -245,6 +257,64 @@ int NeoScriptV2Smoke()
     Check(static_cast<bool>(a) && static_cast<bool>(b), "create 2 instances (shared program)");
     rt->BindObject(a, "Host", reinterpret_cast<void*>(static_cast<intptr_t>(7)));
     rt->BindObject(b, "Host", reinterpret_cast<void*>(static_cast<intptr_t>(99)));
+
+    // Fixed primitive arrays use the same borrowed v2 lifetime as map/list readers, while
+    // exposing their dense storage directly during that valid scope.
+    const char* arraySource =
+        "import system;\n"
+        "export fun makeInts() { var a = system.array(3, 4); a[2] = 9; return a; }\n"
+        "export fun makeBools() { var a = system.array(false, 10); a[7] = true; a[8] = true; return a; }\n"
+        "export fun makeMap() { var m = {}; m[\"data\"] = system.array(2, 2); return m; }\n"
+        "export fun makeList() { var l = []; l.append(system.array(1.5, 2)); return l; }\n"
+        "export fun touchArray() { var a = system.array(1, 3); var sum = Host.touchArray(a); return a[1] * 100 + sum; }\n";
+    CompileDesc arrayDesc; arrayDesc.source = arraySource; arrayDesc.sourceName = "array_smoke.ns";
+    CompileResult arrayProgram = rt->Compile(arrayDesc);
+    Check(static_cast<bool>(arrayProgram.program), "compile fixed primitive arrays");
+    if (arrayProgram.program)
+    {
+        InstanceHandle arrayInstance = rt->CreateInstance(arrayProgram.program);
+        {
+        Invocation intCall = rt->Call(arrayInstance, "makeInts");
+        Check(intCall.invoke() == RunStatus::Completed, "array int return status Completed");
+        ArrayView ints;
+        Check(intCall.retArray(ints) && ints.elementType() == ArrayElementType::Int && ints.count() == 4,
+            "retArray exposes int type and fixed count");
+        int32_t* intData = ints.ints();
+        Check(intData && intData[0] == 3 && intData[2] == 9 && ints.floats() == nullptr,
+            "retArray exposes contiguous int storage only for the matching accessor");
+
+        bool readArray = false;
+        Check(rt->Call(arrayInstance, "makeInts").invokeReadArray([&](ArrayView values) {
+            int32_t* p = values.ints();
+            readArray = p && values.count() == 4 && p[2] == 9;
+        }) == RunStatus::Completed && readArray,
+            "invokeReadArray keeps zero-copy storage valid for callback scope");
+
+        Invocation boolCall = rt->Call(arrayInstance, "makeBools");
+        Check(boolCall.invoke() == RunStatus::Completed, "array bool return status Completed");
+        ArrayView bools;
+        uint8_t* bits = boolCall.retArray(bools) ? bools.boolBits() : nullptr;
+        Check(bits && bools.elementType() == ArrayElementType::Bool && bools.count() == 10 &&
+              (bits[0] & 0x80) != 0 && (bits[1] & 0x01) != 0,
+            "bool array view uses documented packed-bit layout");
+
+        Invocation mapCall = rt->Call(arrayInstance, "makeMap"); mapCall.invoke();
+        MapReader map; ArrayView nestedMap;
+        Check(mapCall.retMap(map) && map.getArray("data", nestedMap) && nestedMap.ints() && nestedMap.ints()[0] == 2,
+            "MapReader::getArray exposes nested array storage");
+
+        Invocation listCall = rt->Call(arrayInstance, "makeList"); listCall.invoke();
+        ListReader list; ArrayView nestedList;
+        Check(listCall.retList(list) && list.getArray(0, nestedList) && nestedList.floats() && nestedList.floats()[1] == 1.5f,
+            "ListReader::getArray exposes nested array storage");
+
+        CallResult touched = rt->Call(arrayInstance, "touchArray").invokeR();
+        Check(touched.ok() && touched.asInt() == 2022,
+            "CallContext::argAsArray writes the script array through the zero-copy view");
+        }
+        rt->DestroyInstance(arrayInstance);
+        rt->DestroyProgram(arrayProgram.program);
+    }
 
     // 스칼라 인자/반환 + 객체 메서드 디스패치 (인자 VM 슬롯 직접 write, 반환 in-place read)
     {

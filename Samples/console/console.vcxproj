@@ -178,6 +178,7 @@
     <ClInclude Include="..\..\NeoSource\NeoQueue.h" />
     <ClInclude Include="..\..\NeoSource\NeoTextLoader.h" />
     <ClInclude Include="..\..\NeoSource\NeoVM.h" />
+    <ClInclude Include="..\..\NeoSource\NeoVMArray.h" />
     <ClInclude Include="..\..\NeoSource\NeoVMHash.h" />
     <ClInclude Include="..\..\NeoSource\NeoVMInternal.h" />
     <ClInclude Include="..\..\NeoSource\NeoVMList.h" />

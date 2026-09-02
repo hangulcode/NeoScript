@@ -18,6 +18,7 @@ struct ClosureInfo;
 struct NeoExecContextPool;
 struct SFunctionLayer;
 struct SFunctions;
+struct ArrayInfo;
 NEOS_FORCEINLINE void Move_DestNoRelease(VarInfo* v1, VarInfo* v2);
 
 // 실행 컨텍스트 풀 팩토리. 내부 동기화가 없으므로 엔진이 스레드별(thread_local)로 하나 만들어 주입한다.
@@ -172,6 +173,10 @@ enum VAR_TYPE : u8
 	// _pUserData 는 호스트 소유의 불투명 포인터라 VM 관점에서는 리프다.
 	VAR_FP_NATIVE,
 
+	// 고정 길이 원시 배열. bool/int/float 중 한 형식만 담으며, 다른 alloc 자식이 없어
+	// 리프다. List와 같은 참조 의미론(대입 뒤 같은 저장소 공유)을 쓴다.
+	VAR_ARRAY,
+
 	// =====================================================================
 	// 여기부터 컨테이너 alloc — IsContainerType() == (_type >= VAR_MAP)
 	//
@@ -201,7 +206,7 @@ enum VAR_TYPE : u8
 // 배치 계약을 코드로 고정한다. IsAllocType()/IsContainerType() 이 단일 비교인 근거가
 // 순전히 열거 순서라서, 주석만 두면 다음 사람이 구간 사이에 새 타입을 끼워 넣는다.
 // 새 타입은 반드시 해당 구간의 **끝**에 추가할 것.
-static_assert(VAR_FP_NATIVE + 1 == VAR_MAP, "VAR_TYPE: 리프 alloc 구간 바로 뒤에 컨테이너 구간이 와야 한다");
+static_assert(VAR_ARRAY + 1 == VAR_MAP, "VAR_TYPE: 리프 alloc 구간 바로 뒤에 컨테이너 구간이 와야 한다");
 static_assert(VAR_MAP < VAR_CLOSURE, "VAR_TYPE: 컨테이너 구간이 열거 맨 뒤여야 한다");
 
 struct SNeoVMAllocStats
@@ -215,6 +220,7 @@ struct SNeoVMAllocStats
 	int asyncs = 0;
 	int closures = 0;
 	int vectors = 0;
+	int arrays = 0;
 	// VM 메모리풀이 OS 에서 확보해 들고 있는 총 바이트(사용중 + 여유). 풀은 반납해도 페이지를
 	// 돌려주지 않으므로 이 값이 곧 실제 점유량이다. 전역 조회면 모든 VM 의 오브젝트 풀 +
 	// 스레드별 실행 컨텍스트 풀(var 스택 포함) 합계, VM 단위 조회면 그 VM 의 오브젝트 풀만.
@@ -237,6 +243,14 @@ struct AsyncInfo;
 struct MapNode;
 struct SetNode;
 struct VecInfo;
+
+// system.array의 원소 형식. bool은 원소당 1비트, int/float은 각 원시 배열로 저장한다.
+enum class NeoArrayElementType : u8
+{
+	Bool,
+	Int,
+	Float,
+};
 
 // 순환 수집 후보의 intrusive FIFO 링크와 수명 상태. 후보 큐에 없을 때는
 // _cyclePrev == owner 를 유지해 별도 queued 플래그 없이 중복 등록을 막는다.
@@ -312,6 +326,7 @@ private:
 	friend struct MapInfo;
 	friend struct ListInfo;
 	friend struct SetInfo;
+	friend struct ArrayInfo;
 	friend struct SFunctionLayer;
 	friend struct SFunctions;
 	friend void Move_DestNoRelease(VarInfo* v1, VarInfo* v2);
@@ -334,6 +349,7 @@ public:
 		ClosureInfo*	_closure;
 		CollectionIterator	_it;
 		VecInfo*	_vec; // VAR_VEC 성분(유효 성분 수는 _vecCount)
+		ArrayInfo*	_array; // VAR_ARRAY 고정 길이 원시 배열
 	};
 
 	NEOS_FORCEINLINE VarInfo() { _type = VAR_NONE; }
@@ -509,6 +525,7 @@ protected:
 	NEOS_FORCEINLINE bool Var_ReleaseVecFast(VarInfo* d);
 	NEOS_FORCEINLINE bool Var_ReleaseStringFast(VarInfo* d);
 	NEOS_FORCEINLINE bool Var_ReleaseListFast(VarInfo* d);
+	NEOS_FORCEINLINE bool Var_ReleaseArrayFast(VarInfo* d);
 
 public:
 
@@ -645,6 +662,7 @@ public:
 	void Var_SetStringA(VarInfo* d, const std::string& str);
 	void Var_SetTable(VarInfo* d, MapInfo* p);
 	void Var_SetList(VarInfo* d, ListInfo* p);
+	void Var_SetArray(VarInfo* d, ArrayInfo* p);
 	void Var_SetSet(VarInfo* d, SetInfo* p);
 	void Var_SetFun(VarInfo* d, int fun_index);
 	void Var_SetModule(VarInfo* d, INeoVMWorker* p);

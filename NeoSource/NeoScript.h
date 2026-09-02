@@ -20,7 +20,7 @@
 //      Builder/Reader 로만 다룸(GC/스레드 안전성 때문에 Value 를 컨테이너로 만들지 않음)
 //   4) 디버거는 IDebugger 로 분리(Runtime->GetDebugger()) — NeoEditor 만 링크
 //   5) 빌트인 리플렉션·Call 타임아웃/예산·프로그램 직렬화(캐시) 복원
-//   6) 호출은 Call(RunStatus, 저비용)/CallR(CallResult)/CallReadMap·List 3갈래 —
+//   6) 호출은 Call(RunStatus, 저비용)/CallR(CallResult)/CallReadMap·List·Array 3갈래 —
 //      프레임당 수천 번 도는 void Update 가 반환 마샬링 비용을 안 내게 함
 //   7) 네이티브 객체 바인딩(RegisterObject + BindObject): 메서드 디스패처 하나로 GameObject.*/
 //      Services.* 처럼 수백 메서드 노출. userData 는 인스턴스별(BindObject). 내부
@@ -164,8 +164,17 @@ enum class ValueType : uint8_t
     Vec4,
     Map,      // 경계 Value 로는 직접 못 담음 — Reader/Builder 로만 접근
     List,
+    Array,
     Set,
     Function,
+};
+
+// system.array 의 원소 형식. ArrayView 의 raw pointer 는 이 값에 맞는 접근자에서만 얻는다.
+enum class ArrayElementType : uint8_t
+{
+    Bool,
+    Int,
+    Float,
 };
 
 struct Error
@@ -190,6 +199,7 @@ class MapBuilder;
 class ListBuilder;
 class MapReader;
 class ListReader;
+class ArrayView;
 class CallContext;
 class Invocation;
 
@@ -262,6 +272,7 @@ public:
     bool getVec(StringView key, float out[4]) const;   // 항상 4개를 채운다(Vec2 면 out[2..3]=0)
     bool getMap(StringView key, MapReader& out) const;
     bool getList(StringView key, ListReader& out) const;
+    bool getArray(StringView key, ArrayView& out) const;
 
 private:
     friend class CallContext; friend class Invocation; friend struct NeoScriptInternal;
@@ -280,6 +291,29 @@ public:
     bool getVec(int index, float out[4]) const;
     bool getMap(int index, MapReader& out) const;
     bool getList(int index, ListReader& out) const;
+    bool getArray(int index, ArrayView& out) const;
+
+private:
+    friend class CallContext; friend class Invocation; friend struct NeoScriptInternal;
+    const void* m_impl = nullptr;
+};
+
+// Fixed-size bool/int/float storage exposed without copying.  The backing
+// storage cannot resize, but the view and every pointer returned from it are
+// borrowed: they are valid only during the native callback that supplied it,
+// or during Invocation's documented return-view lifetime.
+//
+// Bool data is packed least-significant-bit first: bit i is
+// (boolBits()[i >> 3] >> (i & 7)) & 1.  Callers must not retain the view or
+// raw pointer after that scope and must not access it from another thread.
+class ArrayView
+{
+public:
+    ArrayElementType elementType() const;
+    int count() const;
+    uint8_t* boolBits() const;  // nullptr unless elementType()==Bool
+    int32_t* ints() const;      // nullptr unless elementType()==Int
+    float* floats() const;      // nullptr unless elementType()==Float
 
 private:
     friend class CallContext; friend class Invocation; friend struct NeoScriptInternal;
@@ -312,6 +346,7 @@ public:
     void        argVec(std::size_t i, float out[4]) const;
     bool        argAsMap(std::size_t i, MapReader& out) const;
     bool        argAsList(std::size_t i, ListReader& out) const;
+    bool        argAsArray(std::size_t i, ArrayView& out) const;
     // [콜백] 스크립트 함수 또는 캡처 람다 인자를 보관 가능한 FunctionHandle 로 얻는다.
     // 람다는 생성 시점의 지역값 보관함을 핸들이 소유한다. 호출마다 보관함을 람다 프레임에
     // 복사하고 종료 시 다시 저장한다. FunctionHandle 자체를 보관해야 하며
@@ -449,8 +484,8 @@ struct ResumeDesc
 // 이동 전용(컨텍스트 보유). 소멸 시 EndHostCall.
 //------------------------------------------------------------------------------
 // invokeR() 결과 — 스칼라/벡터/문자열 반환을 값으로 소유한다. Invocation 수명이나 이후 다른 Call 과
-// 무관하게 안전(여러 결과를 동시에 들고 있어도 됨). 컬렉션(map/list)은 값 복사가 비싸/부적합하므로
-// 여기 담지 않는다 → invokeReadMap/invokeReadList 로 "살아있는 스코프 안에서" 읽을 것.
+// 무관하게 안전(여러 결과를 동시에 들고 있어도 됨). 컬렉션(map/list/array)은 값 복사가 비싸/부적합하므로
+// 여기 담지 않는다 → invokeReadMap/invokeReadList/invokeReadArray 로 "살아있는 스코프 안에서" 읽을 것.
 struct CallResult
 {
     RunStatus status = RunStatus::Failed;
@@ -504,11 +539,12 @@ public:
     // 여러 CallResult 를 동시에 보관하거나, 이후 같은 인스턴스를 다시 Call 해도 안전하다.
     //   CallResult r = rt->Call(inst,"GetScore").argInt(id).invokeR();  if (r.ok()) int s = r.asInt();
     CallResult invokeR();
-    // 컬렉션(map/list) 반환을 "컨텍스트 살아있는 스코프(콜백) 안에서만" 읽는다. 리더를 fn 밖으로
+    // 컬렉션(map/list/array) 반환을 "컨텍스트 살아있는 스코프(콜백) 안에서만" 읽는다. 리더/뷰를 fn 밖으로
     // 들고 나가면 안 된다(그 시점엔 이미 반납). 필요한 값은 fn 안에서 호스트 변수로 복사할 것.
     //   rt->Call(inst,"GetInv").invokeReadMap([&](MapReader m){ m.getInt("gold", gold); });
     template<class Fn> RunStatus invokeReadMap (Fn&& fn) { return invokeReadMapImpl (&fn, &ReadTramp<MapReader,  Fn>); }
     template<class Fn> RunStatus invokeReadList(Fn&& fn) { return invokeReadListImpl(&fn, &ReadTramp<ListReader, Fn>); }
+    template<class Fn> RunStatus invokeReadArray(Fn&& fn) { return invokeReadArrayImpl(&fn, &ReadTramp<ArrayView, Fn>); }
 
     //--- 저수준 반환 읽기 (invoke 후, 핸들 소멸/다음 Call 전까지만 유효) ---
     // ⚠️ 이 뷰들은 인스턴스의 공유 반환 컨텍스트를 라이브로 읽는다. 같은 인스턴스에 다시 Call 하면
@@ -521,6 +557,7 @@ public:
     void       retVec(float out[4]) const;   // 항상 4개를 채운다(Vec2 면 out[2..3]=0, 벡터가 아니면 전부 0)
     bool       retMap(MapReader& out) const;
     bool       retList(ListReader& out) const;
+    bool       retArray(ArrayView& out) const;
 
 private:
     friend class IRuntime;
@@ -529,6 +566,7 @@ private:
     template<class R, class Fn> static void ReadTramp(void* p, R r) { (*static_cast<typename std::remove_reference<Fn>::type*>(p))(r); }
     RunStatus invokeReadMapImpl (void* ctx, void(*cb)(void*, MapReader));
     RunStatus invokeReadListImpl(void* ctx, void(*cb)(void*, ListReader));
+    RunStatus invokeReadArrayImpl(void* ctx, void(*cb)(void*, ArrayView));
     void* m_impl = nullptr;   // InstanceRec* (인스턴스별 호출 스크래치)
     uint32_t m_seq = 0;       // 이 Invocation 의 호출 시퀀스(소유권 토큰). Call 이 부여, 소멸자가 소유 확인에 사용.
 };
@@ -804,6 +842,7 @@ struct AllocStats
     int32_t modules = 0;
     int32_t asyncs = 0;
     int32_t vectors = 0;   // Vector2/3/4/Quaternion 성분 저장소(VecInfo)
+    int32_t arrays = 0;    // system.array 고정 길이 bool/int/float 저장소(ArrayInfo)
     // VM 메모리풀이 확보해 들고 있는 총 바이트(사용중 + 여유). 풀은 반납해도 페이지를 OS 에
     // 돌려주지 않으므로 이 값이 곧 실제 점유량이다. 모든 런타임의 오브젝트 풀 + 스레드별
     // 실행 컨텍스트 풀(var 스택 포함) 합계.
