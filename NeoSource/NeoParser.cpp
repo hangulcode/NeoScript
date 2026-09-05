@@ -3975,6 +3975,11 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		SetParserCompileError(ar, PCE_EXPECTED_EXPRESSION);
 		return false;
 	}
+	// 조건이 컨테이너 읽기(a[i]) 하나뿐이면 값을 꺼내야 한다. 그대로 점프에
+	// 넘기면 배열 객체 자체를 검사하게 되는데, VAR_ARRAY 는 IsTrue 가 늘 거짓이라
+	// while (bools[i]) 가 한 번도 참이 되지 않는다. 이 명령은 조건 코드 구간
+	// (Pos1~Pos2) 안에 들어가야 루프마다 다시 읽는다.
+	MaterializeContainerRead(iTempOffset, ar, funs);
 	int iStackCheckVar = iTempOffset._iVar;
 	int Pos2 = funs._cur->_code->GetBufferOffset();
 	eNOperation opCheck = funs._cur->GetLastOP();
@@ -4108,6 +4113,12 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 		return false;
 	}
 
+	// 조건이 컨테이너 읽기(a[i]) 하나뿐이면 값을 꺼내야 한다. 여기까지 오는
+	// 피연산자는 베이스 슬롯과 키를 따로 들고 있어서, 그대로 점프에 넘기면
+	// 배열 객체 자체를 검사하게 된다 - VAR_ARRAY 는 IsTrue 가 늘 거짓이라
+	// if (bools[i]) 가 한 번도 참이 되지 않았다. &&/|| 가 있는 조건은
+	// ParseShortCircuitLogic 안에서 이미 같은 처리를 한다.
+	MaterializeContainerRead(iTempOffset, ar, funs);
 	SJumpValue jmp1;
 	SJumpValue jmp2;
 	bool blJmp1 = true;

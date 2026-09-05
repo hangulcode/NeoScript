@@ -1,4 +1,4 @@
-// Compiler and VM regression suite.
+﻿// Compiler and VM regression suite.
 // Run from Samples/console with: console.exe --run regression
 
 import math;
@@ -377,6 +377,21 @@ fun TestFixedArrays()
     bools[7] = true;
     bools[8] = true;
     Check(bools[0] && bools[7] && bools[8] && !bools[1] && !bools[9], __LINE__);
+
+    // 컨테이너 읽기 하나만으로 된 조건. 위 줄은 && 가 있어 다른 경로로 컴파일되므로
+    // 이것과 같이 있어야 한다 - 단독일 때 배열 객체를 검사하던 버그를 잡는다.
+    var boolHit = 0;
+    for (var bi in 0, 10) { if (bools[bi]) boolHit = boolHit + 1; }
+    Check(boolHit == 3, __LINE__);
+    var boolWhile = 0;
+    while (bools[0]) { boolWhile = 1; bools[0] = false; }
+    Check(boolWhile == 1, __LINE__);
+    bools[0] = true;
+
+    var boolElif = 0;
+    if (false) boolElif = -1;
+    else if (bools[0]) boolElif = 1;
+    Check(boolElif == 1, __LINE__);
 
     var ints = system.array(2, 4);
     ints[0] = 1.7;
