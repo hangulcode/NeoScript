@@ -911,6 +911,35 @@ fun TestNumberLiterals()
     Check(REG_EXP > 1199.999 && REG_EXP < 1200.001, __LINE__);
 }
 
+fun Near(var a, var b) { return math.abs(a - b) < 0.0001; }
+
+// atan2 와 각도·보간 도우미. 게임 스크립트가 손으로 짜던 것들이라 값이 맞아야 한다.
+fun TestMathHelpers()
+{
+    Check(Near(math.atan2(1.0, 0.0), 1.5707963), __LINE__);
+    Check(Near(math.atan2(0.0, -1.0), 3.1415927), __LINE__);
+    Check(Near(math.atan2(-1.0, -1.0), -2.3561945), __LINE__);
+    Check(Near(math.hypot(3.0, 4.0), 5.0), __LINE__);
+    Check(Near(math.fmod(7.5, 2.0), 1.5) && Near(math.fmod(-7.5, 2.0), -1.5) && math.fmod(1.0, 0.0) == 0.0, __LINE__);
+    Check(math.trunc(-2.7) == -2.0 && Near(math.fract(-2.25), 0.75), __LINE__);
+    Check(math.Sign(-3.0) == -1.0 && math.Sign(0.0) == 0.0 && math.Sign(2.0) == 1.0, __LINE__);
+    Check(math.Min(2.0, 5.0) == 2.0 && math.Max(2.0, 5.0) == 5.0, __LINE__);
+    Check(Near(math.Repeat(-1.0, 3.0), 2.0) && Near(math.Repeat(7.0, 3.0), 1.0) && math.Repeat(1.0, 0.0) == 0.0, __LINE__);
+    Check(Near(math.PingPong(4.0, 3.0), 2.0) && Near(math.PingPong(1.0, 3.0), 1.0), __LINE__);
+    Check(Near(math.WrapAngle(4.0), 4.0 - 6.2831853) && Near(math.WrapAngle(-4.0), -4.0 + 6.2831853), __LINE__);
+    Check(Near(math.DeltaAngle(3.0, -3.0), 0.2831853), __LINE__);
+    Check(Near(math.LerpAngle(3.0, -3.0, 0.5), 3.1415927) || Near(math.LerpAngle(3.0, -3.0, 0.5), -3.1415927), __LINE__);
+    Check(Near(math.MoveToward(1.0, 5.0, 0.5), 1.5) && math.MoveToward(1.0, 1.2, 0.5) == 1.2, __LINE__);
+    Check(Near(math.MoveTowardAngle(3.0, -3.0, 0.1), 3.1), __LINE__);
+    Check(Near(math.InverseLerp(10.0, 20.0, 15.0), 0.5) && math.InverseLerp(1.0, 1.0, 7.0) == 0.0, __LINE__);
+    Check(Near(math.Remap(5.0, 0.0, 10.0, 100.0, 200.0), 150.0), __LINE__);
+    Check(math.SmoothStep(0.0, 1.0, -1.0) == 0.0 && Near(math.SmoothStep(0.0, 1.0, 0.5), 0.5) && math.SmoothStep(0.0, 1.0, 2.0) == 1.0, __LINE__);
+    Check(Near(math.Distance2(1.0, 1.0, 4.0, 5.0), 5.0), __LINE__);
+    var va = math.Vector3(1.0, 2.0, 2.0);
+    var vb = math.Vector3(0.0, 0.0, 0.0);
+    Check(Near(math.Length3(va), 3.0) && Near(math.Distance3(va, vb), 3.0) && Near(math.Dot3(va, va), 9.0), __LINE__);
+}
+
 fun RegressionRun()
 {
     TestExpressions();
@@ -935,6 +964,7 @@ fun RegressionRun()
     TestNumberLiterals();
     Check(Add3(10, 20, 30) == 60, __LINE__);
     Check(Fibonacci(12) == 144, __LINE__);
+    TestMathHelpers();
     if (regressionFailed == 0)
         print("Compiler regression PASS : " .. regressionPassed .. "/" .. regressionTotal);
     else

@@ -379,6 +379,226 @@ struct neo_libs
 		pN->ReturnValue(::sqrt(v));
 		return true;
 	}
+
+	// ── 게임 스크립트가 자주 찾는 것들 ─────────────────────────────────────────
+	//
+	// atan2 가 없어서 스크립트가 사분면을 손으로 나누고 있었다. 각도·보간·거리
+	// 도우미를 한 번에 넣는다. 각도는 전부 라디안이고, WrapAngle 은 (-pi, pi] 다.
+	static constexpr NS_FLOAT kNsPi = (NS_FLOAT)3.14159265358979323846;
+	static constexpr NS_FLOAT kNsTwoPi = (NS_FLOAT)6.28318530717958647692;
+
+	static NS_FLOAT NsWrapAngle(NS_FLOAT a)
+	{
+		a = a - kNsTwoPi * ::floor((a + kNsPi) / kNsTwoPi);
+		// floor 식은 [-pi, pi) 를 주므로 -pi 를 +pi 로 옮겨 (-pi, pi] 로 맞춘다.
+		if (a <= -kNsPi) a += kNsTwoPi;
+		return a;
+	}
+	static NS_FLOAT NsRepeat(NS_FLOAT x, NS_FLOAT length)
+	{
+		if (length <= (NS_FLOAT)0) return (NS_FLOAT)0;
+		return x - ::floor(x / length) * length;
+	}
+	static NS_FLOAT NsMoveToward(NS_FLOAT cur, NS_FLOAT target, NS_FLOAT maxDelta)
+	{
+		NS_FLOAT d = target - cur;
+		if (::fabs(d) <= maxDelta) return target;
+		return cur + (d > (NS_FLOAT)0 ? maxDelta : -maxDelta);
+	}
+
+	static bool Math_atan2(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+		pN->ReturnValue(::atan2(pN->read<NS_FLOAT>(1), pN->read<NS_FLOAT>(2)));
+		return true;
+	}
+	static bool Math_hypot(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+		NS_FLOAT x = pN->read<NS_FLOAT>(1);
+		NS_FLOAT y = pN->read<NS_FLOAT>(2);
+		pN->ReturnValue(::sqrt(x * x + y * y));
+		return true;
+	}
+	static bool Math_fmod(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+		NS_FLOAT x = pN->read<NS_FLOAT>(1);
+		NS_FLOAT y = pN->read<NS_FLOAT>(2);
+		// C 의 fmod(x, 0) 은 NaN 이다. 스크립트에 NaN 을 흘리지 않는다.
+		pN->ReturnValue(y == (NS_FLOAT)0 ? (NS_FLOAT)0 : ::fmod(x, y));
+		return true;
+	}
+	static bool Math_trunc(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1) return false;
+		pN->ReturnValue(::trunc(pN->read<NS_FLOAT>(1)));
+		return true;
+	}
+	static bool Math_fract(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1) return false;
+		NS_FLOAT x = pN->read<NS_FLOAT>(1);
+		pN->ReturnValue(x - ::floor(x));
+		return true;
+	}
+	static bool Math_sinh(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1) return false;
+		pN->ReturnValue(::sinh(pN->read<NS_FLOAT>(1)));
+		return true;
+	}
+	static bool Math_cosh(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1) return false;
+		pN->ReturnValue(::cosh(pN->read<NS_FLOAT>(1)));
+		return true;
+	}
+	static bool Math_tanh(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1) return false;
+		pN->ReturnValue(::tanh(pN->read<NS_FLOAT>(1)));
+		return true;
+	}
+	static bool Math_Sign(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1) return false;
+		NS_FLOAT x = pN->read<NS_FLOAT>(1);
+		pN->ReturnValue(x > (NS_FLOAT)0 ? (NS_FLOAT)1 : (x < (NS_FLOAT)0 ? (NS_FLOAT)-1 : (NS_FLOAT)0));
+		return true;
+	}
+	static bool Math_Min(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+		NS_FLOAT a = pN->read<NS_FLOAT>(1);
+		NS_FLOAT b = pN->read<NS_FLOAT>(2);
+		pN->ReturnValue(a < b ? a : b);
+		return true;
+	}
+	static bool Math_Max(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+		NS_FLOAT a = pN->read<NS_FLOAT>(1);
+		NS_FLOAT b = pN->read<NS_FLOAT>(2);
+		pN->ReturnValue(a > b ? a : b);
+		return true;
+	}
+	static bool Math_Repeat(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+		pN->ReturnValue(NsRepeat(pN->read<NS_FLOAT>(1), pN->read<NS_FLOAT>(2)));
+		return true;
+	}
+	static bool Math_PingPong(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+		NS_FLOAT length = pN->read<NS_FLOAT>(2);
+		NS_FLOAT t = NsRepeat(pN->read<NS_FLOAT>(1), length * (NS_FLOAT)2);
+		pN->ReturnValue(length - ::fabs(t - length));
+		return true;
+	}
+	static bool Math_WrapAngle(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1) return false;
+		pN->ReturnValue(NsWrapAngle(pN->read<NS_FLOAT>(1)));
+		return true;
+	}
+	static bool Math_DeltaAngle(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+		pN->ReturnValue(NsWrapAngle(pN->read<NS_FLOAT>(2) - pN->read<NS_FLOAT>(1)));
+		return true;
+	}
+	static bool Math_LerpAngle(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 3) return false;
+		NS_FLOAT a = pN->read<NS_FLOAT>(1);
+		NS_FLOAT d = NsWrapAngle(pN->read<NS_FLOAT>(2) - a);
+		pN->ReturnValue(NsWrapAngle(a + d * pN->read<NS_FLOAT>(3)));
+		return true;
+	}
+	static bool Math_MoveToward(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 3) return false;
+		pN->ReturnValue(NsMoveToward(pN->read<NS_FLOAT>(1), pN->read<NS_FLOAT>(2), pN->read<NS_FLOAT>(3)));
+		return true;
+	}
+	static bool Math_MoveTowardAngle(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 3) return false;
+		NS_FLOAT cur = pN->read<NS_FLOAT>(1);
+		NS_FLOAT d = NsWrapAngle(pN->read<NS_FLOAT>(2) - cur);
+		pN->ReturnValue(NsWrapAngle(NsMoveToward(cur, cur + d, pN->read<NS_FLOAT>(3))));
+		return true;
+	}
+	static bool Math_InverseLerp(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 3) return false;
+		NS_FLOAT a = pN->read<NS_FLOAT>(1);
+		NS_FLOAT b = pN->read<NS_FLOAT>(2);
+		NS_FLOAT v = pN->read<NS_FLOAT>(3);
+		pN->ReturnValue(b == a ? (NS_FLOAT)0 : (v - a) / (b - a));
+		return true;
+	}
+	static bool Math_Remap(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 5) return false;
+		NS_FLOAT v = pN->read<NS_FLOAT>(1);
+		NS_FLOAT inMin = pN->read<NS_FLOAT>(2);
+		NS_FLOAT inMax = pN->read<NS_FLOAT>(3);
+		NS_FLOAT outMin = pN->read<NS_FLOAT>(4);
+		NS_FLOAT outMax = pN->read<NS_FLOAT>(5);
+		NS_FLOAT t = inMax == inMin ? (NS_FLOAT)0 : (v - inMin) / (inMax - inMin);
+		pN->ReturnValue(outMin + (outMax - outMin) * t);
+		return true;
+	}
+	static bool Math_SmoothStep(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 3) return false;
+		NS_FLOAT e0 = pN->read<NS_FLOAT>(1);
+		NS_FLOAT e1 = pN->read<NS_FLOAT>(2);
+		NS_FLOAT x = pN->read<NS_FLOAT>(3);
+		NS_FLOAT t = e1 == e0 ? (x < e0 ? (NS_FLOAT)0 : (NS_FLOAT)1) : MathClamp01Value((x - e0) / (e1 - e0));
+		pN->ReturnValue(t * t * ((NS_FLOAT)3.0 - (NS_FLOAT)2.0 * t));
+		return true;
+	}
+	static bool Math_Distance2(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 4) return false;
+		NS_FLOAT dx = pN->read<NS_FLOAT>(3) - pN->read<NS_FLOAT>(1);
+		NS_FLOAT dy = pN->read<NS_FLOAT>(4) - pN->read<NS_FLOAT>(2);
+		pN->ReturnValue(::sqrt(dx * dx + dy * dy));
+		return true;
+	}
+	static bool Math_Dot3(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+		float a[3], b[3];
+		if (ReadVec3(pN->GetStackVar(1), a) == false) return false;
+		if (ReadVec3(pN->GetStackVar(2), b) == false) return false;
+		pN->ReturnValue((NS_FLOAT)(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]));
+		return true;
+	}
+	static bool Math_Length3(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1) return false;
+		float v[3];
+		if (ReadVec3(pN->GetStackVar(1), v) == false) return false;
+		pN->ReturnValue((NS_FLOAT)::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]));
+		return true;
+	}
+	static bool Math_Distance3(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 2) return false;
+		float a[3], b[3];
+		if (ReadVec3(pN->GetStackVar(1), a) == false) return false;
+		if (ReadVec3(pN->GetStackVar(2), b) == false) return false;
+		NS_FLOAT dx = a[0] - b[0];
+		NS_FLOAT dy = a[1] - b[1];
+		NS_FLOAT dz = a[2] - b[2];
+		pN->ReturnValue(::sqrt(dx * dx + dy * dy + dz * dz));
+		return true;
+	}
 	static bool Math_Vector2(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 2) return false;
@@ -1507,6 +1727,17 @@ static void AddGlobalLibFun()
 	AddSystemFun("deg", &neo_libs::Math_deg, "float", "float radian");
 	AddSystemFun("rad", &neo_libs::Math_rad, "float", "float degree");
 	AddSystemFun("sqrt", &neo_libs::Math_sqrt, "float", "float x");
+	AddSystemFun("atan2", &neo_libs::Math_atan2, "float", "float y", "float x");
+	AddSystemFun("hypot", &neo_libs::Math_hypot, "float", "float x", "float y");
+	AddSystemFun("fmod", &neo_libs::Math_fmod, "float", "float x", "float y");
+	AddSystemFun("trunc", &neo_libs::Math_trunc, "float", "float x");
+	AddSystemFun("fract", &neo_libs::Math_fract, "float", "float x");
+	AddSystemFun("sinh", &neo_libs::Math_sinh, "float", "float x");
+	AddSystemFun("cosh", &neo_libs::Math_cosh, "float", "float x");
+	AddSystemFun("tanh", &neo_libs::Math_tanh, "float", "float x");
+	AddSystemFun("Sign", &neo_libs::Math_Sign, "float", "float x");
+	AddSystemFun("Min", &neo_libs::Math_Min, "float", "float a", "float b");
+	AddSystemFun("Max", &neo_libs::Math_Max, "float", "float a", "float b");
 	AddSystemFun("Vector2", &neo_libs::Math_Vector2, "Vector2", "float x", "float y");
 	AddSystemFun("Vector3", &neo_libs::Math_Vector3, "Vector3", "float x", "float y", "float z");
 	AddSystemFun("Vector4", &neo_libs::Math_Vector4, "Vector4", "float x", "float y", "float z", "float w");
@@ -1522,6 +1753,20 @@ static void AddGlobalLibFun()
 	AddSystemFun("SmoothStep01", &neo_libs::Math_SmoothStep01, "float", "float t");
 	AddSystemFun("Lerp", &neo_libs::Math_Lerp, "float", "float a", "float b", "float t");
 	AddSystemFun("Lerp3", &neo_libs::Math_Lerp3, "Vector3", "Vector3 a", "Vector3 b", "float t");
+	AddSystemFun("Repeat", &neo_libs::Math_Repeat, "float", "float x", "float length");
+	AddSystemFun("PingPong", &neo_libs::Math_PingPong, "float", "float x", "float length");
+	AddSystemFun("WrapAngle", &neo_libs::Math_WrapAngle, "float", "float radian");
+	AddSystemFun("DeltaAngle", &neo_libs::Math_DeltaAngle, "float", "float from", "float to");
+	AddSystemFun("LerpAngle", &neo_libs::Math_LerpAngle, "float", "float from", "float to", "float t");
+	AddSystemFun("MoveToward", &neo_libs::Math_MoveToward, "float", "float current", "float target", "float maxDelta");
+	AddSystemFun("MoveTowardAngle", &neo_libs::Math_MoveTowardAngle, "float", "float current", "float target", "float maxDelta");
+	AddSystemFun("InverseLerp", &neo_libs::Math_InverseLerp, "float", "float a", "float b", "float value");
+	AddSystemFun("Remap", &neo_libs::Math_Remap, "float", "float value", "float inMin", "float inMax", "float outMin", "float outMax");
+	AddSystemFun("SmoothStep", &neo_libs::Math_SmoothStep, "float", "float edge0", "float edge1", "float x");
+	AddSystemFun("Distance2", &neo_libs::Math_Distance2, "float", "float x0", "float y0", "float x1", "float y1");
+	AddSystemFun("Dot3", &neo_libs::Math_Dot3, "float", "Vector3 a", "Vector3 b");
+	AddSystemFun("Length3", &neo_libs::Math_Length3, "float", "Vector3 v");
+	AddSystemFun("Distance3", &neo_libs::Math_Distance3, "float", "Vector3 a", "Vector3 b");
 	AddSystemFun("DistanceSquared3", &neo_libs::Math_DistanceSquared3, "float", "Vector3 a", "Vector3 b");
 	AddSystemFun("Normalize3", &neo_libs::Math_Normalize3, "Vector3", "Vector3 v", "Vector3 fallback");
 	AddSystemFun("Cross3", &neo_libs::Math_Cross3, "Vector3", "Vector3 a", "Vector3 b");

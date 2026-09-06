@@ -74,7 +74,8 @@ newline is added.
 | `math.abs(x: float)` | `float` | |
 | `math.acos(x: float)` | `float` | radians |
 | `math.asin(x: float)` | `float` | radians |
-| `math.atan(x: float)` | `float` | radians; one-argument form only, there is no `atan2` |
+| `math.atan(x: float)` | `float` | radians |
+| `math.atan2(y: float, x: float)` | `float` | radians, full quadrant; argument order is `(y, x)` like C |
 | `math.ceil(x: float)` | `float` | returns a float, not an int |
 | `math.floor(x: float)` | `float` | returns a float, not an int |
 | `math.round(x: float)` | `float` | returns a float, not an int |
@@ -86,6 +87,13 @@ newline is added.
 | `math.exp(x: float)` | `float` | |
 | `math.pow(base: float, exp: float)` | `float` | |
 | `math.sqrt(x: float)` | `float` | |
+| `math.hypot(x: float, y: float)` | `float` | `sqrt(x*x + y*y)` |
+| `math.fmod(x: float, y: float)` | `float` | C `fmod`; sign follows `x`. `y == 0` returns `0`, never NaN |
+| `math.trunc(x: float)` | `float` | toward zero |
+| `math.fract(x: float)` | `float` | `x - floor(x)`, always `0..1` |
+| `math.sinh(x: float)` `math.cosh(x: float)` `math.tanh(x: float)` | `float` | |
+| `math.Sign(x: float)` | `float` | `-1`, `0`, or `1` |
+| `math.Min(a: float, b: float)` `math.Max(a: float, b: float)` | `float` | |
 | `math.deg(radian: float)` | `float` | radians to degrees |
 | `math.rad(degree: float)` | `float` | degrees to radians |
 
@@ -98,6 +106,30 @@ newline is added.
 | `math.SmoothStep01(t: float)` | `float` | |
 | `math.Lerp(a: float, b: float, t: float)` | `float` | `a + (b - a) * t`, **not** clamped |
 | `math.Lerp3(a: Vector3, b: Vector3, t: float)` | `Vector3` | not clamped |
+| `math.InverseLerp(a: float, b: float, value: float)` | `float` | `(value - a) / (b - a)`, not clamped; `0` when `a == b` |
+| `math.Remap(value, inMin, inMax, outMin, outMax)` | `float` | `Lerp(outMin, outMax, InverseLerp(inMin, inMax, value))`, not clamped |
+| `math.SmoothStep(edge0: float, edge1: float, x: float)` | `float` | GLSL `smoothstep`: clamped Hermite between the two edges |
+| `math.MoveToward(current: float, target: float, maxDelta: float)` | `float` | steps at most `maxDelta` toward `target`; frame-rate independent when `maxDelta = rate * dt` |
+| `math.Repeat(x: float, length: float)` | `float` | positive modulo, `0 <= result < length`; `length <= 0` returns `0` |
+| `math.PingPong(x: float, length: float)` | `float` | bounces between `0` and `length` |
+
+### 3.3 Angles (radians)
+
+| Signature | Returns | Notes |
+| :--- | :--- | :--- |
+| `math.WrapAngle(radian: float)` | `float` | wraps into `(-pi, pi]` |
+| `math.DeltaAngle(from: float, to: float)` | `float` | shortest signed difference, in `(-pi, pi]` |
+| `math.LerpAngle(from: float, to: float, t: float)` | `float` | interpolates along the shortest arc |
+| `math.MoveTowardAngle(current: float, target: float, maxDelta: float)` | `float` | turns at most `maxDelta` along the shortest arc; result wrapped |
+
+### 3.4 Distances
+
+| Signature | Returns | Notes |
+| :--- | :--- | :--- |
+| `math.Distance2(x0: float, y0: float, x1: float, y1: float)` | `float` | scalar 2-D distance, handy for x/z on a height map |
+| `math.Dot3(a: Vector3, b: Vector3)` | `float` | |
+| `math.Length3(v: Vector3)` | `float` | |
+| `math.Distance3(a: Vector3, b: Vector3)` | `float` | `sqrt(DistanceSquared3)` |
 
 ### 3.3 Random
 
