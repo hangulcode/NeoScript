@@ -196,7 +196,7 @@ private:
 
 	inline bool IsDebugInfo() { return _pProgram->IsDebugInfo(); }
 
-	virtual int FindFunction(const std::string& name)
+	virtual int FindFunction(const std::string& name) override
 	{
 		return _pProgram->FindFunction(name);
 	}
@@ -245,35 +245,35 @@ private:
 	void    PoisonOutOfMemory() noexcept { m_bOutOfMemoryPoisoned = true; }
 	NEOS_NOINLINE bool ReportRunException();
 
-    virtual void DebugSetListener(INeoVMDebugListener* listener);
-    virtual void DebugSetBreakpoints(const std::vector<int>& lines);
-    virtual void DebugSetBreakpoints(const std::vector<NeoDebugBreakpoint>& breakpoints);
-    virtual void DebugContinue();
-    virtual void DebugStepInto();
-    virtual void DebugStepOver();
-    virtual void DebugStepOut();
-    virtual void DebugPause();
-    virtual bool DebugIsPaused();
-    virtual NeoDebugLocation DebugGetLocation();
-    virtual void DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames);
-    virtual void DebugGetFrameVariables(int frameId, std::vector<NeoDebugVariable>& vars);
-    virtual void DebugGetExecutableLines(std::vector<int>& lines);
-    virtual void DebugGetExecutableLocations(std::vector<NeoDebugLocation>& locations);
+    virtual void DebugSetListener(INeoVMDebugListener* listener) override;
+    virtual void DebugSetBreakpoints(const std::vector<int>& lines) override;
+    virtual void DebugSetBreakpoints(const std::vector<NeoDebugBreakpoint>& breakpoints) override;
+    virtual void DebugContinue() override;
+    virtual void DebugStepInto() override;
+    virtual void DebugStepOver() override;
+    virtual void DebugStepOut() override;
+    virtual void DebugPause() override;
+    virtual bool DebugIsPaused() override;
+    virtual NeoDebugLocation DebugGetLocation() override;
+    virtual void DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames) override;
+    virtual void DebugGetFrameVariables(int frameId, std::vector<NeoDebugVariable>& vars) override;
+    virtual void DebugGetExecutableLines(std::vector<int>& lines) override;
+    virtual void DebugGetExecutableLocations(std::vector<NeoDebugLocation>& locations) override;
 
 	bool	IsMainCoroutine(CoroutineInfo* p) { return (m_pMainCtx == p); }
-	virtual bool	Setup(int iFunctionID, std::vector<VarInfo>& _args);
-	virtual bool	Run();
-	virtual int	ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args);
-	virtual int	ResumeTop();
-	virtual NeoExecutionState GetExecutionState();
-	virtual bool IsOutOfMemoryPoisoned() const { return m_bOutOfMemoryPoisoned; }
-	virtual bool IsSuspended();
-	virtual NeoHostCallBegin BeginHostCall();
-	virtual void EndHostCall(NeoHostCallBegin begin);
-	virtual void BeginNestedScriptCall();
-	virtual void EndNestedScriptCall();
-	virtual int RunHostCall(int iFunctionID, std::vector<VarInfo>& _args, VarInfo* closureValue = nullptr);
-	virtual bool CancelExecution();
+	virtual bool	Setup(int iFunctionID, std::vector<VarInfo>& _args) override;
+	virtual bool	Run() override;
+	virtual int	ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args) override;
+	virtual int	ResumeTop() override;
+	virtual NeoExecutionState GetExecutionState() override;
+	virtual bool IsOutOfMemoryPoisoned() const override { return m_bOutOfMemoryPoisoned; }
+	virtual bool IsSuspended() override;
+	virtual NeoHostCallBegin BeginHostCall() override;
+	virtual void EndHostCall(NeoHostCallBegin begin) override;
+	virtual void BeginNestedScriptCall() override;
+	virtual void EndNestedScriptCall() override;
+	virtual int RunHostCall(int iFunctionID, std::vector<VarInfo>& _args, VarInfo* closureValue = nullptr) override;
+	virtual bool CancelExecution() override;
 
 	template<bool TIMEOUT, bool DEBUG>
 	bool	RunInternal(int iBreakingCallStack);
@@ -309,7 +309,7 @@ private:
 public:
 	NEOS_FORCEINLINE CNeoVM* GetVM() { return _pVM;  }
 	bool IsNativeScriptCallActive() const { return m_iNativeScriptCallDepth > 0; }
-	virtual void SetTimeout(int iTimeout, int iCheckOpCount) {
+	virtual void SetTimeout(int iTimeout, int iCheckOpCount) override {
 		m_iTimeout = iTimeout;
 		m_iCheckOpCount = iCheckOpCount;
 	}
@@ -320,7 +320,7 @@ private:
 public:
 	mRND m_sRand;
 
-	virtual void Var_Move(VarInfo* v1, VarInfo* v2)
+	virtual void Var_Move(VarInfo* v1, VarInfo* v2) override
 	{
 		Move(v1, v2);
 	}
@@ -435,11 +435,11 @@ private:
 
 public:
 //	virtual VarInfo* GetReturnVar() { return &(*m_pVarStack_Base)[_iSP_Vars]; }
-	virtual VarInfo* GetReturnVar() { return m_pVarStack_Pointer; }
-	virtual VarInfo* GetStackVar(int idx){ return GetStack (idx); }
-	virtual bool ResetVarType(VarInfo* p, VAR_TYPE type, int capa);
+	virtual VarInfo* GetReturnVar() override { return m_pVarStack_Pointer; }
+	virtual VarInfo* GetStackVar(int idx) override{ return GetStack (idx); }
+	virtual bool ResetVarType(VarInfo* p, VAR_TYPE type, int capa) override;
 
-	virtual void GC()
+	virtual void GC() override
 	{
 		for (int i = _iSP_Vars + 1; i < _iSP_Vars_Max2; i++)
 			Var_Release(&(*m_pVarStack_Base)[i]);
@@ -457,7 +457,7 @@ public:
 
 
 
-	virtual VarInfo* GetVar(const std::string& name)
+	virtual VarInfo* GetVar(const std::string& name) override
 	{
 		int idx = _pProgram->FindGlobalVar(name);
 		if (idx < 0 || idx >= (int)m_sVarGlobal.size())
