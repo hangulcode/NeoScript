@@ -279,6 +279,7 @@
     <None Include="..\..\NeoSource\NeoVMWorker.inl" />
     <None Include="..\..\NeoSource\NeoVMWorker_Handlers.inl" />
   </ItemGroup>
+  <Import Project="..\..\BuildConfig\MsvcOverrideWarnings.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

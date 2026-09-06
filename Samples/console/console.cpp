@@ -41,7 +41,7 @@ public:
 		if (last != '/' && last != '\\')
 			m_libPath += "/";
 	}
-	virtual bool        Load(const char* pFileName, void*& pBuffer, int& iLen)
+	virtual bool        Load(const char* pFileName, void*& pBuffer, int& iLen) override
 	{
 		FILE* fp = NULL;
 		int error_t = fopen_s(&fp, pFileName, "rb");
@@ -59,11 +59,11 @@ public:
 		iLen = iFileSize;
 		return true;
 	}
-	virtual void        Unload(const char* pFileName, void* pBuffer, int iLen)
+	virtual void        Unload(const char* pFileName, void* pBuffer, int iLen) override
 	{
 		delete [] pBuffer;
 	}
-	virtual const char* GetLibPath()
+	virtual const char* GetLibPath() override
 	{
 		return m_libPath.c_str();
 	}

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RuleSet Name="NeoScript explicit overrides" Description="Report missing override specifiers in C++ virtual functions." ToolsVersion="15.0">
+  <Rules AnalyzerId="Microsoft.Analyzers.NativeCodeAnalysis" RuleNamespace="Microsoft.Rules.Native">
+    <Rule Id="C26433" Action="Warning" />
+  </Rules>
+</RuleSet>

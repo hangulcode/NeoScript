@@ -40,6 +40,13 @@ Build:
 & "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\amd64\MSBuild.exe" Samples\console\console.sln /p:Configuration=Release /p:Platform=x64 /m
 ```
 
+The Visual Studio console project enables Microsoft code analysis warning `C26433`
+for missing C++ `override` specifiers in Debug/Release, Win32/x64 configurations.
+The shared settings are in `BuildConfig/MsvcOverrideWarnings.props` and its ruleset.
+Reload the project after updating; rebuild once to check unchanged source files.
+Only this analysis rule is enabled; compiler warning levels remain unchanged.
+Code analysis can increase build time.
+
 Run a script file:
 ```powershell
 Samples\console\x64\Release\console.exe --file TestScript\module.ns
