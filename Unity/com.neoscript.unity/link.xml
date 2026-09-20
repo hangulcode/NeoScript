@@ -1,0 +1,17 @@
+<!--
+  Managed stripping protection for IL2CPP / AOT players.
+
+  The binding's callbacks are never called from managed code. The native side
+  calls them through function pointers taken with
+  Marshal.GetFunctionPointerForDelegate, which the linker's reachability
+  analysis cannot follow. At higher stripping levels it is free to remove the
+  methods, the delegate types, or the reverse P/Invoke wrappers IL2CPP generates
+  for them, and the failure shows up only at runtime in a built player -- as a
+  jump into nothing.
+
+  The assembly is small, so preserving all of it is cheaper than maintaining a
+  per-member list that silently goes stale.
+-->
+<linker>
+  <assembly fullname="NeoScript.Runtime" preserve="all"/>
+</linker>

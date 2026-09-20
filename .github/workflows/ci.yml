@@ -68,7 +68,62 @@ jobs:
           ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/27.2.12479018"
           cmake -S . -B build-android -G Ninja \
             -DNEOSCRIPT_BUILD_SMOKE=OFF \
+            -DNEOSCRIPT_BUILD_SHARED=ON \
+            -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_PLATFORM=android-24
           cmake --build build-android --parallel
+
+      # The plugin is what Unity actually ships, and its link options are what
+      # keep it from colliding with Unity's own C++ runtime. Checking the built
+      # library here costs nothing and catches a regression at the commit that
+      # causes it rather than in somebody's APK.
+      - name: Check the plugin exports only its C ABI
+        run: |
+          SO=build-android/libNeoScript.so
+          READELF="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          ns=$("$READELF" --dyn-syms "$SO" | grep -c ' Ns' || true)
+          cxx=$("$READELF" --dyn-syms "$SO" | grep -c ' _ZN' || true)
+          echo "Ns* entry points: $ns, leaked C++ symbols: $cxx"
+          test "$ns" -gt 100 || { echo "the C ABI is missing from the plugin"; exit 1; }
+          test "$cxx" -eq 0 || { echo "the C++ runtime is being re-exported"; exit 1; }
+          "$READELF" -l "$SO" | grep -q 0x4000 || { echo "not 16 KB page aligned"; exit 1; }
+
+  ios-static:
+    name: iOS / Xcode / arm64 static
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Configure and build the static C ABI
+        run: |
+          cmake -S . -B build-ios -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH=NO \
+            -DCMAKE_XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET=13.0 \
+            -DNEOSCRIPT_BUILD_STATIC_C_ABI=ON \
+            -DNEOSCRIPT_BUILD_SMOKE=OFF
+          cmake --build build-ios --config Release --target NeoScriptStatic
+
+      # iOS resolves DllImport("__Internal") against symbols linked into the
+      # player, so the archive has to actually carry them. Mach-O prefixes C
+      # symbols with an underscore.
+      - name: Check the C ABI is in the archive
+        run: |
+          LIB=$(find build-ios -name 'libNeoScriptUnity.a' -print -quit)
+          test -n "$LIB" || { echo "libNeoScriptUnity.a was not produced"; exit 1; }
+          ns=$(nm -g "$LIB" | grep -c ' T _Ns' || true)
+          echo "$LIB carries $ns Ns* entry points"
+          test "$ns" -gt 100 || { echo "the C ABI is missing from the archive"; exit 1; }
+          mkdir -p artifact && cp "$LIB" artifact/
+
+      # The archive is the one plugin binary nobody can build on Windows, so
+      # hand it back: drop it into Runtime/Plugins/iOS/ and Unity links it.
+      - name: Upload libNeoScriptUnity.a
+        uses: actions/upload-artifact@v4
+        with:
+          name: libNeoScriptUnity-ios-arm64
+          path: artifact/libNeoScriptUnity.a
+          if-no-files-found: error

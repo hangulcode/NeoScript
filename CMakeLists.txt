@@ -78,6 +78,14 @@ if(NEOSCRIPT_BUILD_SHARED)
         # unstripped one is ~19MB of debug symbols riding along in every APK.
         target_link_options(NeoScriptShared PRIVATE $<$<CONFIG:Release>:-s>)
 
+        # Hidden visibility covers our own code, but the statically linked C++
+        # runtime re-exports itself regardless -- measured at 1348 std:: symbols
+        # on Android.  Unity loads libunity.so and libil2cpp.so with their own C++
+        # runtime into the same process, so those exports let the dynamic linker
+        # bind their calls to our copy and leave two libc++ instances sharing one
+        # heap.  Keep everything that came out of a static archive to ourselves.
+        target_link_options(NeoScriptShared PRIVATE -Wl,--exclude-libs,ALL)
+
         if(ANDROID)
             # Google Play requires 16 KB page alignment for apps targeting Android 15
             # and later.  NDK r25 still links at 4 KB, and an unaligned .so fails the

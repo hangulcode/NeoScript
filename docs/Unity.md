@@ -33,6 +33,12 @@ pwsh Unity\build_android.ps1                 # arm64-v8a
 ./Unity/build_ios.sh                         # macOS with Xcode only
 ```
 
+Unity does not produce `libNeoScriptUnity.a`. It is built from the same sources
+as every other platform — the VM plus the C ABI — through the `NeoScriptStatic`
+CMake target, and it needs the Xcode toolchain, which exists only on macOS. If
+nobody on the team has a Mac, the `ios-static` CI job builds it on a `macos-latest`
+runner; download the artifact and drop it into `Runtime/Plugins/iOS/`.
+
 Each script copies its output straight into
 `Unity/com.neoscript.unity/Runtime/Plugins/`.
 
@@ -217,14 +223,64 @@ to special-case.
 
 ## Platforms
 
-| Platform | Output | Resolution |
-| :--- | :--- | :--- |
-| Windows (editor / player, x64) | `NeoScript.dll` | `DllImport("NeoScript")` |
-| Android arm64-v8a | `libNeoScript.so` | same |
-| iOS arm64 | `libNeoScriptUnity.a` | `DllImport("__Internal")` — dynamic loading is forbidden, so it links statically |
+| Platform | Output | Resolution | Verified |
+| :--- | :--- | :--- | :--- |
+| Windows editor (Mono) | `NeoScript.dll` | `DllImport("NeoScript")` | yes — all three suites pass |
+| Windows player x64 (**IL2CPP**) | `NeoScript.dll` | same | yes — PlayMode tests pass inside the built player |
+| Android arm64-v8a (**IL2CPP**) | `libNeoScript.so` | same | APK verified structurally; never run on a device |
+| iOS arm64 | `libNeoScriptUnity.a` | `DllImport("__Internal")` — dynamic loading is forbidden, so it links statically | no — needs macOS with Xcode |
 
-The Android `.so` is stripped in release. Unstripped it carries about 19MB of
-debug symbols into every APK.
+The IL2CPP run matters more than the platform it ran on. iOS has no alternative
+to IL2CPP, and AOT adds steps Mono never takes: generating reverse P/Invoke
+wrappers for every callback, and stripping managed code. Both were exercised —
+the player was built with managed stripping at **High**, so a stripping bug
+could not hide. What the binding does to be AOT-correct:
+
+- every native-to-managed callback is `static` and carries `[MonoPInvokeCallback]`
+- no managed exception is allowed to cross the boundary; each callback body is
+  wrapped in try/catch
+- the delegates handed to native code are held in static fields, so the GC
+  cannot collect their thunks
+- `link.xml` preserves the binding assembly, because the callbacks are reachable
+  only through `Marshal.GetFunctionPointerForDelegate` and the linker cannot see
+  that
+- every struct crossing the boundary is blittable, and callbacks take
+  pointer-plus-length instead of a struct by value
+
+To re-run it: flip the backend, then run the PlayMode tests inside a built
+player rather than in the editor.
+
+```powershell
+# sets IL2CPP with High stripping, so a stripping bug cannot hide
+Unity.exe -batchmode -nographics -projectPath <project> `
+          -executeMethod NeoScriptTest.NeoPlayerBuildSetup.UseIl2Cpp -logFile -
+
+Unity.exe -batchmode -projectPath <project> `
+          -runTests -testPlatform StandaloneWindows64 -testResults results.xml
+```
+
+This needs the Windows Build Support (IL2CPP) module. Where several editor
+installs of the same version exist, only some carry it — check
+`Editor/Data/PlaybackEngines/windowsstandalonesupport/Variations` for
+`*_il2cpp` entries rather than trusting the folder name.
+
+An arm64-v8a IL2CPP APK has been taken apart and checked: `libNeoScript.so`
+lands in `lib/arm64-v8a/`, exports its 150 `Ns*` entry points and no C++ runtime
+symbols, needs only `libc`/`libm`/`libdl`, and its LOAD segments align at
+`0x4000`. IL2CPP emitted a `ReversePInvokeWrapper_*` for all nine callbacks, so
+script-to-C# calls really are compiled ahead of time for arm64. Nobody has run
+it on a device yet — that is the one step left, and the demo scene reports it in
+logcat as `[neo] runtime up` followed by `[neo] neo script is driving this
+transform`.
+
+The Android `.so` is stripped in release and keeps its C++ runtime to itself.
+Unstripped it carries about 19MB of debug symbols into every APK, and without
+`-Wl,--exclude-libs,ALL` the statically linked libc++ re-exports about 1300
+`std::` symbols. Unity loads `libunity.so` and `libil2cpp.so` with their own C++
+runtime into the same process, so those exports would let the dynamic linker
+bind their calls into our copy, leaving two libc++ instances on one heap. After
+both, the `.so` exports its 150 `Ns*` entry points and nothing else, and needs
+only `libc`, `libm` and `libdl`.
 
 Using async (`system.async` / http) makes the VM spin up a background thread. If
 a script never uses it, no thread is created.
