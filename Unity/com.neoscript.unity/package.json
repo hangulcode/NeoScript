@@ -1,0 +1,10 @@
+{
+  "name": "com.neoscript.unity",
+  "displayName": "NeoScript",
+  "version": "0.1.0",
+  "unity": "6000.0",
+  "description": "NeoScript VM for Unity. A flat C ABI over the C++ engine plus a P/Invoke binding: compile and run .ns scripts, expose C# objects to script, and drive long-running scripts in frame-sized slices.",
+  "keywords": [ "scripting", "vm", "neoscript" ],
+  "author": { "name": "NeoScript" },
+  "hideInEditor": false
+}

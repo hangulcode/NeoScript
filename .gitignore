@@ -89,3 +89,10 @@ crashlytics-build.properties
 # PGO profile artifacts (regenerate with Tools/pgo_build.bat)
 *.pgd
 *.pgc
+
+# Unity native plugin binaries are build output (Unity/build_*.ps1|sh produces them).
+# The whole Plugins tree goes with them, metas included: Unity deletes a .meta whose
+# asset is missing, so committing them would just dirty the tree on a fresh clone.
+# Importer settings live in NeoPluginImportSettings.cs instead.
+/Unity/com.neoscript.unity/Runtime/Plugins/
+/Unity/com.neoscript.unity/Runtime/Plugins.meta

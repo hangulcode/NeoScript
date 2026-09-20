@@ -16,6 +16,14 @@ Every function a script can call — the keyword intrinsics, `print`, the `math`
 signatures, argument types and return types. Look there first when you need a function; this
 file covers the language itself and the C++ host API.
 
+### Unity
+
+**[docs/Unity.md](docs/Unity.md)**
+
+Running the VM from C#. A flat C ABI (`Unity/Native/NeoScriptC.h`) plus a P/Invoke binding
+shipped as a UPM package (`Unity/com.neoscript.unity`): compile and run scripts, expose C#
+objects to script, and slice long-running scripts across frames. Windows, Android and iOS.
+
 ### License
 	MIT license
 	NeoScript is free software.

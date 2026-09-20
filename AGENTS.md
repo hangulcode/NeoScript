@@ -47,6 +47,14 @@ NDK clang : %LOCALAPPDATA%\Android\Sdk\ndk\25.1.8937393\toolchains\llvm\prebuilt
             --target=aarch64-linux-android24 -std=c++17 -fsyntax-only -INeoSource <각 .cpp>
 ```
 
+## 유니티
+
+C ABI 는 `Unity\Native`, C# 바인딩은 `Unity\com.neoscript.unity`(UPM). **`NeoSource\` 에 두지 않는다** —
+엔진 저장소가 `NeoSource\*.cpp` 를 통째로 컴파일해서 쓰지도 않는 셰임이 딸려 들어간다.
+플러그인 바이너리는 커밋하지 않는다. 유니티로 열기 전에 `pwsh Unity\build_windows.ps1` 을 먼저 돌린다.
+회귀는 `neoscript_c_abi_smoke.exe`(순수 C 로 컴파일되는 것 자체가 검증)와
+`Unity.exe -batchmode -executeMethod NeoScript.Tests.NeoSmokeTest.RunAll` 둘이다.
+
 ## 성능 측정 규칙
 
 - 벤치는 `Samples\bench` 에서 Neo / Lua / C++ 를 **한 세션 안에서 교차 실행**하고 체크섬 8/8 을 확인한다.
@@ -68,4 +76,5 @@ NDK clang : %LOCALAPPDATA%\Android\Sdk\ndk\25.1.8937393\toolchains\llvm\prebuilt
 - `ReadMe.md` — 언어 문법, 호스트 API, 성능 결과와 측정 방법
 - `docs/API.md` — 스크립트가 부를 수 있는 모든 함수(math/system/coroutine, string/list/map/async 메서드, 키워드 intrinsic)
   — 라이브러리를 고치면 `NeoLib.cpp` 기준으로 같이 갱신한다
+- `docs/Unity.md` — 유니티 연동(3계층 구조, 설치, C# 객체 노출, 플랫폼, 함정)
 - `docs/` — 보조 자료
