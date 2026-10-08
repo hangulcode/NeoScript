@@ -66,7 +66,6 @@ void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 	X(PCE_CONST_INVALID_VALUE, "Error (%d, %d): const expression must be a compile-time constant, near '%s'") \
 	X(PCE_CONST_INVALID_OP, "Error (%d, %d): invalid operation in const expression near '%s'") \
 	X(PCE_CONST_DIV_ZERO, "Error (%d, %d): division by zero in const expression") \
-	X(PCE_ELIF_DEPRECATED, "Error (%d, %d): 'elif' is no longer supported. Use 'else if' instead") \
 	X(PCE_CASE_OUTSIDE_SWITCH, "Error (%d, %d): 'case' / 'default' can only be used inside a switch") \
 	X(PCE_SWITCH_DUPLICATE_CASE, "Error (%d, %d): duplicate case value in switch") \
 	X(PCE_SWITCH_DUPLICATE_DEFAULT, "Error (%d, %d): 'default' appears more than once in switch") \
@@ -382,8 +381,8 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 TK_TYPE ParseShortCircuitLogic(bool bReqReturn, SOperand& sResultStack, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, TK_TYPE tkEnd1 = TK_SEMICOLON, TK_TYPE tkEnd2 = TK_COMMA, TK_TYPE tkEnd3 = TK_R_SMALL, TK_TYPE tkEnd4 = TK_R_ARRAY, std::vector<SJumpValue>* pOutFalseJumps = NULL);
 bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport);
 // bStopAtCase: switch 본문 파싱용. case/default/'}' 를 만나면 소비하지 않고(PushToken) 종료한다.
-bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn = NULL, std::vector<SJumpValue>* pContinueJumps = NULL, bool bStopAtCase = false);
-bool ParseSwitch(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn, std::vector<SJumpValue>* pContinueJumps);
+bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* alwaysReturns = NULL, std::vector<SJumpValue>* pContinueJumps = NULL, bool bStopAtCase = false);
+bool ParseSwitch(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* alwaysReturns, std::vector<SJumpValue>* pContinueJumps);
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool addOPFunEnd = true);
 
 eNOperation GetOpTypeFromOp(eNOperation op)
@@ -457,7 +456,6 @@ int InitDefaultTokenString()
 	TOKEN_STR2(TK_CONTINUE, "continue");
 	TOKEN_STR2(TK_IF, "if");
 	TOKEN_STR2(TK_ELSE, "else");
-	TOKEN_STR2(TK_ELSEIF, "elif");
 	TOKEN_STR2(TK_FOR, "for");
 	TOKEN_STR2(TK_FOREACH, "foreach");
 	TOKEN_STR2(TK_WHILE, "while");
@@ -4075,14 +4073,14 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	return true;
 }
-bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn, std::vector<SJumpValue>* pContinueJumps = NULL)
+bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* alwaysReturns, std::vector<SJumpValue>* pContinueJumps = NULL)
 {
 	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
 		SetParserCompileError(ar, PCE_LOGIC_NOT_ALLOWED_GLOBAL, "if");
 		return false;
 	}
-	if(lastOPReturn) *lastOPReturn = false;
+	if(alwaysReturns) *alwaysReturns = false;
 
 	std::string tk1;
 	TK_TYPE tkType1;
@@ -4121,8 +4119,6 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	MaterializeContainerRead(iTempOffset, ar, funs);
 	SJumpValue jmp1;
 	SJumpValue jmp2;
-	bool blJmp1 = true;
-	bool blJmp2 = true;
 
 	// 논리 연산자가 있어 분기 목록을 받은 경우 — jmp1 대신 그 목록 전체를 패치한다.
 	const bool blCondBranch = !condFalseJumps.empty();
@@ -4175,18 +4171,20 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 		jmp1.Set(funs._cur->_code->GetBufferOffset() - 6, funs._cur->_code->GetBufferOffset());
 	}
 
+	bool thenAlwaysReturns = false;
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 == TK_L_MIDDLE)
 	{
 		AddLocalVar(vars.GetCurrentLayer());
 
-		if (false == ParseMiddleArea(pJumps, ar, funs, vars, NULL, pContinueJumps))
+		if (false == ParseMiddleArea(pJumps, ar, funs, vars, &thenAlwaysReturns, pContinueJumps))
 			return false;
 
 		DelLocalVar(vars.GetCurrentLayer());
 	}
 	else
 	{
+		thenAlwaysReturns = tkType1 == TK_RETURN;
 		ar.PushToken(tkType1, tk1);
 		iTempOffset = INVALID_ERROR_PARSEJOB;
 		r = ParseJob(false, iTempOffset, pJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, pContinueJumps);
@@ -4201,12 +4199,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	ClearTempVars(funs);
 
 	tkType1 = GetToken(ar, tk1);
-	if (tkType1 == TK_ELSEIF)
-	{
-		SetParserCompileError(ar, PCE_ELIF_DEPRECATED);
-		return false;
-	}
-	// C 스타일 else if: else 바로 뒤에 if 가 오면 elif 처럼 체인으로 처리
+	// else 바로 뒤의 if 는 조건 분기 체인으로 처리한다.
 	bool blElseIf = false;
 	if (tkType1 == TK_ELSE)
 	{
@@ -4219,9 +4212,9 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	}
 	if (blElseIf)
 	{
-		if (funs._cur->GetLastOP() == NOP_RETURN) // Code Size OPT TODO !!
-			blJmp2 = false;
-		if (blJmp2)
+		// 마지막 OP 가 return 인 것과 분기의 모든 경로가 반환하는 것은 다르다.
+		// 중첩 if 의 거짓 경로는 내려올 수 있으므로, 구문으로 반환을 증명할 때만 점프를 뺀다.
+		if (!thenAlwaysReturns)
 		{
 			funs._cur->Push_JMP(ar, 0);
 			jmp2.Set(funs._cur->_code->GetBufferOffset() - 6, funs._cur->_code->GetBufferOffset());
@@ -4229,36 +4222,40 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 
 		SetCondFalseTarget(funs._cur->_code->GetBufferOffset());
 
-		if (false == ParseIF(pJumps, ar, funs, vars, lastOPReturn, pContinueJumps))
+		bool elseAlwaysReturns = false;
+		if (false == ParseIF(pJumps, ar, funs, vars, &elseAlwaysReturns, pContinueJumps))
 			return false;
 
 		ClearTempVars(funs);
-		if (blJmp2) // Code Size OPT TODO !!
+		if (!thenAlwaysReturns)
 			funs._cur->Set_JumpOffet(jmp2, funs._cur->_code->GetBufferOffset());
+		// 뒤쪽 체인만 반환한다고 함수의 기본 반환까지 생략해서는 안 된다.
+		if (alwaysReturns) *alwaysReturns = thenAlwaysReturns && elseAlwaysReturns;
 	}
 	else if (tkType1 == TK_ELSE)
 	{
-		if (funs._cur->GetLastOP() == NOP_RETURN) // Code Size OPT TODO !!
-			blJmp2 = false;
-		if(blJmp2)
+		// then 전체가 반환할 때만 실행되지 않을 점프를 생략한다.
+		if (!thenAlwaysReturns)
 		{
 			funs._cur->Push_JMP(ar, 0);
 			jmp2.Set(funs._cur->_code->GetBufferOffset() - 6, funs._cur->_code->GetBufferOffset());
 		}
 		SetCondFalseTarget(funs._cur->_code->GetBufferOffset());
 
+		bool elseAlwaysReturns = false;
 		tkType1 = GetToken(ar, tk1);
 		if (tkType1 == TK_L_MIDDLE)
 		{
 			AddLocalVar(vars.GetCurrentLayer());
 
-			if (false == ParseMiddleArea(pJumps, ar, funs, vars, NULL, pContinueJumps))
+			if (false == ParseMiddleArea(pJumps, ar, funs, vars, &elseAlwaysReturns, pContinueJumps))
 				return false;
 
 			DelLocalVar(vars.GetCurrentLayer());
 		}
 		else
 		{
+			elseAlwaysReturns = tkType1 == TK_RETURN;
 			ar.PushToken(tkType1, tk1);
 			iTempOffset = INVALID_ERROR_PARSEJOB;
 			r = ParseJob(false, iTempOffset, pJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, pContinueJumps);
@@ -4270,18 +4267,14 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 			}
 		}
 		ClearTempVars(funs);
-		if(blJmp2) // Code Size OPT TODO !!
+		if (!thenAlwaysReturns)
 			funs._cur->Set_JumpOffet(jmp2, funs._cur->_code->GetBufferOffset());
-		else if (funs._cur->GetLastOP() == NOP_RETURN)
-		{
-			if (lastOPReturn) *lastOPReturn = true;
-		}
+		if (alwaysReturns) *alwaysReturns = thenAlwaysReturns && elseAlwaysReturns;
 	}
 	else
 	{
 		ar.PushToken(tkType1, tk1);
-		//if (funs._cur->GetLastOP() != NOP_RETURN) // Code Size OPT TODO !!
-			SetCondFalseTarget(funs._cur->_code->GetBufferOffset());
+		SetCondFalseTarget(funs._cur->_code->GetBufferOffset());
 	}
 	return true;
 }
@@ -4646,7 +4639,7 @@ bool ParseSleep(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 // - case 값은 컴파일 타임 상수(bool/int/string), strict type 비교. float 는 허용하지 않는다.
 // - fallthrough 없음: 각 case 본문 끝에서 switch 끝으로 점프
 // - break 는 switch 만 탈출, continue 는 바깥 loop 로 그대로 전달
-bool ParseSwitch(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn, std::vector<SJumpValue>* pContinueJumps)
+bool ParseSwitch(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* alwaysReturns, std::vector<SJumpValue>* pContinueJumps)
 {
 	std::string tk1;
 	TK_TYPE tkType1;
@@ -4815,12 +4808,18 @@ bool ParseSwitch(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPRe
 		funs._cur->Set_JumpOffet(sBreakJumps[i], iEndOffset);
 
 	funs._cur->ClearLastOP();
-	if (lastOPReturn) *lastOPReturn = false;
+	if (alwaysReturns) *alwaysReturns = false;
 	return true;
 }
 
-bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* lastOPReturn, std::vector<SJumpValue>* pContinueJumps, bool bStopAtCase)
+bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* alwaysReturns, std::vector<SJumpValue>* pContinueJumps, bool bStopAtCase)
 {
+	// 마지막 OP 대신 문과 분기의 구조로 블록 전체의 반환을 추적한다.
+	bool blockAlwaysReturns = false;
+	const std::size_t initialBreakJumps = pJumps ? pJumps->size() : 0;
+	const std::size_t initialContinueJumps = pContinueJumps ? pContinueJumps->size() : 0;
+	if (alwaysReturns) *alwaysReturns = false;
+
 	std::string tk1, tk2;
 	TK_TYPE tkType1, tkType2;
 	TK_TYPE r;
@@ -4835,6 +4834,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 	while (blEnd == false)
 	{
 		ClearTempVars(funs);
+		bool statementAlwaysReturns = false;
 
 		bGlobalLocal = false;
 		tkType1 = GetToken(ar, tk1);
@@ -4851,11 +4851,10 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 		case TK_L_MIDDLE:
 			AddLocalVar(vars.GetCurrentLayer());
 
-			if (false == ParseMiddleArea(pJumps, ar, funs, vars, NULL, pContinueJumps))
+			if (false == ParseMiddleArea(pJumps, ar, funs, vars, &statementAlwaysReturns, pContinueJumps))
 				return false;
 
 			DelLocalVar(vars.GetCurrentLayer());
-			if(lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_R_MIDDLE:
 			if (bStopAtCase)
@@ -4891,12 +4890,11 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "';' after 'return'", tk1.c_str());
 				return false;
 			}
-			if (lastOPReturn) *lastOPReturn = true;
+			statementAlwaysReturns = true;
 			break;
 		case TK_VAR:
 			if (false == ParseVarDef(ar, funs, vars, funType == FUNT_EXPORT))
 				return false;
-			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_CONST:
 			if (funs.GetCurFunName() != GLOBAL_INIT_FUN_NAME)
@@ -4906,7 +4904,6 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			}
 			if (false == ParseConstDef(ar, funs, vars))
 				return false;
-			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_BREAK:
 			if (pJumps == NULL)
@@ -4922,7 +4919,6 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				SetParserCompileError(ar, PCE_EXPECTED_BREAK_SEMICOLON);
 				return false;
 			}
-			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_CONTINUE:
 			if (pContinueJumps == NULL)
@@ -4938,12 +4934,10 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				SetParserCompileError(ar, PCE_EXPECTED_CONTINUE_SEMICOLON);
 				return false;
 			}
-			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_IMPORT:
 			if (ParseImport(ar, funs, vars) == false)
 				return false;
-			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_EXPORT:
 			funType = FUNT_EXPORT;
@@ -4965,12 +4959,10 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "function name", tk2.c_str());
 				return false;
 			}
-			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_SLEEP:
 			if (false == ParseSleep(ar, funs, vars))
 				return false;
-			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_STRING:
 		case TK_MINUS2:
@@ -4984,12 +4976,11 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				//SetCompileError(ar, "Error (%d, %d): ", ar.CurLine(), ar.CurCol());
 				return false;
 			}
-			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_IF:
 			bGlobalLocal = funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME;
 			if(bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME "IF";
-			if (false == ParseIF(pJumps, ar, funs, vars, lastOPReturn, pContinueJumps))
+			if (false == ParseIF(pJumps, ar, funs, vars, &statementAlwaysReturns, pContinueJumps))
 				return false;
 			if (bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME;
 			break;
@@ -4999,7 +4990,6 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			if (false == ParseFor(ar, funs, vars))
 				return false;
 			if (bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME;
-			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_FOREACH:
 			bGlobalLocal = funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME;
@@ -5007,7 +4997,6 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			if (false == ParseForEach(ar, funs, vars))
 				return false;
 			if (bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME;
-			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_WHILE:
 			bGlobalLocal = funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME;
@@ -5015,12 +5004,11 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			if (false == ParseWhile(ar, funs, vars))
 				return false;
 			if (bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME;
-			if (lastOPReturn) *lastOPReturn = false;
 			break;
 		case TK_SWITCH:
 			bGlobalLocal = funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME;
 			if (bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME "SWITCH";
-			if (false == ParseSwitch(ar, funs, vars, lastOPReturn, pContinueJumps))
+			if (false == ParseSwitch(ar, funs, vars, &statementAlwaysReturns, pContinueJumps))
 				return false;
 			if (bGlobalLocal) funs._cur->_name = GLOBAL_INIT_FUN_NAME;
 			break;
@@ -5030,9 +5018,18 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			break;
 		}
 
+		// 모든 경로가 반환한 뒤의 도달 불가능한 문장은 반환 판정을 취소하지 않는다.
+		blockAlwaysReturns = blockAlwaysReturns || statementAlwaysReturns;
+
 		if (tkType1 != TK_EXPORT)
 			funType = FUNT_NORMAL;
 	}
+	// 바깥 루프의 break/continue 는 뒤의 return 을 건너뛸 수 있으므로 반환을 단정하지 않는다.
+	// 안쪽 루프와 switch 의 break 는 각자의 목록에 들어가므로 이 판정에 영향을 주지 않는다.
+	if (alwaysReturns)
+		*alwaysReturns = blockAlwaysReturns &&
+			(!pJumps || pJumps->size() == initialBreakJumps) &&
+			(!pContinueJumps || pContinueJumps->size() == initialContinueJumps);
 	return true;
 }
 
@@ -5276,14 +5273,14 @@ void FinalizeFuction(SFunctions& funs)
 
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool addOPFunEnd)
 {
-	bool LastOPReturn = false;
-	if (false == ParseMiddleArea(NULL, ar, funs, vars, &LastOPReturn))
+	bool bodyAlwaysReturns = false;
+	if (false == ParseMiddleArea(NULL, ar, funs, vars, &bodyAlwaysReturns))
 		return false;
 
 	if (ar.m_sErrorString.empty() == false)
 		return false;
 
-	if(addOPFunEnd && LastOPReturn == false)
+	if(addOPFunEnd && bodyAlwaysReturns == false)
 		//funs._cur->Push_FUNEND(ar);
 		funs._cur->Push_RETURN(ar, 0, true); // 
 
