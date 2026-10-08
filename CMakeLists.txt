@@ -137,4 +137,8 @@ if(NEOSCRIPT_BUILD_SMOKE)
     add_executable(neoscript_control_flow_regression Tests/control_flow_regression.cpp)
     target_link_libraries(neoscript_control_flow_regression PRIVATE neoscript Threads::Threads)
     add_test(NAME neoscript_control_flow_regression COMMAND neoscript_control_flow_regression)
+
+    add_executable(neoscript_postfix_regression Tests/postfix_regression.cpp)
+    target_link_libraries(neoscript_postfix_regression PRIVATE neoscript Threads::Threads)
+    add_test(NAME neoscript_postfix_regression COMMAND neoscript_postfix_regression)
 endif()

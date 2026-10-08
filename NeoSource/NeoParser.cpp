@@ -2100,12 +2100,67 @@ static void MaterializeContainerRead(SOperand& operand, CArchiveRdWC& ar, SFunct
 	operand = SOperand(iValue);
 }
 
+// 변수와 호출 결과의 후위 선택자를 같은 규칙으로 읽는다.
+// 호출 직후 끝내면 L().len(), callback()[i] 에서 다음 선택자가 식 밖에 남는다.
+static bool ParsePostfixSelectors(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+{
+	bool lastSelectorWasDot = false;
+	while (true)
+	{
+		std::string token;
+		const TK_TYPE type = GetToken(ar, token);
+		if (type == TK_L_SMALL)
+		{
+			ar.PushToken(type, token);
+			// 점 뒤의 호출은 컨테이너 메서드이고, 인덱스 뒤의 호출은 읽어 낸 함수값이다.
+			if (!lastSelectorWasDot)
+				MaterializeContainerRead(operand, ar, funs);
+			if (!ParseFunCall(operand, TK_NONE, NULL, ar, funs, vars))
+				return false;
+			// 호출 결과는 새 값이다. 이전 점 선택자의 메서드 문맥을 이어받지 않는다.
+			lastSelectorWasDot = false;
+			continue;
+		}
+		if (type != TK_L_ARRAY && type != TK_DOT)
+		{
+			ar.PushToken(type, token);
+			return true;
+		}
+
+		SOperand key;
+		if (type == TK_L_ARRAY)
+		{
+			if (ParseTable(key, ar, funs, vars) != TK_R_ARRAY)
+				return false;
+			if (key.IsInvalidValue() || key.IsNone())
+			{
+				SetParserCompileError(ar, PCE_EXPECTED_EXPRESSION);
+				return false;
+			}
+		}
+		else
+		{
+			std::string member;
+			if (!GetDotString(ar, member) || member.empty())
+			{
+				SetParserCompileError(ar, PCE_EXPECTED_MEMBER_NAME);
+				return false;
+			}
+			key = funs.AddStaticString(member);
+		}
+
+		MaterializeContainerRead(key, ar, funs);
+		MaterializeContainerRead(operand, ar, funs);
+		operand._iArrayIndex = key._iVar;
+		operand._operandType = key.IsShort() ? Data_TS : Data_TR;
+		lastSelectorWasDot = type == TK_DOT;
+	}
+}
+
 bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	std::string tk1, tk2;
 	TK_TYPE tkType1, tkType2;
-	TK_TYPE r = TK_NONE;
-
 
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_STRING)
@@ -2125,89 +2180,16 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 			return false;
 		}
 		tkType2 = GetToken(ar, tk2);
-		//tk1 = tk1 + "." + tk2;
 		tk1 = tk2;
 		pOtherModule = (*it).second;
 	}
 
-	SOperand iTempOffset;
-	SOperand iTempOffset2;
-	bool lastSelectorWasDot = false;
-	//SOperand iArrayIndex = INVALID_ERROR_PARSEJOB;
-	if(pOtherModule == nullptr)
-		iTempOffset._iVar = FindReadableVar(funs, vars, tk1);
-
-	if (iTempOffset._iVar != -1)
+	SOperand value;
+	if (pOtherModule == nullptr)
+		value._iVar = FindReadableVar(funs, vars, tk1);
+	if (value._iVar == -1)
 	{
-		while (true)
-		{
-			tkType2 = GetToken(ar, tk2);
-			if (tkType2 == TK_L_ARRAY || tkType2 == TK_DOT)
-			{
-			}
-			else if (tkType2 == TK_L_SMALL)
-			{
-				ar.PushToken(tkType2, tk2);
-				if (false == lastSelectorWasDot && iTempOffset.IsArray())
-				{
-					// list[index]() / table[key](): PTRCALL은 컨테이너 메서드 호출용이므로
-					// 인덱스 결과의 함수값을 먼저 임시 슬롯으로 읽어 직접 호출한다.
-					MaterializeContainerRead(iTempOffset, ar, funs);
-				}
-
-				//iTempOffset._iArrayIndex = iArrayIndex._iVar;
-				//iArrayIndex = INVALID_ERROR_PARSEJOB;
-
-				if (false == ParseFunCall(iTempOffset, tkTypePre, NULL, ar, funs, vars))
-					return false;
-				break;
-			}
-			else
-			{
-				ar.PushToken(tkType2, tk2);
-				break;
-			}
-
-			iTempOffset2 = INVALID_ERROR_PARSEJOB;
-			if (tkType2 == TK_L_ARRAY)
-			{
-				r = ParseTable(iTempOffset2, ar, funs, vars);
-			}
-			else
-			{
-				std::string str;
-				if (false == GetDotString(ar, str))
-				{
-					SetParserCompileError(ar, PCE_EXPECTED_MEMBER_NAME);
-					return false;
-				}
-				iTempOffset2 = funs.AddStaticString(str);
-			}
-
-			MaterializeContainerRead(iTempOffset2, ar, funs);
-			// 선택자가 이어지면(a[i][j]) 앞 단계 읽기를 값으로 만들고 그 위에 새 키를 얹는다.
-			MaterializeContainerRead(iTempOffset, ar, funs);
-			iTempOffset._iArrayIndex = iTempOffset2._iVar;
-			iTempOffset._operandType = iTempOffset2.IsShort() ? Data_TS : Data_TR;
-			lastSelectorWasDot = (tkType2 == TK_DOT);
-
-		}
-		if (tkTypePre == TK_MINUS)
-		{
-			MaterializeContainerRead(iTempOffset, ar, funs);
-
-			int iTempOffset3 = funs._cur->AllocLocalTempVar();
-			funs._cur->Push_OP2(ar, NOP_MOV_MINUS, iTempOffset3, iTempOffset._iVar, false);
-			iTempOffset = iTempOffset3;
-		}
-	}
-	else
-	{
-		SFunctionInfo* pFun = nullptr;
-		if(pOtherModule == nullptr)
-			pFun = funs.FindFun(tk1);
-		else
-			pFun = funs.FindFun(tk1, pOtherModule);
+		SFunctionInfo* pFun = pOtherModule == nullptr ? funs.FindFun(tk1) : funs.FindFun(tk1, pOtherModule);
 		if (pFun != NULL)
 		{
 			if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
@@ -2215,87 +2197,52 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 				SetParserCompileError(ar, PCE_GLOBAL_CALL_NOT_ALLOWED);
 				return false;
 			}
-
 			tkType2 = GetToken(ar, tk2);
+			ar.PushToken(tkType2, tk2);
 			if (tkType2 == TK_L_SMALL)
 			{
-				ar.PushToken(tkType2, tk2);
-				if (false == ParseFunCall(iTempOffset, tkTypePre, pFun, ar, funs, vars))
+				if (!ParseFunCall(value, TK_NONE, pFun, ar, funs, vars))
 					return false;
-
-				// 함수 반환값도 컨테이너일 수 있으므로 MakeMatrix()[1][0]처럼
-				// 호출 뒤에 이어지는 인덱스 선택자를 일반 변수와 동일하게 처리한다.
-				while (true)
-				{
-					tkType2 = GetToken(ar, tk2);
-					if (tkType2 == TK_L_SMALL)
-					{
-						ar.PushToken(tkType2, tk2);
-						MaterializeContainerRead(iTempOffset, ar, funs);
-						if (false == ParseFunCall(iTempOffset, tkTypePre, NULL, ar, funs, vars))
-							return false;
-						continue;
-					}
-					if (tkType2 != TK_L_ARRAY)
-					{
-						ar.PushToken(tkType2, tk2);
-						break;
-					}
-
-					SOperand iArrayIndex = INVALID_ERROR_PARSEJOB;
-					if (false == ParseTable(iArrayIndex, ar, funs, vars))
-					{
-						SetParserCompileError(ar, PCE_EXPECTED_MEMBER_NAME);
-						return false;
-					}
-					MaterializeContainerRead(iArrayIndex, ar, funs);
-
-					if (iTempOffset._iArrayIndex == INVALID_ERROR_PARSEJOB)
-					{
-						iTempOffset._iArrayIndex = iArrayIndex._iVar;
-						iTempOffset._operandType = iArrayIndex.IsShort() ? Data_TS : Data_TR;
-					}
-					else
-					{
-						int iValue = funs._cur->AllocLocalTempVar();
-						funs._cur->Push_TableRead(ar, iTempOffset._iVar, iTempOffset._iArrayIndex, iValue, iTempOffset.IsHaveShort());
-						iTempOffset._iVar = iValue;
-						iTempOffset._iArrayIndex = iArrayIndex._iVar;
-						iTempOffset._operandType = iArrayIndex.IsShort() ? Data_TS : Data_TR;
-					}
-				}
 			}
 			else
 			{
-				ar.PushToken(tkType2, tk2);
-				//iTempOffset._iVar = pFun->_staticIndex;
-				iTempOffset._iVar = pFun->_funID;
-				iTempOffset._operandType = Data_Fun;
+				// 호출하지 않은 함수 이름은 컴파일 전용 함수 참조로 유지한다.
+				value = SOperand(pFun->_funID, INVALID_ERROR_PARSEJOB, Data_Fun);
+				operand = value;
+				return true;
 			}
 		}
 		else if (pOtherModule == nullptr && CNeoVM::IsGlobalLibFun(tk1))
 		{
 			tkType2 = GetToken(ar, tk2);
-			if (tkType2 == TK_L_SMALL)
-			{
-				iTempOffset = SOperand(-1, funs.AddStaticString(tk1));
-				ar.PushToken(tkType2, tk2);
-				if (false == ParseFunCall(iTempOffset, tkTypePre, pFun, ar, funs, vars))
-					return false;
-			}
-			else
+			if (tkType2 != TK_L_SMALL)
 			{
 				SetParserCompileError(ar, PCE_INVALID_FUNCTION_CALL);
 				return false;
 			}
+			value = SOperand(-1, funs.AddStaticString(tk1));
+			ar.PushToken(tkType2, tk2);
+			if (!ParseFunCall(value, TK_NONE, NULL, ar, funs, vars))
+				return false;
 		}
 		else
 		{
-			if (false == ParseNum(iTempOffset, tkTypePre, tk1, ar, funs, vars))
-				return false;
+			// 숫자 리터럴의 부호와 즉값 최적화는 기존 숫자 파서에서 처리한다.
+			return ParseNum(operand, tkTypePre, tk1, ar, funs, vars);
 		}
 	}
-	operand = iTempOffset;// SOperand(iTempOffset._iVar, iArrayIndex, iTempOffset._operandType);
+
+	if (!ParsePostfixSelectors(value, ar, funs, vars))
+		return false;
+	if (tkTypePre == TK_MINUS)
+	{
+		// -L()[i], -S().len() 의 부호는 호출 결과가 아니라 최종 선택자 결과에 한 번만 적용한다.
+		MaterializeContainerRead(value, ar, funs);
+		const int negated = IsTempVar(value._iVar) ? value._iVar : funs._cur->AllocLocalTempVar();
+		funs._cur->Push_OP2(ar, NOP_MOV_MINUS, negated, value._iVar, false);
+		value = SOperand(negated);
+	}
+	operand = value;
 	return true;
 }
 

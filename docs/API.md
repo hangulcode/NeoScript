@@ -220,7 +220,9 @@ inside the native call, so statements after `coroutine.resume(...)` in the calle
 
 ## 6. `string` methods
 
-Call these on a **variable**: `"literal".len()` is a syntax error, assign to a variable first.
+Call these on a **variable or function result**, for example `s.len()` or `GetText().trim().len()`.
+Selectors can continue after a call: `GetWords()[0].len()` and `GetText().split(",")[0].len()` work too.
+`"literal".len()` is a syntax error; assign a literal to a variable first.
 Indexes and lengths are UTF-8 **character** counts, not bytes.
 
 | Signature | Returns | Notes |
