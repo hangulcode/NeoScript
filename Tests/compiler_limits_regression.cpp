@@ -108,6 +108,39 @@ int main()
     rt->FreezeBindings();
     for (bool debug : {false, true})
     {
+        // Null assignment preserves list positions, but removes map keys. Run
+        // both with direct constants and after a pool that requires LOADK.
+        const char* const nullAssignments[] = {
+            "var l=[1,2,3]; l[1]=null; export fun Test(){"
+                "return l.len()==3 && l[0]==1 && l[1]==null && l[2]==3;}",
+            "export fun Test(){var l=[1,2,3]; l[0]=null; l[2]=null;"
+                "return l.len()==3 && l[0]==null && l[1]==2 && l[2]==null;}",
+            "fun Clear(var x,var i){x[i]=null;} export fun Test(){"
+                "var l=[1,2,3]; Clear(l,1); var m={\"keep\":1,\"drop\":2}; Clear(m,\"drop\");"
+                "return l.len()==3 && l[0]==1 && l[1]==null && l[2]==3"
+                " && m.len()==1 && m.keep==1 && m.drop==null;}",
+            "export fun Test(){var l=[null,2,null];"
+                "return l.len()==3 && l[0]==null && l[1]==2 && l[2]==null;}",
+            "var box={\"items\":[1,2,3]}; fun Box(){return box;} export fun Test(){"
+                "Box().items[1]=null; return box.items.len()==3 && box.items[0]==1"
+                " && box.items[1]==null && box.items[2]==3;}",
+            "var calls=0; fun Nothing(){calls+=1; return null;} export fun Test(){"
+                "var l=[1,2,3]; var n=null; l[0]=n; l[2]=Nothing();"
+                "return calls==1 && l.len()==3 && l[0]==null && l[1]==2 && l[2]==null;}",
+            "export fun Test(){var l=[\"left\",{\"owned\":[1,2]},\"right\"]; l[1]=null;"
+                "return l.len()==3 && l[0]==\"left\" && l[1]==null && l[2]==\"right\";}",
+            "export fun Test(){var m={\"keep\":1,\"drop\":2}; m.drop=null; m[\"missing\"]=null;"
+                "return m.len()==1 && m.keep==1 && m.drop==null;}",
+            "export fun Test(){var m={}; m[1]=7; m[2]=8; m[1]=null; m[9]=null;"
+                "return m.len()==1 && m[1]==null && m[2]==8;}"
+        };
+        for (bool largePool : {false, true})
+        {
+            const std::string prefix = largePool ? Pool(15000) : std::string();
+            for (size_t i = 0; i < sizeof(nullAssignments) / sizeof(nullAssignments[0]); ++i)
+                Run(rt, prefix + nullAssignments[i], "null assignment " + std::to_string(i)
+                    + (largePool ? " large pool" : " small pool") + (debug ? " debug" : ""), debug);
+        }
         for (int n : {14990, 14997, 20000, 33000, 66000})
         {
             const std::string s = Pool(n) +

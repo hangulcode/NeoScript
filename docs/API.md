@@ -255,6 +255,8 @@ Strings are **not** indexable. `s[0]` raises `cannot read by index from string`.
 There is no `remove`, `insert`, `sort`, `find`, or `clear` on lists. Use `l.resize(0)` to clear.
 Index with `l[i]`; `l[i] = v` only works for an index that already exists, so grow with
 `resize`/`append` first.
+Assigning `l[i] = null` keeps the list length and all other indices unchanged; it replaces only
+that element's value. This differs from assigning `null` to a map entry, which removes its key.
 
 ### 7.1 Primitive arrays
 

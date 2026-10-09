@@ -767,26 +767,8 @@ struct SFunctionInfo
 		OperandTemps temps(*this);
 		nTable = ReadOperand(ar, nTable); nArray = ReadOperand(ar, nArray);
 		if (op != NOP_FMOV2) nValue = ReadOperand(ar, nValue);
-		if (b3 == false && IsTempVar(nValue))
-		{
-			eNOperation preOP = GetLastOP();
-			u8 *pre = (u8*)_code->GetData() + sizeof(OpType) + sizeof(ArgFlag) + _iLastOPOffset;
-			short* preDest = (short*)pre;
-			switch (preOP)
-			{
-			case NOP_VAR_CLEAR:
-				if (*preDest == nValue)
-				{
-					//_code->SetPointer(_iLastOPOffset - (ar._debug ? sizeof(debug_info) : 0), SEEK_SET);
-					_code->SetPointer(_iLastOPOffset, SEEK_SET);
-					Push_TableRemove(ar, nTable, nArray);
-					return;
-				}
-				break;
-			default:
-				break;
-			}
-		}
+		// null 대입을 REMOVE로 바꾸지 않는다. 대상은 런타임에 목록일 수도 있다.
+		// CltInsert가 목록의 길이/인덱스를 보존하고, 표에 대해서만 키를 삭제한다.
 		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
@@ -799,26 +781,7 @@ struct SFunctionInfo
 		OperandTemps temps(*this);
 		nTable = ReadOperand(ar, nTable); nArray = ReadOperand(ar, nArray);
 		if (op != NOP_FMOV2) nValue = ReadOperand(ar, nValue);
-		if (b3 == false && IsTempVar(nValue))
-		{
-			eNOperation preOP = GetLastOP();
-			u8 *pre = (u8*)_code->GetData() + sizeof(OpType) + sizeof(ArgFlag) + _iLastOPOffset;
-			short* preDest = (short*)pre;
-			switch (preOP)
-			{
-			case NOP_VAR_CLEAR:
-				if (*preDest == nValue)
-				{
-					//_code->SetPointer(_iLastOPOffset - (ar._debug ? sizeof(debug_info) : 0), SEEK_SET);
-					_code->SetPointer(_iLastOPOffset, SEEK_SET);
-					Push_ListRemove(ar, nTable, nArray);
-					return;
-				}
-				break;
-			default:
-				break;
-			}
-		}
+		// 목록의 null 대입도 일반 대입으로 유지한다. 원소 삭제와 의미가 다르다.
 		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
