@@ -117,13 +117,15 @@ The VS Code debugger currently supports:
 
 - Lists support `insert(index, value)`, `remove(index)` (returns the removed value), and
   stable `sort(comparator)`. The existing `append(value, index)` insertion form is retained.
+  List sorting rejects execution with an enabled time limit before invoking the comparator.
 - Sets support `len()` as well as `tosize(set)`; unknown method calls are errors.
 - String literals, string consts and parenthesized expressions support postfix selectors:
   `"text".len()`, `TEXT.len()`, and `("a" .. "b").len()`.
 - String literals decode `\uXXXX`, including paired surrogate escapes. Malformed escapes and
   embedded NUL (`\u0000`) are compile errors.
 - `format(pattern, ...)` and `pattern.format(...)` support `%d`, `%f`, `%s`, `%%`, width,
-  left alignment, numeric zero padding, and float/string precision. See [API.md](docs/API.md#21-string-formatting).
+  left alignment, numeric zero padding, and float/string precision. Width is capped at 4,096,
+  float precision at 1,024, and the full result at 1 MiB. See [API.md](docs/API.md#21-string-formatting).
 
 ### Numeric precision
 The scalar float type `NS_FLOAT` is **`float` (32-bit)**, matching the game engine's native

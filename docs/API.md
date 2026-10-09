@@ -98,6 +98,14 @@ Precision is supported only for `%f` and `%s`; zero padding is numeric only. Uns
 width/precision, wrong types, and missing or extra arguments are runtime errors. Literal
 backslash-u text written in a pattern is not decoded again at runtime.
 
+Width is limited to **4,096 characters**, `%f` precision to **1,024 fractional digits**,
+and the complete result of one call to **1 MiB (1,048,576 UTF-8 bytes)**. Expansion limits
+are checked before padding or numeric conversion; string fields are checked before copying,
+and literal text and all fields share the result limit. Exceeding a limit is a runtime error,
+never silent truncation. `%s` precision only truncates existing text and remains an int-range
+value; its actual output still counts toward the byte limit. These are formatting limits,
+independent of compiler image capacity and other runtime string operations.
+
 ---
 
 ## 3. `math`
@@ -316,7 +324,10 @@ Sort accepts named functions and capturing lambdas with two arguments. Equal ele
 their original order. The comparator must return bool and must not modify the list or its elements.
 It runs synchronously: yield, sleep, async waits, coroutine.resume and coroutine.close are errors,
 as in other synchronous native-to-script callbacks.
-Execution time slices resume only after the synchronous sort has finished.
+When an execution time limit is enabled (`timeoutMs >= 0`, including `timeoutMs == 0`),
+`list.sort` fails with `list.sort is not allowed during time-limited execution` before calling
+the comparator or modifying the list. The same instance can sort in a later unlimited call.
+With no time limit, sort remains synchronous; a nonterminating comparator will not return.
 Sorting works on retained snapshots, then writes back only on success. Structural changes
 (insert, append, remove, resize to a different size, or another sort) during comparisons abort with
 `list was modified during sort`; callback errors and non-bool results also abort. Callback side

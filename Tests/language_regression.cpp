@@ -152,25 +152,77 @@ static void RuntimeReject(IRuntime* runtime, const std::string& source, const ch
 
 static void CheckSortSliced(IRuntime* runtime, bool debug)
 {
-    const std::string source = "export var done=0; export fun Test(){var a=[3,1,2];"
-        "a.sort(fun(var x,var y){var n=0;for(var i in 0,200)n+=i;return x<y;});"
-        "if(a[0]==1 && a[1]==2 && a[2]==3)done=1;}";
-    CompileResult compiled = runtime->Compile(Describe(source, debug));
-    Check((bool)compiled.program, "compile sort in sliced execution");
-    if (!compiled.program) return;
-    InstanceHandle instance = runtime->CreateInstance(compiled.program);
-    bool ok = instance && runtime->StartSliced(instance, "Test", 0, 64);
-    if (ok)
+    // The nonterminating comparator must never be entered. The CTest timeout
+    // also bounds a regression that accidentally disables VM slicing again.
+    for (bool image : {false, true})
+    for (int timeout : {0, 1000})
+    for (bool infinite : {false, true})
     {
-        RunStatus status = RunStatus::Suspended;
-        for (int slices = 0; slices < 128 && status == RunStatus::Suspended; ++slices)
-            status = runtime->UpdateSliced(instance);
-        int32_t done = 0;
-        ok = status == RunStatus::Completed && runtime->GetGlobalInt(instance, "done", done) && done==1;
+        const std::string source = std::string("var a=[3,1,2]; export var calls=0; export var verified=0; fun Compare(var x,var y){calls+=1;") +
+            (infinite ? "while(true){}" : "") + "return x<y;}"
+            "export fun Test(){var n=0;for(var i in 0,30)n+=i;a.sort(Compare);}"
+            "export fun Verify(){if(a[0]!=3 || a[1]!=1 || a[2]!=2)return false;"
+            "a.sort(fun(var x,var y){return x<y;});if(a[0]==1 && a[1]==2 && a[2]==3)verified=1;}";
+        const std::string label = "sliced sort debug=" + std::to_string(debug) + " image=" + std::to_string(image)
+            + " timeout=" + std::to_string(timeout) + " infinite=" + std::to_string(infinite);
+        ProgramHandle program;
+        if (image)
+        {
+            std::vector<uint8_t> bytes;
+            if (runtime->CompileToBytecode(Describe(source, debug), bytes).ok()) program = runtime->LoadProgram(bytes);
+        }
+        else program = runtime->Compile(Describe(source, debug)).program;
+        Check((bool)program, "compile " + label);
+        if (!program) continue;
+        InstanceHandle instance = runtime->CreateInstance(program);
+        bool rejected = false, untouched = false, reusable = false;
+        if (instance)
+        {
+            RunStatus status = runtime->StartSliced(instance, "Test", timeout, 10)
+                ? RunStatus::Suspended : RunStatus::Failed;
+            for (int slices = 0; slices < 128 && status == RunStatus::Suspended; ++slices)
+                status = runtime->UpdateSliced(instance);
+            StringView error;
+            rejected = status == RunStatus::Failed && runtime->PeekLastError(error)
+                && error.str().find("list.sort is not allowed during time-limited execution") != std::string::npos;
+            int32_t calls = -1;
+            untouched = runtime->GetGlobalInt(instance, "calls", calls) && calls==0;
+            if (rejected)
+            {
+                // Explicitly clear the worker's retained time-limit setting.
+                const bool started = runtime->StartSliced(instance, "Verify", -1, 10);
+                int32_t verified = 0;
+                reusable = started && !runtime->IsRunning(instance)
+                    && runtime->GetGlobalInt(instance, "verified", verified) && verified==1;
+            }
+            runtime->DestroyInstance(instance);
+        }
+        Check(rejected, "reject " + label);
+        Check(untouched, "never enter comparator " + label);
+        Check(reusable, "preserve list and allow subsequent unlimited sort " + label);
+        runtime->DestroyProgram(program);
     }
-    Check(ok, "sort completes before an outer time slice resumes");
-    if (instance) runtime->DestroyInstance(instance);
-    runtime->DestroyProgram(compiled.program);
+}
+
+static void CheckFormatLimits(IRuntime* runtime, bool debug)
+{
+    const std::string prefix = "export fun Test(){var s=\"x\";for(var i in 0,20)s=s..s;";
+    Run(runtime, prefix + "return format(\"%s\",s).len()==1048576 && s.format().len()==1048576"
+        " && format(\"%s%.0s\",s,\"x\").len()==1048576;}", debug);
+    Run(runtime, "export fun Test(){var s=\"x\";for(var i in 0,19)s=s..s;"
+        "return \"%s%s\".format(s,s).len()==1048576;}", debug);
+    const std::string unicode = u8"export fun Test(){var s=\"😀\";for(var i in 0,18)s=s..s;";
+    Run(runtime, unicode + "return format(\"%s\",s).len()==262144;}", debug);
+    RuntimeReject(runtime, unicode + u8"format(\"%s\",s..\"😀\");}", "exceeds 1048576 bytes", debug);
+    const char* overflows[] = {
+        "format(\"%s\",s..\"x\");", "format(\"%s%s\",s,\"x\");",
+        "format(\"%sX\",s);", "format(\"%s%%\",s);", "(s..\"x\").format();",
+        "(s..\"%d\").format(1);", "(s..\"%1s\").format(\"\");", "format(\"%s%.1f\",s,1.0);"
+    };
+    for (const char* body : overflows)
+        RuntimeReject(runtime, prefix + body + "}", "exceeds 1048576 bytes", debug);
+    RuntimeReject(runtime, "export fun Test(){format(\"%4097d\",1);}", "width exceeds 4096", debug);
+    RuntimeReject(runtime, "export fun Test(){\"%.1025f\".format(1.0);}", "precision exceeds 1024", debug);
 }
 
 static void CheckExportVisibility(IRuntime* runtime, bool debug)
@@ -251,6 +303,8 @@ int main()
         "return format(\"[%5d][%-5s][%-05d]\",3,\"ab\",7)==\"[    3][ab   ][7    ]\";",
         u8"return format(\"[%4.2s]\",\"한😀글\")==\"[  한😀]\" && \"%.0s\".format(\"abc\")==\"\";",
         "return format(\"%%\")==\"%\" && \"plain\".format()==\"plain\" && format(\"\")==\"\";",
+        "return format(\"%4096d\",1).len()==4096 && \"%-4096s\".format(\"x\").len()==4096;",
+        "return format(\"%.1024f\",1.0).len()==1026 && \"%.2147483647s\".format(\"abc\")==\"abc\";",
         // Keyword-shaped members must not become declarations in the pre-pass.
         "var t={}; t.fun=3; var x=t.fun; return x==3;",
         "var t={\"fun\":3}; t.fun+=2; return t.fun==5;",
@@ -339,6 +393,7 @@ int main()
     for (bool debug : {false, true})
     {
         CheckSortSliced(runtime, debug);
+        CheckFormatLimits(runtime, debug);
         CheckExportVisibility(runtime, debug);
         for (const char* body : bodies)
             Run(runtime, std::string("export fun Test(){") + body + "}", debug);

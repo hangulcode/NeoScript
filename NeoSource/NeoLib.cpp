@@ -220,6 +220,11 @@ struct neo_libs
 	}
 	static bool FormatText(CNeoVMWorker* pN, const std::string& pattern, int firstArg, int lastArg)
 	{
+		// Bound format-induced expansion before allocating. These are per-call
+		// text formatting limits, independent of compiler/image capacity.
+		constexpr int maxWidth = 4096;
+		constexpr int maxFloatPrecision = 1024;
+		constexpr size_t maxOutputBytes = 1024 * 1024;
 		auto fail = [pN](const char* message) { pN->SetError(message); return false; };
 		// Parse the format ourselves. Never pass script-controlled specifiers or
 		// mismatched VM values through a C variadic printf call.
@@ -229,10 +234,19 @@ struct neo_libs
 			int arg = firstArg;
 			for (size_t pos = 0; pos < pattern.size();)
 			{
-				if (output.size() >= static_cast<size_t>(INT32_MAX)) return fail("formatted string exceeds int range");
-				if (pattern[pos] != '%') { output += pattern[pos++]; continue; }
+				if (pattern[pos] != '%')
+				{
+					if (output.size() == maxOutputBytes) return fail("formatted string exceeds 1048576 bytes");
+					output += pattern[pos++];
+					continue;
+				}
 				++pos;
-				if (pos < pattern.size() && pattern[pos] == '%') { output += '%'; ++pos; continue; }
+				if (pos < pattern.size() && pattern[pos] == '%')
+				{
+					if (output.size() == maxOutputBytes) return fail("formatted string exceeds 1048576 bytes");
+					output += '%'; ++pos;
+					continue;
+				}
 				bool left = false, zero = false;
 				while (pos < pattern.size() && (pattern[pos] == '-' || pattern[pos] == '0'))
 				{
@@ -253,6 +267,7 @@ struct neo_libs
 				};
 				int width = 0, precision = -1;
 				if (!number(width)) return fail("format width exceeds int range");
+				if (width > maxWidth) return fail("format width exceeds 4096 characters");
 				if (pos < pattern.size() && pattern[pos] == '.')
 				{
 					++pos;
@@ -278,6 +293,8 @@ struct neo_libs
 				case 'f':
 				{
 					if (!value->IsNumber()) return fail("format %f requires int or float");
+					// Check before the stream creates its conversion buffer.
+					if (precision > maxFloatPrecision) return fail("format float precision exceeds 1024 digits");
 					std::ostringstream stream;
 					stream.imbue(std::locale::classic());
 					const double numeric = value->GetType() == VAR_INT
@@ -289,19 +306,29 @@ struct neo_libs
 					break;
 				}
 				case 's':
+				{
 					if (value->GetType() != VAR_STRING) return fail("format %s requires string");
 					if (zero) return fail("format zero padding requires a numeric value");
 					characters = static_cast<size_t>(value->_str->_StringLen);
 					if (precision >= 0) characters = std::min(characters, static_cast<size_t>(precision));
-					field = value->_str->_str.substr(0, utf_string::UTF8_OFFSET(value->_str->_str, 0, static_cast<int>(characters)));
+					// Every UTF-8 character occupies at least one byte. Bound the
+					// prefix scan and check its byte size before copying the field.
+					const size_t remaining = maxOutputBytes - output.size();
+					if (characters > remaining) return fail("formatted string exceeds 1048576 bytes");
+					const size_t bytes = utf_string::UTF8_OFFSET(value->_str->_str, 0, static_cast<int>(characters));
+					const size_t padding = static_cast<size_t>(width) > characters ? static_cast<size_t>(width) - characters : 0;
+					if (bytes > remaining || padding > remaining - bytes)
+						return fail("formatted string exceeds 1048576 bytes");
+					field.assign(value->_str->_str, 0, bytes);
 					break;
+				}
 				default:
 					return fail("unsupported format specifier");
 				}
 				const size_t padding = static_cast<size_t>(width) > characters ? static_cast<size_t>(width) - characters : 0;
-				const size_t limit = static_cast<size_t>(INT32_MAX);
-				if (field.size() > limit - output.size() || padding > limit - output.size() - field.size())
-					return fail("formatted string exceeds int range");
+				const size_t remaining = maxOutputBytes - output.size();
+				if (field.size() > remaining || padding > remaining - field.size())
+					return fail("formatted string exceeds 1048576 bytes");
 				if (!left && zero && padding != 0 && !field.empty() && field[0] == '-')
 				{
 					output += '-';
@@ -446,26 +473,21 @@ struct neo_libs
 		if (pVar->GetType() != VAR_LIST || args != 1) return false;
 		VarInfo* compare = pN->GetStack(1);
 		if (compare->GetType() != VAR_FUN && compare->GetType() != VAR_CLOSURE) return false;
+		// The native sort cannot suspend and resume its C++ frame. Never disable
+		// a host's time limit to run a comparator: it may loop forever.
+		if (pN->m_iTimeout >= 0)
+		{
+			pN->SetError("list.sort is not allowed during time-limited execution");
+			return false;
+		}
 		HeldValue receiver(pN, pVar), callback(pN, compare);
 		// A synchronous native sort cannot preserve its C++ frame across a
 		// script suspension or coroutine switch. Use the VM's nested-call guard.
 		struct SynchronousCall
 		{
 			CNeoVMWorker* worker;
-			int timeout, remainingOps;
-			explicit SynchronousCall(CNeoVMWorker* value) : worker(value),
-				timeout(value->m_iTimeout), remainingOps(value->m_op_process)
-			{
-				worker->BeginNestedScriptCall();
-				// Finish the native operation before honoring the outer time slice.
-				worker->m_iTimeout = -1;
-			}
-			~SynchronousCall()
-			{
-				worker->m_iTimeout = timeout;
-				worker->m_op_process = remainingOps;
-				worker->EndNestedScriptCall();
-			}
+			explicit SynchronousCall(CNeoVMWorker* value) : worker(value) { worker->BeginNestedScriptCall(); }
+			~SynchronousCall() { worker->EndNestedScriptCall(); }
 		} synchronousCall(pN);
 		ListInfo* list = receiver.value._lst;
 		const size_t count = static_cast<size_t>(list->GetCount());
