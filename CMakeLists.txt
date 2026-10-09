@@ -146,4 +146,8 @@ if(NEOSCRIPT_BUILD_SMOKE)
     target_link_libraries(neoscript_compiler_limits_regression PRIVATE neoscript Threads::Threads)
     add_test(NAME neoscript_compiler_limits_regression COMMAND neoscript_compiler_limits_regression)
     set_tests_properties(neoscript_compiler_limits_regression PROPERTIES TIMEOUT 180)
+
+    add_executable(neoscript_language_regression Tests/language_regression.cpp)
+    target_link_libraries(neoscript_language_regression PRIVATE neoscript Threads::Threads)
+    add_test(NAME neoscript_language_regression COMMAND neoscript_language_regression)
 endif()

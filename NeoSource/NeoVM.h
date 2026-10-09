@@ -763,12 +763,21 @@ struct NeoGlobalSymbolTable
 	int                    count = 0;
 };
 
+struct NeoCompileDiagnostic
+{
+	std::string sourceName;
+	uint32_t line = 0;
+	uint32_t column = 0;
+};
+
 struct NeoCompilerParam
 {
 	const void* pBufferSrc;
 	int iLenSrc;
 
 	std::string* err = nullptr;
+	std::string sourceName;
+	NeoCompileDiagnostic* diagnostic = nullptr;
 	bool putASM = false;
 	bool debug = false;
 	bool allowGlobalInitLogic = true;

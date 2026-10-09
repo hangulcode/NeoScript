@@ -230,6 +230,7 @@ struct SFunctionInfo
 	std::set<std::string>		_args;
 	int							_built_in_arg_c;
 	FUNCTION_TYPE				_funType = FUNT_NORMAL;
+	bool _bodyParsed = false;
 	std::string					_moduleName;
 	std::map<int, std::string>	_debugVarNames;
 	std::vector<SClosureCapture>	_captures;
@@ -825,6 +826,7 @@ struct SFunctionLayer
 	bool _blBuiltInModule = false;
 	std::map<std::string, SFunctionInfo*>	_funs;
 	std::map< std::string, SFunctionLayer*> _defModules;
+	NeoCompileDefines _exportedConsts; // Compile-time values only; never runtime globals.
 };
 
 // 컴파일 타임 switch case 1개. Program 의 ProgramSwitchKey 와 같은 값 모델.

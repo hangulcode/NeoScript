@@ -1388,6 +1388,7 @@ public:
 	ProgramHandle program;
 	InstanceHandle instance;
 	std::string sourcePath;
+	Error compileError;
 	std::vector<std::string> sourceFiles;
 	std::map<int, std::vector<int>> breakpointsByFile;
 	std::set<int> executableLines;
@@ -1554,6 +1555,7 @@ public:
 
 	bool LoadProgram(const std::string& path, std::string& err, bool enableDebug)
 	{
+		compileError = Error{};
 		std::string fullPath = FullPathOrSelf(path);
 		std::ifstream in(fullPath.c_str(), std::ios::binary);
 		if (!in)
@@ -1581,6 +1583,7 @@ public:
 		if (!cr.program)
 		{
 			err = cr.error.message;
+			compileError = cr.error;
 			return false;
 		}
 		program = cr.program;
@@ -1711,7 +1714,10 @@ public:
 				std::string message;
 				if (ParseNeoCompileError(err, line, column, message))
 				{
-					std::string fullPath = FullPathOrSelf(path);
+					// Imported diagnostics carry their own source, not the launch file.
+					std::string fullPath = FullPathOrSelf(compileError.sourceName.empty() ? path : compileError.sourceName);
+					if (compileError.line) line = (int)compileError.line;
+					if (compileError.column) column = (int)compileError.column;
 					std::ostringstream eventBody;
 					eventBody << "{\"source\":{\"path\":\"" << JsonEscape(fullPath) << "\"},\"line\":" << line
 						<< ",\"column\":" << column << ",\"message\":\"" << JsonEscape(message)

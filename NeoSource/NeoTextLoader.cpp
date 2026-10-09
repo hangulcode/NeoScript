@@ -457,7 +457,12 @@ void SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...)
 	va_end(arg_ptr);
 
 	if(ar.m_sErrorString.empty())
-		ar.m_sErrorString = buff;
+	{
+		ar.m_errorLocation.sourceName = ar.m_sSourceName;
+		ar.m_errorLocation.line = ar.CurLine();
+		ar.m_errorLocation.column = ar.CurCol();
+		ar.m_sErrorString = ar.m_sSourceName.empty() ? buff : ar.m_sSourceName + ": " + buff;
+	}
 //#ifdef _WIN32	
 //	printf(buff);
 //#endif

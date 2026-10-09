@@ -142,6 +142,8 @@ public:
 
 	std::list<SToken> m_sTokenQueue;
 	std::string m_sErrorString;
+	std::string m_sSourceName;
+	NeoCompileDiagnostic m_errorLocation;
 //	std::set<std::string> m_sImports; // Document Load State
 	std::string	m_sModuleName;
 	u16 m_iFileSeq = 0;
@@ -225,6 +227,14 @@ public:
 		st._type = tk;
 		st._tk = str;
 		m_sTokenQueue.push_front(st);
+	}
+	void CopyErrorFrom(const CArchiveRdWC& other)
+	{
+		if (m_sErrorString.empty())
+		{
+			m_sErrorString = other.m_sErrorString;
+			m_errorLocation = other.m_errorLocation;
+		}
 	}
 
 protected:

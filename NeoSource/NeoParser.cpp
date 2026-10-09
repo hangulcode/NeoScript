@@ -18,7 +18,11 @@ void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 	X(PCE_INVALID_EXPORT_SCOPE, "Error (%d, %d): export is only allowed at the global scope. Current function: '%s', name: '%s'") \
 	X(PCE_IMPORT_FAILED, "Error (%d, %d): failed to import module '%s'") \
 	X(PCE_IMPORT_CYCLE, "Error (%d, %d): circular import of module '%s'") \
+	X(PCE_MODULE_MEMBER, "Error (%d, %d): module '%s' has no public member '%s' (only functions and exported consts are accessible)") \
+	X(PCE_MODULE_CONST, "Error (%d, %d): module '%s' has no exported const '%s'") \
 	X(PCE_DUPLICATE_FUNCTION_ARGUMENT, "Error (%d, %d): duplicate function argument '%s'") \
+	X(PCE_DUPLICATE_FUNCTION, "Error (%d, %d): duplicate function definition '%s'") \
+	X(PCE_FUNCTION_PROTOTYPE, "Error (%d, %d): function forward declarations are no longer supported; remove this declaration and keep the function body") \
 	X(PCE_EXPECTED_FUNCTION_ARGUMENT, "Error (%d, %d): expected a function argument name, but found '%s'") \
 	X(PCE_EXPECTED_COMMA_BETWEEN_ARGUMENTS, "Error (%d, %d): expected ',' between function arguments") \
 	X(PCE_INVALID_CALL_ARGUMENT, "Error (%d, %d): invalid function call argument") \
@@ -151,6 +155,7 @@ struct SOperand
 	LiteralKind _literalKind;
 	NS_FLOAT _floatLiteral;
 	int _intLiteral;
+	bool _readOnly = false;
 
 	SOperand()
 	{
@@ -170,6 +175,7 @@ struct SOperand
 	}
 	void Reset()
 	{
+		_readOnly = false;
 		_iVar = _iArrayIndex = INVALID_ERROR_PARSEJOB;
 		_operandType = Data_NR;
 		_literalKind = Literal_None;
@@ -651,6 +657,7 @@ std::string GetTokenString(TK_TYPE tk)
 
 #define GLOBAL_INIT_FUN_NAME	"##_global"
 int ParseFunctionBase(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string fname, FUNCTION_TYPE funType); // -1 : error
+static bool CollectFunctionDeclarations(CArchiveRdWC& ar, SFunctions& funs);
 
 
 void SkipCurrentLine(CArchiveRdWC& ar)
@@ -712,6 +719,15 @@ TK_TYPE CalcStringToken(std::string& tk)
 }
 
 TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk);
+
+static TK_TYPE GetRawToken(CArchiveRdWC& ar, std::string& tk)
+{
+	const bool suppressed = ar.m_bSuppressDefines;
+	ar.m_bSuppressDefines = true;
+	const TK_TYPE type = GetToken(ar, tk);
+	ar.m_bSuppressDefines = suppressed;
+	return type;
+}
 
 static TK_TYPE CompileDefineTokenToToken(const NeoCompileDefineToken& defineToken, std::string& tk)
 {
@@ -1383,12 +1399,14 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 
 	CArchiveRdWC ar2;
+	ar2.m_sSourceName = fullFileName;
 	const bool decoded = ToArchiveRdWC((const char*)pFileBuffer, iFileLen, ar2);
 	if (ar.m_pLoader)
 		ar.m_pLoader->Unload(fullFileName.c_str(), pFileBuffer, iFileLen);
 	if (!decoded)
 	{
-		SetParserCompileError(ar, PCE_IMPORT_FAILED, fileName.c_str());
+		SetCompileError(ar2, "Invalid script source encoding (expected UTF-8 or BOM-marked UTF-16)");
+		ar.CopyErrorFrom(ar2);
 		return false;
 	}
 	ar2._allowGlobalInitLogic = ar._allowGlobalInitLogic;
@@ -1412,7 +1430,7 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	funs._curModule = funs.NewLayer();
 	/////////////////////////////////
 	vars.m_sImporting.insert(fileName);      // 이 모듈을 파싱하는 동안 재진입 금지
-	bool r = ParseFunctionBody(ar2, funs, vars, false);
+	bool r = CollectFunctionDeclarations(ar2, funs) && ParseFunctionBody(ar2, funs, vars, false);
 	vars.m_sImporting.erase(fileName);
 	/////////////////////////////////
 	vars.m_sImports[fileName] = funs._curModule;
@@ -1421,8 +1439,7 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	// 하위 모듈에서 난 에러를 덮어쓰지 않는다(SetCompileError 는 first-wins 라
 	// 여기서 빈 문자열로 밀면 순환 감지 메시지까지 사라진다).
-	if (ar.m_sErrorString.empty())
-		ar.m_sErrorString = ar2.m_sErrorString;
+	ar.CopyErrorFrom(ar2);
 	return r;
 //#else
 //	SetCompileError(ar, "Error (%d, %d): Import Not Defined)", ar.CurLine(), ar.CurCol());
@@ -1486,6 +1503,91 @@ bool ParseFunctionArg(CArchiveRdWC& ar, SFunctions& funs, SLayerVar* pCurLayer)
 		}
 	}
 	return true;
+}
+
+// Collect names and arity without compiling bodies, evaluating initializers or
+// loading imports. The real pass retains variable/const scope and import order.
+// Named functions already belong to their module (including nested definitions);
+// anonymous functions are still created at their expression in the real pass.
+static bool CollectFunctionDeclarations(CArchiveRdWC& ar, SFunctions& funs)
+{
+	CArchiveRdWC scan = ar;
+	scan.m_bSuppressDefines = true;
+	try
+	{
+		std::string token;
+		for (TK_TYPE type = GetToken(scan, token); type != TK_NONE; type = GetToken(scan, token))
+		{
+			if (type == TK_QUOTE2 || type == TK_QUOTE1)
+			{
+				if (!GetQuotationString(scan, token, type == TK_QUOTE2 ? '"' : '\''))
+				{
+					SetParserCompileError(scan, PCE_UNTERMINATED_STRING);
+					break;
+				}
+				continue;
+			}
+			if (type == TK_DOT)
+			{
+				// The real parser reads a raw member name after '.', so t.fun is
+				// not a declaration. Consume it the same way here; leave missing
+				// or invalid selectors for the real pass to diagnose.
+				GetDotString(scan, token);
+				continue;
+			}
+			if (type != TK_FUN) continue;
+			type = GetToken(scan, token);
+			if (type == TK_L_SMALL) continue; // anonymous fun (...)
+			if (type != TK_STRING || !AbleName(token))
+			{
+				SetParserCompileError(scan, PCE_INVALID_FUNCTION_NAME, token.c_str());
+				break;
+			}
+			const std::string name = token;
+			if (funs.FindFun(name))
+			{
+				SetParserCompileError(scan, PCE_DUPLICATE_FUNCTION, name.c_str());
+				break;
+			}
+			if (GetToken(scan, token) != TK_L_SMALL)
+			{
+				SetParserCompileError(scan, PCE_EXPECTED_TOKEN, "'(' after function name", token.c_str());
+				break;
+			}
+			const int id = funs.GetFunCountAll();
+			CheckCompileRange("function id", id, 0, SHRT_MAX);
+			SFunctionInfo* info = funs.NewFun(name, funs._cur->_code, funs._cur->_pDebugData);
+			info->_funID = id;
+			info->_moduleName = ar.m_sModuleName;
+			funs._funIDs[id] = info;
+			{
+				struct RestoreCurrent
+				{
+					SFunctions& functions;
+					SFunctionInfo* saved;
+					~RestoreCurrent() { functions._cur = saved; }
+				} restore{funs, funs._cur};
+				funs._cur = info;
+				SLayerVar arguments;
+				if (!ParseFunctionArg(scan, funs, &arguments)) break;
+			}
+			type = GetToken(scan, token);
+			if (type == TK_SEMICOLON)
+			{
+				SetParserCompileError(scan, PCE_FUNCTION_PROTOTYPE);
+				break;
+			}
+			if (type != TK_L_MIDDLE)
+			{
+				SetParserCompileError(scan, PCE_EXPECTED_TOKEN, "'{' to start function body", token.c_str());
+				break;
+			}
+		}
+	}
+	catch (const CompileLimitError& e)
+	{ SetCompileError(scan, "Error (%d, %d): %s", scan.CurLine(), scan.CurCol(), e.what()); }
+	ar.CopyErrorFrom(scan);
+	return scan.m_sErrorString.empty();
 }
 
 void AddLocalVar(SLayerVar* pCurLayer)
@@ -1950,6 +2052,8 @@ TK_TYPE ParseListDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs,
 	return tkType1;
 }
 
+static void MaterializeContainerRead(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs);
+
 TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, int iTableDeep = 0)
 {
 	std::string tk1, tk2;
@@ -2001,6 +2105,9 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 
 		if (tkType1 == TK_COLON)
 		{
+			// Resolve the key before parsing the value: that expression can mutate
+			// its source container. A container operand is not the element itself.
+			MaterializeContainerRead(iTempOffsetKey, ar, funs);
 			tkType2 = ParseShortCircuitLogic(false, iTempOffsetValue, ar, funs, vars, TK_COMMA, TK_R_MIDDLE, TK_NONE, TK_NONE);
 			if (tkType2 == TK_NONE)
 			{
@@ -2020,6 +2127,7 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 				funs._cur->Push_OP2(ar, NOP_FMOV1, iTempFunction, iTempOffsetValue._iVar, false);
 				iTempOffsetValue = SOperand(iTempFunction);
 			}
+			MaterializeContainerRead(iTempOffsetValue, ar, funs);
 			funs._cur->Push_Table_MASMDP(ar, NOP_CLT_MOV, iResultStack._iVar, iTempOffsetKey._iVar, iTempOffsetValue._iVar, false, iTempOffsetKey.IsShort(), iTempOffsetValue.IsShort());
 			tkType1 = tkType2;
 			iItemCount++;
@@ -2027,6 +2135,7 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 		else
 		{
 			iTempOffsetValue = iTempOffsetKey;
+			MaterializeContainerRead(iTempOffsetValue, ar, funs);
 			if (iTempOffsetValue.IsFun())
 			{
 				int iTempFunction = funs._cur->AllocLocalTempVar();
@@ -2165,6 +2274,64 @@ static bool ParsePostfixSelectors(SOperand& operand, CArchiveRdWC& ar, SFunction
 	}
 }
 
+// Read a member in its module's namespace, without substituting a same-named
+// const or host define from the importing file.
+static bool ReadModuleMember(CArchiveRdWC& ar, std::string& member)
+{
+	if (GetToken(ar, member) != TK_DOT)
+	{
+		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'.' after module name", member.c_str());
+		return false;
+	}
+	if (GetRawToken(ar, member) != TK_STRING || !AbleName(member))
+	{
+		SetParserCompileError(ar, PCE_EXPECTED_MEMBER_NAME);
+		return false;
+	}
+	return true;
+}
+
+static bool MakeConstOperand(const NeoCompileDefineToken& constant, SOperand& value,
+	CArchiveRdWC& ar, SFunctions& funs)
+{
+	switch (constant.type)
+	{
+	case NEO_DEFINE_TOKEN_INT:
+	case NEO_DEFINE_TOKEN_FLOAT:
+	{
+		ParsedNumber number;
+		if (!StringToNumber(number, constant.text.c_str()))
+		{
+			SetParserCompileError(ar, PCE_INVALID_NUMBER_LITERAL);
+			return false;
+		}
+		if (constant.type == NEO_DEFINE_TOKEN_INT)
+			value.SetIntLiteral(funs.AddStaticInt(number.intValue), number.intValue);
+		else
+			value.SetFloatLiteral(funs.AddStaticNum(number.floatValue), (NS_FLOAT)number.floatValue);
+		break;
+	}
+	case NEO_DEFINE_TOKEN_STRING:
+		value = SOperand(funs.AddStaticString(constant.text));
+		break;
+	case NEO_DEFINE_TOKEN_TRUE:
+	case NEO_DEFINE_TOKEN_FALSE:
+		value = SOperand(funs.AddStaticBool(constant.type == NEO_DEFINE_TOKEN_TRUE));
+		break;
+	case NEO_DEFINE_TOKEN_NULL:
+		value = SOperand(funs._cur->AllocLocalTempVar());
+		funs._cur->Push_OP1(ar, NOP_VAR_CLEAR, value._iVar);
+		break;
+	default:
+		SetParserCompileError(ar, PCE_CONST_INVALID_VALUE, constant.text.c_str());
+		return false;
+	}
+	// null is materialized in a temporary, so a pool-slot check alone does not
+	// protect every constant from assignment and prefix/postfix increment.
+	value._readOnly = true;
+	return true;
+}
+
 bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	std::string tk1, tk2;
@@ -2178,16 +2345,13 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 	}
 
 	SFunctionLayer* pOtherModule = nullptr;
+	std::string moduleName;
 	auto it = funs._curModule->_defModules.find(tk1);
 	if (it != funs._curModule->_defModules.end())
 	{
-		tkType2 = GetToken(ar, tk2);
-		if(tkType2 != TK_DOT)
-		{
-			SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'.' after module name", tk2.c_str());
+		moduleName = tk1;
+		if (!ReadModuleMember(ar, tk2))
 			return false;
-		}
-		tkType2 = GetToken(ar, tk2);
 		tk1 = tk2;
 		pOtherModule = (*it).second;
 	}
@@ -2195,6 +2359,13 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 	SOperand value;
 	if (pOtherModule == nullptr)
 		value._iVar = FindReadableVar(funs, vars, tk1);
+	else
+	{
+		const auto constant = pOtherModule->_exportedConsts.values.find(tk1);
+		if (constant != pOtherModule->_exportedConsts.values.end()
+			&& !MakeConstOperand(constant->second, value, ar, funs))
+			return false;
+	}
 	if (value._iVar == -1)
 	{
 		SFunctionInfo* pFun = pOtherModule == nullptr ? funs.FindFun(tk1) : funs.FindFun(tk1, pOtherModule);
@@ -2235,6 +2406,11 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 		}
 		else
 		{
+			if (pOtherModule != nullptr)
+			{
+				SetParserCompileError(ar, PCE_MODULE_MEMBER, moduleName.c_str(), tk1.c_str());
+				return false;
+			}
 			// 숫자 리터럴의 부호와 즉값 최적화는 기존 숫자 파서에서 처리한다.
 			return ParseNum(operand, tkTypePre, tk1, ar, funs, vars);
 		}
@@ -2651,7 +2827,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				{
 					return TK_NONE;
 				}
-				if (IsCompileConstant(a._iVar))
+				if (a._readOnly || IsCompileConstant(a._iVar))
 				{	// 상수 풀(리터럴/const) 증감 불가
 					SetParserCompileError(ar, PCE_INVALID_INCREMENT_TARGET, tk1.c_str());
 					return TK_NONE;
@@ -2677,7 +2853,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			else
 			{	// 후위
 				SOperand& a = operands[operands.size() - 1];
-				if (a.IsArray() == false && IsTempVar(a._iVar))
+				if (a._readOnly || (a.IsArray() == false && IsTempVar(a._iVar)))
 				{
 					SetParserCompileError(ar, PCE_TEMP_VAR_UNSUPPORTED, tk1.c_str());
 					return TK_NONE;
@@ -2795,6 +2971,13 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			continue;
 		}
 
+		// Check the destination before the function-value assignment path too.
+		if (op < NOP_VAR_CLEAR && (a._readOnly ||
+			(!a.IsArray() && (IsTempVar(a._iVar) || IsCompileConstant(a._iVar)))))
+		{
+			SetParserCompileError(ar, PCE_EXPECTED_LVALUE);
+			return TK_NONE;
+		}
 		if (b.IsFun())
 		{
 			if (op == NOP_MOV)
@@ -2816,20 +2999,6 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		}
 		else if (op < NOP_VAR_CLEAR)
 		{
-			if (a.IsArray() == false)
-			{
-				if (IsTempVar(a._iVar))
-				{
-					SetParserCompileError(ar, PCE_EXPECTED_LVALUE);
-					return TK_NONE;
-				}
-				// 상수 풀(리터럴/const 치환 결과)에 쓰면 같은 값을 쓰는 모든 코드가 오염된다
-				if (IsCompileConstant(a._iVar))
-				{
-					SetParserCompileError(ar, PCE_EXPECTED_LVALUE);
-					return TK_NONE;
-				}
-			}
 			if (b.IsArray() == false)
 			{
 				if (a.IsArray() == false)
@@ -4282,71 +4451,32 @@ struct SConstValue
 	double Num() const { return type == NEO_DEFINE_TOKEN_INT ? (double)i : f; }
 };
 
-static bool ParseConstExpr(SConstValue& out, int minPrec, CArchiveRdWC& ar);
+static bool ParseConstExpr(SConstValue& out, int minPrec, CArchiveRdWC& ar, SFunctions& funs);
 
-static bool ParseConstPrimary(SConstValue& out, CArchiveRdWC& ar)
+static bool ParseConstPrimary(SConstValue& out, CArchiveRdWC& ar, SFunctions& funs)
 {
 	std::string tk;
 	TK_TYPE tkType = GetToken(ar, tk);
+	if (tkType == TK_STRING)
+	{
+		const auto module = funs._curModule->_defModules.find(tk);
+		if (module != funs._curModule->_defModules.end())
+		{
+			const std::string alias = tk;
+			if (!ReadModuleMember(ar, tk)) return false;
+			const auto& values = module->second->_exportedConsts.values;
+			const auto constant = values.find(tk);
+			if (constant == values.end())
+			{
+				SetParserCompileError(ar, PCE_MODULE_CONST, alias.c_str(), tk.c_str());
+				return false;
+			}
+			tkType = CompileDefineTokenToToken(constant->second, tk);
+		}
+	}
 
 	switch (tkType)
 	{
-	case TK_PLUS:
-		if (false == ParseConstPrimary(out, ar))
-			return false;
-		if (false == out.IsNum())
-		{
-			SetParserCompileError(ar, PCE_CONST_INVALID_OP, "+");
-			return false;
-		}
-		return true;
-	case TK_MINUS:
-		if (false == ParseConstPrimary(out, ar))
-			return false;
-		if (out.type == NEO_DEFINE_TOKEN_INT) { out.i = -out.i; return true; }
-		if (out.type == NEO_DEFINE_TOKEN_FLOAT) { out.f = -out.f; return true; }
-		SetParserCompileError(ar, PCE_CONST_INVALID_OP, "-");
-		return false;
-	case TK_NOT: // ~
-		if (false == ParseConstPrimary(out, ar))
-			return false;
-		if (out.type != NEO_DEFINE_TOKEN_INT)
-		{
-			SetParserCompileError(ar, PCE_CONST_INVALID_OP, "~");
-			return false;
-		}
-		out.i = ~out.i;
-		return true;
-	case TK_L_SMALL:
-		if (false == ParseConstExpr(out, 0, ar))
-			return false;
-		tkType = GetToken(ar, tk);
-		if (tkType != TK_R_SMALL)
-		{
-			SetParserCompileError(ar, PCE_EXPECTED_RIGHT_PAREN);
-			return false;
-		}
-		return true;
-	case TK_QUOTE2:
-	case TK_QUOTE1:
-		if (false == GetQuotationString(ar, out.s, tkType == TK_QUOTE2 ? '"' : '\''))
-		{
-			SetParserCompileError(ar, PCE_UNTERMINATED_STRING);
-			return false;
-		}
-		out.type = NEO_DEFINE_TOKEN_STRING;
-		return true;
-	case TK_STRING_LITERAL: // define/const 치환으로 완성된 문자열
-		out.type = NEO_DEFINE_TOKEN_STRING;
-		out.s = tk;
-		return true;
-	case TK_TRUE:  out.type = NEO_DEFINE_TOKEN_TRUE;  return true;
-	case TK_FALSE: out.type = NEO_DEFINE_TOKEN_FALSE; return true;
-	case TK_NULL:  out.type = NEO_DEFINE_TOKEN_NULL;  return true;
-	case TK_SOURCE_LINE:
-		out.type = NEO_DEFINE_TOKEN_INT;
-		out.i = (int)ar.CurLine();
-		return true;
 	case TK_STRING:
 	{
 		ParsedNumber num;
@@ -4377,6 +4507,62 @@ static bool ParseConstPrimary(SConstValue& out, CArchiveRdWC& ar)
 		else         { out.type = NEO_DEFINE_TOKEN_INT;   out.i = num.intValue; } // 정수 리터럴은 int32 로 정확히(0xffffffff→-1)
 		return true;
 	}
+	case TK_TRUE:  out.type = NEO_DEFINE_TOKEN_TRUE;  return true;
+	case TK_FALSE: out.type = NEO_DEFINE_TOKEN_FALSE; return true;
+	case TK_NULL:  out.type = NEO_DEFINE_TOKEN_NULL;  return true;
+	case TK_SOURCE_LINE:
+		out.type = NEO_DEFINE_TOKEN_INT;
+		out.i = (int)ar.CurLine();
+		return true;
+	case TK_PLUS:
+		if (false == ParseConstPrimary(out, ar, funs))
+			return false;
+		if (false == out.IsNum())
+		{
+			SetParserCompileError(ar, PCE_CONST_INVALID_OP, "+");
+			return false;
+		}
+		return true;
+	case TK_MINUS:
+		if (false == ParseConstPrimary(out, ar, funs))
+			return false;
+		if (out.type == NEO_DEFINE_TOKEN_INT) { out.i = -out.i; return true; }
+		if (out.type == NEO_DEFINE_TOKEN_FLOAT) { out.f = -out.f; return true; }
+		SetParserCompileError(ar, PCE_CONST_INVALID_OP, "-");
+		return false;
+	case TK_NOT: // ~
+		if (false == ParseConstPrimary(out, ar, funs))
+			return false;
+		if (out.type != NEO_DEFINE_TOKEN_INT)
+		{
+			SetParserCompileError(ar, PCE_CONST_INVALID_OP, "~");
+			return false;
+		}
+		out.i = ~out.i;
+		return true;
+	case TK_L_SMALL:
+		if (false == ParseConstExpr(out, 0, ar, funs))
+			return false;
+		tkType = GetToken(ar, tk);
+		if (tkType != TK_R_SMALL)
+		{
+			SetParserCompileError(ar, PCE_EXPECTED_RIGHT_PAREN);
+			return false;
+		}
+		return true;
+	case TK_QUOTE2:
+	case TK_QUOTE1:
+		if (false == GetQuotationString(ar, out.s, tkType == TK_QUOTE2 ? '"' : '\''))
+		{
+			SetParserCompileError(ar, PCE_UNTERMINATED_STRING);
+			return false;
+		}
+		out.type = NEO_DEFINE_TOKEN_STRING;
+		return true;
+	case TK_STRING_LITERAL: // define/const 치환으로 완성된 문자열
+		out.type = NEO_DEFINE_TOKEN_STRING;
+		out.s = tk;
+		return true;
 	default:
 		SetParserCompileError(ar, PCE_CONST_INVALID_VALUE, tk.c_str());
 		return false;
@@ -4456,9 +4642,9 @@ static bool EvalConstBinOp(SConstValue& a, TK_TYPE op, const SConstValue& b, CAr
 	}
 }
 
-static bool ParseConstExpr(SConstValue& out, int minPrec, CArchiveRdWC& ar)
+static bool ParseConstExpr(SConstValue& out, int minPrec, CArchiveRdWC& ar, SFunctions& funs)
 {
-	if (false == ParseConstPrimary(out, ar))
+	if (false == ParseConstPrimary(out, ar, funs))
 		return false;
 
 	while (true)
@@ -4472,21 +4658,19 @@ static bool ParseConstExpr(SConstValue& out, int minPrec, CArchiveRdWC& ar)
 			return true;
 		}
 		SConstValue rhs;
-		if (false == ParseConstExpr(rhs, prec + 1, ar))
+		if (false == ParseConstExpr(rhs, prec + 1, ar, funs))
 			return false;
 		if (false == EvalConstBinOp(out, tkType, rhs, ar))
 			return false;
 	}
 }
 
-bool ParseConstDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+bool ParseConstDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool exported)
 {
 	std::string name, tk;
 	TK_TYPE tkType;
 
-	ar.m_bSuppressDefines = true; // 이름은 치환 없이 raw 로 읽는다 (중복 선언 감지)
-	tkType = GetToken(ar, name);
-	ar.m_bSuppressDefines = false;
+	tkType = GetRawToken(ar, name); // Keep the declaration name for duplicate checks.
 
 	if (tkType != TK_STRING || false == AbleName(name))
 	{
@@ -4496,7 +4680,7 @@ bool ParseConstDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	if (ar.m_sScriptDefines.values.find(name) != ar.m_sScriptDefines.values.end() ||
 		(ar.m_pDefines != nullptr && ar.m_pDefines->values.find(name) != ar.m_pDefines->values.end()) ||
 		vars.FindVar(name) != -1 ||
-		funs.FindFun(name) != NULL)
+		funs.FindFun(name) != NULL || funs._curModule->_defModules.count(name) != 0)
 	{
 		SetParserCompileError(ar, PCE_CONST_DUPLICATE, name.c_str());
 		return false;
@@ -4510,7 +4694,7 @@ bool ParseConstDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 
 	SConstValue v;
-	if (false == ParseConstExpr(v, 0, ar))
+	if (false == ParseConstExpr(v, 0, ar, funs))
 		return false;
 
 	tkType = GetToken(ar, tk);
@@ -4548,6 +4732,7 @@ bool ParseConstDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	default:                     d.type = NEO_DEFINE_TOKEN_NULL;  d.text = "null";  break;
 	}
 	ar.m_sScriptDefines.values[name] = d;
+	if (exported) funs._curModule->_exportedConsts.values[name] = d;
 	return true;
 }
 bool ParseSleep(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
@@ -4664,7 +4849,7 @@ bool ParseSwitch(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* alwaysRe
 			while (true)   // <const> [, <const>]* ':'
 			{
 				SConstValue cv;
-				if (false == ParseConstExpr(cv, 0, ar))
+				if (false == ParseConstExpr(cv, 0, ar, funs))
 					return false;
 
 				SSwitchCaseCompile kc;
@@ -4858,7 +5043,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				SetParserCompileError(ar, PCE_CONST_NOT_GLOBAL);
 				return false;
 			}
-			if (false == ParseConstDef(ar, funs, vars))
+			if (false == ParseConstDef(ar, funs, vars, funType == FUNT_EXPORT))
 				return false;
 			break;
 		case TK_BREAK:
@@ -5256,9 +5441,6 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string&
 {
 	//funs._cur->Clear();
 	//funs._cur->_name = fname;
-	bool fowardDeclaration = false;
-	int fowardArgCnt = 0;
-
 	SFunctionInfo* pF = funs.FindFun(fname);
 	if(pF == nullptr)
 	{
@@ -5281,10 +5463,15 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string&
 	}
 	else
 	{
-		fowardDeclaration = true;
-		fowardArgCnt = (int)pF->_args.size();
+		if (pF->_bodyParsed)
+		{
+			SetParserCompileError(ar, PCE_DUPLICATE_FUNCTION, fname.c_str());
+			return false;
+		}
 		pF->_args.clear();
 	}
+	pF->_bodyParsed = true;
+	pF->_funType = funType;
 	funs._cur = pF;
 
 	std::string tk1;
@@ -5294,12 +5481,6 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string&
 	pCurLayer->_function = pF;
 	if (false == ParseFunctionArg(ar, funs, pCurLayer))
 		return false;
-
-	if(fowardDeclaration)
-	{
-		if(fowardArgCnt != (int)pF->_args.size())
-			return false;
-	}
 
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_MIDDLE)
@@ -5311,11 +5492,8 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string&
 		}
 		if (tkType1 == TK_SEMICOLON)
 		{
-			DelVarsFunction(vars);
-
-//			SFunctionInfo* pF = funs.FindFun(funs.GetCurFunName());
-//			*pF = funs._cur;
-			return true;
+			SetParserCompileError(ar, PCE_FUNCTION_PROTOTYPE);
+			return false;
 		}
 		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'{' to start function body", tk1.c_str());
 		return false;
@@ -5405,7 +5583,7 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 		}
 	}
 
-	bool r = ParseFunctionBody(ar, funs, vars);
+	bool r = CollectFunctionDeclarations(ar, funs) && ParseFunctionBody(ar, funs, vars);
 	if (true == r)
 	{
 		funs._cur->_iCode_Size = funs._cur->_code->GetBufferOffset();
@@ -5438,6 +5616,9 @@ bool NeoVMSystem::Compile(CNArchive& arw, const NeoCompilerParam& param)
 
 	CArchiveRdWC ar2;
 	ar2._allowGlobalInitLogic = param.allowGlobalInitLogic;
+	ar2.m_sSourceName = !param.sourceName.empty() ? param.sourceName
+		: (param.debugSourcePath != nullptr ? param.debugSourcePath : "<script>");
+	if (param.diagnostic) *param.diagnostic = NeoCompileDiagnostic{};
 	ar2._debug = param.debug;
 	ar2.m_pDefines = param.defines;
 	ar2.m_pGlobalSymbols = param.globalSymbols;
@@ -5465,6 +5646,7 @@ bool NeoVMSystem::Compile(CNArchive& arw, const NeoCompilerParam& param)
 	if (!b) arw.SetBufferOffset(0);
 	if(b == false && param.err)
 		*(param.err) = ar2.m_sErrorString;
+	if (!b && param.diagnostic) *param.diagnostic = ar2.m_errorLocation;
 
 	return b;
 }

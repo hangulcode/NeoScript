@@ -1,6 +1,6 @@
 ﻿# NeoScript — 작업 규칙
 
-> 이 파일이 유일한 진입점이다. CLAUDE.md / GEMINI.md 는 여기를 가리킨다. 80줄을 넘기지 않으며 세부는 `ReadMe.md` 와 `docs/` 로 내린다.
+> 이 파일이 유일한 진입점이다. CLAUDE.md / GEMINI.md 는 여기를 가리킨다. 80줄을 넘기지 않는다. 스크립트 작성 전 [ScriptAuthoring.md](docs/ScriptAuthoring.md)를 먼저 읽고, 세부는 `ReadMe.md`와 `docs/`를 확인한다.
 
 ## 함께 쓰는 트리
 
@@ -65,16 +65,16 @@ plus three Unity suites — smoke, PlayMode, reload cycle. Commands in `docs/Uni
 
 ## 먼저 알아야 할 함정
 
-- **컴파일러는 위에서 아래로 한 번만 훑는다.** 함수는 쓰기 전에 정의해야 한다. 어기면 `unknown identifier` 로
-  그 파일을 import 한 스크립트까지 통째로 컴파일이 깨진다.
-- `import` 는 컴파일 타임 인클루드다. 임포트한 쪽마다 전역의 **사본**이 생긴다(상태 공유 아님).
+- **함수 이름·인자 정보는 모듈별로 먼저 수집한다.** 뒤쪽 함수 정의를 호출할 수 있으며 `fun F(...);` 전방 선언은 오류다.
+- **변수·const는 반드시 사용 전에 선언한다.** 함수 본문에서도 뒤에 선언된 전역변수는 읽을 수 없다.
+- `import`는 컴파일 시 포함하며, 같은 컴파일의 중복 import는 재사용한다. 실행 인스턴스끼리는 전역 상태를 공유하지 않는다.
 - `math.Vector2/3/4`, `Quaternion` 은 값 타입이고 `NOP_VEC_MAKE` 인트린식이라 호출이 아니다.
-- 모듈 멤버 호출(`mod.Fn()`)은 파서가 컴파일 타임에 해소한다. 런타임 맵 조회가 아니다.
+- 모듈 별칭은 함수와 `export const`만 노출하며 컴파일 타임에 해소한다. 변수 접근은 지원하지 않으므로 필요한 값은 함수로 전달한다.
 
 ## 문서
 
 - `ReadMe.md` — 언어 문법, 호스트 API, 성능 결과와 측정 방법
 - `docs/API.md` — 스크립트가 부를 수 있는 모든 함수(math/system/coroutine, string/list/map/async 메서드, 키워드 intrinsic)
-  — 라이브러리를 고치면 `NeoLib.cpp` 기준으로 같이 갱신한다
+  — 언어·라이브러리를 고치면 구현·회귀 시험과 함께 API 및 ScriptAuthoring 문서도 갱신한다
 - `docs/Unity.md` — Unity integration (the three layers, setup, exposing C# objects, platforms, traps)
-- `docs/` — 보조 자료
+- [docs/ScriptAuthoring.md](docs/ScriptAuthoring.md) — AI와 사람이 먼저 읽는 스크립트 사용법·주요 기능·실행 예제. 이 문서만 줄 수 제한 예외

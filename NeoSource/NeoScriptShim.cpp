@@ -746,6 +746,7 @@ void RuntimeImpl::SetupCompilerParam(const CompileDesc& desc, NeoCompilerParam& 
                                     NeoGlobalSymbolTable& gtab, NeoCompileDefines& inlineDefines, std::string& dbgPath)
 {
     param.err = &err;
+    param.sourceName = desc.sourceName.str();
     param.debug = desc.includeDebugInfo;
     param.putASM = desc.emitAsm;   // ASM 덤프(진단): 내부 컴파일러가 OutAsm 으로 stdout 출력
     gtab = NeoGlobalSymbolTable{ m_globalSymbols.data(), static_cast<int>(m_globalSymbols.size()) };
@@ -788,13 +789,17 @@ CompileResult RuntimeImpl::Compile(const CompileDesc& desc)
     NeoCompileDefines inlineDefines;
     NeoCompilerParam param(desc.source.data(), static_cast<int>(desc.source.size()));
     SetupCompilerParam(desc, param, err, gtab, inlineDefines, dbgPath);
+    NeoCompileDiagnostic diagnostic;
+    param.diagnostic = &diagnostic;
 
     CNeoVMProgram* prog = NeoVMSystem::CompileToProgram(param);
     if (prog == nullptr)
     {
         r.error.code = 1;
         r.error.message = err;
-        r.error.sourceName = desc.sourceName.str();
+        r.error.sourceName = diagnostic.sourceName.empty() ? desc.sourceName.str() : diagnostic.sourceName;
+        r.error.line = diagnostic.line;
+        r.error.column = diagnostic.column;
         return r;
     }
     ProgramRec* rec = new ProgramRec();
@@ -818,11 +823,16 @@ Error RuntimeImpl::CompileToBytecode(const CompileDesc& desc, std::vector<uint8_
     NeoCompileDefines inlineDefines;
     NeoCompilerParam param(desc.source.data(), static_cast<int>(desc.source.size()));
     SetupCompilerParam(desc, param, err, gtab, inlineDefines, dbgPath);
+    NeoCompileDiagnostic diagnostic;
+    param.diagnostic = &diagnostic;
 
     CNArchive arw;   // 자체 버퍼(성장). NeoVMSystem::Compile 이 여기 바이트코드를 쓴다.
     if (!NeoVMSystem::Compile(arw, param))
     {
-        Error e; e.code = 1; e.message = err; e.sourceName = desc.sourceName.str();
+        Error e; e.code = 1; e.message = err;
+        e.sourceName = diagnostic.sourceName.empty() ? desc.sourceName.str() : diagnostic.sourceName;
+        e.line = diagnostic.line;
+        e.column = diagnostic.column;
         return e;
     }
     const uint8_t* bytes = static_cast<const uint8_t*>(arw.GetData());

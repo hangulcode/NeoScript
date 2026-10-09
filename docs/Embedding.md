@@ -61,6 +61,18 @@ ProgramHandle prog = rt->LoadProgram(loadFromCacheOrDb());
 InstanceHandle inst = rt->CreateInstance(prog, idesc);
 ```
 
+Compile diagnostics populate `Error.sourceName`, `line` and `column` with the originating
+source, including nested imports, independently of `includeDebugInfo`. Set `CompileDesc.sourceName`
+for the root source; imported sources use the loader path. `Error.message` also includes the
+file name before `Error (line, column): ...`. This applies to both `Compile` and
+`CompileToBytecode`; a failed bytecode compilation clears its output. Concatenating source
+files does not preserve their original locations automatically.
+
+Script `export const` publishes a compile-time value to importing scripts. It creates no
+host-visible global or runtime module lookup; `GetGlobal*` does not expose it. Rebuild cached
+bytecode for consumers when an exported constant changes. `export var` and `export fun`
+retain their existing host visibility.
+
 **Host → script calls.** Function indices are fixed per program, so cache the `FunctionHandle` once and
 call it every frame with no per-call string lookup. `Call(inst, fn)` returns an `Invocation`: push args,
 `invoke()`, then read the return.

@@ -7,6 +7,12 @@
 	- It was developed in Visual Studio 2026 C++.
 	- After some more features are added, port to C#
 
+### Script authoring guide
+
+**[docs/ScriptAuthoring.md](docs/ScriptAuthoring.md)** — AI와 사람을 위한 스크립트 사용 설명서.
+선언 순서, import와 공개 상수, 자료구조·문자열·클로저·벡터·코루틴의 실제 사용 예제와
+오류 확인 방법을 먼저 읽고, 전체 함수 시그니처는 아래 API 목록에서 찾는다.
+
 ### Script API reference
 
 **[docs/API.md](docs/API.md)**
@@ -216,10 +222,31 @@ Rules:
 	- Value must be a compile-time constant expression: literals (`int`, `float`,
 	  `string`, `true`, `false`, `null`), other defines/consts, unary `-` `~`,
 	  binary `+ - * / % << >> & ^ |`, and parentheses.
-	- A `const` is local to the script file that declares it; it is not visible
-	  in imported modules (host defines are visible everywhere).
+	- A plain `const` is local to its script file. `export const` makes the value
+	  available through an imported module alias; host defines remain visible everywhere.
 	- Redeclaring a name that is already a const, host define, global variable,
-	  or function is a compile error.
+	  function, or module alias is a compile error.
+
+```cpp
+// settings.ns
+export const TEXT_SPEED = 22;
+const INTERNAL_LIMIT = 100; // private to this file
+```
+
+```cpp
+import settings as cfg;
+const DOUBLE_SPEED = cfg.TEXT_SPEED * 2;
+var speed = cfg.TEXT_SPEED;
+switch (speed) { case cfg.TEXT_SPEED: print("matched"); }
+```
+
+The import must precede the reference. Only explicitly exported constants are exposed;
+their names are not injected into the importing file. References are compile-time values,
+including in `const` initializers and `case` expressions. Assignments and increments are
+compile errors. Changing an exported constant requires recompiling its consumers.
+An imported constant may be explicitly re-exported with `export const COPY = cfg.TEXT_SPEED;`.
+`export const` exposes a value to script modules, not a runtime global to the C++ host;
+the existing host visibility of `export var` and `export fun` is unchanged.
 
 
 ### Performance test results
@@ -337,6 +364,19 @@ compiler cases) and `console.exe --v2smoke` (host API, closure lifetime, leak co
 	- > / < / >= / <=: comparison operators, equivalent to C semantics
 	- x..y: converts x and y to strings and concatenates them
 
+### Function and variable declaration order
+
+The compiler collects named function signatures within each module before compiling
+its bodies. Calls and function references may precede the definition, and mutually
+recursive functions need no extra declarations. The old `fun F(var x);` forward
+declaration syntax is a compile error; keep only `fun F(var x) { ... }`.
+
+Variables (including globals) and `const` still **must be declared before use**.
+A function body cannot read a global declared farther down the file. Initializers
+and imports retain their source order; anonymous functions retain their capture rules.
+Module aliases expose functions and `export const`, not variables: use `module.GetValue()`
+to pass runtime data. Constants, including exported ones, must precede their use in their own file.
+
 ### for loop
 ```cpp
 for (var i in 0, n)        // step omitted -> 1
@@ -345,7 +385,7 @@ for (var i in 0, n)        // step omitted -> 1
 for (var i in 0, n, 2)     // every other element
     total += i;
 
-for (var i in n, 0, -1)    // counts down: n-1 … 1
+for (var i in n, 0, -1)    // counts down: n, n-1, ... 1
     total += i;
 ```
 

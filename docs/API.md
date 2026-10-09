@@ -3,6 +3,9 @@
 Everything a `.ns` script can call: keyword intrinsics, the three built-in modules
 (`math` / `system` / `coroutine`), and the method sets of `string` / `list` / `map` / `async`.
 
+Start with [ScriptAuthoring.md](ScriptAuthoring.md) for runnable examples, declaration and
+module rules, collection semantics, and practical checks before writing script.
+
 - The **host** side (`IRuntime`, `CallContext`, `FunctionHandle`, binding native objects) lives in
   [`ReadMe.md`](../ReadMe.md). This file never describes C++ API.
 - Language syntax (`for`, `foreach`, `switch`, operators, `const`, compile-time defines) also lives
@@ -29,8 +32,14 @@ Every signature and behavioural note below was verified by running it through
   `invalid function call`. There are no optional parameters except where an entry says so.
 - Module functions need `import` first (`import math;`). Keyword intrinsics and `print` do not.
 - `import name;` lowercases `name`, looks for `<libPath>/name.ns`, then falls back to the built-in
-  module table. `import name as alias;` renames it locally. Import is a compile-time include, so
-  each importer gets its **own copy** of that module's globals.
+  module table. `import name as alias;` renames it locally. Import is a compile-time include;
+  repeated imports within one compilation reuse the module. Separate runtime instances do not
+  share its globals.
+- Aliases expose module functions and `export const` values. Use a getter function to pass
+  a module variable; `alias.variable` is unsupported. Plain `const` names remain file-local.
+- `alias.CONSTANT` is resolved during compilation and also works in `const` initializers
+  and `switch case` expressions. Import first; assignment and increment are errors. Names
+  are not imported unqualified. Recompile consumers after an exported constant changes.
 
 ---
 
@@ -213,8 +222,9 @@ chunk's top level is the only thing you can do with one. To call named functions
 | `coroutine.close()` | `coroutine` | Closes the *current* coroutine |
 | `coroutine.close(co: coroutine)` | `coroutine` | Closing an already-dead coroutine succeeds as a no-op |
 
-`yield` (the keyword) suspends. The context switch happens when the interpreter next runs, not
-inside the native call, so statements after `coroutine.resume(...)` in the caller still run first.
+`yield` (the keyword) suspends. After the native `resume` callback, the VM switches to the
+coroutine before executing the caller's next statement. The coroutine runs until it yields or
+finishes, then the caller continues. Sleeping or host execution budgets can suspend the instance.
 
 ---
 
@@ -228,20 +238,25 @@ Indexes and lengths are UTF-8 **character** counts, not bytes.
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
 | `s.len()` | `int` | character count |
-| `s.sub(start: int, count: int)` | `string` | `start` out of range raises `invalid function call` |
+| `s.sub(start: int, count: int)` | `string` | clamps `start` to `[0, s.len()]`; clips the count at the end; `count <= 0` returns `""` |
 | `s.find(needle: string)` | `int` | character index, `-1` when not found |
 | `s.upper()` | `string` | ASCII only - per-byte `::toupper` |
 | `s.lower()` | `string` | ASCII only |
 | `s.trim()` | `string` | strips **spaces only**, not tabs or newlines |
 | `s.ltrim()` | `string` | leading spaces |
 | `s.rtrim()` | `string` | trailing spaces |
-| `s.replace(find: string, to: string)` | `string` | **first occurrence only** |
-| `s.split(sep: string)` | `list` | multi-character separators work; always returns at least one element |
+| `s.replace(find: string, to: string)` | `string` | **first occurrence only**; no match returns the original text |
+| `s.replaceAll(find: string, to: string)` | `string` | all non-overlapping literal matches, left to right; no match or empty `find` returns the original text |
+| `s.split(sep: string)` | `list` | multi-character separators work; always returns at least one element; pass a non-empty separator |
 
-`s.replace(x, y)` where `x` is absent throws, surfacing as the runtime error `exception`. Guard it:
-`if (s.find(x) >= 0) s = s.replace(x, y);`
+These methods return a new value and do not modify `s`. `replaceAll` never searches text
+inserted by the replacement. For compatibility, `replace("", x)` still prepends `x` once;
+`replaceAll("", x)` leaves the text unchanged. `find("")` returns `0`.
+Empty input and `sub(s.len(), count)` return an empty substring. Wrong argument counts
+or types are still errors.
 
 Strings are **not** indexable. `s[0]` raises `cannot read by index from string`.
+An empty `split` separator currently prevents the search loop from advancing; reject it before calling.
 
 ## 7. `list` methods
 
@@ -400,9 +415,12 @@ produced, so `!= null` is the presence test to use.
 - **Only `bool` is truthy.** `if (x)` and `while (x)` take the branch **only** when `x` is a
   boolean `true`. `if (1)`, `if ("a")`, `if (someMap)` are all false - there is no truthiness
   conversion. Write the comparison out: `if (count > 0)`, `if (name != "")`.
-- **Declare before use.** The compiler makes one top-to-bottom pass. A function must be defined
-  above its first call site or the file - and every file importing it - fails with
-  `unknown identifier`.
+- **Declare variables and const before use.** This includes global variables referenced inside
+  function bodies. Only named function signatures are collected ahead of use, per module;
+  calls to later definitions and mutual recursion work. `fun F(...);` prototypes are rejected.
+- **Imported compile errors identify the source file.** Their line and column belong to that
+  module, even through nested imports. Concatenated sources still need a host-provided mapping
+  back to original files; concatenation alone loses those boundaries.
 - **Native arity is not checked at compile time.** A wrong count surfaces at run time as
   `invalid function call`.
 - **`/` on two ints is integer division**, C semantics. Use `tofloat` when you want a real quotient.

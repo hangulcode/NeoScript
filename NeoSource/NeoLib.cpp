@@ -34,7 +34,14 @@ struct neo_libs
 		int p1 = pN->read<int>(1);
 		int p2 = pN->read<int>(2);
 
-		if (p1 < 0 || p1 >= len) return false;
+		// Character offsets are clamped; empty input and non-positive counts
+		// produce an empty string without making a normal boundary an error.
+		p1 = std::max(0, std::min(p1, len));
+		if (p1 == len || p2 <= 0)
+		{
+			pN->ReturnValue("");
+			return true;
+		}
 
 		p1 = utf_string::UTF8_OFFSET(*p, 0, p1);
 		p2 = utf_string::UTF8_OFFSET(*p, p1, p2) - p1;
@@ -61,8 +68,8 @@ struct neo_libs
 		char* p2 = pN->read<char*>(1);
 		if (p2 == NULL) return false;
 
-		int iFind = (int)p->find(p2);
-		iFind = utf_string::UTF8_INDEX2OFFSET(*p, iFind);
+		const size_t found = p->find(p2);
+		int iFind = found == std::string::npos ? -1 : utf_string::UTF8_INDEX2OFFSET(*p, (int)found);
 		pN->ReturnValue((int)iFind);
 		return true;
 	}
@@ -131,8 +138,37 @@ struct neo_libs
 		if (pReplace->GetType() != VAR_STRING) return false;
 
 		std::string str = pVar->_str->_str;
-		str.replace(str.find(pFind->_str->_str), pFind->_str->_str.length(), pReplace->_str->_str);
+		const size_t found = str.find(pFind->_str->_str);
+		if (found != std::string::npos)
+			str.replace(found, pFind->_str->_str.length(), pReplace->_str->_str);
 		pN->ReturnValue(str.c_str());
+		return true;
+	}
+	static bool Str_replaceAll(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_STRING || args != 2) return false;
+		VarInfo* pFind = pN->GetStack(1);
+		VarInfo* pReplace = pN->GetStack(2);
+		if (pFind->GetType() != VAR_STRING || pReplace->GetType() != VAR_STRING) return false;
+		const std::string& source = pVar->_str->_str;
+		const std::string& needle = pFind->_str->_str;
+		const std::string& replacement = pReplace->_str->_str;
+		// Match the original input once, left to right. Never search inserted
+		// text, and define an empty needle as a no-op to guarantee progress.
+		std::string result;
+		size_t begin = 0;
+		if (!needle.empty())
+		{
+			for (size_t found = source.find(needle); found != std::string::npos;
+				found = source.find(needle, begin))
+			{
+				result.append(source, begin, found - begin);
+				result += replacement;
+				begin = found + needle.size();
+			}
+		}
+		result.append(source, begin, std::string::npos);
+		pN->ReturnValue(result.c_str());
 		return true;
 	}
 	static bool Str_split(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -1844,6 +1880,7 @@ void CNeoVM::RegObjLibrary()
 	g_sNeoFunLib_String.Add("ltrim", &neo_libs::Str_ltrim);
 	g_sNeoFunLib_String.Add("rtrim", &neo_libs::Str_rtrim);
 	g_sNeoFunLib_String.Add("replace", &neo_libs::Str_replace);
+	g_sNeoFunLib_String.Add("replaceAll", &neo_libs::Str_replaceAll);
 	g_sNeoFunLib_String.Add("split", &neo_libs::Str_split);
 
 	// List Lib
