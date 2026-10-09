@@ -397,11 +397,13 @@ result before it can return to Script A, so Script B does not own a resumable ex
 > Note: `NeoExecContextPool_Create` returns an opaque handle; its full type lives in the internal headers.
 > Only the pointer, the two factory functions, and `NeoLoadVMParam::execPool` are part of the public API.
 
-### Compiled image capacity (format 0122)
+### Compiled image capacity (format 0123)
 
-Recompile cached images when updating to format **0122**. Instructions remain eight bytes, but global
-operand addressing and the new `LOADK` instruction require the matching VM. `LOADK` sits beside the
-`MOV` instructions; its destination flag handles both local and global storage.
+Recompile cached images when updating to format **0123**, including images from **0122**: removing
+unused collection removal opcodes changes subsequent opcode numbers. Indexed null assignment uses
+the ordinary assignment instruction; lists keep their positions and maps remove the key at runtime.
+Instructions remain eight bytes. `LOADK` sits beside the `MOV` instructions; its destination flag
+handles both local and global storage.
 
 - Constant indices 0–14,999 use the existing direct 16-bit operand path. Larger indices use `LOADK`
   with a 32-bit constant index and a 16-bit destination. A direct assignment needs one instruction;
@@ -458,4 +460,4 @@ keep their existing temporary-return behavior.
 This removes the extra global-destination conversion and keeps opcode and call-stack numbering
 consistent, without growing instructions or call frames. It does not change the constant/global
 limits; any performance difference needs measurement. Producers and consumers must use the same
-representation. Call frames are runtime state; compiled images continue to use format **0122**.
+representation. Call frames are runtime state and do not add a separate image-format requirement.

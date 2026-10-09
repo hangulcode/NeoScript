@@ -106,6 +106,22 @@ int main()
 {
     IRuntime* rt = CreateRuntime(RuntimeDesc{});
     rt->FreezeBindings();
+    // Removing opcodes changes the numeric interpretation of older images.
+    // Reject 0122 before decoding its instructions, even for otherwise valid data.
+    std::vector<uint8_t> oldImage;
+    Error imageError = rt->CompileToBytecode(Describe("export fun Test(){return true;}"), oldImage);
+    Check(imageError.code == 0 && oldImage.size() >= sizeof(SNeoVMHeader), "version test compile");
+    if (imageError.code == 0 && oldImage.size() >= sizeof(SNeoVMHeader))
+    {
+        SNeoVMHeader oldHeader{};
+        std::memcpy(&oldHeader, oldImage.data(), sizeof(oldHeader));
+        oldHeader._dwNeoVersion = ('0' << 24) | ('1' << 16) | ('2' << 8) | '2';
+        std::memcpy(oldImage.data(), &oldHeader, sizeof(oldHeader));
+        ProgramHandle oldProgram = rt->LoadProgram(oldImage, &imageError);
+        Check(!oldProgram && imageError.message.find("version mismatch") != std::string::npos,
+            "reject format 0122 after opcode removal");
+        if (oldProgram) rt->DestroyProgram(oldProgram);
+    }
     for (bool debug : {false, true})
     {
         // Null assignment preserves list positions, but removes map keys. Run

@@ -804,32 +804,6 @@ struct SFunctionInfo
 
 		Push_NoFlag(nTable, nArray, nValue);
 	}
-	void	Push_TableRemove(CArchiveRdWC& ar, int nTable, int nArray)
-	{
-		OperandTemps temps(*this);
-		nTable = ReadOperand(ar, nTable); nArray = ReadOperand(ar, nArray);
-		AddDebugData(ar);
-		_iLastOPOffset = _code->GetBufferOffset();
-
-		OpType optype = GetOpTypeFromOp(NOP_TABLE_REMOVE);
-		_code->Write(&optype, sizeof(optype));
-		//_code->Write(&nTable, sizeof(nTable));
-		//_code->Write(&nArray, sizeof(nArray));
-		Push_NoFlag(nTable, nArray, 0);
-	}
-	void	Push_ListRemove(CArchiveRdWC& ar, int nTable, int nArray)
-	{
-		OperandTemps temps(*this);
-		nTable = ReadOperand(ar, nTable); nArray = ReadOperand(ar, nArray);
-		AddDebugData(ar);
-		_iLastOPOffset = _code->GetBufferOffset();
-
-		OpType optype = GetOpTypeFromOp(NOP_LIST_REMOVE);
-		_code->Write(&optype, sizeof(optype));
-		//_code->Write(&nTable, sizeof(nTable));
-		//_code->Write(&nArray, sizeof(nArray));
-		Push_NoFlag(nTable, nArray, 0);
-	}
 	void	Push_ToType(CArchiveRdWC& ar, eNOperation op, int r, int s)
 	{
 		OperandTemps temps(*this);

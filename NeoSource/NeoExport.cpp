@@ -394,13 +394,6 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, &v.n3);
 			break;
 
-		case NOP_TABLE_REMOVE:
-			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
-			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
-			//ar << optype << v.n1 << v.n2;
-			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, nullptr);
-			break;
-
 		case NOP_LIST_ALLOC:
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			//ar << optype << v.n1;
@@ -419,12 +412,6 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, &v.n3);
 			break;*/
-		case NOP_LIST_REMOVE:
-			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
-			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
-			//ar << optype << v.n1 << v.n2;
-			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, nullptr);
-			break;
 		case NOP_VERIFY_TYPE:
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);

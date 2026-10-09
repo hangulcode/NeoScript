@@ -2068,7 +2068,6 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_TABLE_ALLOC:   handle_TABLE_ALLOC(OP); break;
 		case NOP_CLT_READ:      handle_CLT_READ(OP); break;
 		case NOP_CLT_READ_L:    handle_CLT_READ_L(OP); break;
-		case NOP_TABLE_REMOVE:  handle_TABLE_REMOVE(OP); break;
 		case NOP_CLT_MOV:       handle_CLT_MOV(OP); break;
 		case NOP_CLT_MOV_L:     handle_CLT_MOV_L(OP); break;
 		case NOP_TABLE_ADD2:    handle_TABLE_ADD2(OP); break;
@@ -2078,7 +2077,6 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_TABLE_PERSENT2:handle_TABLE_PERSENT2(OP); break;
 		case NOP_LIST_ALLOC:    handle_LIST_ALLOC(OP); break;
 		case NOP_LIST_ALLOC_L:  handle_LIST_ALLOC_L(OP); break;
-		case NOP_LIST_REMOVE:   handle_LIST_REMOVE(OP); break;
 		case NOP_VERIFY_TYPE:   handle_VERIFY_TYPE(OP); break;
 		case NOP_CHANGE_INT:    handle_CHANGE_INT(OP); break;
 		case NOP_CHANGE_INT_L:  handle_CHANGE_INT_L(OP); break;

@@ -1154,18 +1154,9 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		outAssembly = FormatAsm("JROT %d%s,  %s outside range[%u]", v.n1,
 			context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), (unsigned)(u16)v.n3);
 		break;
-	case NOP_TABLE_REMOVE:
-		byteCount = OpFlagByteChars + 2 * 2;
-		outAssembly = FormatAsm("Table Remove %s.%s", context.operand(1).c_str(), context.operand(2).c_str());
-		break;
-
 	case NOP_LIST_ALLOC:
 		byteCount = OpFlagByteChars + 2 * 3;
 		outAssembly = FormatAsm("List Alloc %s, %d", context.operand(1).c_str(), v.n23);
-		break;
-	case NOP_LIST_REMOVE:
-		byteCount = OpFlagByteChars + 2 * 2;
-		outAssembly = FormatAsm("List Remove %s.%s", context.operand(1).c_str(), context.operand(2).c_str());
 		break;
 
 	case NOP_VERIFY_TYPE:

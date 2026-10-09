@@ -370,11 +370,6 @@ NEOS_FORCEINLINE bool handle_CLT_READ_STATIC_STRING(const SVMOperation& OP) {
     return false;
 }
 
-NEOS_NOINLINE bool handle_TABLE_REMOVE(const SVMOperation& OP) {
-    TableRemove(GetVarPtrF1(OP), GetVarPtr2(OP));
-    return false;
-}
-
 NEOS_FORCEINLINE bool handle_CLT_MOV(const SVMOperation& OP) {
     CltInsert(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
     return false;
@@ -452,11 +447,6 @@ NEOS_FORCEINLINE bool handle_LIST_ALLOC(const SVMOperation& OP) {
 
 NEOS_FORCEINLINE bool handle_LIST_ALLOC_L(const SVMOperation& OP) {
     Var_SetList(GetVarPtr_L(OP.n1), GetVM()->ListAlloc(OP.n23));
-    return false;
-}
-
-NEOS_NOINLINE bool handle_LIST_REMOVE(const SVMOperation& OP) {
-    TableRemove(GetVarPtrF1(OP), GetVarPtr2(OP));
     return false;
 }
 
