@@ -967,6 +967,7 @@ public:
 	static FunctionPtrNative _funLib_Array;
 	static FunctionPtrNative _funLib_String;
 	static FunctionPtrNative _funLib_Map;
+	static FunctionPtrNative _funLib_Set;
 	static FunctionPtrNative _funLib_Async;
 public:
 	NEOS_FORCEINLINE CNeoVMWorker* GetMainWorker() { return (CNeoVMWorker*)_pMainWorker; }

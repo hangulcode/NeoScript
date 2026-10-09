@@ -113,6 +113,18 @@ The VS Code debugger currently supports:
 	- print output in the Debug Console
 	- Runtime exception stop and exceptionInfo
 
+### Collection and text conveniences
+
+- Lists support `insert(index, value)`, `remove(index)` (returns the removed value), and
+  stable `sort(comparator)`. The existing `append(value, index)` insertion form is retained.
+- Sets support `len()` as well as `tosize(set)`; unknown method calls are errors.
+- String literals, string consts and parenthesized expressions support postfix selectors:
+  `"text".len()`, `TEXT.len()`, and `("a" .. "b").len()`.
+- String literals decode `\uXXXX`, including paired surrogate escapes. Malformed escapes and
+  embedded NUL (`\u0000`) are compile errors.
+- `format(pattern, ...)` and `pattern.format(...)` support `%d`, `%f`, `%s`, `%%`, width,
+  left alignment, numeric zero padding, and float/string precision. See [API.md](docs/API.md#21-string-formatting).
+
 ### Numeric precision
 The scalar float type `NS_FLOAT` is **`float` (32-bit)**, matching the game engine's native
 `float3`/`float4` layout. This lets vector value types (Vec2/Vec3/Vec4/Quaternion) be stored

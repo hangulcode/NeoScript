@@ -1,7 +1,7 @@
 ﻿# NeoScript Script API Reference
 
 Everything a `.ns` script can call: keyword intrinsics, the three built-in modules
-(`math` / `system` / `coroutine`), and the method sets of `string` / `list` / `map` / `async`.
+(`math` / `system` / `coroutine`), and the method sets of `string` / `list` / `array` / `map` / `set` / `async`.
 
 Start with [ScriptAuthoring.md](ScriptAuthoring.md) for runnable examples, declaration and
 module rules, collection semantics, and practical checks before writing script.
@@ -67,10 +67,36 @@ callback.
 | :--- | :--- | :--- |
 | `print(x)` | `void` | Writes `tostring(x)`. With the default `std::cout` sink it appends a newline. |
 | `print(x, y)` | `void` | Writes both concatenated, **without** a trailing newline (default sink). |
+| `format(pattern: string, ...)` | `string` | Typed formatting; same rules as `pattern.format(...)` below |
 
-`print` is the only global native. Three or more arguments raise `invalid function call`. When the
+`print` accepts at most two arguments; three or more raise `invalid function call`. When the
 host installs a print sink (`NeoVMSystem::m_pFunPrint`), both forms go through it as one string and no
 newline is added.
+
+### 2.1 String formatting
+
+Both `format("%04d: %.2f %s", 7, 1.25, "kg")` and
+`"%04d: %.2f %s".format(7, 1.25, "kg")` return `"0007: 1.25 kg"`.
+No import is needed. The pattern is parsed by the VM, not passed unchecked to C varargs.
+
+| Form | Contract |
+| --- | --- |
+| `%d` | int only; signed decimal |
+| `%f` | int or float; fixed-point, default six fractional digits |
+| `%s` | string only; use `tostring` explicitly for other values |
+| `%%` | literal percent, consumes no argument |
+| `%8d`, `%8s` | minimum width, left-padded with spaces |
+| `%-8s` | left alignment, right-padded with spaces |
+| `%04d`, `%08.2f` | numeric zero padding, after a minus sign |
+| `%.2f` | two fractional digits; rounding follows stream formatting |
+| `%.2s` | at most two UTF-8 characters; never cuts a character's bytes |
+
+Width and string precision count characters, not display columns. Numeric formatting uses the
+classic locale (`.` decimal point). Width does not truncate. `-` takes precedence over `0`.
+Precision is supported only for `%f` and `%s`; zero padding is numeric only. Unsupported forms
+(including `*`, length modifiers and `%n`), repeated flags, incomplete patterns, out-of-range
+width/precision, wrong types, and missing or extra arguments are runtime errors. Literal
+backslash-u text written in a pattern is not decoded again at runtime.
 
 ---
 
@@ -230,9 +256,9 @@ finishes, then the caller continues. Sleeping or host execution budgets can susp
 
 ## 6. `string` methods
 
-Call these on a **variable or function result**, for example `s.len()` or `GetText().trim().len()`.
+Call these on a variable, function result, string literal, string constant, or parenthesized expression.
 Selectors can continue after a call: `GetWords()[0].len()` and `GetText().split(",")[0].len()` work too.
-`"literal".len()` is a syntax error; assign a literal to a variable first.
+`"literal".len()`, `TEXT.len()` for a string const, and `("a" .. "b").len()` also work.
 Indexes and lengths are UTF-8 **character** counts, not bytes.
 
 | Signature | Returns | Notes |
@@ -248,6 +274,7 @@ Indexes and lengths are UTF-8 **character** counts, not bytes.
 | `s.replace(find: string, to: string)` | `string` | **first occurrence only**; no match returns the original text |
 | `s.replaceAll(find: string, to: string)` | `string` | all non-overlapping literal matches, left to right; no match or empty `find` returns the original text |
 | `s.split(sep: string)` | `list` | multi-character separators work; always returns at least one element; pass a non-empty separator |
+| `s.format(...)` | `string` | uses `s` as the pattern; see section 2.1 |
 
 These methods return a new value and do not modify `s`. `replaceAll` never searches text
 inserted by the replacement. For compatibility, `replace("", x)` still prepends `x` once;
@@ -258,6 +285,11 @@ or types are still errors.
 Strings are **not** indexable. `s[0]` raises `cannot read by index from string`.
 An empty `split` separator currently prevents the search loop from advancing; reject it before calling.
 
+String literals support `\uXXXX` with exactly four hex digits. A high-surrogate escape must be
+followed by a low-surrogate escape, e.g. `"\uD83D\uDE00"` is one emoji. Both quote styles work.
+Malformed hex, lone/mismatched surrogates, and `\u0000` are compile errors: current runtime
+string APIs cannot preserve an embedded NUL. `"\\u0041"` keeps the backslash-u text literally.
+
 ## 7. `list` methods
 
 | Signature | Returns | Notes |
@@ -266,12 +298,29 @@ An empty `split` separator currently prevents the search loop from advancing; re
 | `l.resize(n: int)` | `void` | grows with `null`, shrinks by dropping the tail |
 | `l.append(value)` | `void` | appends |
 | `l.append(value, index: int)` | `void` | inserts **at** `index` - note the value comes first |
+| `l.insert(index: int, value)` | `void` | inserts before index; `0 <= index <= l.len()` |
+| `l.remove(index: int)` | `var` | returns the removed value, shifts the tail left; `0 <= index < l.len()` |
+| `l.sort(cmp: function)` | `void` | stable in-place sort; `cmp(a,b)` returns bool: true when a belongs before b |
 
-There is no `remove`, `insert`, `sort`, `find`, or `clear` on lists. Use `l.resize(0)` to clear.
+There is no `find` or `clear` on lists. Use `l.resize(0)` to clear.
 Index with `l[i]`; `l[i] = v` only works for an index that already exists, so grow with
 `resize`/`append` first.
 Assigning `l[i] = null` keeps the list length and all other indices unchanged; it replaces only
 that element's value. This differs from assigning `null` to a map entry, which removes its key.
+
+Invalid insert/remove indices and non-integer indices are runtime errors. Aliases observe the
+same list changes. Removal preserves references in the returned value, including nested containers.
+Insertion, removal and sorting during foreach invalidate the active iterator.
+
+Sort accepts named functions and capturing lambdas with two arguments. Equal elements keep
+their original order. The comparator must return bool and must not modify the list or its elements.
+It runs synchronously: yield, sleep, async waits, coroutine.resume and coroutine.close are errors,
+as in other synchronous native-to-script callbacks.
+Execution time slices resume only after the synchronous sort has finished.
+Sorting works on retained snapshots, then writes back only on success. Structural changes
+(insert, append, remove, resize to a different size, or another sort) during comparisons abort with
+`list was modified during sort`; callback errors and non-bool results also abort. Callback side
+effects are not rolled back. List slots are shallow snapshots; contained maps/lists remain references.
 
 ### 7.1 Primitive arrays
 
@@ -322,20 +371,21 @@ each value; `foreach(var index, value in a)` is rejected.
 
 Access with `m["key"]` or `m.key`. Assigning to a missing key inserts it.
 
-### 8.1 `set` has no methods
+### 8.1 `set`
 
-No method table is registered for `set`. A method call on one does **not** raise - it silently
-evaluates to `null`, so `s.len()` is a bug that looks like it works:
+`s.len()` and `tosize(s)` both return the number of unique elements. Unknown methods and
+wrong argument counts raise a runtime error; they never reuse an earlier call's return value.
 
 ```cpp
+import system;
 var s = system.set([1, 2, 3]);
-print(tosize(s));               // 3   <- use this
+print(tosize(s));               // 3
+print(s.len());                 // 3
 foreach (var v in s) print(v);  // iteration works
-var n = s.len();                // null, no error
 ```
 
-Build a set with `system.set(list)`; duplicates collapse. There is no add, remove, or membership
-test from script - a set is a build-once, iterate-many value.
+Build a set with `system.set(list)`; duplicates collapse. There are no `add`, `remove`, or
+`contains` methods; `len()` is its only registered method.
 
 ## 9. `async` methods
 

@@ -831,6 +831,26 @@ eNOperation TokenToOP(TK_TYPE tk, int& iPriority)
 	return tv._op;
 }
 
+static bool ReadUnicodeEscape(CArchiveRdWC& ar, u16& value)
+{
+	value = 0;
+	for (int i = 0; i < 4; ++i)
+	{
+		const u16 c = ar.GetData(true);
+		int digit;
+		if (c >= '0' && c <= '9') digit = c - '0';
+		else if (c >= 'A' && c <= 'F') digit = c - 'A' + 10;
+		else if (c >= 'a' && c <= 'f') digit = c - 'a' + 10;
+		else
+		{
+			SetCompileError(ar, "Error (%d, %d): invalid Unicode escape (expected four hex digits)", ar.CurLine(), ar.CurCol());
+			return false;
+		}
+		value = static_cast<u16>((value << 4) | digit);
+	}
+	return true;
+}
+
 bool GetQuotationString(CArchiveRdWC& ar, std::string& str, u16 quote)
 {
 	str.clear();
@@ -849,6 +869,12 @@ bool GetQuotationString(CArchiveRdWC& ar, std::string& str, u16 quote)
 			u16 c2 = ar.GetData(false);
 			switch (c2)
 			{
+			case '"':
+			case '\'':
+			case '\\':
+				c1 = c2;
+				ar.GetData(true);
+				break;
 			case 'n':
 				c1 = '\n';
 				ar.GetData(true);
@@ -861,21 +887,40 @@ bool GetQuotationString(CArchiveRdWC& ar, std::string& str, u16 quote)
 				c1 = '\t';
 				ar.GetData(true);
 				break;
-			// 따옴표와 역슬래시 자체를 넣는 이스케이프. 이게 없으면 "\"" 가 종료 따옴표로
-			// 읽혀 문자열이 거기서 끊기고, 뒤에 남은 글자가 식별자로 해석된다. JSON 처럼
-			// 따옴표가 든 텍스트를 스크립트에서 만들 때 반드시 필요하다.
-			case '"':
-				c1 = '"';
+			case 'u':
+			{
 				ar.GetData(true);
-				break;
-			case '\'':
-				c1 = '\'';
-				ar.GetData(true);
-				break;
-			case '\\':
-				c1 = '\\';
-				ar.GetData(true);
-				break;
+				u16 first;
+				if (!ReadUnicodeEscape(ar, first)) return false;
+				if (first >= 0xD800 && first <= 0xDBFF)
+				{
+					u16 second;
+					if (ar.GetData(true) != '\\' || ar.GetData(true) != 'u')
+					{
+						SetCompileError(ar, "Error (%d, %d): invalid Unicode escape (missing low surrogate)", ar.CurLine(), ar.CurCol());
+						return false;
+					}
+					if (!ReadUnicodeEscape(ar, second)) return false;
+					if (second < 0xDC00 || second > 0xDFFF)
+					{
+						SetCompileError(ar, "Error (%d, %d): invalid Unicode escape (expected low surrogate)", ar.CurLine(), ar.CurCol());
+						return false;
+					}
+					utf_string::UNICODE_UTF8_PAIR(first, second, str);
+				}
+				else
+				{
+					// Runtime string APIs use NUL-terminated text. Reject U+0000
+					// rather than compile a string that silently truncates later.
+					if (first == 0 || (first >= 0xDC00 && first <= 0xDFFF))
+					{
+						SetCompileError(ar, "Error (%d, %d): invalid Unicode escape (NUL or unpaired low surrogate)", ar.CurLine(), ar.CurCol());
+						return false;
+					}
+					utf_string::UNICODE_UTF8_ONE(first, str);
+				}
+				continue;
+			}
 			}
 		}
 
@@ -2229,6 +2274,14 @@ static bool ParsePostfixSelectors(SOperand& operand, CArchiveRdWC& ar, SFunction
 		if (type == TK_L_SMALL)
 		{
 			ar.PushToken(type, token);
+			if (operand.IsFun())
+			{
+				// Parenthesized named/anonymous functions need a callable value;
+				// a function ID is not a variable operand (and may carry captures).
+				const int functionValue = funs._cur->AllocLocalTempVar();
+				funs._cur->Push_OP2(ar, NOP_FMOV1, functionValue, operand._iVar, false);
+				operand = SOperand(functionValue);
+			}
 			// 점 뒤의 호출은 컨테이너 메서드이고, 인덱스 뒤의 호출은 읽어 낸 함수값이다.
 			if (!lastSelectorWasDot)
 				MaterializeContainerRead(operand, ar, funs);
@@ -2587,6 +2640,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			{
 				return TK_NONE;
 			}
+			if (!ParsePostfixSelectors(iTempOffset, ar, funs, vars)) return TK_NONE;
 			operands.push_back(SOperand(iTempOffset));
 			blApperOperator = true;
 			break;
@@ -2615,12 +2669,14 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				return TK_NONE;
 			}
 			iTempOffset = funs.AddStaticString(str);
+			if (!ParsePostfixSelectors(iTempOffset, ar, funs, vars)) return TK_NONE;
 			operands.push_back(SOperand(iTempOffset));
 			blApperOperator = true;
 			break;
 		}
 		case TK_STRING_LITERAL: // define/const 치환으로 완성된 문자열
 			iTempOffset = funs.AddStaticString(tk1);
+			if (!ParsePostfixSelectors(iTempOffset, ar, funs, vars)) return TK_NONE;
 			operands.push_back(SOperand(iTempOffset));
 			blApperOperator = true;
 			break;
@@ -5106,9 +5162,13 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				return false;
 			break;
 		case TK_STRING:
-		case TK_MINUS2:
 		case TK_PLUS2:
+		case TK_MINUS2:
+		case TK_L_SMALL:
+		case TK_QUOTE2:
+		case TK_QUOTE1:
 		case TK_YIELD:
+		case TK_STRING_LITERAL:
 			ar.PushToken(tkType1, tk1);
 			iTempOffset = INVALID_ERROR_PARSEJOB;
 			r = ParseJob(false, iTempOffset, NULL, ar, funs, vars);

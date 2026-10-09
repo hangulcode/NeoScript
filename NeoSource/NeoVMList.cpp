@@ -113,6 +113,18 @@ bool ListInfo::Insert(int idx, VarInfo* pValue)
 	_Bucket[idx] = tmp;
 	return true;
 }
+bool ListInfo::Remove(int idx)
+{
+	if (idx < 0 || idx >= _itemCount) return false;
+	_pVM->Var_Release(&_Bucket[idx]);
+	// Transfer ownership while closing the gap. The duplicate tail does not
+	// own an extra reference and must be cleared without releasing it again.
+	memmove(&_Bucket[idx], &_Bucket[idx + 1], sizeof(VarInfo) * (_itemCount - idx - 1));
+	_Bucket[--_itemCount].ClearType();
+	++_mutationVersion;
+	return true;
+}
+
 bool ListInfo::InsertLast(VarInfo* pValue)
 {
 	if (_itemCount + 1 >= _BucketCapa)

@@ -203,7 +203,7 @@
 			<key>name</key>
 			<string>support.function.builtin.neoscript</string>
 			<key>match</key>
-			<string>\b(print|tostring|toint|tofloat|tosize|type|sleep)\b(?=\s*\()</string>
+			<string>\b(print|format|tostring|toint|tofloat|tosize|type|sleep)\b(?=\s*\()</string>
 		</dict>
 		<key>function-calls</key>
 		<dict>

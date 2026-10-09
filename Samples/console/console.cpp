@@ -2114,7 +2114,7 @@ public:
 			{
 				for (const NeoBuiltinInfo& info : builtins)
 				{
-					if ((info.module == "string" || info.module == "list" || info.module == "map" || info.module == "async") &&
+					if ((info.module == "string" || info.module == "list" || info.module == "array" || info.module == "map" || info.module == "set" || info.module == "async") &&
 						LspStartsWith(info.name, prefix))
 						AppendLspCompletionItem(os, first, emitted, info.name, 2, BuildLspFunctionDetail(info));
 				}
@@ -2135,7 +2135,12 @@ public:
 			std::set<std::string> modules;
 			for (const NeoBuiltinInfo& info : builtins)
 			{
-				if (info.module != "string" && info.module != "list" && info.module != "map" && info.module != "async")
+				if (info.module.empty())
+				{
+					if (LspStartsWith(info.name, prefix))
+						AppendLspCompletionItem(os, first, emitted, info.name, 3, BuildLspFunctionDetail(info));
+				}
+				else if (info.module != "string" && info.module != "list" && info.module != "array" && info.module != "map" && info.module != "set" && info.module != "async")
 					modules.insert(info.module);
 			}
 			for (const std::string& builtinModule : modules)

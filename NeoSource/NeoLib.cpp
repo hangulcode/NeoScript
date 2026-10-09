@@ -4,6 +4,11 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <iomanip>
+#include <locale>
+#include <new>
+#include <sstream>
+#include <stdexcept>
 
 #include "NeoVMInternal.h"
 #include "NeoVMWorker.h"
@@ -24,6 +29,19 @@ void NVM_QuickSort(CNeoVMWorker* pN, VarInfo* compare, std::vector<VarInfo*>& ls
 
 struct neo_libs
 {
+	// VM values are not C++ smart pointers. Hold references across callbacks,
+	// return-slot replacement and exceptions, then release them on every exit.
+	struct HeldValue
+	{
+		CNeoVMWorker* worker;
+		VarInfo value;
+		HeldValue(CNeoVMWorker* w, VarInfo* source) : worker(w)
+		{ Move_DestNoRelease(&value, source); }
+		~HeldValue() { worker->Var_Release(&value); }
+		HeldValue(const HeldValue&) = delete;
+		HeldValue& operator=(const HeldValue&) = delete;
+	};
+
 	static bool Str_sub(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (pVar->GetType() != VAR_STRING) return false;
@@ -200,6 +218,120 @@ struct neo_libs
 		pListR->InsertLast(str.substr(previous, current - previous)); // Last
 		return true;
 	}
+	static bool FormatText(CNeoVMWorker* pN, const std::string& pattern, int firstArg, int lastArg)
+	{
+		auto fail = [pN](const char* message) { pN->SetError(message); return false; };
+		// Parse the format ourselves. Never pass script-controlled specifiers or
+		// mismatched VM values through a C variadic printf call.
+		try
+		{
+			std::string output;
+			int arg = firstArg;
+			for (size_t pos = 0; pos < pattern.size();)
+			{
+				if (output.size() >= static_cast<size_t>(INT32_MAX)) return fail("formatted string exceeds int range");
+				if (pattern[pos] != '%') { output += pattern[pos++]; continue; }
+				++pos;
+				if (pos < pattern.size() && pattern[pos] == '%') { output += '%'; ++pos; continue; }
+				bool left = false, zero = false;
+				while (pos < pattern.size() && (pattern[pos] == '-' || pattern[pos] == '0'))
+				{
+					bool& flag = pattern[pos++] == '-' ? left : zero;
+					if (flag) return fail("invalid format: duplicate flag");
+					flag = true;
+				}
+				auto number = [&](int& value)
+				{
+					value = 0;
+					while (pos < pattern.size() && pattern[pos] >= '0' && pattern[pos] <= '9')
+					{
+						const int digit = pattern[pos++] - '0';
+						if (value > (INT32_MAX - digit) / 10) return false;
+						value = value * 10 + digit;
+					}
+					return true;
+				};
+				int width = 0, precision = -1;
+				if (!number(width)) return fail("format width exceeds int range");
+				if (pos < pattern.size() && pattern[pos] == '.')
+				{
+					++pos;
+					if (pos == pattern.size() || pattern[pos] < '0' || pattern[pos] > '9')
+						return fail("invalid format precision");
+					if (!number(precision)) return fail("format precision exceeds int range");
+				}
+				if (pos == pattern.size()) return fail("incomplete format specifier");
+				const char spec = pattern[pos++];
+				if (spec != 'd' && spec != 'f' && spec != 's') return fail("unsupported format specifier");
+				if (arg > lastArg) return fail("format argument count mismatch");
+				VarInfo* value = pN->GetStack(arg++);
+				std::string field;
+				size_t characters = 0;
+				switch (spec)
+				{
+				case 'd':
+					if (value->GetType() != VAR_INT) return fail("format %d requires int");
+					if (precision >= 0) return fail("format precision is supported only for %f and %s");
+					field = std::to_string(value->_int);
+					characters = field.size();
+					break;
+				case 'f':
+				{
+					if (!value->IsNumber()) return fail("format %f requires int or float");
+					std::ostringstream stream;
+					stream.imbue(std::locale::classic());
+					const double numeric = value->GetType() == VAR_INT
+						? static_cast<double>(value->_int) : static_cast<double>(value->_float);
+					stream << std::fixed << std::setprecision(precision < 0 ? 6 : precision) << numeric;
+					if (!stream) return fail("formatted string allocation failed");
+					field = stream.str();
+					characters = field.size();
+					break;
+				}
+				case 's':
+					if (value->GetType() != VAR_STRING) return fail("format %s requires string");
+					if (zero) return fail("format zero padding requires a numeric value");
+					characters = static_cast<size_t>(value->_str->_StringLen);
+					if (precision >= 0) characters = std::min(characters, static_cast<size_t>(precision));
+					field = value->_str->_str.substr(0, utf_string::UTF8_OFFSET(value->_str->_str, 0, static_cast<int>(characters)));
+					break;
+				default:
+					return fail("unsupported format specifier");
+				}
+				const size_t padding = static_cast<size_t>(width) > characters ? static_cast<size_t>(width) - characters : 0;
+				const size_t limit = static_cast<size_t>(INT32_MAX);
+				if (field.size() > limit - output.size() || padding > limit - output.size() - field.size())
+					return fail("formatted string exceeds int range");
+				if (!left && zero && padding != 0 && !field.empty() && field[0] == '-')
+				{
+					output += '-';
+					output.append(padding, '0');
+					output.append(field, 1, std::string::npos);
+				}
+				else
+				{
+					if (!left) output.append(padding, zero ? '0' : ' ');
+					output += field;
+					if (left) output.append(padding, ' ');
+				}
+			}
+			if (arg <= lastArg) return fail("format argument count mismatch");
+			pN->ReturnValue(output.c_str());
+			return true;
+		}
+		catch (const std::bad_alloc&) { return fail("formatted string allocation failed"); }
+		catch (const std::length_error&) { return fail("formatted string is too large"); }
+	}
+	static bool Str_format(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_STRING) return false;
+		return FormatText(pN, pVar->_str->_str, 1, args);
+	}
+	static bool io_format(CNeoVMWorker* pN, VarInfo*, short args)
+	{
+		if (args < 1 || pN->GetStack(1)->GetType() != VAR_STRING) return false;
+		return FormatText(pN, pN->GetStack(1)->_str->_str, 2, args);
+	}
 
 
 	static bool List_resize(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -276,6 +408,128 @@ struct neo_libs
 			pN->ReturnValue();
 			return true;
 		}
+		return false;
+	}
+	static bool List_insert(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_LIST || args != 2) return false;
+		VarInfo* index = pN->GetStack(1);
+		if (index->GetType() != VAR_INT) return false;
+		if (!pVar->_lst->Insert(index->_int, pN->GetStack(2)))
+		{
+			pN->SetError("list insert index out of range");
+			return false;
+		}
+		pN->ReturnValue();
+		return true;
+	}
+	static bool List_remove(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_LIST || args != 1) return false;
+		VarInfo* index = pN->GetStack(1);
+		if (index->GetType() != VAR_INT) return false;
+		const int offset = index->_int;
+		HeldValue receiver(pN, pVar);
+		VarInfo* item = receiver.value._lst->GetValue(offset);
+		if (item == nullptr)
+		{
+			pN->SetError("list remove index out of range");
+			return false;
+		}
+		HeldValue removed(pN, item);
+		receiver.value._lst->Remove(offset);
+		pN->ReturnValue(&removed.value);
+		return true;
+	}
+	static bool List_sort(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_LIST || args != 1) return false;
+		VarInfo* compare = pN->GetStack(1);
+		if (compare->GetType() != VAR_FUN && compare->GetType() != VAR_CLOSURE) return false;
+		HeldValue receiver(pN, pVar), callback(pN, compare);
+		// A synchronous native sort cannot preserve its C++ frame across a
+		// script suspension or coroutine switch. Use the VM's nested-call guard.
+		struct SynchronousCall
+		{
+			CNeoVMWorker* worker;
+			int timeout, remainingOps;
+			explicit SynchronousCall(CNeoVMWorker* value) : worker(value),
+				timeout(value->m_iTimeout), remainingOps(value->m_op_process)
+			{
+				worker->BeginNestedScriptCall();
+				// Finish the native operation before honoring the outer time slice.
+				worker->m_iTimeout = -1;
+			}
+			~SynchronousCall()
+			{
+				worker->m_iTimeout = timeout;
+				worker->m_op_process = remainingOps;
+				worker->EndNestedScriptCall();
+			}
+		} synchronousCall(pN);
+		ListInfo* list = receiver.value._lst;
+		const size_t count = static_cast<size_t>(list->GetCount());
+		const u32 version = list->_mutationVersion;
+		struct Snapshot
+		{
+			CNeoVMWorker* worker;
+			std::vector<VarInfo> values;
+			~Snapshot() { for (auto& value : values) worker->Var_Release(&value); }
+		} snapshot{pN, std::vector<VarInfo>(count)};
+		std::vector<size_t> order(count), next(count);
+		for (size_t i = 0; i < count; ++i)
+		{
+			Move_DestNoRelease(&snapshot.values[i], list->GetValue(static_cast<int>(i)));
+			order[i] = i;
+		}
+		// Stable, bounded mergesort: even an inconsistent script comparator must
+		// not violate std::sort's strict-weak-ordering precondition or read past
+		// a buffer. Never retain a list bucket or VM stack pointer across calls.
+		for (size_t width = 1; width < count; width *= 2)
+		{
+			for (size_t begin = 0; begin < count; begin += width * 2)
+			{
+				const size_t middle = std::min(begin + width, count);
+				const size_t end = std::min(begin + width * 2, count);
+				size_t left = begin, right = middle;
+				for (size_t dest = begin; dest < end; ++dest)
+				{
+					bool takeRight = left == middle;
+					if (left < middle && right < end)
+					{
+						VarInfo callArgs[2] = {snapshot.values[order[right]], snapshot.values[order[left]]};
+						VarInfo* result = pN->testCall(&callback.value, callArgs, 2);
+						if (pN->GetVM()->IsLastErrorMsg()) return false;
+						if (list->_mutationVersion != version)
+						{
+							pN->SetError("list was modified during sort");
+							return false;
+						}
+						if (result == nullptr || result->GetType() != VAR_BOOL)
+						{
+							pN->SetError("list sort comparator must accept two arguments and return bool");
+							return false;
+						}
+						takeRight = result->_bl;
+					}
+					next[dest] = takeRight ? order[right++] : order[left++];
+				}
+			}
+			order.swap(next);
+		}
+		if (count > 1)
+		{
+			for (size_t i = 0; i < count; ++i)
+				list->SetValue(static_cast<int>(i), &snapshot.values[order[i]]);
+			++list->_mutationVersion;
+		}
+		pN->ReturnValue();
+		return true;
+	}
+	static bool Set_len(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_SET || args != 0) return false;
+		pN->ReturnValue(pVar->_set->GetCount());
 		return true;
 	}
 	static bool Math_abs(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -1442,6 +1696,11 @@ struct neo_libs
 	}
 	static bool coroutine_resume(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
+		if (pN->IsNativeScriptCallActive())
+		{
+			pN->SetErrorFormat(RTE_NESTED_NOT_ALLOWED, "coroutine.resume");
+			return false;
+		}
 		if (args < 1) return false; // param : index 1 ~ 
 
 		VarInfo* v = pN->GetStack(1);
@@ -1486,6 +1745,11 @@ struct neo_libs
 	}
 	static bool coroutine_close(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
+		if (pN->IsNativeScriptCallActive())
+		{
+			pN->SetErrorFormat(RTE_NESTED_NOT_ALLOWED, "coroutine.close");
+			return false;
+		}
 		if (args >= 2) return false;
 
 		CoroutineInfo* pCI;
@@ -1562,6 +1826,7 @@ static VMHash<TYPE_NeoLib> g_sNeoFunLib_List;
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_Array;
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_String;
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_Map;
+static VMHash<TYPE_NeoLib> g_sNeoFunLib_Set;
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_Async;
 static std::vector<TYPE_NeoLib> g_sNeoFunLib_DefaultNative;
 static std::vector<u8> g_sNeoFunLib_DefaultIntrinsic; // native index 별 intrinsic opcode (기본 NOP_NONE)
@@ -1573,6 +1838,7 @@ FunctionPtrNative CNeoVM::_funLib_List;
 FunctionPtrNative CNeoVM::_funLib_Array;
 FunctionPtrNative CNeoVM::_funLib_String;
 FunctionPtrNative CNeoVM::_funLib_Map;
+FunctionPtrNative CNeoVM::_funLib_Set;
 FunctionPtrNative CNeoVM::_funLib_Async;
 
 
@@ -1614,6 +1880,12 @@ static bool Fun_Map(INeoVMWorker* pN, void* pUserData, const VMString* pStr, sho
 	if (false == g_sNeoFunLib_Map.TryGetValue(pStr, &f))
 		return false;
 
+	return (*f)((CNeoVMWorker*)pN, (VarInfo*)pUserData, args);
+}
+static bool Fun_Set(INeoVMWorker* pN, void* pUserData, const VMString* pStr, short args)
+{
+	TYPE_NeoLib f;
+	if (!g_sNeoFunLib_Set.TryGetValue(pStr, &f)) return false;
 	return (*f)((CNeoVMWorker*)pN, (VarInfo*)pUserData, args);
 }
 static bool Fun_Async(INeoVMWorker* pN, void* pUserData, const VMString* pStr, short args)
@@ -1838,12 +2110,13 @@ static void AddGlobalLibFun()
 	AddSystemFun("close", &neo_libs::coroutine_close, "coroutine", "...");
 
 	g_sCurrentSystem.clear();
+	AddDefaultNativeFun("format", &neo_libs::io_format);
 }
 bool CNeoVM::IsGlobalLibFun(std::string& FunName)
 {
 	//InitLib();
 	//return g_sNeoFunLib_Default.IsKey(FunName);
-	return FunName == "print";
+	return FunName == "print" || FunName == "format";
 }
 const std::list< SystemFun>* CNeoVM::GetSystemModule(const std::string& module)
 {
@@ -1882,12 +2155,16 @@ void CNeoVM::RegObjLibrary()
 	g_sNeoFunLib_String.Add("replace", &neo_libs::Str_replace);
 	g_sNeoFunLib_String.Add("replaceAll", &neo_libs::Str_replaceAll);
 	g_sNeoFunLib_String.Add("split", &neo_libs::Str_split);
+	g_sNeoFunLib_String.Add("format", &neo_libs::Str_format);
 
 	// List Lib
 	_funLib_List = NeoVMSystem::RegisterNative(Fun_List);
 	g_sNeoFunLib_List.Add("resize", &neo_libs::List_resize);
 	g_sNeoFunLib_List.Add("len", &neo_libs::List_len);
 	g_sNeoFunLib_List.Add("append", &neo_libs::List_append);
+	g_sNeoFunLib_List.Add("insert", &neo_libs::List_insert);
+	g_sNeoFunLib_List.Add("remove", &neo_libs::List_remove);
+	g_sNeoFunLib_List.Add("sort", &neo_libs::List_sort);
 
 	// Array Lib
 	_funLib_Array = NeoVMSystem::RegisterNative(Fun_Array);
@@ -1902,6 +2179,9 @@ void CNeoVM::RegObjLibrary()
 	g_sNeoFunLib_Map.Add("sort", &neo_libs::map_sort);
 	g_sNeoFunLib_Map.Add("keys", &neo_libs::map_keys);
 	g_sNeoFunLib_Map.Add("values", &neo_libs::map_values);
+
+	_funLib_Set = NeoVMSystem::RegisterNative(Fun_Set);
+	g_sNeoFunLib_Set.Add("len", &neo_libs::Set_len);
 
 	// Async Lib
 	_funLib_Async = NeoVMSystem::RegisterNative(Fun_Async);
@@ -1926,6 +2206,12 @@ void CNeoVM::InitLib()
 void NeoVMSystem::GetBuiltins(std::vector<NeoBuiltinInfo>& out)
 {
 	out.clear();
+	NeoBuiltinInfo format;
+	format.name = "format";
+	format.argCount = -1;
+	format.ret = "string";
+	format.params = {"string pattern", "..."};
+	out.push_back(format);
 
 	// 1) namespaced module 함수 (math / system / coroutine …) — argCount/타입+이름 파라미터 포함
 	for (auto& mod : g_sSystemFuns)
@@ -1942,7 +2228,7 @@ void NeoVMSystem::GetBuiltins(std::vector<NeoBuiltinInfo>& out)
 		}
 	}
 
-	// 2) 타입 메서드 테이블 (string / list / array / map / async) — 이름만(argCount 미상)
+	// 2) 타입 메서드 테이블 — 이름만(argCount 미상)
 	auto emitTable = [&out](const char* module, VMHash<TYPE_NeoLib>& tbl)
 	{
 		tbl.Enumerate([&out, module](const std::string& key, TYPE_NeoLib)
@@ -1958,6 +2244,7 @@ void NeoVMSystem::GetBuiltins(std::vector<NeoBuiltinInfo>& out)
 	emitTable("list", g_sNeoFunLib_List);
 	emitTable("array", g_sNeoFunLib_Array);
 	emitTable("map", g_sNeoFunLib_Map);
+	emitTable("set", g_sNeoFunLib_Set);
 	emitTable("async", g_sNeoFunLib_Async);
 }
 

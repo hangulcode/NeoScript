@@ -104,6 +104,75 @@ static void Reject(IRuntime* runtime, const std::string& source, const char* rea
     }
 }
 
+static void RuntimeReject(IRuntime* runtime, const std::string& source, const char* reason,
+    bool debug, bool verify = false)
+{
+    for (bool image : {false, true})
+    {
+        ProgramHandle program;
+        Error error;
+        if (image)
+        {
+            std::vector<uint8_t> bytes;
+            error = runtime->CompileToBytecode(Describe(source, debug), bytes);
+            if (error.ok()) program = runtime->LoadProgram(bytes, &error);
+        }
+        else
+        {
+            CompileResult compiled = runtime->Compile(Describe(source, debug));
+            program = compiled.program;
+            error = compiled.error;
+        }
+        bool ok = false;
+        std::string message = error.message;
+        if (program)
+        {
+            InstanceHandle instance = runtime->CreateInstance(program);
+            if (instance)
+            {
+                {
+                    Invocation call = runtime->Call(instance, "Test");
+                    const RunStatus status = call.invoke();
+                    message = call.error().message;
+                    ok = status == RunStatus::Failed && message.find(reason) != std::string::npos;
+                }
+                if (ok && verify)
+                {
+                    Invocation call = runtime->Call(instance, "Verify");
+                    ok = call.invoke() == RunStatus::Completed && call.retType() == ValueType::Bool && call.retBool();
+                }
+                runtime->DestroyInstance(instance);
+            }
+            runtime->DestroyProgram(program);
+        }
+        Check(ok, "runtime reject debug=" + std::to_string(debug) + " image=" + std::to_string(image)
+            + " " + source + "\n" + message);
+    }
+}
+
+static void CheckSortSliced(IRuntime* runtime, bool debug)
+{
+    const std::string source = "export var done=0; export fun Test(){var a=[3,1,2];"
+        "a.sort(fun(var x,var y){var n=0;for(var i in 0,200)n+=i;return x<y;});"
+        "if(a[0]==1 && a[1]==2 && a[2]==3)done=1;}";
+    CompileResult compiled = runtime->Compile(Describe(source, debug));
+    Check((bool)compiled.program, "compile sort in sliced execution");
+    if (!compiled.program) return;
+    InstanceHandle instance = runtime->CreateInstance(compiled.program);
+    bool ok = instance && runtime->StartSliced(instance, "Test", 0, 64);
+    if (ok)
+    {
+        RunStatus status = RunStatus::Suspended;
+        for (int slices = 0; slices < 128 && status == RunStatus::Suspended; ++slices)
+            status = runtime->UpdateSliced(instance);
+        int32_t done = 0;
+        ok = status == RunStatus::Completed && runtime->GetGlobalInt(instance, "done", done) && done==1;
+    }
+    Check(ok, "sort completes before an outer time slice resumes");
+    if (instance) runtime->DestroyInstance(instance);
+    runtime->DestroyProgram(compiled.program);
+}
+
 static void CheckExportVisibility(IRuntime* runtime, bool debug)
 {
     const std::string source = "import settings as cfg; export const LOCAL=7; export var visible=cfg.COUNT;";
@@ -154,6 +223,34 @@ int main()
     runtime->FreezeBindings();
 
     const char* bodies[] = {
+        "var a=[1,3]; a.insert(1,2); a.insert(0,0); a.insert(4,4); return a.len()==5 && a[0]==0 && a[2]==2 && a[4]==4;",
+        "var a=[]; a.insert(0,null); a.append(3,0); return a.len()==2 && a[0]==3 && a[1]==null;",
+        "var a=[1,2,3]; var shared=a; var r=a.remove(1); return r==2 && shared.len()==2 && a[1]==3;",
+        "var a=[1,null,3]; var r=a.remove(1); return r==null && a.len()==2 && a[1]==3;",
+        "var a=[1,2,3]; var first=a.remove(0); var last=a.remove(1); var only=a.remove(0); return first==1 && last==3 && only==2 && a.len()==0;",
+        "var a=[{\"x\":3},[4],\"tail\"]; var r=a.remove(0); a.resize(0); return r.x==3;",
+        "var a=[]; a.append(a); var r=a.remove(0); r.append(7); return a.len()==1 && a[0]==7;",
+        "var a=[3,1,2]; a.sort(fun(var x,var y){return x<y;}); return a[0]==1 && a[1]==2 && a[2]==3;",
+        "var a=[3,1,2,1]; var alias=a; a.sort(fun(var x,var y){return x>y;}); return alias[0]==3 && a[1]==2 && a[2]==1 && a[3]==1;",
+        "var a=[{\"k\":1,\"id\":0},{\"k\":0,\"id\":1},{\"k\":1,\"id\":2}]; a.sort(fun(var x,var y){return x.k<y.k;}); return a[0].id==1 && a[1].id==0 && a[2].id==2;",
+        "var descending=true; var a=[1,3,2]; a.sort(fun(var x,var y){if(descending)return x>y;return x<y;}); return a[0]==3 && a[2]==1;",
+        "var a=[\"b\",\"a\",\"c\"]; a.sort(fun(var x,var y){return x<y;}); return a[0]==\"a\" && a[2]==\"c\";",
+        "var a=[]; var cmp=fun(var x,var y){return x<y;}; a.sort(cmp); a.append(5); a.sort(cmp); return a.len()==1 && a[0]==5;",
+        "var a=[3,2,1]; a.sort(fun(var x,var y){return true;}); return a.len()==3;",
+        "var a=[]; for(var i in 257,0,-1)a.append(i); a.sort(fun(var x,var y){return x<y;}); for(var i in 0,257){if(a[i]!=i+1)return false;} return true;",
+        u8"return \"글자\".len()==2 && '글자'.len()==2 && (\"가\"..\"나\").len()==2;",
+        "return \" a,b \".trim().split(\",\")[1].upper()==\"B\";",
+        "var a=[7]; return (a)[0]==7 && (fun(){return 3;})()==3;",
+        "var n=7; return (fun(){return n;})()==7;",
+        "var a=[1]; (a).append(2); \"unused\".len(); return a.len()==2;",
+        u8"return \"\\uAE00\\uc790\"==\"글자\" && \"\\uD83D\\uDE00\".len()==1 && '\\u0041'==\"A\";",
+        "return \"\\\\u0041\"==\"\\u005Cu0041\" && \"\\u0022\"==\"\\\"\" && \"\\u0027\"==\"'\";",
+        "return format(\"%04d / %.2f / %s / %%\",-3,1.25,\"ok\")==\"-003 / 1.25 / ok / %\";",
+        "return \"%d %.0f\".format(-2147483648,2147483647)==\"-2147483648 2147483647\";",
+        "return format(\"%f\",2)==\"2.000000\" && format(\"%08.2f\",-1.5)==\"-0001.50\";",
+        "return format(\"[%5d][%-5s][%-05d]\",3,\"ab\",7)==\"[    3][ab   ][7    ]\";",
+        u8"return format(\"[%4.2s]\",\"한😀글\")==\"[  한😀]\" && \"%.0s\".format(\"abc\")==\"\";",
+        "return format(\"%%\")==\"%\" && \"plain\".format()==\"plain\" && format(\"\")==\"\";",
         // Keyword-shaped members must not become declarations in the pre-pass.
         "var t={}; t.fun=3; var x=t.fun; return x==3;",
         "var t={\"fun\":3}; t.fun+=2; return t.fun==5;",
@@ -183,6 +280,13 @@ int main()
         u8"var s=\"한😀한😀\"; return s.replaceAll(\"한😀\",\"글\")==\"글글\";"
     };
     const char* programs[] = {
+        "const TEXT=\"abc\"; export fun Test(){return TEXT.len()==3 && (TEXT).upper()==\"ABC\";}",
+        "const TEXT=\"\\u0041\"; export fun Test(){switch(\"A\"){case TEXT:return true;default:return false;}}",
+        "import system; export fun Test(){var s=system.set([1,1,2]); return s.len()==2 && tosize(s)==2 && system.set([]).len()==0;}",
+        "import system; fun Previous(){return 7;} export fun Test(){var s=system.set([1,2]); Previous(); return s.len()==2;}",
+        "var a=[3,2,1]; fun Compare(var x,var y){return x<y;} export fun Test(){a.sort(Compare);return a[0]==1 && a[2]==3;}",
+        "var a=[3,2,1]; var hold=a; fun Compare(var x,var y){a=null;return x<y;} export fun Test(){hold.sort(Compare);return a==null && hold[0]==1 && hold[2]==3;}",
+        "fun Make(){return [{\"x\":7}];} export fun Test(){return Make().remove(0).x==7;}",
         "var t={}; t.fun=3; var x=t.fun; export fun Test(){return x==3;}",
         "var t={}; t.fun=Later; export fun Test(){return t.fun()==3;} fun Later(){return 3;}",
         "export fun Test(){return Make().fun[0]==3;} fun Make(){return {\"fun\":[3]};}",
@@ -234,10 +338,44 @@ int main()
     };
     for (bool debug : {false, true})
     {
+        CheckSortSliced(runtime, debug);
         CheckExportVisibility(runtime, debug);
         for (const char* body : bodies)
             Run(runtime, std::string("export fun Test(){") + body + "}", debug);
         for (const char* source : programs) Run(runtime, source, debug);
+        const char* badEscapes[] = {"\\u12", "\\u12G4", "\\uD800", "\\uDC00", "\\uD800\\u0041", "\\uD800\\uD800", "\\u0000"};
+        for (const char* escaped : badEscapes)
+            Reject(runtime, std::string("var s=\"") + escaped + "\";", "invalid Unicode escape", "language.ns", 1, debug);
+        const char* invalidCalls[] = {
+            "var a=[]; a.insert(-1,3);", "var a=[1]; a.insert(2,3);",
+            "var a=[]; a.remove(0);", "var a=[1]; a.remove(-1);", "var a=[1]; a.remove(1);",
+            "var a=[1]; a.insert(true,3);", "var a=[1]; a.remove(0.0);",
+            "var a=[]; a.insert(0);", "var a=[]; a.remove();", "var a=[]; a.append();",
+            "var a=[]; a.sort(7);", "var a=[]; a.sort();",
+            "var a=[1,2]; a.sort(fun(var x,var y){return 1;});",
+            "var a=[1,2]; a.sort(fun(var x){return true;});",
+            "var a=[1,2]; foreach(var v in a)a.remove(0);",
+            "var a=[1,2]; foreach(var v in a)a.insert(0,3);",
+            "var a=[1,2]; foreach(var v in a)a.sort(fun(var x,var y){return x<y;});",
+            "format();", "format(1);", "format(\"%d\");", "format(\"x\",1);", "format(\"%n\",1);",
+            "format(\"%\");", "format(\"%d\",1.5);", "format(\"%f\",\"1\");", "format(\"%s\",1);",
+            "format(\"%*d\",3,1);", "format(\"%.d\",1);", "format(\"%.2d\",1);", "format(\"%03s\",\"a\");",
+            "format(\"%2147483648d\",1);", "format(\"%.2147483648f\",1.0);", "\"%d\".format();",
+            "import system; var s=system.set([1]); s.missing();", "import system; var s=system.set([1]); s.len(1);"
+        };
+        for (const char* body : invalidCalls)
+            RuntimeReject(runtime, std::string("export fun Test(){") + body + "}", "", debug);
+        RuntimeReject(runtime, "var a=[3,1,2]; fun C(var x,var y){a.append(4);return x<y;} export fun Test(){a.sort(C);}"
+            "export fun Verify(){return a.len()==4 && a[0]==3 && a[1]==1 && a[3]==4;}", "modified during sort", debug, true);
+        RuntimeReject(runtime, "var a=[3,1,2]; fun C(var x,var y){a.resize(0);return x<y;} export fun Test(){a.sort(C);}"
+            "export fun Verify(){return a.len()==0;}", "modified during sort", debug, true);
+        RuntimeReject(runtime, "var a=[3,1,2]; fun C(var x,var y){var bad=[1];return bad[9];} export fun Test(){a.sort(C);}"
+            "export fun Verify(){return a[0]==3 && a[1]==1 && a[2]==2;}", "", debug, true);
+        for (const char* pause : {"yield;", "sleep(1);", "coroutine.resume(coroutine.create(fun(){}));", "coroutine.close();"})
+            RuntimeReject(runtime, std::string("import coroutine; var a=[3,1,2]; fun C(var x,var y){") + pause +
+                "return x<y;} export fun Test(){a.sort(C);}"
+                "export fun Verify(){a.sort(fun(var x,var y){return x<y;});return a[0]==1 && a[1]==2 && a[2]==3;}",
+                "not allowed", debug, true);
         Reject(runtime, "fun Old();", "forward declarations", "language.ns", 1, debug);
         Reject(runtime, "fun = 3;", "invalid function name", "language.ns", 1, debug);
         Reject(runtime, "fun Old(var n);\nfun Old(var n){return n;}", "forward declarations", "language.ns", 1, debug);

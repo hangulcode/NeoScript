@@ -180,6 +180,8 @@ NEOS_NOINLINE bool handle_PTRCALL_native(const SVMOperation& OP, VarInfo* pVar1,
         CallNative(GetVM()->_funLib_List, pVar1, pFunName->_str, n3);
         break;
     case VAR_SET:
+        pFunName = pFunNamePre ? pFunNamePre : GetVarPtr2(OP);
+        CallNative(GetVM()->_funLib_Set, pVar1, pFunName->_str, n3);
         break;
     case VAR_ASYNC:
         pFunName = pFunNamePre ? pFunNamePre : GetVarPtr2(OP);

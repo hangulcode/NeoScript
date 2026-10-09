@@ -60,6 +60,7 @@ struct ListInfo : AllocBase
 	bool SetValue(int idx, NS_FLOAT v);
 
 	bool Insert(int idx, VarInfo* pValue);
+	bool Remove(int idx);
 	bool InsertLast(VarInfo* pValue);
 	bool InsertLast(const std::string& str);
 
