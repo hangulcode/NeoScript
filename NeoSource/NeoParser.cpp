@@ -71,7 +71,7 @@ void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 	X(PCE_SWITCH_DUPLICATE_DEFAULT, "Error (%d, %d): 'default' appears more than once in switch") \
 	X(PCE_SWITCH_INVALID_CASE_VALUE, "Error (%d, %d): case value must be a compile-time constant of type bool, int or string") \
 	X(PCE_SWITCH_FLOAT_CASE, "Error (%d, %d): float is not allowed as a case value (exact comparison is unreliable). use int or string") \
-	X(PCE_SWITCH_TOO_MANY, "Error (%d, %d): too many switch statements in one program") \
+	X(PCE_SWITCH_TOO_MANY, "Error (%d, %d): switch table count limit exceeded (maximum 65536)") \
 	X(PCE_VM_NOT_INITIALIZED, "Please call NeoScript::NeoVMSystem::Initialize() before compiling scripts")
 
 enum EParserCompileError
@@ -213,7 +213,7 @@ struct SOperand
 // ParseNum 이 만들어 둔 상수 풀 항목은, 아무도 참조하지 않는 것이 확실할 때만 되돌린다.
 // 판정은 CanPopLastStatic 이 O(1) 로 한다 — 명령을 내면 코드 오프셋이 달라지므로
 // 반드시 방출 '전에' 물어봐야 한다.
-static bool TryPushImmediate(CArchiveRdWC& ar, SFunctions& funs, short dest, const SOperand& source, int iDebugLine = -1)
+static bool TryPushImmediate(CArchiveRdWC& ar, SFunctions& funs, int dest, const SOperand& source, int iDebugLine = -1)
 {
 	if (source.IsArray())
 		return false;
@@ -531,6 +531,7 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_MOV, 2);
 	OP_STR1(NOP_MOVI, 3);
 	OP_STR1(NOP_MOVF, 3);
+	OP_STR1(NOP_LOADK, 3);
 	OP_STR1(NOP_MOV_MINUS, 2);
 	OP_STR1(NOP_LOG_NOT, 2);
 	OP_STR1(NOP_ADD2, 2);
@@ -1159,9 +1160,12 @@ int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExp
 		return -1;
 	int iLocalVar;
 	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME)
+	{
+		CheckCompileRange("global variable count", (int64_t)vars._globalVarCount + 1, 1, 32767);
 		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN - vars._globalVarCount++;
+	}
 	else
-		iLocalVar = 1 + (int)funs._cur->_args.size() + funs._cur->_localVarCount++; // 0 번은 리턴 저장용
+		iLocalVar = funs._cur->AllocLocalVar(); // 0 번은 리턴 저장용
 	SLayerVar* pCurLayer = vars.GetCurrentLayer();
 	pCurLayer->AddLocalVar(name, iLocalVar);
 	if (funs.GetCurFunName() != GLOBAL_INIT_FUN_NAME && iLocalVar > 0)
@@ -1233,9 +1237,12 @@ int  AddLocalVar(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	int iLocalVar;
 	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME)
+	{
+		CheckCompileRange("global variable count", (int64_t)vars._globalVarCount + 1, 1, 32767);
 		iLocalVar = COMPILE_GLOBAL_VAR_BEGIN - vars._globalVarCount++;
+	}
 	else
-		iLocalVar = 1 + (int)funs._cur->_args.size() + funs._cur->_localVarCount++; // 0 번은 리턴 저장용
+		iLocalVar = funs._cur->AllocLocalVar(); // 0 번은 리턴 저장용
 	pCurLayer->AddLocalVar(name, iLocalVar);
 	return iLocalVar;
 }
@@ -1395,6 +1402,7 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	if (ar2.m_pDebugSourceFiles != nullptr)
 	{
 		size_t fileSeq = ar2.m_pDebugSourceFiles->size();
+		CheckCompileRange("debug source file index", (int64_t)fileSeq, 0, USHRT_MAX);
 		if (fileSeq <= 0xffff)
 		{
 			ar2.m_iFileSeq = (u16)fileSeq;
@@ -1446,6 +1454,7 @@ bool ParseFunctionArg(CArchiveRdWC& ar, SFunctions& funs, SLayerVar* pCurLayer)
 					return false;
 				}
 				int iArg = 1 + (int)funs._cur->_args.size();
+				CheckCompileRange("function arguments", iArg, 0, COMPILE_MAX_ARGUMENTS);
 				pCurLayer->AddLocalVar(tk2, iArg);
 				funs._cur->_debugVarNames[iArg] = tk2;
 				funs._cur->_args.insert(tk2);
@@ -1643,6 +1652,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 				argDefOffsets.push_back(iDefOffset);
 				argCallCounts.push_back(funs._cur->_callOpEmitCount);
 			}
+			CheckCompileRange("call arguments", (int64_t)iParamCount + 1, 0, COMPILE_MAX_ARGUMENTS);
 			iParamCount++;
 
 
@@ -2643,7 +2653,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				{
 					return TK_NONE;
 				}
-				if (a._iVar >= COMPILE_STATIC_VAR_BEGIN && a._iVar < COMPILE_CALLARG_VAR_BEGIN)
+				if (IsCompileConstant(a._iVar))
 				{	// 상수 풀(리터럴/const) 증감 불가
 					SetParserCompileError(ar, PCE_INVALID_INCREMENT_TARGET, tk1.c_str());
 					return TK_NONE;
@@ -2675,7 +2685,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 					return TK_NONE;
 				}
 				if (a.IsConst() ||
-					(a._iVar >= COMPILE_STATIC_VAR_BEGIN && a._iVar < COMPILE_CALLARG_VAR_BEGIN))
+					(IsCompileConstant(a._iVar)))
 				{	// 상수 풀(리터럴/const) 증감 불가
 					SetParserCompileError(ar, PCE_INVALID_INCREMENT_TARGET, tk1.c_str());
 					return TK_NONE;
@@ -2816,7 +2826,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 					return TK_NONE;
 				}
 				// 상수 풀(리터럴/const 치환 결과)에 쓰면 같은 값을 쓰는 모든 코드가 오염된다
-				if (a._iVar >= COMPILE_STATIC_VAR_BEGIN && a._iVar < COMPILE_CALLARG_VAR_BEGIN)
+				if (IsCompileConstant(a._iVar))
 				{
 					SetParserCompileError(ar, PCE_EXPECTED_LVALUE);
 					return TK_NONE;
@@ -2927,7 +2937,8 @@ static bool TryFuseCompareJump(bool bJumpWhenTrue, const SOperand& operand, SFun
 	funs._cur->_code->Write(&optype, sizeof(optype));
 	funs._cur->_code->SetPointer((int)sizeof(ArgFlag), SEEK_CUR);
 	const int cur = funs._cur->_code->GetBufferOffset();
-	funs._cur->Set_JumpOffet(SJumpValue(cur, cur + argLen), 0);
+	// This is an unresolved forward jump, not a jump to byte offset zero.
+	funs._cur->SetN(cur - (int)sizeof(OpType) - (int)sizeof(ArgFlag), 0, 0);
 	funs._cur->_code->SetPointer(argLen, SEEK_CUR);
 	outJump.Set(funs._cur->_code->GetBufferOffset() - 6, funs._cur->_code->GetBufferOffset());
 	return true;
@@ -4112,7 +4123,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 		funs._cur->_code->SetPointer((int)sizeof(ArgFlag), SEEK_CUR);
 
 		int cur = funs._cur->_code->GetBufferOffset();
-		funs._cur->Set_JumpOffet(SJumpValue(cur, cur + argLen), 0);
+		funs._cur->SetN(cur - (int)sizeof(OpType) - (int)sizeof(ArgFlag), 0, 0);
 		funs._cur->_code->SetPointer(argLen, SEEK_CUR);
 
 		jmp1.Set(funs._cur->_code->GetBufferOffset() - 6, funs._cur->_code->GetBufferOffset());
@@ -4636,7 +4647,7 @@ bool ParseSwitch(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* alwaysRe
 	const int iTableIndex = (int)funs._switchTables.size();
 	funs._switchTables.push_back(SSwitchTableCompile());
 
-	funs._cur->Push_Switch(ar, (u16)iTableIndex, (short)iKeyVar);
+	funs._cur->Push_Switch(ar, (u16)iTableIndex, iKeyVar);
 	const int iBaseOffset = funs._cur->_code->GetBufferOffset(); // NOP_SWITCH 다음 op 기준
 
 	std::vector<SJumpValue> sBreakJumps;   // break + 각 case 본문 끝 → switch 끝
@@ -5137,7 +5148,8 @@ static void HoistLoopConstants(SFunctions& funs, u8* pCode, int codeSize,
 	for (int c = 0; c < (int)cand.size(); c++)
 	{
 		const short staticVar = cand[c].second;
-		const short slot = (short)(1 + (int)funs._cur->_args.size() + funs._cur->_localVarCount++);
+		if (1 + (int)funs._cur->_args.size() + funs._cur->_localVarCount >= COMPILE_LOCALTMP_VAR_BEGIN) break;
+		const short slot = (short)funs._cur->AllocLocalVar();
 		remap[staticVar] = slot;
 		outPrologue.push_back(std::make_pair(slot, staticVar));
 	}
@@ -5221,8 +5233,17 @@ void FinalizeFuction(SFunctions& funs)
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool addOPFunEnd)
 {
 	bool bodyAlwaysReturns = false;
-	if (false == ParseMiddleArea(NULL, ar, funs, vars, &bodyAlwaysReturns))
+	try
+	{
+		if (false == ParseMiddleArea(NULL, ar, funs, vars, &bodyAlwaysReturns))
+			return false;
+	}
+	catch (const CompileLimitError& e)
+	{
+		// 임포트 안의 한도 초과도 해당 소스의 위치에서 컴파일 오류로 남긴다.
+		SetCompileError(ar, "Error (%d, %d): %s", ar.CurLine(), ar.CurCol(), e.what());
 		return false;
+	}
 
 	if (ar.m_sErrorString.empty() == false)
 		return false;
@@ -5244,6 +5265,7 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string&
 	if(pF == nullptr)
 	{
 		int funID = funs.GetFunCountAll();
+		CheckCompileRange("function id", funID, 0, SHRT_MAX);
 
 		if (funType == FUNT_ANONYMOUS)
 		{
@@ -5429,15 +5451,20 @@ bool NeoVMSystem::Compile(CNArchive& arw, const NeoCompilerParam& param)
 		ar2.m_pDebugSourceFiles = param.debugSourceFiles;
 	}
 
-	if (!ToArchiveRdWC((const char*)param.pBufferSrc, param.iLenSrc, ar2))
+	bool b = false;
+	try
 	{
-		if (param.err)
-			*(param.err) = "Invalid script source encoding (expected UTF-8 or BOM-marked UTF-16)";
-		return false;
+		CheckCompileRange("source bytes", param.iLenSrc, 0, INT_MAX - 1);
+		if (!ToArchiveRdWC((const char*)param.pBufferSrc, param.iLenSrc, ar2))
+			SetCompileError(ar2, "Invalid script source encoding (expected UTF-8 or BOM-marked UTF-16)");
+		else
+			b = Parse(ar2, arw, param.putASM);
 	}
-
-
-	bool b = Parse(ar2, arw, param.putASM);
+	catch (const CompileLimitError& e)
+	{ SetCompileError(ar2, "Error (%d, %d): %s", ar2.CurLine(), ar2.CurCol(), e.what()); }
+	catch (const std::bad_alloc&)
+	{ SetCompileError(ar2, "Error (%d, %d): compiler memory allocation failed", ar2.CurLine(), ar2.CurCol()); }
+	if (!b) arw.SetBufferOffset(0);
 	if(b == false && param.err)
 		*(param.err) = ar2.m_sErrorString;
 

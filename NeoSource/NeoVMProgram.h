@@ -163,7 +163,13 @@ public:
 	NEOS_FORCEINLINE bool IsDebugInfo() const { return (header._dwFlag & NEO_HEADER_FLAG_DEBUG) != 0; }
 	NEOS_FORCEINLINE const u8* GetCodeBegin() const { return (const u8*)code.data(); }
 	NEOS_FORCEINLINE int GetCodeSize() const { return (int)(code.size() * sizeof(SVMOperation)); }
-	NEOS_FORCEINLINE int GetGlobalSlotCount() const { return header._iStaticVarCount + header._iGlobalVarCount; }
+	// The pointer between globals and constants is the origin for signed slots.
+	NEOS_FORCEINLINE int ConstantBase() const { return header._iGlobalVarCount + 1; }
+	NEOS_FORCEINLINE bool IsGlobalVariable(int slot) const
+	{ return slot <= -2 && slot >= -header._iGlobalVarCount - 1; }
+	NEOS_FORCEINLINE bool IsGlobalOperand(int slot) const
+	{ return IsGlobalVariable(slot) || (slot >= 0 && slot < header._iStaticVarCount); }
+	NEOS_FORCEINLINE int GetGlobalSlotCount() const { return header._iStaticVarCount + header._iGlobalVarCount + 1; }
 
 	int FindFunction(const std::string& name) const
 	{

@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "NeoConfig.h"
+#include "NeoCompileLimits.h"
 #include "NeoVM.h" // NeoCompileDefines (스크립트 const 테이블 소유용)
 #include <cstdint>
 #include <string>
@@ -131,8 +132,8 @@ private:
 	int		m_iOffset;
 	int		m_iSize;
 
-	u16		m_iCurLine;
-	u16		m_iCurCol;
+	int		m_iCurLine;
+	int		m_iCurCol;
 public:
 	bool	_allowGlobalInitLogic = true;
 	bool	_debug = false;
@@ -160,6 +161,7 @@ public:
 	}
 	void SetData(std::u16string source)
 	{
+		CheckCompileRange("source code units", (int64_t)source.size(), 0, INT_MAX - 1);
 		m_source = std::move(source);
 		m_iOffset = 0;
 		m_iSize = static_cast<int>(m_source.size());
@@ -200,8 +202,8 @@ public:
 	}
 
 	u16		CurFile() { return m_iFileSeq; }
-	u16		CurLine() { return m_iCurLine; }
-	u16		CurCol() { return m_iCurCol; }
+	int		CurLine() { return m_iCurLine; }
+	int		CurCol() { return m_iCurCol; }
 
 
 	inline int GetBufferOffset()

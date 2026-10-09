@@ -69,14 +69,15 @@ u8 ChangeIndex(int staticCount, int localCount, int curFunStatkSize, SVMOperatio
 
 	if (*n == STACK_POS_RETURN)
 	{
-		*n = curFunStatkSize;
+		*n = CompileShort("return slot", curFunStatkSize);
 		if (argIndex == 1) return NEOS_ARG_N1_LOCAL;
 		else if (argIndex == 2) return NEOS_ARG_N2_LOCAL;
 		else if (argIndex == 3) return NEOS_ARG_N3_LOCAL;
 	}
 	if(*n <= COMPILE_GLOBAL_VAR_BEGIN)
 	{
-		*n = -(*n) + COMPILE_GLOBAL_VAR_BEGIN + staticCount;
+		// Negative globals are independent of the constant pool size.
+		// -1 stays reserved; -2 is the first declared global.
 		return 0;
 	}
 
@@ -86,7 +87,7 @@ u8 ChangeIndex(int staticCount, int localCount, int curFunStatkSize, SVMOperatio
 		{
 			if (*n >= COMPILE_CALLARG_VAR_BEGIN)
 			{
-				*n = (*n - COMPILE_CALLARG_VAR_BEGIN) + curFunStatkSize;
+				*n = CompileShort("call argument stack slot", (*n - COMPILE_CALLARG_VAR_BEGIN) + curFunStatkSize);
 				if (argIndex == 1) return NEOS_ARG_N1_LOCAL;
 				else if (argIndex == 2) return NEOS_ARG_N2_LOCAL;
 				else if (argIndex == 3) return NEOS_ARG_N3_LOCAL;
@@ -94,7 +95,7 @@ u8 ChangeIndex(int staticCount, int localCount, int curFunStatkSize, SVMOperatio
 			*n = (*n - COMPILE_STATIC_VAR_BEGIN);
 			return 0;
 		}
-		*n = *n - COMPILE_LOCALTMP_VAR_BEGIN + localCount;
+		*n = CompileShort("temporary stack slot", *n - COMPILE_LOCALTMP_VAR_BEGIN + localCount);
 		if (argIndex == 1) return NEOS_ARG_N1_LOCAL;
 		else if (argIndex == 2) return NEOS_ARG_N2_LOCAL;
 		else if (argIndex == 3) return NEOS_ARG_N3_LOCAL;
@@ -136,8 +137,8 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 
 	SFunctionTableForWriter fun;
 	fun._codePtr = ar.GetBufferOffset() - sizeof(SNeoVMHeader);
-	fun._argsCount = (short)fi._args.size();
-	fun._localTempMax = (short)fi._localTempMax;
+	fun._argsCount = CompileShort("function arguments", (int)fi._args.size());
+	fun._localTempMax = CompileShort("temporary variables", fi._localTempMax);
 	fun._localVarCount = fi._localVarCount;
 	fun._funType = fi._funType;
 	fun._name = fi._name;
@@ -147,6 +148,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		fun._captures.push_back(std::make_pair(capture._sourceSlot, capture._localSlot));
 
 	int curFunStatkSize = 1 + fun._argsCount + fun._localVarCount + fun._localTempMax;
+	CheckCompileRange("function stack slots", curFunStatkSize, 0, SHRT_MAX);
 
 	funPos[fi._funID] = fun;
 
@@ -325,10 +327,8 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			break;
 
 		case NOP_MOVI:
-			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
-			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
-			break;
 		case NOP_MOVF:
+		case NOP_LOADK:
 			argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
 			argFlag |= GetArgIndexToCode(argFlag, &v.n1, nullptr, nullptr);
 			break;
@@ -553,12 +553,12 @@ std::string GetLog(STempDebug& td, SVMOperation& op, int argIndex)
 
 	if (c[0] == 'G')
 	{
-		if(v < (int)td._staticVars.size())
+		if(v >= 0 && v < (int)td._staticVars.size())
 			snprintf(ch, _countof(ch), "[%s%d %s]", c, v, GetValueString(td._staticVars[v]).c_str());
 		else
 		{
-			if(v - (int)td._staticVars.size() < (int)td._globalVars.size())
-				snprintf(ch, _countof(ch), "[%s%d %s]", c, v, td._globalVars[v - (int)td._staticVars.size()].c_str());
+			if(v <= -2 && -v - 2 < (int)td._globalVars.size())
+				snprintf(ch, _countof(ch), "[%s%d %s]", c, v, td._globalVars[-v - 2].c_str());
 			else
 				snprintf(ch, _countof(ch), "[%s%d ???]", c, v);
 		}
@@ -701,7 +701,7 @@ void WriteFunLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SFuncti
 
 static void WriteString(CNArchive& ar, const std::string& str)
 {
-	short nLen = (short)str.length();
+	short nLen = (short)CheckCompileRange("image string bytes", (int64_t)str.size(), 0, SHRT_MAX);
 	ar << nLen;
 	ar.Write((char*)str.data(), nLen);
 }
@@ -769,7 +769,7 @@ static void WriteDebugVarNames(CNArchive& ar, SFunctions& funs, SVars& vars, int
 		ar.WriteCount((u32)pLocalLayer->_localVars.size());
 		for (auto it = pLocalLayer->_localVars.begin(); it != pLocalLayer->_localVars.end(); ++it)
 		{
-			int idx = -it->second + COMPILE_GLOBAL_VAR_BEGIN + staticVarCount;
+			int idx = it->second;
 			ar << idx;
 			WriteString(ar, it->first);
 		}
@@ -862,7 +862,7 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 		int iID = (*it).first;
 		SFunctionTableForWriter fun = (*it).second;
 		ar << iID << fun._codePtr << fun._argsCount << fun._localTempMax << fun._localVarCount << fun._funType;
-		const u16 captureCount = (u16)fun._captures.size();
+		const u16 captureCount = (u16)CheckCompileRange("closure captures", (int64_t)fun._captures.size(), 0, USHRT_MAX);
 		ar << captureCount;
 		for (const auto& capture : fun._captures)
 			ar << capture.first << capture.second;
@@ -882,7 +882,7 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	for(int i = 0; i < header._iExportVarCount; i++)
 	{
 		auto it = pLocalLayer->_localVars.find(vars._varsExport[i]);
-		int idx = COMPILE_GLOBAL_VAR_BEGIN - (*it).second + header._iStaticVarCount;
+		int idx = (*it).second;
 		ar << idx;
 		WriteString(ar, (*it).first);
 	}
@@ -996,16 +996,16 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 	std::map<int, std::string> global;
 	for (auto it2 = pLocalLayer->_localVars.begin(); it2 != pLocalLayer->_localVars.end(); it2++)
 	{
-		int idx = -(*it2).second + COMPILE_GLOBAL_VAR_BEGIN + header._iStaticVarCount;
+		int idx = -(*it2).second + COMPILE_GLOBAL_VAR_BEGIN;
 		global[idx] = (*it2).first;
 	}
 	for (auto it2 = global.begin(); it2 != global.end(); it2++)
 	{
 		int idx = (*it2).first;
 		if (tempExportVars.end() == tempExportVars.find((*it2).second))
-			OutAsm("Global   [%d] %s\n", idx, (*it2).second.c_str());
+			OutAsm("Global   [%d] %s\n", -idx - 2, (*it2).second.c_str());
 		else
-			OutAsm("Global E [%d] %s\n", idx, (*it2).second.c_str());
+			OutAsm("Global E [%d] %s\n", -idx - 2, (*it2).second.c_str());
 		td._globalVars.push_back((*it2).second);
 	}
 	if (header.m_iDebugCount > 0 && header.m_iDebugOffset > 0)

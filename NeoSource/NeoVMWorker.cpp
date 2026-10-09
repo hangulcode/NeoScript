@@ -412,19 +412,20 @@ bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, CNeoVMProgram* pProgram, i
 	_pCodeBegin = pProgram->GetCodeBegin();
 	_pCodeCurrent = (const SVMOperation*)_pCodeBegin;
 
-	// 전역 슬롯 = [static 상수 | 전역 변수]. static 은 프로그램의 상수 서술자에서
+	// 전역 슬롯 = [역순 전역 변수 | -1 예약 | static 상수]. 기준 포인터는 상수 0.
+	// 전역은 음수, 작은 상수는 양수 16-bit offset으로 분기 없이 접근한다.
+	// 상수 개수가 늘어도 전역 번호/한도는 바뀌지 않는다. static 은 프로그램 서술자에서
 	// 이 VM 의 할당자로 실체화한다 (StringInfo 는 VM 별 풀 소유라 공유 불가).
 	const int staticCount = pProgram->header._iStaticVarCount;
 	const int iMaxVar = pProgram->GetGlobalSlotCount();
 	m_sVarGlobal.clear();
 	m_sVarGlobal.resize(iMaxVar);
-	if (m_sVarGlobal.empty()) m_pVarGlobal_Pointer = nullptr;
-	else m_pVarGlobal_Pointer = &m_sVarGlobal[0];
+	m_pVarGlobal_Pointer = m_sVarGlobal.data() + pProgram->ConstantBase();
 
 	for (int i = 0; i < staticCount; i++)
 	{
 		const SStaticConst& sc = pProgram->staticValues[i];
-		VarInfo& vi = m_sVarGlobal[i];
+		VarInfo& vi = m_pVarGlobal_Pointer[i];
 		vi.SetType(sc._type);
 		switch (sc._type)
 		{
@@ -1772,13 +1773,13 @@ void CNeoVMWorker::DebugGetFrameVariables(int frameId, std::vector<NeoDebugVaria
 		for (auto it = _pProgram->debugGlobalNames.begin(); it != _pProgram->debugGlobalNames.end(); ++it)
 		{
 			int globalIndex = it->first;
-			if (globalIndex < 0 || globalIndex >= (int)m_sVarGlobal.size())
+			if (!_pProgram->IsGlobalVariable(globalIndex))
 				continue;
 
 			NeoDebugVariable var;
 			var.name = it->second;
 			var.stackIndex = globalIndex;
-			NeoDebugFormatValue(&m_sVarGlobal[globalIndex], var);
+			NeoDebugFormatValue(NEOS_GLOBAL_VAR(globalIndex), var);
 			vars.push_back(var);
 		}
 	}
@@ -1973,6 +1974,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_MOVI_L:        MoveI(GetVarPtr_L(OP.n1), OP.n23); break;
 		case NOP_MOVF:          MoveF(GetVarPtrF1(OP), OP.n23); break;
 		case NOP_MOVF_L:        MoveF(GetVarPtr_L(OP.n1), OP.n23); break;
+		case NOP_LOADK:         Move(GetVarPtrF1(OP), m_pVarGlobal_Pointer + OP.n23); break;
 		case NOP_MOV_MINUS:     MoveMinus(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
 		case NOP_MOV_MINUS_L:   MoveMinus(GetVarPtr_L(OP.n1), GetVarPtr_L(OP.n2)); break;
 		case NOP_LOG_NOT:       Var_SetBool(GetVarPtrF1(OP), !GetVarPtr2(OP)->IsTrue()); break;

@@ -777,6 +777,11 @@ void RuntimeImpl::SetupCompilerParam(const CompileDesc& desc, NeoCompilerParam& 
 CompileResult RuntimeImpl::Compile(const CompileDesc& desc)
 {
     CompileResult r;
+    if (desc.source.size() > INT_MAX - 1)
+    {
+        r.error.code = 1; r.error.message = "source bytes limit exceeded (maximum 2147483646)";
+        r.error.sourceName = desc.sourceName.str(); return r;
+    }
     // 백킹 스토리지(param 이 가리킴 — CompileToProgram 반환까지 생존).
     std::string err, dbgPath;
     NeoGlobalSymbolTable gtab{};
@@ -801,6 +806,12 @@ CompileResult RuntimeImpl::Compile(const CompileDesc& desc)
 
 Error RuntimeImpl::CompileToBytecode(const CompileDesc& desc, std::vector<uint8_t>& out)
 {
+    out.clear();
+    if (desc.source.size() > INT_MAX - 1)
+    {
+        Error e; e.code = 1; e.message = "source bytes limit exceeded (maximum 2147483646)";
+        e.sourceName = desc.sourceName.str(); return e;
+    }
     // 소스 → 바이트코드(빌드 산출물). Program 은 만들지 않는다. 저장/전송 후 LoadProgram 으로 로드.
     std::string err, dbgPath;
     NeoGlobalSymbolTable gtab{};

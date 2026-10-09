@@ -115,7 +115,8 @@ NEOS_FORCEINLINE int GetCallReturnValueIndex(const SVMOperation& OP) {
         return -1;
     if (OP.argFlag & NEOS_ARG_N3_LOCAL)
         return _iSP_Vars + OP.n3;
-    return -2 - OP.n3;
+    // 전역 목적지는 opcode와 같은 음수 오프셋을 저장한다. 기준점은 상수 0이다.
+    return OP.n3;
 }
 
 NEOS_FORCEINLINE bool handle_CALL(const SVMOperation& OP) {
@@ -285,7 +286,7 @@ NEOS_FORCEINLINE bool handle_RETURN_impl(VarInfo* pSrc) {
     {
         VarInfo* pReturnValue = (callStack._iReturnValueIndex >= 0)
             ? &(*m_pVarStack_Base)[callStack._iReturnValueIndex]
-            : NEOS_GLOBAL_VAR(-callStack._iReturnValueIndex - 2);
+            : m_pVarGlobal_Pointer + callStack._iReturnValueIndex;
         if (pSrc == nullptr)
             Var_Release(pReturnValue); // Clear
         else

@@ -40,9 +40,9 @@ struct SVarWrapper
 
 
 #ifdef _DEBUG
-	#define NEOS_GLOBAL_VAR(idx) &(*m_pVarGlobal)[idx]
+	#define NEOS_GLOBAL_VAR(idx) (&(*m_pVarGlobal)[_pProgram->ConstantBase() + (idx)])
 #else
-	#define NEOS_GLOBAL_VAR(idx) m_pVarGlobal_Pointer + idx
+	#define NEOS_GLOBAL_VAR(idx) (m_pVarGlobal_Pointer + (idx))
 #endif
 
 class mRND 
@@ -460,9 +460,9 @@ public:
 	virtual VarInfo* GetVar(const std::string& name) override
 	{
 		int idx = _pProgram->FindGlobalVar(name);
-		if (idx < 0 || idx >= (int)m_sVarGlobal.size())
+		if (!_pProgram->IsGlobalVariable(idx))
 			return NULL;
-		return &m_sVarGlobal[idx];
+		return NEOS_GLOBAL_VAR(idx);
 	}
 
 	VarInfo* testCall(int iFID, VarInfo* args, int argc);

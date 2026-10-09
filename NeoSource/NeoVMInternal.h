@@ -98,6 +98,9 @@ enum eNOperation : OpType
 	NOP_MOVI_L,
 	NOP_MOVF,
 	NOP_MOVF_L,
+	// 32-bit constant index, 16-bit destination: still exactly eight bytes.
+	// The destination flag selects local/global storage; no separate _L opcode is needed.
+	NOP_LOADK,
 
 	NOP_MOV_MINUS,
 	NOP_MOV_MINUS_L,
@@ -225,7 +228,7 @@ enum eNOperation : OpType
 	NOP_VEC_MAKE,
 
 
-	// 새 opcode는 끝에 붙여 기존 저장 스크립트 이미지의 opcode 값을 보존한다.
+	// 기존 opcode 값을 보존하려고 끝에 추가한 READ 특수화.
 	// 로드 시 n2가 static 문자열 상수인 READ만 이 opcode로 치환한다.
 	// 키 StringInfo는 워커별 static 슬롯에서 매번 얻으며 Map/value 포인터는 보관하지 않는다.
 	NOP_CLT_READ_STATIC_STRING,
@@ -268,6 +271,7 @@ struct SVMOperation
 	};
 };
 #pragma pack()
+static_assert(sizeof(SVMOperation) == 8, "NeoScript instructions must remain eight bytes");
 
 struct VarInfo;
 struct SVarWrapper;
@@ -281,8 +285,9 @@ struct SCallStack
 	int		_iSP_Vars;
 	int		_iSP_VarsMax;
 	u32		_ReturnIP;
-	// >= 0: 절대 실행 스택 인덱스, -1: 반환값 무시,
-	// <= -2: 전역 인덱스(-_iReturnValueIndex - 2).
+	// >= 0: 절대 실행 스택 인덱스, -1: 명시적 목적지 없음(기본 반환 임시 슬롯 사용),
+	// <= -2: opcode와 같은 전역 음수 오프셋. 상수 0 포인터에 그대로 더해 복원한다.
+	// 물리 배열 인덱스로 재인코딩하지 않으며, 상수 개수와 무관하다.
 	int	 _iReturnValueIndex = -1;
 };
 

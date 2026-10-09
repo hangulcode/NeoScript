@@ -177,7 +177,9 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 		return false;
 	}
 	if (header._iFunctionCount < 0 || header._iStaticVarCount < 0 ||
-		header._iGlobalVarCount < 0 || header._iExportVarCount < 0)
+		header._iGlobalVarCount < 0 || header._iGlobalVarCount > 32767 || header._iExportVarCount < 0 ||
+		header._iStaticVarCount > INT_MAX - header._iGlobalVarCount - 1 ||
+		header._iFunctionCount > SHRT_MAX + 1)
 	{
 		SetLoadError(err, "Invalid script image counts");
 		return false;
@@ -322,6 +324,11 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 		if (false == ReadString(ar, name))
 		{
 			SetLoadError(err, "Truncated script image (export var name)");
+			return false;
+		}
+		if (!IsGlobalVariable(idx))
+		{
+			SetLoadError(err, "Invalid exported global slot");
 			return false;
 		}
 		exportVariables[name] = idx;
@@ -488,10 +495,20 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 	}
 
 	// range jump은 descriptor를 반드시 참조해야 한다. descriptor의 local slot은 해당
-	// opcode를 소유한 함수 프레임 기준이고, global slot은 static+global 배열 기준이다.
+	// opcode를 소유한 함수 프레임 기준이고, global slot은 상수 0 기준 signed offset이다.
 	for (int opIndex = 0; opIndex < (int)code.size(); ++opIndex)
 	{
 		const SVMOperation& op = code[opIndex];
+		if (op.op == NOP_LOADK)
+		{
+			const bool local = (op.argFlag & NEOS_ARG_N1_LOCAL) != 0;
+			if (op.n23 < 0 || op.n23 >= header._iStaticVarCount || codeOwners[opIndex] < 0 ||
+				(local ? op.n1 < 0 : !IsGlobalVariable(op.n1)))
+			{
+				SetLoadError(err, "Invalid LOADK operand");
+				return false;
+			}
+		}
 		if (op.op != NOP_JMP_RANGE_INSIDE && op.op != NOP_JMP_RANGE_OUTSIDE)
 			continue;
 		const int rangeIndex = (int)(u16)op.n3;
@@ -506,7 +523,7 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 		{
 			if (isLocal)
 				return slot >= 0 && slot < fun._localAddCount;
-			return slot >= 0 && slot < GetGlobalSlotCount();
+			return IsGlobalOperand(slot);
 		};
 		if (IsValidRangeOperand(op.n2, (op.argFlag & NEOS_ARG_N2_LOCAL) != 0) == false ||
 			IsValidRangeOperand(range.lower, (range.flags & NEOS_RANGE_LOWER_LOCAL) != 0) == false ||
@@ -1012,6 +1029,10 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 			outAssembly = FormatAsm("MOVF %s = <invalid precision>", context.operand(1).c_str());
 		break;
 	}
+	case NOP_LOADK:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("LOADK %s = K[%d]", context.operand(1).c_str(), v.n23);
+		break;
 	case NOP_MOV_MINUS:
 		byteCount = OpFlagByteChars + 2 * 2;
 		outAssembly = FormatAsm("MOV  %s = -%s", context.operand(1).c_str(), context.operand(2).c_str());
@@ -1313,7 +1334,7 @@ struct ProgramSymbolCache
 			snprintf(ch, sizeof(ch), "[G.%d %s]", v, StaticConstToString(program->staticValues[v]).c_str());
 			return ch;
 		}
-		if (v >= 0 && v < program->GetGlobalSlotCount())
+		if (program->IsGlobalVariable(v))
 		{
 			auto it = globalNames.find(v);
 			if (it != globalNames.end())

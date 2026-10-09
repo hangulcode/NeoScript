@@ -396,3 +396,66 @@ result before it can return to Script A, so Script B does not own a resumable ex
 
 > Note: `NeoExecContextPool_Create` returns an opaque handle; its full type lives in the internal headers.
 > Only the pointer, the two factory functions, and `NeoLoadVMParam::execPool` are part of the public API.
+
+### Compiled image capacity (format 0122)
+
+Recompile cached images when updating to format **0122**. Instructions remain eight bytes, but global
+operand addressing and the new `LOADK` instruction require the matching VM. `LOADK` sits beside the
+`MOV` instructions; its destination flag handles both local and global storage.
+
+- Constant indices 0–14,999 use the existing direct 16-bit operand path. Larger indices use `LOADK`
+  with a 32-bit constant index and a 16-bit destination. A direct assignment needs one instruction;
+  an arithmetic operand, table key, or method name may need an extra load into a temporary slot.
+- Global variables use signed operands -2 through -32,768; -1 remains reserved. Each VM stores
+  `[reversed globals | reserved slot | constants]`, with its operand pointer at constant zero.
+  Ordinary global/constant access is pointer addition without a sign-dependent branch. Increasing
+  the constant pool does not consume global indices. Strings remain owned by each VM.
+- Code buffers and the complete image grow beyond the former 1 MiB ceiling. The current signed
+  32-bit image offsets impose an `INT_MAX` byte ceiling; memory availability can impose a lower one.
+  Checked arithmetic and write failures stop compilation, including failures in intermediate buffers.
+- Function IDs are separate from constants and remain signed 16-bit: IDs 0–32,767, including the
+  global initializer. Defining many functions with distinct return literals can also grow the constant pool.
+
+Remaining encoding limits are checked before narrowing or serialization:
+
+| Item | Limit |
+| --- | --- |
+| Globals | 32,767, independent of constant count |
+| Arguments per definition/call | 2,766 |
+| Named local/capture slots | Arguments + locals + captures ≤ 9,999 |
+| Temporary slots | Arguments + temporaries ≤ 4,999 |
+| Relative branch | -32,768 through 32,767 instructions |
+| Serialized string or symbol name | 32,767 UTF-8 bytes per string |
+| Switch tables | 65,536 |
+| Debug source index / line | 0–65,535 / 1–65,535 |
+
+Constants also have checked 32-bit compiler indices; image size and available memory usually become
+the practical limit first. Without debug information, source line numbers use `int` and can exceed
+65,535. Optional optimizations fall back to ordinary code when their own spare slots are exhausted.
+
+On failure, `CompileToBytecode` clears its output and returns an error containing the limit and,
+where available, the source location. The low-level compiler likewise resets its output cursor.
+`neoscript_compiler_limits_regression` covers large pools/images, independent global indices,
+save/load/execution, and encoding boundaries.
+
+#### Function return slots
+
+`SCallStack::_iReturnValueIndex` keeps global destinations in the same signed-offset form as opcode
+operands. Calling and returning use these meanings:
+
+| Stored value | Destination |
+| --- | --- |
+| 0 or greater | Absolute index in the caller's execution stack |
+| -1 | No explicit destination; use the ordinary return temporary |
+| -2 through -32,768 | Global offset from the pointer to constant zero |
+
+For a global destination, the call stores `OP.n3` directly and the return resolves it as
+`m_pVarGlobal_Pointer + slot`. Do not add `ConstantBase()` or encode/decode a physical array index.
+The negative offset must be applied to the constant-zero pointer, not the allocation's first element.
+Local destinations still include the caller's stack base, and calls without an explicit destination
+keep their existing temporary-return behavior.
+
+This removes the extra global-destination conversion and keeps opcode and call-stack numbering
+consistent, without growing instructions or call frames. It does not change the constant/global
+limits; any performance difference needs measurement. Producers and consumers must use the same
+representation. Call frames are runtime state; compiled images continue to use format **0122**.
