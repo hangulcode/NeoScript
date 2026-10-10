@@ -153,6 +153,8 @@
       <PreprocessorDefinitions>_WIN32;_WIN64;WIN_PRJ</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <ExceptionHandling>Async</ExceptionHandling>
+      <!-- Static CRT so the copied console.exe runs on machines without Visual Studio or the VC++ redistributable -->
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -165,6 +167,19 @@
       <LinkTimeCodeGeneration Condition="'$(NeoLtcgMode)'!=''">$(NeoLtcgMode)</LinkTimeCodeGeneration>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
+    <PostBuildEvent>
+      <!-- Copy the release console into GameDesign (sibling repository) so content machines without Visual Studio can run headless tests.
+           Skipped when GameDesign is not next to this repository; a failed copy (file in use) only warns. -->
+      <Command>set "NEO_BACKUP=$(ProjectDir)..\..\..\GameDesign\PDev\backup\Tools"
+if exist "%NEO_BACKUP%\" (
+  copy /Y "$(TargetPath)" "%NEO_BACKUP%\console.exe" &gt;nul
+  if errorlevel 1 (echo warning: could not copy console.exe to %NEO_BACKUP%) else (echo console.exe copied to %NEO_BACKUP%)
+) else (
+  echo GameDesign backup folder not found - console.exe not copied
+)
+exit /b 0</Command>
+      <Message>Copy console.exe to GameDesign/PDev/backup/Tools</Message>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\..\NeoSource\HttpRequest.h" />
