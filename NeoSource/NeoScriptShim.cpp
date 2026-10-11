@@ -443,6 +443,7 @@ static ValueType VarTypeToValueType(VarInfo* v)
     case VAR_INT:    return ValueType::Int;
     case VAR_FLOAT:  return ValueType::Float;
     case VAR_BOOL:   return ValueType::Bool;
+    case VAR_NONE:   return ValueType::None;
     case VAR_FUN:
     case VAR_FUN_NATIVE: return ValueType::Function;
     case VAR_STRING: return ValueType::String;
@@ -1506,10 +1507,17 @@ InstanceHandle CallContext::instance() const { return Ctx(m_impl)->instance; }
 // (raw INeoVMWorker*/VarInfo* 접근자는 공개 API 에 없다 — 전부 shim 내부.)
 std::size_t CallContext::argCount() const { return static_cast<std::size_t>(Ctx(m_impl)->argCount); }
 ValueType CallContext::argType(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); VarInfo* v=CtxArgVar(c,i); return v?VarTypeToValueType(v):ValueType::None; }
+bool CallContext::argIsNativeObject(std::size_t i) const { VarInfo* v=CtxArgVar(Ctx(m_impl),i); return v && v->GetType()==VAR_FP_NATIVE; }
 int32_t CallContext::argInt(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); return c->worker->PopInt(CtxArgVar(c,i)); }
 float CallContext::argFloat(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); return static_cast<float>(c->worker->PopFloat(CtxArgVar(c,i))); }
 bool CallContext::argBool(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); return c->worker->PopBool(CtxArgVar(c,i)); }
-StringView CallContext::argString(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); const char* s=c->worker->PopString(CtxArgVar(c,i)); return StringView(s?s:""); }
+StringView CallContext::argString(std::size_t i) const
+{
+    CallContextImpl* c=Ctx(m_impl); VarInfo* v=CtxArgVar(c,i);
+    // 문자열은 NUL을 포함해 원래 길이를 보존한다. 다른 타입의 기존 변환은 유지한다.
+    if (v && v->GetType() == VAR_STRING) return StringView(v->_str->_str);
+    const char* s=c->worker->PopString(v); return StringView(s?s:"");
+}
 void CallContext::argVec(std::size_t i, float out[4]) const { CallContextImpl* c=Ctx(m_impl); ReadVec(CtxArgVar(c,i), out); }
 FunctionHandle CallContext::argFunction(std::size_t i) const
 {
@@ -1644,6 +1652,7 @@ int  ListBuilder::count() const      { return static_cast<ListBuilderImpl*>(m_im
 void ListBuilder::pushInt(int32_t v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetInt(&it, v);   b->list->InsertLast(&it); }
 void ListBuilder::pushFloat(float v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetFloat(&it, v); b->list->InsertLast(&it); }
 void ListBuilder::pushBool(bool v)      { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetBool(&it, v);  b->list->InsertLast(&it); }
+void ListBuilder::pushNull() { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->list->InsertLast(&it); }
 void ListBuilder::pushString(StringView v) { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; SetVarString(b->w, &it, v); b->list->InsertLast(&it); b->w->Var_Release(&it); }
 void ListBuilder::pushVec3(float x, float y, float z) { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetVec3(&it, x, y, z); b->list->InsertLast(&it); b->w->Var_Release(&it); }
 void ListBuilder::setInt(int index, int32_t v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetInt(&it, v);   b->list->SetValue(index, &it); }
@@ -1666,12 +1675,43 @@ void ListBuilder::pushObject(ObjectType type, void* userData) {
 //==============================================================================
 static VarInfo* MapFind(const MapReaderImpl* r, StringView key) { return r->map->Find(std::string(key.data(), key.size())); }
 
+bool MapReader::stringKeys(std::vector<StringView>& out, ValueType* unsupportedKeyType) const
+{
+    out.clear();
+    if (unsupportedKeyType) *unsupportedKeyType = ValueType::None;
+    const MapReaderImpl* r = static_cast<const MapReaderImpl*>(m_impl);
+    for (CollectionIterator it = r->map->FirstNode(); it._pTableNode; r->map->NextNode(it))
+    {
+        VarInfo& key = it._pTableNode->data->key;
+        if (key.GetType() != VAR_STRING)
+        {
+            if (unsupportedKeyType) *unsupportedKeyType = VarTypeToValueType(&key);
+            out.clear();
+            return false;
+        }
+        out.emplace_back(key._str->_str);
+    }
+    return true;
+}
+bool MapReader::sameStorage(const MapReader& other) const
+{
+    return m_impl && other.m_impl && static_cast<const MapReaderImpl*>(m_impl)->map ==
+        static_cast<const MapReaderImpl*>(other.m_impl)->map;
+}
+bool ListReader::sameStorage(const ListReader& other) const
+{
+    return m_impl && other.m_impl && static_cast<const ListReaderImpl*>(m_impl)->list ==
+        static_cast<const ListReaderImpl*>(other.m_impl)->list;
+}
+
 bool MapReader::has(StringView key) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); return MapFind(r,key)!=nullptr; }
 ValueType MapReader::type(StringView key) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); return v?VarTypeToValueType(v):ValueType::None; }
+bool MapReader::isNull(StringView key) const { VarInfo* v=MapFind(static_cast<const MapReaderImpl*>(m_impl),key); return v && v->GetType()==VAR_NONE; }
+bool MapReader::isNativeObject(StringView key) const { VarInfo* v=MapFind(static_cast<const MapReaderImpl*>(m_impl),key); return v && v->GetType()==VAR_FP_NATIVE; }
 bool MapReader::getInt(StringView key, int32_t& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v) return false; out=r->w->PopInt(v); return true; }
 bool MapReader::getFloat(StringView key, float& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v) return false; out=static_cast<float>(r->w->PopFloat(v)); return true; }
 bool MapReader::getBool(StringView key, bool& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v) return false; out=r->w->PopBool(v); return true; }
-bool MapReader::getString(StringView key, StringView& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v||v->GetType()!=VAR_STRING) return false; const char* s=r->w->PopString(v); out=StringView(s?s:""); return true; }
+bool MapReader::getString(StringView key, StringView& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v||v->GetType()!=VAR_STRING) return false; out=StringView(v->_str->_str); return true; }
 bool MapReader::getVec(StringView key, float out[4]) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v) return false; ReadVec(v,out); return v->IsVector(); }
 bool MapReader::getMap(StringView key, MapReader& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v||v->GetType()!=VAR_MAP||!v->_tbl) return false; r->mpool->push_back(MapReaderImpl{r->w,v->_tbl,r->mpool,r->lpool}); out=NeoScriptInternal::mapR(&r->mpool->back()); return true; }
 bool MapReader::getList(StringView key, ListReader& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v||v->GetType()!=VAR_LIST||!v->_lst) return false; r->lpool->push_back(ListReaderImpl{r->w,v->_lst,r->mpool,r->lpool}); out=NeoScriptInternal::listR(&r->lpool->back()); return true; }
@@ -1679,10 +1719,12 @@ bool MapReader::getArray(StringView key, ArrayView& out) const { const MapReader
 
 int ListReader::count() const { return static_cast<const ListReaderImpl*>(m_impl)->list->GetCount(); }
 ValueType ListReader::type(int index) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); return v?VarTypeToValueType(v):ValueType::None; }
+bool ListReader::isNull(int index) const { VarInfo* v=static_cast<const ListReaderImpl*>(m_impl)->list->GetValue(index); return v && v->GetType()==VAR_NONE; }
+bool ListReader::isNativeObject(int index) const { VarInfo* v=static_cast<const ListReaderImpl*>(m_impl)->list->GetValue(index); return v && v->GetType()==VAR_FP_NATIVE; }
 bool ListReader::getInt(int index, int32_t& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v) return false; out=r->w->PopInt(v); return true; }
 bool ListReader::getFloat(int index, float& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v) return false; out=static_cast<float>(r->w->PopFloat(v)); return true; }
 bool ListReader::getBool(int index, bool& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v) return false; out=r->w->PopBool(v); return true; }
-bool ListReader::getString(int index, StringView& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v||v->GetType()!=VAR_STRING) return false; const char* s=r->w->PopString(v); out=StringView(s?s:""); return true; }
+bool ListReader::getString(int index, StringView& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v||v->GetType()!=VAR_STRING) return false; out=StringView(v->_str->_str); return true; }
 bool ListReader::getVec(int index, float out[4]) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v) return false; ReadVec(v,out); return v->IsVector(); }
 bool ListReader::getMap(int index, MapReader& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v||v->GetType()!=VAR_MAP||!v->_tbl) return false; r->mpool->push_back(MapReaderImpl{r->w,v->_tbl,r->mpool,r->lpool}); out=NeoScriptInternal::mapR(&r->mpool->back()); return true; }
 bool ListReader::getList(int index, ListReader& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v||v->GetType()!=VAR_LIST||!v->_lst) return false; r->lpool->push_back(ListReaderImpl{r->w,v->_lst,r->mpool,r->lpool}); out=NeoScriptInternal::listR(&r->lpool->back()); return true; }

@@ -225,6 +225,7 @@ public:
     void pushInt(int32_t v);
     void pushFloat(float v);
     void pushBool(bool v);
+    void pushNull();
     void pushString(StringView v);
     void pushVec3(float x, float y, float z);
     void setInt(int index, int32_t v);
@@ -263,8 +264,14 @@ private:
 class MapReader
 {
 public:
+    // 문자열 키를 호출 스코프의 뷰로 열거한다. 다른 키가 있으면 그 타입과 함께 실패한다.
+    bool stringKeys(std::vector<StringView>& out, ValueType* unsupportedKeyType = nullptr) const;
+    bool sameStorage(const MapReader& other) const;
     bool has(StringView key) const;
     ValueType type(StringView key) const;
+    // 실제 null과 네이티브 객체를 VM 타입으로 판별한다. 없는 키는 둘 다 false다.
+    bool isNull(StringView key) const;
+    bool isNativeObject(StringView key) const;
     bool getInt(StringView key, int32_t& out) const;
     bool getFloat(StringView key, float& out) const;
     bool getBool(StringView key, bool& out) const;
@@ -282,8 +289,12 @@ private:
 class ListReader
 {
 public:
+    bool sameStorage(const ListReader& other) const;
     int count() const;
     ValueType type(int index) const;
+    // 실제 null과 네이티브 객체를 VM 타입으로 판별한다. 없는 원소는 둘 다 false다.
+    bool isNull(int index) const;
+    bool isNativeObject(int index) const;
     bool getInt(int index, int32_t& out) const;
     bool getFloat(int index, float& out) const;
     bool getBool(int index, bool& out) const;
@@ -339,6 +350,8 @@ public:
     // 인자 읽기 (zero-copy, VM 슬롯 직접)
     std::size_t argCount() const;
     ValueType   argType(std::size_t i) const;
+    // userData가 null이어도 기존 네이티브 객체 타입이면 true다.
+    bool        argIsNativeObject(std::size_t i) const;
     int32_t     argInt(std::size_t i) const;
     float       argFloat(std::size_t i) const;
     bool        argBool(std::size_t i) const;

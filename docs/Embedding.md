@@ -111,6 +111,23 @@ Invocation b = rt->Call(inst, "GetHp");    b.invoke();  // ← flushes a's retur
 int score = a.retInt();  // ⚠️ no longer 100 — use invokeR() for this pattern
 ```
 
+Collection readers preserve the full byte length of string values, including embedded NUL.
+`CallContext::argString()` also preserves a string argument's full length; non-string coercion
+retains its existing behavior. Hosts validating text must use `StringView::size()`.
+`MapReader::stringKeys(out, &unsupportedKeyType)` enumerates borrowed string-key views;
+it returns false and clears `out` when a non-string key is present. Do not mutate the map
+or retain these views outside the reader's callback. `sameStorage()` on map/list readers
+compares container identity without exposing VM pointers, allowing hosts to reject cycles
+while independently processing shared references. `ListBuilder::pushNull()` appends a
+null element without changing its position. `MapReader::isNativeObject(key)`,
+`ListReader::isNativeObject(index)` and `CallContext::argIsNativeObject(i)` inspect the
+existing native-object VM type, independently of its userData pointer. Reader `isNull()`
+checks for an actual null; both predicates return false for a missing key/index.
+`ValueType::None` alone does not distinguish null from unsupported opaque VM values.
+Serializers must check `isNull()` before omitting a map value or emitting a list null,
+and reject remaining unsupported values. The ValueType enum, C ABI/C# type values,
+script `type()` intrinsic and bytecode format are unchanged.
+
 `ArrayView` follows exactly the same borrowed lifetime. `CallContext::argAsArray`, nested
 `MapReader::getArray`/`ListReader::getArray`, `Invocation::retArray`, and the `invokeReadArray`
 callback expose the VM's storage directly. The raw pointer is valid only while its source callback

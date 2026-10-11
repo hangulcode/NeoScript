@@ -131,6 +131,9 @@ if(NEOSCRIPT_BUILD_SMOKE)
     target_link_libraries(neoscript_c_abi_smoke PRIVATE neoscript Threads::Threads)
 
     enable_testing()
+    add_executable(neoscript_collection_reader_regression Tests/collection_reader_regression.cpp)
+    target_link_libraries(neoscript_collection_reader_regression PRIVATE neoscript Threads::Threads)
+    add_test(NAME neoscript_collection_reader_regression COMMAND neoscript_collection_reader_regression)
     add_test(NAME neoscript_ci_smoke COMMAND neoscript_ci_smoke)
     add_test(NAME neoscript_c_abi_smoke COMMAND neoscript_c_abi_smoke)
 
