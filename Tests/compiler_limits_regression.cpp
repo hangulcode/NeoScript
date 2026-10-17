@@ -191,9 +191,11 @@ export fun Test() {
         Reject(rt, "var s=\"" + std::string(32768, 'x') + "\";", "string constant bytes", debug);
     }
 
-    Run(rt, Functions(20000, true) + "export fun Test() { var f=f19999; return f19999()==19999 && f()==19999; }",
+    Run(rt, Functions(20000, true) + "export fun Test() { var f=f19999; var m={f19999:7};"
+        "return f19999()==19999 && f()==19999 && type(f19999)==\"function\" && f19999==f && m[f]==7; }",
         "unique-return functions", true, 1);
-    Run(rt, Functions(32766, false) + "export fun Test() { var f=f32765; return f32765()==7 && f()==7; }",
+    Run(rt, Functions(32766, false) + "export fun Test() { var f=f32765; var m={};m[f32765]=7;"
+        "return f32765()==7 && f()==7 && type(f32765)==\"function\" && f==f32765 && m[f]==7; }",
         "maximum function id", false, 0);
     Reject(rt, Functions(32768, false), "function id");
 

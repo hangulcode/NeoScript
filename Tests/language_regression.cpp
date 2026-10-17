@@ -150,6 +150,60 @@ static void RuntimeReject(IRuntime* runtime, const std::string& source, const ch
     }
 }
 
+static void CheckFunctionValues(IRuntime* runtime, bool debug)
+{
+    // Every case runs both compiled and serialized, with/without debug data.
+    // A live local in slot 1 makes an accidental function-ID-as-slot read visible.
+    const std::string prefix = "fun One(){return 1;} fun Two(){return 2;}"
+        "fun Identity(var value){return value;} export fun Test(){var sentinel=\"wrong slot\";var f=One;";
+    const char* bodies[] = {
+        "return type(One)==\"function\" && type(f)==\"function\" && f()==1;",
+        "return f==One && One==f && One==One && One!=Two && Two!=One && !(f!=One);",
+        "if(f!=One)return false;if(One!=f)return false;if(One==Two)return false;return true;",
+        "var m={};m[One]=\"x\";return m[f]==\"x\" && m[One]==\"x\" && type(m.keys()[0])==\"function\";",
+        "var m={};m[f]=3;m[One]+=4;return m[f]==7 && m[One]==7;",
+        "var m={};m[One]=3;m[f]=null;return m.len()==0;",
+        "var m={One:7,Two:8};return m[f]==7 && m[One]==7 && m[Two]==8;",
+        "var m={One:Identity(9)};return m[f]==9;",
+        "return (\"text\"..One)==(\"text\"..f) && (One..\"text\")== (f..\"text\");",
+        "return tostring(One)==tostring(f) && toint(One)==toint(f) && tofloat(One)==tofloat(f) && tosize(One)==tosize(f);",
+        "return type(fun(){return 3;})==\"function\";",
+        "var capture=7;return type(fun(){return capture;})==\"function\";",
+        "var capture=7;var a=fun(){return capture;};var b=a;return a==b && a!=fun(){return capture;};",
+        "var capture=7;var m={fun(){return capture;}:8};var key=m.keys()[0];return type(key)==\"function\" && key()==7 && m[key]==8;",
+        "var l=[One];var m={\"f\":One};l.append(One);return l[0]==One && l[1]==f && m.f==One && Identity(One)==f;",
+        "return One()==1 && (One)()==1 && Identity(One)()==1;",
+        "return (!One)==(!f) && (One && true)==(f && true) && (true && One)==(true && f) && (One || false)==(f || false);",
+        "var n=0;if(One)n+=1;if(f)n-=1;return n==0;",
+        "var n=0;while(One){n+=1;break;}while(f){n-=1;break;}return n==0;",
+        "switch(One){case \"wrong slot\":return false;default:return true;}",
+        "return type(+One)==\"function\" && type((+One))==\"function\";"
+    };
+    for (const char* body : bodies)
+        Run(runtime, prefix + body + "}", debug);
+    Run(runtime, "var kind=type(One);var m={One:4};fun One(){return 1;}"
+        "export fun Test(){var f=One;return kind==\"function\" && m[f]==4 && One==f;}", debug);
+    Run(runtime, "import good as a;import good as b;export fun Test(){var f=a.First;var m={a.First:7};"
+        "return type(a.First)==\"function\" && a.First==f && f==b.First && m[b.First]==7 && a.First()==5;}", debug);
+    Run(runtime, "fun One(){return 1;}fun Get(){return One;}export fun Test(){return Get()==One;}", debug);
+    // Invalid value uses must reject the function type, never consume an unrelated slot.
+    for (const char* operand : {"One", "f"})
+    {
+        const std::string value = operand;
+        RuntimeReject(runtime, prefix + "for(var i in " + value + ",2){}}", "fun != number", debug);
+        RuntimeReject(runtime, prefix + "for(var i in 0," + value + "){}}", "fun != number", debug);
+        RuntimeReject(runtime, prefix + "for(var i in 0,2," + value + "){}}", "fun != number", debug);
+        RuntimeReject(runtime, prefix + "foreach(var x in " + value + "){}}", "foreach does not support fun", debug);
+        RuntimeReject(runtime, prefix + "return -" + value + ";}", "invalid operator '-' for 'fun'", debug);
+        RuntimeReject(runtime, prefix + "return -(" + value + ");}", "invalid operator '-' for 'fun'", debug);
+    }
+    Reject(runtime, "fun One(){} One=3;", "assignment target", "language.ns", 1, debug);
+    Reject(runtime, "fun One(){} One=One;", "assignment target", "language.ns", 1, debug);
+    Reject(runtime, "fun One(){} One+=1;", "assignment target", "language.ns", 1, debug);
+    Reject(runtime, "fun One(){} ++One;", "invalid target", "language.ns", 1, debug);
+    Reject(runtime, "fun One(){} One++;", "do not support", "language.ns", 1, debug);
+}
+
 static void CheckSortSliced(IRuntime* runtime, bool debug)
 {
     // The nonterminating comparator must never be entered. The CTest timeout
@@ -392,6 +446,7 @@ int main()
     };
     for (bool debug : {false, true})
     {
+        CheckFunctionValues(runtime, debug);
         Run(runtime, R"(export fun Test(){var s="A\uAC00\uAC01\uD83D\uDE00";
             return s.codepoint(0)==65 && s.codepoint(1)==44032 && s.codepoint(2)==44033 &&
                 s.codepoint(3)==128512 && s.codepoint(4)==-1 && s.codepoint(-1)==-1 &&

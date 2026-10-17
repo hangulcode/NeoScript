@@ -473,8 +473,13 @@ component-wise add rather than an error. Compose rotations with `math.quat_slerp
 | Quaternion | `"Vector4"` - there is no distinct quaternion type at run time |
 | bound native object (`RegisterObject` / `BindObject`) | `"null"` - **not distinguishable from a real null** |
 
-`type()` on an inline lambda literal (`type(fun() { })`) reports `"null"`; assign it to a variable
-first if you need the type.
+`type(FunctionName)` and `type(fun() { })` both return `"function"`, just like a function
+stored in a variable. Named functions (including imported module functions) can be used
+directly as map keys, comparison operands, and string-concatenation operands. These uses
+have the same behavior as first assigning the function to a variable. `==`/`!=` and map
+keys compare function identity; they do not call the function. Capturing lambdas create
+separate closure identities when evaluated. Function declarations are not writable:
+`FunctionName = ...`, `++FunctionName`, and `FunctionName++` are compile errors.
 
 A host-bound native object also reports `"null"`, so `type()` cannot identify one. Comparison
 still works, though: `obj == null` is false for a live object and true for one the host never
