@@ -17,6 +17,39 @@
 
 namespace NeoScript
 {
+// ==와 맵/set 키가 참조의 동일성 규칙을 공유한다. 내용 비교나 재귀 순회는 하지 않는다.
+// 숫자/문자열/벡터는 값 비교 규칙이 따로 있으므로 여기서 처리하지 않는다.
+inline bool ReferenceEquals(VarInfo* a, VarInfo* b)
+{
+	if (a->GetType() != b->GetType()) return false;
+	switch (a->GetType())
+	{
+	case VAR_FUN:        return a->_fun_index == b->_fun_index;
+	case VAR_FUN_NATIVE: return a->_funPtr == b->_funPtr;
+	case VAR_FP_NATIVE:
+	{
+		const FunctionPropertyInfo* x = a->_fpNative;
+		const FunctionPropertyInfo* y = b->_fpNative;
+		if (x == y) return true;
+		if (!x || !y) return false;
+		if (x->_identityType || y->_identityType)
+			return x->_identityType == y->_identityType && x->_identityObject == y->_identityObject;
+		// 구 API에는 등록 타입이 없으므로 디스패처 쌍과 사용자 데이터로 식별한다.
+		return x->_fun._func == y->_fun._func && x->_fun._property == y->_fun._property
+			&& x->_pUserData == y->_pUserData;
+	}
+	case VAR_ARRAY:      return a->_array == b->_array;
+	case VAR_MAP:        return a->_tbl == b->_tbl;
+	case VAR_LIST:       return a->_lst == b->_lst;
+	case VAR_SET:        return a->_set == b->_set;
+	case VAR_COROUTINE:  return a->_cor == b->_cor;
+	case VAR_MODULE:     return a->_module == b->_module;
+	case VAR_ASYNC:      return a->_async == b->_async;
+	case VAR_CLOSURE:    return a->_closure == b->_closure;
+	default:            return false;
+	}
+}
+
 struct neo_libs;
 struct neo_DCalllibs;;
 class CNArchive;

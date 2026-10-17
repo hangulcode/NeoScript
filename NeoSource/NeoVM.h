@@ -294,6 +294,10 @@ struct FunctionPropertyInfo
 	int				_refCount;
 	FunctionPtrNative	_fun;
 	void*				_pUserData;
+	// 호출 컨텍스트와 별개인 호스트 객체 식별자. 반환 래퍼/스크립트 인스턴스가
+	// 달라도 (등록 타입, 호스트 핸들)이 같으면 동일한 객체다. null 타입은 구 API다.
+	const void*		_identityType;
+	const void*		_identityObject;
 };
 
 #pragma pack(1)
@@ -821,7 +825,8 @@ struct NeoVMSystem
 	static IO_Print m_pFunPrint;
 	static IO_Print m_pFunError;
 
-	static bool	RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFunction func, Neo_NativeProperty property);
+	static bool	RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFunction func, Neo_NativeProperty property,
+		const void* identityType = nullptr, const void* identityObject = nullptr);
 
 	static CNeoVM* 	CreateVM();
 	static void		ReleaseVM(CNeoVM* pVM);

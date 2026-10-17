@@ -382,6 +382,12 @@ each value; `foreach(var index, value in a)` is rejected.
 
 Access with `m["key"]` or `m.key`. Assigning to a missing key inserts it.
 
+Reference keys (list, map, set, array, function, closure, coroutine, runtime module, async,
+and host object) use the same identity rule as `==`/`!=`. A container's contents do not
+determine its identity. Host objects compare by registered type and host handle, so returning
+the same object again preserves lookup identity even when the return wrapper is new.
+Numeric keys remain type-sensitive: key `1` and key `1.0` are distinct despite `1 == 1.0`.
+
 ### 8.1 `set`
 
 `s.len()` and `tosize(s)` both return the number of unique elements. Unknown methods and
@@ -397,6 +403,8 @@ foreach (var v in s) print(v);  // iteration works
 
 Build a set with `system.set(list)`; duplicates collapse. There are no `add`, `remove`, or
 `contains` methods; `len()` is its only registered method.
+Reference elements use the identity rules described for map keys above; two references to
+one host object or container collapse, while separate containers with equal contents remain distinct.
 
 ## 9. `async` methods
 

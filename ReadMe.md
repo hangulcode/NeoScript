@@ -336,8 +336,15 @@ compiler cases) and `console.exe --v2smoke` (host API, closure lifetime, leak co
 	- function: a named function or a captured anonymous function
 	- coroutine / module / async: engine object handles
 	- native object: a symbol the host bound with `RegisterObject`/`BindObject`
-	  (`GameObject`, `Host`, ...). `type()` reports "null" for one and `== null` is true,
-	  so it cannot be told apart from a real null - call a method on it instead
+	  (`GameObject`, `Host`, ...). `type()` reports "null", but a bound value is not equal to null.
+
+`==` / `!=` compare list/map/set/array storage identity, named-function identity, and
+closure/coroutine/runtime-module/async instance identity. Separately allocated containers
+with equal contents are unequal. Native objects compare by registered type and host handle,
+not by the allocation of their return wrappers. Reference map keys and set elements share
+these identity rules. See [reference comparison](docs/ScriptAuthoring.md#참조-비교와-참조를-키로-쓰기).
+Host `BindObject` rebinding replaces the global slot; existing aliases and map keys retain
+the previous object rather than changing identity in place.
 
 
 ### Neo Script reserved words

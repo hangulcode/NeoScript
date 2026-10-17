@@ -970,7 +970,7 @@ void RuntimeImpl::BindRegisteredObjects(INeoVMWorker* worker, InstanceRec* inst)
         ObjectBinding* b = &inst->bindings.back(); // reserve() 로 주소 안정
         NeoVMSystem::RegisterTableCallBack(pVar, b,
             (o.method != nullptr) ? &MethodTrampoline : nullptr,
-            (o.property != nullptr) ? &PropertyTrampoline : nullptr);
+            (o.property != nullptr) ? &PropertyTrampoline : nullptr, &o, userData);
     }
     // 소비자의 전역 바인딩 훅 트리거. 훅은 인스턴스 핸들로 BindGlobalObject/BindGlobalMapObject 호출.
     if (m_desc.onInstanceBind)
@@ -1043,7 +1043,7 @@ void RuntimeImpl::BindObjectInto(void* worker, void* mapVar, StringView key, Obj
     w->ResetVarType(&v, VAR_FP_NATIVE);
     NeoVMSystem::RegisterTableCallBack(&v, bind,
         (ro->method)   ? &MethodTrampoline   : nullptr,
-        (ro->property) ? &PropertyTrampoline : nullptr);
+        (ro->property) ? &PropertyTrampoline : nullptr, ro, userData);
     pMap->_tbl->Insert(std::string(key.data(), key.size()), &v);
     w->Var_Release(&v);
 }
@@ -1062,7 +1062,7 @@ void RuntimeImpl::BindObjectToVar(void* worker, void* varInfo, ObjectType type, 
     if (!bind) return;
     NeoVMSystem::RegisterTableCallBack(pVar, bind,
         (ro->method)   ? &MethodTrampoline   : nullptr,
-        (ro->property) ? &PropertyTrampoline : nullptr);
+        (ro->property) ? &PropertyTrampoline : nullptr, ro, userData);
 }
 
 bool RuntimeImpl::ResetInstance(InstanceHandle h)
@@ -1156,10 +1156,10 @@ bool RuntimeImpl::BindObject(InstanceHandle h, StringView name, void* userData)
     if (!inst) return false;
     std::string n = name.str();
     inst->objectUserData[n] = userData;
-    // 이미 등록된 바인딩(트램폴린이 &ObjectBinding 을 보관)의 userData 를 갱신.
-    // RegisterTableCallBack 은 이 ObjectBinding 포인터를 그대로 되돌려주므로 재등록 불필요.
-    for (ObjectBinding& b : inst->bindings)
-        if (b.obj != nullptr && b.obj->name == n) { b.userData = userData; break; }
+    // 기존 별칭/맵 키의 객체 식별자가 바뀌지 않도록 전역 슬롯만 새 객체로 교체한다.
+    // 호출 컨텍스트도 (타입, 핸들)별 바인딩을 쓰므로 예전 참조의 메서드는 예전 객체를 본다.
+    const ObjectType type = GetObjectType(name);
+    if (type) BindGlobalObject(h, name, type, userData);
     return true;
 }
 
@@ -1605,7 +1605,7 @@ void CallContext::retObject(ObjectType type, void* userData) {
     c->worker->ResetVarType(r, VAR_FP_NATIVE);
     RuntimeImpl* rt=static_cast<RuntimeImpl*>(c->runtime);
     ObjectBinding* b=rt->AcquireNestedBinding(c->instance, ro, userData); if(!b) return;
-    NeoVMSystem::RegisterTableCallBack(r, b, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr);
+    NeoVMSystem::RegisterTableCallBack(r, b, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr, ro, userData);
 }
 void CallContext::retNull() { CallContextImpl* c=Ctx(m_impl); c->worker->ResetVarType(CtxRetVar(c), VAR_NONE); }
 void CallContext::fail(int32_t code, StringView message)
@@ -1643,7 +1643,7 @@ void MapBuilder::setObject(StringView key, ObjectType type, void* userData) {
     VarInfo* slot=MapInsertKey(b, key); b->w->ResetVarType(slot, VAR_FP_NATIVE);
     RuntimeImpl* rt=static_cast<RuntimeImpl*>(b->ctx->runtime);
     ObjectBinding* bind=rt->AcquireNestedBinding(b->ctx->instance, ro, userData); if(!bind) return;
-    NeoVMSystem::RegisterTableCallBack(slot, bind, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr);
+    NeoVMSystem::RegisterTableCallBack(slot, bind, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr, ro, userData);
 }
 
 void ListBuilder::reserve(int count) { static_cast<ListBuilderImpl*>(m_impl)->list->Reserve(count); }
@@ -1667,7 +1667,7 @@ void ListBuilder::pushObject(ObjectType type, void* userData) {
     VarInfo* slot=b->list->GetValue(idx); b->w->ResetVarType(slot, VAR_FP_NATIVE);
     RuntimeImpl* rt=static_cast<RuntimeImpl*>(b->ctx->runtime);
     ObjectBinding* bind=rt->AcquireNestedBinding(b->ctx->instance, ro, userData); if(!bind) return;
-    NeoVMSystem::RegisterTableCallBack(slot, bind, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr);
+    NeoVMSystem::RegisterTableCallBack(slot, bind, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr, ro, userData);
 }
 
 //==============================================================================
@@ -1796,7 +1796,7 @@ Invocation& Invocation::argObject(ObjectType type, void* userData)
             if (bind)
                 NeoVMSystem::RegisterTableCallBack(pVar, bind,
                     (ro->method)   ? &MethodTrampoline   : nullptr,
-                    (ro->property) ? &PropertyTrampoline : nullptr);
+                    (ro->property) ? &PropertyTrampoline : nullptr, ro, userData);
         }
     }
     return *this;

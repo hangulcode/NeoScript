@@ -1040,7 +1040,7 @@ NEOS_NOINLINE bool CNeoVMWorker::CompareEQRare(VarInfo* v1, VarInfo* v2)
 		}
 		break;
 	default:
-		break;
+		return ReferenceEquals(v1, v2);
 	}
 	return false;
 }

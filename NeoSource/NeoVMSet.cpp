@@ -3,6 +3,7 @@
 #include <thread>
 #include <chrono>
 #include <algorithm>
+#include <functional>
 
 #include "NeoVMInternal.h"
 #include "NeoVMWorker.h"
@@ -49,7 +50,7 @@ u32 GetHashCode(VarInfo* p)
 	case VAR_FUN:        return (u32)p->_fun_index;
 	case VAR_FUN_NATIVE: return (u32)(uintptr_t)p->_funPtr;
 	case VAR_STRING:     return p->_str->GetHash();
-	// alloc 객체를 키로 쓸 때 동등성은 **포인터 동일성**이다(MapKeyEquals/SetKeyEquals 참조).
+	// 컨테이너 키의 동등성은 저장소 포인터 동일성이다(ReferenceEquals 참조).
 	// 따라서 해시도 포인터 "값" 에서 나와야 한다 — 반드시 &p->_xxx 다.
 	//
 	// [예전 버그] & 없이 (u8*)p->_tbl 로 썼다. 그러면 포인터가 아니라 **가리키는 객체의
@@ -59,11 +60,33 @@ u32 GetHashCode(VarInfo* p)
 	//   - 맵 안에 든 키의 해시가 변해 Remove/ReMap 이 그 노드를 찾지 못함
 	//   - refCount 가 같은 서로 다른 객체가 전부 같은 버킷으로 몰림
 	case VAR_VEC:        return GetHashCode((u8*)&p->_vec, sizeof(p->_vec));
-	case VAR_FP_NATIVE:  return GetHashCode((u8*)&p->_fpNative, sizeof(p->_fpNative));
+	case VAR_FP_NATIVE:
+	{
+		const FunctionPropertyInfo* fp = p->_fpNative;
+		if (!fp) return 0;
+		// 래퍼 주소는 제외한다. 동일 객체의 새 반환값도 같은 버킷으로 가야 한다.
+		size_t h = 0;
+		auto mix = [&h](size_t v) { h ^= v + size_t(0x9e3779b9u) + (h << 6) + (h >> 2); };
+		if (fp->_identityType)
+		{
+			mix(std::hash<const void*>{}(fp->_identityType));
+			mix(std::hash<const void*>{}(fp->_identityObject));
+		}
+		else
+		{
+			mix(std::hash<Neo_NativeFunction>{}(fp->_fun._func));
+			mix(std::hash<Neo_NativeProperty>{}(fp->_fun._property));
+			mix(std::hash<void*>{}(fp->_pUserData));
+		}
+		return static_cast<u32>(h);
+	}
+	case VAR_ARRAY:      return GetHashCode((u8*)&p->_array, sizeof(p->_array));
 	case VAR_MAP:        return GetHashCode((u8*)&p->_tbl, sizeof(p->_tbl));
 	case VAR_LIST:       return GetHashCode((u8*)&p->_lst, sizeof(p->_lst));
 	case VAR_SET:        return GetHashCode((u8*)&p->_set, sizeof(p->_set));
 	case VAR_COROUTINE:  return GetHashCode((u8*)&p->_cor, sizeof(p->_cor));
+	case VAR_MODULE:     return GetHashCode((u8*)&p->_module, sizeof(p->_module));
+	case VAR_ASYNC:      return GetHashCode((u8*)&p->_async, sizeof(p->_async));
 	case VAR_CLOSURE:    return GetHashCode((u8*)&p->_closure, sizeof(p->_closure));
 	default:              return 0;
 	}
@@ -103,18 +126,10 @@ static bool SetKeyEquals(SetNode& node, VarInfo* pKey, u32 hash)
 	case VAR_FLOAT:      return data->key._float == pKey->_float;
 	case VAR_BOOL:       return data->key._bl == pKey->_bl;
 	case VAR_NONE:       return true;
-	case VAR_FUN:        return data->key._fun_index == pKey->_fun_index;
-	case VAR_FUN_NATIVE: return data->key._funPtr == pKey->_funPtr;
 	case VAR_STRING:
 		return data->key._str == pKey->_str;
 	case VAR_VEC:		return data->key._vec == pKey->_vec;
-	case VAR_FP_NATIVE: return data->key._fpNative == pKey->_fpNative;
-	case VAR_MAP:       return data->key._tbl == pKey->_tbl;
-	case VAR_LIST:      return data->key._lst == pKey->_lst;
-	case VAR_SET:       return data->key._set == pKey->_set;
-	case VAR_COROUTINE: return data->key._cor == pKey->_cor;
-	case VAR_CLOSURE:   return data->key._closure == pKey->_closure;
-	default:             return false;
+	default:           return ReferenceEquals(&data->key, pKey);
 	}
 }
 

@@ -31,13 +31,16 @@ FunctionPtrNative NeoVMSystem::RegisterNative(Neo_NativeFunction func)
 	CNeoVMWorker::neo_pushcclosureNative(&fun, func);
 	return fun;
 }
-bool	NeoVMSystem::RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFunction func, Neo_NativeProperty property)
+bool	NeoVMSystem::RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFunction func, Neo_NativeProperty property,
+	const void* identityType, const void* identityObject)
 {
 	// 일반 VAR_MAP을 변환하지 않는다. VAR_FP_NATIVE를 생성한 뒤에만 바인딩한다.
 	if (p == nullptr || p->GetType() != VAR_FP_NATIVE || p->_fpNative == nullptr) return false;
 	FunctionPropertyInfo* fp = p->_fpNative;
 
 	fp->_pUserData = pUserData;
+	fp->_identityType = identityType;
+	fp->_identityObject = identityObject;
 	CNeoVMWorker::neo_pushcclosureNative(&fp->_fun, func);
 	CNeoVMWorker::neo_pushcclosureNative(&fp->_fun, property);
 
@@ -985,6 +988,8 @@ FunctionPropertyInfo* CNeoVM::FunctionPropertyAlloc()
 	fp->_fun._func = NULL;
 	fp->_fun._property = NULL;
 	fp->_pUserData = NULL;
+	fp->_identityType = nullptr;
+	fp->_identityObject = nullptr;
 	return fp;
 }
 void CNeoVM::FreeFunctionProperty(FunctionPropertyInfo* fp)
@@ -992,6 +997,8 @@ void CNeoVM::FreeFunctionProperty(FunctionPropertyInfo* fp)
 	fp->_fun._func = NULL;
 	fp->_fun._property = NULL;
 	fp->_pUserData = NULL;
+	fp->_identityType = nullptr;
+	fp->_identityObject = nullptr;
 	m_sPool_FunctionProperty.Confer(fp);
 }
 ListInfo* CNeoVM::ListAlloc(int cnt)
