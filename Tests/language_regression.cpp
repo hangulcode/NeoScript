@@ -392,6 +392,14 @@ int main()
     };
     for (bool debug : {false, true})
     {
+        Run(runtime, R"(export fun Test(){var s="A\uAC00\uAC01\uD83D\uDE00";
+            return s.codepoint(0)==65 && s.codepoint(1)==44032 && s.codepoint(2)==44033 &&
+                s.codepoint(3)==128512 && s.codepoint(4)==-1 && s.codepoint(-1)==-1 &&
+                "".codepoint(0)==-1 && s.codepoint(2147483647)==-1 &&
+                (s.codepoint(2)-44032)%28==1;})", debug);
+        RuntimeReject(runtime, R"(export fun Test(){"a".codepoint(0.0);})", "", debug);
+        RuntimeReject(runtime, R"(export fun Test(){"a".codepoint();})", "", debug);
+
         CheckSortSliced(runtime, debug);
         CheckFormatLimits(runtime, debug);
         CheckExportVisibility(runtime, debug);

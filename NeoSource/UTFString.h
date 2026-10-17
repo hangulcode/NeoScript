@@ -108,6 +108,20 @@ private:
 	}
 
 public:
+    // Return a Unicode scalar at a character index, never a UTF-8 byte.
+    // -1 denotes a missing character or invalid UTF-8 before/at that index.
+    static int CodePointAt(const std::string& text, int index)
+    {
+        if (index < 0 || text.size() > static_cast<size_t>(INT32_MAX)) return -1;
+        int offset = 0;
+        u32 value = 0;
+        for (int i = 0; i <= index; ++i)
+        {
+            if (!DecodeUTF8CodePoint(reinterpret_cast<const u8*>(text.data()),
+                static_cast<int>(text.size()), offset, value)) return -1;
+        }
+        return static_cast<int>(value);
+    }
 	static bool IsValidUTF16(const std::u16string& str)
 	{
 		for (size_t i = 0; i < str.size(); ++i)

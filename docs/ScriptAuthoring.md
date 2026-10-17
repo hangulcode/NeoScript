@@ -504,6 +504,7 @@ set의 크기는 `unique.len()` 또는 `tosize(unique)`로 읽는다.
 | 기능 | 사용법 | 결과·경계 조건 |
 | --- | --- | --- |
 | 길이 | `s.len()` / `tosize(s)` | UTF-8 문자 수 |
+| 문자 코드 | `s.codepoint(index)` | 0부터 센 Unicode 코드 포인트, 음수·범위 밖·해당 위치까지 잘못된 UTF-8은 -1. 정수 인자 하나 필요 |
 | 부분 추출 | `s.sub(start, count)` | 두 번째 인자는 끝 위치가 아니라 길이 |
 | 검색 | `s.find(text)` | 첫 위치, 없으면 `-1`, 빈 검색어는 `0` |
 | 첫 치환 | `s.replace(find, to)` | 첫 일치만 교체, 없으면 원본 |
@@ -516,6 +517,8 @@ set의 크기는 `unique.len()` 또는 `tosize(unique)`로 읽는다.
 ```cpp
 var text = "A한😀글Z";
 print(text.len());                  // 5
+print(text.codepoint(2));           // 128512 (😀)
+print("각".codepoint(0));            // 44033, 한글 종성 = (코드 - 44032) % 28
 print(text.sub(1, 3));              // 한😀글
 print(text.find("😀"));             // 2
 print(text.find("missing"));        // -1

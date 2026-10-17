@@ -76,6 +76,14 @@ struct neo_libs
 		pN->ReturnValue(pVar->_str->_StringLen);
 		return true;
 	}
+    static bool Str_codepoint(CNeoVMWorker* pN, VarInfo* pVar, short args)
+    {
+        if (pVar->GetType() != VAR_STRING || args != 1) return false;
+        VarInfo* index = pN->GetStack(1);
+        if (index->GetType() != VAR_INT) return false;
+        pN->ReturnValue(utf_string::CodePointAt(pVar->_str->_str, index->_int));
+        return true;
+    }
 	static bool Str_find(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (pVar->GetType() != VAR_STRING) return false;
@@ -2168,6 +2176,7 @@ void CNeoVM::RegObjLibrary()
 	_funLib_String = NeoVMSystem::RegisterNative(Fun_String);
 	g_sNeoFunLib_String.Add("sub", &neo_libs::Str_sub);
 	g_sNeoFunLib_String.Add("len", &neo_libs::Str_len);
+	g_sNeoFunLib_String.Add("codepoint", &neo_libs::Str_codepoint);
 	g_sNeoFunLib_String.Add("find", &neo_libs::Str_find);
 	g_sNeoFunLib_String.Add("upper", &neo_libs::Str_upper);
 	g_sNeoFunLib_String.Add("lower", &neo_libs::Str_lower);

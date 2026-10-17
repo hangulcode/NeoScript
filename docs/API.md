@@ -272,6 +272,7 @@ Indexes and lengths are UTF-8 **character** counts, not bytes.
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
 | `s.len()` | `int` | character count |
+| `s.codepoint(index: int)` | `int` | Unicode scalar at a zero-based character index; `-1` for negative/out-of-range indexes or invalid UTF-8 before or at that index; exactly one integer argument required |
 | `s.sub(start: int, count: int)` | `string` | clamps `start` to `[0, s.len()]`; clips the count at the end; `count <= 0` returns `""` |
 | `s.find(needle: string)` | `int` | character index, `-1` when not found |
 | `s.upper()` | `string` | ASCII only - per-byte `::toupper` |
