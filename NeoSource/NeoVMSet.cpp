@@ -50,6 +50,24 @@ u32 GetHashCode(VarInfo* p)
 	case VAR_FUN:        return (u32)p->_fun_index;
 	case VAR_FUN_NATIVE: return (u32)(uintptr_t)p->_funPtr;
 	case VAR_STRING:     return p->_str->GetHash();
+	case VAR_VEC:
+	{
+		// 값으로 같은 벡터는 저장소·부호 있는 0에 관계없이 같은 해시를 갖는다.
+		const int count = p->VectorComponentCount();
+		u32 h = 2166136261u ^ static_cast<u32>(count);
+		for (int i = 0; i < count; ++i)
+		{
+			u32 bits = 0;
+			const float value = p->_vec->v[i];
+			if (value != 0.0f) memcpy(&bits, &value, sizeof(bits));
+			h = (h ^ bits) * 16777619u;
+		}
+		h ^= h >> 16;
+		h *= 0x7feb352du;
+		h ^= h >> 15;
+		h *= 0x846ca68bu;
+		return h ^ (h >> 16);
+	}
 	// 컨테이너 키의 동등성은 저장소 포인터 동일성이다(ReferenceEquals 참조).
 	// 따라서 해시도 포인터 "값" 에서 나와야 한다 — 반드시 &p->_xxx 다.
 	//
@@ -59,7 +77,6 @@ u32 GetHashCode(VarInfo* p)
 	//   - 넣을 때와 찾을 때 해시가 달라 조회 실패 (m[k]=1 뒤 k 를 어딘가 대입하면 사라짐)
 	//   - 맵 안에 든 키의 해시가 변해 Remove/ReMap 이 그 노드를 찾지 못함
 	//   - refCount 가 같은 서로 다른 객체가 전부 같은 버킷으로 몰림
-	case VAR_VEC:        return GetHashCode((u8*)&p->_vec, sizeof(p->_vec));
 	case VAR_FP_NATIVE:
 	{
 		const FunctionPropertyInfo* fp = p->_fpNative;
@@ -128,7 +145,7 @@ static bool SetKeyEquals(SetNode& node, VarInfo* pKey, u32 hash)
 	case VAR_NONE:       return true;
 	case VAR_STRING:
 		return data->key._str == pKey->_str;
-	case VAR_VEC:		return data->key._vec == pKey->_vec;
+	case VAR_VEC:       return VectorValuesEqual(&data->key, pKey);
 	default:           return ReferenceEquals(&data->key, pKey);
 	}
 }

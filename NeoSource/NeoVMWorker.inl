@@ -1030,15 +1030,7 @@ NEOS_NOINLINE bool CNeoVMWorker::CompareEQRare(VarInfo* v1, VarInfo* v2)
 			return v1->_str->_str == v2->_str->_str;
 		break;
 	case VAR_VEC:
-		// 같은 벡터 타입 + 모든 성분 정확 일치
-		if (v1->GetType() == v2->GetType())
-		{
-			int n = v1->VectorComponentCount();
-			for (int i = 0; i < n; i++)
-				if (v1->_vec->v[i] != v2->_vec->v[i]) return false;
-			return true;
-		}
-		break;
+		return VectorValuesEqual(v1, v2);
 	default:
 		return ReferenceEquals(v1, v2);
 	}

@@ -1,6 +1,7 @@
-#include "NeoScript.h"
+﻿#include "NeoScript.h"
 
 #include <cstdio>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,14 @@ static bool EntityMethod(CallContext& ctx, StringView name)
 static bool HostMethod(CallContext& ctx, StringView name)
 {
     const std::string method = name.str();
+    if (method == "specialVector")
+    {
+        const int kind = ctx.argInt(0);
+        const float x = kind == 0 ? -0.0f : kind == 1
+            ? std::numeric_limits<float>::infinity() : std::numeric_limits<float>::quiet_NaN();
+        ctx.retVec3(x, 2.0f, 3.0f);
+        return true;
+    }
     ObjectType entity = ctx.runtime()->GetObjectType("Entity");
     if (method == "get" || method == "other")
     {
@@ -115,6 +124,63 @@ export fun Scalars()
         && keys.len()==2 && keys[i]==1 && keys[f]==2;
 }
 export fun MixedTypes() { var a=[]; var b={}; var c=system.array(0,0); var f=First; return a!=b && b!=a && a!=c && b!=c && a!=f; }
+export fun VectorKeys()
+{
+    return Same(math.Vector2(1,2), math.Vector2(1,2), math.Vector2(2,1))
+        && Same(math.Vector3(1,2,3), math.Vector3(1,2,3), math.Vector3(1,2,4))
+        && Same(math.Vector4(1,2,3,4), math.Vector4(1,2,3,4), math.Vector4(1,2,4,3))
+        && Same(math.Quaternion(1,0,0,0), math.Vector4(1,0,0,0), math.Vector4(0,1,0,0));
+}
+export fun VectorDimensions()
+{
+    var a=math.Vector2(1,2); var b=math.Vector3(1,2,0); var c=math.Vector4(1,2,0,0);
+    var k={}; k[a]=2; k[b]=3; k[c]=4;
+    return a!=b && b!=a && a!=c && c!=a && b!=c && c!=b && a!=null && null!=a
+        && k.len()==3 && k[math.Vector2(1,2)]==2 && k[math.Vector3(1,2,0)]==3
+        && k[math.Vector4(1,2,0,0)]==4 && system.set([a,b,c]).len()==3;
+}
+export fun VectorKeyCopies()
+{
+    var v=math.Vector3(1,2,3); var alias=v; var k={}; k[v]=7;
+    var s=system.set([v]);
+    v[0]=9;
+    if (alias[0]!=1 || k[v]!=null || k[math.Vector3(1,2,3)]!=7) return false;
+    var keys=k.keys(); var extracted=keys[0]; extracted[1]=8;
+    if (k[math.Vector3(1,2,3)]!=7 || k[extracted]!=null || keys[0]!=math.Vector3(1,2,3)) return false;
+    foreach (var item in s) { item[2]=10; }
+    foreach (var item in s) { if (item!=math.Vector3(1,2,3)) return false; }
+    alias[2]=6;
+    k[math.Vector3(1,2,3)]=null;
+    return k.len()==0;
+}
+export fun VectorKeyGrowth()
+{
+    var k={}; var values=[];
+    for (var i in 0,300) {
+        k[math.Vector3(i,i+1,i+2)]=i;
+        values.append(math.Vector3(i,i+1,i+2));
+        values.append(math.Vector3(i,i+1,i+2));
+    }
+    k.reserve(2048);
+    if (k.len()!=300 || system.set(values).len()!=300) return false;
+    for (var i in 0,300) {
+        var key=math.Vector3(i,i+1,i+2);
+        if (k[key]!=i) return false;
+        k[key]=null;
+    }
+    return k.len()==0;
+}
+export fun VectorSpecialValues()
+{
+    var z=math.Vector3(0.0,2,3); var nz=Host.specialVector(0);
+    var inf=Host.specialVector(1); var nan=Host.specialVector(2);
+    var k={}; k[z]=7; k[inf]=9;
+    if (z!=nz || nz!=z || k[nz]!=7 || k[Host.specialVector(1)]!=9) return false;
+    k[nz]=8;
+    if (k.len()!=2 || k[z]!=8 || system.set([z,nz,inf,Host.specialVector(1)]).len()!=2) return false;
+    k[nz]=null;
+    return k[z]==null && k.len()==1 && nan!=nan;
+}
 export fun Native() { return Same(Host.get(1),Host.get(1),Host.get(2)); }
 export fun NativeType() { return Same(Host.get(1),Host.get(1),Host.other(1)); }
 export fun NullHandle() { return Same(Host.get(0),Host.get(0),Host.other(0)); }
@@ -160,6 +226,7 @@ static void Run(IRuntime* runtime, bool debug, bool image)
     {
         for (const char* name : {"List", "Map", "Set", "ArrayInt", "ArrayFloat", "ArrayBool", "Function",
             "Module", "Closure", "Coroutine", "Async", "MutatedKeys", "Cycles", "Scalars", "MixedTypes",
+            "VectorKeys", "VectorDimensions", "VectorKeyCopies", "VectorKeyGrowth", "VectorSpecialValues",
             "Native", "NativeType", "NullHandle", "Global", "Bundle", "CrossInstance", "Capture"})
         {
             Invocation call = runtime->Call(instance, name);

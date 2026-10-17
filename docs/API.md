@@ -388,6 +388,11 @@ and host object) use the same identity rule as `==`/`!=`. A container's contents
 determine its identity. Host objects compare by registered type and host handle, so returning
 the same object again preserves lookup identity even when the return wrapper is new.
 Numeric keys remain type-sensitive: key `1` and key `1.0` are distinct despite `1 == 1.0`.
+Vector keys use component count and exact component values, just like vector `==`.
+Separately constructed equal vectors find/overwrite/remove the same key; `+0.0` and `-0.0`
+are equivalent. Changing the original vector or a vector returned by `keys()` does not change
+the stored key. NaN retains floating-point comparison rules (`NaN != NaN`); do not use
+vectors containing NaN as lookup keys. No approximate comparison is performed.
 
 ### 8.1 `set`
 
@@ -406,6 +411,7 @@ Build a set with `system.set(list)`; duplicates collapse. There are no `add`, `r
 `contains` methods; `len()` is its only registered method.
 Reference elements use the identity rules described for map keys above; two references to
 one host object or container collapse, while separate containers with equal contents remain distinct.
+Vector elements follow the value-key rules above, so equal vectors collapse even with separate storage.
 
 ## 9. `async` methods
 
@@ -431,8 +437,8 @@ Create the object with `system.aysnc_create()`.
 
 ## 10. Vector and quaternion value types
 
-`Vector2` / `Vector3` / `Vector4` / `Quaternion` are **value types**, not lists. They live inline in
-a `VarInfo`, so assignment copies: there is no reference sharing and no allocation.
+`Vector2` / `Vector3` / `Vector4` / `Quaternion` are **value types**, not lists. Assignment preserves
+value semantics: storage may be shared internally, but modifying a component detaches a shared value.
 
 | Operation | Supported | Notes |
 | :--- | :--- | :--- |
@@ -440,6 +446,7 @@ a `VarInfo`, so assignment copies: there is no reference sharing and no allocati
 | `v.x`, `v.y`, `v.z`, `v.w` | **no** | named component access does not exist - index instead |
 | `a + b`, `a - b` | yes | component-wise; both sides need the same component count |
 | `a * scalar`, `a / scalar` | yes | component-wise |
+| `a == b`, `a != b` | yes | same component count and exact component values; also used by map keys and set elements |
 | `type(v)` | yes | `"Vector2"` / `"Vector3"` / `"Vector4"` - a quaternion also reports `"Vector4"` |
 | `"" .. v` | yes | formats as `(3, 4)` / `(1, 2, 3)` / `(1, 0, 0, 0)` |
 | `tosize(v)` | yes | component count: `2` / `3` / `4` / `4` |

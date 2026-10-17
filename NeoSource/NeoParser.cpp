@@ -3963,6 +3963,14 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		iTable = AddLocalVar(ar, funs, vars);
 		funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iTable, operand.IsHaveShort());
 	}
+	else if (IsTempVar(operand._iVar))
+	{
+		// 리터럴·함수 반환값의 식 임시 슬롯은 본문의 ClearTempVars 뒤에 재사용된다.
+		// 순회 대상은 루프 전체에서 살아 있어야 하므로 숨은 로컬에 한 번만 보관한다.
+		// 컨테이너를 복제하지 않아 원소 변경 감지와 기존 참조 의미는 그대로 유지한다.
+		iTable = AddLocalVar(ar, funs, vars);
+		funs._cur->Push_OP2(ar, NOP_MOV, iTable, operand._iVar, false);
+	}
 	else
 		iTable = operand._iVar;
 

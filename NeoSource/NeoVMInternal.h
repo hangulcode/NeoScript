@@ -552,6 +552,17 @@ struct VecInfo : AllocBase
 	float v[4];
 };
 
+// 벡터는 값 타입이다. ==, 맵 키, set 원소가 같은 성분 수와 실수 비교 규칙을 쓴다.
+// 포인터가 같아도 NaN 성분은 같지 않으므로 저장소 동일성으로 건너뛰지 않는다.
+inline bool VectorValuesEqual(VarInfo* a, VarInfo* b)
+{
+	const int count = a->VectorComponentCount();
+	if (count == 0 || count != b->VectorComponentCount()) return false;
+	for (int i = 0; i < count; ++i)
+		if (a->_vec->v[i] != b->_vec->v[i]) return false;
+	return true;
+}
+
 
 struct AsyncInfo : AllocBase
 {
