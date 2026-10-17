@@ -2032,6 +2032,14 @@ bool CNeoVM::CallDefaultNativeByIndex(int nativeIndex, CNeoVMWorker* pWorker, sh
 		return false;
 	return (*g_sNeoFunLib_DefaultNative[nativeIndex])(pWorker, nullptr, args);
 }
+const char* CNeoVM::GetDefaultNativeName(int nativeIndex)
+{
+	// 실패할 때만 역조회한다. 정상 호출에는 이름 검색이나 문자열 할당을 추가하지 않는다.
+	for (const auto& entry : g_sNeoFunLib_DefaultNativeIndex)
+		if (entry.second == nativeIndex)
+			return entry.first.c_str() + (!entry.first.empty() && entry.first[0] == '#' ? 1 : 0);
+	return "<unknown>";
+}
 // 로드 시 PTRCALL2 를 대체할 intrinsic opcode. 없으면 NOP_NONE.
 int CNeoVM::GetDefaultNativeIntrinsic(int nativeIndex)
 {

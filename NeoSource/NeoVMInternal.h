@@ -1027,6 +1027,7 @@ public:
 	// 프로그램 로드 시 코드 패치용 — StringInfo 없이 상수 문자열로 조회한다.
 	static int FindDefaultNativeIndex(const std::string& name);
 	static int GetDefaultNativeIntrinsic(int nativeIndex);
+	static const char* GetDefaultNativeName(int nativeIndex);
 	static bool CallDefaultNativeByIndex(int nativeIndex, CNeoVMWorker* pWorker, short args);
 	void RegLibrary(VarInfo* pSystem, const char* pLibName);// , SNeoFunLib* pFuns);
 	static void RegObjLibrary();

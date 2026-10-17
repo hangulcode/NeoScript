@@ -30,6 +30,9 @@ namespace NeoScript
 	X(RTE_FOREACH_SET_TWOVAR,      "foreach on set does not support two variables. use: foreach(var v in set)") \
 	/* 호출 */ \
 	X(RTE_CALL_INVALID,            "invalid function call") \
+	X(RTE_CALL_NAMED,              "invalid function call '%s'") \
+	X(RTE_PROPERTY_NAMED,          "cannot %s property '%s'") \
+	X(RTE_CALL_VALUE,              "cannot call a value of type '%s'") \
 	X(RTE_CALL_NULL,               "cannot call a null function") \
 	X(RTE_CALL_ARG_COUNT,          "function call argument count mismatch") \
 	X(RTE_FUNCTION_NOT_FOUND,      "function not found") \

@@ -504,7 +504,9 @@ produced, so `!= null` is the presence test to use.
   module, even through nested imports. Concatenated sources still need a host-provided mapping
   back to original files; concatenation alone loses those boundaries.
 - **Native arity is not checked at compile time.** A wrong count surfaces at run time as
-  `invalid function call`.
+  `invalid function call 'Method'`. Native property failures identify `read` or `write` and
+  the property name. Names remain available without debug info; explicit host error messages
+  and error codes are preserved. Calling a non-callable value reports its type.
 - **`/` on two ints is integer division**, C semantics. Use `tofloat` when you want a real quotient.
 - **`..` concatenates, `+` adds.** `1 .. 2` is `"12"`.
 - **`elif` is removed**; use `else if`.

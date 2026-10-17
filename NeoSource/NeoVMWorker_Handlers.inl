@@ -188,7 +188,17 @@ NEOS_NOINLINE bool handle_PTRCALL_native(const SVMOperation& OP, VarInfo* pVar1,
         CallNative(GetVM()->_funLib_Async, pVar1, pFunName->_str, n3);
         break;
     default:
-        SetError(RTE_CALL_INVALID);
+        // 함수값 호출(n2=-1)은 이름 슬롯이 없다. 멤버 호출만 이름을 읽는다.
+        if ((OP.argFlag & NEOS_ARG_N2_LOCAL) || OP.n2 != -1)
+        {
+            pFunName = pFunNamePre ? pFunNamePre : GetVarPtr2(OP);
+            if (pFunName->GetType() == VAR_STRING)
+            {
+                SetErrorFormat(RTE_CALL_NAMED, pFunName->_str->_str.c_str());
+                break;
+            }
+        }
+        SetErrorUnsupport(g_sNeoRuntimeErrors[RTE_CALL_VALUE], pVar1);
         break;
     }
     return false;

@@ -2480,7 +2480,7 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 	Neo_NativeFunction func = functionPtrNative._func;
 	if (func == NULL)
 	{
-		SetError(RTE_CALL_INVALID);
+		SetErrorFormat(RTE_CALL_NAMED, pStr ? pStr->_str.c_str() : "<unknown>");
 		return false;
 	}
 	if (!EnsureStackRange(_iSP_VarsMax, n3))
@@ -2503,7 +2503,7 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 		if (GetVM()->IsLastErrorMsg())
 			SetCodePtr(0);
 		else
-			SetError(RTE_CALL_INVALID);
+			SetErrorFormat(RTE_CALL_NAMED, pStr ? pStr->_str.c_str() : "<unknown>");
 		return false;
 	}
 	if (nullptr != pRet)
@@ -2578,7 +2578,7 @@ bool CNeoVMWorker::CallDefaultNativeByIndex(int nativeIndex, int n3, VarInfo* pR
 		if (GetVM()->IsLastErrorMsg())
 			SetCodePtr(0);
 		else
-			SetError(RTE_CALL_INVALID);
+			SetErrorFormat(RTE_CALL_NAMED, CNeoVM::GetDefaultNativeName(nativeIndex));
 		return false;
 	}
 	if (nullptr != pRet)
@@ -2636,7 +2636,7 @@ bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUs
 	Neo_NativeProperty func = functionPtrNative._property;
 	if (func == NULL)
 	{
-		SetError(RTE_CALL_INVALID);
+		SetErrorFormat(RTE_PROPERTY_NAMED, get ? "read" : "write", pStr ? pStr->_str.c_str() : "<unknown>");
 		return false;
 	}
 	if (!EnsureStackRange(_iSP_VarsMax, 0))
@@ -2659,7 +2659,7 @@ bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUs
 		if (GetVM()->IsLastErrorMsg())
 			SetCodePtr(0);
 		else
-			SetError(RTE_CALL_INVALID);
+			SetErrorFormat(RTE_PROPERTY_NAMED, get ? "read" : "write", pStr ? pStr->_str.c_str() : "<unknown>");
 		return false;
 	}
 
