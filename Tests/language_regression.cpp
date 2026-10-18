@@ -296,6 +296,48 @@ static void CheckExportVisibility(IRuntime* runtime, bool debug)
     runtime->DestroyProgram(compiled.program);
 }
 
+static void CheckModuleState(IRuntime* runtime, bool debug)
+{
+    const std::string source = "import private_a as a; import private_a as again;"
+        "var visibleA=99; export var own=7;"
+        "export fun Change(){a.Set(41);return again.Get();}"
+        "export fun Read(){return a.Get();} export fun Own(){return visibleA;}";
+    std::vector<uint8_t> bytes;
+    const Error compiled = runtime->CompileToBytecode(Describe(source, debug), bytes);
+    Error error;
+    ProgramHandle program = compiled.ok() ? runtime->LoadProgram(bytes, &error) : ProgramHandle{};
+    Check((bool)program, "module state image: " + compiled.message + error.message);
+    if (!program) return;
+    InstanceHandle first = runtime->CreateInstance(program);
+    InstanceHandle second = runtime->CreateInstance(program);
+    Check((bool)first && (bool)second, "two module state instances");
+    if (first && second)
+    {
+        int32_t value = 0;
+        Check(runtime->GetGlobalInt(first, "visibleA", value) && value==12,
+            "host export uses imported slot despite same private root name");
+        Check(runtime->GetGlobalInt(first, "own", value) && value==7,
+            "root host export retains its name and slot");
+        Check(!runtime->GetGlobalInt(first, "value", value)
+            && !runtime->GetGlobalInt(first, "private_a.value", value), "private globals are not host exports");
+        {
+            Invocation call = runtime->Call(first, "Change");
+            Check(call.invoke()==RunStatus::Completed && call.retInt()==41, "two aliases share state");
+        }
+        {
+            Invocation call = runtime->Call(second, "Read");
+            Check(call.invoke()==RunStatus::Completed && call.retInt()==10, "instances have separate module state");
+        }
+        {
+            Invocation call = runtime->Call(first, "Own");
+            Check(call.invoke()==RunStatus::Completed && call.retInt()==99, "root private name remains independent");
+        }
+    }
+    if (first) runtime->DestroyInstance(first);
+    if (second) runtime->DestroyInstance(second);
+    runtime->DestroyProgram(program);
+}
+
 int main()
 {
     ModuleLoader loader;
@@ -323,9 +365,22 @@ int main()
     loader.sources["modules/constorder.ns"] = "fun F(){return LATE;}\nexport const LATE=1;";
     loader.sources["modules/memberfun.ns"] =
         "var holder={}; holder.fun=3; fun Read(){return holder.fun;}";
+    loader.sources["modules/private_a.ns"] =
+        "var value=10; export var visibleA=12; export const LIMIT=20;"
+        "fun Get(){return value;} fun Set(var x){value=x;}"
+        "fun Closure(var n){return fun(){return fun(){return value+n;};};}";
+    loader.sources["modules/private_b.ns"] =
+        "import private_a as a; var value=30; const visibleA=99;"
+        "fun Get(){return value+a.Get();} fun Host(){return type(HostAPI);}";
+    loader.sources["modules/private_leak.ns"] = "import private_a; fun Get(){return value;}";
+    loader.sources["modules/root_leak.ns"] = "fun Get(){return rootPrivate;}";
+    loader.sources["modules/export_duplicate.ns"] = "export var visibleA=44;";
     RuntimeDesc runtimeDesc;
     runtimeDesc.loader = &loader;
     IRuntime* runtime = CreateRuntime(runtimeDesc);
+    NativeObjectDesc host;
+    host.name = "HostAPI";
+    runtime->RegisterObject(host);
     runtime->FreezeBindings();
 
     const char* bodies[] = {
@@ -388,6 +443,16 @@ int main()
         u8"var s=\"한😀한😀\"; return s.replaceAll(\"한😀\",\"글\")==\"글글\";"
     };
     const char* programs[] = {
+        "var value=3; fun Get(){return value;} fun Set(){value=9;return 4;}"
+        "export fun Test(){var sum=Get()+Set();return sum==7 && Get()==9;}",
+        "var list=[1];fun Get(){return list;}fun Reset(){list=[9];return 0;}"
+        "export fun Test(){var old=Get();Get()[Reset()]=7;return old[0]==7 && Get()[0]==9;}",
+        "var count=0;fun Touch(){count++;return count;}fun Minus(){return -2;}"
+        "fun Capture(var n){return fun(){return n;};}export fun Test(){var f=Capture(5);"
+        "return Touch()+Touch()==3 && count==2 && Minus()==-2 && f()==5;}",
+        "var value=1; import private_a as a; import private_b as b; import private_a as again;"
+        "export fun Test(){a.Set(17);var f=a.Closure(5);return value==1 && again.Get()==17 && b.Get()==47 && f()()==22 && a.LIMIT==20 && b.Host()==type(HostAPI);}",
+        "import private_a as a; var value=2; export fun Test(){var value=4;{var value=8;if(value!=8)return false;}return value==4 && a.Get()==10;}",
         "const TEXT=\"abc\"; export fun Test(){return TEXT.len()==3 && (TEXT).upper()==\"ABC\";}",
         "const TEXT=\"\\u0041\"; export fun Test(){switch(\"A\"){case TEXT:return true;default:return false;}}",
         "import system; export fun Test(){var s=system.set([1,1,2]); return s.len()==2 && tosize(s)==2 && system.set([]).len()==0;}",
@@ -446,6 +511,14 @@ int main()
     };
     for (bool debug : {false, true})
     {
+        CheckModuleState(runtime, debug);
+        Reject(runtime, "import private_a; export fun Test(){return value;}", "unknown identifier", "language.ns", 1, debug);
+        Reject(runtime, "import private_a; export fun Test(){value=8;}", "unknown identifier", "language.ns", 1, debug);
+        Reject(runtime, "import private_leak;", "unknown identifier", "modules/private_leak.ns", 1, debug);
+        Reject(runtime, "var rootPrivate=3; import root_leak;", "unknown identifier", "modules/root_leak.ns", 1, debug);
+        Reject(runtime, "import private_a; import export_duplicate;", "duplicate exported variable", "modules/export_duplicate.ns", 1, debug);
+        Reject(runtime, "import private_a; export fun Test(){return visibleA;}", "unknown identifier", "language.ns", 1, debug);
+        Reject(runtime, "var HostAPI=1;", "already defined", "language.ns", 1, debug);
         CheckFunctionValues(runtime, debug);
         Run(runtime, R"(export fun Test(){var s="A\uAC00\uAC01\uD83D\uDE00";
             return s.codepoint(0)==65 && s.codepoint(1)==44032 && s.codepoint(2)==44033 &&

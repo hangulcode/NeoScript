@@ -787,8 +787,49 @@ static void WriteDebugFunctionNames(CNArchive& ar, SFunctions& funs)
 	}
 }
 
+static void FoldGlobalGetters(SFunctions& funs)
+{
+	// 모듈 경계를 지키려고 둔 `fun Get(){ return value; }`는 호출 비용이
+	// 필요 없다. 전체 몸통이 전역 RETURN 하나인 직접 호출만 MOV로 바꾼다.
+	// 결과를 임시 슬롯에 복사하므로 뒤의 식이 원본을 바꿔도 평가 순서가 같다.
+	// 함수값 호출, 인자, 부작용, 클로저는 제외한다. 디버그에서는 호출을 보존한다.
+	std::map<int, short> getters;
+	u8* code = static_cast<u8*>(funs._codeFinal.GetData());
+	for (SFunctionInfo* function : funs._funSequence)
+	{
+		if ((function->_funType != FUNT_NORMAL && function->_funType != FUNT_EXPORT) ||
+			!function->_args.empty() || !function->_captures.empty() ||
+			function->_iCode_Size != sizeof(SVMOperation))
+			continue;
+		SVMOperation op;
+		memcpy(&op, code + function->_iCode_Begin, sizeof(op));
+		if (CODE_TO_NOP(op.op) == NOP_RETURN && op.argFlag == 0 && op.n1 <= COMPILE_GLOBAL_VAR_BEGIN)
+			getters[function->_funID] = op.n1;
+	}
+	if (getters.empty()) return;
+	for (SFunctionInfo* function : funs._funSequence)
+	{
+		for (int offset = function->_iCode_Begin; offset < function->_iCode_Begin + function->_iCode_Size;
+			offset += sizeof(SVMOperation))
+		{
+			SVMOperation op;
+			memcpy(&op, code + offset, sizeof(op));
+			if (CODE_TO_NOP(op.op) != NOP_CALL || op.argFlag != 0 || op.n2 != 0)
+				continue;
+			auto getter = getters.find(op.n1);
+			if (getter == getters.end()) continue;
+			op.op = GetOpTypeFromOp(NOP_MOV);
+			op.n1 = op.n3;
+			op.n2 = getter->second;
+			op.n3 = 0;
+			memcpy(code + offset, &op, sizeof(op));
+		}
+	}
+}
+
 bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 {
+	if (!arText._debug) FoldGlobalGetters(funs);
 	int iSaveOffset1 = ar.GetBufferOffset();
 	SNeoVMHeader header;
 	memset(&header, 0, sizeof(header));
@@ -864,14 +905,12 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 	if (vars._varsFunction.size() != 1) return false;
 	SLayerVar* pLayerVar = vars._varsFunction[0];
 	if (pLayerVar->_varsLayer.size() != 1) return false;
-	SLocalVar* pLocalLayer = pLayerVar->_varsLayer[0];
 	header._iExportVarCount = (int)vars._varsExport.size();
 	for(int i = 0; i < header._iExportVarCount; i++)
 	{
-		auto it = pLocalLayer->_localVars.find(vars._varsExport[i]);
-		int idx = (*it).second;
+		int idx = vars._exportSlots.at(vars._varsExport[i]);
 		ar << idx;
-		WriteString(ar, (*it).first);
+		WriteString(ar, vars._varsExport[i]);
 	}
 
 
@@ -969,10 +1008,10 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 		OutAsm("Static   [%d] %s\n", i, GetValueString(vi, &mapFun).c_str());
 	}
 
-	std::set<std::string> tempExportVars;
+	std::set<int> tempExportVars;
 	for (int i = 0; i < header._iExportVarCount; i++)
 	{
-		tempExportVars.insert(vars._varsExport[i]);
+		tempExportVars.insert(vars._exportSlots.at(vars._varsExport[i]));
 	}
 
 	// Global 변수
@@ -989,7 +1028,7 @@ bool WriteLog(CArchiveRdWC& arText, CNArchive& arw, SFunctions& funs, SVars& var
 	for (auto it2 = global.begin(); it2 != global.end(); it2++)
 	{
 		int idx = (*it2).first;
-		if (tempExportVars.end() == tempExportVars.find((*it2).second))
+		if (tempExportVars.end() == tempExportVars.find(-idx - 2))
 			OutAsm("Global   [%d] %s\n", -idx - 2, (*it2).second.c_str());
 		else
 			OutAsm("Global E [%d] %s\n", -idx - 2, (*it2).second.c_str());

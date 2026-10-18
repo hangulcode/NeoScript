@@ -1224,7 +1224,9 @@ bool UseableName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, const std::str
 	}
 	SLayerVar* pCurLayer = vars.GetCurrentLayer();
 
-	if (pCurLayer->FindVarOnlyCurrentBlock(name) != -1)
+	if (pCurLayer->FindVarOnlyCurrentBlock(vars.DeclarationName(name)) != -1 ||
+		(vars._varsFunction.size() == 1 && pCurLayer->_varsLayer.size() == 1 &&
+			vars._hostGlobals.count(name) != 0))
 	{
 		SetParserCompileError(ar, PCE_DUPLICATE_LOCAL_NAME, name.c_str(), funs.GetCurFunName().c_str());
 		return false;
@@ -1236,6 +1238,13 @@ int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExp
 {
 	if(false == UseableName(ar, funs, vars, name, checkName))
 		return -1;
+	// export var는 호스트가 이름으로 찾는 기존 인터페이스다. 모듈 별칭에는
+	// 노출하지 않으며, 호스트 이름이 충돌하면 모호한 이미지를 만들지 않는다.
+	if (blExport && vars._exportSlots.count(name) != 0)
+	{
+		SetCompileError(ar, "duplicate exported variable '%s'", name.c_str());
+		return -1;
+	}
 	int iLocalVar;
 	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME)
 	{
@@ -1245,13 +1254,16 @@ int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExp
 	else
 		iLocalVar = funs._cur->AllocLocalVar(); // 0 번은 리턴 저장용
 	SLayerVar* pCurLayer = vars.GetCurrentLayer();
-	pCurLayer->AddLocalVar(name, iLocalVar);
+	pCurLayer->AddLocalVar(vars.DeclarationName(name), iLocalVar);
 	if (funs.GetCurFunName() != GLOBAL_INIT_FUN_NAME && iLocalVar > 0)
 		funs._cur->_debugVarNames[iLocalVar] = name;
 	if (blExport)
 	{
 		if(vars._varsFunction.size() == 1)
+		{
 			vars._varsExport.push_back(name);
+			vars._exportSlots[name] = iLocalVar;
+		}
 		else
 		{
 			SetParserCompileError(ar, PCE_INVALID_EXPORT_SCOPE, funs.GetCurFunName().c_str(), name.c_str());
@@ -1308,7 +1320,7 @@ int  AddLocalVar(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	char name[256];
 	snprintf(name, _countof(name), "^_#@_temp_%d", vars._iTempVarNameIndex++);
 
-	if (pCurLayer->FindVarOnlyCurrentBlock(name) != -1)
+	if (pCurLayer->FindVarOnlyCurrentBlock(vars.DeclarationName(name)) != -1)
 	{
 		SetParserCompileError(ar, PCE_DUPLICATE_LOCAL_NAME, name, funs.GetCurFunName().c_str());
 		return -1;
@@ -1321,7 +1333,7 @@ int  AddLocalVar(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	else
 		iLocalVar = funs._cur->AllocLocalVar(); // 0 번은 리턴 저장용
-	pCurLayer->AddLocalVar(name, iLocalVar);
+	pCurLayer->AddLocalVar(vars.DeclarationName(name), iLocalVar);
 	return iLocalVar;
 }
 void ClearTempVars(SFunctions& funs)
@@ -1494,7 +1506,19 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	funs._curModule = funs.NewLayer();
 	/////////////////////////////////
 	vars.m_sImporting.insert(fileName);      // 이 모듈을 파싱하는 동안 재진입 금지
-	bool r = CollectFunctionDeclarations(ar2, funs) && ParseFunctionBody(ar2, funs, vars, false);
+	bool r;
+	{
+		// ar2가 살아 있는 동안만 빌려 쓴다. 중첩 import와 예외에서도
+		// ar2 소멸 전에 상위 모듈 포인터를 복원해 수명을 넘겨 참조하지 않는다.
+		struct ModuleNameRestore
+		{
+			const std::string*& current;
+			const std::string* previous;
+			~ModuleNameRestore() { current = previous; }
+		} restore{vars._moduleName, vars._moduleName};
+		vars._moduleName = &ar2.m_sModuleName;
+		r = CollectFunctionDeclarations(ar2, funs) && ParseFunctionBody(ar2, funs, vars, false);
+	}
 	vars.m_sImporting.erase(fileName);
 	/////////////////////////////////
 	vars.m_sImports[fileName] = funs._curModule;
@@ -5558,6 +5582,7 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 				continue;
 			if (-1 == AddLocalVarName(ar, funs, vars, sym.exported, sym.name, true))
 				return false; // 중복/예약어 등은 AddLocalVarName 이 에러 세팅
+			vars._hostGlobals.insert(sym.name);
 		}
 	}
 

@@ -166,7 +166,7 @@ static double ElapsedMs(std::chrono::steady_clock::time_point start, std::chrono
 }
 
 static int RunFile(CNeoLoader* pLoader, const std::string& filename, bool putASM, bool debug,
-	NeoScript::SNeoVMAllocStats* liveStats = nullptr)
+	NeoScript::SNeoVMAllocStats* liveStats = nullptr, const std::vector<std::string>& hostGlobals = {})
 {
 	void* pFileBuffer = nullptr;
 	int iFileLen = 0;
@@ -181,6 +181,20 @@ static int RunFile(CNeoLoader* pLoader, const std::string& filename, bool putASM
 	// (1인자 print 는 개행, 2인자 print(x,"") 는 개행 없이 이어붙임 — printFn 을 걸면 이 구분 소실)
 	rd.nativeLoader = pLoader;                 // import 해석
 	IRuntime* rt = CreateRuntime(rd);
+	// 헤드리스 호스트의 명시적 전역만 모든 모듈에 제공한다. 스크립트의
+	// 일반 var를 다시 공유하지 않고, 본문에서는 이 슬롯에 시험 대역을 대입한다.
+	for (const std::string& name : hostGlobals)
+	{
+		NativeObjectDesc object;
+		object.name = name;
+		if (!rt->RegisterObject(object))
+		{
+			printf("invalid host global: %s\n", name.c_str());
+			pLoader->Unload(filename.c_str(), pFileBuffer, iFileLen);
+			DestroyRuntime(rt);
+			return -1;
+		}
+	}
 	rt->FreezeBindings();
 
 	CompileDesc cd;
@@ -2277,15 +2291,27 @@ int main(int argc, char* argv[])
 		else if (command == "--file" && argc >= 3)
 		{
 			bool putASM = false, debug = false, stats = false; // --file <script.ns> [--asm] [--debug] [--stats]
+			std::vector<std::string> hostGlobals;
 			for (int i = 3; i < argc; ++i)
 			{
 				std::string opt = argv[i];
 				if (opt == "--asm")   putASM = true;
 				else if (opt == "--debug") debug = true;
 				else if (opt == "--stats") stats = true;
+				else if (opt == "--globals" && i + 1 < argc)
+				{
+					std::string names = argv[++i];
+					for (size_t begin = 0; begin < names.size();)
+					{
+						size_t end = names.find(',', begin);
+						hostGlobals.push_back(names.substr(begin, end - begin));
+						if (end == std::string::npos) break;
+						begin = end + 1;
+					}
+				}
 			}
 			NeoScript::SNeoVMAllocStats s;
-			exitCode = RunFile(pLoader, argv[2], putASM, debug, stats ? &s : nullptr);
+			exitCode = RunFile(pLoader, argv[2], putASM, debug, stats ? &s : nullptr, hostGlobals);
 			if (stats)
 			{
 				printf("[ALLOC] str=%d map=%d list=%d array=%d buffer=%lld bytes set=%d cor=%d mod=%d async=%d closure=%d vec=%d pool=%lld bytes\n",

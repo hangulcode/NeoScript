@@ -409,6 +409,17 @@ and imports retain their source order; anonymous functions retain their capture 
 Module aliases expose functions and `export const`, not variables: use `module.GetValue()`
 to pass runtime data. Constants, including exported ones, must precede their use in their own file.
 
+Top-level `var` is private to its file. Two modules can declare the same name;
+reading or writing another module's variable by an unqualified name is a compile error.
+`export var` retains its host-facing meaning and does not expose `alias.variable`.
+Host export names must be unique within a compiled program. Globals registered by the
+host remain visible in all modules. Getter-returned lists, maps and arrays share their
+storage; returning one does not make it immutable or automatically copy it.
+
+For standalone headless hosts, `console --file test.ns --globals Host,Input` explicitly
+registers host symbols before compilation. Initialize them with `Host = {...};` in the
+test root, before importing consumers. Do not redeclare these names with `var`.
+
 ### for loop
 ```cpp
 for (var i in 0, n)        // step omitted -> 1

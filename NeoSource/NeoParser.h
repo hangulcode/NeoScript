@@ -155,6 +155,19 @@ struct SVars
 {
 	std::vector<SLayerVar*>	_varsFunction;
 	std::vector<std::string> _varsExport;
+	// 모듈 변수의 이름만 분리한다. 실행 시에는 기존 전역 슬롯을 그대로 쓴다.
+	// 현재 import의 입력 아카이브가 소유한다. 루트 파일은 nullptr이다.
+	const std::string* _moduleName = nullptr;
+	std::set<std::string> _hostGlobals;
+	std::map<std::string, int> _exportSlots;
+	std::string GlobalName(const std::string& name) const
+	{
+		return _moduleName == nullptr ? name : *_moduleName + "." + name;
+	}
+	std::string DeclarationName(const std::string& name) const
+	{
+		return _varsFunction.size() == 1 ? GlobalName(name) : name;
+	}
 	std::map<std::string, SFunctionLayer*> m_sImports; // Only Once Load
 	// 지금 파싱 중인 import 체인. m_sImports 는 파싱을 마친 뒤에야 채워지므로,
 	// A->B->A 같은 순환은 캐시로 막히지 않고 A 를 재진입 파싱해 이름 충돌로 죽는다
@@ -170,13 +183,7 @@ struct SVars
 
 	int FindVar(const std::string& name)
 	{
-		for (int i = (int)_varsFunction.size() - 1; i >= 0; i--)
-		{
-			int r = _varsFunction[i]->FindVar(name);
-			if (r != -1)
-				return r;
-		}
-		return -1;
+		return FindVar(name, nullptr);
 	}
 	// 반환값이 어느 함수 lexical scope에서 왔는지도 함께 알려 준다. 익명 함수
 	// 본문에서 상위 함수의 지역만 캡처하고, 전역은 기존 전역 경로로 남긴다.
@@ -185,7 +192,9 @@ struct SVars
 		if (outLayer) *outLayer = nullptr;
 		for (int i = (int)_varsFunction.size() - 1; i >= 0; i--)
 		{
-			int r = _varsFunction[i]->FindVar(name);
+			int r = _varsFunction[i]->FindVar(i == 0 ? GlobalName(name) : name);
+			if (r == -1 && i == 0 && _hostGlobals.count(name) != 0)
+				r = _varsFunction[i]->FindVar(name);
 			if (r != -1)
 			{
 				if (outLayer) *outLayer = _varsFunction[i];

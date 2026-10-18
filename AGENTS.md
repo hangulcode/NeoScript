@@ -69,7 +69,7 @@ plus three Unity suites — smoke, PlayMode, reload cycle. Commands in `docs/Uni
 - **변수·const는 반드시 사용 전에 선언한다.** 함수 본문에서도 뒤에 선언된 전역변수는 읽을 수 없다.
 - `import`는 컴파일 시 포함하며, 같은 컴파일의 중복 import는 재사용한다. 실행 인스턴스끼리는 전역 상태를 공유하지 않는다.
 - `math.Vector2/3/4`, `Quaternion` 은 값 타입이고 `NOP_VEC_MAKE` 인트린식이라 호출이 아니다.
-- 모듈 별칭은 함수와 `export const`만 노출하며 컴파일 타임에 해소한다. 변수 접근은 지원하지 않으므로 필요한 값은 함수로 전달한다.
+- 최상위 `var`는 파일 내부에서만 보인다. 별칭은 함수와 `export const`만 노출한다. 호스트 전역은 모든 모듈에 보이며, `export var`는 호스트 공개용이다.
 
 ## 문서
 

@@ -35,6 +35,9 @@ Every signature and behavioural note below was verified by running it through
   module table. `import name as alias;` renames it locally. Import is a compile-time include;
   repeated imports within one compilation reuse the module. Separate runtime instances do not
   share its globals.
+- Top-level `var` names are private to their file, even when marked `export` for the host.
+  Different modules may use the same private name. Host-declared globals remain visible
+  in every module; explicitly exported host variable names must be unique per program.
 - Aliases expose module functions and `export const` values. Use a getter function to pass
   a module variable; `alias.variable` is unsupported. Plain `const` names remain file-local.
 - `alias.CONSTANT` is resolved during compilation and also works in `const` initializers
