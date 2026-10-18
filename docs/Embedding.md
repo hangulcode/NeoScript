@@ -68,10 +68,11 @@ file name before `Error (line, column): ...`. This applies to both `Compile` and
 `CompileToBytecode`; a failed bytecode compilation clears its output. Concatenating source
 files does not preserve their original locations automatically.
 
-Script `export const` publishes a compile-time value to importing scripts. It creates no
-host-visible global or runtime module lookup; `GetGlobal*` does not expose it. Rebuild cached
-bytecode for consumers when an exported constant changes. `export var` and `export fun`
-retain their existing host visibility.
+Script `public const` publishes a compile-time value to importing scripts. It creates no
+host-visible global or runtime module lookup; `GetGlobal*` does not expose it, and
+`export const` is a compile error. Rebuild cached bytecode for consumers when a public
+constant changes. `export var` and `export fun` keep their host visibility and are not
+visible to other modules unless also marked `public` (`export public`).
 
 **Host → script calls.** Function indices are fixed per program, so cache the `FunctionHandle` once and
 call it every frame with no per-call string lookup. `Call(inst, fn)` returns an `Invocation`: push args,

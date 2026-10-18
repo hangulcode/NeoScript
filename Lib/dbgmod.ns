@@ -5,7 +5,7 @@ import math;
 
 var modList = [];
 
-fun Heavy(var count, var seed)
+public fun Heavy(var count, var seed)
 {
 	modList = [];
 	for(var i in 0, count, 1)
@@ -16,7 +16,7 @@ fun Heavy(var count, var seed)
 	return modList.len();
 }
 
-fun Take(var n)
+public fun Take(var n)
 {
 	var r = n + 1;
 	return r;

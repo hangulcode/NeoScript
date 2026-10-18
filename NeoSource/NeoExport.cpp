@@ -792,7 +792,7 @@ static void FoldGlobalGetters(SFunctions& funs)
 	// 모듈 경계를 지키려고 둔 `fun Get(){ return value; }`는 호출 비용이
 	// 필요 없다. 전체 몸통이 전역 RETURN 하나인 직접 호출만 MOV로 바꾼다.
 	// 결과를 임시 슬롯에 복사하므로 뒤의 식이 원본을 바꿔도 평가 순서가 같다.
-	// 함수값 호출, 인자, 부작용, 클로저는 제외한다. 디버그에서는 호출을 보존한다.
+	// 함수값 호출, 인자, 부작용, 클로저는 제외한다. 디버그 정보 유무와 무관하게 적용한다.
 	std::map<int, short> getters;
 	u8* code = static_cast<u8*>(funs._codeFinal.GetData());
 	for (SFunctionInfo* function : funs._funSequence)
@@ -829,7 +829,8 @@ static void FoldGlobalGetters(SFunctions& funs)
 
 bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 {
-	if (!arText._debug) FoldGlobalGetters(funs);
+	// 디버그 정보가 있어도 접는다(에디터 플레이). 한 줄 getter 안에는 중단점을 걸 수 없다.
+	FoldGlobalGetters(funs);
 	int iSaveOffset1 = ar.GetBufferOffset();
 	SNeoVMHeader header;
 	memset(&header, 0, sizeof(header));

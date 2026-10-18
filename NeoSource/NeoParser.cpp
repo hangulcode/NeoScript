@@ -15,11 +15,14 @@ void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 #define PARSER_COMPILE_ERROR_LIST(X) \
 	X(PCE_INVALID_LOCAL_NAME, "Error (%d, %d): invalid local variable name in function '%s': '%s'") \
 	X(PCE_DUPLICATE_LOCAL_NAME, "Error (%d, %d): local variable '%s' is already defined in function '%s'") \
-	X(PCE_INVALID_EXPORT_SCOPE, "Error (%d, %d): export is only allowed at the global scope. Current function: '%s', name: '%s'") \
+	X(PCE_NOT_FILE_SCOPE, "Error (%d, %d): '%s' is only allowed at file scope") \
+	X(PCE_EXPORT_CONST, "Error (%d, %d): const cannot be exported to the host; use 'public const'") \
+	X(PCE_DUPLICATE_VISIBILITY, "Error (%d, %d): duplicate '%s'") \
+	X(PCE_EXPECTED_DECLARATION, "Error (%d, %d): expected 'var', 'const' or 'fun' after '%s', but found '%s'") \
 	X(PCE_IMPORT_FAILED, "Error (%d, %d): failed to import module '%s'") \
 	X(PCE_IMPORT_CYCLE, "Error (%d, %d): circular import of module '%s'") \
-	X(PCE_MODULE_MEMBER, "Error (%d, %d): module '%s' has no public member '%s' (only functions and exported consts are accessible)") \
-	X(PCE_MODULE_CONST, "Error (%d, %d): module '%s' has no exported const '%s'") \
+	X(PCE_MODULE_MEMBER, "Error (%d, %d): module '%s' has no public member '%s' (only public functions, public consts and public vars are accessible)") \
+	X(PCE_MODULE_CONST, "Error (%d, %d): module '%s' has no public const '%s'") \
 	X(PCE_DUPLICATE_FUNCTION_ARGUMENT, "Error (%d, %d): duplicate function argument '%s'") \
 	X(PCE_DUPLICATE_FUNCTION, "Error (%d, %d): duplicate function definition '%s'") \
 	X(PCE_FUNCTION_PROTOTYPE, "Error (%d, %d): function forward declarations are no longer supported; remove this declaration and keep the function body") \
@@ -65,7 +68,6 @@ void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 	X(PCE_INVALID_STATEMENT_END, "Error (%d, %d): expected ';' at the end of the statement") \
 	X(PCE_INVALID_FUNCTION_NAME, "Error (%d, %d): invalid function name '%s'") \
 	X(PCE_UNEXPECTED_TOKEN, "Error (%d, %d): unexpected token '%s' in function '%s'") \
-	X(PCE_CONST_NOT_GLOBAL, "Error (%d, %d): 'const' is only allowed at the global scope") \
 	X(PCE_CONST_DUPLICATE, "Error (%d, %d): const name '%s' is already defined (const, define, variable or function)") \
 	X(PCE_CONST_INVALID_VALUE, "Error (%d, %d): const expression must be a compile-time constant, near '%s'") \
 	X(PCE_CONST_INVALID_OP, "Error (%d, %d): invalid operation in const expression near '%s'") \
@@ -404,7 +406,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 // 조건이 거짓일 때 뛸 점프 목록만 돌려준다 → 호출자가 자기 위치로 패치한다.
 // 논리 연산자가 없으면 목록은 비어 있고 기존 경로(값 반환)와 동일하다.
 TK_TYPE ParseShortCircuitLogic(bool bReqReturn, SOperand& sResultStack, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, TK_TYPE tkEnd1 = TK_SEMICOLON, TK_TYPE tkEnd2 = TK_COMMA, TK_TYPE tkEnd3 = TK_R_SMALL, TK_TYPE tkEnd4 = TK_R_ARRAY, std::vector<SJumpValue>* pOutFalseJumps = NULL);
-bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport);
+bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport, bool blPublic);
 // bStopAtCase: switch 본문 파싱용. case/default/'}' 를 만나면 소비하지 않고(PushToken) 종료한다.
 bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* alwaysReturns = NULL, std::vector<SJumpValue>* pContinueJumps = NULL, bool bStopAtCase = false);
 bool ParseSwitch(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* alwaysReturns, std::vector<SJumpValue>* pContinueJumps);
@@ -468,6 +470,7 @@ int InitDefaultTokenString()
 	TOKEN_STR2(TK_FUN, "fun");
 	TOKEN_STR2(TK_IMPORT, "import");
 	TOKEN_STR2(TK_EXPORT, "export");
+	TOKEN_STR2(TK_PUBLIC, "public");
 
 	TOKEN_STR3(TK_TOSTRING, "tostring", 20, NOP_TOSTRING);
 	TOKEN_STR3(TK_TOINT, "toint", 20, NOP_TOINT);
@@ -1234,12 +1237,12 @@ bool UseableName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, const std::str
 	return true;
 }
 
-int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport, const std::string& name, bool checkName = true)
+int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport, bool blPublic, const std::string& name, bool checkName = true)
 {
 	if(false == UseableName(ar, funs, vars, name, checkName))
 		return -1;
-	// export var는 호스트가 이름으로 찾는 기존 인터페이스다. 모듈 별칭에는
-	// 노출하지 않으며, 호스트 이름이 충돌하면 모호한 이미지를 만들지 않는다.
+	// export var 는 호스트가 이름으로 찾는 변수(모듈에는 안 보임), public var 는 다른 모듈이
+	// 별칭으로 읽고 쓰는 변수다. 호스트 이름이 충돌하면 모호한 이미지를 만들지 않는다.
 	if (blExport && vars._exportSlots.count(name) != 0)
 	{
 		SetCompileError(ar, "duplicate exported variable '%s'", name.c_str());
@@ -1266,9 +1269,20 @@ int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExp
 		}
 		else
 		{
-			SetParserCompileError(ar, PCE_INVALID_EXPORT_SCOPE, funs.GetCurFunName().c_str(), name.c_str());
+			SetParserCompileError(ar, PCE_NOT_FILE_SCOPE, "export");
 			return -1;
 		}
+	}
+	if (blPublic)
+	{
+		// 파일 최상위 블록만. 블록 안의 선언은 블록이 끝나면 사라지는데 공개 이름은 남아,
+		// 뒤에 오는 같은 이름의 비공개 변수가 공개되어 버린다.
+		if (vars._varsFunction.size() != 1 || pCurLayer->_varsLayer.size() != 1)
+		{
+			SetParserCompileError(ar, PCE_NOT_FILE_SCOPE, "public");
+			return -1;
+		}
+		vars._publicVars.insert(vars.DeclarationName(name));
 	}
 	return iLocalVar;
 }
@@ -1277,6 +1291,28 @@ int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExp
 // 물리 스택 슬롯을 본문에 박지 않는다. 람다 생성 시 그 슬롯의 VarInfo를
 // ClosureRecord에 복사하고, 호출 시 이 함수의 숨은 지역 슬롯으로 주입한다.
 // 전역(음수 compile 슬롯)은 기존처럼 런타임 전역 조회로 둔다.
+// 다른 모듈의 public var 를 전역 슬롯으로 푼다. 모듈 변수는 전역 층에 "모듈.이름" 으로 있으므로
+// 컴파일 때 슬롯이 정해지고, 같은 모듈 안의 전역 접근과 같은 명령이 나와 실행 비용이 없다.
+// public 이 아닌 변수(export var 포함)와 호스트 전역은 돌려주지 않는다.
+static int FindPublicModuleVar(SVars& vars, const SFunctionLayer* module, const std::string& name)
+{
+	if (module->_moduleName.empty() || vars._varsFunction.empty())
+		return -1;
+	const std::string qualified = module->_moduleName + "." + name;
+	if (vars._publicVars.count(qualified) == 0)
+		return -1;
+	return vars._varsFunction[0]->FindVar(qualified);
+}
+
+// 파일 최상위(전역 초기화 함수의 바깥 블록)인가. import · const · public · export 는 여기서만 허용한다.
+// 블록 안에 두면 블록이 끝나며 선언은 사라지는데 공개 이름 · 모듈 등록은 남아 뒤 선언에 번진다.
+static bool AtFileTopLevel(SFunctions& funs, SVars& vars)
+{
+	SLayerVar* pLayer = vars.GetCurrentLayer();
+	return funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && vars._varsFunction.size() == 1 &&
+		pLayer != nullptr && pLayer->_varsLayer.size() == 1;
+}
+
 static int FindReadableVar(SFunctions& funs, SVars& vars, const std::string& name)
 {
 	SLayerVar* owner = nullptr;
@@ -1504,6 +1540,7 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	SFunctionLayer* pLayerBackup = funs._curModule;
 	funs._curModule = funs.NewLayer();
+	funs._curModule->_moduleName = fileName;   // 별칭으로 public var 를 찾을 때의 한정 이름
 	/////////////////////////////////
 	vars.m_sImporting.insert(fileName);      // 이 모듈을 파싱하는 동안 재진입 금지
 	bool r;
@@ -2411,10 +2448,16 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 		if (constant != pOtherModule->_exportedConsts.values.end()
 			&& !MakeConstOperand(constant->second, value, ar, funs))
 			return false;
+		// public var 는 전역 슬롯 그대로라 뒤의 선택자 · 대입 · 증감이 자기 모듈 변수와 똑같이 붙는다.
+		if (value._iVar == -1)
+			value._iVar = FindPublicModuleVar(vars, pOtherModule, tk1);
 	}
 	if (value._iVar == -1)
 	{
 		SFunctionInfo* pFun = pOtherModule == nullptr ? funs.FindFun(tk1) : funs.FindFun(tk1, pOtherModule);
+		// 다른 모듈의 함수는 public 인 것만 보인다(내장 모듈은 전부). export 는 호스트용이라 모듈에는 안 보인다.
+		if (pFun != NULL && pOtherModule != nullptr && !pOtherModule->_blBuiltInModule && !pFun->_blPublic)
+			pFun = NULL;
 		if (pFun != NULL)
 		{
 			if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
@@ -2756,7 +2799,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		case TK_VAR:
 			if (bAllowVarDef)
 			{
-				if (false == ParseVarDef(ar, funs, vars, false))
+				if (false == ParseVarDef(ar, funs, vars, false, false))
 					return TK_NONE;
 				return TK_SEMICOLON; // ㅡㅡ;
 			}
@@ -3663,7 +3706,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "loop variable name", tk1.c_str());
 		return false;
 	}
-	int iKey = AddLocalVarName(ar, funs, vars, false, tk1);
+	int iKey = AddLocalVarName(ar, funs, vars, false, false, tk1);
 	if (iKey == -1)
 		return false;
 
@@ -3889,7 +3932,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "foreach key variable name", tk1.c_str());
 		return false;
 	}
-	int iKey = AddLocalVarName(ar, funs, vars, false, tk1);
+	int iKey = AddLocalVarName(ar, funs, vars, false, false, tk1);
 	if(iKey == -1)
 		return false;
 
@@ -3917,7 +3960,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "foreach value variable name", tk1.c_str());
 			return false;
 		}
-		iValue = AddLocalVarName(ar, funs, vars, false, tk1);
+		iValue = AddLocalVarName(ar, funs, vars, false, false, tk1);
 		bTwoVar = true;
 	}
 	if (iValue == -1)
@@ -4408,7 +4451,7 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	return true;
 }
 
-bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport)
+bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport, bool blPublic)
 {
 	std::string tk1;
 	TK_TYPE tkType1;
@@ -4419,7 +4462,7 @@ bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport)
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 == TK_STRING)
 	{
-		int iLocalVar = AddLocalVarName(ar, funs, vars, blExport, tk1);
+		int iLocalVar = AddLocalVarName(ar, funs, vars, blExport, blPublic, tk1);
 		if (iLocalVar == -1)
 			return false;
 
@@ -4669,7 +4712,7 @@ static bool ParseConstExpr(SConstValue& out, int minPrec, CArchiveRdWC& ar, SFun
 	}
 }
 
-bool ParseConstDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool exported)
+bool ParseConstDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool exported /* public const: 다른 모듈에 보임 */)
 {
 	std::string name, tk;
 	TK_TYPE tkType;
@@ -4964,7 +5007,8 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 	TK_TYPE r;
 
 	SOperand iTempOffset;
-	FUNCTION_TYPE funType = FUNT_NORMAL;
+	FUNCTION_TYPE funType = FUNT_NORMAL;   // export: 호스트에 보임
+	bool blPublic = false;                 // public: 다른 모듈에 보임. 둘은 별개이며 각각 한 번만 쓴다.
 
 	SLayerVar* pCurLayer = vars.GetCurrentLayer();
 
@@ -4977,6 +5021,17 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 
 		bGlobalLocal = false;
 		tkType1 = GetToken(ar, tk1);
+		if ((funType == FUNT_EXPORT || blPublic) && tkType1 != TK_VAR && tkType1 != TK_CONST && tkType1 != TK_FUN &&
+			tkType1 != TK_EXPORT && tkType1 != TK_PUBLIC)
+		{
+			SetParserCompileError(ar, PCE_EXPECTED_DECLARATION, funType == FUNT_EXPORT ? "export" : "public", tk1.c_str());
+			return false;
+		}
+		if ((tkType1 == TK_EXPORT || tkType1 == TK_PUBLIC || tkType1 == TK_IMPORT || tkType1 == TK_CONST) && !AtFileTopLevel(funs, vars))
+		{
+			SetParserCompileError(ar, PCE_NOT_FILE_SCOPE, tk1.c_str());
+			return false;
+		}
 		switch (tkType1)
 		{
 		case TK_NONE:
@@ -5032,16 +5087,17 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			statementAlwaysReturns = true;
 			break;
 		case TK_VAR:
-			if (false == ParseVarDef(ar, funs, vars, funType == FUNT_EXPORT))
+			if (false == ParseVarDef(ar, funs, vars, funType == FUNT_EXPORT, blPublic))
 				return false;
 			break;
 		case TK_CONST:
-			if (funs.GetCurFunName() != GLOBAL_INIT_FUN_NAME)
+			if (funType == FUNT_EXPORT)
 			{
-				SetParserCompileError(ar, PCE_CONST_NOT_GLOBAL);
+				// 상수는 실행 중 슬롯이 없어 호스트가 읽을 것이 없다. 모듈 공개는 public const.
+				SetParserCompileError(ar, PCE_EXPORT_CONST);
 				return false;
 			}
-			if (false == ParseConstDef(ar, funs, vars, funType == FUNT_EXPORT))
+			if (false == ParseConstDef(ar, funs, vars, blPublic))
 				return false;
 			break;
 		case TK_BREAK:
@@ -5079,7 +5135,20 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				return false;
 			break;
 		case TK_EXPORT:
+			if (funType == FUNT_EXPORT)
+			{
+				SetParserCompileError(ar, PCE_DUPLICATE_VISIBILITY, tk1.c_str());
+				return false;
+			}
 			funType = FUNT_EXPORT;
+			break;
+		case TK_PUBLIC:
+			if (blPublic)
+			{
+				SetParserCompileError(ar, PCE_DUPLICATE_VISIBILITY, tk1.c_str());
+				return false;
+			}
+			blPublic = true;
 			break;
 		case TK_FUN:
 			tkType2 = GetToken(ar, tk2);
@@ -5092,6 +5161,11 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			{
 				if (-1 == ParseFunctionBase(ar, funs, vars, tk2, funType))
 					return false;
+				if (blPublic)
+				{
+					SFunctionInfo* pPublic = funs.FindFun(tk2);
+					if (pPublic != NULL) pPublic->_blPublic = true;
+				}
 			}
 			else
 			{
@@ -5164,8 +5238,11 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 		// 모든 경로가 반환한 뒤의 도달 불가능한 문장은 반환 판정을 취소하지 않는다.
 		blockAlwaysReturns = blockAlwaysReturns || statementAlwaysReturns;
 
-		if (tkType1 != TK_EXPORT)
+		if (tkType1 != TK_EXPORT && tkType1 != TK_PUBLIC)
+		{
 			funType = FUNT_NORMAL;
+			blPublic = false;
+		}
 	}
 	// 바깥 루프의 break/continue 는 뒤의 return 을 건너뛸 수 있으므로 반환을 단정하지 않는다.
 	// 안쪽 루프와 switch 의 break 는 각자의 목록에 들어가므로 이 판정에 영향을 주지 않는다.
@@ -5580,7 +5657,7 @@ bool Parse(CArchiveRdWC& ar, CNArchive&arw, bool putASM)
 			const NeoGlobalSymbol& sym = ar.m_pGlobalSymbols->symbols[i];
 			if (sym.name == nullptr || sym.name[0] == 0)
 				continue;
-			if (-1 == AddLocalVarName(ar, funs, vars, sym.exported, sym.name, true))
+			if (-1 == AddLocalVarName(ar, funs, vars, sym.exported, false, sym.name, true))
 				return false; // 중복/예약어 등은 AddLocalVarName 이 에러 세팅
 			vars._hostGlobals.insert(sym.name);
 		}

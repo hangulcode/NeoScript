@@ -9,9 +9,10 @@
 
 ### Script authoring guide
 
-**[docs/ScriptAuthoring.md](docs/ScriptAuthoring.md)** — AI와 사람을 위한 스크립트 사용 설명서.
-선언 순서, import와 공개 상수, 자료구조·문자열·클로저·벡터·코루틴의 실제 사용 예제와
-오류 확인 방법을 먼저 읽고, 전체 함수 시그니처는 아래 API 목록에서 찾는다.
+**[docs/ScriptAuthoring.md](docs/ScriptAuthoring.md)** — the practical guide for people and AI
+writing scripts. Read it first for declaration order, imports and public constants, and for
+worked examples of collections, strings, closures, vectors and coroutines with their error
+checks; look up full function signatures in the API reference below.
 
 ### Script API reference
 
@@ -243,18 +244,21 @@ GameObject.AddEvent("OnButtonClick", BTN_START_GAME, StartNewGame);
 ```
 
 Rules:
-	- Allowed only at the global scope (top level of a script).
+	- Allowed only at file scope (the top level of a script, outside any block or
+	  function). The same restriction applies to `import`, `public` and `export`;
+	  the compiler reports `'<keyword>' is only allowed at file scope`.
 	- Value must be a compile-time constant expression: literals (`int`, `float`,
 	  `string`, `true`, `false`, `null`), other defines/consts, unary `-` `~`,
 	  binary `+ - * / % << >> & ^ |`, and parentheses.
-	- A plain `const` is local to its script file. `export const` makes the value
+	- A plain `const` is local to its script file. `public const` makes the value
 	  available through an imported module alias; host defines remain visible everywhere.
+	  `export const` is a compile error: a constant has no runtime slot for the host to read.
 	- Redeclaring a name that is already a const, host define, global variable,
 	  function, or module alias is a compile error.
 
 ```cpp
 // settings.ns
-export const TEXT_SPEED = 22;
+public const TEXT_SPEED = 22;
 const INTERNAL_LIMIT = 100; // private to this file
 ```
 
@@ -265,13 +269,13 @@ var speed = cfg.TEXT_SPEED;
 switch (speed) { case cfg.TEXT_SPEED: print("matched"); }
 ```
 
-The import must precede the reference. Only explicitly exported constants are exposed;
+The import must precede the reference. Only `public` constants are exposed;
 their names are not injected into the importing file. References are compile-time values,
 including in `const` initializers and `case` expressions. Assignments and increments are
-compile errors. Changing an exported constant requires recompiling its consumers.
-An imported constant may be explicitly re-exported with `export const COPY = cfg.TEXT_SPEED;`.
-`export const` exposes a value to script modules, not a runtime global to the C++ host;
-the existing host visibility of `export var` and `export fun` is unchanged.
+compile errors. Changing a public constant requires recompiling its consumers.
+An imported constant may be re-published with `public const COPY = cfg.TEXT_SPEED;`.
+`public` exposes a declaration to script modules only; `export` exposes a variable or
+function to the C++ host only (see "Visibility" under the module rules below).
 
 
 ### Performance test results
@@ -365,7 +369,10 @@ the previous object rather than changing identity in place.
 	  captures the enclosing function's locals **by value** — see "Captured anonymous functions"
 	  in [docs/Embedding.md](docs/Embedding.md) for what that does and does not share
 	- import: imports a module from the Lib directory
-	- export: makes a variable or function available to C++
+	- public: makes a top-level variable, constant or function visible to other modules
+	  through their import alias
+	- export: makes a variable or function available to C++ by name. It does not make the
+	  declaration visible to other modules; write `export public` when both are needed
 	- tostring (x) / toint (x) / tofloat (x) / tosize (x) / type (x) / sleep (x):
 	  built-in intrinsics. Return types and exact semantics:
 	  [`docs/API.md`](docs/API.md) section 1
@@ -406,15 +413,22 @@ declaration syntax is a compile error; keep only `fun F(var x) { ... }`.
 Variables (including globals) and `const` still **must be declared before use**.
 A function body cannot read a global declared farther down the file. Initializers
 and imports retain their source order; anonymous functions retain their capture rules.
-Module aliases expose functions and `export const`, not variables: use `module.GetValue()`
-to pass runtime data. Constants, including exported ones, must precede their use in their own file.
+Visibility has two independent keywords. `public` makes a top-level `var`, `const` or
+`fun` visible to other modules through their import alias; `export` makes a `var` or `fun`
+visible to the C++ host by name. Neither implies the other: `export fun F()` is not
+callable through an alias, and `public var x` is not a host global. Write `export public`
+(or `public export`) when both are needed; repeating a keyword, or `export const`, is a
+compile error. `import`, `const`, `public` and `export` are accepted only at file scope,
+never inside a block or a function. `alias.name` on a `public var` reads and writes the variable's global slot
+directly (selectors, compound assignment and increment work as on a local global, with no
+call cost). Constants, including public ones, must precede their use in their own file.
 
 Top-level `var` is private to its file. Two modules can declare the same name;
-reading or writing another module's variable by an unqualified name is a compile error.
-`export var` retains its host-facing meaning and does not expose `alias.variable`.
-Host export names must be unique within a compiled program. Globals registered by the
-host remain visible in all modules. Getter-returned lists, maps and arrays share their
-storage; returning one does not make it immutable or automatically copy it.
+reading or writing another module's variable by an unqualified name is a compile error,
+and a non-public variable or function is not visible through an alias either.
+Export names must be unique within a compiled program. Globals registered by the host
+remain visible in all modules. Getter-returned lists, maps and arrays share their storage;
+returning one does not make it immutable or automatically copy it.
 
 For standalone headless hosts, `console --file test.ns --globals Host,Input` explicitly
 registers host symbols before compilation. Initialize them with `Host = {...};` in the

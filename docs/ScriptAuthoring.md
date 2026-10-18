@@ -14,7 +14,7 @@ AI와 사람이 `.ns` 스크립트를 작성할 때 먼저 읽는 실용 안내�
 | --- | --- |
 | 함수 선언 순서 | 같은 모듈의 이름 있는 함수는 뒤에서 정의해도 호출할 수 있다. `fun F();` 전방 선언은 오류다. |
 | 변수 선언 순서 | 전역·지역 변수와 `const`는 반드시 사용보다 앞에 선언한다. 함수 본문도 예외가 아니다. |
-| 모듈 접근 | `alias.Function()`과 `alias.EXPORTED_CONST`를 쓴다. `alias.variable`은 지원하지 않는다. |
+| 모듈 접근 | `public`이 붙은 함수·상수·변수만 `alias.F()`, `alias.NAME`, `alias.value`로 쓴다. `export`는 C++ 호스트 공개이며 모듈에는 보이지 않는다. |
 | 조건 | `if`·`while`의 조건은 `bool`로 만든다. 숫자나 문자열을 참으로 자동 변환하지 않는다. |
 | 숫자 | `int`는 32비트 정수, `float`는 32비트 실수다. 정수끼리 `/` 하면 정수 나눗셈이다. |
 | 인덱스 | 목록·기본형 배열·벡터는 0부터 시작한다. 문자열은 `s[i]`로 읽지 않는다. |
@@ -178,19 +178,22 @@ import는 별칭을 사용하는 코드보다 먼저 둔다.
 - 따로 생성한 실행 인스턴스끼리는 모듈 전역 상태가 자동 공유되지 않는다.
 - 파일 최상위 `var`는 그 파일에서만 보인다. 서로 다른 모듈이 같은 변수 이름을 써도 충돌하지 않는다.
   다른 파일의 변수를 이름만으로 읽거나 쓰면 컴파일 오류다.
-- 다른 모듈의 런타임 데이터는 함수로 전달한다. `cfg.items[0]` 같은 변수 접근은 지원하지 않는다.
-- 호스트가 등록한 전역 객체는 모든 모듈에서 보인다. 스크립트의 `export var`는 호스트에 값을
-  공개하는 기존 기능이며, 다른 모듈에 변수 이름을 공개하지 않는다. 호스트에 내보내는 이름은 프로그램 안에서 유일해야 한다.
+- 다른 모듈에 내놓을 것에는 `public`을 붙인다. `public var`는 `alias.name`으로 읽고 쓰며 `cfg.items[0]`,
+  `cfg.count += 1`처럼 선택자·대입·증감이 자기 파일의 전역과 똑같이 붙는다. 컴파일 때 같은 전역 슬롯으로
+  풀리므로 함수 호출 비용이 없다. `public fun`만 별칭으로 부를 수 있고, 공유 상수는 `public const`다.
+- `export`는 C++ 호스트 공개(`export var`, `export fun`)이고 모듈에는 보이지 않는다. 둘 다 필요하면
+  `export public`으로 함께 쓴다. 같은 키워드 반복과 `export const`는 오류다. `export` 이름은 프로그램 안에서
+  유일해야 한다. 호스트가 등록한 전역 객체는 모든 모듈에서 보인다.
 - 함수가 돌려준 목록·맵·배열은 원본과 같은 저장소다. 읽기 전용 사본이 필요하면 따로 복사한다.
   반복문에서 같은 배열을 여러 번 읽을 때는 접근 함수를 반복 호출하지 말고 지역변수에 받아 사용한다.
   원본 변수가 다른 배열로 재대입되면 이미 받아 둔 참조는 이전 배열을 계속 가리킨다.
-- 디버그 정보 없는 빌드는 인자가 없고 몸통이 변수 하나를 반환하는 문장뿐인 직접 호출을
-  값 복사로 최적화한다. 디버그 빌드·함수값 호출·부작용이 있는 접근 함수는 실제 호출을 유지한다.
+- 인자가 없고 몸통이 변수 하나를 반환하는 문장뿐인 직접 호출은 값 복사로 최적화한다(디버그 정보가
+  있어도 같다). 함수값 호출·부작용이 있는 접근 함수는 실제 호출을 유지한다.
 
-### const와 export const
+### const와 public const
 
 `const`는 파일의 전역 위치에 선언하는 **컴파일 타임 상수**다.
-사용보다 먼저 선언하며 함수 안에는 선언하지 않는다.
+사용보다 먼저 선언하며 블록·함수 안에는 선언하지 않는다(`'const' is only allowed at file scope` 오류).
 정수·실수·문자열·bool·null과 이미 알려진 상수의 계산식을 쓸 수 있다.
 런타임 변수, 함수 호출, 목록·맵은 상수 초기값으로 쓰지 않는다.
 
@@ -199,16 +202,17 @@ import는 별칭을 사용하는 코드보다 먼저 둔다.
 **settings.ns**
 
 ```cpp
-export const TEXT_SPEED = 22;
-export const MODE_PLAY = 2;
+public const TEXT_SPEED = 22;
+public const MODE_PLAY = 2;
 const INTERNAL_LIMIT = 100;         // 이 파일 안에서만 사용
 
 var settings_volume = 5;
 var settings_points = [10, 20];
 
-fun GetVolume() { return settings_volume; }
-fun SetVolume(var value) { settings_volume = value; }
-fun GetPoint(var index) { return settings_points[index]; }
+public fun GetVolume() { return settings_volume; }
+public fun SetVolume(var value) { settings_volume = value; }
+public fun GetPoint(var index) { return settings_points[index]; }
+fun Reset() { settings_volume = 5; }  // public 이 없어 다른 파일에서는 못 부른다
 ```
 
 **main.ns**
@@ -234,16 +238,22 @@ default:
 | 선언 | 다른 스크립트에서 사용 | C++ 호스트에 런타임 값으로 노출 |
 | --- | --- | --- |
 | `const NAME = ...;` | 파일 내부만 | 없음 |
-| `export const NAME = ...;` | `alias.NAME` | 없음 |
-| `var value = ...;` | 파일 내부만. 다른 파일에는 접근 함수 제공 | export 없이 공개하지 않음 |
-| `export var value = ...;` | 파일 내부만. 별칭 접근 불가 | 고유한 이름으로 전역값 공개 |
-| `fun F() { ... }` | `alias.F()` | 호스트 호출용으로는 export 사용 |
-| `export fun F() { ... }` | `alias.F()` | 함수로 공개 |
+| `public const NAME = ...;` | `alias.NAME` | 없음 (`export const`는 오류) |
+| `var value = ...;` | 파일 내부만 | 없음 |
+| `public var value = ...;` | `alias.value` 읽기·쓰기 | 없음 |
+| `export var value = ...;` | 안 보임 | 고유한 이름으로 전역값 공개 |
+| `fun F() { ... }` | 파일 내부만 | 없음 |
+| `public fun F() { ... }` | `alias.F()` | 없음 |
+| `export fun F() { ... }` | 안 보임 | 함수로 공개 |
+| `export public var/fun` | 보임 | 공개 (둘 다 필요할 때만) |
+
+`import`·`const`·`public`·`export`는 파일 최상위에서만 쓴다. 블록이나 함수 안에 두면
+`'<키워드>' is only allowed at file scope` 컴파일 오류다.
 
 공개 상수는 이름만 import한 파일에 풀어 놓지 않는다. 반드시 `cfg.TEXT_SPEED`처럼 쓴다.
-`cfg.INTERNAL_LIMIT`, `cfg.settings_volume`은 오류다.
+`cfg.INTERNAL_LIMIT`, `cfg.settings_volume`, `cfg.Reset()`은 오류다.
 공개 상수에는 대입·복합 대입·증감이 불가능하다.
-필요하면 `export const COPY = cfg.TEXT_SPEED;`로 명시적으로 다시 공개한다.
+필요하면 `public const COPY = cfg.TEXT_SPEED;`로 명시적으로 다시 공개한다.
 상수값을 바꾸면 사용하는 쪽의 컴파일 이미지도 다시 만들어야 한다.
 
 함수가 목록이나 맵 전체를 반환하면 호출자도 **같은 저장소**를 받는다.
@@ -901,7 +911,8 @@ import가 여러 단계여도 실제 오류가 난 파일의 줄·열을 보존�
 | --- | --- |
 | `unknown identifier` | 변수·const·import가 사용 전에 선언되었는지, 철자·대소문자 |
 | `forward declarations` | 몸통 없는 `fun F(...);`를 남겼는지 |
-| `no public member` | 변수나 비공개 const를 별칭으로 읽었는지. 함수 또는 export const 사용 |
+| `no public member` | `public` 없는 변수·상수·함수를 별칭으로 썼는지. 내놓을 것에 `public`을 붙인다(`export`는 모듈에 안 보임) |
+| `is only allowed at file scope` | `import`·`const`·`public`·`export`를 블록이나 함수 안에 썼는지. 파일 최상위로 옮긴다 |
 | `invalid function call` | API의 정확한 인자 수·타입, 필요한 vector와 실제 list의 혼동 |
 | 문자열 인덱스 오류 | `s[i]` 대신 `s.sub(i, 1)` 사용 |
 | 목록·배열 인덱스 오류 | 0 기반 범위와 먼저 크기를 늘렸는지 확인 |
@@ -933,7 +944,7 @@ AI가 코드를 제출하기 전에 확인할 것:
 
 1. 필요한 기능을 이 문서와 API 목록에서 찾았는가? 기존 `find`, 보간·벡터 함수 등을 놓치지 않았는가?
 2. 함수 선언 순서와 변수·상수 선언 순서를 구분했는가?
-3. 모듈 변수 접근 대신 함수를 쓰고, 공유 상수는 `export const`로 제공했는가?
+3. 다른 모듈에 내놓을 변수·상수·함수에 `public`을 붙였는가? `export`는 C++ 호스트용이다.
 4. 정수 나눗셈, bool 조건, 0 기반 인덱스, 문자열 길이 인자를 정확히 썼는가?
 5. 목록의 null과 맵의 삭제, 참조 공유와 값 복사를 구분했는가?
 6. 람다 캡처가 바깥 스칼라를 함께 수정한다고 가정하지 않았는가?

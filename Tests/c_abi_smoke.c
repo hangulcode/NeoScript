@@ -74,7 +74,7 @@ static void NS_CALL OnError(void* user, const char* msg, int32_t len)
 static int g_loaderHits = 0;
 
 static const char* kHelperSource =
-    "export fun triple(var v) { return v * 3; }\n";
+    "public fun triple(var v) { return v * 3; }\n";
 
 static int32_t NS_CALL OnLoad(void* user, const char* path, int32_t pathLen, void* sink)
 {

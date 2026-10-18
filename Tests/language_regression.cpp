@@ -281,7 +281,7 @@ static void CheckFormatLimits(IRuntime* runtime, bool debug)
 
 static void CheckExportVisibility(IRuntime* runtime, bool debug)
 {
-    const std::string source = "import settings as cfg; export const LOCAL=7; export var visible=cfg.COUNT;";
+    const std::string source = "import settings as cfg; public const LOCAL=7; export var visible=cfg.COUNT;";
     CompileResult compiled = runtime->Compile(Describe(source, debug));
     Check((bool)compiled.program, "compile exported const host visibility");
     if (!compiled.program) return;
@@ -342,10 +342,10 @@ int main()
 {
     ModuleLoader loader;
     loader.sources["modules/good.ns"] =
-        "var moduleValue=5; var items=[7,8]; fun First(){return Last();}"
-        "fun Last(){return moduleValue;} fun Items(){return items;}";
-    loader.sources["modules/outer.ns"] = "import inner;\nfun Outer(){return inner.First();}";
-    loader.sources["modules/inner.ns"] = "fun First(){return Last();}\nfun Last(){return 9;}";
+        "var moduleValue=5; var items=[7,8]; public fun First(){return Last();}"
+        "fun Last(){return moduleValue;} public fun Items(){return items;}";
+    loader.sources["modules/outer.ns"] = "import inner;\npublic fun Outer(){return inner.First();}";
+    loader.sources["modules/inner.ns"] = "public fun First(){return Last();}\nfun Last(){return 9;}";
     loader.sources["modules/bad.ns"] = "fun Broken(){\n return missing;\n}";
     loader.sources["modules/badouter.ns"] = "import bad;";
     loader.sources["modules/prototype.ns"] = "// old syntax\nfun Removed();";
@@ -353,28 +353,33 @@ int main()
     loader.sources["modules/order.ns"] = "fun F(){return later;}\nvar later=1;";
     loader.sources["modules/badencoding.ns"] = std::string(1, (char)0xff);
     loader.sources["modules/settings.ns"] =
-        "export const COUNT=22; export const NEG=-7; export const RATE=1.25; export const WHOLE=2.0;"
-        "export const TEXT=\"red\"; export const EMPTY=\"\"; export const YES=true; export const NO=false;"
-        "export const NOTHING=null; export const MASK=1<<3; const PRIVATE=100;"
-        "var mutableValue=42; fun Fetch(){return COUNT;} fun GetMutable(){return mutableValue;}";
-    loader.sources["modules/other.ns"] = "export const COUNT=33; const PRIVATE=200;";
+        "public const COUNT=22; public const NEG=-7; public const RATE=1.25; public const WHOLE=2.0;"
+        "public const TEXT=\"red\"; public const EMPTY=\"\"; public const YES=true; public const NO=false;"
+        "public const NOTHING=null; public const MASK=1<<3; const PRIVATE=100;"
+        "var mutableValue=42; public fun Fetch(){return COUNT;} public fun GetMutable(){return mutableValue;}";
+    loader.sources["modules/other.ns"] = "public const COUNT=33; const PRIVATE=200;";
     loader.sources["modules/facade.ns"] =
-        "import settings as src; export const COUNT=src.COUNT+1; export const TEXT=src.TEXT;"
-        "const HIDDEN=src.COUNT; fun Fetch(){return src.Fetch();}";
+        "import settings as src; public const COUNT=src.COUNT+1; public const TEXT=src.TEXT;"
+        "const HIDDEN=src.COUNT; public fun Fetch(){return src.Fetch();}";
     loader.sources["modules/privateuse.ns"] = "import settings as src;\nconst BAD=src.PRIVATE;";
-    loader.sources["modules/constorder.ns"] = "fun F(){return LATE;}\nexport const LATE=1;";
+    loader.sources["modules/constorder.ns"] = "fun F(){return LATE;}\npublic const LATE=1;";
     loader.sources["modules/memberfun.ns"] =
-        "var holder={}; holder.fun=3; fun Read(){return holder.fun;}";
+        "var holder={}; holder.fun=3; public fun Read(){return holder.fun;}";
     loader.sources["modules/private_a.ns"] =
-        "var value=10; export var visibleA=12; export const LIMIT=20;"
-        "fun Get(){return value;} fun Set(var x){value=x;}"
-        "fun Closure(var n){return fun(){return fun(){return value+n;};};}";
+        "var value=10; export var visibleA=12; public const LIMIT=20;"
+        "public fun Get(){return value;} public fun Set(var x){value=x;}"
+        "public fun Closure(var n){return fun(){return fun(){return value+n;};};}";
     loader.sources["modules/private_b.ns"] =
         "import private_a as a; var value=30; const visibleA=99;"
-        "fun Get(){return value+a.Get();} fun Host(){return type(HostAPI);}";
+        "public fun Get(){return value+a.Get();} public fun Host(){return type(HostAPI);}";
     loader.sources["modules/private_leak.ns"] = "import private_a; fun Get(){return value;}";
     loader.sources["modules/root_leak.ns"] = "fun Get(){return rootPrivate;}";
     loader.sources["modules/export_duplicate.ns"] = "export var visibleA=44;";
+    loader.sources["modules/shared.ns"] =
+        "public var count=1; var hidden=2; public var items=[1,2]; fun Private(){return 1;}"
+        "export fun HostOnly(){return 2;} export public fun Both(){return 3;}"
+        "public fun Get(){return count;} public fun Items(){return items;} public fun Bump(){count=count+100;}";
+    loader.sources["modules/shadow.ns"] = "var count=5; public fun Own(){return count;}";
     RuntimeDesc runtimeDesc;
     runtimeDesc.loader = &loader;
     IRuntime* runtime = CreateRuntime(runtimeDesc);
@@ -507,7 +512,21 @@ int main()
         "import facade as cfg; export fun Test(){return cfg.COUNT==23 && cfg.TEXT==\"red\" && cfg.Fetch()==22;}",
         "import settings as cfg; export fun Test(){return cfg.GetMutable()==42;}",
         "import settings; export fun Test(){return settings.COUNT==22;}",
-        "import settings as cfg; export fun Test(){var get=fun(){return cfg.COUNT;};return get()==22;}"
+        "import settings as cfg; export fun Test(){var get=fun(){return cfg.COUNT;};return get()==22;}",
+        // export var: 별칭으로 읽고 쓰며 자기 모듈의 전역과 같은 슬롯이다.
+        "import shared as s; export fun Test(){return s.count==1 && s.items.len()==2 && s.items[1]==2;}",
+        "import shared as s; export fun Test(){s.count=5; s.count+=2; s.count++; ++s.count; return s.count==9 && s.Get()==9;}",
+        "import shared as s; export fun Test(){s.Bump(); return s.count==101 && -s.count==-101 && s.count*2==202;}",
+        "import shared as s; export fun Test(){s.items.append(3); s.items[0]=9;"
+        "return s.Items()[0]==9 && s.Items().len()==3 && s.items==s.Items();}",
+        "import shared as s; export fun Test(){s.items=[4]; return s.Items()[0]==4 && s.Items().len()==1;}",
+        "import shared as a; import shared as b; export fun Test(){a.count=7; return b.count==7 && b.Get()==7;}",
+        "import shared as s; export fun Test(){var f=fun(){return s.count+1;}; s.count=3; return f()==4;}",
+        "import shared as s; import shadow as sh; export fun Test(){sh.Own(); return s.count==1 && sh.Own()==5;}",
+        "import private_a as a; export fun Test(){return a.LIMIT==20 && a.Get()==10;}",
+        "import shared as s; export fun Test(){return s.Both()==3;}",
+        "public export var both=5; public var p=1; export public var both2=6; export fun Test(){return both==5 && p==1 && both2==6;}",
+        "import shared as s; export fun Test(){var m={}; m[s.count]=\"one\"; return m[1]==\"one\";}"
     };
     for (bool debug : {false, true})
     {
@@ -518,6 +537,30 @@ int main()
         Reject(runtime, "var rootPrivate=3; import root_leak;", "unknown identifier", "modules/root_leak.ns", 1, debug);
         Reject(runtime, "import private_a; import export_duplicate;", "duplicate exported variable", "modules/export_duplicate.ns", 1, debug);
         Reject(runtime, "import private_a; export fun Test(){return visibleA;}", "unknown identifier", "language.ns", 1, debug);
+        Reject(runtime, "import shared as s; export fun Test(){return s.hidden;}", "no public member", "language.ns", 1, debug);
+        Reject(runtime, "import shared as s; export fun Test(){s.hidden=1;}", "no public member", "language.ns", 1, debug);
+        Reject(runtime, "import shared as s; import shadow as sh; export fun Test(){return sh.count;}", "no public member", "language.ns", 1, debug);
+        Reject(runtime, "import private_b as b; export fun Test(){return b.visibleA;}", "no public member", "language.ns", 1, debug);
+        Reject(runtime, "import shared as s; export fun Test(){return count;}", "unknown identifier", "language.ns", 1, debug);
+        Reject(runtime, "import shared as s; export fun Test(){return s.Private();}", "no public member", "language.ns", 1, debug);
+        Reject(runtime, "import shared as s; export fun Test(){return s.HostOnly();}", "no public member", "language.ns", 1, debug);
+        Reject(runtime, "import private_a as a; export fun Test(){return a.visibleA;}", "no public member", "language.ns", 1, debug);
+        Reject(runtime, "export const X=1;", "use 'public const'", "language.ns", 1, debug);
+        Reject(runtime, "export public const X=1;", "use 'public const'", "language.ns", 1, debug);
+        Reject(runtime, "public public var x=1;", "duplicate 'public'", "language.ns", 1, debug);
+        Reject(runtime, "export export var x=1;", "duplicate 'export'", "language.ns", 1, debug);
+        Reject(runtime, "public x=1;", "expected 'var', 'const' or 'fun' after 'public'", "language.ns", 1, debug);
+        Reject(runtime, "export fun Test(){public var x=1;}", "'public' is only allowed at file scope", "language.ns", 1, debug);
+        Reject(runtime, "{ public var x=1; } var x=2; export fun Test(){return x;}", "'public' is only allowed at file scope", "language.ns", 1, debug);
+        Reject(runtime, "{ public fun G(){return 1;} }", "'public' is only allowed at file scope", "language.ns", 1, debug);
+        Reject(runtime, "{ const N=1; }", "'const' is only allowed at file scope", "language.ns", 1, debug);
+        Reject(runtime, "export fun Test(){const N=1; return N;}", "'const' is only allowed at file scope", "language.ns", 1, debug);
+        Reject(runtime, "{ export var x=1; }", "'export' is only allowed at file scope", "language.ns", 1, debug);
+        Reject(runtime, "export fun Test(){export var x=1;}", "'export' is only allowed at file scope", "language.ns", 1, debug);
+        Reject(runtime, "{ export fun G(){return 1;} }", "'export' is only allowed at file scope", "language.ns", 1, debug);
+        Reject(runtime, "{ import math; }", "'import' is only allowed at file scope", "language.ns", 1, debug);
+        Reject(runtime, "export fun Test(){import math; return 1;}", "'import' is only allowed at file scope", "language.ns", 1, debug);
+        Reject(runtime, "if (true) { import settings as cfg; }", "'import' is only allowed at file scope", "language.ns", 1, debug);
         Reject(runtime, "var HostAPI=1;", "already defined", "language.ns", 1, debug);
         CheckFunctionValues(runtime, debug);
         Run(runtime, R"(export fun Test(){var s="A\uAC00\uAC01\uD83D\uDE00";
@@ -552,10 +595,10 @@ int main()
             "format(\"%\");", "format(\"%d\",1.5);", "format(\"%f\",\"1\");", "format(\"%s\",1);",
             "format(\"%*d\",3,1);", "format(\"%.d\",1);", "format(\"%.2d\",1);", "format(\"%03s\",\"a\");",
             "format(\"%2147483648d\",1);", "format(\"%.2147483648f\",1.0);", "\"%d\".format();",
-            "import system; var s=system.set([1]); s.missing();", "import system; var s=system.set([1]); s.len(1);"
+            "var s=system.set([1]); s.missing();", "var s=system.set([1]); s.len(1);"
         };
         for (const char* body : invalidCalls)
-            RuntimeReject(runtime, std::string("export fun Test(){") + body + "}", "", debug);
+            RuntimeReject(runtime, std::string("import system; export fun Test(){") + body + "}", "", debug);
         RuntimeReject(runtime, "var a=[3,1,2]; fun C(var x,var y){a.append(4);return x<y;} export fun Test(){a.sort(C);}"
             "export fun Verify(){return a.len()==4 && a[0]==3 && a[1]==1 && a[3]==4;}", "modified during sort", debug, true);
         RuntimeReject(runtime, "var a=[3,1,2]; fun C(var x,var y){a.resize(0);return x<y;} export fun Test(){a.sort(C);}"
@@ -584,10 +627,10 @@ int main()
         Reject(runtime, "import badencoding;", "Invalid script source encoding", "modules/badencoding.ns", 1, debug);
         Reject(runtime, "import good; var value=good.items[0];", "no public member", "language.ns", 1, debug);
         Reject(runtime, "import settings as cfg; var v=cfg.PRIVATE;", "no public member", "language.ns", 1, debug);
-        Reject(runtime, "import settings as cfg; const V=cfg.PRIVATE;", "no exported const", "language.ns", 1, debug);
+        Reject(runtime, "import settings as cfg; const V=cfg.PRIVATE;", "no public const", "language.ns", 1, debug);
         Reject(runtime, "import settings as cfg; var v=cfg.mutableValue;", "no public member", "language.ns", 1, debug);
-        Reject(runtime, "import settings as cfg; const V=cfg.mutableValue;", "no exported const", "language.ns", 1, debug);
-        Reject(runtime, "import settings as cfg; const V=cfg.Fetch;", "no exported const", "language.ns", 1, debug);
+        Reject(runtime, "import settings as cfg; const V=cfg.mutableValue;", "no public const", "language.ns", 1, debug);
+        Reject(runtime, "import settings as cfg; const V=cfg.Fetch;", "no public const", "language.ns", 1, debug);
         Reject(runtime, "import settings as cfg; var v=COUNT;", "unknown identifier", "language.ns", 1, debug);
         Reject(runtime, "var v=cfg.COUNT; import settings as cfg;", "unknown identifier", "language.ns", 1, debug);
         Reject(runtime, "import settings as cfg; const cfg=1;", "already defined", "language.ns", 1, debug);
@@ -603,13 +646,13 @@ int main()
         Reject(runtime, "import settings as cfg; cfg.NOTHING=fun(){return 1;};", "assignment target", "language.ns", 1, debug);
         Reject(runtime, "import settings as cfg; switch(2){case cfg.WHOLE: break;}", "float is not allowed", "language.ns", 1, debug);
         Reject(runtime, "import settings as cfg; switch(22){case cfg.COUNT: break;case 22: break;}", "duplicate case", "language.ns", 1, debug);
-        Reject(runtime, "import settings as cfg; const V=cfg.UNKNOWN;", "no exported const", "language.ns", 1, debug);
+        Reject(runtime, "import settings as cfg; const V=cfg.UNKNOWN;", "no public const", "language.ns", 1, debug);
         Reject(runtime, "import settings as cfg; var v=cfg.;", "member name", "language.ns", 1, debug);
-        Reject(runtime, "fun F(){export const N=1;}", "only allowed at the global", "language.ns", 1, debug);
-        Reject(runtime, "import privateuse;", "no exported const", "modules/privateuse.ns", 2, debug);
+        Reject(runtime, "fun F(){public const N=1;}", "'public' is only allowed at file scope", "language.ns", 1, debug);
+        Reject(runtime, "import privateuse;", "no public const", "modules/privateuse.ns", 2, debug);
         Reject(runtime, "import constorder;", "unknown identifier", "modules/constorder.ns", 1, debug);
-        Reject(runtime, "import facade as cfg; const N=cfg.HIDDEN;", "no exported const", "language.ns", 1, debug);
-        Reject(runtime, "export const VALUE=1; export const VALUE=2;", "already defined", "language.ns", 1, debug);
+        Reject(runtime, "import facade as cfg; const N=cfg.HIDDEN;", "no public const", "language.ns", 1, debug);
+        Reject(runtime, "public const VALUE=1; public const VALUE=2;", "already defined", "language.ns", 1, debug);
     }
     DestroyRuntime(runtime);
     std::printf("Language regression %s: %d/%d\n", failures ? "FAIL" : "PASS", checks-failures, checks);

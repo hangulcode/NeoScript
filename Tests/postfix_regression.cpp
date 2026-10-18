@@ -14,9 +14,9 @@ public:
         if (std::string(path.data(), path.size()) != "postfix_module.ns")
             return false;
         const char* source =
-            "fun L() { return [4, 5]; }"
-            "fun S() { return \"hello\"; }"
-            "fun Factory() { return L; }";
+            "public fun L() { return [4, 5]; }"
+            "public fun S() { return \"hello\"; }"
+            "public fun Factory() { return L; }";
         out.assign(source, source + std::strlen(source));
         return true;
     }

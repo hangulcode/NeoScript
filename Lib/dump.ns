@@ -1,6 +1,6 @@
 ﻿// Format script values recursively for diagnostic output.
 
-fun object(var o)
+public fun object(var o)
 {
 	var first = true;
 

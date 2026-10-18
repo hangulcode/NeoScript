@@ -1,14 +1,14 @@
-fun add(var a, var b)
+public fun add(var a, var b)
 {
 	return a + b;
 }
 
-fun sub(var a, var b)
+public fun sub(var a, var b)
 {
 	return a - b;
 }
 
-fun mul(var a, var b)
+public fun mul(var a, var b)
 {
 	return a * b;
 }

@@ -160,6 +160,7 @@ struct SVars
 	const std::string* _moduleName = nullptr;
 	std::set<std::string> _hostGlobals;
 	std::map<std::string, int> _exportSlots;
+	std::set<std::string> _publicVars;   // public var 의 한정 이름("모듈.이름"). 별칭으로 읽고 쓸 수 있는 변수.
 	std::string GlobalName(const std::string& name) const
 	{
 		return _moduleName == nullptr ? name : *_moduleName + "." + name;
@@ -239,6 +240,7 @@ struct SFunctionInfo
 	std::set<std::string>		_args;
 	int							_built_in_arg_c;
 	FUNCTION_TYPE				_funType = FUNT_NORMAL;
+	bool _blPublic = false;   // public: 다른 모듈이 별칭으로 부를 수 있다. export(호스트)와 별개다.
 	bool _bodyParsed = false;
 	std::string					_moduleName;
 	std::map<int, std::string>	_debugVarNames;
@@ -833,9 +835,12 @@ struct SFunctionInfo
 struct SFunctionLayer
 {
 	bool _blBuiltInModule = false;
+	// import 한 파일 이름. 이 모듈의 최상위 변수는 전역 층에 "_moduleName.이름" 으로 있어
+	// 별칭으로 public var 를 찾을 때 한정 이름을 만드는 데 쓴다. 루트와 내장 모듈은 비어 있다.
+	std::string _moduleName;
 	std::map<std::string, SFunctionInfo*>	_funs;
 	std::map< std::string, SFunctionLayer*> _defModules;
-	NeoCompileDefines _exportedConsts; // Compile-time values only; never runtime globals.
+	NeoCompileDefines _exportedConsts; // public const. Compile-time values only; never runtime globals.
 };
 
 // 컴파일 타임 switch case 1개. Program 의 ProgramSwitchKey 와 같은 값 모델.

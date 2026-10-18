@@ -35,14 +35,18 @@ Every signature and behavioural note below was verified by running it through
   module table. `import name as alias;` renames it locally. Import is a compile-time include;
   repeated imports within one compilation reuse the module. Separate runtime instances do not
   share its globals.
-- Top-level `var` names are private to their file, even when marked `export` for the host.
-  Different modules may use the same private name. Host-declared globals remain visible
-  in every module; explicitly exported host variable names must be unique per program.
-- Aliases expose module functions and `export const` values. Use a getter function to pass
-  a module variable; `alias.variable` is unsupported. Plain `const` names remain file-local.
+- Top-level names are private to their file. `public var`, `public const` and `public fun`
+  are visible to importing modules through `alias.name`; `export var` and `export fun` are
+  visible to the C++ host by name. The keywords are independent (`export public` for both);
+  `export const` and a repeated keyword are compile errors. Different modules may use the
+  same private name. Host-declared globals remain visible in every module; export names
+  must be unique per program.
+- `alias.variable` reads and writes a public variable's global slot directly, so selectors,
+  compound assignment and increment work as on a local global and there is no call cost.
+  A function without `public` cannot be called or taken as a value through an alias.
 - `alias.CONSTANT` is resolved during compilation and also works in `const` initializers
   and `switch case` expressions. Import first; assignment and increment are errors. Names
-  are not imported unqualified. Recompile consumers after an exported constant changes.
+  are not imported unqualified. Recompile consumers after a public constant changes.
 
 ---
 
@@ -506,6 +510,8 @@ produced, so `!= null` is the presence test to use.
 - **Declare variables and const before use.** This includes global variables referenced inside
   function bodies. Only named function signatures are collected ahead of use, per module;
   calls to later definitions and mutual recursion work. `fun F(...);` prototypes are rejected.
+- **`import`, `const`, `public` and `export` are file-scope only.** Inside a block or a function
+  the compiler reports `'<keyword>' is only allowed at file scope`.
 - **Imported compile errors identify the source file.** Their line and column belong to that
   module, even through nested imports. Concatenated sources still need a host-provided mapping
   back to original files; concatenation alone loses those boundaries.
