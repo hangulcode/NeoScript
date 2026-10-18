@@ -46,6 +46,8 @@ $dll = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $dll) { throw "NeoScript.dll not found under $buildDir" }
 
 New-Item -ItemType Directory -Force -Path $pluginDir | Out-Null
+Copy-Item (Join-Path $repoRoot "THIRD_PARTY_NOTICES.txt") (Join-Path $repoRoot "Unity/com.neoscript.unity/THIRD_PARTY_NOTICES.txt") -Force
+Copy-Item (Join-Path $repoRoot "LICENSE") (Join-Path $repoRoot "Unity/com.neoscript.unity/LICENSE") -Force
 Copy-Item $dll (Join-Path $pluginDir 'NeoScript.dll') -Force
 
 $info = Get-Item (Join-Path $pluginDir 'NeoScript.dll')

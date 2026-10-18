@@ -2,6 +2,9 @@
 
 //
 //  HTTPRequest
+//  Source: https://github.com/elnormous/HTTPRequest
+//  SPDX-License-Identifier: Unlicense
+//  See ../ThirdParty/HTTPRequest/UNLICENSE (locally adapted).
 //
 
 #ifndef HTTPREQUEST_HPP

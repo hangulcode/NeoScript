@@ -766,6 +766,33 @@ print(coroutine.status(co));        // dead
 | HTTP | `system.aysnc_create()`로 요청 객체 생성. **aysnc라는 철자가 실제 API 이름** |
 | 편집기 | VS Code 확장의 완성·서명 도움말·중단점·단계 실행·호출 스택·지역변수 보기 |
 
+### JSON 문자열 변환 (console에서도 사용 가능)
+
+`import system;` 뒤에 `system.jsonEncode(value, sortKeys = false)`와 `system.jsonDecode(text)`를 쓴다.
+파일 입출력 없이 값과 UTF-8 JSON 문자열 사이를 변환한다. 비교용 요약은 두 번째 인자를 `true`로 주면
+중첩된 모든 맵의 문자열 키를 UTF-8 바이트 순서로 정렬한다. 목록의 순서는 바꾸지 않는다.
+
+```javascript
+import system;
+var state = {"x": 100.0, "ships": [1, null, 3]};
+var text = system.jsonEncode(state, true);
+if (text == null) print(system.jsonError());
+var copy = system.jsonDecode(text);
+if (system.jsonError() != "") print(system.jsonError());
+```
+
+- 정수는 `1`, 실수는 `1.0`처럼 구별해 기록한다. `0.1`도 같은 float32로 왕복한다.
+- 읽을 때 소수점·지수가 없으면 int32, 있으면 float32다. 범위 밖 숫자는 실패한다. UTF-8 BOM은 읽는다.
+- 문자열 키 맵·목록·문자열·int·float·bool·null만 된다. 루트는 맵일 필요가 없다.
+- 맵의 null은 키 생략, 목록의 null은 위치를 유지한다. 공유 참조는 읽은 뒤 독립된 값이 된다.
+- `system.array`·set·벡터·함수·호스트 객체·순환 참조·NaN/무한대·잘못된 UTF-8·NUL은 실패한다.
+- 루트 컨테이너부터 최대 64단계다. 중복 키는 마지막 값이 남고, 마지막 null은 키를 지운다.
+- 실패는 null이며 `system.jsonError()`에 `$.ships[2]` 같은 경로와 이유가 남는다.
+  다음 변환 성공은 오류를 지운다. `jsonDecode("null")`의 정상 null은 빈 오류로 구별한다.
+- JSON 직렬화 성공은 파일 저장 성공을 뜻하지 않는다. 파일 API의 반환값도 확인한다.
+- JSON 함수는 데이터를 묶는 실행 구조를 강제하지 않는다. 매 틱 처리용 기본형 배열은 유지하고,
+  저장 경계에서 맵·목록으로 변환한다. 자세한 규칙은 [JSON.md](JSON.md)를 따른다.
+
 `system.pcall`은 Lua의 보호 호출이 아니다. 내부 오류가 호출자에게 전파되고 실행을 중단한다.
 `system.load` 결과에 `module.Function()` 형태로 이름 있는 함수를 호출하는 기능도 없다.
 파일 간 함수 호출에는 정적 import를 쓴다. `load`의 `name` 인자는 현재 구현에서 사용되지 않으므로

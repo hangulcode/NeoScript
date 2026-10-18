@@ -13,6 +13,7 @@
 #include "NeoVMInternal.h"
 #include "NeoVMWorker.h"
 #include "NeoArchive.h"
+#include "NeoJson.h"
 //#include "NeoTime.h"
 #include "UTFString.h"
 #include <chrono>
@@ -1658,6 +1659,36 @@ struct neo_libs
 		return true;
 	}
 	// system.load(source, name) — arg1 = 컴파일할 소스 텍스트, arg2 = 청크 이름(현재 미사용).
+    static bool sys_jsonEncode(CNeoVMWorker* worker, VarInfo*, short args)
+    {
+        JsonResult result; std::string text;
+        if (args < 1 || args > 2 || (args == 2 && worker->GetStack(2)->GetType() != VAR_BOOL))
+            result.Fail("$", "jsonEncode expects value and optional bool sortKeys");
+        else JsonInternal::Encode(*worker->GetStack(1), text, result, args == 2 && worker->GetStack(2)->_bl);
+        worker->m_jsonError = result.error;
+        if (result.error.empty()) worker->Var_SetStringA(worker->GetStack(0), text);
+        else worker->ReturnValue();
+        return true;
+    }
+    static bool sys_jsonDecode(CNeoVMWorker* worker, VarInfo*, short args)
+    {
+        JsonResult result;
+        if (args != 1 || worker->GetStack(1)->GetType() != VAR_STRING)
+            result.Fail("$", "jsonDecode expects a string");
+        else {
+            const auto& text = worker->GetStack(1)->_str->_str;
+            JsonInternal::Decode(*worker, text.data(), text.size(), *worker->GetStack(0), result);
+        }
+        worker->m_jsonError = result.error;
+        if (!result.error.empty()) worker->ReturnValue();
+        return true;
+    }
+    static bool sys_jsonError(CNeoVMWorker* worker, VarInfo*, short args)
+    {
+        if (args != 0) return false;
+        worker->ReturnValue(worker->m_jsonError.c_str()); return true;
+    }
+	// system.load(source, name) — arg1 = 컴파일할 소스 텍스트, arg2 = 청크 이름(현재 미사용).
 	static bool sys_load(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 2) return false;
@@ -2132,6 +2163,9 @@ static void AddGlobalLibFun()
 	AddSystemFun("time", &neo_libs::sys_time, "int");
 	AddSystemFun("date", &neo_libs::sys_date, "string", "string format", "int time");
 	AddSystemFun("clock", &neo_libs::sys_clock, "float");
+	AddSystemFun("jsonEncode", &neo_libs::sys_jsonEncode, "var", "var value", "...");
+	AddSystemFun("jsonDecode", &neo_libs::sys_jsonDecode, "var", "string text");
+	AddSystemFun("jsonError", &neo_libs::sys_jsonError, "string");
 	AddSystemFun("array", &neo_libs::sys_array, "array", "var initial", "int size");
 	// 인자 순서는 sys_load 구현 기준: arg1=컴파일할 소스, arg2=청크 이름.
 	// name 은 현재 타입 검사만 하고 사용하지 않는다(진단 메시지/모듈 식별용 예약).

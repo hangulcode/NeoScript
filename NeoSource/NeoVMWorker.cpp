@@ -395,6 +395,7 @@ void CNeoVMWorker::Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue)
 
 bool CNeoVMWorker::Init(const NeoLoadVMParam* vparam, CNeoVMProgram* pProgram, int iStackSize)
 {
+	m_jsonError.clear();
 	if (pProgram == nullptr)
 		return false;
 

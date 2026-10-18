@@ -364,7 +364,7 @@ public:
 	NEOS_FORCEINLINE VarInfo(VAR_TYPE t) { _type = t; }
 	NEOS_FORCEINLINE VarInfo(int v) { _type = VAR_INT; _int = v; }
 
-	NEOS_FORCEINLINE VAR_TYPE GetType() { return _type; }
+	NEOS_FORCEINLINE VAR_TYPE GetType() const { return _type; }
 	// 풀 객체 + refcount 를 쓰는 타입인가. 대입/해제 때 참조 카운트를 만져야 하는지 판정.
 	NEOS_FORCEINLINE bool IsAllocType()
 	{
@@ -392,7 +392,7 @@ public:
 		return (_type == VAR_VEC);
 	}
 	// VAR_VEC 일 때만 유효. 다른 타입에서는 값이 의미 없으므로 IsVector() 로 먼저 거른다.
-	NEOS_FORCEINLINE int VectorComponentCount()
+	NEOS_FORCEINLINE int VectorComponentCount() const
 	{
 		return (_type == VAR_VEC) ? _vecCount : 0;
 	}

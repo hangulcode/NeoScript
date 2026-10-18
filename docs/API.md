@@ -228,6 +228,9 @@ Use `import system;` before calling these functions.
 
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
+| `system.jsonEncode(value, sortKeys = false)` | `string\|null` | UTF-8 JSON; optional recursive key sorting. Failure returns null; see `jsonError()` and [JSON rules](JSON.md) |
+| `system.jsonDecode(text: string)` | `var` | Strict int32/float32 JSON conversion; any supported root. Failure returns null |
+| `system.jsonError()` | `string` | Last JSON conversion error in this execution instance, including data path; empty on success |
 | `system.time()` | `int` | Unix seconds |
 | `system.date(format: string, time: int)` | `string` | `strftime` + `localtime`, output capped at 79 chars |
 | `system.clock()` | `float` | `clock() / CLOCKS_PER_SEC` in seconds. Use for deltas, not wall time |

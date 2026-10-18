@@ -1581,6 +1581,19 @@ void* CallContext::argObjectUserData(std::size_t i) const
         return static_cast<ObjectBinding*>(ud)->userData;
     return ud;
 }
+bool CallContext::argToJson(std::size_t index, std::string& text, JsonResult& result, bool sortKeys) const
+{
+    auto* value = CtxArgVar(Ctx(m_impl), index);
+    if (!value) { result = JsonResult(); text.clear(); return result.Fail("$", "missing JSON argument"); }
+    return JsonInternal::Encode(*value, text, result, sortKeys);
+}
+bool CallContext::retJson(StringView text, JsonResult& result, bool strictIntegers, bool requireMap)
+{
+    auto* c = Ctx(m_impl);
+    if (JsonInternal::Decode(*static_cast<CNeoVMWorker*>(c->worker), text.data(), text.size(),
+        *CtxRetVar(c), result, strictIntegers, requireMap)) return true;
+    retNull(); return false;
+}
 void CallContext::retInt(int32_t v) { CallContextImpl* c=Ctx(m_impl); c->worker->Var_SetInt(CtxRetVar(c), v); }
 void CallContext::retFloat(float v) { CallContextImpl* c=Ctx(m_impl); c->worker->Var_SetFloat(CtxRetVar(c), v); }
 void CallContext::retBool(bool v) { CallContextImpl* c=Ctx(m_impl); c->worker->Var_SetBool(CtxRetVar(c), v); }

@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include "NeoJson.h"
 //==============================================================================
 // NeoScript 공개 API v2 — Runtime / Program / Instance 3-개념 파사드
 //------------------------------------------------------------------------------
@@ -386,6 +387,9 @@ public:
     // 반환 슬롯(프로퍼티 get 이면 그 슬롯)에 바인딩된 네이티브 객체를 넣는다.
     // 예: Scene.Find 가 GameObject 를 반환. userData=그 객체의 eventID.
     void        retObject(ObjectType type, void* userData);
+    bool        argToJson(std::size_t index, std::string& text, JsonResult& result, bool sortKeys = false) const;
+    bool        retJson(StringView text, JsonResult& result, bool strictIntegers = true, bool requireMap = false);
+
     void        retNull();   // 반환/프로퍼티 슬롯을 None 으로(예: 못 찾은 객체 반환)
 
     // 이 네이티브 호출의 실패 사유를 남긴다. **호출 후 디스패처는 반드시 false 를 반환해야 한다**

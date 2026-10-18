@@ -61,6 +61,8 @@ if [[ -z "$LIB" ]]; then
 fi
 
 mkdir -p "$PLUGIN_DIR"
+cp "$REPO_ROOT/THIRD_PARTY_NOTICES.txt" "$REPO_ROOT/Unity/com.neoscript.unity/THIRD_PARTY_NOTICES.txt"
+cp "$REPO_ROOT/LICENSE" "$REPO_ROOT/Unity/com.neoscript.unity/LICENSE"
 cp "$LIB" "$PLUGIN_DIR/libNeoScriptUnity.a"
 
 echo "==> deployed $PLUGIN_DIR/libNeoScriptUnity.a"

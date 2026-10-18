@@ -31,9 +31,20 @@ shipped as a UPM package (`Unity/com.neoscript.unity`): compile and run scripts,
 objects to script, and slice long-running scripts across frames. Windows, Android and iOS.
 
 ### License
-	MIT license
-	NeoScript is free software.
-	The only requirement is that if you do use NeoScript, then you should give us credit by including the copyright notice somewhere in your product or its documentation.
+
+NeoScript is licensed under the [MIT license](LICENSE), Copyright (c) 2018-2026 NeoScript contributors.
+
+JSON parsing and serialization include **[yyjson 0.13.0](https://github.com/ibireme/yyjson)**,
+Copyright (c) 2020 YaoYuan, under the **MIT license**. The unmodified source is in
+[`ThirdParty/yyjson`](ThirdParty/yyjson); see its [license](ThirdParty/yyjson/LICENSE).
+Include [`THIRD_PARTY_NOTICES.txt`](THIRD_PARTY_NOTICES.txt) with redistributed builds
+that use the bundled JSON implementation. See [JSON API and build notes](docs/JSON.md).
+
+Redistributed copies must retain the applicable copyright and license notices.
+
+HTTP requests use the locally adapted [elnormous/HTTPRequest](https://github.com/elnormous/HTTPRequest)
+under the [Unlicense](ThirdParty/HTTPRequest/UNLICENSE). Its provenance and license are also
+recorded in `THIRD_PARTY_NOTICES.txt`.
 
 ### VS Code extension
 	- Extension source: Tools/vscode-neo-script

@@ -1,5 +1,6 @@
 {
   "name": "com.neoscript.unity",
+  "license": "MIT",
   "displayName": "NeoScript",
   "version": "0.1.0",
   "unity": "6000.0",

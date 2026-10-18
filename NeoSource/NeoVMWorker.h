@@ -319,6 +319,7 @@ private:
 
 public:
 	mRND m_sRand;
+	std::string m_jsonError;
 
 	virtual void Var_Move(VarInfo* v1, VarInfo* v2) override
 	{

@@ -24,6 +24,8 @@ set(NEOSCRIPT_C_ABI_SOURCES ${NEOSCRIPT_C_ABI_DIR}/NeoScriptC.cpp)
 
 set(NEOSCRIPT_SOURCES
     NeoSource/NeoExport.cpp
+    NeoSource/NeoJson.cpp
+    NeoSource/NeoJsonVendor.cpp
     NeoSource/NeoLib.cpp
     NeoSource/NeoParser.cpp
     NeoSource/NeoScriptShim.cpp
@@ -131,6 +133,12 @@ if(NEOSCRIPT_BUILD_SMOKE)
     target_link_libraries(neoscript_c_abi_smoke PRIVATE neoscript Threads::Threads)
 
     enable_testing()
+    add_executable(neoscript_json_regression Tests/json_regression.cpp)
+    target_link_libraries(neoscript_json_regression PRIVATE neoscript Threads::Threads)
+    if(MSVC)
+        target_compile_options(neoscript_json_regression PRIVATE /utf-8 /GR-)
+    endif()
+    add_test(NAME neoscript_json_regression COMMAND neoscript_json_regression)
     add_executable(neoscript_call_error_regression Tests/call_error_regression.cpp)
     target_link_libraries(neoscript_call_error_regression PRIVATE neoscript Threads::Threads)
     add_test(NAME neoscript_call_error_regression COMMAND neoscript_call_error_regression)
@@ -167,3 +175,16 @@ if(NEOSCRIPT_BUILD_SMOKE)
     add_test(NAME neoscript_language_regression COMMAND neoscript_language_regression)
     set_tests_properties(neoscript_language_regression PROPERTIES TIMEOUT 60)
 endif()
+
+# Keep licenses beside standalone host artifacts, including multi-config builds.
+foreach(json_host neoscript NeoScriptShared NeoScriptStatic)
+    if(TARGET ${json_host})
+        add_custom_command(TARGET ${json_host} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.txt"
+                "$<TARGET_FILE_DIR:${json_host}>/NEOSCRIPT_THIRD_PARTY_NOTICES.txt"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+                "$<TARGET_FILE_DIR:${json_host}>/NEOSCRIPT_LICENSE.txt")
+    endif()
+endforeach()
