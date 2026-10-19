@@ -7,6 +7,15 @@
 	- It was developed in Visual Studio 2026 C++.
 	- After some more features are added, port to C#
 
+### Author and contact
+
+- **Author:** JRoot
+- **Email:** [hangulcode@gmail.com](mailto:hangulcode@gmail.com)
+
+### NeoScript in action
+
+[Watch an example of NeoScript in use on YouTube](https://www.youtube.com/watch?v=Wi3EgWx38Vs).
+
 ### Script authoring guide
 
 **[docs/ScriptAuthoring.md](docs/ScriptAuthoring.md)** — the practical guide for people and AI
@@ -357,7 +366,7 @@ compiler cases) and `console.exe --v2smoke` (host API, closure lifetime, leak co
 closure/coroutine/runtime-module/async instance identity. Separately allocated containers
 with equal contents are unequal. Native objects compare by registered type and host handle,
 not by the allocation of their return wrappers. Reference map keys and set elements share
-these identity rules. See [reference comparison](docs/ScriptAuthoring.md#참조-비교와-참조를-키로-쓰기).
+these identity rules. See [reference comparison](docs/ScriptAuthoring.md#reference-comparison-and-reference-keys).
 Host `BindObject` rebinding replaces the global slot; existing aliases and map keys retain
 the previous object rather than changing identity in place.
 
