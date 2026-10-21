@@ -1,20 +1,102 @@
 ﻿<p align="center">
-  <img src="/docs/img/Neo_Icon.png" alt="My Image">
+  <img src="/docs/img/Neo_Icon.png" alt="NeoScript logo">
 </p>
 
-# Neo Script Documentation
-	- The grammar uses a C-like syntax, but it is somewhat similar to Lua script.
-	- It was developed in Visual Studio 2026 C++.
-	- After some more features are added, port to C#
+# NeoScript — scripting for C++ and Unity games
+
+Embed a C-like scripting language in your game. Keep native objects in C++ or C#,
+expose the methods and properties your scripts need, and drive game behavior from
+your own update loop. NeoScript includes a compiler, bytecode VM, and VS Code tooling.
+
+- **Native game objects:** bind C++ methods, properties, and script callbacks through
+  a public Runtime / Program / Instance API. Compile once, create independent instances.
+- **Game-oriented math and execution:** value-type vectors and quaternions,
+  coroutines, and host-controlled execution budgets for time-sliced work.
+- **Unity from C#:** a flat C ABI and UPM package for Windows, Android, and iOS.
+  See the [Unity setup and sample](docs/Unity.md).
+- **Debug your scripts:** VS Code completion, signature help, breakpoints, stepping,
+  call stacks, and variable inspection. See [extension setup](Tools/vscode-neo-script/README.md).
+
+**[Run the mini game host](Samples/minigame/README.md)** ·
+**[C++ embedding guide](docs/Embedding.md)** ·
+**[Write scripts](docs/ScriptAuthoring.md)** ·
+**[API reference](docs/API.md)** ·
+**[Releases](https://github.com/hangulcode/NeoScript/releases)**
+
+## Try it: two objects, one script
+
+![Recorded 3D positions from the native C++ mini game host](docs/img/minigame.png)
+
+*Offline replay of positions calculated by the C++ host; NeoScript runs natively.*
+
+The [mini game host](Samples/minigame) is a complete C++17 project with no engine
+checkout or graphics SDK required. Two native objects share compiled code, keep
+separate script state, and call this behavior every tick:
+
+```cpp
+import math;
+
+var elapsed = 0.0;
+fun OnUpdate(var dt)
+{
+    elapsed += dt;
+    GameObject.Position = math.Vector3(math.sin(elapsed), 0.0, 0.0);
+}
+GameObject.AddEvent("OnUpdate", OnUpdate);
+```
+
+`GameObject` is supplied by the example host; it is not a standard-library global.
+The full example also shows host logging, native argument validation, per-instance
+globals, and resource cleanup. It can record positions for an offline browser replay.
+
+From the repository root, with **CMake 3.21+ and a C++17 toolchain** installed:
+
+```sh
+cmake -S Samples/minigame -B build/minigame
+cmake --build build/minigame --config Release --parallel
+ctest --test-dir build/minigame -C Release --output-on-failure
+```
+
+```powershell
+# Windows: run the sample, then open build/minigame/bin/viewer.html
+.\build\minigame\bin\neoscript_minigame.exe --record build/minigame/bin/scene-data.js
+```
+
+```sh
+# Linux
+./build/minigame/bin/neoscript_minigame --record build/minigame/bin/scene-data.js
+```
+
+The test checks **one shared program, two independent instances, and 120 updates
+per instance**. Edit the `.ns` file beside the executable and rerun to change behavior.
+See the [sample guide](Samples/minigame/README.md) for expected output, source-script
+overrides, the offline viewer, and ZIP packaging. CI prepares a Windows ZIP artifact;
+release assets, when published, appear on the [releases page](https://github.com/hangulcode/NeoScript/releases).
+
+## See it in use
+
+[Watch NeoScript driving a game-engine tech demo](https://www.youtube.com/watch?v=Wi3EgWx38Vs).
+
+![NeoScript debugging tools](docs/img/code_debugger.png)
+
+## Choose your integration
+
+| Goal | Start here |
+| --- | --- |
+| See a small, complete C++ game host | [Mini game project](Samples/minigame/README.md) |
+| Embed into an existing C++ engine or application | [Embedding and lifetimes](docs/Embedding.md) |
+| Run from C# / Unity | [Unity setup, platforms, and sample](docs/Unity.md) |
+| Learn the language and standard library | [Script authoring](docs/ScriptAuthoring.md), [API reference](docs/API.md) |
+| Run standalone scripts or debug in VS Code | [Console runner](#console-runner), [VS Code setup](#vs-code-debugger-setup) |
+
+NeoScript is intended for hosts that want explicit native bindings, a C-like syntax,
+and control over per-instance execution. The benchmarks below describe specific
+workloads and their methodology; they are not a general performance guarantee.
 
 ### Author and contact
 
 - **Author:** JRoot
 - **Email:** [hangulcode@gmail.com](mailto:hangulcode@gmail.com)
-
-### NeoScript in action
-
-[Watch an example of NeoScript in use on YouTube](https://www.youtube.com/watch?v=Wi3EgWx38Vs).
 
 ### Script authoring guide
 
@@ -189,6 +271,7 @@ var moved = position + direction * 2.0;
 ```
 
 - Components can be read and written with indexing (`position[0]`, `position[1] = 5.0`).
+	- Component `+=`, `-=`, `*=`, and `/=` accept numeric operands and preserve value-copy semantics. `%=` is unsupported for float components.
 - Vector assignment is a value copy; assigning `b = a` does not alias `a`.
 - Vector arithmetic supports component-wise `+`, `-`, `*`, `/` and scalar multiplication/division.
 - `tosize(vector)` returns the component count. List operations (`append`, `insert`, `len`,

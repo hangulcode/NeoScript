@@ -13,6 +13,11 @@ if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 endif()
 
 option(NEOSCRIPT_BUILD_SMOKE "Build the cross-platform API smoke test" ON)
+set(NEOSCRIPT_EXAMPLES_DEFAULT ON)
+if(ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(NEOSCRIPT_EXAMPLES_DEFAULT OFF)
+endif()
+option(NEOSCRIPT_BUILD_EXAMPLES "Build the standalone game-host example" ${NEOSCRIPT_EXAMPLES_DEFAULT})
 option(NEOSCRIPT_BUILD_SHARED "Build the flat-C shared library (Unity / P/Invoke hosts)" OFF)
 option(NEOSCRIPT_BUILD_STATIC_C_ABI "Build the flat-C static library (iOS, where dynamic loading is not allowed)" OFF)
 
@@ -114,6 +119,10 @@ if(NEOSCRIPT_BUILD_STATIC_C_ABI)
     set_target_properties(NeoScriptStatic PROPERTIES OUTPUT_NAME NeoScriptUnity)
 endif()
 
+if(NEOSCRIPT_BUILD_SMOKE OR NEOSCRIPT_BUILD_EXAMPLES)
+    enable_testing()
+endif()
+
 if(NEOSCRIPT_BUILD_SMOKE)
     find_package(Threads REQUIRED)
 
@@ -174,6 +183,15 @@ if(NEOSCRIPT_BUILD_SMOKE)
     target_link_libraries(neoscript_language_regression PRIVATE neoscript Threads::Threads)
     add_test(NAME neoscript_language_regression COMMAND neoscript_language_regression)
     set_tests_properties(neoscript_language_regression PROPERTIES TIMEOUT 60)
+    add_executable(neoscript_vector_component_regression Tests/vector_component_regression.cpp)
+    target_link_libraries(neoscript_vector_component_regression PRIVATE neoscript Threads::Threads)
+    add_test(NAME neoscript_vector_component_regression COMMAND neoscript_vector_component_regression)
+    set_tests_properties(neoscript_vector_component_regression PROPERTIES TIMEOUT 60)
+endif()
+
+# A desktop host example; disabled by default for Android/iOS cross builds.
+if(NEOSCRIPT_BUILD_EXAMPLES)
+    add_subdirectory(Samples/minigame)
 endif()
 
 # Keep licenses beside standalone host artifacts, including multi-config builds.

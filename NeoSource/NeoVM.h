@@ -660,6 +660,7 @@ public:
 	void Var_SetBool(VarInfo* d, bool v);
 	// 벡터 저장소 확보. 대상이 이미 단독 소유 벡터면 재사용하고, 아니면 풀에서 새로 받는다.
 	VecInfo*	VecStoreFor(VarInfo* d, int count);
+	VecInfo*	VecWritable(VarInfo* d);
 	// 각 setter는 실제 성분 수만 받거나 저장한다. VecInfo의 남는 레인은 건드리지 않는다.
 	void Var_SetVec2(VarInfo* d, float x, float y);
 	void Var_SetVec3(VarInfo* d, float x, float y, float z);

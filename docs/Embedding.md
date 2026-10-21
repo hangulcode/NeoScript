@@ -1,5 +1,10 @@
 ﻿# Embedding NeoScript in a C++ host
 
+For a complete buildable project, start with the
+[mini game host](../Samples/minigame/README.md). It registers native objects,
+compiles once, creates two independent instances, dispatches script callbacks,
+and cleans up handles. The snippets below explain the API in more detail.
+
 The public host API (`NeoScript.h`) and the internal engine surface behind it.
 For the language see [../ReadMe.md](../ReadMe.md); for script-callable functions
 see [API.md](API.md).

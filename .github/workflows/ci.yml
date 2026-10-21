@@ -27,6 +27,34 @@ jobs:
         shell: pwsh
         run: .\x64\Release\console.exe --smoke
 
+      - name: Build and test with CMake
+        shell: pwsh
+        run: |
+          cmake -S . -B build -A x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build the standalone game-host example
+        shell: pwsh
+        run: |
+          cmake -S Samples/minigame -B build/minigame -A x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build/minigame --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build/minigame -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cpack --config build/minigame/CPackConfig.cmake -C Release -B build/packages
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload the Windows game-host ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: neoscript-minigame-windows-x64
+          path: build/packages/*.zip
+          if-no-files-found: error
+
   linux:
     name: Linux / ${{ matrix.compiler }} / smoke
     runs-on: ubuntu-24.04

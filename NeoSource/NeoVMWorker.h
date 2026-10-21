@@ -419,6 +419,7 @@ private:
 	void CltRead(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
 	void CltReadRare(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
 	bool ArrayModify(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue, eNOperation op);
+	bool VecComponentOp(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue, eNOperation op);
 	void TableRemove(VarInfo *pTable, VarInfo *pArray);
 	VarInfo* GetTableItem(VarInfo *pTable, VarInfo *pArray);
 	VarInfo* GetTableItemValid(VarInfo *pTable, VarInfo *pArray);

@@ -28,6 +28,14 @@ NEOS_FORCEINLINE VecInfo* INeoVMWorker::VecStoreFor(VarInfo* d, int count)
 	return p;
 }
 
+// 성분을 쓰기 직전의 저장소. 단독 소유(refcount 1)면 호출 없이 그대로 쓰고, 공유 중일 때만
+// VecCopyOnWrite 로 복제한다(값 의미론). 성분 쓰기마다 지나는 자리라 VecStoreFor 처럼 인라인.
+NEOS_FORCEINLINE VecInfo* INeoVMWorker::VecWritable(VarInfo* d)
+{
+	VecInfo* p = d->_vec;
+	return (p->_refCount <= 1) ? p : _pVM->VecCopyOnWrite(d);
+}
+
 NEOS_FORCEINLINE bool INeoVMWorker::Var_ReleaseVecFast(VarInfo* d)
 {
 	VecInfo* vec = d->_vec;

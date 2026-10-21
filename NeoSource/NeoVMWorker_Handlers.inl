@@ -399,6 +399,11 @@ NEOS_NOINLINE bool handle_TABLE_ADD2(const SVMOperation& OP) {
         ArrayModify(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_ADD2);
         return false;
     }
+    if (pTable->GetType() == VAR_VEC)
+    {
+        VecComponentOp(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_ADD2);
+        return false;
+    }
     VarInfo* pVarTemp = GetTableItemValid(pTable, GetVarPtr2(OP));
     if (pVarTemp) Add2(pVarTemp, GetVarPtr3(OP));
     return false;
@@ -409,6 +414,11 @@ NEOS_NOINLINE bool handle_TABLE_SUB2(const SVMOperation& OP) {
     if (pTable->GetType() == VAR_ARRAY)
     {
         ArrayModify(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_SUB2);
+        return false;
+    }
+    if (pTable->GetType() == VAR_VEC)
+    {
+        VecComponentOp(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_SUB2);
         return false;
     }
     VarInfo* pVarTemp = GetTableItemValid(pTable, GetVarPtr2(OP));
@@ -423,6 +433,11 @@ NEOS_NOINLINE bool handle_TABLE_MUL2(const SVMOperation& OP) {
         ArrayModify(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_MUL2);
         return false;
     }
+    if (pTable->GetType() == VAR_VEC)
+    {
+        VecComponentOp(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_MUL2);
+        return false;
+    }
     VarInfo* pVarTemp = GetTableItemValid(pTable, GetVarPtr2(OP));
     if (pVarTemp) Mul2(pVarTemp, GetVarPtr3(OP));
     return false;
@@ -435,6 +450,11 @@ NEOS_NOINLINE bool handle_TABLE_DIV2(const SVMOperation& OP) {
         ArrayModify(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_DIV2);
         return false;
     }
+    if (pTable->GetType() == VAR_VEC)
+    {
+        VecComponentOp(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_DIV2);
+        return false;
+    }
     VarInfo* pVarTemp = GetTableItemValid(pTable, GetVarPtr2(OP));
     if (pVarTemp) Div2(pVarTemp, GetVarPtr3(OP));
     return false;
@@ -445,6 +465,11 @@ NEOS_NOINLINE bool handle_TABLE_PERSENT2(const SVMOperation& OP) {
     if (pTable->GetType() == VAR_ARRAY)
     {
         ArrayModify(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_PERSENT2);
+        return false;
+    }
+    if (pTable->GetType() == VAR_VEC)
+    {
+        VecComponentOp(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_PERSENT2);
         return false;
     }
     VarInfo* pVarTemp = GetTableItemValid(pTable, GetVarPtr2(OP));

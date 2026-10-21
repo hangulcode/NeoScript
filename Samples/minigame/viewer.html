@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NeoScript · two objects, one script</title>
+<style>
+  :root { color-scheme: dark; font: 16px/1.6 system-ui, sans-serif; background: #101720; color: #e7edf6; }
+  body { max-width: 980px; margin: 48px auto; padding: 0 24px; }
+  h1 { font-size: clamp(24px, 4vw, 40px); margin-bottom: 8px; }
+  p { color: #acbbcd; }
+  canvas { width: 100%; background: #151f2b; border: 1px solid #304054; border-radius: 16px; }
+  button { font: inherit; padding: 6px 20px; border-radius: 8px; cursor: pointer; }
+  input { width: min(50vw, 480px); vertical-align: middle; }
+  code { color: #8de3bf; }
+</style>
+<body>
+<p>NEOSCRIPT / C++ EMBEDDING SAMPLE</p>
+<h1>Two objects. One compiled script.</h1>
+<p>Native C++ objects, independent script state, and a host-driven update callback.</p>
+<canvas id="scene" width="960" height="480" aria-label="Recorded 3D positions of Red and Blue"></canvas>
+<p><button id="play" type="button">Pause</button> <input id="time" aria-label="Frame" type="range" min="0" max="120" value="0"> <span id="frame"></span></p>
+<p id="status">To record a run, execute <code>neoscript_minigame --record scene-data.js</code>
+in this folder, then reopen this page. Windows: <code>.\neoscript_minigame.exe --record scene-data.js</code>.</p>
+<p>This page replays positions recorded by the C++ host. NeoScript executes in the native sample.</p>
+<script src="scene-data.js"></script>
+<script>
+  const data = window.neoScene;
+  const canvas = document.querySelector('#scene');
+  const ctx = canvas.getContext('2d');
+  const slider = document.querySelector('#time');
+  const button = document.querySelector('#play');
+  const label = document.querySelector('#frame');
+  const project = ([x, y, z]) => [480 + (x - z) * 94, 300 + (x + z) * 28 - y * 110];
+  const edge = (a, b) => { ctx.beginPath(); ctx.moveTo(...project(a)); ctx.lineTo(...project(b)); ctx.stroke(); };
+  let playing = true;
+  let start = performance.now();
+  if (data) {
+    document.querySelector('#status').textContent =
+      `${data.frames.length - 1} native simulation ticks · ${data.fps} ticks/second · no browser VM or graphics dependencies`;
+    slider.max = data.frames.length - 1;
+    button.onclick = () => {
+      playing = !playing;
+      button.textContent = playing ? 'Pause' : 'Play';
+      start = performance.now() - Number(slider.value) / data.fps * 1000;
+    };
+    slider.oninput = () => { playing = false; button.textContent = 'Play'; };
+  } else { button.disabled = true; slider.disabled = true; }
+  function draw(now) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = '#2b3c50'; ctx.lineWidth = 1;
+    for (let i = -3; i <= 3; ++i) {
+      edge([i, -0.55, -3], [i, -0.55, 3]);
+      edge([-3, -0.55, i], [3, -0.55, i]);
+    }
+    if (data) {
+      if (playing) slider.value = Math.floor((now - start) / 1000 * data.fps) % data.frames.length;
+      const frame = Number(slider.value);
+      label.textContent = `frame ${frame} / ${data.frames.length - 1}`;
+      data.frames[frame].forEach((position, index) => {
+        const color = index ? '#71b7ff' : '#ff826f';
+        ctx.strokeStyle = color + '55';
+        ctx.beginPath();
+        data.frames.slice(0, frame + 1).forEach((points, step) => {
+          const point = project(points[index]);
+          if (step) ctx.lineTo(...point); else ctx.moveTo(...point);
+        });
+        ctx.stroke();
+        const vertices = [];
+        for (let i = 0; i < 8; ++i)
+          vertices.push(position.map((v, axis) => v + ((i >> axis) & 1 ? 0.16 : -0.16)));
+        ctx.strokeStyle = color; ctx.lineWidth = 2;
+        for (let i = 0; i < 8; ++i) for (let axis = 0; axis < 3; ++axis)
+          if (!(i & (1 << axis))) edge(vertices[i], vertices[i | (1 << axis)]);
+        const [x, y] = project(position);
+        ctx.fillStyle = color; ctx.font = '15px system-ui';
+        ctx.fillText(`${index ? 'Blue' : 'Red'}  (${position.map(v => v.toFixed(2)).join(', ')})`, x - 28, y - 32);
+      });
+    }
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+</script>
+</body>
+</html>

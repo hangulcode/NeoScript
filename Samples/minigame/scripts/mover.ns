@@ -1,0 +1,26 @@
+import math;
+
+// Each instance owns these globals, even though the compiled code is shared.
+var origin = GameObject.Position;
+var elapsed = 0.0;
+var speed = 1.0;
+export var updates = 0;
+
+if (GameObject.Name == "Blue") speed = -0.5;
+
+fun OnUpdate(var dt)
+{
+    elapsed += dt;
+    updates += 1;
+
+    var position = GameObject.Position;
+    position[0] += speed * dt;
+    position[1] = origin[1] + math.sin(elapsed * 3.0) * 0.5;
+    GameObject.Position = position;
+
+    if (updates == 60)
+        Services.Log(GameObject.Name .. ": 60 updates in my own instance");
+}
+
+GameObject.AddEvent("OnUpdate", OnUpdate);
+Services.Log(GameObject.Name .. ": script attached");

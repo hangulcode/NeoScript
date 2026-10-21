@@ -51,6 +51,39 @@ NEOS_FORCEINLINE bool ArrayWriteValue(ArrayInfo* array, int index, VarInfo* valu
 // 디스패치 루프에 인라인되는 것은 list[int] / array[int] / map[string] 세 경로뿐이다.
 // 나머지(프로퍼티 맵, 벡터 성분 쓰기, 문자열 인덱서, 에러 포맷)는 CltInsertRare 로 밀어낸다 —
 // RunInternal 의 인라인 크기가 곧 성능이라(For/Add3 에서 실측) 드문 경로를 루프에 두지 않는다.
+// v[i] op= x (TABLE_ADD2 류의 VAR_VEC 가지). 인덱스 · 피연산자 검사를 먼저 끝내고 성분 float 에
+// 바로 연산한다. 실패 경로가 쓰기 전에 끝나므로 원본과 공유 사본은 그대로 남는다. 핸들러가 op 를
+// 상수로 넘기고 이 함수가 인라인되면 switch 는 사라진다. 성분은 float 라 %= 는 스칼라 float 와 같이 오류.
+NEOS_FORCEINLINE bool CNeoVMWorker::VecComponentOp(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue, eNOperation op)
+{
+	if (pKey->GetType() != VAR_INT || (unsigned)pKey->_int >= (unsigned)pClt->VectorComponentCount())
+	{
+		SetError(RTE_VECTOR_INDEX_WRITE);
+		return false;
+	}
+	if (op == NOP_TABLE_PERSENT2 || pValue->IsNumber() == false)
+	{
+		VarInfo component;
+		Var_SetFloat(&component, pClt->_vec->v[pKey->_int]);
+		SetErrorOperator(op == NOP_TABLE_ADD2 ? "+=" : op == NOP_TABLE_SUB2 ? "-=" : op == NOP_TABLE_MUL2 ? "*=" :
+			op == NOP_TABLE_DIV2 ? "/=" : "%=", &component, pValue);
+		return false;
+	}
+	const float s = (float)pValue->GetFloatNumber();
+	float& c = VecWritable(pClt)->v[pKey->_int];
+	switch (op)
+	{
+	case NOP_TABLE_ADD2: c += s; break;
+	case NOP_TABLE_SUB2: c -= s; break;
+	case NOP_TABLE_MUL2: c *= s; break;
+	case NOP_TABLE_DIV2: c /= s; break;
+	default:
+		SetError(RTE_UNKNOWN_OP);
+		return false;
+	}
+	return true;
+}
+
 NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue)
 {
 	const VAR_TYPE t = pClt->GetType();
@@ -96,13 +129,13 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 	}
 	else if (t == VAR_VEC)
 	{
-		// v[i] = x. 공유 중이면 VecCopyOnWrite 가 복제한다(값 의미론).
+		// v[i] = x. 공유 중이면 VecWritable 이 복제한다(값 의미론).
 		if (pKey->GetType() == VAR_INT && pValue->IsNumber())
 		{
 			unsigned idx = (unsigned)pKey->_int;
 			if (idx < (unsigned)pClt->VectorComponentCount())
 			{
-				GetVM()->VecCopyOnWrite(pClt)->v[idx] = (float)pValue->GetFloatNumber();
+				VecWritable(pClt)->v[idx] = (float)pValue->GetFloatNumber();
 				return;
 			}
 		}
