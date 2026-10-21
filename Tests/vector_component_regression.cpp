@@ -151,6 +151,9 @@ int main()
             "export fun Test(){Host.Position[0]+=2;var l=Host.Last;return l[0]==10 && l[1]==8 && l[2]==8;}",
             "export fun Test(){var before=Host.Reads;Host.Position[0]+=2;var mid=Host.Reads;Host.Position[1]=1;"
                 "return mid==before+1 && Host.Reads==before+2 && Host.Last[1]==1 && Host.Last[0]==8;}",
+            "export fun Test(){var before=Host.Reads;var v=(Host.Position[0]=2);var w=toint(Host.Position[1]+=1)+(Host.Position[2]*=2);"
+                "return v==2 && w==25 && Host.Reads==before+3 && Host.Last[2]==16;}",
+            "export fun Test(){var before=Host.Reads;(Host.Position[0])+=2;return Host.Reads==before+1 && Host.Last[0]==10;}",
             "export fun Test(){Host.Position[1]=5;var a=Host.Last;Host.Position[2]--;var b=Host.Last;return a[1]==5 && a[2]==8 && b[1]==8 && b[2]==7;}",
             "import math; export fun Test(){var l=[math.Vector3(8,8,8)];l[0][0]*=2;var m={};m.v=math.Vector2(8,8);m.v[1]-=3;return l[0][0]==16 && m.v[1]==5;}"
         };

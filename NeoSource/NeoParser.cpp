@@ -2398,9 +2398,21 @@ static bool ParsePostfixSelectors(SOperand& operand, CArchiveRdWC& ar, SFunction
 		const int iParentClt = blElement ? operand._iVar : INVALID_ERROR_PARSEJOB;
 		const int iParentKey = blElement ? operand._iArrayIndex : INVALID_ERROR_PARSEJOB;
 		const bool blParentKeyShort = blElement ? operand.IsHaveShort() : false;
+		// 괄호로 감싼 lvalue((a[i][0]) += v)도 쓰기 대상이다. 닫는 괄호는 건너뛰고 그 뒤 토큰을 본 뒤 전부 되돌린다.
+		// 호출 인자 F(a[i][0]) 뒤에는 대입 토큰이 올 수 없으니 괄호를 건너뛰어도 r-value 와 섞이지 않는다.
 		std::string next;
-		const TK_TYPE nextType = GetToken(ar, next);
+		TK_TYPE nextType = GetToken(ar, next);
+		int closeCount = 0;
+		std::string closeToken;
+		while (nextType == TK_R_SMALL)
+		{
+			closeToken = next;
+			++closeCount;
+			nextType = GetToken(ar, next);
+		}
 		ar.PushToken(nextType, next);
+		for (int c = 0; c < closeCount; ++c)
+			ar.PushToken(TK_R_SMALL, closeToken);
 		if (blElement && IsWriteToken(nextType))
 		{
 			operand = SOperand(funs._cur->AllocLocalTempVar());
@@ -3111,6 +3123,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			else
 			{
 				EnsureParentRead(ar, funs, a);
+				operands[iFindOffset]._lazyRead = false;   // a 는 사본. 대입 결과를 읽을 때 부모 READ 가 다시 나오지 않게
 				funs._cur->Push_Table_MASMDP(ar, NOP_FMOV2, a._iVar, a._iArrayIndex, b._iVar, false, a.IsHaveShort(), false);
 			}
 		}
@@ -3127,6 +3140,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				else
 				{
 					EnsureParentRead(ar, funs, a);
+					operands[iFindOffset]._lazyRead = false;   // a 는 사본. 대입 결과를 읽을 때 부모 READ 가 다시 나오지 않게
 					funs._cur->Push_Table_MASMDP(ar, op, a._iVar, a._iArrayIndex, b._iVar, false, a.IsHaveShort(), b.IsShort());
 					PushVecWriteBack(ar, funs, a);
 				}
@@ -3153,6 +3167,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 					int iTempOffset2 = funs._cur->AllocLocalTempVar();
 					funs._cur->Push_TableRead(ar, b._iVar, b._iArrayIndex, iTempOffset2, b.IsHaveShort());
 					EnsureParentRead(ar, funs, a);
+					operands[iFindOffset]._lazyRead = false;   // a 는 사본. 대입 결과를 읽을 때 부모 READ 가 다시 나오지 않게
 					funs._cur->Push_Table_MASMDP(ar, op, a._iVar, a._iArrayIndex, iTempOffset2, false, false, false);
 					PushVecWriteBack(ar, funs, a);
 				}
