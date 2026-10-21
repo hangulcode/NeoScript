@@ -187,6 +187,10 @@ if(NEOSCRIPT_BUILD_SMOKE)
     target_link_libraries(neoscript_vector_component_regression PRIVATE neoscript Threads::Threads)
     add_test(NAME neoscript_vector_component_regression COMMAND neoscript_vector_component_regression)
     set_tests_properties(neoscript_vector_component_regression PROPERTIES TIMEOUT 60)
+    add_executable(neoscript_selector_regression Tests/selector_regression.cpp)
+    target_link_libraries(neoscript_selector_regression PRIVATE neoscript Threads::Threads)
+    add_test(NAME neoscript_selector_regression COMMAND neoscript_selector_regression)
+    set_tests_properties(neoscript_selector_regression PROPERTIES TIMEOUT 120)
 endif()
 
 # A desktop host example; disabled by default for Android/iOS cross builds.

@@ -455,6 +455,7 @@ value semantics: storage may be shared internally, but modifying a component det
 | `v[0]`, `v[1]`, `v[2]`, `v[3]` | yes | read and write; out of range raises `vector index out of range` |
 | `v[i] += n`, `-=`, `*=`, `/=` | yes | integer index and int/float operand; preserves value-copy semantics; `%=` is unsupported for float components |
 | `list[i][j] = n`, `obj.Position[j] += n` | yes | a component write through a container element or a native property is written back to that element or property; through a native property it costs one getter and one setter per statement, so batch several components in a local |
+| `v[i]++`, `v[i]--`, `++v[i]`, `--v[i]` | yes | postfix returns the old value, prefix the updated value, including when the result is placed in a list/map literal |
 | `v.x`, `v.y`, `v.z`, `v.w` | **no** | named component access does not exist - index instead |
 | `a + b`, `a - b` | yes | component-wise; both sides need the same component count |
 | `a * scalar`, `a / scalar` | yes | component-wise |
@@ -463,6 +464,11 @@ value semantics: storage may be shared internally, but modifying a component det
 | `"" .. v` | yes | formats as `(3, 4)` / `(1, 2, 3)` / `(1, 0, 0, 0)` |
 | `tosize(v)` | yes | component count: `2` / `3` / `4` / `4` |
 | `foreach` | **no** | raises `foreach does not support vector` |
+
+An indexed assignment resolves its final containing element after its right-hand side has run.
+If that side changes an index variable or replaces the element, the write uses the current value,
+including the other vector components. Parentheses around the target do not change evaluation order.
+Index expressions containing calls run once; the write-back does not repeat those calls.
 
 `Quaternion` stores `w, x, y, z` in that order, so `q[0]` is `w`.
 

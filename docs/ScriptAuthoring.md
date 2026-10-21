@@ -725,6 +725,12 @@ print(math.MoveToward(0.0, 10.0, 2.0)); // 2
 - A component write through a container element or a native property (`list[0][1] = n`, `obj.Position[0] += n`)
   reaches that element or property. Through a native property each statement costs one getter and one setter,
   so when changing several components copy into a variable, modify it, then store it back once.
+- Indexed assignments resolve the final containing element after evaluating the right-hand side.
+  For example, if `F()` changes `i`, `list[i][0] += F()` reads and writes the element at the new `i`,
+  just like a single-level indexed assignment. Parentheses around the target do not change this rule.
+  An index computed by a function call is evaluated once; its result is not recomputed for write-back.
+- Postfix `++` and `--` return the previous component value, including inside list/map literals;
+  prefix forms return the updated value. For `var a = [v[0]++];`, `a[0]` receives the old value.
 - Addition and subtraction work on vectors with the same component count; multiplication and division support a vector and a scalar.
 - Vectors do not support `.len()`, list methods, or `foreach`. Use `tosize` for the component count.
 - `math.Quaternion(w, x, y, z)` takes **w first**. Its runtime type name is `"Vector4"`.
@@ -972,6 +978,7 @@ When documentation and behavior disagree, verify with a small script and determi
 | Recent language behavior and errors | [language_regression.cpp](../Tests/language_regression.cpp) |
 | Branches, returns, and null assignment | [control_flow_regression.cpp](../Tests/control_flow_regression.cpp) |
 | Selectors after calls | [postfix_regression.cpp](../Tests/postfix_regression.cpp) |
+| Indexed writes, evaluation order, and malformed selectors | [selector_regression.cpp](../Tests/selector_regression.cpp) |
 | Compiler capacity limits | [compiler_limits_regression.cpp](../Tests/compiler_limits_regression.cpp) |
 | Host calls, captures, and lifetimes | [Embedding.md](Embedding.md) |
 | Repository workflow, builds, and regressions | [AGENTS.md](../AGENTS.md) |

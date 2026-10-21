@@ -411,7 +411,9 @@ bool StringToNumber(ParsedNumber& out, const char* p)
 		uint32_t u32 = (uint32_t)uval;              // 32비트로 절단 후 int32 비트패턴
 		double   mag = (double)uval;
 		out.type = ParsedNumber::Type::Int;
-		out.intValue   = negative ? -(int32_t)u32 : (int32_t)u32;
+		// Apply the sign before converting the uint32 bit pattern to int32.
+		// Signed negation would overflow for -0x80000000.
+		out.intValue   = (int32_t)(negative ? 0u - u32 : u32);
 		out.floatValue = negative ? -mag : mag;
 		return true;
 	}
@@ -439,7 +441,8 @@ bool StringToNumber(ParsedNumber& out, const char* p)
 		return false;
 
 	out.type = ParsedNumber::Type::Int;
-	out.intValue   = negative ? -(int32_t)ival : (int32_t)ival;
+	const uint32_t bits = (uint32_t)ival;
+	out.intValue   = (int32_t)(negative ? 0u - bits : bits);
 	out.floatValue = negative ? -(double)ival : (double)ival;
 	return true;
 }

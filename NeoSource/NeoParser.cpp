@@ -158,14 +158,15 @@ struct SOperand
 	NS_FLOAT _floatLiteral;
 	int _intLiteral;
 	bool _readOnly = false;
-	// 사슬 lvalue 의 부모 원소. a[i][j] 에서 a[i] 를 임시 칸에 올릴 때 (a, i) 를 기억해 두고, 그 임시 칸에
-	// 쓰는 문장 뒤에 VEC_WRITEBACK 을 붙인다(임시 칸이 벡터면 사본에만 쓰이므로). 호출 결과 · 변수에는 없다.
-	int _iParentClt = INVALID_ERROR_PARSEJOB;
-	int _iParentKey = INVALID_ERROR_PARSEJOB;
-	bool _parentKeyShort = false;
-	// 쓰기 대상 사슬 원소: _iVar 임시 칸이 아직 비어 있고, 쓰기 직전에 READ _iVar = 부모[키] 를 낸다(EnsureParentRead).
-	// 우변이 인덱스 · 컨테이너 · 같은 원소를 바꿔도 읽기 · 쓰기 · 되써 넣기가 같은 원소를 보게 한다.
-	bool _lazyRead = false;
+	// Compile-time address of the immediate container, e.g. (list, i) for
+	// list[i][component]. Keep the address until a consumer chooses read/write.
+	// Parentheses never decide that choice, and no future tokens are inspected.
+	struct ContainerAccess
+	{
+		int owner = INVALID_ERROR_PARSEJOB;
+		int key = INVALID_ERROR_PARSEJOB;
+		bool loaded = false;
+	} _container;
 
 	SOperand()
 	{
@@ -186,10 +187,8 @@ struct SOperand
 	void Reset()
 	{
 		_readOnly = false;
+		_container = ContainerAccess();
 		_iVar = _iArrayIndex = INVALID_ERROR_PARSEJOB;
-		_iParentClt = _iParentKey = INVALID_ERROR_PARSEJOB;
-		_parentKeyShort = false;
-		_lazyRead = false;
 		_operandType = Data_NR;
 		_literalKind = Literal_None;
 		_floatLiteral = 0;
@@ -226,13 +225,36 @@ struct SOperand
 	inline bool IsIntLiteral() const { return _literalKind == Literal_Int; }
 };
 
-// 쓰기 대상 사슬 원소의 미뤄 둔 부모 읽기. 쓰기 방출 직전(우변 평가 뒤)에 한 번만 낸다.
-static void EnsureParentRead(CArchiveRdWC& ar, SFunctions& funs, SOperand& a)
+// Resolve the container at the consuming operation. Assignment calls this
+// after its RHS, just as a single-level indexed assignment does. R-value
+// boundaries resolve it before later arguments/operands can have side effects.
+static void ResolveContainer(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs)
 {
-	if (a._lazyRead == false)
-		return;
-	funs._cur->Push_TableRead(ar, a._iParentClt, a._iParentKey, a._iVar, a._parentKeyShort);
-	a._lazyRead = false;
+	auto& access = operand._container;
+	if (access.owner != INVALID_ERROR_PARSEJOB && !access.loaded)
+	{
+		funs._cur->Push_TableRead(ar, access.owner, access.key, operand._iVar, false);
+		access.loaded = true;
+	}
+}
+
+static void ReadElement(SOperand& operand, int dest, CArchiveRdWC& ar, SFunctions& funs)
+{
+	ResolveContainer(operand, ar, funs);
+	funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, dest, operand.IsHaveShort());
+}
+
+static void WriteElement(SOperand& operand, eNOperation op, int value, bool immediate,
+	CArchiveRdWC& ar, SFunctions& funs)
+{
+	ResolveContainer(operand, ar, funs);
+	funs._cur->Push_Table_MASMDP(ar, op, operand._iVar, operand._iArrayIndex,
+		value, false, operand.IsHaveShort(), immediate);
+	// Vector components live in a value copy; other containers already share
+	// their storage. A function cannot be stored in a vector component.
+	if (operand._container.owner != INVALID_ERROR_PARSEJOB && op != NOP_FMOV2)
+		funs._cur->Push_Table_MASMDP(ar, NOP_VEC_WRITEBACK,
+			operand._container.owner, operand._container.key, operand._iVar, false, false, false);
 }
 
 // 컴파일 전용 함수 ID와 컨테이너 선택자를 런타임 값 슬롯으로 확정한다.
@@ -240,7 +262,6 @@ static void EnsureParentRead(CArchiveRdWC& ar, SFunctions& funs, SOperand& a)
 // 값을 읽는 경계에서만 사용한다. 직접 CALL과 대입/인자의 FMOV 목적 슬롯은 유지한다.
 static void MaterializeValue(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs)
 {
-	EnsureParentRead(ar, funs, operand);
 	if (operand.IsFun())
 	{
 		const int value = funs._cur->AllocLocalTempVar();
@@ -250,18 +271,9 @@ static void MaterializeValue(SOperand& operand, CArchiveRdWC& ar, SFunctions& fu
 	else if (operand.IsArray())
 	{
 		const int value = funs._cur->AllocLocalTempVar();
-		funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, value, operand.IsHaveShort());
+		ReadElement(operand, value, ar, funs);
 		operand = SOperand(value);
 	}
-}
-
-// 사슬 lvalue(a[i][j], obj.P[j])에 쓴 뒤 부모 원소로 되써 넣는다. 실행 때 임시 칸이 벡터가 아니면
-// VEC_WRITEBACK 은 타입 비교 한 번으로 끝난다. 부모가 네이티브 객체면 프로퍼티 setter 가 불린다.
-static void PushVecWriteBack(CArchiveRdWC& ar, SFunctions& funs, const SOperand& a)
-{
-	if (a._iParentClt == INVALID_ERROR_PARSEJOB)
-		return;
-	funs._cur->Push_Table_MASMDP(ar, NOP_VEC_WRITEBACK, a._iParentClt, a._iParentKey, a._iVar, false, false, false);
 }
 
 // 숫자 리터럴을 값만 옮기는 자리(대입/인자 전달)에서는 상수 풀을 거치지 않고
@@ -1799,6 +1811,13 @@ bool IsTempVar(int iVar)
 }
 // (구 IsFloatNumberToken 제거: 정수/실수 판정은 StringToNumber → ParsedNumber.type 으로 통합됨)
 
+// Parsed integers already carry the int32 bit pattern (including 0x80000000).
+// Preserve that established wrap rule without negating INT_MIN in signed C++.
+static int NegateParsedInteger(int value)
+{
+	return value == INT_MIN ? value : -value;
+}
+
 // This Function No Error Because Try Only
 // return TK_NONE : error
 TK_TYPE Try_ParseIntNum(int& iResultInt, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, TK_TYPE tkTypeEnd1 = TK_UNUSED, TK_TYPE tkTypeEnd2 = TK_UNUSED, TK_TYPE tkTypeEnd3 = TK_UNUSED)
@@ -1822,7 +1841,7 @@ TK_TYPE Try_ParseIntNum(int& iResultInt, CArchiveRdWC& ar, SFunctions& funs, SVa
 		{
 			int inum = num.intValue;   // 정수 리터럴은 int32 로 정확히 파싱됨(0xffffffff→-1)
 			if (tkTypePre == TK_MINUS)
-				inum = -inum;
+				inum = NegateParsedInteger(inum);
 #if 0
 			if (IsShort(inum))
 			{
@@ -1859,6 +1878,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 == TK_L_SMALL)
 	{
+		ResolveContainer(iResultStack, ar, funs);
 		int iCallLine = ar.CurLine();
 		int iParamCount = 0;
 		// 각 인자를 평가하되, 호출-인자 슬롯(COMPILE_CALLARG_VAR_BEGIN)으로의 복사는
@@ -1891,6 +1911,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 					SetParserCompileError(ar, PCE_INVALID_CALL_ARGUMENT);
 					return false;
 				}
+				ResolveContainer(iTempVar, ar, funs);
 				argOperands.push_back(iTempVar);
 
 				// 인자 식 전체가 "임시변수에 쓰는 단일 op" 로 끝났으면 나중에
@@ -1942,7 +1963,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 					funs._cur->Push_OP2(ar, NOP_MOV, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg._iVar, arg.IsShort(), iCallLine);
 			}
 			else
-				funs._cur->Push_TableRead(ar, arg._iVar, arg._iArrayIndex, COMPILE_CALLARG_VAR_BEGIN + 1 + i, arg.IsHaveShort());
+				ReadElement(arg, COMPILE_CALLARG_VAR_BEGIN + 1 + i, ar, funs);
 		}
 		if (pFun != NULL)
 		{
@@ -2068,7 +2089,7 @@ bool ParseNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArch
 		{
 			int inum = num.intValue;   // 정수 리터럴은 int32 로 정확히(0xffffffff→-1)
 			if (tkTypePre == TK_MINUS)
-				inum = -inum;
+				inum = NegateParsedInteger(inum);
 			int staticVar = funs.AddStaticInt(inum);
 			iResultStack.SetIntLiteral(staticVar, inum);
 		}
@@ -2146,7 +2167,7 @@ TK_TYPE ParseListDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs,
 
 		iTempOffsetValue = INVALID_ERROR_PARSEJOB;
 
-		tkType1 = ParseShortCircuitLogic(false, iTempOffsetValue, ar, funs, vars, TK_COMMA, TK_R_ARRAY, TK_NONE, TK_NONE);
+		tkType1 = ParseShortCircuitLogic(true, iTempOffsetValue, ar, funs, vars, TK_COMMA, TK_R_ARRAY, TK_NONE, TK_NONE);
 
 		// 여기까지 왔으면 원소가 하나 있어야 한다(빈 리스트와 마지막 쉼표는 위에서 이미 걸렀다).
 		// 그런데 값 없이 돌아오면, 예전에는 조용히 break 해서 원소를 버리고 남은 토큰까지
@@ -2236,7 +2257,7 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 
 		iTempOffsetKey = iTempOffsetValue = INVALID_ERROR_PARSEJOB;
 
-		tkType1 = ParseShortCircuitLogic(false, iTempOffsetKey, ar, funs, vars, TK_COLON, TK_COMMA, TK_R_MIDDLE, TK_NONE);
+		tkType1 = ParseShortCircuitLogic(true, iTempOffsetKey, ar, funs, vars, TK_COLON, TK_COMMA, TK_R_MIDDLE, TK_NONE);
 
 		// 리스트 리터럴과 같은 이유로 침묵 break 를 없앤다(위 ParseListDef 주석 참고).
 		if (tkType1 == TK_NONE || iTempOffsetKey.IsInvalidValue() || iTempOffsetKey.IsNone())
@@ -2250,7 +2271,7 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 			// Resolve the key before parsing the value: that expression can mutate
 			// its source container. A container operand is not the element itself.
 			MaterializeValue(iTempOffsetKey, ar, funs);
-			tkType2 = ParseShortCircuitLogic(false, iTempOffsetValue, ar, funs, vars, TK_COMMA, TK_R_MIDDLE, TK_NONE, TK_NONE);
+			tkType2 = ParseShortCircuitLogic(true, iTempOffsetValue, ar, funs, vars, TK_COMMA, TK_R_MIDDLE, TK_NONE, TK_NONE);
 			if (tkType2 == TK_NONE)
 			{
 				return TK_NONE;
@@ -2331,14 +2352,6 @@ TK_TYPE ParseTable(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs, SVars&
 	return r;
 }
 
-// 선택자 뒤에 오면 그 원소가 쓰기 대상인 토큰: 대입 · 복합 대입 · 후위 증감.
-static bool IsWriteToken(TK_TYPE t)
-{
-	return t == TK_EQUAL || t == TK_PLUS_EQ || t == TK_MINUS_EQ || t == TK_MUL_EQ || t == TK_DIV_EQ ||
-		t == TK_PERCENT_EQ || t == TK_LSHIFT_EQ || t == TK_RSHIFT_EQ || t == TK_AND_EQ || t == TK_OR_EQ ||
-		t == TK_XOR_EQ || t == TK_PLUS2 || t == TK_MINUS2;
-}
-
 // 변수와 호출 결과의 후위 선택자를 같은 규칙으로 읽는다.
 // 호출 직후 끝내면 L().len(), callback()[i] 에서 다음 선택자가 식 밖에 남는다.
 static bool ParsePostfixSelectors(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
@@ -2389,42 +2402,18 @@ static bool ParsePostfixSelectors(SOperand& operand, CArchiveRdWC& ar, SFunction
 		}
 
 		MaterializeValue(key, ar, funs);
-		// 원소 뒤에 선택자가 더 오면 원소를 임시 칸에 올린다. 그 임시 칸이 벡터면 성분 쓰기가 사본에만
-		// 가므로, 어느 원소에서 왔는지 기억했다가 쓰기 뒤에 되써 넣는다(PushVecWriteBack).
-		// 바로 뒤가 대입 · 증감이면 이 원소가 쓰기 대상이다. 그때는 부모 읽기를 지금 내지 않고 쓰기 직전으로
-		// 미룬다(EnsureParentRead): 우변이 인덱스 · 컨테이너 · 같은 원소를 바꿔도 한 단계 대입처럼 쓰는 시점의
-		// 원소를 읽고 · 쓰고 · 되써 넣는다. 미리 읽은 값이 버려지지 않으니 프로퍼티 getter 도 한 번만 불린다.
-		const bool blElement = operand.IsArray();
-		const int iParentClt = blElement ? operand._iVar : INVALID_ERROR_PARSEJOB;
-		const int iParentKey = blElement ? operand._iArrayIndex : INVALID_ERROR_PARSEJOB;
-		const bool blParentKeyShort = blElement ? operand.IsHaveShort() : false;
-		// 괄호로 감싼 lvalue((a[i][0]) += v)도 쓰기 대상이다. 닫는 괄호는 건너뛰고 그 뒤 토큰을 본 뒤 전부 되돌린다.
-		// 호출 인자 F(a[i][0]) 뒤에는 대입 토큰이 올 수 없으니 괄호를 건너뛰어도 r-value 와 섞이지 않는다.
-		std::string next;
-		TK_TYPE nextType = GetToken(ar, next);
-		int closeCount = 0;
-		std::string closeToken;
-		while (nextType == TK_R_SMALL)
+		ResolveContainer(operand, ar, funs);
+		if (operand.IsArray())
 		{
-			closeToken = next;
-			++closeCount;
-			nextType = GetToken(ar, next);
-		}
-		ar.PushToken(nextType, next);
-		for (int c = 0; c < closeCount; ++c)
-			ar.PushToken(TK_R_SMALL, closeToken);
-		if (blElement && IsWriteToken(nextType))
-		{
-			operand = SOperand(funs._cur->AllocLocalTempVar());
-			operand._lazyRead = true;
+			SOperand child(funs._cur->AllocLocalTempVar());
+			child._container.owner = operand._iVar;
+			child._container.key = operand._iArrayIndex;
+			operand = child;
 		}
 		else
 			MaterializeValue(operand, ar, funs);
 		operand._iArrayIndex = key._iVar;
 		operand._operandType = key.IsShort() ? Data_TS : Data_TR;
-		operand._iParentClt = iParentClt;
-		operand._iParentKey = iParentKey;
-		operand._parentKeyShort = blParentKeyShort;
 		lastSelectorWasDot = type == TK_DOT;
 	}
 }
@@ -2800,6 +2789,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				blApperOperator = true;
 				break;
 			}
+			ResolveContainer(operands.back(), ar, funs);
 			operators.push_back(tkType1);
 			blApperOperator = false;
 			break;
@@ -2836,6 +2826,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				SetParserCompileError(ar, PCE_INVALID_OPERATOR, tk1.c_str());
 				return TK_NONE;
 			}
+			ResolveContainer(operands.back(), ar, funs);
 			operators.push_back(tkType1);
 			blApperOperator = false;
 			break;
@@ -2967,13 +2958,10 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				}
 				if (a.IsArray())
 				{
-					EnsureParentRead(ar, funs, a);
 					const int one = funs.AddStaticInt(1);
-					funs._cur->Push_Table_MASMDP(ar, tkType1 == TK_PLUS2 ? NOP_ADD2 : NOP_SUB2,
-						a._iVar, a._iArrayIndex, one, false, a.IsHaveShort(), false);
-					PushVecWriteBack(ar, funs, a);
+					WriteElement(a, tkType1 == TK_PLUS2 ? NOP_ADD2 : NOP_SUB2, one, false, ar, funs);
 					const int value = funs._cur->AllocLocalTempVar();
-					funs._cur->Push_TableRead(ar, a._iVar, a._iArrayIndex, value, a.IsHaveShort());
+					ReadElement(a, value, ar, funs);
 					a = SOperand(value);
 				}
 				else
@@ -3002,16 +2990,13 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				int iTempOffset2;
 				if (a.IsArray())
 				{
-					EnsureParentRead(ar, funs, a);
 					if (bReqReturn)
 					{
 						iTempOffset2 = funs._cur->AllocLocalTempVar();
-						funs._cur->Push_TableRead(ar, a._iVar, a._iArrayIndex, iTempOffset2, a.IsHaveShort());
+						ReadElement(a, iTempOffset2, ar, funs);
 					}
 					const int one = funs.AddStaticInt(1);
-					funs._cur->Push_Table_MASMDP(ar, tkType1 == TK_PLUS2 ? NOP_ADD2 : NOP_SUB2,
-						a._iVar, a._iArrayIndex, one, false, a.IsHaveShort(), false);
-					PushVecWriteBack(ar, funs, a);
+					WriteElement(a, tkType1 == TK_PLUS2 ? NOP_ADD2 : NOP_SUB2, one, false, ar, funs);
 				}
 				else
 				{
@@ -3096,7 +3081,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		auto op = TokenToOP(operators[iFindOffset], iTempPriority);
 		RemoveAt<TK_TYPE>(operators, iFindOffset);
 
-		auto a = operands[iFindOffset];
+		SOperand& a = operands[iFindOffset];
 		auto b = operands[iFindOffset + 1];
 
 		// 양쪽이 숫자 리터럴이면 여기서 계산해 버린다(런타임 연산이 통째로 사라진다).
@@ -3115,62 +3100,24 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			SetParserCompileError(ar, PCE_EXPECTED_LVALUE);
 			return TK_NONE;
 		}
-		if (b.IsFun() && op == NOP_MOV)
+		if (op < NOP_VAR_CLEAR)
 		{
-			// Keep direct function assignment free of an extra temporary and MOV.
-			if (a.IsArray() == false)
-				funs._cur->Push_OP2(ar, NOP_FMOV1, a._iVar, b._iVar, false);
+			if (b.IsFun() && op == NOP_MOV)
+			{
+				if (a.IsArray())
+					WriteElement(a, NOP_FMOV2, b._iVar, false, ar, funs);
+				else
+					funs._cur->Push_OP2(ar, NOP_FMOV1, a._iVar, b._iVar, false);
+			}
+			else if (op == NOP_MOV && !a.IsArray() && b.IsArray())
+				ReadElement(b, a._iVar, ar, funs); // retain READ-to-destination fusion
 			else
 			{
-				EnsureParentRead(ar, funs, a);
-				operands[iFindOffset]._lazyRead = false;   // a 는 사본. 대입 결과를 읽을 때 부모 READ 가 다시 나오지 않게
-				funs._cur->Push_Table_MASMDP(ar, NOP_FMOV2, a._iVar, a._iArrayIndex, b._iVar, false, a.IsHaveShort(), false);
-			}
-		}
-		else if (op < NOP_VAR_CLEAR)
-		{
-			if (b.IsFun()) MaterializeValue(b, ar, funs);
-			if (b.IsArray() == false)
-			{
-				if (a.IsArray() == false)
-				{
-					if (op != NOP_MOV || TryPushImmediate(ar, funs, a._iVar, b) == false)
-						funs._cur->Push_OP2(ar, op, a._iVar, b._iVar, b.IsShort());
-				}
-				else
-				{
-					EnsureParentRead(ar, funs, a);
-					operands[iFindOffset]._lazyRead = false;   // a 는 사본. 대입 결과를 읽을 때 부모 READ 가 다시 나오지 않게
-					funs._cur->Push_Table_MASMDP(ar, op, a._iVar, a._iArrayIndex, b._iVar, false, a.IsHaveShort(), b.IsShort());
-					PushVecWriteBack(ar, funs, a);
-				}
-			}
-			else
-			{
-				if (a.IsArray() == false)
-				{
-					if (op == NOP_MOV)
-					{
-						funs._cur->Push_TableRead(ar, b._iVar, b._iArrayIndex, a._iVar, b.IsHaveShort());
-					}
-					else
-					{
-						// 복합 대입은 우변 컨테이너 값을 목적 변수에 바로 읽으면
-						// 기존 값이 소실된다. 임시값을 거쳐 a += table[key] 등을 계산한다.
-						int iTempOffset2 = funs._cur->AllocLocalTempVar();
-						funs._cur->Push_TableRead(ar, b._iVar, b._iArrayIndex, iTempOffset2, b.IsHaveShort());
-						funs._cur->Push_OP2(ar, op, a._iVar, iTempOffset2, false);
-					}
-				}
-				else
-				{
-					int iTempOffset2 = funs._cur->AllocLocalTempVar();
-					funs._cur->Push_TableRead(ar, b._iVar, b._iArrayIndex, iTempOffset2, b.IsHaveShort());
-					EnsureParentRead(ar, funs, a);
-					operands[iFindOffset]._lazyRead = false;   // a 는 사본. 대입 결과를 읽을 때 부모 READ 가 다시 나오지 않게
-					funs._cur->Push_Table_MASMDP(ar, op, a._iVar, a._iArrayIndex, iTempOffset2, false, false, false);
-					PushVecWriteBack(ar, funs, a);
-				}
+				MaterializeValue(b, ar, funs); // complete the RHS before resolving the destination
+				if (a.IsArray())
+					WriteElement(a, op, b._iVar, b.IsShort(), ar, funs);
+				else if (op != NOP_MOV || !TryPushImmediate(ar, funs, a._iVar, b))
+					funs._cur->Push_OP2(ar, op, a._iVar, b._iVar, b.IsShort());
 			}
 		}
 		else
@@ -3193,6 +3140,8 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 	}
 
 	sResultStack = operands[0];
+	if (!bReqReturn && r == TK_SEMICOLON)
+		ResolveContainer(sResultStack, ar, funs); // discarded expression, not a parenthesized lvalue
 	return r;
 }
 
@@ -3847,7 +3796,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
 			funs._cur->Push_OP2(ar, NOP_MOV, i_Begin, iTempVar._iVar, false);
 		else
-			funs._cur->Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_Begin, iTempVar.IsHaveShort());
+			ReadElement(iTempVar, i_Begin, ar, funs);
 		//funs._cur->Push_OP(ar, NOP_VERIFY_TYPE, i_Begin, VAR_INT, 0);
 		funs._cur->Push_OP(ar, NOP_CHANGE_INT, i_Begin, 0, 0);
 	}
@@ -3881,7 +3830,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
 			funs._cur->Push_OP2(ar, NOP_MOV, i_End, iTempVar._iVar, false);
 		else
-			funs._cur->Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_End, iTempVar.IsHaveShort());
+			ReadElement(iTempVar, i_End, ar, funs);
 		//funs._cur->Push_OP(ar, NOP_VERIFY_TYPE, i_End, VAR_INT, 0);
 		funs._cur->Push_OP(ar, NOP_CHANGE_INT, i_End, 0, 0);
 	}
@@ -3918,7 +3867,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 			if (iTempVar._iArrayIndex == INVALID_ERROR_PARSEJOB)
 				funs._cur->Push_OP2(ar, NOP_MOV, i_Step, iTempVar._iVar, false);
 			else
-				funs._cur->Push_TableRead(ar, iTempVar._iVar, iTempVar._iArrayIndex, i_Step, iTempVar.IsHaveShort());
+				ReadElement(iTempVar, i_Step, ar, funs);
 			//funs._cur->Push_OP(ar, NOP_VERIFY_TYPE, i_Step, VAR_INT, 0);
 			funs._cur->Push_OP(ar, NOP_CHANGE_INT, i_Step, 0, 0);
 		}
@@ -4114,7 +4063,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	if (operand.IsArray())
 	{
 		iTable = AddLocalVar(ar, funs, vars);
-		funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, iTable, operand.IsHaveShort());
+		ReadElement(operand, iTable, ar, funs);
 	}
 	else if (IsTempVar(operand._iVar))
 	{
@@ -4659,7 +4608,7 @@ static bool ParseConstPrimary(SConstValue& out, CArchiveRdWC& ar, SFunctions& fu
 	case TK_MINUS:
 		if (false == ParseConstPrimary(out, ar, funs))
 			return false;
-		if (out.type == NEO_DEFINE_TOKEN_INT) { out.i = -out.i; return true; }
+		if (out.type == NEO_DEFINE_TOKEN_INT) { out.i = NegateParsedInteger(out.i); return true; }
 		if (out.type == NEO_DEFINE_TOKEN_FLOAT) { out.f = -out.f; return true; }
 		SetParserCompileError(ar, PCE_CONST_INVALID_OP, "-");
 		return false;
