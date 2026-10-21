@@ -466,6 +466,23 @@ int main()
         "var a=[3,2,1]; var hold=a; fun Compare(var x,var y){a=null;return x<y;} export fun Test(){hold.sort(Compare);return a==null && hold[0]==1 && hold[2]==3;}",
         "fun Make(){return [{\"x\":7}];} export fun Test(){return Make().remove(0).x==7;}",
         "var t={}; t.fun=3; var x=t.fun; export fun Test(){return x==3;}",
+        "import math; export fun Test(){var l=[math.Vector3(1,2,3)];l[0][1]=7;l[0][2]+=10;l[0][0]++;--l[0][1];return l[0][0]==2 && l[0][1]==6 && l[0][2]==13;}",
+        "import math; export fun Test(){var m={};m.k=math.Vector3(1,2,3);m.k[0]=9;m.k[1]-=2;return m.k[0]==9 && m.k[1]==0 && m.k[2]==3;}",
+        "import math; export fun Test(){var a=[[math.Vector2(1,2)]];a[0][0][1]=5;a[0][0][0]*=4;return a[0][0][0]==4 && a[0][0][1]==5;}",
+        "import math; export fun Test(){var v=math.Vector3(1,2,3);var l=[v];l[0][0]=9;return v[0]==1 && l[0][0]==9;}",
+        "import math; export fun Test(){var l=[math.Vector3(1,2,3)];var t=l[0];t[0]=9;return l[0][0]==1 && t[0]==9;}",
+        "import math; export fun Test(){var l=[math.Vector3(1,2,3)];var r=l[0][1]++;var s=++l[0][2];return r==2 && s==4 && l[0][1]==3 && l[0][2]==4;}",
+        "export fun Test(){var q=[[1,2,3]];q[0][1]=7;q[0][2]+=1;var m={};m.k=[5];m.k[0]--;return q[0][1]==7 && q[0][2]==4 && m.k[0]==4;}",
+        "import math; var g=[math.Vector3(0,0,0)]; export fun Test(){g[0][2]=4;g[0][2]*=2;return g[0][2]==8;}",
+        "import math; fun Make(){return [math.Vector3(1,2,3)];} export fun Test(){var l=Make();l[0][0]=5;return l[0][0]==5;}",
+        "import math; var i=0; var a=[math.Vector3(1,2,3),math.Vector3(100,200,300)]; fun F(){i=1;return 10;}"
+            "export fun Test(){a[i][0]+=F();return a[0][0]==1 && a[1][0]==110 && i==1;}",
+        "import math; var k=[math.Vector3(1,2,3)]; var orig=k; var other=[math.Vector3(7,7,7)]; fun H(){k=other;return 10;}"
+            "export fun Test(){k[0][0]+=H();return orig[0][0]==1 && other[0][0]==17;}",
+        "import math; export fun Test(){var b=[math.Vector3(1,2,3)];b[0][0]=++b[0][1];return b[0][0]==3 && b[0][1]==3 && b[0][2]==3;}",
+        "import math; var fs=0; var gs=0; var l=[math.Vector3(0,0,0),math.Vector3(0,0,0)]; fun F(){fs++;return 1;} fun G(){gs=fs*10+1;return 5;}"
+            "export fun Test(){l[F()][2]=G();return l[1][2]==5 && l[0][2]==0 && fs==1 && gs==11;}",
+        "import math; export fun Test(){var l=[math.Vector3(1,2,3)];var m={};m.v=l[0];m.v[0]=l[0][1]++;return m.v[0]==2 && l[0][1]==3 && l[0][0]==1;}",
         "var t={}; t.fun=Later; export fun Test(){return t.fun()==3;} fun Later(){return 3;}",
         "export fun Test(){return Make().fun[0]==3;} fun Make(){return {\"fun\":[3]};}",
         "import memberfun; export fun Test(){return memberfun.Read()==3;}",

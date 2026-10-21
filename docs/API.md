@@ -454,7 +454,7 @@ value semantics: storage may be shared internally, but modifying a component det
 | :--- | :--- | :--- |
 | `v[0]`, `v[1]`, `v[2]`, `v[3]` | yes | read and write; out of range raises `vector index out of range` |
 | `v[i] += n`, `-=`, `*=`, `/=` | yes | integer index and int/float operand; preserves value-copy semantics; `%=` is unsupported for float components |
-| `list[i][j] = n`, `obj.Position[j] += n` | **no** | a component write through a container element or a native property changes a temporary copy and is lost; copy into a variable, modify, then store back |
+| `list[i][j] = n`, `obj.Position[j] += n` | yes | a component write through a container element or a native property is written back to that element or property; through a native property it costs one getter and one setter per statement, so batch several components in a local |
 | `v.x`, `v.y`, `v.z`, `v.w` | **no** | named component access does not exist - index instead |
 | `a + b`, `a - b` | yes | component-wise; both sides need the same component count |
 | `a * scalar`, `a / scalar` | yes | component-wise |

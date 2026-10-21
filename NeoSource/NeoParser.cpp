@@ -158,6 +158,14 @@ struct SOperand
 	NS_FLOAT _floatLiteral;
 	int _intLiteral;
 	bool _readOnly = false;
+	// 사슬 lvalue 의 부모 원소. a[i][j] 에서 a[i] 를 임시 칸에 올릴 때 (a, i) 를 기억해 두고, 그 임시 칸에
+	// 쓰는 문장 뒤에 VEC_WRITEBACK 을 붙인다(임시 칸이 벡터면 사본에만 쓰이므로). 호출 결과 · 변수에는 없다.
+	int _iParentClt = INVALID_ERROR_PARSEJOB;
+	int _iParentKey = INVALID_ERROR_PARSEJOB;
+	bool _parentKeyShort = false;
+	// 쓰기 대상 사슬 원소: _iVar 임시 칸이 아직 비어 있고, 쓰기 직전에 READ _iVar = 부모[키] 를 낸다(EnsureParentRead).
+	// 우변이 인덱스 · 컨테이너 · 같은 원소를 바꿔도 읽기 · 쓰기 · 되써 넣기가 같은 원소를 보게 한다.
+	bool _lazyRead = false;
 
 	SOperand()
 	{
@@ -179,6 +187,9 @@ struct SOperand
 	{
 		_readOnly = false;
 		_iVar = _iArrayIndex = INVALID_ERROR_PARSEJOB;
+		_iParentClt = _iParentKey = INVALID_ERROR_PARSEJOB;
+		_parentKeyShort = false;
+		_lazyRead = false;
 		_operandType = Data_NR;
 		_literalKind = Literal_None;
 		_floatLiteral = 0;
@@ -215,11 +226,21 @@ struct SOperand
 	inline bool IsIntLiteral() const { return _literalKind == Literal_Int; }
 };
 
+// 쓰기 대상 사슬 원소의 미뤄 둔 부모 읽기. 쓰기 방출 직전(우변 평가 뒤)에 한 번만 낸다.
+static void EnsureParentRead(CArchiveRdWC& ar, SFunctions& funs, SOperand& a)
+{
+	if (a._lazyRead == false)
+		return;
+	funs._cur->Push_TableRead(ar, a._iParentClt, a._iParentKey, a._iVar, a._parentKeyShort);
+	a._lazyRead = false;
+}
+
 // 컴파일 전용 함수 ID와 컨테이너 선택자를 런타임 값 슬롯으로 확정한다.
 // 함수 ID를 일반 op에 그대로 넘기면 같은 번호의 변수 슬롯을 읽게 된다.
 // 값을 읽는 경계에서만 사용한다. 직접 CALL과 대입/인자의 FMOV 목적 슬롯은 유지한다.
 static void MaterializeValue(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs)
 {
+	EnsureParentRead(ar, funs, operand);
 	if (operand.IsFun())
 	{
 		const int value = funs._cur->AllocLocalTempVar();
@@ -232,6 +253,15 @@ static void MaterializeValue(SOperand& operand, CArchiveRdWC& ar, SFunctions& fu
 		funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, value, operand.IsHaveShort());
 		operand = SOperand(value);
 	}
+}
+
+// 사슬 lvalue(a[i][j], obj.P[j])에 쓴 뒤 부모 원소로 되써 넣는다. 실행 때 임시 칸이 벡터가 아니면
+// VEC_WRITEBACK 은 타입 비교 한 번으로 끝난다. 부모가 네이티브 객체면 프로퍼티 setter 가 불린다.
+static void PushVecWriteBack(CArchiveRdWC& ar, SFunctions& funs, const SOperand& a)
+{
+	if (a._iParentClt == INVALID_ERROR_PARSEJOB)
+		return;
+	funs._cur->Push_Table_MASMDP(ar, NOP_VEC_WRITEBACK, a._iParentClt, a._iParentKey, a._iVar, false, false, false);
 }
 
 // 숫자 리터럴을 값만 옮기는 자리(대입/인자 전달)에서는 상수 풀을 거치지 않고
@@ -658,6 +688,7 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_JMP_RANGE_OUTSIDE, 3);
 	OP_STR1(NOP_JMP_RANGE_INSIDE_L, 3);
 	OP_STR1(NOP_JMP_RANGE_OUTSIDE_L, 3);
+	OP_STR1(NOP_VEC_WRITEBACK, 3);
 
 	if (blError)
 	{
@@ -2300,6 +2331,14 @@ TK_TYPE ParseTable(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs, SVars&
 	return r;
 }
 
+// 선택자 뒤에 오면 그 원소가 쓰기 대상인 토큰: 대입 · 복합 대입 · 후위 증감.
+static bool IsWriteToken(TK_TYPE t)
+{
+	return t == TK_EQUAL || t == TK_PLUS_EQ || t == TK_MINUS_EQ || t == TK_MUL_EQ || t == TK_DIV_EQ ||
+		t == TK_PERCENT_EQ || t == TK_LSHIFT_EQ || t == TK_RSHIFT_EQ || t == TK_AND_EQ || t == TK_OR_EQ ||
+		t == TK_XOR_EQ || t == TK_PLUS2 || t == TK_MINUS2;
+}
+
 // 변수와 호출 결과의 후위 선택자를 같은 규칙으로 읽는다.
 // 호출 직후 끝내면 L().len(), callback()[i] 에서 다음 선택자가 식 밖에 남는다.
 static bool ParsePostfixSelectors(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
@@ -2350,9 +2389,30 @@ static bool ParsePostfixSelectors(SOperand& operand, CArchiveRdWC& ar, SFunction
 		}
 
 		MaterializeValue(key, ar, funs);
-		MaterializeValue(operand, ar, funs);
+		// 원소 뒤에 선택자가 더 오면 원소를 임시 칸에 올린다. 그 임시 칸이 벡터면 성분 쓰기가 사본에만
+		// 가므로, 어느 원소에서 왔는지 기억했다가 쓰기 뒤에 되써 넣는다(PushVecWriteBack).
+		// 바로 뒤가 대입 · 증감이면 이 원소가 쓰기 대상이다. 그때는 부모 읽기를 지금 내지 않고 쓰기 직전으로
+		// 미룬다(EnsureParentRead): 우변이 인덱스 · 컨테이너 · 같은 원소를 바꿔도 한 단계 대입처럼 쓰는 시점의
+		// 원소를 읽고 · 쓰고 · 되써 넣는다. 미리 읽은 값이 버려지지 않으니 프로퍼티 getter 도 한 번만 불린다.
+		const bool blElement = operand.IsArray();
+		const int iParentClt = blElement ? operand._iVar : INVALID_ERROR_PARSEJOB;
+		const int iParentKey = blElement ? operand._iArrayIndex : INVALID_ERROR_PARSEJOB;
+		const bool blParentKeyShort = blElement ? operand.IsHaveShort() : false;
+		std::string next;
+		const TK_TYPE nextType = GetToken(ar, next);
+		ar.PushToken(nextType, next);
+		if (blElement && IsWriteToken(nextType))
+		{
+			operand = SOperand(funs._cur->AllocLocalTempVar());
+			operand._lazyRead = true;
+		}
+		else
+			MaterializeValue(operand, ar, funs);
 		operand._iArrayIndex = key._iVar;
 		operand._operandType = key.IsShort() ? Data_TS : Data_TR;
+		operand._iParentClt = iParentClt;
+		operand._iParentKey = iParentKey;
+		operand._parentKeyShort = blParentKeyShort;
 		lastSelectorWasDot = type == TK_DOT;
 	}
 }
@@ -2895,9 +2955,11 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				}
 				if (a.IsArray())
 				{
+					EnsureParentRead(ar, funs, a);
 					const int one = funs.AddStaticInt(1);
 					funs._cur->Push_Table_MASMDP(ar, tkType1 == TK_PLUS2 ? NOP_ADD2 : NOP_SUB2,
 						a._iVar, a._iArrayIndex, one, false, a.IsHaveShort(), false);
+					PushVecWriteBack(ar, funs, a);
 					const int value = funs._cur->AllocLocalTempVar();
 					funs._cur->Push_TableRead(ar, a._iVar, a._iArrayIndex, value, a.IsHaveShort());
 					a = SOperand(value);
@@ -2928,6 +2990,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				int iTempOffset2;
 				if (a.IsArray())
 				{
+					EnsureParentRead(ar, funs, a);
 					if (bReqReturn)
 					{
 						iTempOffset2 = funs._cur->AllocLocalTempVar();
@@ -2936,6 +2999,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 					const int one = funs.AddStaticInt(1);
 					funs._cur->Push_Table_MASMDP(ar, tkType1 == TK_PLUS2 ? NOP_ADD2 : NOP_SUB2,
 						a._iVar, a._iArrayIndex, one, false, a.IsHaveShort(), false);
+					PushVecWriteBack(ar, funs, a);
 				}
 				else
 				{
@@ -3045,7 +3109,10 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			if (a.IsArray() == false)
 				funs._cur->Push_OP2(ar, NOP_FMOV1, a._iVar, b._iVar, false);
 			else
+			{
+				EnsureParentRead(ar, funs, a);
 				funs._cur->Push_Table_MASMDP(ar, NOP_FMOV2, a._iVar, a._iArrayIndex, b._iVar, false, a.IsHaveShort(), false);
+			}
 		}
 		else if (op < NOP_VAR_CLEAR)
 		{
@@ -3059,7 +3126,9 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				}
 				else
 				{
+					EnsureParentRead(ar, funs, a);
 					funs._cur->Push_Table_MASMDP(ar, op, a._iVar, a._iArrayIndex, b._iVar, false, a.IsHaveShort(), b.IsShort());
+					PushVecWriteBack(ar, funs, a);
 				}
 			}
 			else
@@ -3083,7 +3152,9 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				{
 					int iTempOffset2 = funs._cur->AllocLocalTempVar();
 					funs._cur->Push_TableRead(ar, b._iVar, b._iArrayIndex, iTempOffset2, b.IsHaveShort());
+					EnsureParentRead(ar, funs, a);
 					funs._cur->Push_Table_MASMDP(ar, op, a._iVar, a._iArrayIndex, iTempOffset2, false, false, false);
+					PushVecWriteBack(ar, funs, a);
 				}
 			}
 		}
@@ -5306,19 +5377,21 @@ static int HoistableOperandMask(eNOperation op)
 	case NOP_MOV:			// n1 = dest
 	case NOP_MOV_MINUS:		// n1 = dest
 	case NOP_ADD2:			// n1 = dest 겸 src
-	case NOP_TOINT:			// n1 = dest
 		return 0x2;
 	case NOP_ADD3:	case NOP_SUB3:	case NOP_MUL3:
 	case NOP_AND:
-	case NOP_STR_ADD:
-	case NOP_JMP_LESS:		case NOP_JMP_LESS_EQ:
 	case NOP_JMP_GREAT:		case NOP_JMP_GREAT_EQ:
+	case NOP_JMP_LESS:		case NOP_JMP_LESS_EQ:
 	case NOP_JMP_EQUAL2:	case NOP_JMP_NEQUAL:
+	case NOP_STR_ADD:
 		return 0x2 | 0x4;
-	case NOP_CLT_MOV:		// n1 = 컨테이너, n2 = key, n3 = value
-		return 0x2 | 0x4;
+	case NOP_TOINT:			// n1 = dest
+		return 0x2;
 	case NOP_CLT_READ:		// n1 = 컨테이너, n2 = key, n3 = dest
 		return 0x2;
+	case NOP_CLT_MOV:		// n1 = 컨테이너, n2 = key, n3 = value
+	case NOP_VEC_WRITEBACK:	// n1 = 부모 컨테이너, n2 = key, n3 = 되써 넣을 임시 칸
+		return 0x2 | 0x4;
 	default:
 		return 0;
 	}

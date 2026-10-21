@@ -257,6 +257,10 @@ enum eNOperation : OpType
 	// native 호출 프레임 없이 인자 슬롯에서 직접 벡터를 만든다(n2=인자수=성분수, n3=결과).
 	// 성분 수가 타입이 아니라 데이터라 op 하나로 충분하다(넷을 두면 디스패치 루프만 커진다).
 	NOP_VEC_MAKE,
+	// 사슬 lvalue(a[i][j] = v, obj.P[j] += v) 뒤에 컴파일러가 붙이는 되써 넣기.
+	// n1 = 부모 컨테이너, n2 = 부모 키, n3 = 원소를 읽어 둔 임시 칸. 임시 칸이 VAR_VEC 일 때만
+	// 부모 원소에 다시 넣는다(copy-on-write 로 갈라진 사본을 돌려놓기). 참조 타입은 할 일이 없다.
+	NOP_VEC_WRITEBACK,
 
 
 	// 기존 opcode 값을 보존하려고 끝에 추가한 READ 특수화.
@@ -269,7 +273,6 @@ enum eNOperation : OpType
 	NOP_JMP_RANGE_OUTSIDE,
 	NOP_JMP_RANGE_INSIDE_L,
 	NOP_JMP_RANGE_OUTSIDE_L,
-
 	NOP_NONE,
 	NOP_ERROR,
 

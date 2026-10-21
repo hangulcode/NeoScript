@@ -723,7 +723,8 @@ print(math.MoveToward(0.0, 10.0, 2.0)); // 2
 - Component `+=`, `-=`, `*=`, and `/=` accept int/float operands and preserve value-copy semantics.
   Indices must be integers in range. `%=` is unsupported because vector components are floats.
 - A component write through a container element or a native property (`list[0][1] = n`, `obj.Position[0] += n`)
-  changes a temporary copy and is lost. Copy into a variable, modify it, then store it back.
+  reaches that element or property. Through a native property each statement costs one getter and one setter,
+  so when changing several components copy into a variable, modify it, then store it back once.
 - Addition and subtraction work on vectors with the same component count; multiplication and division support a vector and a scalar.
 - Vectors do not support `.len()`, list methods, or `foreach`. Use `tosize` for the component count.
 - `math.Quaternion(w, x, y, z)` takes **w first**. Its runtime type name is `"Vector4"`.

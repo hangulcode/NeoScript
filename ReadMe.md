@@ -272,6 +272,7 @@ var moved = position + direction * 2.0;
 
 - Components can be read and written with indexing (`position[0]`, `position[1] = 5.0`).
 	- Component `+=`, `-=`, `*=`, and `/=` accept numeric operands and preserve value-copy semantics. `%=` is unsupported for float components.
+	- Component writes through a container element or a native property (`list[0][1] = n`, `obj.Position[0] += n`) reach that element or property.
 - Vector assignment is a value copy; assigning `b = a` does not alias `a`.
 - Vector arithmetic supports component-wise `+`, `-`, `*`, `/` and scalar multiplication/division.
 - `tosize(vector)` returns the component count. List operations (`append`, `insert`, `len`,

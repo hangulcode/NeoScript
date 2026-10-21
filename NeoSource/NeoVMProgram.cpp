@@ -773,6 +773,39 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 
 	switch (v.op)
 	{
+	case NOP_MOV:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("MOV  %s = %s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_MOVI:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("MOVI %s = %d", context.operand(1).c_str(), v.n23);
+		break;
+	case NOP_MOVF:
+	{
+		byteCount = OpFlagByteChars + 2 * 3;
+		if (NEOS_CAN_EMBED_FLOAT_IMMEDIATE)
+		{
+			NS_FLOAT value = 0;
+			std::memcpy(&value, &v.n23, sizeof(v.n23));
+			outAssembly = FormatAsm("MOVF %s = %g", context.operand(1).c_str(), (double)value);
+		}
+		else
+			outAssembly = FormatAsm("MOVF %s = <invalid precision>", context.operand(1).c_str());
+		break;
+	}
+	case NOP_LOADK:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("LOADK %s = K[%d]", context.operand(1).c_str(), v.n23);
+		break;
+	case NOP_MOV_MINUS:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("MOV  %s = -%s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_LOG_NOT:
+		byteCount = OpFlagByteChars + 2 * 2;
+		outAssembly = FormatAsm("NOT  %s = !%s", context.operand(1).c_str(), context.operand(2).c_str());
+		break;
 	case NOP_ADD2:
 		byteCount = OpFlagByteChars + 2 * 2;
 		outAssembly = FormatAsm("ADD  %s += %s", context.operand(1).c_str(), context.operand(2).c_str());
@@ -813,11 +846,18 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		byteCount = OpFlagByteChars + 2 * 2;
 		outAssembly = FormatAsm("XOR  %s ^= %s", context.operand(1).c_str(), context.operand(2).c_str());
 		break;
-	case NOP_LOG_NOT:
-		byteCount = OpFlagByteChars + 2 * 2;
-		outAssembly = FormatAsm("NOT  %s = !%s", context.operand(1).c_str(), context.operand(2).c_str());
+	case NOP_VAR_CLEAR:
+		byteCount = OpFlagByteChars + 2 * 1;
+		outAssembly = FormatAsm("CLR  %s", context.operand(1).c_str());
 		break;
-
+	case NOP_INC:
+		byteCount = OpFlagByteChars + 2 * 1;
+		outAssembly = FormatAsm("INC  %s", context.operand(1).c_str());
+		break;
+	case NOP_DEC:
+		byteCount = OpFlagByteChars + 2 * 1;
+		outAssembly = FormatAsm("DEC  %s", context.operand(1).c_str());
+		break;
 	case NOP_ADD3:
 		byteCount = OpFlagByteChars + 2 * 3;
 		outAssembly = FormatAsm("ADD  %s = %s + %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
@@ -858,20 +898,6 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		byteCount = OpFlagByteChars + 2 * 3;
 		outAssembly = FormatAsm("XOR  %s = %s ^ %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
 		break;
-
-	case NOP_VAR_CLEAR:
-		byteCount = OpFlagByteChars + 2 * 1;
-		outAssembly = FormatAsm("CLR  %s", context.operand(1).c_str());
-		break;
-	case NOP_INC:
-		byteCount = OpFlagByteChars + 2 * 1;
-		outAssembly = FormatAsm("INC  %s", context.operand(1).c_str());
-		break;
-	case NOP_DEC:
-		byteCount = OpFlagByteChars + 2 * 1;
-		outAssembly = FormatAsm("DEC  %s", context.operand(1).c_str());
-		break;
-
 	case NOP_GREAT:		// >
 		byteCount = OpFlagByteChars + 2 * 3;
 		outAssembly = FormatAsm("GR   %s = %s > %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
@@ -912,12 +938,6 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		byteCount = OpFlagByteChars + 2 * 3;
 		outAssembly = FormatAsm("NE   %s = %s || %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
 		break;
-
-	case NOP_STR_ADD:	// ..
-		byteCount = OpFlagByteChars + 2 * 3;
-		outAssembly = FormatAsm("SADD %s = ToStr%s + ToStr%s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
-		break;
-
 	case NOP_JMP:
 		byteCount = OpFlagByteChars + 2 * 1;
 		outAssembly = FormatAsm("JMP  %d%s", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str());
@@ -930,7 +950,6 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		byteCount = OpFlagByteChars + 2 * 2;
 		outAssembly = FormatAsm("JT   %d%s %s is True", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str());
 		break;
-
 	case NOP_JMP_GREAT:		// >
 		byteCount = OpFlagByteChars + 2 * 3;
 		outAssembly = FormatAsm("JGR  %d%s,  %s > %s", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
@@ -983,6 +1002,10 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		byteCount = OpFlagByteChars + 2 * 2;
 		outAssembly = FormatAsm("SWTC table[%u], key %s", (unsigned)(u16)v.n1, context.operand(2).c_str());
 		break;
+	case NOP_STR_ADD:	// ..
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("SADD %s = ToStr%s + ToStr%s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
 	case NOP_TOSTRING:
 		byteCount = OpFlagByteChars + 2 * 2;
 		outAssembly = FormatAsm("ToStr %s = %s", context.operand(1).c_str(), context.operand(2).c_str());
@@ -1007,37 +1030,6 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		byteCount = OpFlagByteChars + 2 * 2;
 		outAssembly = FormatAsm("Sleep %s", context.operand(2).c_str());
 		break;
-
-	case NOP_MOV:
-		byteCount = OpFlagByteChars + 2 * 2;
-		outAssembly = FormatAsm("MOV  %s = %s", context.operand(1).c_str(), context.operand(2).c_str());
-		break;
-	case NOP_MOVI:
-		byteCount = OpFlagByteChars + 2 * 3;
-		outAssembly = FormatAsm("MOVI %s = %d", context.operand(1).c_str(), v.n23);
-		break;
-	case NOP_MOVF:
-	{
-		byteCount = OpFlagByteChars + 2 * 3;
-		if (NEOS_CAN_EMBED_FLOAT_IMMEDIATE)
-		{
-			NS_FLOAT value = 0;
-			std::memcpy(&value, &v.n23, sizeof(v.n23));
-			outAssembly = FormatAsm("MOVF %s = %g", context.operand(1).c_str(), (double)value);
-		}
-		else
-			outAssembly = FormatAsm("MOVF %s = <invalid precision>", context.operand(1).c_str());
-		break;
-	}
-	case NOP_LOADK:
-		byteCount = OpFlagByteChars + 2 * 3;
-		outAssembly = FormatAsm("LOADK %s = K[%d]", context.operand(1).c_str(), v.n23);
-		break;
-	case NOP_MOV_MINUS:
-		byteCount = OpFlagByteChars + 2 * 2;
-		outAssembly = FormatAsm("MOV  %s = -%s", context.operand(1).c_str(), context.operand(2).c_str());
-		break;
-
 	case NOP_FMOV1:
 		byteCount = OpFlagByteChars + 2 * 2;
 		outAssembly = FormatAsm("MOV  %s = &%s", context.operand(1).c_str(), context.functionShort(v.n2).c_str());
@@ -1046,7 +1038,18 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		byteCount = OpFlagByteChars + 2 * 3;
 		outAssembly = FormatAsm("MOV  %s.%s = &%s", context.operand(1).c_str(), context.operand(2).c_str(), context.functionShort(v.n3).c_str());
 		break;
-
+	case NOP_CALL:
+		if(v.argFlag & NEOS_OP_CALL_NORESULT)
+		{
+			byteCount = OpFlagByteChars + 2 * 2;
+			outAssembly = FormatAsm("CALL %s arg:%d", context.functionFull(v.n1).c_str(), v.n2);
+		}
+		else
+		{
+			byteCount = OpFlagByteChars + 2 * 3;
+			outAssembly = FormatAsm("CALL %s = %s arg:%d", context.operand(3).c_str(), context.functionFull(v.n1).c_str(), v.n2);
+		}
+		break;
 	case NOP_PTRCALL:
 		byteCount = OpFlagByteChars + 2 * 3;
 		if(v.n2 != -1)
@@ -1078,18 +1081,6 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 			outAssembly = FormatAsm("NCAL %s = native:%d arg:%d", context.operand(3).c_str(), v.n1, v.n2);
 		}
 		break;
-	case NOP_CALL:
-		if(v.argFlag & NEOS_OP_CALL_NORESULT)
-		{
-			byteCount = OpFlagByteChars + 2 * 2;
-			outAssembly = FormatAsm("CALL %s arg:%d", context.functionFull(v.n1).c_str(), v.n2);
-		}
-		else
-		{
-			byteCount = OpFlagByteChars + 2 * 3;
-			outAssembly = FormatAsm("CALL %s = %s arg:%d", context.operand(3).c_str(), context.functionFull(v.n1).c_str(), v.n2);
-		}
-		break;
 	case NOP_RETURN:
 		// NORESULT = 값 없는 'return;'. n1(반환값 슬롯)을 쓰지 않으므로 op/flag 2바이트만 덤프한다.
 		if (v.argFlag & NEOS_OP_CALL_NORESULT)
@@ -1110,11 +1101,14 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		byteCount = OpFlagByteChars + 2 * 3;
 		outAssembly = FormatAsm("Table Alloc %s, %d", context.operand(1).c_str(), v.n23);
 		break;
+	case NOP_CLT_READ:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("READ %s = %s.%s", context.operand(3).c_str(), context.operand(1).c_str(), context.operand(2).c_str());
+		break;
 	case NOP_CLT_MOV:
 		byteCount = OpFlagByteChars + 2 * 3;
 		outAssembly = FormatAsm("MOV  %s.%s = %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
 		break;
-
 	case NOP_TABLE_ADD2:
 		byteCount = OpFlagByteChars + 2 * 3;
 		outAssembly = FormatAsm("TADD %s.%s += %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
@@ -1135,30 +1129,10 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		byteCount = OpFlagByteChars + 2 * 3;
 		outAssembly = FormatAsm("TPER %s.%s %= %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
 		break;
-
-	case NOP_CLT_READ:
-		byteCount = OpFlagByteChars + 2 * 3;
-		outAssembly = FormatAsm("READ %s = %s.%s", context.operand(3).c_str(), context.operand(1).c_str(), context.operand(2).c_str());
-		break;
-	case NOP_CLT_READ_STATIC_STRING:
-		byteCount = OpFlagByteChars + 2 * 3;
-		outAssembly = FormatAsm("READ.S %s = %s.%s", context.operand(3).c_str(), context.operand(1).c_str(), context.operand(2).c_str());
-		break;
-	case NOP_JMP_RANGE_INSIDE:
-		byteCount = OpFlagByteChars + 2 * 3;
-		outAssembly = FormatAsm("JRIN %d%s,  %s in range[%u]", v.n1,
-			context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), (unsigned)(u16)v.n3);
-		break;
-	case NOP_JMP_RANGE_OUTSIDE:
-		byteCount = OpFlagByteChars + 2 * 3;
-		outAssembly = FormatAsm("JROT %d%s,  %s outside range[%u]", v.n1,
-			context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), (unsigned)(u16)v.n3);
-		break;
 	case NOP_LIST_ALLOC:
 		byteCount = OpFlagByteChars + 2 * 3;
 		outAssembly = FormatAsm("List Alloc %s, %d", context.operand(1).c_str(), v.n23);
 		break;
-
 	case NOP_VERIFY_TYPE:
 		byteCount = OpFlagByteChars + 2 * 2;
 		outAssembly = FormatAsm("Verify %s %s", context.operand(1).c_str(), GetDataType((VAR_TYPE)v.n2).c_str());
@@ -1173,6 +1147,24 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 			outAssembly = FormatAsm("yield return");
 		else
 			{ outAssembly = FormatAsm("?? yield sub(%d)", v.n1); known = false; }
+		break;
+	case NOP_VEC_WRITEBACK:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("VWB  %s.%s = %s if vector", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		break;
+	case NOP_CLT_READ_STATIC_STRING:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("READ.S %s = %s.%s", context.operand(3).c_str(), context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	case NOP_JMP_RANGE_INSIDE:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("JRIN %d%s,  %s in range[%u]", v.n1,
+			context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), (unsigned)(u16)v.n3);
+		break;
+	case NOP_JMP_RANGE_OUTSIDE:
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("JROT %d%s,  %s outside range[%u]", v.n1,
+			context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), (unsigned)(u16)v.n3);
 		break;
 	case NOP_ERROR:
 		outAssembly = FormatAsm("Begin");

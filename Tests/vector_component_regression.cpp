@@ -8,11 +8,37 @@ using namespace NeoScript;
 static int checks = 0;
 static int failures = 0;
 
+// Position: the getter always returns (8, 8, 8); the setter records what the script wrote so a
+// component write through the property (Host.Position[0] += 2) can be observed via Last.
+// ReadOnly rejects writes, which the VM reports as "cannot write property".
+static float g_lastWritten[3] = {0.0f, 0.0f, 0.0f};
+static int g_positionReads = 0;   // Reads: how many times the Position getter ran
 static bool HostProperty(CallContext& ctx, StringView name, bool get)
 {
-    if (!get || name.str() != "Position") return false;
-    ctx.retVec3(8.0f, 8.0f, 8.0f);
-    return true;
+    if (name.str() == "Position")
+    {
+        if (get) { ++g_positionReads; ctx.retVec3(8.0f, 8.0f, 8.0f); return true; }
+        float v[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        ctx.argVec(0, v);
+        g_lastWritten[0] = v[0]; g_lastWritten[1] = v[1]; g_lastWritten[2] = v[2];
+        return true;
+    }
+    if (name.str() == "Reads" && get)
+    {
+        ctx.retInt(g_positionReads);
+        return true;
+    }
+    if (name.str() == "Last" && get)
+    {
+        ctx.retVec3(g_lastWritten[0], g_lastWritten[1], g_lastWritten[2]);
+        return true;
+    }
+    if (name.str() == "ReadOnly")
+    {
+        if (get) { ctx.retVec3(1.0f, 1.0f, 1.0f); return true; }
+        return false;
+    }
+    return false;
 }
 
 static void Run(IRuntime* runtime, const std::string& source, bool debug, bool image,
@@ -121,7 +147,12 @@ int main()
             "import math; export fun Test(){var v=math.Vector3(8,8,8);var copy=v;v[0]++;++v[1];v[2]--;--v[2];"
                 "return v[0]==9 && v[1]==9 && v[2]==6 && copy[0]==8 && copy[1]==8 && copy[2]==8;}",
             "import math; export fun Test(){var v=math.Vector3(8,8,8);var a=v[0]++;var b=++v[1];var c=v[2]--;"
-                "return a==8 && b==9 && c==8 && v[0]==9 && v[1]==9 && v[2]==7;}"
+                "return a==8 && b==9 && c==8 && v[0]==9 && v[1]==9 && v[2]==7;}",
+            "export fun Test(){Host.Position[0]+=2;var l=Host.Last;return l[0]==10 && l[1]==8 && l[2]==8;}",
+            "export fun Test(){var before=Host.Reads;Host.Position[0]+=2;var mid=Host.Reads;Host.Position[1]=1;"
+                "return mid==before+1 && Host.Reads==before+2 && Host.Last[1]==1 && Host.Last[0]==8;}",
+            "export fun Test(){Host.Position[1]=5;var a=Host.Last;Host.Position[2]--;var b=Host.Last;return a[1]==5 && a[2]==8 && b[1]==8 && b[2]==7;}",
+            "import math; export fun Test(){var l=[math.Vector3(8,8,8)];l[0][0]*=2;var m={};m.v=math.Vector2(8,8);m.v[1]-=3;return l[0][0]==16 && m.v[1]==5;}"
         };
         for (const char* source : success) Run(runtime, source, debug, image);
 
@@ -136,6 +167,8 @@ int main()
                 Run(runtime, prefix + "v[0]" + op + rhs + ";" + suffix, debug, image, "invalid operator");
         }
         Run(runtime, prefix + "v[0]%=2;" + suffix, debug, image, "invalid operator '%='");
+        Run(runtime, "export fun Test(){Host.ReadOnly[0]+=1;}export fun Verify(){return Host.ReadOnly[0]==1;}",
+            debug, image, "cannot write property 'ReadOnly'");
     }
     DestroyRuntime(runtime);
     std::printf("Vector component regression %s: %d/%d\n", failures ? "FAIL" : "PASS", checks-failures, checks);

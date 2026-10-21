@@ -392,6 +392,19 @@ NEOS_FORCEINLINE bool handle_CLT_MOV_L(const SVMOperation& OP) {
     return false;
 }
 
+// 사슬 lvalue 쓰기 뒤의 되써 넣기(컴파일러가 붙임). n3 임시 칸이 벡터일 때만 부모 원소 n1[n2] 에 넣는다.
+// 임시 칸은 부모 원소와 저장소를 공유하다 성분 쓰기에서 복제됐으므로 되써 넣어야 값이 남는다.
+// 리스트 · 맵 · 배열 · 객체는 부모가 이미 같은 객체를 들고 있어 타입 비교 한 번으로 끝난다 — 그 비교만
+// 루프에 인라인하고, 벡터일 때의 CltInsert 전개는 Add2/Add2Rare 처럼 바깥 함수에 둔다(루프 본문 크기 = 성능).
+NEOS_FORCEINLINE bool handle_VEC_WRITEBACK(const SVMOperation& OP) {
+    if (GetVarPtr3(OP)->GetType() == VAR_VEC)
+        VecWriteBackRare(OP);
+    return false;
+}
+NEOS_NOINLINE void VecWriteBackRare(const SVMOperation& OP) {
+    CltInsert(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
+}
+
 NEOS_NOINLINE bool handle_TABLE_ADD2(const SVMOperation& OP) {
     VarInfo* pTable = GetVarPtrF1(OP);
     if (pTable->GetType() == VAR_ARRAY)
