@@ -53,7 +53,7 @@ extern "C" {
 // ABI 버전. 구조체 레이아웃이나 함수 시그니처가 바뀌면 올린다. 바인딩(C#)은 기동 시
 // NsGetAbiVersion() 으로 확인해서 어긋나면 바로 실패시킬 것 — 조용한 메모리 깨짐보다 낫다.
 //------------------------------------------------------------------------------
-#define NS_ABI_VERSION 1
+#define NS_ABI_VERSION 2
 
 // 한 프로세스에서 등록할 수 있는 네이티브 객체 타입 수. 디스패처가 컨텍스트 없는
 // 함수 포인터라 슬롯마다 고정 썽크가 필요해서 상한이 있다.
@@ -129,6 +129,18 @@ typedef struct NsStr
     int32_t     len;
     int32_t     _pad;
 } NsStr;
+
+// JSON output and diagnostics are borrowed until the current native callback
+// returns. Later JSON calls (including nested callbacks) do not invalidate them.
+// Copy before returning to script. No allocation is transferred to the caller.
+typedef struct NsJsonResult
+{
+    NsStr text;                 // Encode output; empty on failure or decode.
+    NsStr error;                // Full data path and reason; empty on success.
+    const NsStr* warnings;
+    int32_t warningCount;
+    int32_t _pad;
+} NsJsonResult;
 
 typedef struct NsError
 {
@@ -405,6 +417,12 @@ NS_API void    NS_CALL NsCtxArgVec(NsContext* ctx, int32_t i, float* out4);
 NS_API NsMapReader*  NS_CALL NsCtxArgMap(NsContext* ctx, int32_t i);
 NS_API NsListReader* NS_CALL NsCtxArgList(NsContext* ctx, int32_t i);
 NS_API NsArrayView*  NS_CALL NsCtxArgArray(NsContext* ctx, int32_t i);
+NS_API int32_t NS_CALL NsCtxArgIsNativeObject(NsContext* ctx, int32_t i);
+// Return 1 on success. Decode failure clears the return slot to null.
+// These report conversion errors without raising a VM error: use NsCtxFail if desired.
+NS_API int32_t NS_CALL NsCtxArgToJson(NsContext* ctx, int32_t i, int32_t sortKeys, NsJsonResult* out);
+NS_API int32_t NS_CALL NsCtxRetJson(NsContext* ctx, const char* text, int32_t len,
+                                    int32_t strictIntegers, int32_t requireMap, NsJsonResult* out);
 NS_API void*         NS_CALL NsCtxArgObjectUserData(NsContext* ctx, int32_t i);
 // 스크립트 함수/람다 인자를 보관 가능한 핸들로. NsFunctionRelease 로 해제할 것.
 NS_API NsFunction*   NS_CALL NsCtxArgFunction(NsContext* ctx, int32_t i);
@@ -440,6 +458,7 @@ NS_API NsListBuilder* NS_CALL NsMapSetList(NsMapBuilder* m, const char* k, int32
 NS_API void    NS_CALL NsListReserve(NsListBuilder* l, int32_t count);
 NS_API void    NS_CALL NsListResize(NsListBuilder* l, int32_t count);
 NS_API int32_t NS_CALL NsListCount(NsListBuilder* l);
+NS_API void    NS_CALL NsListPushNull(NsListBuilder* l);
 NS_API void    NS_CALL NsListPushInt(NsListBuilder* l, int32_t v);
 NS_API void    NS_CALL NsListPushFloat(NsListBuilder* l, float v);
 NS_API void    NS_CALL NsListPushBool(NsListBuilder* l, int32_t v);
@@ -452,6 +471,14 @@ NS_API void    NS_CALL NsListSetString(NsListBuilder* l, int32_t index, const ch
 NS_API NsMapBuilder*  NS_CALL NsListPushMap(NsListBuilder* l);
 NS_API NsListBuilder* NS_CALL NsListPushList(NsListBuilder* l);
 
+// Invalid/missing entries are neither null values nor native objects.
+NS_API int32_t NS_CALL NsMapIsNull(NsMapReader* m, const char* k, int32_t klen);
+NS_API int32_t NS_CALL NsMapIsNativeObject(NsMapReader* m, const char* k, int32_t klen);
+NS_API int32_t NS_CALL NsMapSameStorage(NsMapReader* a, NsMapReader* b);
+// No partial keys on failure. The array lives for the reader's issuing scope;
+// key bytes are borrowed from the map and must be copied before modifying it.
+NS_API int32_t NS_CALL NsMapStringKeys(NsMapReader* m, const NsStr** keys,
+                                      int32_t* count, int32_t* unsupportedKeyType);
 NS_API int32_t NS_CALL NsMapHas(NsMapReader* m, const char* k, int32_t klen);
 NS_API int32_t NS_CALL NsMapType(NsMapReader* m, const char* k, int32_t klen);
 NS_API int32_t NS_CALL NsMapGetInt(NsMapReader* m, const char* k, int32_t klen, int32_t* out);
@@ -463,6 +490,9 @@ NS_API NsMapReader*  NS_CALL NsMapGetMap(NsMapReader* m, const char* k, int32_t 
 NS_API NsListReader* NS_CALL NsMapGetList(NsMapReader* m, const char* k, int32_t klen);
 NS_API NsArrayView*  NS_CALL NsMapGetArray(NsMapReader* m, const char* k, int32_t klen);
 
+NS_API int32_t NS_CALL NsListRdIsNull(NsListReader* l, int32_t index);
+NS_API int32_t NS_CALL NsListRdIsNativeObject(NsListReader* l, int32_t index);
+NS_API int32_t NS_CALL NsListRdSameStorage(NsListReader* a, NsListReader* b);
 NS_API int32_t NS_CALL NsListRdCount(NsListReader* l);
 NS_API int32_t NS_CALL NsListRdType(NsListReader* l, int32_t index);
 NS_API int32_t NS_CALL NsListRdGetInt(NsListReader* l, int32_t index, int32_t* out);

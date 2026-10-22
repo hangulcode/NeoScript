@@ -102,6 +102,40 @@ static int32_t NS_CALL OnMethod(void* user, int32_t slot, NsContext* ctx,
 
     if (slot == g_hostSlot)
     {
+        if (SameStr(method, methodLen, "JsonProbe"))
+        {
+            NsJsonResult first, next;
+            NsMapReader* map = NsCtxArgMap(ctx, 0);
+            NsListReader* list = NsCtxArgList(ctx, 1);
+            const NsStr* keys = NULL;
+            int32_t count = 0, unsupported = 0, i;
+            Check(sizeof(NsJsonResult) == 48, "JSON result ABI layout");
+            Check(NsCtxArgToJson(ctx, 0, 1, &first), "encode JSON through C ABI");
+            Check(SameStr(first.text.data, first.text.len, "{\"a\":1,\"b\":100.0}"), "sorted JSON with real type");
+            for (i = 0; i < 40; ++i) NsCtxArgToJson(ctx, 1, 0, &next);
+            Check(SameStr(first.text.data, first.text.len, "{\"a\":1,\"b\":100.0}"), "earlier JSON output survives subsequent calls");
+            Check(NsMapStringKeys(map, &keys, &count, &unsupported) && count == 2, "C string-key enumeration");
+            Check(NsMapSameStorage(map, NsCtxArgMap(ctx, 0)) && !NsMapSameStorage(map, NULL), "map storage identity");
+            Check(!NsMapIsNull(map, "absent", 6) && !NsMapIsNativeObject(map, "a", 1), "missing map key is not null/object");
+            Check(NsListRdSameStorage(list, NsCtxArgList(ctx, 1)) && !NsListRdSameStorage(list, NULL), "list storage identity");
+            Check(NsListRdIsNull(list, 0) && !NsListRdIsNull(list, 99), "list null versus invalid index");
+            Check(NsCtxArgIsNativeObject(ctx, 2) && NsCtxArgObjectUserData(ctx, 2) == NULL, "native object recognized with null userdata");
+            Check(!NsCtxArgToJson(ctx, 2, 0, &next) && next.error.len > 0, "native object JSON rejected");
+            Check(!NsCtxRetJson(ctx, "2147483648", 10, 1, 0, &next) && next.error.len > 0, "strict integer error");
+            Check(NsCtxRetJson(ctx, "2147483648", 10, 0, 0, &next) && next.warningCount == 1, "permissive integer warning");
+            Check(!NsCtxRetJson(ctx, "[]", 2, 1, 1, &next), "map-only decode rejects list");
+            Check(!NsCtxRetJson(ctx, NULL, 3, 1, 0, &next), "invalid JSON buffer rejected");
+            Check(!NsCtxArgToJson(ctx, -1, 0, &next), "negative JSON index rejected");
+            NsCtxRetInt(ctx, 1);
+            return 1;
+        }
+        if (SameStr(method, methodLen, "NullList"))
+        {
+            NsListBuilder* list = NsCtxRetList(ctx);
+            NsListPushNull(list);
+            NsListPushInt(list, 42);
+            return 1;
+        }
         if (SameStr(method, methodLen, "Double"))
         {
             NsCtxRetInt(ctx, NsCtxArgInt(ctx, 0) * 2);
@@ -214,6 +248,7 @@ static const char* kSource =
     /* Only exported globals are reachable by name from the host. */
     "export var counter = 10;\n"
     "print(\"hello from script\");\n"
+    "export fun JsonProbe() { Host.JsonProbe({\"b\":100.0,\"a\":1}, [null, 42], Host); var a = Host.NullList(); return a.len() == 2 && a[0] == null && a[1] == 42; }\n"
     "export fun Add(var a, var b) { return a + b; }\n"
     "export fun Greet(var who) { return \"hi \" + who; }\n"
     "export fun Bump() { counter = counter + 1; return counter; }\n"
@@ -305,6 +340,10 @@ int main(void)
     Check(instance != 0, "instance created");
     Check(NsIsAlive(rt, instance) == 1, "instance reports alive");
     Check(g_sawHelloFromScript == 1, "print handler received global-init output");
+
+    call = NsCallBeginName(rt, instance, "JsonProbe", 9);
+    Check(NsCallInvokeR(call, &result) == NS_RUN_COMPLETED && result.i == 1, "JSON/collection extensions round-trip");
+    NsCallEnd(call);
 
     /* --- scalar call through a cached function handle --- */
     addFn = NsFindFunction(rt, program, "Add", 3);

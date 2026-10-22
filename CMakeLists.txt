@@ -93,6 +93,15 @@ if(NEOSCRIPT_BUILD_SHARED)
         # heap.  Keep everything that came out of a static archive to ourselves.
         target_link_options(NeoScriptShared PRIVATE -Wl,--exclude-libs,ALL)
 
+        # yyjson explicitly requests default visibility; compiler flags alone
+        # cannot hide it or libc++ template instantiations emitted in our TUs.
+        # Keep the plugin's ELF export surface limited to the public C ABI.
+        if(ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            set(NEOSCRIPT_EXPORT_MAP ${NEOSCRIPT_C_ABI_DIR}/neoscript.exports)
+            target_link_options(NeoScriptShared PRIVATE "-Wl,--version-script=${NEOSCRIPT_EXPORT_MAP}")
+            set_property(TARGET NeoScriptShared APPEND PROPERTY LINK_DEPENDS ${NEOSCRIPT_EXPORT_MAP})
+        endif()
+
         if(ANDROID)
             # Google Play requires 16 KB page alignment for apps targeting Android 15
             # and later.  NDK r25 still links at 4 KB, and an unaligned .so fails the

@@ -20,6 +20,21 @@ compiles `NeoSource/*.cpp` wholesale, and the engine uses the C++ facade
 directly, so it has no use for this shim. Keeping it there would drag a file
 into every engine build that nothing in that build calls.
 
+## Updating from an older checkout
+
+Close Unity, update the UPM sources, then rebuild the native plugin for each
+target platform. The current binding requires **C ABI 2**; an older DLL is
+rejected at runtime construction with an ABI mismatch. This is the native
+binding revision, not a package or bytecode version. Recompile cached bytecode
+with the current core; old images may be rejected by its image-version check.
+
+The binding now exposes the shared JSON codec, collection null/native-object
+checks, storage identity and string-key enumeration. See the examples below.
+The Basic sample also demonstrates vector component assignment through a C#
+property. Library features such as `replaceAll`, `format`, list insertion,
+removal and sorting are available to scripts through the rebuilt core; they do
+not need separate C# implementations. See [API.md](API.md).
+
 ## Setup
 
 ### 1. Build the native plugin
@@ -265,7 +280,7 @@ installs of the same version exist, only some carry it — check
 `*_il2cpp` entries rather than trusting the folder name.
 
 An arm64-v8a IL2CPP APK has been taken apart and checked: `libNeoScript.so`
-lands in `lib/arm64-v8a/`, exports its 150 `Ns*` entry points and no C++ runtime
+lands in `lib/arm64-v8a/`, exports its `Ns*` C entry points and no C++ runtime
 symbols, needs only `libc`/`libm`/`libdl`, and its LOAD segments align at
 `0x4000`. IL2CPP emitted a `ReversePInvokeWrapper_*` for all nine callbacks, so
 script-to-C# calls really are compiled ahead of time for arm64. Nobody has run
@@ -279,7 +294,7 @@ Unstripped it carries about 19MB of debug symbols into every APK, and without
 `std::` symbols. Unity loads `libunity.so` and `libil2cpp.so` with their own C++
 runtime into the same process, so those exports would let the dynamic linker
 bind their calls into our copy, leaving two libc++ instances on one heap. After
-both, the `.so` exports its 150 `Ns*` entry points and nothing else, and needs
+both, the `.so` exports its `Ns*` C entry points and nothing else, and needs
 only `libc`, `libm` and `libdl`.
 
 Using async (`system.async` / http) makes the VM spin up a background thread. If
@@ -306,6 +321,105 @@ Iterating on the native side without closing the editor would require the
 binding to resolve entry points itself through `LoadLibrary`/`GetProcAddress`
 instead of DllImport. That is a design change in the binding layer, not
 something a workaround can reach.
+
+## Module visibility
+
+`export` is for the C# host; `public` is for another script module. For example,
+with a loader that resolves `import util;` to `util.ns`:
+
+```cpp
+// util.ns
+var privateCounter = 0;
+public const STEP = 3;
+public var value = 5;
+public fun Triple(var v) { return v * 3; }
+```
+
+```cpp
+// main.ns
+import util;
+export fun Update(var dt) { util.value += util.STEP; }
+```
+
+Use `export public fun` or `export public var` only when both consumers need
+access. `export const` is an error; module constants use `public const`.
+Functions may call later function definitions, but variables and constants
+must still be declared before use, including inside function bodies.
+Existing imported helpers declared with only `export fun` need `public fun`.
+
+## JSON from scripts and C# callbacks
+
+Scripts can call `system.jsonEncode(value, sortKeys)` and
+`system.jsonDecode(text)`, and inspect `system.jsonError()` on failure.
+C# callbacks use the **same core codec**:
+
+```csharp
+if (method.Is("Encode"))
+{
+    if (!ctx.ArgToJson(0, out string text, out NeoJsonResult result, sortKeys: true))
+    {
+        ctx.Fail(1, result.Error);
+        return false;
+    }
+    ctx.Return(text);
+    return true;
+}
+if (method.Is("Decode"))
+{
+    string text = ctx.ArgString(0);
+    if (!ctx.ReturnJson(text, out NeoJsonResult result))
+    {
+        ctx.Fail(1, result.Error);
+        return false;
+    }
+    return true;
+}
+```
+
+The helpers return a success flag; they do not raise a VM error themselves.
+`ArgToJson` produces null text on failure. `ReturnJson` leaves a null return
+value on failure. A successfully decoded JSON `null` also returns null, so
+check the flag to distinguish it from failure. `NeoJsonResult.Error` and
+`Warnings` are managed copies and remain valid after the callback returns.
+
+Decode defaults to strict int32 integers and accepts any supported root value.
+`requireMap: true` restricts the root to a map. `strictIntegers: false` allows
+out-of-int32 integers to become finite float32 values with warnings. Float32
+values retain real notation (`100.0`) when encoded. Encoding optionally sorts
+map keys; lists keep their order.
+
+Only null, bool, int32, float32, strings, string-key maps and lists are
+supported. Native objects, vectors, functions, sets, dense arrays, cycles,
+invalid text and nesting beyond 64 containers fail with a full path such as
+`$.items[2].position`. Map nulls are omitted; list nulls are preserved. See
+[JSON.md](JSON.md) for the complete shared contract.
+
+`NeoListBuilder.PushNull()` explicitly adds a null slot. Readers expose
+`IsNull`, `IsNativeObject` and `SameStorage`. Missing keys and invalid indices
+are not null values. `ArgIsNativeObject` detects native objects even when their
+userData is zero; `ArgObjectUserData == IntPtr.Zero` alone cannot do that.
+`NeoMapReader.TryGetStringKeys` copies all keys to managed strings, without
+sorting, and rejects mixed-key maps without returning partial keys. Readers
+remain borrowed views and must not escape their issuing callback.
+
+The Android/Linux shared-library link uses an export map to keep yyjson and
+C++ implementation symbols private even if a dependency requests default
+visibility. The Android build script verifies this before deploying the plugin.
+
+## Vector properties
+
+The Basic sample exposes a writable `Unity.position` property. Both whole-value
+and component assignments call its setter:
+
+```cpp
+Unity.position = math.Vector3(1.0, 2.0, 3.0);
+Unity.position[1] += dt;
+```
+
+Component assignment reads the parent property once after evaluating the right
+side and writes the changed vector back once. Implement `SetProperty` and
+return true only when the assignment was accepted. A getter-only property
+must return false from the setter; the error identifies the property name.
 
 ## Domain reloads
 

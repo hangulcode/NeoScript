@@ -92,6 +92,7 @@ namespace NeoScript
         public void Reserve(int count) => NeoNative.NsListReserve(_handle, count);
         public void Resize(int count) => NeoNative.NsListResize(_handle, count);
 
+        public void PushNull() => NeoNative.NsListPushNull(_handle);
         public void Push(int value) => NeoNative.NsListPushInt(_handle, value);
         public void Push(float value) => NeoNative.NsListPushFloat(_handle, value);
         public void Push(bool value) => NeoNative.NsListPushBool(_handle, value ? 1 : 0);
@@ -125,6 +126,34 @@ namespace NeoScript
         private readonly IntPtr _handle;
         internal NeoMapReader(IntPtr handle) { _handle = handle; }
         public bool IsValid => _handle != IntPtr.Zero;
+
+        /// <summary>Storage identity, not deep equality. Invalid readers never match.</summary>
+        public bool SameStorage(NeoMapReader other) => NeoNative.NsMapSameStorage(_handle, other._handle) != 0;
+
+        public bool IsNull(string key)
+        {
+            var frame = NeoUtf8.Push();
+            try { int n = NeoUtf8.Encode(key, out int o); fixed (byte* b = NeoUtf8.Buffer) return NeoNative.NsMapIsNull(_handle, b + o, n) != 0; }
+            finally { NeoUtf8.Pop(frame); }
+        }
+
+        public bool IsNativeObject(string key)
+        {
+            var frame = NeoUtf8.Push();
+            try { int n = NeoUtf8.Encode(key, out int o); fixed (byte* b = NeoUtf8.Buffer) return NeoNative.NsMapIsNativeObject(_handle, b + o, n) != 0; }
+            finally { NeoUtf8.Pop(frame); }
+        }
+
+        /// <summary>Copies string keys, without sorting. Mixed-key maps fail without returning partial keys.</summary>
+        public bool TryGetStringKeys(out string[] keys, out NeoValueType unsupportedKeyType)
+        {
+            bool ok = NeoNative.NsMapStringKeys(_handle, out IntPtr data, out int count, out int unsupported) != 0;
+            unsupportedKeyType = (NeoValueType)unsupported;
+            keys = ok ? new string[count] : Array.Empty<string>();
+            var names = (NsStr*)data;
+            for (int i = 0; i < keys.Length; ++i) keys[i] = NeoUtf8.ToString(names[i]);
+            return ok;
+        }
 
         public bool Has(string key)
         {
@@ -237,6 +266,10 @@ namespace NeoScript
         internal NeoListReader(IntPtr handle) { _handle = handle; }
         public bool IsValid => _handle != IntPtr.Zero;
 
+        public bool SameStorage(NeoListReader other) => NeoNative.NsListRdSameStorage(_handle, other._handle) != 0;
+        // An invalid index is neither null nor a native object.
+        public bool IsNull(int index) => NeoNative.NsListRdIsNull(_handle, index) != 0;
+        public bool IsNativeObject(int index) => NeoNative.NsListRdIsNativeObject(_handle, index) != 0;
         public int Count => NeoNative.NsListRdCount(_handle);
         public NeoValueType TypeOf(int index) => (NeoValueType)NeoNative.NsListRdType(_handle, index);
 

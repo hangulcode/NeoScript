@@ -27,7 +27,8 @@ fun Wobble(var t)
 export fun Update(var dt)
 {
     ticks = ticks + 1;
-    Unity.SetPosition(Wobble(Unity.time));
+    Unity.position = Wobble(Unity.time);
+    Unity.position[1] += dt;
     if (ticks == 1)
         Unity.Log(""neo script is driving this transform"");
 }
@@ -68,12 +69,21 @@ export fun Update(var dt)
 
         public bool GetProperty(NeoCallContext ctx, NeoName name)
         {
+            if (name.Is("position") && Target != null) { ctx.Return(Target.localPosition); return true; }
             if (name.Is("time")) { ctx.Return(Time.time); return true; }
             if (name.Is("deltaTime")) { ctx.Return(Time.deltaTime); return true; }
             return false;
         }
 
-        public bool SetProperty(NeoCallContext ctx, NeoName name) => false;
+        public bool SetProperty(NeoCallContext ctx, NeoName name)
+        {
+            if (name.Is("position") && Target != null)
+            {
+                Target.localPosition = ctx.ArgVector3(0);
+                return true;
+            }
+            return false;
+        }
     }
 
     private void Awake()

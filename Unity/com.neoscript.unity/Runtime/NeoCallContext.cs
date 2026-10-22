@@ -79,9 +79,39 @@ namespace NeoScript
         /// <summary>네이티브 객체 인자에서 그 객체의 userData 를 꺼낸다. 객체가 아니면 Zero.</summary>
         public IntPtr ArgObjectUserData(int index) => NeoNative.NsCtxArgObjectUserData(_ctx, index);
 
+        /// <summary>True for a native object, including one with zero userData.</summary>
+        public bool ArgIsNativeObject(int index) => NeoNative.NsCtxArgIsNativeObject(_ctx, index) != 0;
+
+        /// <summary>Encode through the core JSON codec. Failure returns null text and a path in Error.</summary>
+        public bool ArgToJson(int index, out string text, out NeoJsonResult result, bool sortKeys = false)
+        {
+            bool ok = NeoNative.NsCtxArgToJson(_ctx, index, sortKeys ? 1 : 0, out NsJsonResult raw) != 0;
+            text = ok ? NeoUtf8.ToString(raw.text) : null;
+            result = new NeoJsonResult(raw);
+            return ok;
+        }
+
+        /// <summary>Decode into the return slot. Failure leaves null, without raising a VM error.</summary>
+        public bool ReturnJson(string text, out NeoJsonResult result, bool strictIntegers = true, bool requireMap = false)
+        {
+            var frame = NeoUtf8.Push();
+            try
+            {
+                int n = NeoUtf8.Encode(text, out int o);
+                NsJsonResult raw;
+                bool ok;
+                fixed (byte* b = NeoUtf8.Buffer)
+                    ok = NeoNative.NsCtxRetJson(_ctx, b + o, n, strictIntegers ? 1 : 0, requireMap ? 1 : 0, out raw) != 0;
+                result = new NeoJsonResult(raw);
+                return ok;
+            }
+            finally { NeoUtf8.Pop(frame); }
+        }
+
         /// <summary>
         /// 스크립트 함수/람다 인자를 보관 가능한 핸들로 받는다. 다 쓰면 Dispose 할 것.
-        /// 원본 인스턴스가 Destroy/Reset 되면 자동으로 무효가 된다.
+        /// Captured lambdas become invalid when their instance is reset or destroyed.
+        /// Named functions remain valid until their program/runtime is destroyed.
         /// </summary>
         public NeoFunction ArgFunction(int index)
         {
@@ -138,4 +168,21 @@ namespace NeoScript
             finally { NeoUtf8.Pop(frame); }
         }
     }
+
+    /// <summary>Owned JSON diagnostics; safe to keep after a native callback returns.</summary>
+    public readonly unsafe struct NeoJsonResult
+    {
+        public string Error { get; }
+        public string[] Warnings { get; }
+
+        internal NeoJsonResult(NsJsonResult raw)
+        {
+            Error = NeoUtf8.ToString(raw.error);
+            Warnings = raw.warningCount == 0 ? Array.Empty<string>() : new string[raw.warningCount];
+            var warnings = (NsStr*)raw.warnings;
+            for (int i = 0; i < Warnings.Length; ++i)
+                Warnings[i] = NeoUtf8.ToString(warnings[i]);
+        }
+    }
+
 }

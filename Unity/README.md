@@ -24,6 +24,13 @@ against the `Packages` folder):
 "com.neoscript.unity": "file:../../path/to/NeoScript/Unity/com.neoscript.unity"
 ```
 
+## Updating the core and binding
+
+Rebuild the plugin after updating the package sources. The current C# binding
+requires C ABI 2 and rejects an old DLL at startup. Imported script APIs now
+use `public`; `export` remains the C# host visibility keyword. See the
+[migration notes and JSON/property examples](../docs/Unity.md).
+
 ## Verification
 
 Run all three. Each sees what the others cannot: the smoke test covers the

@@ -25,6 +25,7 @@
 #include <cstddef>
 #include <cstring>
 #include <map>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -162,6 +163,13 @@ private:
     std::size_t m_count = 0;
 };
 
+struct JsonScratch
+{
+    std::string text;
+    JsonResult result;
+    std::vector<NsStr> warnings;
+};
+
 struct ScratchMark
 {
     std::size_t mapBuilder;
@@ -169,6 +177,8 @@ struct ScratchMark
     std::size_t mapReader;
     std::size_t listReader;
     std::size_t arrayView;
+    std::size_t json;
+    std::size_t keys;
 };
 
 struct Scratch
@@ -178,6 +188,10 @@ struct Scratch
     Arena<MapReader>   mapReader;
     Arena<ListReader>  listReader;
     Arena<ArrayView>   arrayView;
+    // Own variable-sized results only until their issuing callback returns.
+    // unique_ptr keeps earlier results stable when these vectors grow.
+    std::vector<std::unique_ptr<JsonScratch>> json;
+    std::vector<std::unique_ptr<std::vector<NsStr>>> keys;
 
     ScratchMark Mark()
     {
@@ -187,6 +201,8 @@ struct Scratch
         m.mapReader   = mapReader.Mark();
         m.listReader  = listReader.Mark();
         m.arrayView   = arrayView.Mark();
+        m.json = json.size();
+        m.keys = keys.size();
         return m;
     }
 
@@ -197,6 +213,8 @@ struct Scratch
         mapReader.Rewind(m.mapReader);
         listReader.Rewind(m.listReader);
         arrayView.Rewind(m.arrayView);
+        json.resize(m.json);
+        keys.resize(m.keys);
     }
 };
 
@@ -1457,6 +1475,75 @@ NS_API NsArrayView* NS_CALL NsCtxArgArray(NsContext* ctx, int32_t i)
     return Hand(view);
 }
 
+namespace {
+int32_t JsonFailure(NsJsonResult* out, const char* message)
+{
+    if (out)
+    {
+        *out = {};
+        out->error = ToNsStr(StringView(message, std::strlen(message)));
+    }
+    return 0;
+}
+
+int32_t PublishJson(std::unique_ptr<JsonScratch> data, bool ok, NsJsonResult* out)
+{
+    if (!out) return ok ? 1 : 0;
+    if (data->text.size() > static_cast<std::size_t>(std::numeric_limits<int32_t>::max()))
+        return JsonFailure(out, "$: JSON text exceeds C ABI string size");
+    data->warnings.reserve(data->result.warnings.size());
+    for (const auto& warning : data->result.warnings)
+        data->warnings.push_back(ToNsStr(warning));
+    auto* view = data.get();
+    TheScratch().json.push_back(std::move(data));
+    out->text = ToNsStr(view->text);
+    out->error = ToNsStr(view->result.error);
+    out->warnings = view->warnings.data();
+    out->warningCount = static_cast<int32_t>(view->warnings.size());
+    out->_pad = 0;
+    return ok ? 1 : 0;
+}
+} // namespace
+
+NS_API int32_t NS_CALL NsCtxArgIsNativeObject(NsContext* ctx, int32_t i)
+{
+    return ctx && i >= 0 && Deref(ctx)->argIsNativeObject(static_cast<std::size_t>(i)) ? 1 : 0;
+}
+
+NS_API int32_t NS_CALL NsCtxArgToJson(NsContext* ctx, int32_t i, int32_t sortKeys, NsJsonResult* out)
+{
+    if (!ctx || i < 0) return JsonFailure(out, "$: missing JSON argument");
+    try
+    {
+        auto data = std::make_unique<JsonScratch>();
+        const bool ok = Deref(ctx)->argToJson(static_cast<std::size_t>(i), data->text, data->result, sortKeys != 0);
+        return PublishJson(std::move(data), ok, out);
+    }
+    catch (...) { return JsonFailure(out, "$: JSON conversion allocation failed"); }
+}
+
+NS_API int32_t NS_CALL NsCtxRetJson(NsContext* ctx, const char* text, int32_t len,
+                                    int32_t strictIntegers, int32_t requireMap, NsJsonResult* out)
+{
+    if (!ctx) return JsonFailure(out, "$: missing JSON context");
+    if (len < 0 || (!text && len != 0))
+    {
+        Deref(ctx)->retNull();
+        return JsonFailure(out, "$: invalid JSON text buffer");
+    }
+    try
+    {
+        auto data = std::make_unique<JsonScratch>();
+        const bool ok = Deref(ctx)->retJson(SV(text, len), data->result, strictIntegers != 0, requireMap != 0);
+        return PublishJson(std::move(data), ok, out);
+    }
+    catch (...)
+    {
+        Deref(ctx)->retNull();
+        return JsonFailure(out, "$: JSON conversion allocation failed");
+    }
+}
+
 NS_API void* NS_CALL NsCtxArgObjectUserData(NsContext* ctx, int32_t i)
 {
     return (ctx != nullptr && i >= 0) ? Deref(ctx)->argObjectUserData((std::size_t)i) : nullptr;
@@ -1608,6 +1695,11 @@ NS_API int32_t NS_CALL NsListCount(NsListBuilder* l)
     return l != nullptr ? Deref(l)->count() : 0;
 }
 
+NS_API void NS_CALL NsListPushNull(NsListBuilder* l)
+{
+    if (l) Deref(l)->pushNull();
+}
+
 NS_API void NS_CALL NsListPushInt(NsListBuilder* l, int32_t v)
 {
     if (l != nullptr) Deref(l)->pushInt(v);
@@ -1671,6 +1763,50 @@ NS_API NsListBuilder* NS_CALL NsListPushList(NsListBuilder* l)
 //==============================================================================
 // 컬렉션 리더
 //==============================================================================
+NS_API int32_t NS_CALL NsMapIsNull(NsMapReader* m, const char* k, int32_t klen)
+{
+    return m && Deref(m)->isNull(SV(k, klen)) ? 1 : 0;
+}
+
+NS_API int32_t NS_CALL NsMapIsNativeObject(NsMapReader* m, const char* k, int32_t klen)
+{
+    return m && Deref(m)->isNativeObject(SV(k, klen)) ? 1 : 0;
+}
+
+NS_API int32_t NS_CALL NsMapSameStorage(NsMapReader* a, NsMapReader* b)
+{
+    return a && b && Deref(a)->sameStorage(*Deref(b)) ? 1 : 0;
+}
+
+NS_API int32_t NS_CALL NsMapStringKeys(NsMapReader* m, const NsStr** keys,
+                                      int32_t* count, int32_t* unsupportedKeyType)
+{
+    if (keys) *keys = nullptr;
+    if (count) *count = 0;
+    if (unsupportedKeyType) *unsupportedKeyType = NS_TYPE_NONE;
+    if (!m || !keys || !count) return 0;
+    try
+    {
+        std::vector<StringView> names;
+        ValueType unsupported = ValueType::None;
+        if (!Deref(m)->stringKeys(names, &unsupported))
+        {
+            if (unsupportedKeyType) *unsupportedKeyType = static_cast<int32_t>(unsupported);
+            return 0;
+        }
+        if (names.size() > static_cast<std::size_t>(std::numeric_limits<int32_t>::max())) return 0;
+        auto data = std::make_unique<std::vector<NsStr>>();
+        data->reserve(names.size());
+        for (const auto name : names) data->push_back(ToNsStr(name));
+        auto* view = data.get();
+        TheScratch().keys.push_back(std::move(data));
+        *keys = view->data();
+        *count = static_cast<int32_t>(view->size());
+        return 1;
+    }
+    catch (...) { return 0; }
+}
+
 NS_API int32_t NS_CALL NsMapHas(NsMapReader* m, const char* k, int32_t klen)
 {
     return (m != nullptr && Deref(m)->has(SV(k, klen))) ? 1 : 0;
@@ -1752,6 +1888,21 @@ NS_API NsArrayView* NS_CALL NsMapGetArray(NsMapReader* m, const char* k, int32_t
     if (!Deref(m)->getArray(SV(k, klen), view))
         return nullptr;
     return Hand(view);
+}
+
+NS_API int32_t NS_CALL NsListRdIsNull(NsListReader* l, int32_t index)
+{
+    return l && index >= 0 && Deref(l)->isNull(static_cast<std::size_t>(index)) ? 1 : 0;
+}
+
+NS_API int32_t NS_CALL NsListRdIsNativeObject(NsListReader* l, int32_t index)
+{
+    return l && index >= 0 && Deref(l)->isNativeObject(static_cast<std::size_t>(index)) ? 1 : 0;
+}
+
+NS_API int32_t NS_CALL NsListRdSameStorage(NsListReader* a, NsListReader* b)
+{
+    return a && b && Deref(a)->sameStorage(*Deref(b)) ? 1 : 0;
 }
 
 NS_API int32_t NS_CALL NsListRdCount(NsListReader* l)

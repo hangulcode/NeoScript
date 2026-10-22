@@ -1,4 +1,4 @@
-// NeoPlayModeTest.cs — Play 모드에서 도는지 확인한다.
+﻿// NeoPlayModeTest.cs — Play 모드에서 도는지 확인한다.
 //
 // 에디터 모드 스모크(Tests/Editor/NeoSmokeTest.cs)가 통과해도 Play 모드는 별개다:
 // 플레이 진입 시 도메인이 리로드되고, 에디터 플러그인 언로더가 그 직전에 네이티브 런타임을
@@ -41,11 +41,20 @@ namespace NeoScript.Tests
 
         public bool GetProperty(NeoCallContext ctx, NeoName name)
         {
+            if (name.Is("position") && Target != null) { ctx.Return(Target.localPosition); return true; }
             if (name.Is("time")) { ctx.Return(Time.time); return true; }
             return false;
         }
 
-        public bool SetProperty(NeoCallContext ctx, NeoName name) => false;
+        public bool SetProperty(NeoCallContext ctx, NeoName name)
+        {
+            if (name.Is("position") && Target != null)
+            {
+                Target.localPosition = ctx.ArgVector3(0);
+                return true;
+            }
+            return false;
+        }
     }
 
     public sealed class NeoPlayModeTest
@@ -63,7 +72,8 @@ fun Wobble(var t)
 export fun Update(var dt)
 {
     ticks = ticks + 1;
-    Unity.SetPosition(Wobble(Unity.time));
+    Unity.position = Wobble(Unity.time);
+    Unity.position[1] += dt;
     if (ticks == 1)
         Unity.Log(""first tick"");
 }
@@ -102,6 +112,9 @@ export fun Update(var dt)
 
                     NeoResult result = instance.Call(update).Arg(Time.deltaTime).Timeout(8).Invoke();
                     Assert.IsTrue(result.Ok, $"frame {i} failed: {result.Error}");
+
+                    Assert.That(probe.transform.localPosition.y, Is.EqualTo(1f + Time.deltaTime).Within(0.0001f),
+                        "component assignment must write back through the C# property");
 
                     // yield 는 프레임을 넘긴다. 여기가 핵심이다 — 에디터 모드 테스트는 한 프레임
                     // 안에서 끝나므로 프레임 경계를 넘는 수명 문제를 못 잡는다.

@@ -16,9 +16,8 @@
 
 1. 커밋 메시지는 `[도구이름] 영문 제목`. **커밋한 주체를 앞에 밝힌다.**
    - Claude 가 커밋하면 `[Claude]`
-   - Codex 가 커밋하면 `[Codex]`
+   - Codex 가 커밋하면 `[Codex]` + 본문 끝 `Co-authored-by: Codex <codex@openai.com>`
    - Gemini 가 커밋하면 `[Gemini]`
-
    **성능 수치는 넣지 않는다.** 수정 항목과 이유만 쓴다.
 2. **푸쉬는 하지 않는다.** 커밋까지만.
 3. 한글이 든 소스는 **UTF-8 BOM**. 없으면 MSVC 가 CP949 로 읽어 주석이 다음 줄을 삼킨다.

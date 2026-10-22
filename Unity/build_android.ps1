@@ -1,4 +1,4 @@
-# build_android.ps1 — Android 네이티브 플러그인을 빌드해 패키지에 넣는다.
+﻿# build_android.ps1 — Android 네이티브 플러그인을 빌드해 패키지에 넣는다.
 #
 #   pwsh Unity\build_android.ps1                 # arm64-v8a
 #   pwsh Unity\build_android.ps1 -Abi armeabi-v7a
@@ -81,6 +81,16 @@ if ($LASTEXITCODE -ne 0) { throw "cmake build failed ($LASTEXITCODE)" }
 
 $so = Join-Path $buildDir 'libNeoScript.so'
 if (-not (Test-Path $so)) { throw "libNeoScript.so not found under $buildDir" }
+
+# Verify the ELF boundary before deploying: dependencies must remain private.
+$nm = Join-Path $ndk 'toolchains/llvm/prebuilt/windows-x86_64/bin/llvm-nm.exe'
+$symbols = & $nm --dynamic --defined-only $so
+if ($LASTEXITCODE -ne 0) { throw "could not inspect plugin exports" }
+$unexpected = @($symbols | Where-Object { $_.Trim() -and $_ -notmatch '\sNs[A-Za-z0-9_]+$' })
+if ($unexpected.Count -ne 0) {
+    throw ("Plugin exports symbols outside the Ns C ABI: " + ($unexpected -join ', '))
+}
+if (-not ($symbols -match '\sNsGetAbiVersion$')) { throw "Plugin C ABI exports are missing" }
 
 New-Item -ItemType Directory -Force -Path $pluginDir | Out-Null
 Copy-Item (Join-Path $repoRoot "THIRD_PARTY_NOTICES.txt") (Join-Path $repoRoot "Unity/com.neoscript.unity/THIRD_PARTY_NOTICES.txt") -Force

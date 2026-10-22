@@ -1,9 +1,9 @@
-# build_windows.ps1 — Windows x64 네이티브 플러그인을 빌드해 패키지에 넣는다.
+﻿# build_windows.ps1 — Windows x64 네이티브 플러그인을 빌드해 패키지에 넣는다.
 #
 #   pwsh Unity\build_windows.ps1
 #
 # 에디터가 NeoScript.dll 을 물고 있으면 복사가 실패한다. 그럴 때는 에디터에서
-# Tools > NeoScript > Unload native plugin 을 한 번 누르거나 에디터를 껐다 켤 것.
+# Close Unity before rebuilding; DllImport keeps the native plugin loaded.
 
 [CmdletBinding()]
 param(

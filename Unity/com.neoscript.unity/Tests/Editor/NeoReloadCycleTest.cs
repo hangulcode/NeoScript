@@ -68,7 +68,7 @@ namespace NeoScript.Tests
             using (var runtime = new NeoRuntime())
             {
                 runtime.Freeze();
-                using (NeoProgram program = runtime.Compile("export fun F() { return 7; }", "probe.ns"))
+                using (NeoProgram program = runtime.Compile("import system; export fun F() { return system.jsonDecode(system.jsonEncode(7)); }", "probe.ns"))
                 using (NeoInstance instance = program.CreateInstance())
                 {
                     int value = instance.Call("F").InvokeInt();

@@ -75,6 +75,16 @@ namespace NeoScript
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct NsJsonResult
+    {
+        public NsStr text;
+        public NsStr error;
+        public IntPtr warnings;
+        public int warningCount;
+        public int pad;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct NsError
     {
         public int   code;
@@ -211,7 +221,7 @@ namespace NeoScript
         public const string Lib = "NeoScript";
 #endif
 
-        public const int AbiVersion = 1;
+        public const int AbiVersion = 2;
         public const int MaxObjectSlots = 64;
 
         private const CallingConvention Cdecl = CallingConvention.Cdecl;
@@ -315,6 +325,9 @@ namespace NeoScript
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern IntPtr NsCtxArgMap(IntPtr ctx, int i);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern IntPtr NsCtxArgList(IntPtr ctx, int i);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern IntPtr NsCtxArgArray(IntPtr ctx, int i);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsCtxArgIsNativeObject(IntPtr ctx, int i);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsCtxArgToJson(IntPtr ctx, int i, int sortKeys, out NsJsonResult result);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsCtxRetJson(IntPtr ctx, byte* text, int len, int strictIntegers, int requireMap, out NsJsonResult result);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern IntPtr NsCtxArgObjectUserData(IntPtr ctx, int i);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern IntPtr NsCtxArgFunction(IntPtr ctx, int i);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern void NsCtxRetInt(IntPtr ctx, int v);
@@ -343,6 +356,7 @@ namespace NeoScript
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern void NsListReserve(IntPtr l, int count);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern void NsListResize(IntPtr l, int count);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsListCount(IntPtr l);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern void NsListPushNull(IntPtr l);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern void NsListPushInt(IntPtr l, int v);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern void NsListPushFloat(IntPtr l, float v);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern void NsListPushBool(IntPtr l, int v);
@@ -356,6 +370,10 @@ namespace NeoScript
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern IntPtr NsListPushList(IntPtr l);
 
         // --- 리더 ---
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsMapIsNull(IntPtr m, byte* k, int klen);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsMapIsNativeObject(IntPtr m, byte* k, int klen);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsMapSameStorage(IntPtr a, IntPtr b);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsMapStringKeys(IntPtr m, out IntPtr keys, out int count, out int unsupportedKeyType);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsMapHas(IntPtr m, byte* k, int klen);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsMapType(IntPtr m, byte* k, int klen);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsMapGetInt(IntPtr m, byte* k, int klen, out int v);
@@ -366,6 +384,9 @@ namespace NeoScript
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern IntPtr NsMapGetMap(IntPtr m, byte* k, int klen);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern IntPtr NsMapGetList(IntPtr m, byte* k, int klen);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern IntPtr NsMapGetArray(IntPtr m, byte* k, int klen);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsListRdIsNull(IntPtr l, int index);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsListRdIsNativeObject(IntPtr l, int index);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsListRdSameStorage(IntPtr a, IntPtr b);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsListRdCount(IntPtr l);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsListRdType(IntPtr l, int index);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsListRdGetInt(IntPtr l, int index, out int v);
@@ -393,6 +414,7 @@ namespace NeoScript
         {
             Expect<NsStr>(16);
             Expect<NsError>(48);
+            Expect<NsJsonResult>(48);
             Expect<NsCallResult>(48);
             Expect<NsAllocStats>(64);
             Expect<NsRuntimeDesc>(64);

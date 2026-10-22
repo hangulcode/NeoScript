@@ -24,9 +24,50 @@ namespace NeoScript.Tests
     {
         internal readonly List<string> Received = new List<string>();
         internal int Version = 7;
+        internal NeoJsonResult JsonResult;
+        internal bool JsonOk;
+        internal Vector3 Position = new Vector3(1, 2, 3);
+        internal int PositionGets, PositionSets;
 
         public bool Invoke(NeoCallContext ctx, NeoName method)
         {
+            if (method.Is("Encode"))
+            {
+                JsonOk = ctx.ArgToJson(0, out string text, out JsonResult, sortKeys: true);
+                if (JsonOk) ctx.Return(text); else ctx.ReturnNull();
+                return true;
+            }
+            if (method.Is("Decode") || method.Is("DecodeRelaxed") || method.Is("DecodeMap"))
+            {
+                string text = ctx.ArgString(0);
+                JsonOk = ctx.ReturnJson(text, out JsonResult,
+                    strictIntegers: !method.Is("DecodeRelaxed"), requireMap: method.Is("DecodeMap"));
+                return true;
+            }
+            if (method.Is("NullList"))
+            {
+                var list = ctx.ReturnList();
+                list.PushNull(); list.Push(42);
+                return true;
+            }
+            if (method.Is("Readers"))
+            {
+                var map = ctx.ArgMap(0);
+                var list = ctx.ArgList(1);
+                bool ok = map.SameStorage(ctx.ArgMap(0)) && !map.SameStorage(ctx.ArgMap(2)) &&
+                    !map.SameStorage(default) && !map.IsNull("missing") &&
+                    map.IsNativeObject("host") && !map.IsNativeObject("n") &&
+                    list.SameStorage(ctx.ArgList(1)) && !list.SameStorage(default) &&
+                    list.IsNull(0) && !list.IsNull(-1) && !list.IsNull(99) &&
+                    list.IsNativeObject(1) && !list.IsNativeObject(0) &&
+                    !list.IsNativeObject(99) && ctx.ArgIsNativeObject(3) && !ctx.ArgIsNativeObject(99);
+                ok &= map.TryGetStringKeys(out string[] keys, out NeoValueType unsupported) &&
+                    keys.Length == 2 && Array.IndexOf(keys, "host") >= 0 && Array.IndexOf(keys, "n") >= 0;
+                ok &= !ctx.ArgMap(4).TryGetStringKeys(out keys, out unsupported) &&
+                    keys.Length == 0 && unsupported == NeoValueType.Int;
+                ctx.Return(ok);
+                return true;
+            }
             if (method.Is("Double"))
             {
                 ctx.Return(ctx.ArgInt(0) * 2);
@@ -74,6 +115,7 @@ namespace NeoScript.Tests
 
         public bool GetProperty(NeoCallContext ctx, NeoName name)
         {
+            if (name.Is("position")) { ++PositionGets; ctx.Return(Position); return true; }
             if (name.Is("version")) { ctx.Return(Version); return true; }
             if (name.Is("time")) { ctx.Return(1.5f); return true; }
             return false;
@@ -81,6 +123,7 @@ namespace NeoScript.Tests
 
         public bool SetProperty(NeoCallContext ctx, NeoName name)
         {
+            if (name.Is("position")) { ++PositionSets; Position = ctx.ArgVector3(0); return true; }
             if (name.Is("version")) { Version = ctx.ArgInt(0); return true; }
             return false;
         }
@@ -127,12 +170,13 @@ fun Wobble(var t)
 export fun Update(var dt)
 {
     ticks = ticks + 1;
-    Host.Move(Wobble(Host.time));
+    Host.position = Wobble(Host.time);
+    Host.position[1] += dt;
 }
 ";
 
         // import 로 끌어올 가상 모듈. 실제 프로젝트에서는 Resources 나 에셋번들에서 읽는다.
-        private const string UtilSource = "export fun triple(var v) { return v * 3; }\n";
+        private const string UtilSource = "public var value = 5; public const STEP = 3; public fun triple(var v) { return v * 3; }\n";
 
         private static int s_checks;
         private static int s_failures;
@@ -267,6 +311,8 @@ export fun Update(var dt)
                 using (NeoProgram demo = runtime.Compile(DemoStyleSource, "demo.ns"))
                     Check(demo != null, "sample-style script compiles");
 
+                RunRecentUpdates(runtime, host);
+
                 // --- 바이트코드 왕복 ---
                 byte[] bytecode = runtime.CompileToBytecode(Source, "smoke.ns");
                 Check(bytecode.Length > 0, "CompileToBytecode produced {0} bytes", bytecode.Length);
@@ -291,6 +337,69 @@ export fun Update(var dt)
 
             s_log.AppendLine($"=== {s_checks} checks, {s_failures} failures ===");
             return s_failures;
+        }
+
+        private static void RunRecentUpdates(NeoRuntime runtime, HostObject host)
+        {
+            const string source = @"
+import math;
+import system;
+import util;
+export fun Encode(var v) { return Host.Encode(v); }
+export fun Decode(var s) { return Host.Decode(s); }
+export fun DecodeRelaxed(var s) { return Host.DecodeRelaxed(s); }
+export fun DecodeMap(var s) { return Host.DecodeMap(s); }
+export fun Json() { return Host.Encode({""z"": [null, 1, 100.0], ""a"": ""\uD55C\uAE00""}); }
+export fun StdJson() { return system.jsonEncode(system.jsonDecode(""{\""z\"":100.0,\""a\"":1}""), true); }
+export fun BadJson() { return Host.Encode({""a"": [math.Vector3(1,2,3)]}); }
+export fun NativeJson() { return Host.Encode({""a"": Host}); }
+export fun CycleJson() { var a = []; a.append(a); return Host.Encode(a); }
+export fun NullList() { return Host.NullList(); }
+export fun Readers() { return Host.Readers({""host"": Host, ""n"": 7}, [null, Host], {}, Host, {1:2}); }
+export fun Position() { return (Host.position[1] += 4.0); }
+export fun Readonly() { Host.time = 2.0; }
+export fun PublicImport() { util.value += util.STEP; return util.value; }
+export fun FunctionValue() { return type(Later) == ""function"" && Later == Later; }
+fun Later() { return 7; }
+";
+            using (var program = runtime.Compile(source, "updates.ns"))
+            using (var instance = program.CreateInstance())
+            {
+                Check(instance.Call("PublicImport").InvokeInt() == 8, "public var/const import aliases");
+                Check(instance.Call("FunctionValue").Invoke().AsBool, "named function values before definition");
+                Check(instance.Call("Json").InvokeString() == "{\"a\":\"한글\",\"z\":[null,1,100.0]}",
+                    "managed JSON: sorted keys, Unicode, list null, integral float");
+                Check(host.JsonOk && host.JsonResult.Error == "" && host.JsonResult.Warnings.Length == 0,
+                    "JSON success diagnostics");
+                Check(instance.Call("StdJson").InvokeString() == "{\"a\":1,\"z\":100.0}", "script JSON uses same codec");
+                Check(instance.Call("Decode").Arg("\uFEFF100.0").Invoke().Type == NeoValueType.Float, "BOM and real type preserved");
+                Check(instance.Call("Decode").Arg("100").InvokeInt() == 100, "integer decode");
+                Check(instance.Call("Decode").Arg("null").Invoke().Type == NeoValueType.None && host.JsonOk, "valid root null");
+                Check(instance.Call("Decode").Arg("2147483648").Invoke().Type == NeoValueType.None &&
+                    !host.JsonOk && host.JsonResult.Error.StartsWith("$:"), "strict integer failure path");
+                Check(instance.Call("DecodeRelaxed").Arg("2147483648").Invoke().Type == NeoValueType.Float &&
+                    host.JsonOk && host.JsonResult.Warnings.Length == 1, "permissive integer warning");
+                NeoJsonResult saved = host.JsonResult;
+                instance.Call("Decode").Arg("{\"a\":[\"\\u0000\"]}").Invoke();
+                Check(!host.JsonOk && host.JsonResult.Error.StartsWith("$.a[0]:"), "JSON string failure path copied");
+                Check(saved.Warnings.Length == 1 && saved.Warnings[0].StartsWith("$:"), "diagnostics survive later callbacks");
+                instance.Call("DecodeMap").Arg("[]").Invoke();
+                Check(!host.JsonOk, "requireMap rejects list root");
+                instance.Call("BadJson").Invoke();
+                Check(!host.JsonOk && host.JsonResult.Error.StartsWith("$.a[0]:"), "vector JSON rejection path");
+                instance.Call("NativeJson").Invoke();
+                Check(!host.JsonOk && host.JsonResult.Error.StartsWith("$.a:"), "native object JSON rejection");
+                instance.Call("CycleJson").Invoke();
+                Check(!host.JsonOk, "cyclic JSON rejected");
+                instance.Call("NullList").InvokeReadList(list =>
+                    Check(list.Count == 2 && list.IsNull(0) && list.GetInt(1) == 42, "PushNull preserves list slot"));
+                Check(instance.Call("Readers").Invoke().AsBool, "reader null/object/identity/string-key APIs");
+                host.PositionGets = host.PositionSets = 0;
+                Check(instance.Call("Position").Invoke().AsFloat == 6f && host.Position == new Vector3(1,6,3) &&
+                    host.PositionGets == 1 && host.PositionSets == 1, "component write calls property getter/setter once");
+                NeoResult error = instance.Call("Readonly").Invoke();
+                Check(!error.Ok && error.Error.Contains("cannot write property 'time'"), "readonly property reports name");
+            }
         }
 
         private static void CheckPluginImport()
