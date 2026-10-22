@@ -288,8 +288,8 @@ var moved = position + direction * 2.0;
   (quaternion multiplication is `math.quat_*`, which is what you want for composing rotations).
   Arithmetic between different component counts is still rejected.
 
-### Primitive arrays
-`system.array(initial, size)` creates a reference array for dense bool, integer, or float data.
+### Dense arrays
+`system.array(initial, size)` creates a reference array for bool, int, float, or Vector2/3/4 data.
 The type of `initial` selects the element type and fills the initial elements:
 
 ```cpp
@@ -304,7 +304,14 @@ var weights = system.array(0.0, 1024);   // float array
 - Indexes must be integers and must be in range. Invalid reads and writes are runtime errors.
 - Integer and float arrays convert between `int` and `float` on assignment; float-to-int truncates
   toward zero. Bool arrays accept only bool values.
-- `a[i] = value`, `+=`, `-=`, `*=`, `/=`, `%=`, `++`, and `--` are supported.
+- Elements support assignment; numeric elements also support compound assignments and increment/decrement.
+- Vector arrays require the exact component count. Reading an element produces a vector value;
+  changing that local vector does not change the array. `a[i][j] = n`, `+=`, `-=`, `*=`, `/=`,
+  `++`, and `--` write through to the stored component. Whole-vector compound assignments remain
+  unsupported; use `a[i] = a[i] + delta` for vector addition.
+- For example, `system.array(math.Vector3(0, 0, 0), 1000)` stores 1000 vectors (requires `import math;`).
+  Vector components occupy a packed float buffer, without per-element pointers. `resize` fills
+  new elements with the vector value captured when the array was created.
 - `a.append(value)` adds one value at the tail. `a.resize(size)` changes the length; growth fills
   new elements with the `initial` value used to create the array, and shrinking drops the tail.
   A negative resize becomes zero, matching List. There is no middle insertion, remove, or slice.

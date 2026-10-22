@@ -3,11 +3,15 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
+#include <new>
+#include "NeoVMVector.h"
 
 namespace NeoScript
 {
 
-// Dense storage for exactly one of bool/int/float.
+// Dense storage for one of bool/int/float/Vector2/3/4. Vectors contain packed float components,
+// never VecInfo pointers; this remains a leaf allocation.
 // The raw pool recycles only this header, so Allocate/Free always own the
 // lifetime of the separately allocated payload.
 struct ArrayInfo : AllocBase
@@ -22,6 +26,7 @@ struct ArrayInfo : AllocBase
 		bool _initialBool;
 		int _initialInt;
 		NS_FLOAT _initialFloat;
+		NS_FLOAT _initialVector[4];
 	};
 
 	// Lets VM shutdown release payloads still referenced by host/script values.
@@ -33,6 +38,17 @@ struct ArrayInfo : AllocBase
 		return (unsigned)index < (unsigned)_count;
 	}
 
+	NEOS_FORCEINLINE int VectorDimension() const
+	{
+		switch (_elementType)
+		{
+		case NeoArrayElementType::Vector2: return 2;
+		case NeoArrayElementType::Vector3: return 3;
+		case NeoArrayElementType::Vector4: return 4;
+		default: return 0;
+		}
+	}
+
 	NEOS_FORCEINLINE size_t BufferBytes() const
 	{
 		switch (_elementType)
@@ -40,6 +56,9 @@ struct ArrayInfo : AllocBase
 		case NeoArrayElementType::Bool:  return ((size_t)_capacity + 7) >> 3;
 		case NeoArrayElementType::Int:   return (size_t)_capacity * sizeof(int);
 		case NeoArrayElementType::Float: return (size_t)_capacity * sizeof(NS_FLOAT);
+		case NeoArrayElementType::Vector2:
+		case NeoArrayElementType::Vector3:
+		case NeoArrayElementType::Vector4: return (size_t)_capacity * VectorDimension() * sizeof(NS_FLOAT);
 		}
 		return 0;
 	}
@@ -50,6 +69,9 @@ struct ArrayInfo : AllocBase
 	NEOS_FORCEINLINE const int* IntData() const { return static_cast<const int*>(_data); }
 	NEOS_FORCEINLINE NS_FLOAT* FloatData() { return static_cast<NS_FLOAT*>(_data); }
 	NEOS_FORCEINLINE const NS_FLOAT* FloatData() const { return static_cast<const NS_FLOAT*>(_data); }
+
+	NEOS_FORCEINLINE NS_FLOAT* VectorData(int index) { return FloatData() + (size_t)index * VectorDimension(); }
+	NEOS_FORCEINLINE const NS_FLOAT* VectorData(int index) const { return FloatData() + (size_t)index * VectorDimension(); }
 
 	NEOS_FORCEINLINE bool GetBool(int index) const
 	{
@@ -98,6 +120,12 @@ struct ArrayInfo : AllocBase
 				return true;
 			}
 			return false;
+		case NeoArrayElementType::Vector2:
+		case NeoArrayElementType::Vector3:
+		case NeoArrayElementType::Vector4:
+			if (!CanAssignValue(value)) return false;
+			memcpy(VectorData(index), value->_vec->v, sizeof(NS_FLOAT) * VectorDimension());
+			return true;
 		}
 		return false;
 	}
@@ -111,6 +139,10 @@ struct ArrayInfo : AllocBase
 		case NeoArrayElementType::Int:
 		case NeoArrayElementType::Float:
 			return value->GetType() == VAR_INT || value->GetType() == VAR_FLOAT;
+		case NeoArrayElementType::Vector2:
+		case NeoArrayElementType::Vector3:
+		case NeoArrayElementType::Vector4:
+			return value->IsVector() && value->VectorComponentCount() == VectorDimension();
 		}
 		return false;
 	}
@@ -122,6 +154,11 @@ struct ArrayInfo : AllocBase
 		case NeoArrayElementType::Bool:  _initialBool = value._bl; break;
 		case NeoArrayElementType::Int:   _initialInt = value._int; break;
 		case NeoArrayElementType::Float: _initialFloat = value._float; break;
+		case NeoArrayElementType::Vector2:
+		case NeoArrayElementType::Vector3:
+		case NeoArrayElementType::Vector4:
+			memcpy(_initialVector, value._vec->v, sizeof(NS_FLOAT) * VectorDimension());
+			break;
 		}
 	}
 
@@ -154,10 +191,13 @@ struct ArrayInfo : AllocBase
 			break;
 		}
 		case NeoArrayElementType::Float:
+		case NeoArrayElementType::Vector2:
+		case NeoArrayElementType::Vector3:
+		case NeoArrayElementType::Vector4:
 		{
-			NS_FLOAT* replacement = new NS_FLOAT[capacity];
+			NS_FLOAT* replacement = new NS_FLOAT[CheckedFloatCount(capacity)];
 			if (_count > 0)
-				memcpy(replacement, FloatData(), sizeof(NS_FLOAT) * (size_t)_count);
+				memcpy(replacement, FloatData(), sizeof(NS_FLOAT) * CheckedFloatCount(_count));
 			delete[] FloatData();
 			_data = replacement;
 			break;
@@ -208,7 +248,10 @@ struct ArrayInfo : AllocBase
 			_data = new int[count];
 			return true;
 		case NeoArrayElementType::Float:
-			_data = new NS_FLOAT[count];
+		case NeoArrayElementType::Vector2:
+		case NeoArrayElementType::Vector3:
+		case NeoArrayElementType::Vector4:
+			_data = new NS_FLOAT[CheckedFloatCount(count)];
 			return true;
 		}
 		return false;
@@ -220,7 +263,10 @@ struct ArrayInfo : AllocBase
 		{
 		case NeoArrayElementType::Bool:  delete[] BoolBits(); break;
 		case NeoArrayElementType::Int:   delete[] IntData(); break;
-		case NeoArrayElementType::Float: delete[] FloatData(); break;
+		case NeoArrayElementType::Float:
+		case NeoArrayElementType::Vector2:
+		case NeoArrayElementType::Vector3:
+		case NeoArrayElementType::Vector4: delete[] FloatData(); break;
 		}
 		_data = nullptr;
 		_count = 0;
@@ -229,6 +275,7 @@ struct ArrayInfo : AllocBase
 	}
 
 private:
+	friend class CNeoVM;
 	void SetInitialRange(int begin, int end)
 	{
 		switch (_elementType)
@@ -254,7 +301,20 @@ private:
 			for (int i = begin; i < end; ++i)
 				FloatData()[i] = _initialFloat;
 			break;
+		case NeoArrayElementType::Vector2:
+		case NeoArrayElementType::Vector3:
+		case NeoArrayElementType::Vector4:
+			for (int i = begin; i < end; ++i)
+				memcpy(VectorData(i), _initialVector, sizeof(NS_FLOAT) * VectorDimension());
+			break;
 		}
+	}
+	size_t CheckedFloatCount(int count) const
+	{
+		const size_t width = VectorDimension() ? (size_t)VectorDimension() : 1;
+		if ((size_t)count > (std::numeric_limits<size_t>::max)() / sizeof(NS_FLOAT) / width)
+			throw std::bad_array_new_length();
+		return (size_t)count * width;
 	}
 };
 
@@ -265,6 +325,9 @@ inline const char* GetArrayElementTypeName(NeoArrayElementType type)
 	case NeoArrayElementType::Bool:  return "bool";
 	case NeoArrayElementType::Int:   return "int";
 	case NeoArrayElementType::Float: return "float";
+	case NeoArrayElementType::Vector2: return "Vector2";
+	case NeoArrayElementType::Vector3: return "Vector3";
+	case NeoArrayElementType::Vector4: return "Vector4";
 	}
 	return "unknown";
 }

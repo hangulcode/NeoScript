@@ -50,6 +50,19 @@ namespace NeoScript.Tests
                 list.PushNull(); list.Push(42);
                 return true;
             }
+            if (method.Is("VectorArray"))
+            {
+                var a = ctx.ArgArray(0);
+                int dim = ctx.ArgInt(1);
+                var data = a.VectorComponents;
+                bool ok = a.VectorDimension == dim && a.Count == 2 && data.Length == 2 * dim &&
+                    (int)a.ElementType == (int)NeoArrayElementType.Vector2 + dim - 2 &&
+                    a.Floats.IsEmpty && a.Ints.IsEmpty;
+                for (int i = 0; i < data.Length; ++i) ok &= data[i] == i % dim + 1;
+                if (data.Length > dim) data[dim] = 9;
+                ctx.Return(ok);
+                return true;
+            }
             if (method.Is("Readers"))
             {
                 var map = ctx.ArgMap(0);
@@ -356,6 +369,13 @@ export fun NativeJson() { return Host.Encode({""a"": Host}); }
 export fun CycleJson() { var a = []; a.append(a); return Host.Encode(a); }
 export fun NullList() { return Host.NullList(); }
 export fun Readers() { return Host.Readers({""host"": Host, ""n"": 7}, [null, Host], {}, Host, {1:2}); }
+export fun VectorArrays() {
+ var a=system.array(math.Vector2(1,2),2);var b=system.array(math.Vector3(1,2,3),2);var c=system.array(math.Vector4(1,2,3,4),2);
+ return Host.VectorArray(a,2) && Host.VectorArray(b,3) && Host.VectorArray(c,4) && a[1][0]==9 && b[1][0]==9 && c[1][0]==9;
+}
+export fun VectorData() { return system.array(math.Vector3(1,2,3),2); }
+export fun EmptyVectorData() { return system.array(math.Vector4(1,2,3,4),0); }
+export fun FloatData() { return system.array(1.0,2); }
 export fun Position() { return (Host.position[1] += 4.0); }
 export fun Readonly() { Host.time = 2.0; }
 export fun PublicImport() { util.value += util.STEP; return util.value; }
@@ -394,6 +414,15 @@ fun Later() { return 7; }
                 instance.Call("NullList").InvokeReadList(list =>
                     Check(list.Count == 2 && list.IsNull(0) && list.GetInt(1) == 42, "PushNull preserves list slot"));
                 Check(instance.Call("Readers").Invoke().AsBool, "reader null/object/identity/string-key APIs");
+                Check(instance.Call("VectorArrays").Invoke().AsBool, "packed vector array callbacks: Vector2/3/4");
+                instance.Call("VectorData").InvokeReadArray(a =>
+                    Check(a.VectorDimension == 3 && a.Count == 2 && a.VectorComponents.Length == 6 &&
+                        a.VectorComponents[5] == 3, "vector array return view"));
+                instance.Call("EmptyVectorData").InvokeReadArray(a =>
+                    Check(a.VectorDimension == 4 && a.Count == 0 && a.VectorComponents.IsEmpty, "empty vector array"));
+                instance.Call("FloatData").InvokeReadArray(a =>
+                    Check(a.VectorDimension == 0 && a.VectorComponents.IsEmpty && a.Floats.Length == 2,
+                        "scalar arrays keep their typed accessors"));
                 host.PositionGets = host.PositionSets = 0;
                 Check(instance.Call("Position").Invoke().AsFloat == 6f && host.Position == new Vector3(1,6,3) &&
                     host.PositionGets == 1 && host.PositionSets == 1, "component write calls property getter/setter once");

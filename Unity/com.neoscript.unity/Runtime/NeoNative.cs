@@ -54,6 +54,9 @@ namespace NeoScript
         Bool  = 0,
         Int   = 1,
         Float = 2,
+        Vector2 = 3,
+        Vector3 = 4,
+        Vector4 = 5,
     }
 
     public enum NeoDefineKind
@@ -221,7 +224,7 @@ namespace NeoScript
         public const string Lib = "NeoScript";
 #endif
 
-        public const int AbiVersion = 2;
+        public const int AbiVersion = 3;
         public const int MaxObjectSlots = 64;
 
         private const CallingConvention Cdecl = CallingConvention.Cdecl;
@@ -402,6 +405,8 @@ namespace NeoScript
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern byte* NsArrayBoolBits(IntPtr a);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern int* NsArrayInts(IntPtr a);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern float* NsArrayFloats(IntPtr a);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsArrayVectorDimension(IntPtr a);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern float* NsArrayVectorData(IntPtr a);
     }
 
     /// <summary>

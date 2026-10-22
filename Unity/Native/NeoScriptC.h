@@ -53,7 +53,7 @@ extern "C" {
 // ABI 버전. 구조체 레이아웃이나 함수 시그니처가 바뀌면 올린다. 바인딩(C#)은 기동 시
 // NsGetAbiVersion() 으로 확인해서 어긋나면 바로 실패시킬 것 — 조용한 메모리 깨짐보다 낫다.
 //------------------------------------------------------------------------------
-#define NS_ABI_VERSION 2
+#define NS_ABI_VERSION 3
 
 // 한 프로세스에서 등록할 수 있는 네이티브 객체 타입 수. 디스패처가 컨텍스트 없는
 // 함수 포인터라 슬롯마다 고정 썽크가 필요해서 상한이 있다.
@@ -111,6 +111,9 @@ typedef uint32_t NsObjectType;
 #define NS_ELEM_BOOL  0
 #define NS_ELEM_INT   1
 #define NS_ELEM_FLOAT 2
+#define NS_ELEM_VECTOR2 3
+#define NS_ELEM_VECTOR3 4
+#define NS_ELEM_VECTOR4 5
 
 #define NS_DEFINE_IDENTIFIER 0
 #define NS_DEFINE_INT        1
@@ -509,6 +512,11 @@ NS_API int32_t  NS_CALL NsArrayCount(NsArrayView* a);
 NS_API uint8_t* NS_CALL NsArrayBoolBits(NsArrayView* a);
 NS_API int32_t* NS_CALL NsArrayInts(NsArrayView* a);
 NS_API float*   NS_CALL NsArrayFloats(NsArrayView* a);
+/* Vector data is count * dimension packed floats, with no padding. Quaternion
+ * arrays are Vector4 and keep script component order (w,x,y,z). Borrowed lifetime
+ * and resize invalidation are the same as the other array pointers. */
+NS_API int32_t  NS_CALL NsArrayVectorDimension(NsArrayView* a);
+NS_API float*   NS_CALL NsArrayVectorData(NsArrayView* a);
 
 #ifdef __cplusplus
 }   /* extern "C" */

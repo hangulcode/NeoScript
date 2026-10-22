@@ -340,6 +340,20 @@ namespace NeoScript
             }
         }
 
+        /// <summary>2/3/4 for vector arrays; zero for other element types.</summary>
+        public int VectorDimension => NeoNative.NsArrayVectorDimension(_handle);
+
+        /// <summary>Packed vector components in element order, without padding.
+        /// Quaternion data keeps script w,x,y,z order. Empty for non-vector arrays.</summary>
+        public Span<float> VectorComponents
+        {
+            get
+            {
+                float* p = NeoNative.NsArrayVectorData(_handle);
+                return p == null ? Span<float>.Empty : new Span<float>(p, checked(Count * VectorDimension));
+            }
+        }
+
         /// <summary>bool 원소는 비트로 채워져 있다. 하위 비트가 먼저다.</summary>
         public bool GetBool(int index)
         {

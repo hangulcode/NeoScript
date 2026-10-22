@@ -39,6 +39,24 @@ NEOS_FORCEINLINE void ArrayReadValue(CNeoVMWorker* worker, ArrayInfo* array, int
 	case NeoArrayElementType::Bool:  worker->Var_SetBool(out, array->GetBool(index)); break;
 	case NeoArrayElementType::Int:   worker->Var_SetInt(out, array->IntData()[index]); break;
 	case NeoArrayElementType::Float: worker->Var_SetFloat(out, array->FloatData()[index]); break;
+	case NeoArrayElementType::Vector2:
+	{
+		const NS_FLOAT* v = array->VectorData(index);
+		worker->Var_SetVec2(out, v[0], v[1]);
+		break;
+	}
+	case NeoArrayElementType::Vector3:
+	{
+		const NS_FLOAT* v = array->VectorData(index);
+		worker->Var_SetVec3(out, v[0], v[1], v[2]);
+		break;
+	}
+	case NeoArrayElementType::Vector4:
+	{
+		const NS_FLOAT* v = array->VectorData(index);
+		worker->Var_SetVec4(out, v[0], v[1], v[2], v[3]);
+		break;
+	}
 	}
 }
 

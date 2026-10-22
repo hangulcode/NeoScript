@@ -65,6 +65,9 @@ static_assert((int)ValueType::Function == NS_TYPE_FUNCTION, "ValueType drift");
 static_assert((int)ArrayElementType::Bool  == NS_ELEM_BOOL,  "ArrayElementType drift");
 static_assert((int)ArrayElementType::Int   == NS_ELEM_INT,   "ArrayElementType drift");
 static_assert((int)ArrayElementType::Float == NS_ELEM_FLOAT, "ArrayElementType drift");
+static_assert((int)ArrayElementType::Vector2 == NS_ELEM_VECTOR2, "ArrayElementType drift");
+static_assert((int)ArrayElementType::Vector3 == NS_ELEM_VECTOR3, "ArrayElementType drift");
+static_assert((int)ArrayElementType::Vector4 == NS_ELEM_VECTOR4, "ArrayElementType drift");
 
 static_assert((int)DefineKind::Identifier == NS_DEFINE_IDENTIFIER, "DefineKind drift");
 static_assert((int)DefineKind::Int        == NS_DEFINE_INT,        "DefineKind drift");
@@ -2011,6 +2014,16 @@ NS_API int32_t* NS_CALL NsArrayInts(NsArrayView* a)
 NS_API float* NS_CALL NsArrayFloats(NsArrayView* a)
 {
     return a != nullptr ? Deref(a)->floats() : nullptr;
+}
+
+NS_API int32_t NS_CALL NsArrayVectorDimension(NsArrayView* a)
+{
+    return a != nullptr ? Deref(a)->vectorDimension() : 0;
+}
+
+NS_API float* NS_CALL NsArrayVectorData(NsArrayView* a)
+{
+    return a != nullptr ? Deref(a)->vectorData() : nullptr;
 }
 
 } // extern "C"

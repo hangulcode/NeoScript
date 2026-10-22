@@ -17,10 +17,10 @@ When looking for a feature, consult both the examples here and the [full API ref
 | Module access | Only `public` functions, constants, and variables are accessible as `alias.F()`, `alias.NAME`, and `alias.value`. `export` exposes declarations to the C++ host, not to other modules. |
 | Conditions | Conditions in `if` and `while` must be `bool`. Numbers and strings are not automatically treated as true. |
 | Numbers | `int` is a 32-bit integer; `float` is a 32-bit floating-point number. `/` between integers performs integer division. |
-| Indices | Lists, primitive arrays, and vectors use zero-based indices. Strings do not support `s[i]`. |
+| Indices | Lists, dense arrays, and vectors use zero-based indices. Strings do not support `s[i]`. |
 | Strings | Concatenate with `..`, extract with `sub(start, count)`, and check for `-1` when `find` fails. |
 | Assigning `null` | Keeps the slot in a list; removes the key from a map. |
-| Copying | Assigning a list, map, or primitive array shares its storage. Assigning a vector copies its value. |
+| Copying | Assigning a list, map, or dense array shares its storage. Assigning a vector copies its value. |
 | Reference comparison | `==` on containers, functions, and engine objects checks identity. Separate containers with equal contents are not equal. |
 | Anonymous functions | Capture local values by value. Updating a captured scalar does not update the outer local variable. |
 | API names | Case and argument count matter. Search `API.md` before concluding that a feature is unavailable. |
@@ -308,13 +308,13 @@ print(sumAgain);                   // 60
   Do not use `for (var i = 0; i < n; i++)` in the current default build.
 - The start is inclusive and the end is exclusive. To traverse a list backward, use `len()-1` to `-1`.
 - The step can be a runtime value. A direction inconsistent with the range runs zero iterations; a zero step is a runtime error.
-- A single `foreach` variable over a list, primitive array, or set holds the **value**, not the index.
+- A single `foreach` variable over a list, dense array, or set holds the **value**, not the index.
   Use a range `for` when you need an index.
 - `foreach (var v in [1,2,3])`, containers returned by functions, and `m.keys()` are supported.
   The source expression is evaluated once on entry, and its temporary result stays alive until the loop ends.
   Nested loops keep independent sources; they do not deep-copy the containers.
 - Maps support `foreach (var key in map)` and `foreach (var key, value in map)`.
-- Avoid changing the element count during iteration. Changing a primitive array's length is an error.
+- Avoid changing the element count during iteration. Changing a dense array's length is an error.
   To remove several map keys, iterate over the list returned by `keys()` and modify the original map.
 - `while (condition)` is also available. `break` exits the innermost loop or switch,
   and `continue` advances to the next loop iteration. There is no `do ... while`.
@@ -355,7 +355,7 @@ Follow repository conventions: order cases by value and place default last.
 | --- | --- | --- | --- |
 | `list` | `[1, "a", null]`, `[]` | `.len()` / `tosize` | Mixed element types; preserves order |
 | `map` | `{"hp": 10}`, `{}` | `.len()` / `tosize` | Key-based access; do not rely on iteration order |
-| Primitive `array` | `system.array(0, n)` | `.len()` / `tosize` | One element type: bool, int, or float |
+| Dense `array` | `system.array(0, n)` | `.len()` / `tosize` | One element type: bool, int, float, or Vector2/3/4 |
 | `set` | `system.set(list)` | `.len()` / `tosize` | Removes duplicates at creation; supports iteration |
 | Vector | `math.Vector3(x, y, z)` | **`tosize`** | Fixed component count, value copying, dedicated math functions |
 
@@ -462,7 +462,7 @@ Passing or returning a container does not automatically copy it.
 
 ### Reference comparison and reference keys
 
-`==` on lists, maps, sets, and primitive arrays checks **whether storage is shared**. Separately created containers
+`==` on lists, maps, sets, and dense arrays checks **whether storage is shared**. Separately created containers
 are unequal even when their contents match; their contents are not compared recursively. `!=` is the inverse.
 Functions compare by function identity; closures, coroutines, runtime modules, and async objects compare by instance identity.
 Host objects with the same registered type and object handle remain equal across repeated lookups or returns.
@@ -486,7 +486,7 @@ still refer to the previous object. The host manages object lifetime; `== null` 
 Value comparison for numbers, strings, bools, null, and vectors is unchanged. Numeric map/set keys distinguish types,
 so keys `1` and `1.0` are separate even though `1 == 1.0` is true.
 
-### Primitive arrays: large collections of numbers and flags
+### Dense arrays: numbers, flags, and vectors
 
 ```cpp
 import system;
@@ -508,6 +508,30 @@ The type of `initial` determines the element type. Use `0` for an int array and 
 Only integer indices are allowed; out-of-range reads and writes are errors.
 Assignments convert between int and float; float-to-int truncates toward zero. Bool arrays accept only bools.
 `append(value)` and `resize(n)` are supported, but insertion at an arbitrary position, as with lists, is not.
+
+Vector arrays keep the same reference semantics for the array and value semantics for its elements:
+
+```cpp
+import system;
+import math;
+
+var initial = math.Vector3(1, 2, 3);
+var positions = system.array(initial, 2);
+var alias = positions;
+alias[0][1] += 5;                    // positions[0] becomes (1, 7, 3)
+var p = positions[0];
+p[0] = 99;                          // positions[0] is unchanged
+positions[1] = p;                    // explicitly store the changed value
+initial[0] = 50;
+positions.resize(3);                // positions[2] is (1, 2, 3)
+```
+
+Vector2, Vector3, and Vector4 arrays require values of the exact component count, including in
+`append`. `len()` and `tosize` count vectors. `foreach` yields vector values, so modifying the loop
+variable does not update the array. Component writes (`positions[i][j]`) do update it, using the
+same evaluation order as other container component writes. Whole-vector compound assignment is
+unsupported; use `positions[i] = positions[i] + delta`. Internally, components are packed floats;
+the array does not retain a separate vector object per element.
 
 ### Sets: remove duplicates and iterate
 
@@ -819,7 +843,7 @@ if (system.jsonError() != "") print(system.jsonError());
 - Failure returns null, and `system.jsonError()` reports a reason and a path such as `$.ships[2]`.
   The next successful conversion clears the error. A successful `jsonDecode("null")` is distinguished by an empty error string.
 - Successful JSON serialization does not guarantee a successful file save. Check the file API's result too.
-- JSON conversion does not dictate runtime data layout. Keep primitive arrays for per-tick processing,
+- JSON conversion does not dictate runtime data layout. Keep dense arrays for per-tick processing,
   and convert to maps and lists at the persistence boundary. See [JSON.md](JSON.md) for detailed rules.
 
 `system.pcall` is not Lua's protected call. Internal errors propagate to the caller and stop execution.

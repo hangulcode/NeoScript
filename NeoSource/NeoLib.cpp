@@ -1649,6 +1649,15 @@ struct neo_libs
 		case VAR_INT:   elementType = NeoArrayElementType::Int; break;
 		case VAR_FLOAT: elementType = NeoArrayElementType::Float; break;
 		case VAR_BOOL:  elementType = NeoArrayElementType::Bool; break;
+		case VAR_VEC:
+			switch (initialValue->VectorComponentCount())
+			{
+			case 2: elementType = NeoArrayElementType::Vector2; break;
+			case 3: elementType = NeoArrayElementType::Vector3; break;
+			case 4: elementType = NeoArrayElementType::Vector4; break;
+			default: return false;
+			}
+			break;
 		default:        return false;
 		}
 

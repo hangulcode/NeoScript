@@ -142,6 +142,11 @@ wrong element accessor. Script-side `append` or size-changing `resize` can reall
 so do not re-enter script and retain the pointer across a structural array change. `boolBits()` is
 packed least-significant-bit first: bit `i` is
 `(bits[i >> 3] >> (i & 7)) & 1`; `ints()` and `floats()` return contiguous element storage.
+For Vector2/3/4 arrays, `vectorDimension()` returns 2/3/4 and `vectorData()` returns packed
+float components, with `count()` counting vectors. Element `i`, component `j` is at
+`vectorData()[size_t(i) * vectorDimension() + j]`. Scalar arrays return dimension zero and a
+null vector pointer; `floats()` remains exclusive to scalar float arrays. Quaternion arrays
+retain script w,x,y,z component order. All pointer lifetime and resize rules above apply.
 
 So: **one live `Invocation` per instance** at a time — a second `Call` while one is still armed (built but
 not yet invoked) returns a falsy `Invocation`; and a value read with `retX` is only valid until the next

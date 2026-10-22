@@ -241,7 +241,7 @@ Use `import system;` before calling these functions.
 | `system.time()` | `int` | Unix seconds |
 | `system.date(format: string, time: int)` | `string` | `strftime` + `localtime`, output capped at 79 chars |
 | `system.clock()` | `float` | `clock() / CLOCKS_PER_SEC` in seconds. Use for deltas, not wall time |
-| `system.array(initial: bool\|int\|float, size: int)` | `array` | Dense primitive array. `initial` chooses the element type and fills the initial elements; `size` must be non-negative |
+| `system.array(initial: bool\|int\|float\|Vector2\|Vector3\|Vector4, size: int)` | `array` | Dense typed array. `initial` chooses the element type and fills the initial elements; `size` must be non-negative |
 | `system.load(source: string, name: string)` | `module` | Compiles `source` at run time. `name` is type-checked but unused. A compile failure raises `invalid function call`; it does not return `null` |
 | `system.pcall(m: module)` | `void` | Runs the module's top-level code |
 | `system.set(l: list)` | `set` | Builds a set from a list; duplicates collapse |
@@ -344,7 +344,7 @@ Sorting works on retained snapshots, then writes back only on success. Structura
 `list was modified during sort`; callback errors and non-bool results also abort. Callback side
 effects are not rolled back. List slots are shallow snapshots; contained maps/lists remain references.
 
-### 7.1 Primitive arrays
+### 7.1 Dense arrays
 
 ```cpp
 import system;
@@ -360,7 +360,14 @@ argument. Arrays are reference values like List: assignment shares the same stor
 each value; `foreach(var index, value in a)` is rejected.
 
 - Only integer indexes in `[0, a.len())` are valid. Out-of-range reads and writes are runtime errors.
-- `=`, `+=`, `-=`, `*=`, `/=`, `%=`, `++`, and `--` work on an element.
+- All element types support `=`. Numeric elements support `+=`, `-=`, `*=`, `/=`, `%=`, `++`, and `--`.
+- Vector elements require exactly the array's component count. `a[i]` and `foreach` return vector
+  values: modifying a copied local vector does not modify the array. `a[i][j]` component assignment,
+  `+=`, `-=`, `*=`, `/=`, `++`, and `--` write back to the array. Whole-vector compound assignment
+  is unsupported; use `a[i] = a[i] + delta`. Array length counts vectors, not float components.
+- Vector components are packed floats in element order; no per-element vector allocation is retained.
+  `system.array(math.Quaternion(w,x,y,z), n)` creates a Vector4 array with the same w,x,y,z order; there is no automatic
+  conversion to a host quaternion layout. Resizing uses the vector initial value captured at creation.
 - int and float arrays convert between those two numeric types on assignment. Float to int truncates
   toward zero. Bool arrays accept only bool values.
 - `a.append(value)` appends exactly one value. `a.resize(size)` changes the length; newly grown
@@ -488,7 +495,7 @@ component-wise add rather than an error. Compose rotations with `math.quat_slerp
 | string | `"string"` |
 | map | `"map"` |
 | list | `"list"` |
-| primitive array | `"array"` |
+| dense array | `"array"` |
 | set | `"set"` |
 | script function or lambda | `"function"` |
 | coroutine | `"coroutine"` |

@@ -1752,6 +1752,9 @@ ArrayElementType ArrayView::elementType() const
     case NeoArrayElementType::Bool:  return ArrayElementType::Bool;
     case NeoArrayElementType::Int:   return ArrayElementType::Int;
     case NeoArrayElementType::Float: return ArrayElementType::Float;
+    case NeoArrayElementType::Vector2: return ArrayElementType::Vector2;
+    case NeoArrayElementType::Vector3: return ArrayElementType::Vector3;
+    case NeoArrayElementType::Vector4: return ArrayElementType::Vector4;
     }
     return ArrayElementType::Bool;
 }
@@ -1759,6 +1762,8 @@ int ArrayView::count() const { const ArrayInfo* a=static_cast<const ArrayInfo*>(
 uint8_t* ArrayView::boolBits() const { ArrayInfo* a=const_cast<ArrayInfo*>(static_cast<const ArrayInfo*>(m_impl)); return a&&a->_elementType==NeoArrayElementType::Bool?a->BoolBits():nullptr; }
 int32_t* ArrayView::ints() const { ArrayInfo* a=const_cast<ArrayInfo*>(static_cast<const ArrayInfo*>(m_impl)); return a&&a->_elementType==NeoArrayElementType::Int?reinterpret_cast<int32_t*>(a->IntData()):nullptr; }
 float* ArrayView::floats() const { ArrayInfo* a=const_cast<ArrayInfo*>(static_cast<const ArrayInfo*>(m_impl)); return a&&a->_elementType==NeoArrayElementType::Float?reinterpret_cast<float*>(a->FloatData()):nullptr; }
+int ArrayView::vectorDimension() const { const ArrayInfo* a=static_cast<const ArrayInfo*>(m_impl); return a?a->VectorDimension():0; }
+float* ArrayView::vectorData() const { ArrayInfo* a=const_cast<ArrayInfo*>(static_cast<const ArrayInfo*>(m_impl)); return a&&a->VectorDimension()?a->FloatData():nullptr; }
 
 //==============================================================================
 // Invocation (호스트→스크립트 호출 핸들) — 인자 VM 슬롯 직접, 반환 in-place zero-copy

@@ -911,6 +911,11 @@ ArrayInfo* CNeoVM::ArrayAlloc(NeoArrayElementType elementType, int count, const 
 		case NeoArrayElementType::Float:
 			std::fill_n(array->FloatData(), count, initialValue._float);
 			break;
+		case NeoArrayElementType::Vector2:
+		case NeoArrayElementType::Vector3:
+		case NeoArrayElementType::Vector4:
+			array->SetInitialRange(0, count);
+			break;
 		}
 	}
 

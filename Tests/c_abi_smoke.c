@@ -102,6 +102,22 @@ static int32_t NS_CALL OnMethod(void* user, int32_t slot, NsContext* ctx,
 
     if (slot == g_hostSlot)
     {
+        if (SameStr(method, methodLen, "VectorArray"))
+        {
+            NsArrayView* a = NsCtxArgArray(ctx, 0);
+            int32_t dim = NsCtxArgInt(ctx, 1);
+            float* data = NsArrayVectorData(a);
+            int32_t i, ok = NsArrayCount(a) == 2 && NsArrayVectorDimension(a) == dim &&
+                NsArrayElementType(a) == NS_ELEM_VECTOR2 + dim - 2 && data != NULL &&
+                NsArrayFloats(a) == NULL && NsArrayInts(a) == NULL && NsArrayBoolBits(a) == NULL;
+            if (data != NULL)
+            {
+                for (i = 0; i < dim * 2; ++i) ok = ok && data[i] == (float)(i % dim + 1);
+                data[dim] = 9;
+            }
+            NsCtxRetBool(ctx, ok);
+            return 1;
+        }
         if (SameStr(method, methodLen, "JsonProbe"))
         {
             NsJsonResult first, next;
@@ -244,6 +260,9 @@ static void NS_CALL OnReadMap(void* user, NsMapReader* reader)
 
 static const char* kSource =
     "import math;\n"
+    "import system;\n"
+    "export fun VectorArrays() { var a=system.array(math.Vector2(1,2),2); var b=system.array(math.Vector3(1,2,3),2); var c=system.array(math.Vector4(1,2,3,4),2); return Host.VectorArray(a,2) && Host.VectorArray(b,3) && Host.VectorArray(c,4) && a[1][0]==9 && b[1][0]==9 && c[1][0]==9; }\n"
+    "export fun VectorData() { return system.array(math.Vector3(1,2,3),2); }\n"
     "import helper;\n"
     /* Only exported globals are reachable by name from the host. */
     "export var counter = 10;\n"
@@ -344,6 +363,20 @@ int main(void)
     call = NsCallBeginName(rt, instance, "JsonProbe", 9);
     Check(NsCallInvokeR(call, &result) == NS_RUN_COMPLETED && result.i == 1, "JSON/collection extensions round-trip");
     NsCallEnd(call);
+
+    call = NsCallBeginName(rt, instance, "VectorArrays", 12);
+    Check(NsCallInvokeR(call, &result) == NS_RUN_COMPLETED && result.i == 1, "packed vector arrays: C callback reads and writes all dimensions");
+    NsCallEnd(call);
+    call = NsCallBeginName(rt, instance, "VectorData", 10);
+    Check(NsCallInvoke(call) == NS_RUN_COMPLETED, "return vector array");
+    {
+        NsArrayView* a = NsCallRetArray(call);
+        float* data = NsArrayVectorData(a);
+        Check(NsArrayVectorDimension(a) == 3 && NsArrayCount(a) == 2 && data != NULL && data[5] == 3,
+            "returned vector array view preserves packed layout");
+    }
+    NsCallEnd(call);
+    Check(NsArrayVectorDimension(NULL) == 0 && NsArrayVectorData(NULL) == NULL, "invalid vector view");
 
     /* --- scalar call through a cached function handle --- */
     addFn = NsFindFunction(rt, program, "Add", 3);

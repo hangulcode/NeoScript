@@ -176,6 +176,9 @@ enum class ArrayElementType : uint8_t
     Bool,
     Int,
     Float,
+    Vector2,
+    Vector3,
+    Vector4,
 };
 
 struct Error
@@ -310,7 +313,7 @@ private:
     const void* m_impl = nullptr;
 };
 
-// Fixed-size bool/int/float storage exposed without copying.  The backing
+// Dense bool/int/float/Vector2/3/4 storage exposed without copying. The backing
 // storage cannot resize, but the view and every pointer returned from it are
 // borrowed: they are valid only during the native callback that supplied it,
 // or during Invocation's documented return-view lifetime.
@@ -326,6 +329,8 @@ public:
     uint8_t* boolBits() const;  // nullptr unless elementType()==Bool
     int32_t* ints() const;      // nullptr unless elementType()==Int
     float* floats() const;      // nullptr unless elementType()==Float
+    int vectorDimension() const; // 2/3/4 for vector arrays; 0 otherwise
+    float* vectorData() const;  // packed components, count()*vectorDimension() floats; nullptr otherwise
 
 private:
     friend class CallContext; friend class Invocation; friend struct NeoScriptInternal;
@@ -859,7 +864,7 @@ struct AllocStats
     int32_t modules = 0;
     int32_t asyncs = 0;
     int32_t vectors = 0;   // Vector2/3/4/Quaternion 성분 저장소(VecInfo)
-    int32_t arrays = 0;    // system.array bool/int/float 저장소(ArrayInfo)
+    int32_t arrays = 0;    // system.array bool/int/float/vector 저장소(ArrayInfo)
     // VM이 풀 밖에서 직접 보유하는 가변 buffer 할당 바이트 합계. 현재는 array의
     // 실제 capacity payload가 기여하며, 이후 같은 종류의 저장소도 이 카운터에 합산한다.
     int64_t bufferBytes = 0;

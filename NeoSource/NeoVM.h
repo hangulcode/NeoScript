@@ -173,7 +173,7 @@ enum VAR_TYPE : u8
 	// _pUserData 는 호스트 소유의 불투명 포인터라 VM 관점에서는 리프다.
 	VAR_FP_NATIVE,
 
-	// 밀집 원시 배열. bool/int/float 중 한 형식만 담으며, 다른 alloc 자식이 없어
+	// 밀집 배열. bool/int/float/Vector2/3/4 중 한 형식만 담으며, 다른 alloc 자식이 없어
 	// 리프다. List와 같은 참조 의미론(대입 뒤 같은 저장소 공유)을 쓴다.
 	VAR_ARRAY,
 
@@ -248,12 +248,15 @@ struct MapNode;
 struct SetNode;
 struct VecInfo;
 
-// system.array의 원소 형식. bool은 원소당 1비트, int/float은 각 원시 배열로 저장한다.
+// system.array의 원소 형식. bool은 비트, int/float은 원시 배열, 벡터는 float 성분을 연속 저장한다.
 enum class NeoArrayElementType : u8
 {
 	Bool,
 	Int,
 	Float,
+	Vector2,
+	Vector3,
+	Vector4,
 };
 
 // 순환 수집 후보의 intrusive FIFO 링크와 수명 상태. 후보 큐에 없을 때는

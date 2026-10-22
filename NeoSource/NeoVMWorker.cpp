@@ -1516,6 +1516,19 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 					snprintf(buf, sizeof(buf), "%g", (double)array->FloatData()[i]);
 					child.value = buf;
 					break;
+				case NeoArrayElementType::Vector2:
+				case NeoArrayElementType::Vector3:
+				case NeoArrayElementType::Vector4:
+				{
+					const NS_FLOAT* v = array->VectorData(i);
+					child.type = GetArrayElementTypeName(array->_elementType);
+					const int n = array->VectorDimension();
+					if (n == 2) snprintf(buf, sizeof(buf), "(%g, %g)", v[0], v[1]);
+					else if (n == 3) snprintf(buf, sizeof(buf), "(%g, %g, %g)", v[0], v[1], v[2]);
+					else snprintf(buf, sizeof(buf), "(%g, %g, %g, %g)", v[0], v[1], v[2], v[3]);
+					child.value = buf;
+					break;
+				}
 				}
 				out.children.push_back(std::move(child));
 			}
@@ -2782,13 +2795,15 @@ bool CNeoVMWorker::ArrayModify(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue, eN
 	case NOP_TABLE_PERSENT2: Per2(&value, pValue); break;
 	default:
 		SetError(RTE_UNKNOWN_OP);
+		Var_Release(&value);
 		return false;
 	}
 
-	if (ArrayWriteValue(array, index, &value))
-		return true;
-	SetErrorFormat(RTE_ARRAY_VALUE_TYPE, GetDataType(value.GetType()).c_str(), GetArrayElementTypeName(array->_elementType));
-	return false;
+	const bool written = ArrayWriteValue(array, index, &value);
+	if (!written)
+		SetErrorFormat(RTE_ARRAY_VALUE_TYPE, GetDataType(value.GetType()).c_str(), GetArrayElementTypeName(array->_elementType));
+	Var_Release(&value);
+	return written;
 }
 
 std::string GetDataType(VAR_TYPE t)
