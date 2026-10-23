@@ -56,7 +56,8 @@ namespace NeoScript
 	X(RTE_EXEC_POOL_REQUIRED,      "NeoExecContextPool is required") \
 	X(RTE_DEFAULT_VALUE,           "unknown default value") \
 	X(RTE_INTEGER_DIV_ZERO,        "integer division by zero") \
-	X(RTE_INTEGER_DIV_OVERFLOW,    "integer division overflow")
+	X(RTE_INTEGER_DIV_OVERFLOW,    "integer division overflow") \
+	X(RTE_INTEGER_SHIFT_RANGE,     "shift count must be between 0 and 31")
 
 enum ENeoRuntimeError
 {

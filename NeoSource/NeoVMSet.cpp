@@ -44,7 +44,7 @@ u32 GetHashCode(VarInfo* p)
 	switch (p->GetType())
 	{
 	case VAR_INT:        return (u32)p->_int;
-	case VAR_FLOAT:      return GetHashCode((u8*)&p->_float, sizeof(p->_float));
+	case VAR_FLOAT:      return p->_float == 0.0f ? 0 : GetHashCode((u8*)&p->_float, sizeof(p->_float));
 	case VAR_BOOL:       return p->_bl;
 	case VAR_NONE:       return 0;
 	case VAR_FUN:        return (u32)p->_fun_index;

@@ -434,6 +434,8 @@ result before it can return to Script A, so Script B does not own a resumable ex
 - `sleep(...)`, `yield`, `async.get(...)`, `async.post(...)`, and `async.wait()` are rejected with a runtime error in
   Script B. A worker configured for time-limited execution cannot start Script B at all. These restrictions prevent
   Script B from being suspended after its native caller has already returned to Script A.
+- Native `CallContext` arguments and borrowed argument strings remain valid across synchronous reentry,
+  including while the child `Invocation` exists and after its destruction. The child uses a separate stack frame.
 - A synchronous callback may call ordinary functions and return values normally. For delayed work, have the native
   API schedule a new top-level `ExecuteTop`/`ResumeTop` execution instead of invoking Script B synchronously.
 

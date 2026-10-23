@@ -73,6 +73,7 @@ void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 	X(PCE_CONST_INVALID_OP, "Error (%d, %d): invalid operation in const expression near '%s'") \
 	X(PCE_CONST_DIV_ZERO, "Error (%d, %d): division by zero in const expression") \
 	X(PCE_CONST_DIV_OVERFLOW, "Error (%d, %d): integer division overflow in const expression") \
+	X(PCE_CONST_SHIFT_RANGE, "Error (%d, %d): shift count must be between 0 and 31 in const expression") \
 	X(PCE_CASE_OUTSIDE_SWITCH, "Error (%d, %d): 'case' / 'default' can only be used inside a switch") \
 	X(PCE_SWITCH_DUPLICATE_CASE, "Error (%d, %d): duplicate case value in switch") \
 	X(PCE_SWITCH_DUPLICATE_DEFAULT, "Error (%d, %d): 'default' appears more than once in switch") \
@@ -383,12 +384,12 @@ static bool TryFoldLiteralBinOp(SOperand& a, eNOperation op, const SOperand& b, 
 		ri = a._intLiteral % b._intLiteral;
 		break;
 	case NOP_LSHIFT3:
-		if (bothInt == false) return false;
-		ri = a._intLiteral << b._intLiteral;
+		if (bothInt == false || static_cast<unsigned int>(b._intLiteral) >= 32) return false;
+		ri = NeoShiftLeft32(a._intLiteral, b._intLiteral);
 		break;
 	case NOP_RSHIFT3:
-		if (bothInt == false) return false;
-		ri = a._intLiteral >> b._intLiteral;
+		if (bothInt == false || static_cast<unsigned int>(b._intLiteral) >= 32) return false;
+		ri = NeoShiftRight32(a._intLiteral, b._intLiteral);
 		break;
 	case NOP_XOR3:
 		if (bothInt == false) return false;
@@ -767,25 +768,23 @@ void SkipCurrentLine(CArchiveRdWC& ar)
 	}
 }
 
-void SkipMultiLine(CArchiveRdWC& ar)
+bool SkipMultiLine(CArchiveRdWC& ar)
 {
-	u16 c1, c2;
 	while (true)
 	{
-		c1 = ar.GetData(true);
-		switch (c1)
+		switch (ar.GetData(true))
 		{
+		case 0:
+			SetCompileError(ar, "Error (%d, %d): unterminated block comment", ar.CurLine(), ar.CurCol());
+			return false;
 		case '\n':
 			ar.AddLine();
 			break;
-		case 0:
-			return;
 		case '*':
-			c2 = ar.GetData(false);
-			if (c2 == '/')
+			if (ar.GetData(false) == '/')
 			{
 				ar.GetData(true);
-				return;
+				return true;
 			}
 			break;
 		default:
@@ -1250,6 +1249,8 @@ TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk)
 
 		case '/':
 		{
+			if (!tk.empty())
+				return ApplyCompileDefine(ar, CalcStringToken(tk), tk);
 			ar.GetData(true);
 			u16 c2 = ar.GetData(false);
 			if (c2 == '/')	// '//'
@@ -1257,7 +1258,7 @@ TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk)
 			else if (c2 == '*')	// '/*'
 			{
 				ar.GetData(true);
-				SkipMultiLine(ar);
+				if (!SkipMultiLine(ar)) return TK_NONE;
 			}
 			else if (c2 == '=')
 			{
@@ -2627,6 +2628,10 @@ bool ParseLogicNotOperand(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs,
 			return false;
 		}
 	}
+	else if (tkNextType == TK_TRUE || tkNextType == TK_FALSE)
+	{
+		operand = SOperand(funs.AddStaticBool(tkNextType == TK_TRUE));
+	}
 	else
 	{
 		ar.PushToken(tkNextType, tkNext);
@@ -3204,6 +3209,9 @@ static bool TryFuseCompareJump(bool bJumpWhenTrue, const SOperand& operand, SFun
 	funs._cur->_code->SetPointer(-((int)sizeof(OpType) + (int)sizeof(ArgFlag) + argLen), SEEK_CUR);
 	OpType optype = GetOpTypeFromOp(opOpz);
 	funs._cur->_code->Write(&optype, sizeof(optype));
+	if (!bJumpWhenTrue && (opCheck == NOP_GREAT || opCheck == NOP_GREAT_EQ ||
+		opCheck == NOP_LESS || opCheck == NOP_LESS_EQ))
+		funs._cur->GetOPPointer(funs._cur->_code->GetBufferOffset() - sizeof(OpType))->argFlag |= NEOS_OP_COMPARE_INVERT;
 	funs._cur->_code->SetPointer((int)sizeof(ArgFlag), SEEK_CUR);
 	const int cur = funs._cur->_code->GetBufferOffset();
 	// This is an unresolved forward jump, not a jump to byte offset zero.
@@ -3261,7 +3269,7 @@ static int BuildRangeBoundCandidates(const SVMOperation& op, bool jumpWhenTrue, 
 	SRangeBoundCandidate outCandidates[2])
 {
 	ERangeCompareRelation relation = GetRangeCompareRelation(op.op);
-	if (jumpWhenTrue == false)
+	if (jumpWhenTrue == ((op.argFlag & NEOS_OP_COMPARE_INVERT) != 0))
 		relation = InvertRangeCompareRelation(relation);
 	// OR 형태는 두 "outside" 조건을 하나의 inside 판정으로 바꾼다. AND 형태는
 	// 두 조건이 이미 inside 경계이므로 그대로 쓴다.
@@ -3538,14 +3546,11 @@ eNOperation ConvertCheckOPToOptimizeInv(eNOperation n)
 {
 	switch (n)
 	{
-	case NOP_GREAT:		// >
-		return NOP_JMP_LESS_EQ;
-	case NOP_GREAT_EQ:	// >=
-		return NOP_JMP_LESS;
-	case NOP_LESS:		// <
-		return NOP_JMP_GREAT_EQ;
-	case NOP_LESS_EQ:	// <=
-		return NOP_JMP_GREAT;
+	case NOP_GREAT:
+	case NOP_GREAT_EQ:
+	case NOP_LESS:
+	case NOP_LESS_EQ:
+		return ConvertCheckOPToOptimize(n);
 	case NOP_EQUAL2:	// ==
 		return NOP_JMP_NEQUAL;
 	case NOP_NEQUAL:	// !=
@@ -4402,6 +4407,8 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 		
 		eNOperation optype = GetOpTypeFromOp(opOpz);
 		funs._cur->_code->Write(&optype, sizeof(optype));
+		if (opCheck == NOP_GREAT || opCheck == NOP_GREAT_EQ || opCheck == NOP_LESS || opCheck == NOP_LESS_EQ)
+			funs._cur->GetOPPointer(funs._cur->_code->GetBufferOffset() - sizeof(OpType))->argFlag |= NEOS_OP_COMPARE_INVERT;
 		funs._cur->_code->SetPointer((int)sizeof(ArgFlag), SEEK_CUR);
 
 		int cur = funs._cur->_code->GetBufferOffset();
@@ -4749,11 +4756,16 @@ static bool EvalConstBinOp(SConstValue& a, TK_TYPE op, const SConstValue& b, CAr
 			SetParserCompileError(ar, PCE_CONST_INVALID_OP, GetTokenString(op).c_str());
 			return false;
 		}
+		if ((op == TK_LSHIFT || op == TK_RSHIFT) && static_cast<unsigned int>(b.i) >= 32)
+		{
+			SetParserCompileError(ar, PCE_CONST_SHIFT_RANGE);
+			return false;
+		}
 		switch (op)
 		{
 		case TK_XOR:    a.i ^= b.i;  break;
-		case TK_LSHIFT: a.i <<= b.i; break;
-		case TK_RSHIFT: a.i >>= b.i; break;
+		case TK_LSHIFT: a.i = NeoShiftLeft32(a.i, b.i); break;
+		case TK_RSHIFT: a.i = NeoShiftRight32(a.i, b.i); break;
 		case TK_AND:    a.i &= b.i;  break;
 		default:        a.i |= b.i;  break;
 		}
@@ -5799,6 +5811,11 @@ bool NeoVMSystem::Compile(CNArchive& arw, const NeoCompilerParam& param)
 	{ SetCompileError(ar2, "Error (%d, %d): %s", ar2.CurLine(), ar2.CurCol(), e.what()); }
 	catch (const std::bad_alloc&)
 	{ SetCompileError(ar2, "Error (%d, %d): compiler memory allocation failed", ar2.CurLine(), ar2.CurCol()); }
+	// A failed parse must always carry a diagnostic; lexer errors must not be
+	// mistaken for successful EOF, even in the declaration pre-pass.
+	if (!ar2.m_sErrorString.empty()) b = false;
+	if (!b && ar2.m_sErrorString.empty())
+		SetParserCompileError(ar2, PCE_EXPECTED_EXPRESSION);
 	if (!b) arw.SetBufferOffset(0);
 	if(b == false && param.err)
 		*(param.err) = ar2.m_sErrorString;
