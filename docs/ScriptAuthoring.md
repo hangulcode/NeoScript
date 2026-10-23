@@ -753,6 +753,8 @@ print(math.MoveToward(0.0, 10.0, 2.0)); // 2
   For example, if `F()` changes `i`, `list[i][0] += F()` reads and writes the element at the new `i`,
   just like a single-level indexed assignment. Parentheses around the target do not change this rule.
   An index computed by a function call is evaluated once; its result is not recomputed for write-back.
+  List/map vector writes may use a temporary internal reference; normal reads and assignment results
+  remain values. Copies still stay independent, and arrays/native properties retain their write-back path.
 - Postfix `++` and `--` return the previous component value, including inside list/map literals;
   prefix forms return the updated value. For `var a = [v[0]++];`, `a[0]` receives the old value.
 - Addition and subtraction work on vectors with the same component count; multiplication and division support a vector and a scalar.

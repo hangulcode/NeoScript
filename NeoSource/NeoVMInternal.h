@@ -114,6 +114,7 @@ typedef u8	ArgFlag;
 // 호출/복귀 op 전용: 반환값 슬롯을 쓰지 않음(=해당 오퍼랜드를 페치하지 않음).
 // PatchLocalOps 도 이 비트를 봐야 해서 argFlag 비트 정의와 같은 곳에 둔다.
 #define NEOS_OP_CALL_NORESULT	(1 << 7) // 0x80
+#define NEOS_OP_REF_LOADED (1 << 6) // postfix consumer already read the parent
 
 // NOP_JMP_RANGE_* descriptor 전용 플래그. opcode의 argFlag와 분리해
 // lower/upper가 각각 stack인지 global/static인지와 경계 포함 여부를 보관한다.
@@ -273,6 +274,10 @@ enum eNOperation : OpType
 	NOP_JMP_RANGE_OUTSIDE,
 	NOP_JMP_RANGE_INSIDE_L,
 	NOP_JMP_RANGE_OUTSIDE_L,
+	// owner/key/temp, then write + writeback.
+	// Vector list/map elements execute the tail atomically and skip its dispatch.
+	NOP_CLT_WRITE_REF,
+	NOP_CLT_READ_RESULT, // completed-assignment value consumer
 	NOP_NONE,
 	NOP_ERROR,
 

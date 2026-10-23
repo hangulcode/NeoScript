@@ -74,7 +74,8 @@ struct debug_info
 // 0122: signed global slots and LOADK32 beside MOV; rebuild older compiled images.
 // 0123: remove unused collection removal opcodes; renumbering requires rebuilding cached images.
 // 0124: 사슬 lvalue 되써 넣기 opcode(NOP_VEC_WRITEBACK) 추가. 이전 캐시는 이 op 를 모르므로 다시 만든다.
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('2' << 8) | ('4'))
+// 0125: internal VAR_REF and atomic chained writes; rebuild older images.
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('2' << 8) | ('5'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline

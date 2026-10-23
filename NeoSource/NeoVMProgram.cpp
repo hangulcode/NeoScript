@@ -1166,6 +1166,14 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		outAssembly = FormatAsm("JROT %d%s,  %s outside range[%u]", v.n1,
 			context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), (unsigned)(u16)v.n3);
 		break;
+	case NOP_CLT_WRITE_REF:
+        byteCount = OpFlagByteChars + 2 * 3;
+        outAssembly = FormatAsm("WREF %s.%s -> %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+        break;
+	case NOP_CLT_READ_RESULT:
+        byteCount = OpFlagByteChars + 2 * 3;
+        outAssembly = FormatAsm("RRES %s = %s.%s", context.operand(3).c_str(), context.operand(1).c_str(), context.operand(2).c_str());
+        break;
 	case NOP_ERROR:
 		outAssembly = FormatAsm("Begin");
 		break;

@@ -8,29 +8,29 @@
 #include <vector>
 using namespace NeoScript;
 static float position[4] = {8, 8, 8, 8};
-static int gets = 0, sets = 0;
+static int propertyGets = 0, propertySets = 0;
 static bool Prop(CallContext &c, StringView name, bool get)
 {
     const auto n = name.str();
     if (n == "Reads" && get)
     {
-        c.retInt(gets);
+        c.retInt(propertyGets);
         return true;
     }
     if (n == "Writes" && get)
     {
-        c.retInt(sets);
+        c.retInt(propertySets);
         return true;
     }
     if (n == "Position" || n == "ReadOnly")
     {
         if (get)
         {
-            ++gets;
+            ++propertyGets;
             c.retVec3(position[0], position[1], position[2]);
             return true;
         }
-        ++sets;
+        ++propertySets;
         if (n == "ReadOnly")
             return false;
         float v[4] = {};
@@ -247,6 +247,25 @@ static void BuildCases()
         "export fun Test(){Host.ReadOnly[0]+=2;return true;}export fun Verify(){return Host.ReadOnly[0]==8;}",
         "cannot write property");
 
+    Add("effects", "list growth before borrow",
+        "import math;var a=[math.Vector3(1,2,3)];fun Grow(){for(var i in 0,128)a.append(null);return 4;}"
+        "export fun Test(){a[0][0]+=Grow();return a[0][0]==5 && a.len()==129;}");
+    Add("effects", "map rehash before borrow",
+        "import math;var a={};a.v=math.Vector3(1,2,3);fun Grow(){for(var i in 0,128)a[i]=i;return 4;}"
+        "export fun Test(){var x=(a.v[0]+=Grow());return x==5 && a.v[0]==5;}");
+    Add("control", "repeated writes and value copy",
+        "import math;export fun Test(){var a=[math.Vector3(1,2,3)];"
+        "for(var i in 0,100){a[0][0]+=1;a[0][1]+=2;}var copy=a[0];a[0][2]=9;"
+        "return copy==math.Vector3(101,202,3) && a[0]==math.Vector3(101,202,9);}");
+    Add("control", "assignment component result stays a value",
+        "import math;var a=[math.Vector3(1,2,3)];fun Change(){a[0]=math.Vector3(50,60,70);return 4;}"
+        "export fun Test(){var x=(a[0][0]+=2)+Change();return x==7 && a[0][0]==50;}");
+    Add("control", "assignment result remains writable",
+        "import math;export fun Test(){var a=[math.Vector3(1,2,3)];"
+        "(a[0][0]=4)+=2;return a[0][0]==6;}");
+    Add("control", "selector after assignment result",
+        "export fun Test(){var a=[[null]];((a[0][0]=[1,2]))[1]=9;return a[0][0][1]==9;}");
+
     // R-values resolve their receiver before later operands or arguments run.
     Add("order", "binary RHS",
         "import math;var i=0;var a=[math.Vector3(1,2,3),math.Vector3(100,200,300)];fun F(){i=1;return 10;}export fun "
@@ -338,7 +357,7 @@ static void Run(IRuntime *rt, const TestCase &t, int id, bool debug, bool image)
     {
         for (float &x : position)
             x = 8;
-        gets = sets = 0;
+        propertyGets = propertySets = 0;
         ++checks;
         ++counts[t.group].first;
         auto ins = rt->CreateInstance(p);

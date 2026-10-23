@@ -2107,6 +2107,8 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_JMP_RANGE_INSIDE_L: if (IsRangeInside(OP, true)) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_RANGE_OUTSIDE_L: if (IsRangeInside(OP, true) == false) SetCodeIncPtr(OP.n1); break;
 
+		case NOP_CLT_WRITE_REF: handle_CLT_WRITE_REF(OP); break;
+		case NOP_CLT_READ_RESULT: handle_CLT_READ_RESULT(OP); break;
 		case NOP_NONE:          handle_NONE(OP); break;
 		case NOP_ERROR:
 			handle_ERROR(OP);

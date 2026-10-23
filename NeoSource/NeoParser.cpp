@@ -158,6 +158,9 @@ struct SOperand
 	NS_FLOAT _floatLiteral;
 	int _intLiteral;
 	bool _readOnly = false;
+    // A completed indexed assignment is still an lvalue, but its next value
+    // consumer uses the captured component rather than rereading the owner.
+    bool _assignedResult = false;
 	// Compile-time address of the immediate container, e.g. (list, i) for
 	// list[i][component]. Keep the address until a consumer chooses read/write.
 	// Parentheses never decide that choice, and no future tokens are inspected.
@@ -187,6 +190,7 @@ struct SOperand
 	void Reset()
 	{
 		_readOnly = false;
+        _assignedResult = false;
 		_container = ContainerAccess();
 		_iVar = _iArrayIndex = INVALID_ERROR_PARSEJOB;
 		_operandType = Data_NR;
@@ -230,6 +234,7 @@ struct SOperand
 // boundaries resolve it before later arguments/operands can have side effects.
 static void ResolveContainer(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs)
 {
+    if (operand._assignedResult) return;
 	auto& access = operand._container;
 	if (access.owner != INVALID_ERROR_PARSEJOB && !access.loaded)
 	{
@@ -240,13 +245,35 @@ static void ResolveContainer(SOperand& operand, CArchiveRdWC& ar, SFunctions& fu
 
 static void ReadElement(SOperand& operand, int dest, CArchiveRdWC& ar, SFunctions& funs)
 {
-	ResolveContainer(operand, ar, funs);
-	funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, dest, operand.IsHaveShort());
+    if (!operand.IsArray())
+    {
+        funs._cur->Push_OP2(ar, NOP_MOV, dest, operand._iVar, false);
+        return;
+    }
+    ResolveContainer(operand, ar, funs);
+    funs._cur->Push_TableRead(ar, operand._iVar, operand._iArrayIndex, dest,
+        operand.IsHaveShort(), operand._assignedResult ? NOP_CLT_READ_RESULT : NOP_CLT_READ);
 }
 
 static void WriteElement(SOperand& operand, eNOperation op, int value, bool immediate,
 	CArchiveRdWC& ar, SFunctions& funs)
 {
+    const auto access = operand._container;
+    if (access.owner != INVALID_ERROR_PARSEJOB &&
+        (op == NOP_MOV || op == NOP_ADD2 || op == NOP_SUB2 ||
+         op == NOP_MUL2 || op == NOP_DIV2 || op == NOP_PERSENT2))
+    {
+        const int temp = operand._iVar;
+        funs._cur->Push_TableWriteRef(ar, op, access.owner, access.key, temp,
+            operand._iArrayIndex, value, access.loaded);
+        operand._assignedResult = true;
+        operand._container.loaded = false;
+        return;
+    }
+    if (operand._assignedResult) {
+        operand._assignedResult = false;
+        operand._container.loaded = false;
+    }
 	ResolveContainer(operand, ar, funs);
 	funs._cur->Push_Table_MASMDP(ar, op, operand._iVar, operand._iArrayIndex,
 		value, false, operand.IsHaveShort(), immediate);
@@ -701,6 +728,8 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_JMP_RANGE_INSIDE_L, 3);
 	OP_STR1(NOP_JMP_RANGE_OUTSIDE_L, 3);
 	OP_STR1(NOP_VEC_WRITEBACK, 3);
+	OP_STR1(NOP_CLT_WRITE_REF, 3);
+	OP_STR1(NOP_CLT_READ_RESULT, 3);
 
 	if (blError)
 	{
@@ -2402,6 +2431,7 @@ static bool ParsePostfixSelectors(SOperand& operand, CArchiveRdWC& ar, SFunction
 		}
 
 		MaterializeValue(key, ar, funs);
+        if (operand._assignedResult) MaterializeValue(operand, ar, funs);
 		ResolveContainer(operand, ar, funs);
 		if (operand.IsArray())
 		{

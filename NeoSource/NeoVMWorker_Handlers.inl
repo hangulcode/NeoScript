@@ -490,6 +490,74 @@ NEOS_NOINLINE bool handle_TABLE_PERSENT2(const SVMOperation& OP) {
     return false;
 }
 
+// Guard the normal read/write/writeback sequence. For a stored vector, consume
+// the tail atomically so no borrowed address survives a VM suspension point.
+// Other types execute the tail normally, preserving native callback behavior.
+NEOS_NOINLINE void handle_CLT_WRITE_REF(const SVMOperation& OP) {
+    const size_t next = (size_t)GetCodeptr() / sizeof(SVMOperation);
+    if (next >= _pProgram->code.size() || _pProgram->code.size() - next < 2) {
+        SetError(RTE_UNKNOWN_OP);
+        return;
+    }
+    const SVMOperation write = *_pCodeCurrent;
+    VarInfo* temp = GetVarPtr3(OP);
+    if ((write.op != NOP_CLT_MOV && write.op != NOP_CLT_MOV_L &&
+         write.op != NOP_TABLE_ADD2 && write.op != NOP_TABLE_SUB2 &&
+         write.op != NOP_TABLE_MUL2 && write.op != NOP_TABLE_DIV2 &&
+         write.op != NOP_TABLE_PERSENT2) || GetVarPtrF1(write) != temp) {
+        SetError(RTE_UNKNOWN_OP);
+        return;
+    }
+    VarInfo* owner = GetVarPtrF1(OP);
+    VarInfo* key = GetVarPtr2(OP);
+    VarInfo* target = nullptr;
+    if (owner->GetType() == VAR_LIST || owner->GetType() == VAR_MAP)
+        target = GetTableItem(owner, key);
+    if (GetCodeptr() == 0) return;
+
+    if (target && target->IsVector()) {
+        GetOP(); // mutation
+        const SVMOperation commit = *GetOP();
+        if (commit.op != NOP_VEC_WRITEBACK || GetVarPtr3(commit) != temp) {
+            SetError(RTE_UNKNOWN_OP);
+            return;
+        }
+        // Release an old temporary before deciding whether COW is necessary.
+        Var_Release(temp);
+        {
+            temp->SetType(VAR_REF);
+            temp->_ref = target;
+            // Also clear the borrow if an allocation throws during COW.
+            struct BorrowScope {
+                VarInfo* slot;
+                ~BorrowScope() { *slot = VarInfo(); }
+            } borrow{temp};
+            if (write.op == NOP_CLT_MOV || write.op == NOP_CLT_MOV_L)
+                CltInsert(temp->_ref, GetVarPtr2(write), GetVarPtr3(write));
+            else
+                VecComponentOp(temp->_ref, GetVarPtr2(write), GetVarPtr3(write), write.op);
+        }
+        if (GetCodeptr() != 0)
+            CltRead(target, GetVarPtr2(write), temp);
+        return;
+    }
+
+    // Packed arrays and native properties retain their getter/setter path.
+    if ((OP.argFlag & NEOS_OP_REF_LOADED) == 0) {
+        // Reuse the list/map lookup even when its value is not a vector.
+        if (target) Move(temp, target);
+        else CltRead(owner, key, temp);
+    }
+}
+
+// Only emitted for a completed indexed assignment. A float temporary is a
+// captured vector component; other temporaries still hold their parent value.
+NEOS_FORCEINLINE void handle_CLT_READ_RESULT(const SVMOperation& OP) {
+    VarInfo* value = GetVarPtrF1(OP);
+    if (value->GetType() == VAR_FLOAT) Move(GetVarPtr3(OP), value);
+    else CltRead(value, GetVarPtr2(OP), GetVarPtr3(OP));
+}
+
 NEOS_FORCEINLINE bool handle_LIST_ALLOC(const SVMOperation& OP) {
     Var_SetList(GetVarPtrF1(OP), GetVM()->ListAlloc(OP.n23));
     return false;

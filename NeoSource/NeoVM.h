@@ -139,6 +139,8 @@ enum VAR_TYPE : u8
 
 	VAR_ITERATOR,
 	VAR_FUN_NATIVE,
+	// Non-owning temporary, confined to the atomic chained-write handler.
+	VAR_REF,
 
 	// =====================================================================
 	// 여기부터 alloc 타입 — IsAllocType() == (_type >= VAR_STRING)
@@ -207,6 +209,7 @@ enum VAR_TYPE : u8
 // 순전히 열거 순서라서, 주석만 두면 다음 사람이 구간 사이에 새 타입을 끼워 넣는다.
 // 새 타입은 반드시 해당 구간의 **끝**에 추가할 것.
 static_assert(VAR_ARRAY + 1 == VAR_MAP, "VAR_TYPE: 리프 alloc 구간 바로 뒤에 컨테이너 구간이 와야 한다");
+static_assert(VAR_REF + 1 == VAR_STRING, "VAR_REF must remain non-owning");
 static_assert(VAR_MAP < VAR_CLOSURE, "VAR_TYPE: 컨테이너 구간이 열거 맨 뒤여야 한다");
 
 struct SNeoVMAllocStats
@@ -361,6 +364,7 @@ public:
 		CollectionIterator	_it;
 		VecInfo*	_vec; // VAR_VEC 성분(유효 성분 수는 _vecCount)
 		ArrayInfo*	_array; // VAR_ARRAY 밀집 원시 배열
+		VarInfo* _ref; // VAR_REF: never stored in script values
 	};
 
 	NEOS_FORCEINLINE VarInfo() { _type = VAR_NONE; }

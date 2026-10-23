@@ -804,14 +804,37 @@ struct SFunctionInfo
 		//_code->Write(&nValue, sizeof(nValue));
 		Push_NoFlag(nTable, nArray, nValue);
 	}
-	void	Push_TableRead(CArchiveRdWC& ar, int nTable, int nArray, int nValue, bool b2) // value = table[nArray]
+	void Push_TableWriteRef(CArchiveRdWC& ar, eNOperation op, int owner, int key,
+        int temp, int component, int value, bool loaded)
+    {
+        // LOADK must never split the guarded sequence: lower operands first.
+        OperandTemps temps(*this);
+        owner = ReadOperand(ar, owner); key = ReadOperand(ar, key);
+        component = ReadOperand(ar, component); value = ReadOperand(ar, value);
+        AddDebugData(ar);
+        _iLastOPOffset = _code->GetBufferOffset();
+        OpType type = GetOpTypeFromOp(NOP_CLT_WRITE_REF);
+        _code->Write(&type, sizeof(type));
+        Push_Flag(loaded ? NEOS_OP_REF_LOADED : 0, owner, key, temp);
+        AddDebugData(ar);
+        _iLastOPOffset = _code->GetBufferOffset();
+        type = GetTableOpTypeFromOp(op);
+        _code->Write(&type, sizeof(type));
+        Push_NoFlag(temp, component, value);
+        AddDebugData(ar);
+        _iLastOPOffset = _code->GetBufferOffset();
+        type = GetOpTypeFromOp(NOP_VEC_WRITEBACK);
+        _code->Write(&type, sizeof(type));
+        Push_NoFlag(owner, key, temp);
+    }
+	void	Push_TableRead(CArchiveRdWC& ar, int nTable, int nArray, int nValue, bool b2, eNOperation op = NOP_CLT_READ) // value = table[nArray]
 	{
 		OperandTemps temps(*this);
 		nTable = ReadOperand(ar, nTable); nArray = ReadOperand(ar, nArray);
 		AddDebugData(ar);
 		_iLastOPOffset = _code->GetBufferOffset();
 
-		OpType optype = GetOpTypeFromOp(NOP_CLT_READ);
+		OpType optype = GetOpTypeFromOp(op);
 		_code->Write(&optype, sizeof(optype));
 
 		Push_NoFlag(nTable, nArray, nValue);

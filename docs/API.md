@@ -476,6 +476,9 @@ An indexed assignment resolves its final containing element after its right-hand
 If that side changes an index variable or replaces the element, the write uses the current value,
 including the other vector components. Parentheses around the target do not change evaluation order.
 Index expressions containing calls run once; the write-back does not repeat those calls.
+List/map vector component writes can modify the stored value directly; shared vectors still
+detach on modification. Internal references do not escape the write or become script values.
+Packed arrays and native properties retain their value/write-back path.
 
 `Quaternion` stores `w, x, y, z` in that order, so `q[0]` is `w`.
 
