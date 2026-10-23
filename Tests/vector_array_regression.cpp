@@ -97,6 +97,27 @@ int main()
     runtime->RegisterObject(host); runtime->FreezeBindings();
     for (bool debug : {false, true}) for (bool image : {false, true})
     {
+        // Reads may overwrite an allocated destination or the array's last
+        // owner. Check all element types, scalar bit patterns, and iterator reads.
+        for (const char* expression : {"true", "false", "-2147483648", "2147483647", "0", "-7",
+            "0.0", "-0.0", "1.25", "-1.25", "1.0 / 0.0", "-1.0 / 0.0", "0.0 / 0.0",
+            "math.Vector2(1,2)", "math.Vector3(1,2,3)", "math.Vector4(1,2,3,4)"}) {
+            const std::string equal = "fun Same(var a,var b){if(type(a)!=type(b))return false;"
+                "if(type(a)==\"float\"){if(a!=a)return b!=b;if(a==0.0 && b==0.0)return (1.0/a)==(1.0/b);}"
+                "return a==b;}";
+            const std::string init = std::string("var value=") + expression + ";var a=system.array(value,9);";
+            for (const char* destination : {"null", "3", "2.5", "true", "\"old\"", "[1,2]", "{\"x\":1}",
+                "math.Vector2(9,8)", "system.array(0,2)", "system.array(math.Vector3(9,8,7),2)"}) {
+                Run(runtime, equal + "export fun Test(){" + init + "var out=" + destination +
+                    ";for(var i in 0,9){out=a[i];if(!Same(out,value))return false;}"
+                    "foreach(var v in a){if(!Same(v,value))return false;}return true;}", debug, image);
+            }
+            Run(runtime, equal + "export fun Test(){" + init + "a=a[8];return Same(a,value);}", debug, image);
+            Run(runtime, equal + "export fun Test(){" + init +
+                "var copy=a;copy=copy[0];a=null;return Same(copy,value);}", debug, image);
+            for (const char* index : {"-1", "9", "1.0", "\"0\""})
+                Run(runtime, "export fun Test(){" + init + "a=a[" + index + "];return true;}", debug, image, "index");
+        }
         for (int dim = 2; dim <= 4; ++dim)
         {
             std::string vector = "math.Vector" + std::to_string(dim) + "(1,2";

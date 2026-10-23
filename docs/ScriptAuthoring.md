@@ -40,7 +40,7 @@ The `argument: type` notation in API tables is descriptive. Actual function para
 <a id="basics"></a>
 ## 2. Basic syntax and numbers
 
-End statements with `;` and enclose blocks in `{ ... }`. Use `//` and `/* ... */` for comments.
+End statements with `;` and enclose blocks in `{ ... }`. Use `//` and `/* ... */` for comments. Comments separate tokens; block comments must end with `*/`.
 Identifiers and function names are case-sensitive. Use lowercase file and resource names.
 Save source files containing Korean text as UTF-8 with a BOM, as required by the repository rules.
 
@@ -76,7 +76,11 @@ print((count > 0) && (count < capacity)); // true
 - Integer `/`, `%`, `/=`, and `%=` fail with a runtime error when the divisor is zero or
   the operands are `-2147483648` and `-1`. The destination is unchanged on failure.
   In `const` and `case` expressions, these are compile errors. Floating-point division
-  continues to produce infinity/NaN for zero divisors.
+  continues to produce infinity/NaN for zero divisors. Ordered comparisons with NaN are false in both expressions and branches.
+  Unary `!` accepts boolean literals directly (`!true`, `!false`).
+- Bit shifts require two integer operands and a count in `0..31`; invalid counts are runtime errors
+  (`const` and `case` expressions report compile errors). Failed compound shifts leave the destination unchanged.
+  Left shifts retain the low 32 bits; right shifts extend the sign bit.
 - For floating-point division, convert one operand with `tofloat` **before dividing**.
   `tofloat(count / capacity)` only converts the already-truncated result.
 - `float` is single precision. Converting a large integer ID to float and back may change its value.
@@ -311,7 +315,7 @@ print(sumAgain);                   // 60
 - The syntax is `for (var i in start, end[, step])`; the default step is 1.
   Do not use `for (var i = 0; i < n; i++)` in the current default build.
 - The start is inclusive and the end is exclusive. To traverse a list backward, use `len()-1` to `-1`.
-- The step can be a runtime value. A direction inconsistent with the range runs zero iterations; a zero step is a runtime error.
+- The step can be a runtime value. A direction inconsistent with the range runs zero iterations; a zero step is a runtime error. An increment beyond the integer boundary ends the range without wrapping.
 - A single `foreach` variable over a list, dense array, or set holds the **value**, not the index.
   Use a range `for` when you need an index.
 - `foreach (var v in [1,2,3])`, containers returned by functions, and `m.keys()` are supported.
@@ -437,7 +441,9 @@ print(t.fun);                       // 3
   Vector2 and Vector3 differ; `+0.0` and `-0.0` are equal. Sets also merge equal vectors.
   Modifying the original vector or a vector returned by `m.keys()` does not change the stored key.
   This is not approximate comparison: normalize coordinates affected by rounding errors before using them as keys. Avoid NaN components, which are unequal even to themselves.
+- Floating-point `+0.0` and `-0.0` identify the same map or set key.
 - `m.sort(cmp)` sorts **map values**. It is neither the list-sorting API nor a key-sorting API.
+  Comparator errors stop sorting immediately; suspension and host time limits are rejected, as for list sorting.
   See the [API reference](API.md#8-map-methods) for the bool comparator result and restrictions on adding or removing keys during sorting.
 
 ### Shared references and shallow copies
@@ -761,7 +767,7 @@ print(math.MoveToward(0.0, 10.0, 2.0)); // 2
   An index computed by a function call is evaluated once; its result is not recomputed for write-back.
   List/map/vector-array writes may use a temporary internal reference; normal reads and assignment results
   remain values. Copies still stay independent, and native properties retain their getter/setter behavior.
-  WREF pairs with an ordinary write and handles vector write-back; rebuild older compiled scripts and caches for bytecode version 0128.
+  WREF pairs with an ordinary write and handles vector write-back; rebuild older compiled scripts and caches for bytecode version 0130 (also required for checked shift folding and corrected NaN branch behavior).
 - A selector immediately after an indexed assignment can still modify the assigned vector:
   `(a[0][0] = math.Vector3(1,2,3))[1] = 9` stores `(1,9,3)` in `a[0][0]`.
   Assigning the result to a separate local instead keeps ordinary vector copy semantics.
@@ -811,7 +817,7 @@ print(coroutine.status(co));        // dead
 In this normal flow, the resumed coroutine runs until it yields or finishes,
 then execution returns to the statement after `resume` in the caller. Use shared state or another explicit mechanism to transfer results.
 Call `resume` only when the coroutine is `suspended`. Resuming a `dead` coroutine is an error.
-Calling `close(co)` on a finished coroutine is allowed.
+Calling `close(co)` on a finished coroutine is allowed and returns that same coroutine.
 
 `sleep(ms)` pauses the execution instance for a duration; it serves a different purpose from `yield;`.
 Suspension operations such as `sleep` and `yield` are restricted inside synchronous callbacks that reenter script from the host.
@@ -865,7 +871,8 @@ so do not rely on it to attach a filename to dynamic source.
 
 See the [async API](API.md#9-async-methods) for the HTTP object's `add_header`, `get`, `post`, `wait`, `close`,
 and callback arguments. The current HTTP transport implementation targets Windows.
-`wait()` blocks; do not treat it as a per-frame polling operation.
+`wait()` blocks; do not treat it as a per-frame polling operation. It returns `false` before a request starts or on timeout,
+and `true` after completion; the callback reports whether the request succeeded.
 
 `type()` alone cannot distinguish a host-bound native object from ordinary `null`.
 Object validity follows the host's binding contract.

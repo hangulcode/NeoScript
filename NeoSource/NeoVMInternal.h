@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include <thread>
+#include <cstring>
 #include <time.h>
 
 #include "NeoConfig.h"
@@ -17,6 +18,21 @@
 
 namespace NeoScript
 {
+// Callers validate count in [0, 31]. Keep VM and constant folding identical:
+// left shifts retain the low 32 bits; right shifts extend the sign bit.
+inline int NeoShiftLeft32(int value, int count)
+{
+	const u32 bits = static_cast<u32>(value) << count;
+	int result;
+	static_assert(sizeof(result) == sizeof(bits), "NeoScript integers must be 32 bits");
+	std::memcpy(&result, &bits, sizeof(result));
+	return result;
+}
+inline int NeoShiftRight32(int value, int count)
+{
+	return value < 0 ? -1 - static_cast<int>((~static_cast<u32>(value)) >> count) : value >> count;
+}
+
 // ==와 맵/set 키가 참조의 동일성 규칙을 공유한다. 내용 비교나 재귀 순회는 하지 않는다.
 // 숫자/문자열/벡터는 값 비교 규칙이 따로 있으므로 여기서 처리하지 않는다.
 inline bool ReferenceEquals(VarInfo* a, VarInfo* b)
@@ -114,6 +130,7 @@ typedef u8	ArgFlag;
 // 호출/복귀 op 전용: 반환값 슬롯을 쓰지 않음(=해당 오퍼랜드를 페치하지 않음).
 // PatchLocalOps 도 이 비트를 봐야 해서 argFlag 비트 정의와 같은 곳에 둔다.
 #define NEOS_OP_CALL_NORESULT	(1 << 7) // 0x80
+#define NEOS_OP_COMPARE_INVERT (1 << 6) // ordered jump: negate the comparison result
 #define NEOS_OP_REF_LOADED (1 << 6) // postfix consumer already read the parent
 #define NEOS_OP_REF_WRITE (1 << 7) // ordinary collection write following WREF
 

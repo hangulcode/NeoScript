@@ -162,6 +162,21 @@ if(NEOSCRIPT_BUILD_SMOKE)
     add_test(NAME neoscript_integer_division_regression COMMAND neoscript_integer_division_regression)
     set_tests_properties(neoscript_integer_division_regression PROPERTIES TIMEOUT 30)
 
+    add_executable(neoscript_integer_shift_regression Tests/integer_shift_regression.cpp)
+    target_link_libraries(neoscript_integer_shift_regression PRIVATE neoscript Threads::Threads)
+    add_test(NAME neoscript_integer_shift_regression COMMAND neoscript_integer_shift_regression)
+    set_tests_properties(neoscript_integer_shift_regression PROPERTIES TIMEOUT 30)
+
+    add_executable(neoscript_runtime_edge_regression Tests/runtime_edge_regression.cpp)
+    target_link_libraries(neoscript_runtime_edge_regression PRIVATE neoscript Threads::Threads)
+    add_test(NAME neoscript_runtime_edge_regression COMMAND neoscript_runtime_edge_regression)
+    set_tests_properties(neoscript_runtime_edge_regression PROPERTIES TIMEOUT 60)
+
+    add_executable(neoscript_callback_reentry_regression Tests/callback_reentry_regression.cpp)
+    target_link_libraries(neoscript_callback_reentry_regression PRIVATE neoscript Threads::Threads)
+    add_test(NAME neoscript_callback_reentry_regression COMMAND neoscript_callback_reentry_regression)
+    set_tests_properties(neoscript_callback_reentry_regression PROPERTIES TIMEOUT 30)
+
     add_executable(neoscript_call_error_regression Tests/call_error_regression.cpp)
     target_link_libraries(neoscript_call_error_regression PRIVATE neoscript Threads::Threads)
     add_test(NAME neoscript_call_error_regression COMMAND neoscript_call_error_regression)

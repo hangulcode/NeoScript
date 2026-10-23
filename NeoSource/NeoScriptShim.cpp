@@ -1881,7 +1881,7 @@ RunStatus Invocation::invoke()
 		inst->suspendedNested = nested;
         return inst->callStatus;
     }
-    if (execStatus == NEOEXEC_COMPLETED) { w->GC(); inst->callStatus = RunStatus::Completed; }
+    if (execStatus == NEOEXEC_COMPLETED) { if (!nested) w->GC(); inst->callStatus = RunStatus::Completed; }
     else inst->callStatus = RunStatus::Failed;
     inst->runtime->CaptureCallError(inst, inst->callStatus);   // 실패면 VM 상세 + fail() 코드 스냅샷
     w->ReleaseArgs(inst->callArgs);

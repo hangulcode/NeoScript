@@ -1004,19 +1004,19 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		break;
 	case NOP_JMP_GREAT:		// >
 		byteCount = OpFlagByteChars + 2 * 3;
-		outAssembly = FormatAsm("JGR  %d%s,  %s > %s", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		outAssembly = FormatAsm("%s %d%s,  %s > %s", (v.argFlag & NEOS_OP_COMPARE_INVERT) ? "JGR.NOT" : "JGR", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
 		break;
 	case NOP_JMP_GREAT_EQ:	// >=
 		byteCount = OpFlagByteChars + 2 * 3;
-		outAssembly = FormatAsm("JGE  %d%s,  %s >= %s", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		outAssembly = FormatAsm("%s %d%s,  %s >= %s", (v.argFlag & NEOS_OP_COMPARE_INVERT) ? "JGE.NOT" : "JGE", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
 		break;
 	case NOP_JMP_LESS:		// <
 		byteCount = OpFlagByteChars + 2 * 3;
-		outAssembly = FormatAsm("JLS  %d%s,  %s < %s", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		outAssembly = FormatAsm("%s %d%s,  %s < %s", (v.argFlag & NEOS_OP_COMPARE_INVERT) ? "JLS.NOT" : "JLS", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
 		break;
 	case NOP_JMP_LESS_EQ:	// <=
 		byteCount = OpFlagByteChars + 2 * 3;
-		outAssembly = FormatAsm("JLE  %d%s,  %s <= %s", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		outAssembly = FormatAsm("%s %d%s,  %s <= %s", (v.argFlag & NEOS_OP_COMPARE_INVERT) ? "JLE.NOT" : "JLE", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
 		break;
 	case NOP_JMP_EQUAL2:	// ==
 		byteCount = OpFlagByteChars + 2 * 3;

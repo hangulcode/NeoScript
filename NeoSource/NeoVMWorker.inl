@@ -32,7 +32,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::MoveF(VarInfo* v1, int bits)
 	std::memcpy(&v1->_float, &bits, sizeof(bits));
 }
 
-NEOS_FORCEINLINE void ArrayReadValue(CNeoVMWorker* worker, ArrayInfo* array, int index, VarInfo* out)
+NEOS_NOINLINE void ArrayReadValue(CNeoVMWorker* worker, ArrayInfo* array, int index, VarInfo* out)
 {
 	switch (array->_elementType)
 	{
@@ -418,7 +418,14 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 			SetError(RTE_ARRAY_INDEX_READ);
 			return;
 		}
-		ArrayReadValue(this, array, index, pValue);
+		// Keep repeated scalar reads small; conversion and ownership changes
+		// use the shared slow path without expanding the dispatch loop.
+		if (array->_elementType == NeoArrayElementType::Int && pValue->GetType() == VAR_INT)
+			pValue->_int = array->IntData()[index];
+		else if (array->_elementType == NeoArrayElementType::Float && pValue->GetType() == VAR_FLOAT)
+			pValue->_float = array->FloatData()[index];
+		else
+			ArrayReadValue(this, array, index, pValue);
 		return;
 	}
 	CltReadRare(pClt, pKey, pValue);
@@ -907,13 +914,26 @@ NEOS_FORCEINLINE void CNeoVMWorker::Per3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	}
 	SetErrorOperator("%", v1, v2);
 }
-NEOS_FORCEINLINE void CNeoVMWorker::LSh3(VarInfo* r, VarInfo* v1, VarInfo* v2)
+NEOS_FORCEINLINE bool CNeoVMWorker::CheckShiftCount(int count)
+{
+	if (static_cast<unsigned int>(count) < 32) return true;
+	SetError(RTE_INTEGER_SHIFT_RANGE);
+	return false;
+}
+// Keep checked shifts out of the dispatch loop: replicating their validation
+// across opcode specializations also increases the cost of unrelated operations.
+NEOS_NOINLINE void CNeoVMWorker::LSh3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
 	{
 	case VAR_INT:
-		Var_SetInt(r, v1->_int << v2->_int);
-		return;
+		if (v2->GetType() == VAR_INT)
+		{
+			if (CheckShiftCount(v2->_int))
+				Var_SetInt(r, NeoShiftLeft32(v1->_int, v2->_int));
+			return;
+		}
+		break;
 	case VAR_FLOAT:
 		break;
 	case VAR_STRING:
@@ -929,14 +949,15 @@ NEOS_FORCEINLINE void CNeoVMWorker::LSh3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	}
 	SetErrorOperator("<<", v1, v2);
 }
-NEOS_FORCEINLINE void CNeoVMWorker::RSh3(VarInfo* r, VarInfo* v1, VarInfo* v2)
+NEOS_NOINLINE void CNeoVMWorker::RSh3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
 	{
 	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 		{
-			Var_SetInt(r, v1->_int >> v2->_int);
+			if (CheckShiftCount(v2->_int))
+				Var_SetInt(r, NeoShiftRight32(v1->_int, v2->_int));
 			return;
 		}
 		break;
@@ -1320,14 +1341,15 @@ NEOS_FORCEINLINE void CNeoVMWorker::Per2(VarInfo* r, VarInfo* v2)
 	}
 	SetErrorOperator("%=", r, v2);
 }
-NEOS_FORCEINLINE void CNeoVMWorker::LSh2(VarInfo* r, VarInfo* v2)
+NEOS_NOINLINE void CNeoVMWorker::LSh2(VarInfo* r, VarInfo* v2)
 {
 	switch (r->GetType())
 	{
 	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 		{
-			r->_int <<= v2->_int;
+			if (CheckShiftCount(v2->_int))
+				r->_int = NeoShiftLeft32(r->_int, v2->_int);
 			return;
 		}
 		break;
@@ -1342,14 +1364,15 @@ NEOS_FORCEINLINE void CNeoVMWorker::LSh2(VarInfo* r, VarInfo* v2)
 	}
 	SetErrorOperator("<<=", r, v2);
 }
-NEOS_FORCEINLINE void CNeoVMWorker::RSh2(VarInfo* r, VarInfo* v2)
+NEOS_NOINLINE void CNeoVMWorker::RSh2(VarInfo* r, VarInfo* v2)
 {
 	switch (r->GetType())
 	{
 	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 		{
-			r->_int >>= v2->_int;
+			if (CheckShiftCount(v2->_int))
+				r->_int = NeoShiftRight32(r->_int, v2->_int);
 			return;
 		}
 		break;
@@ -1447,11 +1470,19 @@ NEOS_FORCEINLINE bool CNeoVMWorker::For(VarInfo* pCur)
 	// 압도적 다수인 step>0 만 여기서 처리하고, 음수/0 은 ForRare 로 분리한다 —
 	// 에러 처리까지 이 인라인 함수에 넣으면 코드가 커져 for 를 쓰는 모든 루프가 느려진다(실측 10~29%).
 	const int step = pCur[3]._int;
+	if (step == 1)
+	{
+		if (pCur->_int >= pCur[2]._int) return false;
+		// current < end <= INT_MAX proves that increment cannot overflow.
+		++pCur_Inter->_int;
+		return true;
+	}
 	if (step > 0)
 	{
 		if (pCur->_int < pCur[2]._int)
 		{
-			pCur_Inter->_int += step;
+			const int64_t next = static_cast<int64_t>(pCur_Inter->_int) + step;
+			pCur_Inter->_int = next >= pCur[2]._int ? pCur[2]._int : static_cast<int>(next);
 			return true;
 		}
 		return false;
@@ -1468,7 +1499,8 @@ NEOS_NOINLINE bool CNeoVMWorker::ForRare(VarInfo* pCur, int step)
 	}
 	if (pCur->_int > pCur[2]._int)           // 역방향은 비교 방향이 반대
 	{
-		pCur[1]._int += step;
+		const int64_t next = static_cast<int64_t>(pCur[1]._int) + step;
+		pCur[1]._int = next <= pCur[2]._int ? pCur[2]._int : static_cast<int>(next);
 		return true;
 	}
 	return false;
