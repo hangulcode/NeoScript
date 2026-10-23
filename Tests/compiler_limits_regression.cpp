@@ -102,6 +102,55 @@ static std::string Functions(int n, bool unique)
     return s;
 }
 
+// Broken pairs must fail at load time, before a vector can consume the tail
+// or a native-vector write can look back at the preceding owner instruction.
+static void InvalidChainedWrites(IRuntime* rt, bool debug)
+{
+    const std::string source = "export fun Test(){var box=[[1]];var i=0;var n=3;"
+        "box[i][i]+=n;return box[0][0]==4;}";
+    Run(rt, source, "ordinary chained write dispatch", debug);
+    std::vector<uint8_t> image;
+    Error error = rt->CompileToBytecode(Describe(source, debug), image);
+    Check(error.code == 0, "chained image compile");
+    if (error.code) return;
+    SNeoVMHeader h{};
+    std::memcpy(&h, image.data(), sizeof(h));
+    std::vector<SVMOperation> ops(h._iCodeSize / sizeof(SVMOperation));
+    std::memcpy(ops.data(), image.data() + sizeof(h), h._iCodeSize);
+    size_t index = 0;
+    while (index < ops.size() && ops[index].op != NOP_CLT_WRITE_REF) ++index;
+    Check(index + 1 < ops.size(), "chained write pair emitted");
+    if (index + 1 >= ops.size()) return;
+    Check(ops[index + 1].op == NOP_TABLE_ADD2, "tail is a normal write opcode");
+    for (int corruption = 0; corruption < 11; ++corruption)
+    {
+        auto changed = ops;
+        auto& owner = changed[index];
+        auto& write = changed[index + 1];
+        switch (corruption)
+        {
+        case 0: write.op = NOP_NONE; break;
+        case 1: write.argFlag &= ~NEOS_OP_REF_WRITE; break;
+        case 2: ++write.n1; break;
+        case 3: write.argFlag ^= NEOS_ARG_N1_LOCAL; break;
+        case 4: owner.argFlag |= NEOS_OP_REF_WRITE; break;
+        case 5: write.argFlag |= NEOS_ARG_N2_IMMEDIATE; break;
+        case 6: owner.op = NOP_NONE; break;
+        case 7: owner.n3 = write.n1 = 32767; break;
+        case 8: write.n2 = 32767; write.argFlag |= NEOS_ARG_N2_LOCAL; break;
+        case 9: owner.n3 = write.n1 = 0;
+            owner.argFlag &= ~NEOS_ARG_N3_LOCAL; write.argFlag &= ~NEOS_ARG_N1_LOCAL; break;
+        case 10: changed.back() = owner; break;
+        }
+        auto damaged = image;
+        std::memcpy(damaged.data() + sizeof(h), changed.data(), h._iCodeSize);
+        ProgramHandle program = rt->LoadProgram(damaged, &error);
+        Check(!program && error.message.find("chained write") != std::string::npos,
+            "reject damaged chained write " + std::to_string(corruption) + ": " + error.message);
+        if (program) rt->DestroyProgram(program);
+    }
+}
+
 int main()
 {
     IRuntime* rt = CreateRuntime(RuntimeDesc{});
@@ -115,7 +164,7 @@ int main()
     {
         SNeoVMHeader oldHeader{};
         std::memcpy(&oldHeader, oldImage.data(), sizeof(oldHeader));
-        for (char version : {'2', '5', '6'})
+        for (char version : {'2', '5', '6', '7'})
         {
             oldHeader._dwNeoVersion = ('0' << 24) | ('1' << 16) | ('2' << 8) | version;
             std::memcpy(oldImage.data(), &oldHeader, sizeof(oldHeader));
@@ -127,6 +176,7 @@ int main()
     }
     for (bool debug : {false, true})
     {
+        InvalidChainedWrites(rt, debug);
         // Null assignment preserves list positions, but removes map keys. Run
         // both with direct constants and after a pool that requires LOADK.
         const char* const nullAssignments[] = {

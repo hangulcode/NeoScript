@@ -89,7 +89,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::VecComponentOp(VarInfo* pClt, VarInfo* pKey,
 	return true;
 }
 
-NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue)
+NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue, const SVMOperation* write)
 {
 	const VAR_TYPE t = pClt->GetType();
 	if (t == VAR_LIST)
@@ -141,6 +141,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 			if (idx < (unsigned)pClt->VectorComponentCount())
 			{
 				VecWritable(pClt)->v[idx] = (float)pValue->GetFloatNumber();
+				if (write && (write->argFlag & NEOS_OP_REF_WRITE)) CommitRefVector(pClt);
 				return;
 			}
 		}
@@ -165,6 +166,14 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 		return;
 	}
 	CltInsertRare(pClt, pKey, pValue);
+}
+
+// The loader validates the adjacent WREF. Recover its owner in the resumed
+// frame, without retaining a pointer or pending state across native callbacks.
+NEOS_NOINLINE void CNeoVMWorker::CommitRefVector(VarInfo* value)
+{
+	const SVMOperation& owner = _pCodeCurrent[-2];
+	CltInsert(GetVarPtrF1(owner), GetVarPtr2(owner), value);
 }
 
 NEOS_NOINLINE void CNeoVMWorker::CltInsertRare(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue)

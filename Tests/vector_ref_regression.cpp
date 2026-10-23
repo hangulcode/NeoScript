@@ -45,49 +45,54 @@ static bool PositionProperty(INeoVMWorker* worker, void* data, const VMString*, 
     return true;
 }
 static void NativeWriteBoundaries() {
-    const char* source =
+    const char* prefix =
         "import coroutine;\n"
         "export var Host; export var phase=0; export var result;\n"
         "export fun Never(){return 0;}\n"
         "export var co;\n"
         "fun Other(){phase=1;var a=[[1]];a[0][0]+=2;yield;phase=2;}\n"
-        "export fun Prepare(){co=coroutine.create(Other);}\n"
-        "export fun Write(){result=(Host.Position[0]+=3);phase+=10;}\n";
-    for (bool debug : {false, true}) {
-        for (int mode = 0; mode < 3; ++mode) {
-            if (mode == 0 && !debug) continue;
-            auto pool = NeoExecContextPool_Create();
-            NeoLoadVMParam load; load.execPool = pool;
-            NeoCompilerParam compile(source, (int)std::strlen(source));
-            std::string error; compile.err = &error; compile.debug = debug;
-            auto vm = NeoVMSystem::CompileAndLoadRunVM(compile, &load);
-            Check(vm != nullptr, error.c_str());
-            if (!vm) { NeoExecContextPool_Destroy(pool); continue; }
-            INeoVMWorker* worker = vm->GetMainWorker();
-            PropertyState state;
-            auto host = worker->GetVar("Host");
-            Check(worker->ResetVarType(host, VAR_FP_NATIVE) &&
-                NeoVMSystem::RegisterTableCallBack(host, &state, nullptr, PositionProperty), "bind native property");
-            Check(worker->ExecuteN(worker->FindFunction("Prepare")) == NEOEXEC_COMPLETED, "prepare callback coroutine");
-            state.pause = mode == 0;
-            state.switchGet = mode == 1;
-            state.switchSet = mode == 2;
-            // Keep debug dispatch active with a breakpoint in an uncalled function.
-            if (mode == 0) worker->DebugSetBreakpoints(std::vector<int>{3});
-            int status = worker->ExecuteN(worker->FindFunction("Write"));
-            if (mode == 0) {
-                Check(status == NEOEXEC_SUSPENDED && worker->DebugIsPaused(), "getter pause suspends before mutation");
-                Check(state.gets == 1 && state.sets == 0 && state.x == 1, "paused getter has not committed");
-                worker->DebugContinue();
-                status = worker->ResumeTop();
+        "export fun Prepare(){co=coroutine.create(Other);}\n";
+    // Local component/value operands also exercise the CLT_MOV_L load patch.
+    for (const char* expression : {"Host.Position[i]+=n", "Host.Position[i]=n+1",
+        "Host.Position[i]*=n+1", "Host.Position[i]-=-n", "Host.Position[i]/=0.25"}) {
+        const std::string source = std::string(prefix) +
+            "export fun Write(){var i=0;var n=3;result=(" + expression + ");phase+=10;}\n";
+        for (bool debug : {false, true}) {
+            for (int mode = 0; mode < 3; ++mode) {
+                if (mode == 0 && !debug) continue;
+                auto pool = NeoExecContextPool_Create();
+                NeoLoadVMParam load; load.execPool = pool;
+                NeoCompilerParam compile(source.c_str(), (int)source.size());
+                std::string error; compile.err = &error; compile.debug = debug;
+                auto vm = NeoVMSystem::CompileAndLoadRunVM(compile, &load);
+                Check(vm != nullptr, error.c_str());
+                if (!vm) { NeoExecContextPool_Destroy(pool); continue; }
+                INeoVMWorker* worker = vm->GetMainWorker();
+                PropertyState state;
+                auto host = worker->GetVar("Host");
+                Check(worker->ResetVarType(host, VAR_FP_NATIVE) &&
+                    NeoVMSystem::RegisterTableCallBack(host, &state, nullptr, PositionProperty), "bind native property");
+                Check(worker->ExecuteN(worker->FindFunction("Prepare")) == NEOEXEC_COMPLETED, "prepare callback coroutine");
+                state.pause = mode == 0;
+                state.switchGet = mode == 1;
+                state.switchSet = mode == 2;
+                // Keep debug dispatch active with a breakpoint in an uncalled function.
+                if (mode == 0) worker->DebugSetBreakpoints(std::vector<int>{3});
+                int status = worker->ExecuteN(worker->FindFunction("Write"));
+                if (mode == 0) {
+                    Check(status == NEOEXEC_SUSPENDED && worker->DebugIsPaused(), "getter pause suspends before mutation");
+                    Check(state.gets == 1 && state.sets == 0 && state.x == 1, "paused getter has not committed");
+                    worker->DebugContinue();
+                    status = worker->ResumeTop();
+                }
+                Check(status == NEOEXEC_COMPLETED, "native component write resumes and completes");
+                Check(state.gets == 1 && state.sets == 1 && state.x == 4, "native getter and setter run exactly once");
+                auto result = worker->GetVar("result");
+                Check(result->GetType() == VAR_FLOAT && result->_float == 4, "resumed assignment returns modified component");
+                Check(worker->GetVar("phase")->_int == (mode == 0 ? 10 : 11), "callback coroutine returns to correct frame");
+                NeoVMSystem::ReleaseVM(vm);
+                NeoExecContextPool_Destroy(pool);
             }
-            Check(status == NEOEXEC_COMPLETED, "native component write resumes and completes");
-            Check(state.gets == 1 && state.sets == 1 && state.x == 4, "native getter and setter run exactly once");
-            auto result = worker->GetVar("result");
-            Check(result->GetType() == VAR_FLOAT && result->_float == 4, "resumed assignment returns modified component");
-            Check(worker->GetVar("phase")->_int == (mode == 0 ? 10 : 11), "callback coroutine returns to correct frame");
-            NeoVMSystem::ReleaseVM(vm);
-            NeoExecContextPool_Destroy(pool);
         }
     }
 }

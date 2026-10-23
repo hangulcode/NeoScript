@@ -77,7 +77,8 @@ struct debug_info
 // 0125: internal VAR_REF and atomic chained writes; rebuild older images.
 // 0126: preserve owning slots for selectors after indexed assignments; regenerate cached code.
 // 0127: fold chained writeback into two-word WREF; opcode renumbering requires new images.
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('2' << 8) | ('7'))
+// 0128: WREF tails are ordinary collection writes; regenerate cached images.
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('2' << 8) | ('8'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline

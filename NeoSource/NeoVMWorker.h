@@ -411,7 +411,8 @@ private:
 	int ToSize(VarInfo* v1);
 	VarInfo* GetType(VarInfo* v1);
 
-	void CltInsert(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
+	void CltInsert(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue, const SVMOperation* write = nullptr);
+	void CommitRefVector(VarInfo* value);
 	void CltInsertRare(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
 	void CltInsert(VarInfo *pClt, int array, VarInfo *v);
 	void CltInsert(VarInfo *pClt, VarInfo *pArray, int v);

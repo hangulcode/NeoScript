@@ -757,7 +757,7 @@ print(math.MoveToward(0.0, 10.0, 2.0)); // 2
   An index computed by a function call is evaluated once; its result is not recomputed for write-back.
   List/map/vector-array writes may use a temporary internal reference; normal reads and assignment results
   remain values. Copies still stay independent, and native properties retain their getter/setter behavior.
-  The VM handles write-back within WREF; rebuild older compiled scripts and caches for bytecode version 0127.
+  WREF pairs with an ordinary write and handles vector write-back; rebuild older compiled scripts and caches for bytecode version 0128.
 - A selector immediately after an indexed assignment can still modify the assigned vector:
   `(a[0][0] = math.Vector3(1,2,3))[1] = 9` stores `(1,9,3)` in `a[0][0]`.
   Assigning the result to a separate local instead keeps ordinary vector copy semantics.
