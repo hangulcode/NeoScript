@@ -73,10 +73,11 @@ struct debug_info
 // 0121: 원시 배열(VAR_ARRAY)을 추가한다. 이전 캐시는 enum 번호가 달라 다시 만든다.
 // 0122: signed global slots and LOADK32 beside MOV; rebuild older compiled images.
 // 0123: remove unused collection removal opcodes; renumbering requires rebuilding cached images.
-// 0124: 사슬 lvalue 되써 넣기 opcode(NOP_VEC_WRITEBACK) 추가. 이전 캐시는 이 op 를 모르므로 다시 만든다.
+// 0124: 사슬 lvalue 되써 넣기 opcode 추가. 이전 캐시는 이 op 를 모르므로 다시 만든다.
 // 0125: internal VAR_REF and atomic chained writes; rebuild older images.
 // 0126: preserve owning slots for selectors after indexed assignments; regenerate cached code.
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('2' << 8) | ('6'))
+// 0127: fold chained writeback into two-word WREF; opcode renumbering requires new images.
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('2' << 8) | ('7'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline

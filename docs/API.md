@@ -479,7 +479,9 @@ including the other vector components. Parentheses around the target do not chan
 Index expressions containing calls run once; the write-back does not repeat those calls.
 List/map/vector-array component writes can modify the stored vector directly; shared vectors still
 detach on modification. Internal references do not escape the write or become script values.
-Native properties retain their value/write-back path.
+Native vector properties still call their getter and setter once per successful component write.
+The WREF instruction pair includes the write-back; there is no separate vector write-back opcode.
+Regenerate compiled images created before bytecode version 0127.
 A selector immediately following an indexed assignment keeps the assigned slot writable:
 `(a[0][0] = math.Vector3(1,2,3))[1] = 9` updates `a[0][0]` to `(1,9,3)`.
 Reading that result into a local still makes an independent vector value via copy-on-write.

@@ -2099,7 +2099,6 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 			break;
 		case NOP_IDLE:          handle_IDLE(OP); break;
 		case NOP_VEC_MAKE:      handle_VEC_MAKE(OP); break;
-		case NOP_VEC_WRITEBACK: handle_VEC_WRITEBACK(OP); break;
 
 		case NOP_CLT_READ_STATIC_STRING: handle_CLT_READ_STATIC_STRING(OP); break;
 		case NOP_JMP_RANGE_INSIDE: if (IsRangeInside(OP, false)) SetCodeIncPtr(OP.n1); break;

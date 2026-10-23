@@ -115,14 +115,13 @@ int main()
     {
         SNeoVMHeader oldHeader{};
         std::memcpy(&oldHeader, oldImage.data(), sizeof(oldHeader));
-        for (char version : {'2', '5'})
+        for (char version : {'2', '5', '6'})
         {
             oldHeader._dwNeoVersion = ('0' << 24) | ('1' << 16) | ('2' << 8) | version;
             std::memcpy(oldImage.data(), &oldHeader, sizeof(oldHeader));
             ProgramHandle oldProgram = rt->LoadProgram(oldImage, &imageError);
             Check(!oldProgram && imageError.message.find("version mismatch") != std::string::npos,
-                version == '2' ? "reject format 0122 after opcode removal" :
-                "reject cached 0125 code without assignment selector writeback");
+                "reject cached 012" + std::string(1, version) + " after opcode/selector changes");
             if (oldProgram) rt->DestroyProgram(oldProgram);
         }
     }

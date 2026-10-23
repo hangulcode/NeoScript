@@ -1148,10 +1148,6 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		else
 			{ outAssembly = FormatAsm("?? yield sub(%d)", v.n1); known = false; }
 		break;
-	case NOP_VEC_WRITEBACK:
-		byteCount = OpFlagByteChars + 2 * 3;
-		outAssembly = FormatAsm("VWB  %s.%s = %s if vector", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
-		break;
 	case NOP_CLT_READ_STATIC_STRING:
 		byteCount = OpFlagByteChars + 2 * 3;
 		outAssembly = FormatAsm("READ.S %s = %s.%s", context.operand(3).c_str(), context.operand(1).c_str(), context.operand(2).c_str());
@@ -1168,7 +1164,20 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		break;
 	case NOP_CLT_WRITE_REF:
         byteCount = OpFlagByteChars + 2 * 3;
-        outAssembly = FormatAsm("WREF %s.%s -> %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+        if (v.argFlag & NEOS_OP_REF_WRITE) {
+            const char* operation = "?";
+            switch (v.n1) {
+            case NOP_CLT_MOV: operation = "="; break;
+            case NOP_TABLE_ADD2: operation = "+="; break;
+            case NOP_TABLE_SUB2: operation = "-="; break;
+            case NOP_TABLE_MUL2: operation = "*="; break;
+            case NOP_TABLE_DIV2: operation = "/="; break;
+            case NOP_TABLE_PERSENT2: operation = "%="; break;
+            default: known = false; break;
+            }
+            outAssembly = FormatAsm("WREF.WRITE [%s] %s %s", context.operand(2).c_str(), operation, context.operand(3).c_str());
+        } else
+            outAssembly = FormatAsm("WREF %s.%s -> %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
         break;
 	case NOP_CLT_READ_RESULT:
         byteCount = OpFlagByteChars + 2 * 3;

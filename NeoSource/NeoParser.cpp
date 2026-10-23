@@ -277,11 +277,6 @@ static void WriteElement(SOperand& operand, eNOperation op, int value, bool imme
 	ResolveContainer(operand, ar, funs);
 	funs._cur->Push_Table_MASMDP(ar, op, operand._iVar, operand._iArrayIndex,
 		value, false, operand.IsHaveShort(), immediate);
-	// Vector components live in a value copy; other containers already share
-	// their storage. A function cannot be stored in a vector component.
-	if (operand._container.owner != INVALID_ERROR_PARSEJOB && op != NOP_FMOV2)
-		funs._cur->Push_Table_MASMDP(ar, NOP_VEC_WRITEBACK,
-			operand._container.owner, operand._container.key, operand._iVar, false, false, false);
 }
 
 // 컴파일 전용 함수 ID와 컨테이너 선택자를 런타임 값 슬롯으로 확정한다.
@@ -727,7 +722,6 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_JMP_RANGE_OUTSIDE, 3);
 	OP_STR1(NOP_JMP_RANGE_INSIDE_L, 3);
 	OP_STR1(NOP_JMP_RANGE_OUTSIDE_L, 3);
-	OP_STR1(NOP_VEC_WRITEBACK, 3);
 	OP_STR1(NOP_CLT_WRITE_REF, 3);
 	OP_STR1(NOP_CLT_READ_RESULT, 3);
 
@@ -5391,7 +5385,6 @@ static int HoistableOperandMask(eNOperation op)
 	case NOP_CLT_READ:		// n1 = 컨테이너, n2 = key, n3 = dest
 		return 0x2;
 	case NOP_CLT_MOV:		// n1 = 컨테이너, n2 = key, n3 = value
-	case NOP_VEC_WRITEBACK:	// n1 = 부모 컨테이너, n2 = key, n3 = 되써 넣을 임시 칸
 		return 0x2 | 0x4;
 	default:
 		return 0;

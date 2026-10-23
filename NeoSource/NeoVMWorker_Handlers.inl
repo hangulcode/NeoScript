@@ -392,19 +392,6 @@ NEOS_FORCEINLINE bool handle_CLT_MOV_L(const SVMOperation& OP) {
     return false;
 }
 
-// 사슬 lvalue 쓰기 뒤의 되써 넣기(컴파일러가 붙임). n3 임시 칸이 벡터일 때만 부모 원소 n1[n2] 에 넣는다.
-// 임시 칸은 부모 원소와 저장소를 공유하다 성분 쓰기에서 복제됐으므로 되써 넣어야 값이 남는다.
-// 리스트 · 맵 · 배열 · 객체는 부모가 이미 같은 객체를 들고 있어 타입 비교 한 번으로 끝난다 — 그 비교만
-// 루프에 인라인하고, 벡터일 때의 CltInsert 전개는 Add2/Add2Rare 처럼 바깥 함수에 둔다(루프 본문 크기 = 성능).
-NEOS_FORCEINLINE bool handle_VEC_WRITEBACK(const SVMOperation& OP) {
-    if (GetVarPtr3(OP)->GetType() == VAR_VEC)
-        VecWriteBackRare(OP);
-    return false;
-}
-NEOS_NOINLINE void VecWriteBackRare(const SVMOperation& OP) {
-    CltInsert(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP));
-}
-
 NEOS_NOINLINE bool handle_TABLE_ADD2(const SVMOperation& OP) {
     VarInfo* pTable = GetVarPtrF1(OP);
     if (pTable->GetType() == VAR_ARRAY)
@@ -490,24 +477,71 @@ NEOS_NOINLINE bool handle_TABLE_PERSENT2(const SVMOperation& OP) {
     return false;
 }
 
-// Guard the normal read/write/writeback sequence. For a stored vector, consume
-// the tail atomically so no borrowed address survives a VM suspension point.
-// Other types execute the tail normally, preserving native callback behavior.
+// The second WREF word carries an immediate collection operation, not a slot.
+NEOS_FORCEINLINE bool IsRefWriteOperation(const SVMOperation& write) {
+    if (write.op != NOP_CLT_WRITE_REF ||
+        (write.argFlag & (NEOS_OP_REF_WRITE | NEOS_ARG_N1_IMMEDIATE)) !=
+            (NEOS_OP_REF_WRITE | NEOS_ARG_N1_IMMEDIATE)) return false;
+    switch (write.n1) {
+    case NOP_CLT_MOV:
+    case NOP_TABLE_ADD2:
+    case NOP_TABLE_SUB2:
+    case NOP_TABLE_MUL2:
+    case NOP_TABLE_DIV2:
+    case NOP_TABLE_PERSENT2: return true;
+    default: return false;
+    }
+}
+
+// The getter has completed, possibly after a coroutine switch or debugger stop.
+// Recover operands from immutable code and the current frame; no borrowed slot
+// pointer or worker-wide pending state survives the callback boundary.
+NEOS_NOINLINE void FinishRefWrite(const SVMOperation& write) {
+    if (GetCodeptr() < 2 * (int)sizeof(SVMOperation) || !IsRefWriteOperation(write)) {
+        SetError(RTE_UNKNOWN_OP);
+        return;
+    }
+    const SVMOperation& owner = _pCodeCurrent[-2];
+    if (owner.op != NOP_CLT_WRITE_REF || (owner.argFlag & NEOS_OP_REF_WRITE)) {
+        SetError(RTE_UNKNOWN_OP);
+        return;
+    }
+    VarInfo* temp = GetVarPtr3(owner);
+    const bool vector = temp->IsVector();
+    SVMOperation mutation = write;
+    mutation.op = (eNOperation)write.n1;
+    mutation.n1 = owner.n3;
+    mutation.argFlag &= ~(NEOS_OP_REF_WRITE | NEOS_ARG_N1_IMMEDIATE | NEOS_ARG_N1_LOCAL);
+    if (owner.argFlag & NEOS_ARG_N3_LOCAL) mutation.argFlag |= NEOS_ARG_N1_LOCAL;
+    switch (mutation.op) {
+    case NOP_CLT_MOV: handle_CLT_MOV(mutation); break;
+    case NOP_TABLE_ADD2: handle_TABLE_ADD2(mutation); break;
+    case NOP_TABLE_SUB2: handle_TABLE_SUB2(mutation); break;
+    case NOP_TABLE_MUL2: handle_TABLE_MUL2(mutation); break;
+    case NOP_TABLE_DIV2: handle_TABLE_DIV2(mutation); break;
+    case NOP_TABLE_PERSENT2: handle_TABLE_PERSENT2(mutation); break;
+    default: SetError(RTE_UNKNOWN_OP); return;
+    }
+    // Vector mutation cannot call native code. Other values already share their
+    // storage, and a nested native-property write may have switched contexts.
+    if (vector && GetCodeptr() != 0)
+        CltInsert(GetVarPtrF1(owner), GetVarPtr2(owner), temp);
+}
+
+// Stored vectors consume both words atomically. Other values retain a resumable
+// getter boundary; their second WREF performs the mutation and vector setter.
 NEOS_NOINLINE void handle_CLT_WRITE_REF(const SVMOperation& OP) {
+    if (OP.argFlag & NEOS_OP_REF_WRITE) {
+        FinishRefWrite(OP);
+        return;
+    }
     const size_t next = (size_t)GetCodeptr() / sizeof(SVMOperation);
-    if (next >= _pProgram->code.size() || _pProgram->code.size() - next < 2) {
+    if (next >= _pProgram->code.size() || !IsRefWriteOperation(*_pCodeCurrent)) {
         SetError(RTE_UNKNOWN_OP);
         return;
     }
     const SVMOperation write = *_pCodeCurrent;
     VarInfo* temp = GetVarPtr3(OP);
-    if ((write.op != NOP_CLT_MOV && write.op != NOP_CLT_MOV_L &&
-         write.op != NOP_TABLE_ADD2 && write.op != NOP_TABLE_SUB2 &&
-         write.op != NOP_TABLE_MUL2 && write.op != NOP_TABLE_DIV2 &&
-         write.op != NOP_TABLE_PERSENT2) || GetVarPtrF1(write) != temp) {
-        SetError(RTE_UNKNOWN_OP);
-        return;
-    }
     VarInfo* owner = GetVarPtrF1(OP);
     VarInfo* key = GetVarPtr2(OP);
     VarInfo* target = nullptr;
@@ -519,12 +553,7 @@ NEOS_NOINLINE void handle_CLT_WRITE_REF(const SVMOperation& OP) {
     if (GetCodeptr() == 0) return;
 
     if (target && target->IsVector()) {
-        GetOP(); // mutation
-        const SVMOperation commit = *GetOP();
-        if (commit.op != NOP_VEC_WRITEBACK || GetVarPtr3(commit) != temp) {
-            SetError(RTE_UNKNOWN_OP);
-            return;
-        }
+        GetOP(); // the second WREF is handled here without another dispatch
         // Release an old temporary before deciding whether COW is necessary.
         Var_Release(temp);
         {
@@ -535,19 +564,17 @@ NEOS_NOINLINE void handle_CLT_WRITE_REF(const SVMOperation& OP) {
                 VarInfo* slot;
                 ~BorrowScope() { *slot = VarInfo(); }
             } borrow{temp};
-            if (write.op == NOP_CLT_MOV || write.op == NOP_CLT_MOV_L)
+            if (write.n1 == NOP_CLT_MOV)
                 CltInsert(temp->_ref, GetVarPtr2(write), GetVarPtr3(write));
             else
-                VecComponentOp(temp->_ref, GetVarPtr2(write), GetVarPtr3(write), write.op);
+                VecComponentOp(temp->_ref, GetVarPtr2(write), GetVarPtr3(write), (eNOperation)write.n1);
         }
         if (GetCodeptr() != 0)
             CltRead(target, GetVarPtr2(write), temp);
         return;
     }
 
-    // Scalar arrays and native properties retain their getter/setter path.
     if ((OP.argFlag & NEOS_OP_REF_LOADED) == 0) {
-        // Reuse the list/map lookup even when its value is not a vector.
         if (target) Move(temp, target);
         else CltRead(owner, key, temp);
     }
