@@ -73,6 +73,10 @@ print("count=" .. count);            // count=2
 print((count > 0) && (count < capacity)); // true
 ```
 
+- Integer `/`, `%`, `/=`, and `%=` fail with a runtime error when the divisor is zero or
+  the operands are `-2147483648` and `-1`. The destination is unchanged on failure.
+  In `const` and `case` expressions, these are compile errors. Floating-point division
+  continues to produce infinity/NaN for zero divisors.
 - For floating-point division, convert one operand with `tofloat` **before dividing**.
   `tofloat(count / capacity)` only converts the already-truncated result.
 - `float` is single precision. Converting a large integer ID to float and back may change its value.

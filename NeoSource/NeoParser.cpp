@@ -72,6 +72,7 @@ void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 	X(PCE_CONST_INVALID_VALUE, "Error (%d, %d): const expression must be a compile-time constant, near '%s'") \
 	X(PCE_CONST_INVALID_OP, "Error (%d, %d): invalid operation in const expression near '%s'") \
 	X(PCE_CONST_DIV_ZERO, "Error (%d, %d): division by zero in const expression") \
+	X(PCE_CONST_DIV_OVERFLOW, "Error (%d, %d): integer division overflow in const expression") \
 	X(PCE_CASE_OUTSIDE_SWITCH, "Error (%d, %d): 'case' / 'default' can only be used inside a switch") \
 	X(PCE_SWITCH_DUPLICATE_CASE, "Error (%d, %d): duplicate case value in switch") \
 	X(PCE_SWITCH_DUPLICATE_DEFAULT, "Error (%d, %d): 'default' appears more than once in switch") \
@@ -367,7 +368,7 @@ static bool TryFoldLiteralBinOp(SOperand& a, eNOperation op, const SOperand& b, 
 	case NOP_DIV3:
 		if (bothInt)
 		{
-			if (b._intLiteral == 0)
+			if (b._intLiteral == 0 || (a._intLiteral == INT_MIN && b._intLiteral == -1))
 				return false;   // 런타임 예외로 남긴다
 			ri = a._intLiteral / b._intLiteral;
 		}
@@ -376,7 +377,8 @@ static bool TryFoldLiteralBinOp(SOperand& a, eNOperation op, const SOperand& b, 
 	// 아래는 VM 도 int/int 조합에서만 계산한다. 나머지 조합은 접지 않고 넘겨서
 	// 기존과 같은 타입 에러가 런타임에 나게 둔다.
 	case NOP_PERSENT3:
-		if (bothInt == false || b._intLiteral == 0)
+		if (bothInt == false || b._intLiteral == 0 ||
+			(a._intLiteral == INT_MIN && b._intLiteral == -1))
 			return false;
 		ri = a._intLiteral % b._intLiteral;
 		break;
@@ -4726,7 +4728,14 @@ static bool EvalConstBinOp(SConstValue& a, TK_TYPE op, const SConstValue& b, CAr
 			return false;
 		}
 		if (bothInt)
+		{
+			if (a.i == INT_MIN && b.i == -1)
+			{
+				SetParserCompileError(ar, PCE_CONST_DIV_OVERFLOW);
+				return false;
+			}
 			a.i = (op == TK_DIV) ? (a.i / b.i) : (a.i % b.i);
+		}
 		else
 		{
 			double x = a.Num(), y = b.Num();

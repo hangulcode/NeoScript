@@ -338,6 +338,7 @@ private:
 	void Add2(VarInfo* r, VarInfo* v2);
 	void Sub2(VarInfo* r, VarInfo* v2);
 	void Mul2(VarInfo* r, VarInfo* v2);
+	bool CheckIntegerDivision(int dividend, int divisor);
 	void Div2(VarInfo* r, VarInfo* v2);
 	void Per2(VarInfo* r, VarInfo* v2);
 	void LSh2(VarInfo* r, VarInfo* v2);

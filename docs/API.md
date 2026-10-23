@@ -544,7 +544,11 @@ produced, so `!= null` is the presence test to use.
   `invalid function call 'Method'`. Native property failures identify `read` or `write` and
   the property name. Names remain available without debug info; explicit host error messages
   and error codes are preserved. Calling a non-callable value reports its type.
-- **`/` on two ints is integer division**, C semantics. Use `tofloat` when you want a real quotient.
+- **`/` on two ints truncates toward zero.** Use `tofloat` when you want a real quotient.
+  Integer `/`, `%`, `/=`, and `%=` report a runtime error for a zero divisor or `INT_MIN` with
+  divisor `-1`, without modifying the destination. The same invalid operations in `const` or
+  `case` expressions are compile errors. Ordinary literal expressions retain runtime errors.
+  Floating-point division retains IEEE infinity/NaN behavior.
 - **`..` concatenates, `+` adds.** `1 .. 2` is `"12"`.
 - **`elif` is removed**; use `else if`.
 - **Lambdas capture by value.** Read *Captured anonymous functions* in `ReadMe.md` before relying on

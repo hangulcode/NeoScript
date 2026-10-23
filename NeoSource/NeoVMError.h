@@ -54,7 +54,9 @@ namespace NeoScript
 	X(RTE_EXCEPTION,               "exception") \
 	X(RTE_PROGRAM_REQUIRED,        "CNeoVMProgram is required") \
 	X(RTE_EXEC_POOL_REQUIRED,      "NeoExecContextPool is required") \
-	X(RTE_DEFAULT_VALUE,           "unknown default value")
+	X(RTE_DEFAULT_VALUE,           "unknown default value") \
+	X(RTE_INTEGER_DIV_ZERO,        "integer division by zero") \
+	X(RTE_INTEGER_DIV_OVERFLOW,    "integer division overflow")
 
 enum ENeoRuntimeError
 {

@@ -833,6 +833,21 @@ NEOS_NOINLINE void CNeoVMWorker::Mul3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	}
 	SetErrorOperator("*", v1, v2);
 }
+NEOS_FORCEINLINE bool CNeoVMWorker::CheckIntegerDivision(int dividend, int divisor)
+{
+	if (divisor == 0)
+	{
+		SetError(RTE_INTEGER_DIV_ZERO);
+		return false;
+	}
+	if (divisor == -1 && dividend == INT_MIN)
+	{
+		SetError(RTE_INTEGER_DIV_OVERFLOW);
+		return false;
+	}
+	return true;
+}
+
 NEOS_FORCEINLINE void CNeoVMWorker::Div3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	// 실사용의 대부분인 INT/FLOAT 조합만 인라인한다. 문자열/벡터/메타/에러는 Div3Rare 로 분리 —
@@ -841,7 +856,12 @@ NEOS_FORCEINLINE void CNeoVMWorker::Div3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	const VAR_TYPE t2 = v2->GetType();
 	if (t1 == VAR_INT)
 	{
-		if (t2 == VAR_INT)   { Var_SetInt(r, v1->_int / v2->_int); return; }
+		if (t2 == VAR_INT)
+		{
+			if (CheckIntegerDivision(v1->_int, v2->_int))
+				Var_SetInt(r, v1->_int / v2->_int);
+			return;
+		}
 		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_int / v2->_float); return; }
 	}
 	else if (t1 == VAR_FLOAT)
@@ -877,7 +897,8 @@ NEOS_FORCEINLINE void CNeoVMWorker::Per3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 		{
-			Var_SetInt(r, v1->_int % v2->_int);
+			if (CheckIntegerDivision(v1->_int, v2->_int))
+				Var_SetInt(r, v1->_int % v2->_int);
 			return;
 		}
 		break;
@@ -1248,7 +1269,12 @@ NEOS_FORCEINLINE void CNeoVMWorker::Div2(VarInfo* r, VarInfo* v2)
 	const VAR_TYPE t2 = v2->GetType();
 	if (t1 == VAR_INT)
 	{
-		if (t2 == VAR_INT)   { r->_int /= v2->_int; return; }
+		if (t2 == VAR_INT)
+		{
+			if (CheckIntegerDivision(r->_int, v2->_int))
+				r->_int /= v2->_int;
+			return;
+		}
 		if (t2 == VAR_FLOAT) { r->SetType(VAR_FLOAT); r->_float = (NS_FLOAT)r->_int / v2->_float; return; }
 	}
 	else if (t1 == VAR_FLOAT)
@@ -1278,7 +1304,8 @@ NEOS_FORCEINLINE void CNeoVMWorker::Per2(VarInfo* r, VarInfo* v2)
 	case VAR_INT:
 		if (v2->GetType() == VAR_INT)
 		{
-			r->_int %= v2->_int;
+			if (CheckIntegerDivision(r->_int, v2->_int))
+				r->_int %= v2->_int;
 			return;
 		}
 		break;
