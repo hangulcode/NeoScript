@@ -224,7 +224,7 @@ namespace NeoScript
         public const string Lib = "NeoScript";
 #endif
 
-        public const int AbiVersion = 3;
+        public const int AbiVersion = 4;
         public const int MaxObjectSlots = 64;
 
         private const CallingConvention Cdecl = CallingConvention.Cdecl;
@@ -406,7 +406,8 @@ namespace NeoScript
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern int* NsArrayInts(IntPtr a);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern float* NsArrayFloats(IntPtr a);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsArrayVectorDimension(IntPtr a);
-        [DllImport(Lib, CallingConvention = Cdecl)] public static extern float* NsArrayVectorData(IntPtr a);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsArrayGetVec(IntPtr a, int index, float* out4);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsArraySetVec(IntPtr a, int index, float* components, int dimension);
     }
 
     /// <summary>

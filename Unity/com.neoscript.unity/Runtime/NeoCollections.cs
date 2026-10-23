@@ -343,15 +343,52 @@ namespace NeoScript
         /// <summary>2/3/4 for vector arrays; zero for other element types.</summary>
         public int VectorDimension => NeoNative.NsArrayVectorDimension(_handle);
 
-        /// <summary>Packed vector components in element order, without padding.
-        /// Quaternion data keeps script w,x,y,z order. Empty for non-vector arrays.</summary>
-        public Span<float> VectorComponents
+        /// <summary>Read a vector value. The array dimension must match the requested type.</summary>
+        public bool TryGet(int index, out Vector2 value)
         {
-            get
-            {
-                float* p = NeoNative.NsArrayVectorData(_handle);
-                return p == null ? Span<float>.Empty : new Span<float>(p, checked(Count * VectorDimension));
-            }
+            float* data = stackalloc float[4];
+            bool ok = VectorDimension == 2 && NeoNative.NsArrayGetVec(_handle, index, data) != 0;
+            value = ok ? new Vector2(data[0], data[1]) : default;
+            return ok;
+        }
+
+        public bool TryGet(int index, out Vector3 value)
+        {
+            float* data = stackalloc float[4];
+            bool ok = VectorDimension == 3 && NeoNative.NsArrayGetVec(_handle, index, data) != 0;
+            value = ok ? new Vector3(data[0], data[1], data[2]) : default;
+            return ok;
+        }
+
+        public bool TryGet(int index, out Vector4 value)
+        {
+            float* data = stackalloc float[4];
+            bool ok = VectorDimension == 4 && NeoNative.NsArrayGetVec(_handle, index, data) != 0;
+            value = ok ? new Vector4(data[0], data[1], data[2], data[3]) : default;
+            return ok;
+        }
+
+        /// <summary>Write one vector with copy-on-write; returns false for a wrong dimension or index.
+        /// Vector4 preserves script component order, including Quaternion w,x,y,z values.</summary>
+        public bool TrySet(int index, Vector2 value)
+        {
+            float* data = stackalloc float[2];
+            data[0] = value.x; data[1] = value.y;
+            return NeoNative.NsArraySetVec(_handle, index, data, 2) != 0;
+        }
+
+        public bool TrySet(int index, Vector3 value)
+        {
+            float* data = stackalloc float[3];
+            data[0] = value.x; data[1] = value.y; data[2] = value.z;
+            return NeoNative.NsArraySetVec(_handle, index, data, 3) != 0;
+        }
+
+        public bool TrySet(int index, Vector4 value)
+        {
+            float* data = stackalloc float[4];
+            data[0] = value.x; data[1] = value.y; data[2] = value.z; data[3] = value.w;
+            return NeoNative.NsArraySetVec(_handle, index, data, 4) != 0;
         }
 
         /// <summary>bool 원소는 비트로 채워져 있다. 하위 비트가 먼저다.</summary>

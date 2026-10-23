@@ -1520,7 +1520,7 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 				case NeoArrayElementType::Vector3:
 				case NeoArrayElementType::Vector4:
 				{
-					const NS_FLOAT* v = array->VectorData(i);
+					const NS_FLOAT* v = array->VectorValues()[i]._vec->v;
 					child.type = GetArrayElementTypeName(array->_elementType);
 					const int n = array->VectorDimension();
 					if (n == 2) snprintf(buf, sizeof(buf), "(%g, %g)", v[0], v[1]);

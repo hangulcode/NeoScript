@@ -18,6 +18,7 @@
 //      빌더 함수처럼 런타임을 모르는 자리에서도 해소할 수 있다.
 //==============================================================================
 
+#include <algorithm>
 #include "NeoScriptC.h"
 #include "NeoScript.h"
 
@@ -2021,9 +2022,17 @@ NS_API int32_t NS_CALL NsArrayVectorDimension(NsArrayView* a)
     return a != nullptr ? Deref(a)->vectorDimension() : 0;
 }
 
-NS_API float* NS_CALL NsArrayVectorData(NsArrayView* a)
+NS_API int32_t NS_CALL NsArrayGetVec(NsArrayView* a, int32_t index, float* out4)
 {
-    return a != nullptr ? Deref(a)->vectorData() : nullptr;
+    if (out4 == nullptr) return 0;
+    std::fill_n(out4, 4, 0.0f);
+    return a != nullptr && Deref(a)->getVec(index, out4);
+}
+
+NS_API int32_t NS_CALL NsArraySetVec(NsArrayView* a, int32_t index, const float* components, int32_t dimension)
+{
+    try { return a != nullptr && Deref(a)->setVec(index, components, dimension); }
+    catch (...) { return 0; }
 }
 
 } // extern "C"

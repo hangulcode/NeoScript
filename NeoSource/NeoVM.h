@@ -156,7 +156,7 @@ enum VAR_TYPE : u8
 	// (실측: 어긋난 상태로 두면 벤치 전체 +5%, float_math +13%, particles +26%)
 	// =====================================================================
 
-	// --- 리프 alloc: 자식으로 다른 alloc 객체를 들지 않는다 ---
+	// --- 비순환 alloc: 리프 또는 리프 자식만 가진 배열 ---
 	// 순환 참조의 당사자가 될 수 없고, 해제가 다른 객체로 내려가지 않는다.
 	VAR_STRING,
 
@@ -175,8 +175,8 @@ enum VAR_TYPE : u8
 	// _pUserData 는 호스트 소유의 불투명 포인터라 VM 관점에서는 리프다.
 	VAR_FP_NATIVE,
 
-	// 밀집 배열. bool/int/float/Vector2/3/4 중 한 형식만 담으며, 다른 alloc 자식이 없어
-	// 리프다. List와 같은 참조 의미론(대입 뒤 같은 저장소 공유)을 쓴다.
+	// 밀집 배열. bool/int/float/Vector2/3/4 중 한 형식만 담는다. 벡터 자식은
+	// 리프라 순환 추적 대상이 아니다. List와 같은 참조 의미론(대입 뒤 같은 저장소 공유)을 쓴다.
 	VAR_ARRAY,
 
 	// =====================================================================
@@ -251,7 +251,7 @@ struct MapNode;
 struct SetNode;
 struct VecInfo;
 
-// system.array의 원소 형식. bool은 비트, int/float은 원시 배열, 벡터는 float 성분을 연속 저장한다.
+// system.array의 원소 형식. bool은 비트, int/float은 원시 배열, 벡터는 VAR_VEC 값으로 저장한다.
 enum class NeoArrayElementType : u8
 {
 	Bool,

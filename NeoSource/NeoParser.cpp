@@ -2431,13 +2431,20 @@ static bool ParsePostfixSelectors(SOperand& operand, CArchiveRdWC& ar, SFunction
 		}
 
 		MaterializeValue(key, ar, funs);
-        if (operand._assignedResult) MaterializeValue(operand, ar, funs);
 		ResolveContainer(operand, ar, funs);
 		if (operand.IsArray())
 		{
 			SOperand child(funs._cur->AllocLocalTempVar());
 			child._container.owner = operand._iVar;
 			child._container.key = operand._iArrayIndex;
+			if (operand._assignedResult)
+			{
+				// Read the completed assignment without losing its owning slot.
+				// A later component write needs that address for COW/writeback;
+				// a captured scalar result must still fail if indexed again.
+				ReadElement(operand, child._iVar, ar, funs);
+				child._container.loaded = true;
+			}
 			operand = child;
 		}
 		else

@@ -53,7 +53,7 @@ extern "C" {
 // ABI 버전. 구조체 레이아웃이나 함수 시그니처가 바뀌면 올린다. 바인딩(C#)은 기동 시
 // NsGetAbiVersion() 으로 확인해서 어긋나면 바로 실패시킬 것 — 조용한 메모리 깨짐보다 낫다.
 //------------------------------------------------------------------------------
-#define NS_ABI_VERSION 3
+#define NS_ABI_VERSION 4
 
 // 한 프로세스에서 등록할 수 있는 네이티브 객체 타입 수. 디스패처가 컨텍스트 없는
 // 함수 포인터라 슬롯마다 고정 썽크가 필요해서 상한이 있다.
@@ -512,11 +512,13 @@ NS_API int32_t  NS_CALL NsArrayCount(NsArrayView* a);
 NS_API uint8_t* NS_CALL NsArrayBoolBits(NsArrayView* a);
 NS_API int32_t* NS_CALL NsArrayInts(NsArrayView* a);
 NS_API float*   NS_CALL NsArrayFloats(NsArrayView* a);
-/* Vector data is count * dimension packed floats, with no padding. Quaternion
- * arrays are Vector4 and keep script component order (w,x,y,z). Borrowed lifetime
- * and resize invalidation are the same as the other array pointers. */
-NS_API int32_t  NS_CALL NsArrayVectorDimension(NsArrayView* a);
-NS_API float*   NS_CALL NsArrayVectorData(NsArrayView* a);
+/* Vector access copies values, preserving script copy-on-write semantics.
+ * GetVec writes four floats (unused components are zero). SetVec reads exactly
+ * dimension floats; dimension must match the array. Both return 0 on invalid
+ * views, indices, pointers or element types. Quaternion order remains w,x,y,z. */
+NS_API int32_t NS_CALL NsArrayVectorDimension(NsArrayView* a);
+NS_API int32_t NS_CALL NsArrayGetVec(NsArrayView* a, int32_t index, float* out4);
+NS_API int32_t NS_CALL NsArraySetVec(NsArrayView* a, int32_t index, const float* components, int32_t dimension);
 
 #ifdef __cplusplus
 }   /* extern "C" */

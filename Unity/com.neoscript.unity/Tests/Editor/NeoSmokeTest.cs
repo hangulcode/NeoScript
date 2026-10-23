@@ -54,12 +54,16 @@ namespace NeoScript.Tests
             {
                 var a = ctx.ArgArray(0);
                 int dim = ctx.ArgInt(1);
-                var data = a.VectorComponents;
-                bool ok = a.VectorDimension == dim && a.Count == 2 && data.Length == 2 * dim &&
+                bool ok = a.VectorDimension == dim && a.Count == 2 &&
                     (int)a.ElementType == (int)NeoArrayElementType.Vector2 + dim - 2 &&
                     a.Floats.IsEmpty && a.Ints.IsEmpty;
-                for (int i = 0; i < data.Length; ++i) ok &= data[i] == i % dim + 1;
-                if (data.Length > dim) data[dim] = 9;
+                if (dim == 2)
+                    ok &= a.TryGet(1, out Vector2 v2) && v2 == new Vector2(1,2) && a.TrySet(1, new Vector2(9,2));
+                else if (dim == 3)
+                    ok &= a.TryGet(1, out Vector3 v3) && v3 == new Vector3(1,2,3) && a.TrySet(1, new Vector3(9,2,3));
+                else
+                    ok &= a.TryGet(1, out Vector4 v4) && v4 == new Vector4(1,2,3,4) && a.TrySet(1, new Vector4(9,2,3,4));
+                ok &= !a.TryGet(-1, out Vector3 _) && !a.TrySet(2, new Vector3(1,2,3));
                 ctx.Return(ok);
                 return true;
             }
@@ -414,14 +418,14 @@ fun Later() { return 7; }
                 instance.Call("NullList").InvokeReadList(list =>
                     Check(list.Count == 2 && list.IsNull(0) && list.GetInt(1) == 42, "PushNull preserves list slot"));
                 Check(instance.Call("Readers").Invoke().AsBool, "reader null/object/identity/string-key APIs");
-                Check(instance.Call("VectorArrays").Invoke().AsBool, "packed vector array callbacks: Vector2/3/4");
+                Check(instance.Call("VectorArrays").Invoke().AsBool, "vector array callbacks: Vector2/3/4");
                 instance.Call("VectorData").InvokeReadArray(a =>
-                    Check(a.VectorDimension == 3 && a.Count == 2 && a.VectorComponents.Length == 6 &&
-                        a.VectorComponents[5] == 3, "vector array return view"));
+                    Check(a.VectorDimension == 3 && a.Count == 2 && a.TryGet(1, out Vector3 v) &&
+                        v == new Vector3(1,2,3) && !a.TryGet(0, out Vector2 _) && !a.TrySet(0, new Vector2(8,9)), "vector array return view"));
                 instance.Call("EmptyVectorData").InvokeReadArray(a =>
-                    Check(a.VectorDimension == 4 && a.Count == 0 && a.VectorComponents.IsEmpty, "empty vector array"));
+                    Check(a.VectorDimension == 4 && a.Count == 0 && !a.TryGet(0, out Vector4 _) && !a.TrySet(0, Vector4.zero), "empty vector array"));
                 instance.Call("FloatData").InvokeReadArray(a =>
-                    Check(a.VectorDimension == 0 && a.VectorComponents.IsEmpty && a.Floats.Length == 2,
+                    Check(a.VectorDimension == 0 && !a.TryGet(0, out Vector3 _) && !a.TrySet(0, Vector3.zero) && a.Floats.Length == 2,
                         "scalar arrays keep their typed accessors"));
                 host.PositionGets = host.PositionSets = 0;
                 Check(instance.Call("Position").Invoke().AsFloat == 6f && host.Position == new Vector3(1,6,3) &&

@@ -365,7 +365,8 @@ each value; `foreach(var index, value in a)` is rejected.
   values: modifying a copied local vector does not modify the array. `a[i][j]` component assignment,
   `+=`, `-=`, `*=`, `/=`, `++`, and `--` write back to the array. Whole-vector compound assignment
   is unsupported; use `a[i] = a[i] + delta`. Array length counts vectors, not float components.
-- Vector components are packed floats in element order; no per-element vector allocation is retained.
+- Vector elements retain ordinary `VAR_VEC` values, sharing storage until a write requires a copy
+  (the same copy-on-write semantics as vectors in lists). Shrinking releases removed values.
   `system.array(math.Quaternion(w,x,y,z), n)` creates a Vector4 array with the same w,x,y,z order; there is no automatic
   conversion to a host quaternion layout. Resizing uses the vector initial value captured at creation.
 - int and float arrays convert between those two numeric types on assignment. Float to int truncates
@@ -476,9 +477,12 @@ An indexed assignment resolves its final containing element after its right-hand
 If that side changes an index variable or replaces the element, the write uses the current value,
 including the other vector components. Parentheses around the target do not change evaluation order.
 Index expressions containing calls run once; the write-back does not repeat those calls.
-List/map vector component writes can modify the stored value directly; shared vectors still
+List/map/vector-array component writes can modify the stored vector directly; shared vectors still
 detach on modification. Internal references do not escape the write or become script values.
-Packed arrays and native properties retain their value/write-back path.
+Native properties retain their value/write-back path.
+A selector immediately following an indexed assignment keeps the assigned slot writable:
+`(a[0][0] = math.Vector3(1,2,3))[1] = 9` updates `a[0][0]` to `(1,9,3)`.
+Reading that result into a local still makes an independent vector value via copy-on-write.
 
 `Quaternion` stores `w, x, y, z` in that order, so `q[0]` is `w`.
 

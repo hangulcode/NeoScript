@@ -530,8 +530,10 @@ Vector2, Vector3, and Vector4 arrays require values of the exact component count
 `append`. `len()` and `tosize` count vectors. `foreach` yields vector values, so modifying the loop
 variable does not update the array. Component writes (`positions[i][j]`) do update it, using the
 same evaluation order as other container component writes. Whole-vector compound assignment is
-unsupported; use `positions[i] = positions[i] + delta`. Internally, components are packed floats;
-the array does not retain a separate vector object per element.
+unsupported; use `positions[i] = positions[i] + delta`. Internally, each element is an ordinary
+`VAR_VEC` value. Reads share the existing vector; modifying a shared value copies it first, just
+like vectors stored in lists. Shrinking the array releases the removed elements. The creation
+value is retained separately so later growth restores that value even after element writes.
 
 ### Sets: remove duplicates and iterate
 
@@ -753,8 +755,11 @@ print(math.MoveToward(0.0, 10.0, 2.0)); // 2
   For example, if `F()` changes `i`, `list[i][0] += F()` reads and writes the element at the new `i`,
   just like a single-level indexed assignment. Parentheses around the target do not change this rule.
   An index computed by a function call is evaluated once; its result is not recomputed for write-back.
-  List/map vector writes may use a temporary internal reference; normal reads and assignment results
-  remain values. Copies still stay independent, and arrays/native properties retain their write-back path.
+  List/map/vector-array writes may use a temporary internal reference; normal reads and assignment results
+  remain values. Copies still stay independent, and native properties retain their write-back path.
+- A selector immediately after an indexed assignment can still modify the assigned vector:
+  `(a[0][0] = math.Vector3(1,2,3))[1] = 9` stores `(1,9,3)` in `a[0][0]`.
+  Assigning the result to a separate local instead keeps ordinary vector copy semantics.
 - Postfix `++` and `--` return the previous component value, including inside list/map literals;
   prefix forms return the updated value. For `var a = [v[0]++];`, `a[0]` receives the old value.
 - Addition and subtraction work on vectors with the same component count; multiplication and division support a vector and a scalar.

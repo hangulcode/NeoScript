@@ -3,19 +3,19 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <limits>
-#include <new>
 #include "NeoVMVector.h"
 
 namespace NeoScript
 {
 
-// Dense storage for one of bool/int/float/Vector2/3/4. Vectors contain packed float components,
-// never VecInfo pointers; this remains a leaf allocation.
+// Typed storage for bool/int/float/Vector2/3/4. Vector elements are VAR_VEC values
+// with the same reference counting and copy-on-write semantics as list elements.
+// Only leaf vectors can be retained, so arrays cannot participate in cycles.
 // The raw pool recycles only this header, so Allocate/Free always own the
 // lifetime of the separately allocated payload.
 struct ArrayInfo : AllocBase
 {
+	CNeoVM* _pVM = nullptr;
 	void* _data = nullptr;
 	int _count = 0;
 	int _capacity = 0;
@@ -26,8 +26,9 @@ struct ArrayInfo : AllocBase
 		bool _initialBool;
 		int _initialInt;
 		NS_FLOAT _initialFloat;
-		NS_FLOAT _initialVector[4];
 	};
+
+	VarInfo _initialVector; // retained creation value used by resize
 
 	// Lets VM shutdown release payloads still referenced by host/script values.
 	ArrayInfo* _liveNext = nullptr;
@@ -58,7 +59,7 @@ struct ArrayInfo : AllocBase
 		case NeoArrayElementType::Float: return (size_t)_capacity * sizeof(NS_FLOAT);
 		case NeoArrayElementType::Vector2:
 		case NeoArrayElementType::Vector3:
-		case NeoArrayElementType::Vector4: return (size_t)_capacity * VectorDimension() * sizeof(NS_FLOAT);
+		case NeoArrayElementType::Vector4: return (size_t)_capacity * sizeof(VarInfo);
 		}
 		return 0;
 	}
@@ -70,8 +71,10 @@ struct ArrayInfo : AllocBase
 	NEOS_FORCEINLINE NS_FLOAT* FloatData() { return static_cast<NS_FLOAT*>(_data); }
 	NEOS_FORCEINLINE const NS_FLOAT* FloatData() const { return static_cast<const NS_FLOAT*>(_data); }
 
-	NEOS_FORCEINLINE NS_FLOAT* VectorData(int index) { return FloatData() + (size_t)index * VectorDimension(); }
-	NEOS_FORCEINLINE const NS_FLOAT* VectorData(int index) const { return FloatData() + (size_t)index * VectorDimension(); }
+	NEOS_FORCEINLINE VarInfo* VectorValues() { return static_cast<VarInfo*>(_data); }
+	NEOS_FORCEINLINE const VarInfo* VectorValues() const { return static_cast<const VarInfo*>(_data); }
+	void ReadVector(int index, VarInfo* out);
+	bool SetVectorComponents(int index, const float* components, int dimension);
 
 	NEOS_FORCEINLINE bool GetBool(int index) const
 	{
@@ -124,7 +127,7 @@ struct ArrayInfo : AllocBase
 		case NeoArrayElementType::Vector3:
 		case NeoArrayElementType::Vector4:
 			if (!CanAssignValue(value)) return false;
-			memcpy(VectorData(index), value->_vec->v, sizeof(NS_FLOAT) * VectorDimension());
+			AssignVector(index, value);
 			return true;
 		}
 		return false;
@@ -157,7 +160,7 @@ struct ArrayInfo : AllocBase
 		case NeoArrayElementType::Vector2:
 		case NeoArrayElementType::Vector3:
 		case NeoArrayElementType::Vector4:
-			memcpy(_initialVector, value._vec->v, sizeof(NS_FLOAT) * VectorDimension());
+			RetainInitialVector(value);
 			break;
 		}
 	}
@@ -191,14 +194,23 @@ struct ArrayInfo : AllocBase
 			break;
 		}
 		case NeoArrayElementType::Float:
+		{
+			NS_FLOAT* replacement = new NS_FLOAT[capacity];
+			if (_count > 0)
+				memcpy(replacement, FloatData(), sizeof(NS_FLOAT) * (size_t)_count);
+			delete[] FloatData();
+			_data = replacement;
+			break;
+		}
 		case NeoArrayElementType::Vector2:
 		case NeoArrayElementType::Vector3:
 		case NeoArrayElementType::Vector4:
 		{
-			NS_FLOAT* replacement = new NS_FLOAT[CheckedFloatCount(capacity)];
+			VarInfo* replacement = new VarInfo[capacity];
 			if (_count > 0)
-				memcpy(replacement, FloatData(), sizeof(NS_FLOAT) * CheckedFloatCount(_count));
-			delete[] FloatData();
+				memcpy(replacement, VectorValues(), sizeof(VarInfo) * (size_t)_count);
+			// Transfer owned references, without retaining or releasing them.
+			delete[] VectorValues();
 			_data = replacement;
 			break;
 		}
@@ -222,6 +234,8 @@ struct ArrayInfo : AllocBase
 		}
 		if (count > oldCount)
 			SetInitialRange(oldCount, count);
+		else if (VectorDimension())
+			ReleaseVectorRange(count, oldCount);
 		_count = count;
 		++_mutationVersion;
 		return true;
@@ -236,6 +250,7 @@ struct ArrayInfo : AllocBase
 		_capacity = count;
 		_elementType = elementType;
 		_mutationVersion = 0;
+		_initialVector = VarInfo();
 		if (count == 0)
 			return true;
 
@@ -248,10 +263,12 @@ struct ArrayInfo : AllocBase
 			_data = new int[count];
 			return true;
 		case NeoArrayElementType::Float:
+			_data = new NS_FLOAT[count];
+			return true;
 		case NeoArrayElementType::Vector2:
 		case NeoArrayElementType::Vector3:
 		case NeoArrayElementType::Vector4:
-			_data = new NS_FLOAT[CheckedFloatCount(count)];
+			_data = new VarInfo[count];
 			return true;
 		}
 		return false;
@@ -263,10 +280,13 @@ struct ArrayInfo : AllocBase
 		{
 		case NeoArrayElementType::Bool:  delete[] BoolBits(); break;
 		case NeoArrayElementType::Int:   delete[] IntData(); break;
-		case NeoArrayElementType::Float:
+		case NeoArrayElementType::Float: delete[] FloatData(); break;
 		case NeoArrayElementType::Vector2:
 		case NeoArrayElementType::Vector3:
-		case NeoArrayElementType::Vector4: delete[] FloatData(); break;
+		case NeoArrayElementType::Vector4:
+			FreeVectors();
+			delete[] VectorValues();
+			break;
 		}
 		_data = nullptr;
 		_count = 0;
@@ -305,17 +325,14 @@ private:
 		case NeoArrayElementType::Vector3:
 		case NeoArrayElementType::Vector4:
 			for (int i = begin; i < end; ++i)
-				memcpy(VectorData(i), _initialVector, sizeof(NS_FLOAT) * VectorDimension());
+				AssignVector(i, &_initialVector);
 			break;
 		}
 	}
-	size_t CheckedFloatCount(int count) const
-	{
-		const size_t width = VectorDimension() ? (size_t)VectorDimension() : 1;
-		if ((size_t)count > (std::numeric_limits<size_t>::max)() / sizeof(NS_FLOAT) / width)
-			throw std::bad_array_new_length();
-		return (size_t)count * width;
-	}
+	void AssignVector(int index, VarInfo* value);
+	void RetainInitialVector(const VarInfo& value);
+	void ReleaseVectorRange(int begin, int end);
+	void FreeVectors();
 };
 
 inline const char* GetArrayElementTypeName(NeoArrayElementType type)

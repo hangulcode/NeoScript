@@ -330,7 +330,8 @@ public:
     int32_t* ints() const;      // nullptr unless elementType()==Int
     float* floats() const;      // nullptr unless elementType()==Float
     int vectorDimension() const; // 2/3/4 for vector arrays; 0 otherwise
-    float* vectorData() const;  // packed components, count()*vectorDimension() floats; nullptr otherwise
+    bool getVec(int index, float out[4]) const; // copies one value, unused components are zero
+    bool setVec(int index, const float* components, int dimension) const; // exact dimension; COW write
 
 private:
     friend class CallContext; friend class Invocation; friend struct NeoScriptInternal;

@@ -23,7 +23,7 @@ into every engine build that nothing in that build calls.
 ## Updating from an older checkout
 
 Close Unity, update the UPM sources, then rebuild the native plugin for each
-target platform. The current binding requires **C ABI 3**; an older DLL is
+target platform. The current binding requires **C ABI 4**; an older DLL is
 rejected at runtime construction with an ABI mismatch. This is the native
 binding revision, not a package or bytecode version. Recompile cached bytecode
 with the current core; old images may be rejected by its image-version check.
@@ -406,18 +406,28 @@ The Android/Linux shared-library link uses an export map to keep yyjson and
 C++ implementation symbols private even if a dependency requests default
 visibility. The Android build script verifies this before deploying the plugin.
 
-## Dense vector arrays
+## Vector arrays
 
-`system.array(math.Vector3(0,0,0), count)` and the Vector2/Vector4 equivalents expose
-`NeoArrayView.ElementType`, `Count`, `VectorDimension` (2/3/4), and the writable
-`VectorComponents` span. Its length is `Count * VectorDimension`; components are
-packed in element order without padding. `Floats` remains exclusive to scalar
-float arrays. Non-vector arrays have dimension zero and an empty component span.
-The existing borrowed-view lifetime and resize invalidation rules apply.
+`system.array(math.Vector3(0,0,0), count)` and the Vector2/Vector4 equivalents store
+ordinary vector values with copy-on-write semantics. `NeoArrayView` exposes `ElementType`,
+`Count`, `VectorDimension` (2/3/4), and `TryGet(index, out Vector2/3/4)` /
+`TrySet(index, Vector2/3/4)`. Both return false for an invalid index or a dimension mismatch.
+Reads copy a value to Unity; writes detach shared vector storage so saved script values remain unchanged.
 
-The C++ equivalents are `ArrayView::vectorDimension()` and `vectorData()`; the C ABI
-uses `NsArrayVectorDimension` and `NsArrayVectorData`. Quaternion arrays are Vector4
-and retain script w,x,y,z component order; convert explicitly for Unity quaternions.
+```csharp
+var positions = ctx.ArgArray(0);
+if (positions.TryGet(0, out Vector3 position))
+    positions.TrySet(0, position + Vector3.up);
+```
+
+`VectorComponents` and `NsArrayVectorData` were removed in C ABI 4; rebuild the native plugin
+with the matching managed bindings. `Floats` remains exclusive to scalar float arrays.
+The view is borrowed for the existing callback scope; copied Vector2/3/4 values can be retained.
+
+C++ uses `ArrayView::getVec(index, out4)` and `setVec(index, components, dimension)`;
+the C ABI uses `NsArrayGetVec` and `NsArraySetVec`. `getVec` writes four floats,
+zeroing unused components. Quaternion arrays remain Vector4 and retain script w,x,y,z
+component order; convert explicitly for Unity quaternions.
 
 ## Vector properties
 

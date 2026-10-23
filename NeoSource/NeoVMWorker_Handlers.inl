@@ -513,6 +513,9 @@ NEOS_NOINLINE void handle_CLT_WRITE_REF(const SVMOperation& OP) {
     VarInfo* target = nullptr;
     if (owner->GetType() == VAR_LIST || owner->GetType() == VAR_MAP)
         target = GetTableItem(owner, key);
+    else if (owner->GetType() == VAR_ARRAY && owner->_array->VectorDimension() &&
+             key->GetType() == VAR_INT && owner->_array->IsValidIndex(key->_int))
+        target = &owner->_array->VectorValues()[key->_int];
     if (GetCodeptr() == 0) return;
 
     if (target && target->IsVector()) {
@@ -542,7 +545,7 @@ NEOS_NOINLINE void handle_CLT_WRITE_REF(const SVMOperation& OP) {
         return;
     }
 
-    // Packed arrays and native properties retain their getter/setter path.
+    // Scalar arrays and native properties retain their getter/setter path.
     if ((OP.argFlag & NEOS_OP_REF_LOADED) == 0) {
         // Reuse the list/map lookup even when its value is not a vector.
         if (target) Move(temp, target);

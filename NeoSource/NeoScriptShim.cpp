@@ -4,6 +4,7 @@
 //
 //==============================================================================
 
+#include <algorithm>
 #include "NeoScript.h"
 
 // 내부 헤더 (공개 헤더는 이걸 include 하지 않는다 — 여기서만)
@@ -1763,7 +1764,20 @@ uint8_t* ArrayView::boolBits() const { ArrayInfo* a=const_cast<ArrayInfo*>(stati
 int32_t* ArrayView::ints() const { ArrayInfo* a=const_cast<ArrayInfo*>(static_cast<const ArrayInfo*>(m_impl)); return a&&a->_elementType==NeoArrayElementType::Int?reinterpret_cast<int32_t*>(a->IntData()):nullptr; }
 float* ArrayView::floats() const { ArrayInfo* a=const_cast<ArrayInfo*>(static_cast<const ArrayInfo*>(m_impl)); return a&&a->_elementType==NeoArrayElementType::Float?reinterpret_cast<float*>(a->FloatData()):nullptr; }
 int ArrayView::vectorDimension() const { const ArrayInfo* a=static_cast<const ArrayInfo*>(m_impl); return a?a->VectorDimension():0; }
-float* ArrayView::vectorData() const { ArrayInfo* a=const_cast<ArrayInfo*>(static_cast<const ArrayInfo*>(m_impl)); return a&&a->VectorDimension()?a->FloatData():nullptr; }
+bool ArrayView::getVec(int index, float out[4]) const
+{
+    const ArrayInfo* a = static_cast<const ArrayInfo*>(m_impl);
+    if (!out) return false;
+    std::fill_n(out, 4, 0.0f);
+    if (!a || !a->VectorDimension() || !a->IsValidIndex(index)) return false;
+    std::copy_n(a->VectorValues()[index]._vec->v, a->VectorDimension(), out);
+    return true;
+}
+bool ArrayView::setVec(int index, const float* components, int dimension) const
+{
+    ArrayInfo* a = const_cast<ArrayInfo*>(static_cast<const ArrayInfo*>(m_impl));
+    return a && a->SetVectorComponents(index, components, dimension);
+}
 
 //==============================================================================
 // Invocation (호스트→스크립트 호출 핸들) — 인자 VM 슬롯 직접, 반환 in-place zero-copy

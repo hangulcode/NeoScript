@@ -14,13 +14,17 @@ static bool Host(CallContext& ctx, StringView name)
     bool ok = a.vectorDimension() == dim && a.count() == 2 &&
         (int)a.elementType() == (int)ArrayElementType::Vector2 + dim - 2 &&
         a.floats() == nullptr && a.ints() == nullptr && a.boolBits() == nullptr;
-    float* data = a.vectorData();
-    ok = ok && data != nullptr;
-    if (data)
+    float data[4];
+    for (int i = 0; i < 2; ++i)
     {
-        for (int i = 0; i < 2 * dim; ++i) ok = ok && data[i] == (float)(i % dim + 1);
-        data[dim] = 20;
+        ok = a.getVec(i, data) && ok;
+        for (int j = 0; j < 4; ++j) ok = ok && data[j] == (j < dim ? float(j + 1) : 0.0f);
     }
+    data[0] = 20;
+    ok = a.setVec(1, data, dim) && ok;
+    ok = ok && !a.setVec(1, data, dim == 2 ? 3 : 2) && !a.setVec(-1, data, dim) &&
+        !a.setVec(2, data, dim) && !a.setVec(0, nullptr, dim) && !a.getVec(0, nullptr) &&
+        !a.getVec(-1, data) && !a.getVec(2, data);
     ctx.retBool(ok);
     return true;
 }
@@ -108,6 +112,10 @@ int main()
             Run(runtime, setup + "var m={\"items\":[a]};m.items[0][1][0]=7;var p=(a[0][0]+=4);return p==5 && a[0][0]==5 && a[1][0]==7;}", debug, image);
             Run(runtime, setup + "a[0]=a[1]+v;a[1]=a[0]*2;return a[0][0]==2 && a[1][0]==4 && a[1][1]==8;}", debug, image);
             Run(runtime, setup + "a=a[0];return a==v;}", debug, image);
+            Run(runtime, setup + "a[0]=a[0];a[1]=a[0];var p=a[1];a.resize(0);a.resize(1);return p==v && a[0]==v;}", debug, image);
+            Run(runtime, "export fun Test(){var a=system.array(" + vector + ",1);a=a[0];a[0]=99;return a[0]==99;}", debug, image);
+            Run(runtime, setup + "var p=a[0];a[0][0]+=1;a[0][0]+=1;return p==v && a[1]==v && a[0][0]==3;}", debug, image);
+            Run(runtime, setup + "var list=[a[0]];var m={\"p\":a[1]};list[0][0]=8;m.p[0]=9;return a[0]==v && a[1]==v;}", debug, image);
             Run(runtime, setup + "var p=a[1];return p[0]==1 && Host.Edit(a," + std::to_string(dim) + ") && a[0][0]==1 && a[1][0]==20 && p[0]==1;}", debug, image);
             Run(runtime, "export fun Test(){var a=system.array(" + vector + ",0);a.append(" + vector + ");return a.len()==1 && a[0]==" + vector + ";}", debug, image);
             const std::string wrong = dim == 2 ? "math.Vector3(1,2,3)" : "math.Vector2(1,2)";
