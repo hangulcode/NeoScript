@@ -144,8 +144,18 @@ struct LazyDeque;
 // 담아야 하므로(CallReadMap/List) InstanceRec 앞에 정의. 중첩 리더는 pool 에 추가된다.
 struct MapReaderImpl;
 struct ListReaderImpl;
-struct MapReaderImpl  { INeoVMWorker* w = nullptr; MapInfo*  map = nullptr;  LazyDeque<MapReaderImpl>* mpool = nullptr; LazyDeque<ListReaderImpl>* lpool = nullptr; };
-struct ListReaderImpl { INeoVMWorker* w = nullptr; ListInfo* list = nullptr; LazyDeque<MapReaderImpl>* mpool = nullptr; LazyDeque<ListReaderImpl>* lpool = nullptr; };
+struct MapReaderImpl {
+    MapReaderImpl(INeoVMWorker* worker = nullptr, MapInfo* value = nullptr,
+        LazyDeque<MapReaderImpl>* maps = nullptr, LazyDeque<ListReaderImpl>* lists = nullptr)
+        : w(worker), map(value), mpool(maps), lpool(lists) {}
+    INeoVMWorker* w; MapInfo* map; LazyDeque<MapReaderImpl>* mpool; LazyDeque<ListReaderImpl>* lpool;
+};
+struct ListReaderImpl {
+    ListReaderImpl(INeoVMWorker* worker = nullptr, ListInfo* value = nullptr,
+        LazyDeque<MapReaderImpl>* maps = nullptr, LazyDeque<ListReaderImpl>* lists = nullptr)
+        : w(worker), list(value), mpool(maps), lpool(lists) {}
+    INeoVMWorker* w; ListInfo* list; LazyDeque<MapReaderImpl>* mpool; LazyDeque<ListReaderImpl>* lpool;
+};
 
 template <typename T>
 struct LazyDeque
@@ -426,8 +436,16 @@ namespace
 struct CallContextImpl;
 
 // (MapReaderImpl/ListReaderImpl 은 InstanceRec 앞에서 이미 정의됨)
-struct MapBuilderImpl  { INeoVMWorker* w = nullptr; MapInfo*  map = nullptr;  CallContextImpl* ctx = nullptr; };
-struct ListBuilderImpl { INeoVMWorker* w = nullptr; ListInfo* list = nullptr; CallContextImpl* ctx = nullptr; };
+struct MapBuilderImpl {
+    MapBuilderImpl(INeoVMWorker* worker = nullptr, MapInfo* value = nullptr, CallContextImpl* context = nullptr)
+        : w(worker), map(value), ctx(context) {}
+    INeoVMWorker* w; MapInfo* map; CallContextImpl* ctx;
+};
+struct ListBuilderImpl {
+    ListBuilderImpl(INeoVMWorker* worker = nullptr, ListInfo* value = nullptr, CallContextImpl* context = nullptr)
+        : w(worker), list(value), ctx(context) {}
+    INeoVMWorker* w; ListInfo* list; CallContextImpl* ctx;
+};
 
 struct CallContextImpl
 {

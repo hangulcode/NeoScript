@@ -1,4 +1,4 @@
-#include "NeoJson.h"
+﻿#include "NeoJson.h"
 #include "NeoVMWorker.h"
 #include "../ThirdParty/yyjson/yyjson.h"
 #include <algorithm>
@@ -57,7 +57,10 @@ bool ValidString(const char* data, size_t size) {
 // This scanner runs only after a syntax error. yyjson owns JSON validation;
 // the scanner recovers the enclosing key/index from its byte offset.
 std::string ErrorPath(const char* text, size_t size, size_t stop) {
-    struct Frame { bool object; std::string path, key; size_t index = 0; bool expectKey = true; };
+    struct Frame {
+        Frame(bool isObject, const std::string& value) : object(isObject), path(value) {}
+        bool object; std::string path, key; size_t index = 0; bool expectKey = true;
+    };
     std::vector<Frame> stack;
     auto path = [&]() { if (stack.empty()) return std::string("$"); const auto& f = stack.back();
         return f.object ? KeyPath(f.path, f.key) : f.path + '[' + std::to_string(f.index) + ']'; };
@@ -77,7 +80,7 @@ std::string ErrorPath(const char* text, size_t size, size_t stop) {
             }
             if (i > stop) break;
         } else if (c == '{' || c == '[') {
-            std::string child = path(); stack.push_back({c == '{', child, ""}); ++i;
+            std::string child = path(); stack.emplace_back(c == '{', child); ++i;
             // A depth failure is reported at the first disallowed container.
             if (stack.size() > 64) return child;
         } else if (c == '}' || c == ']') { if (!stack.empty()) stack.pop_back(); ++i; }

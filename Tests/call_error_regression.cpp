@@ -15,7 +15,15 @@ static bool Property(CallContext& context, StringView name, bool)
     if (name.str() == "Detailed") context.fail(78, "specific property reason");
     return false;
 }
-struct Case { const char* body; const char* expected; int code = 1; };
+struct Case
+{
+    const char* body;
+    const char* expected;
+    int code;
+
+    Case(const char* source, const char* message, int errorCode = 1)
+        : body(source), expected(message), code(errorCode) {}
+};
 int main()
 {
     auto runtime = CreateRuntime();

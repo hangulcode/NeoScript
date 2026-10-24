@@ -1995,7 +1995,10 @@ void CNeoVMWorker::JumpAsyncMsg()
 
 	// NOP_IDLE의 jump operand를 변경하지 않는다. 중첩 async.wait는 현재
 	// 실행 컨텍스트의 resume stack으로 분리되어 LIFO 순서로 복귀한다.
-	m_pCur->m_sAsyncResumeCodePtrs.push_back({ resumeCodePtr, GetReturnVar() });
+	AsyncResumeInfo resume;
+	resume.codePtr = resumeCodePtr;
+	resume.pReturnValue = GetReturnVar();
+	m_pCur->m_sAsyncResumeCodePtrs.push_back(resume);
 	SetCodePtr(sizeof(SVMOperation));
 }
 template<bool TIMEOUT, bool DEBUG>
