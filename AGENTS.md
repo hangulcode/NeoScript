@@ -9,7 +9,7 @@
 | 트리 | 성격 |
 | :--- | :--- |
 | `D:\Git\NeoScript` | 스크립트 VM · 컴파일러 (**git**) — 여기 |
-| 엔진 저장소 | 이 VM 을 쓰는 호스트. `NeoSource\*.cpp` 를 직접 컴파일한다 (**별도 git**) |
+| 엔진 저장소 | 이 VM 을 쓰는 호스트. Windows는 공통 정적 라이브러리를 링크한다 (**별도 git**) |
 | 콘텐츠 저장소 | 게임 리소스와 스크립트 (**SVN**) |
 
 ## 절대 규칙
@@ -49,7 +49,7 @@ NDK clang : %LOCALAPPDATA%\Android\Sdk\ndk\25.1.8937393\toolchains\llvm\prebuilt
 ## Unity
 
 C ABI in `Unity\Native`, C# binding in `Unity\com.neoscript.unity` (UPM). **Keep the C ABI out of
-`NeoSource\`** — the engine repository compiles `NeoSource\*.cpp` wholesale and would drag in a
+`NeoSource\`** — source-based hosts compile `NeoSource\*.cpp` wholesale and would drag in a
 shim it never calls. Plugin binaries are not committed: run `pwsh Unity\build_windows.ps1` before
 opening Unity. Regression is `neoscript_c_abi_smoke.exe` (compiling it as C is itself the test)
 plus three Unity suites — smoke, PlayMode, reload cycle. Commands in `docs/Unity.md`.

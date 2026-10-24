@@ -1,0 +1,123 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" TreatAsLocalProperty="OutDir;IntDir;TargetName" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32"><Configuration>Debug</Configuration><Platform>Win32</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32"><Configuration>Release</Configuration><Platform>Win32</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <ProjectGuid>{3F059C1E-371B-47BC-9880-C2349C5EF462}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>NeoScript</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Release'">false</UseDebugLibraries>
+    <WholeProgramOptimization Condition="'$(Configuration)'=='Release'">true</WholeProgramOptimization>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <!-- 어느 솔루션에서 빌드해도 같은 구성의 라이브러리와 중간 파일을 공유한다. -->
+  <PropertyGroup>
+    <OutDir>$(ProjectDir)..\Build\Windows\lib\</OutDir>
+    <IntDir>$(ProjectDir)..\Build\Windows\obj\$(Platform)\$(Configuration)\</IntDir>
+    <NeoScriptBits Condition="'$(Platform)'=='Win32'">32</NeoScriptBits>
+    <NeoScriptBits Condition="'$(Platform)'=='x64'">64</NeoScriptBits>
+    <TargetName>NeoScript$(NeoScriptBits)</TargetName>
+    <TargetName Condition="'$(Configuration)'=='Debug'">NeoScript$(NeoScriptBits)-d</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <ConformanceMode>true</ConformanceMode>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <ExceptionHandling>Async</ExceptionHandling>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ProgramDataBaseFileName>$(IntDir)NeoScript.pdb</ProgramDataBaseFileName>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <PreprocessorDefinitions>WIN_PRJ;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\NeoSource;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\NeoSource\NeoExport.cpp" />
+    <ClCompile Include="..\NeoSource\NeoJson.cpp" />
+    <ClCompile Include="..\NeoSource\NeoJsonVendor.cpp" />
+    <ClCompile Include="..\NeoSource\NeoLib.cpp" />
+    <ClCompile Include="..\NeoSource\NeoParser.cpp" />
+    <ClCompile Include="..\NeoSource\NeoScriptShim.cpp" />
+    <ClCompile Include="..\NeoSource\NeoTextLoader.cpp" />
+    <ClCompile Include="..\NeoSource\NeoVM.cpp" />
+    <ClCompile Include="..\NeoSource\NeoVMList.cpp" />
+    <ClCompile Include="..\NeoSource\NeoVMMap.cpp" />
+    <ClCompile Include="..\NeoSource\NeoVMProgram.cpp" />
+    <ClCompile Include="..\NeoSource\NeoVMSet.cpp" />
+    <ClCompile Include="..\NeoSource\NeoVMWorker.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\NeoSource\HttpRequest.h" />
+    <ClInclude Include="..\NeoSource\Neo.h" />
+    <ClInclude Include="..\NeoSource\NeoArchive.h" />
+    <ClInclude Include="..\NeoSource\NeoCompileLimits.h" />
+    <ClInclude Include="..\NeoSource\NeoConfig.h" />
+    <ClInclude Include="..\NeoSource\NeoExport.h" />
+    <ClInclude Include="..\NeoSource\NeoJson.h" />
+    <ClInclude Include="..\NeoSource\NeoLibDCall.h" />
+    <ClInclude Include="..\NeoSource\NeoNumeric.h" />
+    <ClInclude Include="..\NeoSource\NeoParser.h" />
+    <ClInclude Include="..\NeoSource\NeoQueue.h" />
+    <ClInclude Include="..\NeoSource\NeoScript.h" />
+    <ClInclude Include="..\NeoSource\NeoStringLimits.h" />
+    <ClInclude Include="..\NeoSource\NeoTextLoader.h" />
+    <ClInclude Include="..\NeoSource\NeoVM.h" />
+    <ClInclude Include="..\NeoSource\NeoVMArray.h" />
+    <ClInclude Include="..\NeoSource\NeoVMError.h" />
+    <ClInclude Include="..\NeoSource\NeoVMHash.h" />
+    <ClInclude Include="..\NeoSource\NeoVMInternal.h" />
+    <ClInclude Include="..\NeoSource\NeoVMList.h" />
+    <ClInclude Include="..\NeoSource\NeoVMMap.h" />
+    <ClInclude Include="..\NeoSource\NeoVMMemoryPool.h" />
+    <ClInclude Include="..\NeoSource\NeoVMProgram.h" />
+    <ClInclude Include="..\NeoSource\NeoVMSet.h" />
+    <ClInclude Include="..\NeoSource\NeoVMVector.h" />
+    <ClInclude Include="..\NeoSource\NeoVMWorker.h" />
+    <ClInclude Include="..\NeoSource\UTFString.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\NeoSource\NeoVMWorker.inl" />
+    <None Include="..\NeoSource\NeoVMWorker_Handlers.inl" />
+    <None Include="..\NeoSource\NeoVMWorker_Move.inl" />
+    <None Include="..\NeoSource\NeoVMWorker_Var.inl" />
+  </ItemGroup>
+  <Import Project="..\BuildConfig\MsvcOverrideWarnings.props" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

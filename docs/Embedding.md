@@ -9,6 +9,42 @@ The public host API (`NeoScript.h`) and the internal engine surface behind it.
 For the language see [../ReadMe.md](../ReadMe.md); for script-callable functions
 see [API.md](API.md).
 
+## Windows static linking
+
+Add `Windows/NeoScript.vcxproj` to the host solution and add a project reference
+from each executable that uses NeoScript. Keep **Link Library Dependencies** enabled
+and **Use Library Dependency Inputs** disabled so the host links the actual `.lib`.
+Remove `NeoSource/*.cpp` from the host's compile items to avoid duplicate definitions.
+An intermediate static library may reference the project with **Link Library Dependencies**
+disabled; the final executable must still reference and link NeoScript directly.
+
+`Windows/NeoScript.sln` builds the library by itself. `Samples/console/console.sln`
+uses the same project and output files. From a Visual Studio developer prompt:
+
+```bat
+MSBuild Windows\NeoScript.sln /p:Configuration=Release /p:Platform=x64 /m
+```
+
+| Configuration | Output under `Build/Windows/lib` | Host CRT |
+| --- | --- | --- |
+| Release x64 | `NeoScript64.lib` | `/MT` |
+| Debug x64 | `NeoScript64-d.lib` | `/MTd` |
+| Release x86 | `NeoScript32.lib` | `/MT` |
+| Debug x86 | `NeoScript32-d.lib` | `/MTd` |
+
+Solutions use `x86`; direct `.vcxproj` builds use `Win32`. Match the host's platform,
+configuration, CRT and MSVC toolset. The project currently uses v145, disables RTTI,
+and keeps its sources compatible with C++11. MSVC's minimum selectable mode is
+C++14; the project uses that default, while Clang/GCC enforce C++11 compatibility.
+Add `NeoSource` to the host's include
+path and include `NeoScript.h`. The Windows socket dependency is linked automatically.
+
+Outputs and intermediate files are relative to the library project, so multiple
+solutions reuse the same build. Build solutions sharing the same configuration
+sequentially to avoid concurrent writes to object and PDB files. The static library
+contains the C++ API; Unity's C ABI plugin remains a separate build. CMake already
+provides the equivalent `neoscript` static-library target.
+
 ## Embedding the engine — Host API (`NeoScript.h`)
 The public host API is a **3-concept facade: Runtime / Program / Instance**, declared in `NeoScript.h`.
 It hides the internal VM (`CNeoVM` / `INeoVMWorker`, the execution-context pool, the bytecode image);
