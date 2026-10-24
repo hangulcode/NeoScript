@@ -168,6 +168,7 @@ private:
 		outOffset = t[tableIndex].Find(pKey);
 		return true;
 	}
+	template<bool negateOutside = false>
 	NEOS_FORCEINLINE bool IsRangeInside(const SVMOperation& op, bool allLocal)
 	{
 		const ProgramRangeJump& range = _pProgram->rangeJumps[(u16)op.n3];
@@ -180,16 +181,24 @@ private:
 		const bool lowerInclusive = (range.flags & NEOS_RANGE_LOWER_INCLUSIVE) != 0;
 		const bool upperInclusive = (range.flags & NEOS_RANGE_UPPER_INCLUSIVE) != 0;
 		const bool upperFirst = (range.flags & NEOS_RANGE_UPPER_FIRST) != 0;
+		// OR ranges require !(x < lower || x > upper), not x >= lower &&
+		// x <= upper: those differ for unordered (NaN) operands.
+		if (negateOutside)
+		{
+			if (upperFirst)
+			{
+				if (upperInclusive ? CompareGR(test, upper) : CompareGE(test, upper)) return false;
+				return !(lowerInclusive ? CompareGR(lower, test) : CompareGE(lower, test));
+			}
+			if (lowerInclusive ? CompareGR(lower, test) : CompareGE(lower, test)) return false;
+			return !(upperInclusive ? CompareGR(test, upper) : CompareGE(test, upper));
+		}
 		if (upperFirst)
 		{
-			const bool upperPass = upperInclusive ? CompareGE(upper, test) : CompareGR(upper, test);
-			if (upperPass == false)
-				return false;
+			if (!(upperInclusive ? CompareGE(upper, test) : CompareGR(upper, test))) return false;
 			return lowerInclusive ? CompareGE(test, lower) : CompareGR(test, lower);
 		}
-		const bool lowerPass = lowerInclusive ? CompareGE(test, lower) : CompareGR(test, lower);
-		if (lowerPass == false)
-			return false;
+		if (!(lowerInclusive ? CompareGE(test, lower) : CompareGR(test, lower))) return false;
 		return upperInclusive ? CompareGE(upper, test) : CompareGR(upper, test);
 	}
 	NEOS_FORCEINLINE const std::vector<debug_info>& DebugData() const { return _pProgram->debugData; }
@@ -338,6 +347,8 @@ private:
 	void Add2(VarInfo* r, VarInfo* v2);
 	void Sub2(VarInfo* r, VarInfo* v2);
 	void Mul2(VarInfo* r, VarInfo* v2);
+	bool CheckIntegerDivision(int dividend, int divisor);
+	bool CheckShiftCount(int count);
 	void Div2(VarInfo* r, VarInfo* v2);
 	void Per2(VarInfo* r, VarInfo* v2);
 	void LSh2(VarInfo* r, VarInfo* v2);
@@ -411,7 +422,8 @@ private:
 	int ToSize(VarInfo* v1);
 	VarInfo* GetType(VarInfo* v1);
 
-	void CltInsert(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
+	void CltInsert(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue, const SVMOperation* write = nullptr);
+	void CommitRefVector(VarInfo* value);
 	void CltInsertRare(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
 	void CltInsert(VarInfo *pClt, int array, VarInfo *v);
 	void CltInsert(VarInfo *pClt, VarInfo *pArray, int v);

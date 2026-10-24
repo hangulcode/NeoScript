@@ -290,6 +290,58 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 		for (int opIndex = begin; opIndex < end; ++opIndex)
 			codeOwners[opIndex] = functionStarts[i].second;
 	}
+	// WREF consumes its next instruction only for stored vectors. Validate the
+	// immutable pair once here, so ordinary collection writes need no hot checks.
+	auto IsRefWriteOpcode = [](eNOperation op) {
+		switch (op) {
+		case NOP_CLT_MOV:
+		case NOP_CLT_MOV_L:
+		case NOP_TABLE_ADD2:
+		case NOP_TABLE_SUB2:
+		case NOP_TABLE_MUL2:
+		case NOP_TABLE_DIV2:
+		case NOP_TABLE_PERSENT2: return true;
+		default: return false;
+		}
+	};
+	for (size_t i = 0; i < code.size(); ++i)
+	{
+		const SVMOperation& op = code[i];
+		if (IsRefWriteOpcode(op.op) && (op.argFlag & NEOS_OP_REF_WRITE) &&
+			(i == 0 || code[i - 1].op != NOP_CLT_WRITE_REF))
+		{
+			SetLoadError(err, "Orphan chained write");
+			return false;
+		}
+		if (op.op != NOP_CLT_WRITE_REF) continue;
+		if (i + 1 >= code.size() || codeOwners[i] < 0 || codeOwners[i] != codeOwners[i + 1])
+		{
+			SetLoadError(err, "Incomplete chained write");
+			return false;
+		}
+		const SVMOperation& write = code[i + 1];
+		const u8 locals = NEOS_ARG_N1_LOCAL | NEOS_ARG_N2_LOCAL | NEOS_ARG_N3_LOCAL;
+		const auto& fun = functions[codeOwners[i]];
+		auto ValidSlot = [&](short slot, bool local, bool writable) {
+			return local ? slot >= 0 && slot < fun._localAddCount :
+				(writable ? IsGlobalVariable(slot) : IsGlobalOperand(slot));
+		};
+		if (!IsRefWriteOpcode(write.op) || !(write.argFlag & NEOS_OP_REF_WRITE) ||
+			(op.argFlag & ~(locals | NEOS_OP_REF_LOADED)) ||
+			(write.argFlag & ~(locals | NEOS_OP_REF_WRITE)) ||
+			write.n1 != op.n3 ||
+			((write.argFlag & NEOS_ARG_N1_LOCAL) != 0) != ((op.argFlag & NEOS_ARG_N3_LOCAL) != 0) ||
+			(write.op == NOP_CLT_MOV_L && (write.argFlag & locals) != locals) ||
+			!ValidSlot(op.n1, op.argFlag & NEOS_ARG_N1_LOCAL, false) ||
+			!ValidSlot(op.n2, op.argFlag & NEOS_ARG_N2_LOCAL, false) ||
+			!ValidSlot(op.n3, op.argFlag & NEOS_ARG_N3_LOCAL, true) ||
+			!ValidSlot(write.n2, write.argFlag & NEOS_ARG_N2_LOCAL, false) ||
+			!ValidSlot(write.n3, write.argFlag & NEOS_ARG_N3_LOCAL, false))
+		{
+			SetLoadError(err, "Invalid chained write operands");
+			return false;
+		}
+	}
 	for (int opIndex = 0; opIndex < (int)code.size(); ++opIndex)
 	{
 		const SVMOperation& op = code[opIndex];
@@ -952,19 +1004,19 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		break;
 	case NOP_JMP_GREAT:		// >
 		byteCount = OpFlagByteChars + 2 * 3;
-		outAssembly = FormatAsm("JGR  %d%s,  %s > %s", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		outAssembly = FormatAsm("%s %d%s,  %s > %s", (v.argFlag & NEOS_OP_COMPARE_INVERT) ? "JGR.NOT" : "JGR", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
 		break;
 	case NOP_JMP_GREAT_EQ:	// >=
 		byteCount = OpFlagByteChars + 2 * 3;
-		outAssembly = FormatAsm("JGE  %d%s,  %s >= %s", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		outAssembly = FormatAsm("%s %d%s,  %s >= %s", (v.argFlag & NEOS_OP_COMPARE_INVERT) ? "JGE.NOT" : "JGE", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
 		break;
 	case NOP_JMP_LESS:		// <
 		byteCount = OpFlagByteChars + 2 * 3;
-		outAssembly = FormatAsm("JLS  %d%s,  %s < %s", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		outAssembly = FormatAsm("%s %d%s,  %s < %s", (v.argFlag & NEOS_OP_COMPARE_INVERT) ? "JLS.NOT" : "JLS", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
 		break;
 	case NOP_JMP_LESS_EQ:	// <=
 		byteCount = OpFlagByteChars + 2 * 3;
-		outAssembly = FormatAsm("JLE  %d%s,  %s <= %s", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+		outAssembly = FormatAsm("%s %d%s,  %s <= %s", (v.argFlag & NEOS_OP_COMPARE_INVERT) ? "JLE.NOT" : "JLE", v.n1, context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
 		break;
 	case NOP_JMP_EQUAL2:	// ==
 		byteCount = OpFlagByteChars + 2 * 3;
@@ -1148,10 +1200,6 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		else
 			{ outAssembly = FormatAsm("?? yield sub(%d)", v.n1); known = false; }
 		break;
-	case NOP_VEC_WRITEBACK:
-		byteCount = OpFlagByteChars + 2 * 3;
-		outAssembly = FormatAsm("VWB  %s.%s = %s if vector", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
-		break;
 	case NOP_CLT_READ_STATIC_STRING:
 		byteCount = OpFlagByteChars + 2 * 3;
 		outAssembly = FormatAsm("READ.S %s = %s.%s", context.operand(3).c_str(), context.operand(1).c_str(), context.operand(2).c_str());
@@ -1166,6 +1214,14 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 		outAssembly = FormatAsm("JROT %d%s,  %s outside range[%u]", v.n1,
 			context.jumpLabel(context.opIndex + 1 + v.n1).c_str(), context.operand(2).c_str(), (unsigned)(u16)v.n3);
 		break;
+	case NOP_CLT_WRITE_REF:
+        byteCount = OpFlagByteChars + 2 * 3;
+        outAssembly = FormatAsm("WREF %s.%s -> %s", context.operand(1).c_str(), context.operand(2).c_str(), context.operand(3).c_str());
+        break;
+	case NOP_CLT_READ_RESULT:
+        byteCount = OpFlagByteChars + 2 * 3;
+        outAssembly = FormatAsm("RRES %s = %s.%s", context.operand(3).c_str(), context.operand(1).c_str(), context.operand(2).c_str());
+        break;
 	case NOP_ERROR:
 		outAssembly = FormatAsm("Begin");
 		break;

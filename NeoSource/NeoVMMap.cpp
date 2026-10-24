@@ -458,25 +458,5 @@ bool MapInfo::ToListValues(std::vector<VarInfo*>& lst)
 	return cnt == _itemCount;
 }
 
-struct NeoSortLocal
-{
-	CNeoVMWorker* m_pN;
-	VarInfo* m_compare;
-
-	NeoSortLocal(CNeoVMWorker* pN, VarInfo* compare) : m_pN(pN), m_compare(compare) {}
-	bool operator () (VarInfo* a, VarInfo* b)
-	{
-		VarInfo args[2];
-		args[0] = *a;
-		args[1] = *b;
-		VarInfo* r = m_pN->testCall(m_compare, args, 2);
-		return r && r->GetType() == VAR_BOOL && r->_bl;
-	}
-};
-
-void NVM_QuickSort(CNeoVMWorker* pN, VarInfo* compare, std::vector<VarInfo*>& lst)
-{
-	std::sort(lst.begin(), lst.end(), NeoSortLocal(pN, compare));
-}
 
 };

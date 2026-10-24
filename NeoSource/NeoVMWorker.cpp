@@ -1,4 +1,5 @@
 ﻿#include <math.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <new>
@@ -1159,6 +1160,18 @@ int CNeoVMWorker::RunHostCall(int iFunctionID, std::vector<VarInfo>& _args, VarI
 			return NEOEXEC_ERROR;
 		}
 		const int returnCodePtr = isNestedScriptCall ? GetCodeptr() : 0;
+		const int nativeBase = _iSP_Vars;
+		const int nativeMax = _iSP_VarsMax;
+		const int nativeHighWater = _iSP_Vars_Max2;
+		// Validate before detaching the parent or touching its stack frame.
+		if (closureValue != nullptr && (closureValue->GetType() != VAR_CLOSURE ||
+			closureValue->_closure == nullptr || closureValue->_closure->_funIndex != iFunctionID ||
+			iFunctionID < 0 || iFunctionID >= (int)Functions().size() ||
+			closureValue->_closure->_captures.size() != Functions()[iFunctionID]._captures.size()))
+			return NEOEXEC_ERROR;
+		// Native arguments remain live throughout reentry, including while the
+		// child Invocation is alive. Child locals must not reuse that window.
+		if (isNestedScriptCall) _iSP_Vars = nativeHighWater;
 		// 네이티브에서 재진입한 일반 함수는 부모 람다의 active closure를 공유하면
 		// 안 된다. 자식 RET가 부모 프레임 슬롯을 동기화하는 것을 막기 위해 실행 중
 		// 잠시 분리하고, Run이 끝난 뒤 원래 프레임에 복원한다.
@@ -1166,24 +1179,17 @@ int CNeoVMWorker::RunHostCall(int iFunctionID, std::vector<VarInfo>& _args, VarI
 		m_pActiveClosure = nullptr;
 		if (Setup(iFunctionID, _args) == false)
 		{
+			_iSP_Vars = nativeBase;
+			_iSP_VarsMax = nativeMax;
+			_iSP_Vars_Max2 = nativeHighWater;
+			SetStackPointer(nativeBase);
 			m_pActiveClosure = outerClosure;
 			return NEOEXEC_ERROR;
 		}
 		if (closureValue != nullptr)
 		{
-			if (closureValue->GetType() != VAR_CLOSURE || closureValue->_closure == nullptr ||
-				closureValue->_closure->_funIndex != iFunctionID)
-			{
-				m_pActiveClosure = outerClosure;
-				return NEOEXEC_ERROR;
-			}
 			ClosureInfo* closure = closureValue->_closure;
 			const SFunctionTable& fun = Functions()[iFunctionID];
-			if (closure->_captures.size() != fun._captures.size())
-			{
-				m_pActiveClosure = outerClosure;
-				return NEOEXEC_ERROR;
-			}
 			for (size_t i = 0; i < fun._captures.size(); ++i)
 				Move(GetVarPtr_L(fun._captures[i].second), &closure->_captures[i]);
 			++closure->_refCount; // 실행 프레임이 closure를 잡는다; RET/ERROR에서 반납.
@@ -1205,7 +1211,16 @@ int CNeoVMWorker::RunHostCall(int iFunctionID, std::vector<VarInfo>& _args, VarI
 			debugSuppressed = false;
 		}
 		if (ok && isNestedScriptCall)
+		{
+			Move(GetStackFromBase(nativeBase), GetReturnVar());
+			for (int i = nativeHighWater; i < _iSP_Vars_Max2; ++i)
+				Var_Release(GetStackFromBase(i));
+			_iSP_Vars = nativeBase;
+			_iSP_VarsMax = nativeMax;
+			_iSP_Vars_Max2 = nativeHighWater;
+			SetStackPointer(nativeBase);
 			SetCodePtr(returnCodePtr);
+		}
 		// sleep/debugger로 정지한 closure는 실행 컨텍스트와 함께 active 환경도
 		// 보존해야 ResumeTop의 RET/ERROR가 변경분을 동기화하고 실행 보유분을 반납한다.
 		const bool suspended = IsSuspended();
@@ -1520,7 +1535,7 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 				case NeoArrayElementType::Vector3:
 				case NeoArrayElementType::Vector4:
 				{
-					const NS_FLOAT* v = array->VectorData(i);
+					const NS_FLOAT* v = array->VectorValues()[i]._vec->v;
 					child.type = GetArrayElementTypeName(array->_elementType);
 					const int n = array->VectorDimension();
 					if (n == 2) snprintf(buf, sizeof(buf), "(%g, %g)", v[0], v[1]);
@@ -2033,14 +2048,14 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_JMP:           SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_FALSE:     if (false == GetVarPtr2(OP)->IsTrue()) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_TRUE:      if (true == GetVarPtr2(OP)->IsTrue()) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_GREAT:     if (true == CompareGR(GetVarPtr2(OP), GetVarPtr3(OP))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_GREAT_L:   if (true == CompareGR(GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_GREAT_EQ:  if (true == CompareGE(GetVarPtr2(OP), GetVarPtr3(OP))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_GREAT_EQ_L:if (true == CompareGE(GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_LESS:      if (true == CompareGR(GetVarPtr3(OP), GetVarPtr2(OP))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_LESS_L:    if (true == CompareGR(GetVarPtr_L(OP.n3), GetVarPtr_L(OP.n2))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_LESS_EQ:   if (true == CompareGE(GetVarPtr3(OP), GetVarPtr2(OP))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_LESS_EQ_L: if (true == CompareGE(GetVarPtr_L(OP.n3), GetVarPtr_L(OP.n2))) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_GREAT:     if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr2(OP), GetVarPtr3(OP))) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_GREAT_L:   if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3))) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_GREAT_EQ:  if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr2(OP), GetVarPtr3(OP))) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_GREAT_EQ_L:if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3))) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_LESS:      if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr3(OP), GetVarPtr2(OP))) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_LESS_L:    if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr_L(OP.n3), GetVarPtr_L(OP.n2))) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_LESS_EQ:   if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr3(OP), GetVarPtr2(OP))) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_LESS_EQ_L: if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr_L(OP.n3), GetVarPtr_L(OP.n2))) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_EQUAL2:    if (true == CompareEQ(GetVarPtr2(OP), GetVarPtr3(OP))) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_EQUAL2_L:  if (true == CompareEQ(GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3))) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_NEQUAL:    if (false == CompareEQ(GetVarPtr2(OP), GetVarPtr3(OP))) SetCodeIncPtr(OP.n1); break;
@@ -2099,14 +2114,15 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 			break;
 		case NOP_IDLE:          handle_IDLE(OP); break;
 		case NOP_VEC_MAKE:      handle_VEC_MAKE(OP); break;
-		case NOP_VEC_WRITEBACK: handle_VEC_WRITEBACK(OP); break;
 
 		case NOP_CLT_READ_STATIC_STRING: handle_CLT_READ_STATIC_STRING(OP); break;
-		case NOP_JMP_RANGE_INSIDE: if (IsRangeInside(OP, false)) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_RANGE_INSIDE: if (IsRangeInside<true>(OP, false)) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_RANGE_OUTSIDE: if (IsRangeInside(OP, false) == false) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_RANGE_INSIDE_L: if (IsRangeInside(OP, true)) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_RANGE_INSIDE_L: if (IsRangeInside<true>(OP, true)) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_RANGE_OUTSIDE_L: if (IsRangeInside(OP, true) == false) SetCodeIncPtr(OP.n1); break;
 
+		case NOP_CLT_WRITE_REF: handle_CLT_WRITE_REF(OP); break;
+		case NOP_CLT_READ_RESULT: handle_CLT_READ_RESULT(OP); break;
 		case NOP_NONE:          handle_NONE(OP); break;
 		case NOP_ERROR:
 			handle_ERROR(OP);

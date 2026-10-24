@@ -422,15 +422,6 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			break;
 		case NOP_YIELD:
 			break;
-		case NOP_VEC_WRITEBACK:	// n1 = 부모 컨테이너, n2 = key, n3 = 되써 넣을 임시 칸. CLT_MOV 와 같은 오퍼랜드 규칙.
-			if ((argFlag & NEOS_ARG_N1_IMMEDIATE) == 0)
-				argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
-			if ((argFlag & NEOS_ARG_N2_IMMEDIATE) == 0)
-				argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
-			if ((argFlag & NEOS_ARG_N3_IMMEDIATE) == 0)
-				argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
-			argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, &v.n3);
-			break;
 		case NOP_JMP_RANGE_INSIDE:
 		case NOP_JMP_RANGE_OUTSIDE:
 		{
@@ -454,6 +445,13 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 			argFlag |= GetArgIndexToCode(argFlag, nullptr, &v.n2, nullptr);
 			break;
 		}
+		case NOP_CLT_WRITE_REF:
+		case NOP_CLT_READ_RESULT:
+            argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
+            argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
+            argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
+            argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, &v.n3);
+            break;
 		case NOP_ERROR:
 			break;
 		default:

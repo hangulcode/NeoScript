@@ -142,11 +142,14 @@ wrong element accessor. Script-side `append` or size-changing `resize` can reall
 so do not re-enter script and retain the pointer across a structural array change. `boolBits()` is
 packed least-significant-bit first: bit `i` is
 `(bits[i >> 3] >> (i & 7)) & 1`; `ints()` and `floats()` return contiguous element storage.
-For Vector2/3/4 arrays, `vectorDimension()` returns 2/3/4 and `vectorData()` returns packed
-float components, with `count()` counting vectors. Element `i`, component `j` is at
-`vectorData()[size_t(i) * vectorDimension() + j]`. Scalar arrays return dimension zero and a
-null vector pointer; `floats()` remains exclusive to scalar float arrays. Quaternion arrays
-retain script w,x,y,z component order. All pointer lifetime and resize rules above apply.
+For Vector2/3/4 arrays, `vectorDimension()` returns 2/3/4 and `count()` counts vectors.
+`getVec(index, out4)` copies one value into four floats, zeroing unused components.
+`setVec(index, components, dimension)` writes one value and requires the exact array dimension;
+shared vectors detach before modification. Both return false for invalid indices, pointers or
+non-vector arrays. There is no writable float buffer for vector arrays: `vectorData()` was removed.
+Scalar arrays return dimension zero; `floats()` remains exclusive to scalar float arrays.
+Quaternion arrays retain script w,x,y,z component order. The view is still borrowed, but the
+components copied into the host's own buffer can be retained.
 
 So: **one live `Invocation` per instance** at a time — a second `Call` while one is still armed (built but
 not yet invoked) returns a falsy `Invocation`; and a value read with `retX` is only valid until the next
@@ -431,6 +434,8 @@ result before it can return to Script A, so Script B does not own a resumable ex
 - `sleep(...)`, `yield`, `async.get(...)`, `async.post(...)`, and `async.wait()` are rejected with a runtime error in
   Script B. A worker configured for time-limited execution cannot start Script B at all. These restrictions prevent
   Script B from being suspended after its native caller has already returned to Script A.
+- Native `CallContext` arguments and borrowed argument strings remain valid across synchronous reentry,
+  including while the child `Invocation` exists and after its destruction. The child uses a separate stack frame.
 - A synchronous callback may call ordinary functions and return values normally. For delayed work, have the native
   API schedule a new top-level `ExecuteTop`/`ResumeTop` execution instead of invoking Script B synchronously.
 

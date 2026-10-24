@@ -106,15 +106,22 @@ static int32_t NS_CALL OnMethod(void* user, int32_t slot, NsContext* ctx,
         {
             NsArrayView* a = NsCtxArgArray(ctx, 0);
             int32_t dim = NsCtxArgInt(ctx, 1);
-            float* data = NsArrayVectorData(a);
+            float data[4];
             int32_t i, ok = NsArrayCount(a) == 2 && NsArrayVectorDimension(a) == dim &&
-                NsArrayElementType(a) == NS_ELEM_VECTOR2 + dim - 2 && data != NULL &&
+                NsArrayElementType(a) == NS_ELEM_VECTOR2 + dim - 2 &&
                 NsArrayFloats(a) == NULL && NsArrayInts(a) == NULL && NsArrayBoolBits(a) == NULL;
-            if (data != NULL)
+            for (i = 0; i < 2; ++i)
             {
-                for (i = 0; i < dim * 2; ++i) ok = ok && data[i] == (float)(i % dim + 1);
-                data[dim] = 9;
+                int j;
+                ok = NsArrayGetVec(a, i, data) && ok;
+                for (j = 0; j < 4; ++j) ok = ok && data[j] == (j < dim ? (float)(j + 1) : 0.0f);
             }
+            data[0] = 9;
+            ok = NsArraySetVec(a, 1, data, dim) && ok;
+            ok = ok && !NsArraySetVec(a, 0, data, dim == 2 ? 3 : 2) &&
+                !NsArraySetVec(a, -1, data, dim) && !NsArraySetVec(a, 2, data, dim) &&
+                !NsArraySetVec(a, 0, NULL, dim) && !NsArrayGetVec(a, -1, data) &&
+                !NsArrayGetVec(a, 2, data) && !NsArrayGetVec(a, 0, NULL);
             NsCtxRetBool(ctx, ok);
             return 1;
         }
@@ -365,18 +372,18 @@ int main(void)
     NsCallEnd(call);
 
     call = NsCallBeginName(rt, instance, "VectorArrays", 12);
-    Check(NsCallInvokeR(call, &result) == NS_RUN_COMPLETED && result.i == 1, "packed vector arrays: C callback reads and writes all dimensions");
+    Check(NsCallInvokeR(call, &result) == NS_RUN_COMPLETED && result.i == 1, "vector arrays: C callback reads and writes all dimensions");
     NsCallEnd(call);
     call = NsCallBeginName(rt, instance, "VectorData", 10);
     Check(NsCallInvoke(call) == NS_RUN_COMPLETED, "return vector array");
     {
         NsArrayView* a = NsCallRetArray(call);
-        float* data = NsArrayVectorData(a);
-        Check(NsArrayVectorDimension(a) == 3 && NsArrayCount(a) == 2 && data != NULL && data[5] == 3,
-            "returned vector array view preserves packed layout");
+        float data[4];
+        Check(NsArrayVectorDimension(a) == 3 && NsArrayCount(a) == 2 && NsArrayGetVec(a, 1, data) && data[2] == 3 && data[3] == 0,
+            "returned vector array view reads a value");
     }
     NsCallEnd(call);
-    Check(NsArrayVectorDimension(NULL) == 0 && NsArrayVectorData(NULL) == NULL, "invalid vector view");
+    Check(NsArrayVectorDimension(NULL) == 0 && !NsArrayGetVec(NULL, 0, NULL) && !NsArraySetVec(NULL, 0, NULL, 3), "invalid vector view");
 
     /* --- scalar call through a cached function handle --- */
     addFn = NsFindFunction(rt, program, "Add", 3);

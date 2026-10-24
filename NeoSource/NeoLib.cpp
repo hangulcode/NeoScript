@@ -26,7 +26,6 @@ namespace NeoScript
 {
 
 
-void NVM_QuickSort(CNeoVMWorker* pN, VarInfo* compare, std::vector<VarInfo*>& lst);
 
 struct neo_libs
 {
@@ -710,15 +709,18 @@ struct neo_libs
 
 	static NS_FLOAT NsWrapAngle(NS_FLOAT a)
 	{
-		a = a - kNsTwoPi * ::floor((a + kNsPi) / kNsTwoPi);
-		// floor 식은 [-pi, pi) 를 주므로 -pi 를 +pi 로 옮겨 (-pi, pi] 로 맞춘다.
+		a = static_cast<NS_FLOAT>(::fmod(a, kNsTwoPi));
+		if (a > kNsPi) a -= kNsTwoPi;
 		if (a <= -kNsPi) a += kNsTwoPi;
 		return a;
 	}
 	static NS_FLOAT NsRepeat(NS_FLOAT x, NS_FLOAT length)
 	{
 		if (length <= (NS_FLOAT)0) return (NS_FLOAT)0;
-		return x - ::floor(x / length) * length;
+		NS_FLOAT result = static_cast<NS_FLOAT>(::fmod(x, length));
+		if (result < 0) result += length;
+		// Adding a tiny negative remainder can round up to length.
+		return result == (NS_FLOAT)0 || result >= length ? (NS_FLOAT)0 : result;
 	}
 	static NS_FLOAT NsMoveToward(NS_FLOAT cur, NS_FLOAT target, NS_FLOAT maxDelta)
 	{
@@ -1308,74 +1310,84 @@ struct neo_libs
 	}
 	static bool map_sort(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false; // fun
-
-		VarInfo *pFun = pN->GetStack(1);
-		if (pVar->GetType() != VAR_MAP) return false;
-
-		if (pFun->GetType() != VAR_FUN && pFun->GetType() != VAR_CLOSURE) return false;
-
-		// Keep the receiver alive across script callbacks. The callback can replace
-		// the variable that originally held this map.
-		VarInfo mapHold;
-		Move_DestNoRelease(&mapHold, pVar);
-		VarInfo callbackHold;
-		Move_DestNoRelease(&callbackHold, pFun);
-		MapInfo* const table = mapHold._tbl;
-
-		// [주의] _Bucket 내부 포인터를 스크립트 콜백 너머로 들고 있으면 안 된다.
-		// 맵 노드가 연속 배열로 바뀌면서, 비교 함수 안의 삽입이 노드를 다른 슬롯으로
-		// 옮기거나(InsertNewNode) 배열을 통째로 재할당(ReMap)할 수 있게 됐다.
-		// 그래서 정렬 전에 값을 지역 벡터로 복사해 두고, 정렬이 끝난 뒤 슬롯을 다시 얻어 쓴다.
-		std::vector<VarInfo*> slots;
-		if (false == table->ToListValues(slots))
+		if (pVar->GetType() != VAR_MAP || args != 1) return false;
+		VarInfo* compare = pN->GetStack(1);
+		if (compare->GetType() != VAR_FUN && compare->GetType() != VAR_CLOSURE) return false;
+		// The native sort cannot suspend and resume its C++ frame. Never disable
+		// a host's time limit to run a comparator: it may loop forever.
+		if (pN->m_iTimeout >= 0)
 		{
-			pN->Var_Release(&mapHold);
-			pN->Var_Release(&callbackHold);
+			pN->SetError("map.sort is not allowed during time-limited execution");
 			return false;
 		}
-
-		if (slots.size() >= 2)
+		HeldValue receiver(pN, pVar), callback(pN, compare);
+		// A synchronous native sort cannot preserve its C++ frame across a
+		// script suspension or coroutine switch. Use the VM's nested-call guard.
+		struct SynchronousCall
 		{
-			const u32 mutationVersion = table->_mutationVersion;
-			// Move_DestNoRelease 는 참조계수를 올리는 복사다(원본은 그대로 둔다).
-			std::vector<VarInfo> snapshot;
-			snapshot.resize(slots.size());
-			for (size_t i = 0; i < slots.size(); i++)
-				Move_DestNoRelease(&snapshot[i], slots[i]);
-			slots.clear();   // 콜백 전에 버린다
-
-			std::vector<VarInfo*> sorted;
-			sorted.resize(snapshot.size());
-			for (size_t i = 0; i < snapshot.size(); i++)
-				sorted[i] = &snapshot[i];
-			NVM_QuickSort(pN, &callbackHold, sorted);      // 지역 벡터만 만진다
-
-			// A structural mutation makes the previous ordering meaningless. Do not
-			// overwrite values (including values inserted by the callback) with a
-			// stale snapshot.
-			if (table->_mutationVersion != mutationVersion)
-			{
-				for (size_t i = 0; i < snapshot.size(); i++)
-					pN->Var_Release(&snapshot[i]);
-				pN->Var_Release(&mapHold);
-				pN->Var_Release(&callbackHold);
-				pN->SetError("map was modified during sort");
-				return true;
-			}
-
-			// No structural mutation: reacquire slots only after every callback has returned.
-			std::vector<VarInfo*> slotsAfter;
-			if (table->ToListValues(slotsAfter) && slotsAfter.size() == sorted.size())
-			{
-				for (size_t i = 0; i < sorted.size(); i++)
-					pN->Move(slotsAfter[i], sorted[i]);
-			}
-			for (size_t i = 0; i < snapshot.size(); i++)
-				pN->Var_Release(&snapshot[i]);
+			CNeoVMWorker* worker;
+			explicit SynchronousCall(CNeoVMWorker* value) : worker(value) { worker->BeginNestedScriptCall(); }
+			~SynchronousCall() { worker->EndNestedScriptCall(); }
+		} synchronousCall(pN);
+		MapInfo* table = receiver.value._tbl;
+		std::vector<VarInfo*> slots;
+		if (!table->ToListValues(slots)) return false;
+		const size_t count = slots.size();
+		const u32 version = table->_mutationVersion;
+		struct Snapshot
+		{
+			CNeoVMWorker* worker;
+			std::vector<VarInfo> values;
+			~Snapshot() { for (auto& value : values) worker->Var_Release(&value); }
+		} snapshot{pN, std::vector<VarInfo>(count)};
+		std::vector<size_t> order(count), next(count);
+		for (size_t i = 0; i < count; ++i)
+		{
+			Move_DestNoRelease(&snapshot.values[i], slots[i]);
+			order[i] = i;
 		}
-		pN->Var_Release(&mapHold);
-		pN->Var_Release(&callbackHold);
+		slots.clear(); // No bucket pointer may survive a script callback.
+		// Stable, bounded mergesort: even an inconsistent script comparator must
+		// not violate std::sort's strict-weak-ordering precondition or read past
+		// a buffer. Never retain a list bucket or VM stack pointer across calls.
+		for (size_t width = 1; width < count; width *= 2)
+		{
+			for (size_t begin = 0; begin < count; begin += width * 2)
+			{
+				const size_t middle = std::min(begin + width, count);
+				const size_t end = std::min(begin + width * 2, count);
+				size_t left = begin, right = middle;
+				for (size_t dest = begin; dest < end; ++dest)
+				{
+					bool takeRight = left == middle;
+					if (left < middle && right < end)
+					{
+						VarInfo callArgs[2] = {snapshot.values[order[right]], snapshot.values[order[left]]};
+						VarInfo* result = pN->testCall(&callback.value, callArgs, 2);
+						if (pN->GetVM()->IsLastErrorMsg()) return false;
+						if (table->_mutationVersion != version)
+						{
+							pN->SetError("map was modified during sort");
+							return false;
+						}
+						if (result == nullptr)
+						{
+							pN->SetError("map sort comparator must accept two arguments");
+							return false;
+						}
+						takeRight = result->GetType() == VAR_BOOL && result->_bl;
+					}
+					next[dest] = takeRight ? order[right++] : order[left++];
+				}
+			}
+			order.swap(next);
+		}
+		if (count > 1)
+		{
+			if (!table->ToListValues(slots) || slots.size() != count) return false;
+			for (size_t i = 0; i < count; ++i)
+				pN->Move(slots[i], &snapshot.values[order[i]]);
+		}
 		pN->ReturnValue();
 		return true;
 	}
@@ -1546,7 +1558,11 @@ struct neo_libs
 		if (args != 0) return false;
 		if (pVar->GetType() != VAR_ASYNC) return false;
 		AsyncInfo* pAsync = pVar->_async;
-		if (pAsync->_state != ASYNC_PENDING) return true;
+		if (pAsync->_state != ASYNC_PENDING)
+		{
+			pN->ReturnValue(pAsync->_state == ASYNC_COMPLETED);
+			return true;
+		}
 
 		bool ok = pAsync->_event.wait(pAsync->_timeout);
 		pN->JumpAsyncMsg();
@@ -1829,8 +1845,11 @@ struct neo_libs
 			if (v->GetType() != VAR_COROUTINE)
 				return false;
 			pCI = v->_cor;
-			if(pCI->_state == COROUTINE_STATE_DEAD) 
-				return true; // Already Dead State (For convenience, return true.)
+			if(pCI->_state == COROUTINE_STATE_DEAD)
+			{
+				pN->ReturnValue(pCI);
+				return true;
+			}
 		}
 		else
 		{

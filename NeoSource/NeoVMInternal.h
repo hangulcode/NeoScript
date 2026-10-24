@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include <thread>
+#include <cstring>
 #include <time.h>
 
 #include "NeoConfig.h"
@@ -17,6 +18,21 @@
 
 namespace NeoScript
 {
+// Callers validate count in [0, 31]. Keep VM and constant folding identical:
+// left shifts retain the low 32 bits; right shifts extend the sign bit.
+inline int NeoShiftLeft32(int value, int count)
+{
+	const u32 bits = static_cast<u32>(value) << count;
+	int result;
+	static_assert(sizeof(result) == sizeof(bits), "NeoScript integers must be 32 bits");
+	std::memcpy(&result, &bits, sizeof(result));
+	return result;
+}
+inline int NeoShiftRight32(int value, int count)
+{
+	return value < 0 ? -1 - static_cast<int>((~static_cast<u32>(value)) >> count) : value >> count;
+}
+
 // ==와 맵/set 키가 참조의 동일성 규칙을 공유한다. 내용 비교나 재귀 순회는 하지 않는다.
 // 숫자/문자열/벡터는 값 비교 규칙이 따로 있으므로 여기서 처리하지 않는다.
 inline bool ReferenceEquals(VarInfo* a, VarInfo* b)
@@ -114,6 +130,9 @@ typedef u8	ArgFlag;
 // 호출/복귀 op 전용: 반환값 슬롯을 쓰지 않음(=해당 오퍼랜드를 페치하지 않음).
 // PatchLocalOps 도 이 비트를 봐야 해서 argFlag 비트 정의와 같은 곳에 둔다.
 #define NEOS_OP_CALL_NORESULT	(1 << 7) // 0x80
+#define NEOS_OP_COMPARE_INVERT (1 << 6) // ordered jump: negate the comparison result
+#define NEOS_OP_REF_LOADED (1 << 6) // postfix consumer already read the parent
+#define NEOS_OP_REF_WRITE (1 << 7) // ordinary collection write following WREF
 
 // NOP_JMP_RANGE_* descriptor 전용 플래그. opcode의 argFlag와 분리해
 // lower/upper가 각각 stack인지 global/static인지와 경계 포함 여부를 보관한다.
@@ -257,12 +276,6 @@ enum eNOperation : OpType
 	// native 호출 프레임 없이 인자 슬롯에서 직접 벡터를 만든다(n2=인자수=성분수, n3=결과).
 	// 성분 수가 타입이 아니라 데이터라 op 하나로 충분하다(넷을 두면 디스패치 루프만 커진다).
 	NOP_VEC_MAKE,
-	// 사슬 lvalue(a[i][j] = v, obj.P[j] += v) 뒤에 컴파일러가 붙이는 되써 넣기.
-	// n1 = 부모 컨테이너, n2 = 부모 키, n3 = 원소를 읽어 둔 임시 칸. 임시 칸이 VAR_VEC 일 때만
-	// 부모 원소에 다시 넣는다(copy-on-write 로 갈라진 사본을 돌려놓기). 참조 타입은 할 일이 없다.
-	NOP_VEC_WRITEBACK,
-
-
 	// 기존 opcode 값을 보존하려고 끝에 추가한 READ 특수화.
 	// 로드 시 n2가 static 문자열 상수인 READ만 이 opcode로 치환한다.
 	// 키 StringInfo는 워커별 static 슬롯에서 매번 얻으며 Map/value 포인터는 보관하지 않는다.
@@ -273,6 +286,11 @@ enum eNOperation : OpType
 	NOP_JMP_RANGE_OUTSIDE,
 	NOP_JMP_RANGE_INSIDE_L,
 	NOP_JMP_RANGE_OUTSIDE_L,
+	// WREF owner/key/temp, followed by an ordinary collection write marked REF_WRITE.
+	// Stored vectors consume both atomically. Other values use normal dispatch;
+	// a native vector getter may suspend before the write and its setter.
+	NOP_CLT_WRITE_REF,
+	NOP_CLT_READ_RESULT, // completed-assignment value consumer
 	NOP_NONE,
 	NOP_ERROR,
 

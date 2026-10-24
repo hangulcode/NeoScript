@@ -160,14 +160,14 @@ independent of compiler image capacity and other runtime string operations.
 | `math.Remap(value, inMin, inMax, outMin, outMax)` | `float` | `Lerp(outMin, outMax, InverseLerp(inMin, inMax, value))`, not clamped |
 | `math.SmoothStep(edge0: float, edge1: float, x: float)` | `float` | GLSL `smoothstep`: clamped Hermite between the two edges |
 | `math.MoveToward(current: float, target: float, maxDelta: float)` | `float` | steps at most `maxDelta` toward `target`; frame-rate independent when `maxDelta = rate * dt` |
-| `math.Repeat(x: float, length: float)` | `float` | positive modulo, `0 <= result < length`; `length <= 0` returns `0` |
+| `math.Repeat(x: float, length: float)` | `float` | positive modulo, `0 <= result < length` for finite inputs, including large magnitudes; zero results are positive zero; `length <= 0` returns `0` |
 | `math.PingPong(x: float, length: float)` | `float` | bounces between `0` and `length` |
 
 ### 3.3 Angles (radians)
 
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
-| `math.WrapAngle(radian: float)` | `float` | wraps into `(-pi, pi]` |
+| `math.WrapAngle(radian: float)` | `float` | wraps finite inputs into `(-pi, pi]`, including large magnitudes |
 | `math.DeltaAngle(from: float, to: float)` | `float` | shortest signed difference, in `(-pi, pi]` |
 | `math.LerpAngle(from: float, to: float, t: float)` | `float` | interpolates along the shortest arc |
 | `math.MoveTowardAngle(current: float, target: float, maxDelta: float)` | `float` | turns at most `maxDelta` along the shortest arc; result wrapped |
@@ -264,7 +264,7 @@ chunk's top level is the only thing you can do with one. To call named functions
 | `coroutine.resume(co: coroutine, ...)` | `void` | Extra arguments become `f`'s parameters on the **first** resume. Requires status `suspended`, otherwise `invalid function call` |
 | `coroutine.status(co: coroutine)` | `string` | `"suspended"` / `"running"` / `"dead"` / `"normal"` |
 | `coroutine.close()` | `coroutine` | Closes the *current* coroutine |
-| `coroutine.close(co: coroutine)` | `coroutine` | Closing an already-dead coroutine succeeds as a no-op |
+| `coroutine.close(co: coroutine)` | `coroutine` | Returns `co`; closing an already-dead coroutine succeeds as a no-op |
 
 `yield` (the keyword) suspends. After the native `resume` callback, the VM switches to the
 coroutine before executing the caller's next statement. The coroutine runs until it yields or
@@ -365,7 +365,8 @@ each value; `foreach(var index, value in a)` is rejected.
   values: modifying a copied local vector does not modify the array. `a[i][j]` component assignment,
   `+=`, `-=`, `*=`, `/=`, `++`, and `--` write back to the array. Whole-vector compound assignment
   is unsupported; use `a[i] = a[i] + delta`. Array length counts vectors, not float components.
-- Vector components are packed floats in element order; no per-element vector allocation is retained.
+- Vector elements retain ordinary `VAR_VEC` values, sharing storage until a write requires a copy
+  (the same copy-on-write semantics as vectors in lists). Shrinking releases removed values.
   `system.array(math.Quaternion(w,x,y,z), n)` creates a Vector4 array with the same w,x,y,z order; there is no automatic
   conversion to a host quaternion layout. Resizing uses the vector initial value captured at creation.
 - int and float arrays convert between those two numeric types on assignment. Float to int truncates
@@ -393,7 +394,9 @@ each value; `foreach(var index, value in a)` is rejected.
 - `cmp(a, b)` receives two values and must return `bool`; anything else counts as `false`.
 - The comparator may be a named function or a capturing lambda.
 - If the callback inserts or erases keys the sort aborts with the runtime error
-  `map was modified during sort`, and the map keeps its pre-sort values.
+  `map was modified during sort`. Failed sorts never write the sorted snapshot back; callback side effects remain.
+- Comparator errors abort immediately. Sorting is synchronous and rejects yield, sleep, async waits,
+  coroutine switching, and execution with a host time limit, as list sorting does.
 - A **capturing** comparator writes back into its own capture storage, not into the enclosing
   function, so counting hits inside a comparator does not work. See *Captured anonymous functions*
   in `ReadMe.md`.
@@ -404,6 +407,7 @@ Reference keys (list, map, set, array, function, closure, coroutine, runtime mod
 and host object) use the same identity rule as `==`/`!=`. A container's contents do not
 determine its identity. Host objects compare by registered type and host handle, so returning
 the same object again preserves lookup identity even when the return wrapper is new.
+Floating-point keys `+0.0` and `-0.0` are the same key in both maps and sets.
 Numeric keys remain type-sensitive: key `1` and key `1.0` are distinct despite `1 == 1.0`.
 Vector keys use component count and exact component values, just like vector `==`.
 Separately constructed equal vectors find/overwrite/remove the same key; `+0.0` and `-0.0`
@@ -439,7 +443,7 @@ Create the object with `system.aysnc_create()`.
 | `a.add_header(name: string, value: string)` | `void` | call **before** `get`/`post`; accumulates |
 | `a.get(timeoutMs: int, url: string, callback: function)` | `void` | `timeoutMs == -1` means no timeout |
 | `a.post(timeoutMs: int, url: string, body: string, callback: function)` | `void` | same timeout rule |
-| `a.wait()` | `bool` | blocks; `false` on timeout. The callback runs when the wait completes |
+| `a.wait()` | `bool` | blocks while pending; `false` before a request starts or on timeout, `true` once completed. Completion does not imply HTTP success; inspect the callback result |
 | `a.close()` | `void` | |
 
 - The callback signature is `fun(ok: bool, result: string)`. On failure `result` carries the error
@@ -476,6 +480,15 @@ An indexed assignment resolves its final containing element after its right-hand
 If that side changes an index variable or replaces the element, the write uses the current value,
 including the other vector components. Parentheses around the target do not change evaluation order.
 Index expressions containing calls run once; the write-back does not repeat those calls.
+List/map/vector-array component writes can modify the stored vector directly; shared vectors still
+detach on modification. Internal references do not escape the write or become script values.
+Native vector properties still call their getter and setter once per successful component write.
+WREF precedes an ordinary collection write. Stored vectors consume both atomically; other values
+use normal write dispatch. Native vector properties retain a resumable getter/setter boundary.
+There is no separate vector write-back opcode. Regenerate images older than bytecode version 0130 to apply checked shift folding and corrected NaN branch semantics.
+A selector immediately following an indexed assignment keeps the assigned slot writable:
+`(a[0][0] = math.Vector3(1,2,3))[1] = 9` updates `a[0][0]` to `(1,9,3)`.
+Reading that result into a local still makes an independent vector value via copy-on-write.
 
 `Quaternion` stores `w, x, y, z` in that order, so `q[0]` is `w`.
 
@@ -534,7 +547,15 @@ produced, so `!= null` is the presence test to use.
   `invalid function call 'Method'`. Native property failures identify `read` or `write` and
   the property name. Names remain available without debug info; explicit host error messages
   and error codes are preserved. Calling a non-callable value reports its type.
-- **`/` on two ints is integer division**, C semantics. Use `tofloat` when you want a real quotient.
+- **`/` on two ints truncates toward zero.** Use `tofloat` when you want a real quotient.
+  Integer `/`, `%`, `/=`, and `%=` report a runtime error for a zero divisor or `INT_MIN` with
+  divisor `-1`, without modifying the destination. The same invalid operations in `const` or
+  `case` expressions are compile errors. Ordinary literal expressions retain runtime errors.
+  Floating-point division retains IEEE infinity/NaN behavior. Ordered comparisons (`<`, `<=`, `>`, `>=`)
+  involving NaN are false in expressions and branches; negation and short-circuit operators preserve that result.
+- `<<`, `>>`, `<<=`, and `>>=` require integer operands and a shift count in `0..31`.
+  An invalid count is a runtime error before changing the destination; `const` and `case` expressions reject it at compile time.
+  Left shifts retain the low 32 bits, and right shifts extend the sign bit, including for negative operands.
 - **`..` concatenates, `+` adds.** `1 .. 2` is `"12"`.
 - **`elif` is removed**; use `else if`.
 - **Lambdas capture by value.** Read *Captured anonymous functions* in `ReadMe.md` before relying on

@@ -310,8 +310,9 @@ var weights = system.array(0.0, 1024);   // float array
   `++`, and `--` write through to the stored component. Whole-vector compound assignments remain
   unsupported; use `a[i] = a[i] + delta` for vector addition.
 - For example, `system.array(math.Vector3(0, 0, 0), 1000)` stores 1000 vectors (requires `import math;`).
-  Vector components occupy a packed float buffer, without per-element pointers. `resize` fills
-  new elements with the vector value captured when the array was created.
+  Each element is an ordinary `VAR_VEC` value, with the same copy-on-write rules as vectors in lists.
+  Reads share vector storage; a write detaches a shared value. `resize` fills new elements with
+  the vector value captured when the array was created.
 - `a.append(value)` adds one value at the tail. `a.resize(size)` changes the length; growth fills
   new elements with the `initial` value used to create the array, and shrinking drops the tail.
   A negative resize becomes zero, matching List. There is no middle insertion, remove, or slice.

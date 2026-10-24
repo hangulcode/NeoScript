@@ -27,7 +27,7 @@ against the `Packages` folder):
 ## Updating the core and binding
 
 Rebuild the plugin after updating the package sources. The current C# binding
-requires C ABI 3 and rejects an old DLL at startup. Imported script APIs now
+requires C ABI 4 and rejects an old DLL at startup. Imported script APIs now
 use `public`; `export` remains the C# host visibility keyword. See the
 [migration notes and JSON/property examples](../docs/Unity.md).
 

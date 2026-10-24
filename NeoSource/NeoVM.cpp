@@ -874,12 +874,52 @@ void CNeoVM::FreeVec(VecInfo* p)
 	--m_sAllocStats.vectors;
 	m_sPool_Vec.Confer(p);
 }
+// Vector arrays own ordinary VAR_VEC values, including the resize initializer.
+void ArrayInfo::AssignVector(int index, VarInfo* value)
+{
+	_pVM->Move(&VectorValues()[index], value);
+}
+void ArrayInfo::RetainInitialVector(const VarInfo& value)
+{
+	_initialVector = value;
+	++_initialVector._vec->_refCount;
+}
+void ArrayInfo::ReleaseVectorRange(int begin, int end)
+{
+	for (int i = begin; i < end; ++i)
+		_pVM->Var_Release(&VectorValues()[i]);
+}
+void ArrayInfo::FreeVectors()
+{
+	ReleaseVectorRange(0, _count);
+	_pVM->Var_Release(&_initialVector);
+}
+void ArrayInfo::ReadVector(int index, VarInfo* out)
+{
+	// out may hold the last reference to this array (a = a[0]). Retain before
+	// releasing it, and do not access this array again after the release.
+	VarInfo value = VectorValues()[index];
+	++value._vec->_refCount;
+	_pVM->Var_Release(out);
+	*out = value;
+}
+bool ArrayInfo::SetVectorComponents(int index, const float* components, int dimension)
+{
+	if (!components || !IsValidIndex(index) || !VectorDimension() || dimension != VectorDimension())
+		return false;
+	float copy[4] = {};
+	memcpy(copy, components, dimension * sizeof(float));
+	VecInfo* value = _pVM->VecCopyOnWrite(&VectorValues()[index]);
+	memcpy(value->v, copy, sizeof(copy));
+	return true;
+}
 ArrayInfo* CNeoVM::ArrayAlloc(NeoArrayElementType elementType, int count, const VarInfo& initialValue)
 {
 	if (count < 0)
 		return nullptr;
 
 	ArrayInfo* array = m_sPool_Array.Receive();
+	array->_pVM = this;
 	array->_refCount = 0;
 	array->_liveNext = nullptr;
 	array->_livePrev = nullptr;

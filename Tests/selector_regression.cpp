@@ -8,29 +8,29 @@
 #include <vector>
 using namespace NeoScript;
 static float position[4] = {8, 8, 8, 8};
-static int gets = 0, sets = 0;
+static int propertyGets = 0, propertySets = 0;
 static bool Prop(CallContext &c, StringView name, bool get)
 {
     const auto n = name.str();
     if (n == "Reads" && get)
     {
-        c.retInt(gets);
+        c.retInt(propertyGets);
         return true;
     }
     if (n == "Writes" && get)
     {
-        c.retInt(sets);
+        c.retInt(propertySets);
         return true;
     }
     if (n == "Position" || n == "ReadOnly")
     {
         if (get)
         {
-            ++gets;
+            ++propertyGets;
             c.retVec3(position[0], position[1], position[2]);
             return true;
         }
-        ++sets;
+        ++propertySets;
         if (n == "ReadOnly")
             return false;
         float v[4] = {};
@@ -247,6 +247,69 @@ static void BuildCases()
         "export fun Test(){Host.ReadOnly[0]+=2;return true;}export fun Verify(){return Host.ReadOnly[0]==8;}",
         "cannot write property");
 
+    Add("effects", "list growth before borrow",
+        "import math;var a=[math.Vector3(1,2,3)];fun Grow(){for(var i in 0,128)a.append(null);return 4;}"
+        "export fun Test(){a[0][0]+=Grow();return a[0][0]==5 && a.len()==129;}");
+    Add("effects", "map rehash before borrow",
+        "import math;var a={};a.v=math.Vector3(1,2,3);fun Grow(){for(var i in 0,128)a[i]=i;return 4;}"
+        "export fun Test(){var x=(a.v[0]+=Grow());return x==5 && a.v[0]==5;}");
+    Add("control", "repeated writes and value copy",
+        "import math;export fun Test(){var a=[math.Vector3(1,2,3)];"
+        "for(var i in 0,100){a[0][0]+=1;a[0][1]+=2;}var copy=a[0];a[0][2]=9;"
+        "return copy==math.Vector3(101,202,3) && a[0]==math.Vector3(101,202,9);}");
+    Add("control", "assignment component result stays a value",
+        "import math;var a=[math.Vector3(1,2,3)];fun Change(){a[0]=math.Vector3(50,60,70);return 4;}"
+        "export fun Test(){var x=(a[0][0]+=2)+Change();return x==7 && a[0][0]==50;}");
+    Add("control", "assignment result remains writable",
+        "import math;export fun Test(){var a=[math.Vector3(1,2,3)];"
+        "(a[0][0]=4)+=2;return a[0][0]==6;}");
+    Add("control", "selector after assignment result",
+        "export fun Test(){var a=[[null]];((a[0][0]=[1,2]))[1]=9;return a[0][0][1]==9;}");
+
+    // A selector on an indexed assignment must retain both the result and
+    // its owning slot. Reference containers alone can hide a lost lvalue.
+    for (int dim : {2, 3, 4})
+        for (int container = 0; container < 3; ++container)
+        {
+            const std::string ctor = "math.Vector" + std::to_string(dim) +
+                (dim == 2 ? "(8,8)" : dim == 3 ? "(8,8,8)" : "(8,8,8,8)");
+            const std::string setup = container == 0 ? "var a=[[null]];" :
+                container == 1 ? "var a={\"inner\":{}};" : "var a=[system.array(v,1)];";
+            const std::string slot = container == 1 ? "a.inner.value" : "a[0][0]";
+            for (const std::string op : {"=2", "+=2", "++"})
+            {
+                const int changed = op == "=2" ? 2 : op == "+=2" ? 10 : 9;
+                const int result = op == "++" ? 8 : changed;
+                Add("assignment-selectors", std::to_string(dim) + "/" + std::to_string(container) + op,
+                    "import math;import system;export fun Test(){var v=" + ctor + ";" + setup +
+                    "var result=(((" + slot + "=v))[1]" + op + ");return result==" + std::to_string(result) +
+                    " && " + slot + "[1]==" + std::to_string(changed) + " && " + slot + "[0]==8 && v[1]==8;}");
+            }
+        }
+    Add("assignment-selectors", "read result and copy still have value semantics",
+        "import math;export fun Test(){var a=[[null]];var copy=(a[0][0]=math.Vector3(1,2,3));"
+        "copy[1]=9;return (a[0][0]=math.Vector3(4,5,6))[1]==5 && a[0][0][1]==5 && copy[1]==9;}");
+    Add("assignment-selectors", "multiple selector and assignment chains",
+        "import math;export fun Test(){var a=[[null]];"
+        "(((a[0][0]=[null])[0]=math.Vector3(1,2,3))[1]=9)+=2;return a[0][0][0][1]==11;}");
+    Add("assignment-selectors", "keys and RHS run once",
+        "import math;var keys=0;var rhs=0;fun Key(){keys++;return 0;}fun Amount(){rhs++;return 4;}"
+        "export fun Test(){var a=[[null]];(a[Key()][Key()]=math.Vector3(1,2,3))[Key()]+=Amount();"
+        "return keys==3 && rhs==1 && a[0][0][0]==5;}");
+    Add("assignment-selectors", "RHS replacement is resolved at the write",
+        "import math;var a=[[null]];fun Change(){a[0][0]=math.Vector3(10,20,30);return 4;}"
+        "export fun Test(){(a[0][0]=math.Vector3(1,2,3))[1]+=Change();return a[0][0][1]==24;}");
+    Add("assignment-selectors", "native property getter and setter counts",
+        "import math;export fun Test(){var a=[Host];var reads=Host.Reads;var writes=Host.Writes;"
+        "var result=((a[0].Position=math.Vector3(1,2,3))[1]+=4);"
+        "return result==6 && Host.Reads==reads+1 && Host.Writes==writes+2 && Host.Position[1]==6;}");
+    Add("assignment-selectors", "scalar component result cannot be indexed",
+        "import math;var a=[math.Vector3(1,2,3)];export fun Test(){(a[0][0]=4)[0]=9;}"
+        "export fun Verify(){return a[0]==math.Vector3(4,2,3);}", "index");
+    Add("assignment-selectors", "invalid component preserves assigned vector",
+        "import math;var a=[[null]];export fun Test(){(a[0][0]=math.Vector3(1,2,3))[3]=9;}"
+        "export fun Verify(){return a[0][0]==math.Vector3(1,2,3);}", "index");
+
     // R-values resolve their receiver before later operands or arguments run.
     Add("order", "binary RHS",
         "import math;var i=0;var a=[math.Vector3(1,2,3),math.Vector3(100,200,300)];fun F(){i=1;return 10;}export fun "
@@ -338,7 +401,7 @@ static void Run(IRuntime *rt, const TestCase &t, int id, bool debug, bool image)
     {
         for (float &x : position)
             x = 8;
-        gets = sets = 0;
+        propertyGets = propertySets = 0;
         ++checks;
         ++counts[t.group].first;
         auto ins = rt->CreateInstance(p);
