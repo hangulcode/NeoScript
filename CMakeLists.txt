@@ -28,9 +28,8 @@ option(NEOSCRIPT_BUILD_EXAMPLES "Build the standalone game-host example" ${NEOSC
 option(NEOSCRIPT_BUILD_SHARED "Build the flat-C shared library (Unity / P/Invoke hosts)" OFF)
 option(NEOSCRIPT_BUILD_STATIC_C_ABI "Build the flat-C static library (iOS, where dynamic loading is not allowed)" OFF)
 
-# The flat-C shim lives outside NeoSource on purpose.  The engine repository
-# compiles NeoSource/*.cpp directly and embeds the C++ facade, so dropping a
-# P/Invoke shim in there would push a shim it never calls into every engine build.
+# C ABI는 C++ 호스트가 쓰는 코어와 분리한다. NeoSource/*.cpp를 직접 컴파일하는
+# 호스트도 있으므로 P/Invoke 전용 코드를 이 디렉터리에 넣지 않는다.
 set(NEOSCRIPT_C_ABI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Unity/Native)
 set(NEOSCRIPT_C_ABI_SOURCES ${NEOSCRIPT_C_ABI_DIR}/NeoScriptC.cpp)
 

@@ -11,6 +11,9 @@ your own update loop. NeoScript includes a compiler, bytecode VM, and VS Code to
 **Requirements:** a C++11-compatible compiler or newer. The core, public C++ API,
 C ABI, console, and mini game host support C++11. CMake builds require CMake 3.21+
 and default to C++11 unless the embedding project selects a newer standard.
+MSVC has no C++11 mode and uses its default C++14 mode on Windows; this does not
+raise NeoScript's source requirement. C++11 compatibility is checked separately
+with Clang/GCC. See Microsoft's [language-standard options](https://learn.microsoft.com/en-us/cpp/build/reference/std-specify-language-standard-version).
 
 - **Native game objects:** bind C++ methods, properties, and script callbacks through
   a public Runtime / Program / Instance API. Compile once, create independent instances.
@@ -161,7 +164,12 @@ Build:
 & "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\amd64\MSBuild.exe" Samples\console\console.sln /p:Configuration=Release /p:Platform=x64 /m
 ```
 
-The Visual Studio console project enables Microsoft code analysis warning `C26433`
+The solution builds the shared Windows static-library project,
+[`Windows/NeoScript.vcxproj`](Windows/NeoScript.vcxproj), and links its `.lib`.
+The console no longer compiles the VM sources itself. Other Visual Studio hosts
+can reference the same project; see [Windows static linking](docs/Embedding.md#windows-static-linking).
+
+The Visual Studio console and library projects enable Microsoft code analysis warning `C26433`
 for missing C++ `override` specifiers in Debug/Release, Win32/x64 configurations.
 The shared settings are in `BuildConfig/MsvcOverrideWarnings.props` and its ruleset.
 Reload the project after updating; rebuild once to check unchanged source files.

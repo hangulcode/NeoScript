@@ -1,0 +1,58 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files" />
+    <Filter Include="Header Files" />
+    <Filter Include="Implementation" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\NeoSource\NeoExport.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\NeoSource\NeoJson.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\NeoSource\NeoJsonVendor.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\NeoSource\NeoLib.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\NeoSource\NeoParser.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\NeoSource\NeoScriptShim.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\NeoSource\NeoTextLoader.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\NeoSource\NeoVM.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\NeoSource\NeoVMList.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\NeoSource\NeoVMMap.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\NeoSource\NeoVMProgram.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\NeoSource\NeoVMSet.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\NeoSource\NeoVMWorker.cpp"><Filter>Source Files</Filter></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\NeoSource\HttpRequest.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\Neo.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoArchive.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoCompileLimits.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoConfig.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoExport.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoJson.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoLibDCall.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoNumeric.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoParser.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoQueue.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoScript.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoStringLimits.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoTextLoader.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoVM.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoVMArray.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoVMError.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoVMHash.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoVMInternal.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoVMList.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoVMMap.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoVMMemoryPool.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoVMProgram.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoVMSet.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoVMVector.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoVMWorker.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\UTFString.h"><Filter>Header Files</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\NeoSource\NeoVMWorker.inl"><Filter>Implementation</Filter></None>
+    <None Include="..\NeoSource\NeoVMWorker_Handlers.inl"><Filter>Implementation</Filter></None>
+    <None Include="..\NeoSource\NeoVMWorker_Move.inl"><Filter>Implementation</Filter></None>
+    <None Include="..\NeoSource\NeoVMWorker_Var.inl"><Filter>Implementation</Filter></None>
+  </ItemGroup>
+</Project>

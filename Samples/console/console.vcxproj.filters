@@ -1,24 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <ClCompile Include="..\..\NeoSource\NeoExport.cpp">
-      <Filter>NeoScript</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\NeoSource\NeoLib.cpp">
-      <Filter>NeoScript</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\NeoSource\NeoParser.cpp">
-      <Filter>NeoScript</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\NeoSource\NeoTextLoader.cpp">
-      <Filter>NeoScript</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\NeoSource\NeoVM.cpp">
-      <Filter>NeoScript</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\NeoSource\NeoVMWorker.cpp">
-      <Filter>NeoScript</Filter>
-    </ClCompile>
     <ClCompile Include="callback.cpp">
       <Filter>Samples</Filter>
     </ClCompile>
@@ -43,119 +25,30 @@
     <ClCompile Include="etc.cpp">
       <Filter>Samples</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\NeoSource\NeoVMMap.cpp">
-      <Filter>NeoScript</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\NeoSource\NeoVMList.cpp">
-      <Filter>NeoScript</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\NeoSource\NeoVMSet.cpp">
-      <Filter>NeoScript</Filter>
-    </ClCompile>
     <ClCompile Include="map_callback.cpp">
       <Filter>Samples</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\NeoSource\NeoScriptShim.cpp">
-      <Filter>NeoScript</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\NeoSource\NeoVMProgram.cpp">
-      <Filter>NeoScript</Filter>
     </ClCompile>
     <ClCompile Include="neov2_smoke.cpp">
       <Filter>Samples</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\NeoSource\Neo.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoArchive.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoExport.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoParser.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoTextLoader.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoVM.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoVMWorker.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
     <ClInclude Include="stdafx.h">
       <Filter>main</Filter>
     </ClInclude>
     <ClInclude Include="targetver.h">
       <Filter>main</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\NeoSource\UTFString.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
     <ClInclude Include="console.h">
       <Filter>main</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoVMMap.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoVMMemoryPool.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoVMList.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoVMArray.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoLibDCall.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoVMSet.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\NeoSource\HttpRequest.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoQueue.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoVMHash.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoVMInternal.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoConfig.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoScript.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\NeoSource\NeoVMProgram.h">
-      <Filter>NeoScript</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Filter Include="NeoScript">
-      <UniqueIdentifier>{8c72315d-fec6-4ae7-90d8-4750437f9946}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Samples">
       <UniqueIdentifier>{fb8804e8-1dea-44a0-bafc-27932579d3c5}</UniqueIdentifier>
     </Filter>
     <Filter Include="main">
       <UniqueIdentifier>{3f68bb8d-fd00-42da-8b77-5b1ff8351879}</UniqueIdentifier>
     </Filter>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="..\..\NeoSource\NeoVMWorker.inl">
-      <Filter>NeoScript</Filter>
-    </None>
-    <None Include="..\..\NeoSource\NeoVMWorker_Handlers.inl">
-      <Filter>NeoScript</Filter>
-    </None>
   </ItemGroup>
 </Project>
