@@ -68,11 +68,10 @@ and bitwise `& | ^ ~ << >>`. Assignment, `+= -= *= /= %=`, and `++ --` are also 
 Use explicit comparisons in logical expressions and parentheses to make mixed operations clear.
 `&&` and `||` short-circuit: the right operand is not evaluated once the result is known.
 Other operands and call arguments are evaluated left to right. Each scalar or vector value is
-fixed before the next operand runs. The compiler copies a value ahead only when something later in
-the same expression can change it: an assignment or `++`/`--`, a call (for globals), or a selector on a
-registered host object such as `Host.Value` (its getter may change globals). Plain reads of script
-containers never force a copy; a getter reached through a variable that holds a host object must not
-modify script globals read by the same expression. Container arguments retain shared storage, so later mutation
+fixed before the next operand runs. Container elements and globals are read or copied ahead whenever a
+call, a selector (which may reach a host getter), or an assignment follows in the same expression. A local
+variable is copied ahead only when the expression assigns to a variable, because callees and getters
+cannot rebind a caller's locals. Container arguments retain shared storage, so later mutation
 through an alias remains visible. A later reassignment of the original variable does not replace the argument.
 Function-value calls capture the callee before arguments. Dot calls retain their receiver but look
 up the member after arguments: if an argument changes `m.f`, `m.f(...)` calls the new member.
