@@ -785,6 +785,10 @@ print(math.Lerp(10.0, 20.0, 0.5));   // 15
 print(math.MoveToward(0.0, 10.0, 2.0)); // 2
 ```
 
+- Direct assignments such as `v = math.Vector3(x, y, z)` avoid an intermediate value copy.
+  Existing copies stay independent. Arguments are evaluated left to right before the constructor
+  writes `v`; invalid component types release the unfinished vector without overwriting it.
+  Argument side effects still occur.
 - Vectors and lists such as `[x, y, z]` are different types. Do not pass a list to a vector API.
 - Access components with `v[0]` and `v[1]`; `v.x`, `v.y`, and `v.z` are unsupported.
 - Component `+=`, `-=`, `*=`, and `/=` accept int/float operands and preserve value-copy semantics.

@@ -1,4 +1,4 @@
-#include "NeoScript.h"
+﻿#include "NeoScript.h"
 
 #include <cstdio>
 #include <string>
@@ -39,6 +39,19 @@ static bool HostProperty(CallContext& ctx, StringView name, bool get)
         return false;
     }
     return false;
+}
+
+static bool HostMethod(CallContext& context, StringView name)
+{
+    if (name.str() != "Run" || context.argCount() != 1) return false;
+    auto call = context.runtime()->Call(context.instance(), context.argFunction(0));
+    if (call.invoke() != RunStatus::Completed)
+    {
+        context.fail(91, call.error().message);
+        return false;
+    }
+    context.retFloat(call.retFloat());
+    return true;
 }
 
 static void Run(IRuntime* runtime, const std::string& source, bool debug, bool image,
@@ -104,12 +117,103 @@ static void Run(IRuntime* runtime, const std::string& source, bool debug, bool i
     runtime->DestroyProgram(program);
 }
 
+static void RunConstructors(IRuntime* runtime, bool debug, bool image)
+{
+    AllocStats before;
+    GetAllocStats(before);
+    const char* names[] = {"Vector2", "Vector3", "Vector4", "Quaternion"};
+    const int counts[] = {2, 3, 4, 4};
+    for (int type = 0; type < 4; ++type)
+    {
+        std::string initial = std::string("math.") + names[type] + "(";
+        std::string changing = initial;
+        std::string invalid = initial;
+        std::string verify;
+        for (int component = 0; component < counts[type]; ++component)
+        {
+            if (component) { initial += ","; changing += ","; invalid += ","; }
+            initial += "8";
+            changing += "i+" + std::to_string(component);
+            invalid += component + 1 == counts[type] ? "{}" : "1";
+            const std::string index = std::to_string(component);
+            if (component) verify += "&&";
+            verify += "fresh[" + index + "]==i+" + index + "&&v[" + index + "]==i+" + index +
+                "&&global[" + index + "]==i+" + index + "&&copy[" + index + "]==8&&old[" + index + "]==8";
+        }
+        initial += ")";
+        changing += ")";
+        invalid += ")";
+        // 같은 슬롯의 반복 대입과 루프 안 선언을 검사하고 이전 별칭의 값도 보존한다.
+        Run(runtime, "import math;var global=" + initial + ";var old=global;export fun Test(){var v=" +
+            initial + ";var copy=v;for(var i in 0,8){var fresh=" + changing + ";v=" + changing +
+            ";global=" + changing + ";if(!(" + verify + "))return false;}return tosize(v)==" +
+            std::to_string(counts[type]) + ";}", debug, image);
+        // 마지막 인자가 잘못되어도 기존 대상은 바뀌지 않으며 결과를 버려도 검증한다.
+        const std::string prefix = "import math;var v=" + initial + ";var saved=v;var reached=false;export fun Test(){";
+        const std::string suffix = ";reached=true;}export fun Verify(){return !reached&&v==" + initial +
+            "&&saved==" + initial + ";}";
+        Run(runtime, prefix + "v=" + invalid + suffix, debug, image, "invalid function call");
+        Run(runtime, prefix + invalid + suffix, debug, image, "invalid function call");
+    }
+    const char* success[] = {
+        R"NS(import math;var calls=0;fun Value(){calls++;return 1;}
+            export fun Test(){for(var i in 0,8){math.Vector2(Value(),2);math.Vector3(Value(),2,3);
+                math.Vector4(Value(),2,3,4);math.Quaternion(Value(),2,3,4);}return calls==32;}
+        )NS",
+        R"NS(import math;import system;export fun Test(){
+            var v=math.Vector3(1,2,3);var copy=v;var list=[v];var map={"v":v};
+            var array=system.array(v,1);var read=fun(){return v;};
+            v=math.Vector3(4,5,6);v[0]=9;var original=math.Vector3(1,2,3);
+            return v==math.Vector3(9,5,6)&&copy==original&&list[0]==original&&map.v==original&&array[0]==original&&read()==original;
+        })NS",
+        R"NS(import math;export fun Test(){
+            var v=math.Vector4(1,2,3,4);v=math.Vector2(v[3],v[0]);
+            if(v!=math.Vector2(4,1))return false;
+            v=math.Vector4(v[1],v[0],v[0]+1,v[1]+1);return v==math.Vector4(1,4,5,2);
+        })NS",
+        R"NS(import math;var v=math.Vector2(1,2);
+            fun Change(){v=math.Vector2(20,30);return math.Vector2(1,2);}
+            export fun Test(){var saved=(v=math.Vector2(3,4));v[0]=9;
+                var sum=(v=math.Vector2(5,6))+Change();
+                return saved==math.Vector2(3,4)&&sum==math.Vector2(6,8)&&v==math.Vector2(20,30);}
+        )NS",
+        R"NS(import math;var v=math.Vector3(1,2,3);var changes=0;
+            fun Change(){changes++;v=math.Vector3(20,30,40);return 9.0;}
+            export fun Test(){var copy=v;v=math.Vector3(v[0],Host.Run(Change),v[1]);
+                return changes==1&&v==math.Vector3(1,9,30)&&copy==math.Vector3(1,2,3);}
+        )NS",
+        R"NS(import math;var v=math.Vector3(1,2,3);
+            fun Change(){v[0]=20;return 7.0;}
+            fun Check(var value,var ignored){return value==math.Vector3(3,4,5)&&ignored==7;}
+            export fun Test(){return Check((v=math.Vector3(3,4,5)),Host.Run(Change))&&v==math.Vector3(20,4,5);}
+        )NS",
+        R"NS(import math;import coroutine;var result=math.Vector4(0,0,0,0);
+            fun Work(){var value=math.Vector4(1,2,3,4);yield;
+                value=math.Vector4(value[3],value[2],value[1],value[0]);result=value;}
+            export fun Test(){var c=coroutine.create(Work);coroutine.resume(c);coroutine.resume(c);
+                return result==math.Vector4(4,3,2,1)&&coroutine.status(c)=="dead";}
+        )NS"
+    };
+    for (const char* source : success) Run(runtime, source, debug, image);
+    // 잘못된 인자로 중간에 실패한 생성도 미완성 벡터를 풀에 반납해야 한다.
+    AllocStats after;
+    GetAllocStats(after);
+    ++checks;
+    if (after.vectors != before.vectors)
+    {
+        ++failures;
+        std::fprintf(stderr, "Constructor vector leak debug=%d image=%d: %d -> %d\n",
+            debug, image, before.vectors, after.vectors);
+    }
+}
+
 int main()
 {
     auto runtime = CreateRuntime();
     NativeObjectDesc host;
     host.name = "Host";
     host.property = HostProperty;
+    host.method = HostMethod;
     runtime->RegisterObject(host);
     runtime->FreezeBindings();
     const char* constructors[] = {
@@ -122,6 +226,7 @@ int main()
     const char* expected[2][4] = {{"10.0", "6.0", "16.0", "4.0"}, {"8.5", "7.5", "4.0", "16.0"}};
     for (bool debug : {false, true}) for (bool image : {false, true})
     {
+        RunConstructors(runtime, debug, image);
         for (int type = 0; type < 4; ++type)
         for (int component = 0; component < counts[type]; ++component)
         for (int op = 0; op < 4; ++op)

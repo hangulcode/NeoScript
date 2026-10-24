@@ -358,6 +358,32 @@ static void SnapshotValue(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs)
     }
 }
 
+// 바로 앞의 벡터 생성 결과를 단순 변수에 직접 쓴다. 인자 평가는 이미 끝났으며,
+// 임시 결과를 공유하는 MOV와 불필요한 참조 수 변경을 없앤다.
+// 호출 인자 슬롯과 컨테이너/속성 대입은 제외하고, 분기 합류점도 넘지 않는다.
+static bool TryStoreVectorConstructor(SFunctions& funs, int dest, SOperand& source)
+{
+    if (source.IsArray() || source.IsFun() || !IsTempVar(source._iVar) ||
+        !((dest > 0 && dest < COMPILE_LOCALTMP_VAR_BEGIN) || dest <= COMPILE_GLOBAL_VAR_BEGIN))
+        return false;
+    SFunctionInfo& fun = *funs._cur;
+    const int end = fun._code->GetBufferOffset();
+    if (fun.GetLastOP() != NOP_PTRCALL2 ||
+        fun._iLastOPOffset + (int)sizeof(SVMOperation) != end ||
+        fun._jumpTargetOffsets.count(end) != 0)
+        return false;
+    SVMOperation* call = fun.GetOPPointer(fun._iLastOPOffset);
+    if (call->n3 != source._iVar || (call->argFlag & NEOS_OP_CALL_NORESULT) ||
+        !IsCompileConstant(call->n1))
+        return false;
+    const VarInfo& name = funs._staticVars[StaticPoolIndex(call->n1)];
+    if (name.GetType() != VAR_STRING ||
+        CNeoVM::GetDefaultNativeIntrinsic(CNeoVM::FindDefaultNativeIndex(name._str->_str)) != NOP_VEC_MAKE)
+        return false;
+    call->n3 = CompileShort("vector destination", dest);
+    return true;
+}
+
 static bool TryPushImmediate(CArchiveRdWC& ar, SFunctions& funs, int dest, const SOperand& source, int iDebugLine = -1)
 {
 	if (source.IsArray())
@@ -2960,7 +2986,8 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				MaterializeValue(b, ar, funs); // complete the RHS before resolving the destination
 				if (a.IsArray())
 					WriteElement(a, op, b._iVar, b.IsShort(), ar, funs);
-				else if (op != NOP_MOV || !TryPushImmediate(ar, funs, a._iVar, b))
+				else if (op != NOP_MOV || (!TryStoreVectorConstructor(funs, a._iVar, b) &&
+					!TryPushImmediate(ar, funs, a._iVar, b)))
 					funs._cur->Push_OP2(ar, op, a._iVar, b._iVar, b.IsShort());
 			}
 		}
@@ -4715,7 +4742,7 @@ bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport,
         funs._cur->Push_OP2(ar, NOP_FMOV1, slot, value._iVar, false);
     else if (value.IsArray())
         ReadElement(value, slot, ar, funs);
-    else if (!TryPushImmediate(ar, funs, slot, value))
+    else if (!TryStoreVectorConstructor(funs, slot, value) && !TryPushImmediate(ar, funs, slot, value))
         funs._cur->Push_OP2(ar, NOP_MOV, slot, value._iVar, value.IsShort());
     return true;
 }

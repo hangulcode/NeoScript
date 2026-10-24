@@ -206,6 +206,11 @@ independent of compiler image capacity and other runtime string operations.
 | `math.Vector4(x: float, y: float, z: float, w: float)` | `Vector4` | same |
 | `math.Quaternion(w: float, x: float, y: float, z: float)` | `Quaternion` | **`w` comes first** |
 
+Direct constructor assignments to local or global variables write the completed result without
+an intermediate value copy. Arguments are evaluated and validated before replacing the destination;
+existing copies keep their values. An invalid component releases the unfinished vector and leaves
+the destination unchanged by the constructor.
+
 Section 10 describes what the resulting values support.
 
 ### 3.7 Vector math

@@ -665,19 +665,28 @@ NEOS_NOINLINE bool handle_VEC_MAKE(const SVMOperation& OP) {
         SetError(RTE_CALL_INVALID);
         return false;
     }
-    if (!EnsureStackRange(_iSP_VarsMax, n)) return false;
-    if (_iSP_Vars_Max2 < _iSP_VarsMax + 1 + n) _iSP_Vars_Max2 = _iSP_VarsMax + 1 + n;
+    // 함수 진입에서 인자 영역까지 스택 범위와 해제 상한을 확정한다.
+    // 새 벡터를 완성한 뒤 대상에 연결해 인자 오류가 기존 값을 바꾸지 않게 한다.
+    VarInfo* args = GetStackFromBase(_iSP_VarsMax + 1);
+    CNeoVM* vm = GetVM();
+    VecInfo* p = vm->VecAlloc();
     for (int i = 0; i < n; ++i) {
-        if (!GetStackFromBase(_iSP_VarsMax + 1 + i)->IsNumber()) {
+        if (!args[i].IsNumber()) {
+            vm->FreeVec(p);
             SetError(RTE_CALL_INVALID);
             return false;
         }
+        p->v[i] = (float)args[i].GetFloatNumber();
     }
-    if (OP.argFlag & NEOS_OP_CALL_NORESULT) return false;
-    VecInfo* p = VecStoreFor(GetVarPtr3(OP), n);
-    for (int i = 0; i < n; i++)
-        p->v[i] = (float)GetStackFromBase(_iSP_VarsMax + 1 + i)->GetFloatNumber();
-    if (_iSP_Vars_Max2 < _iSP_VarsMax + 1 + n) _iSP_Vars_Max2 = _iSP_VarsMax + 1 + n;
+    if (OP.argFlag & NEOS_OP_CALL_NORESULT) {
+        vm->FreeVec(p);
+        return false;
+    }
+    VarInfo* dest = GetVarPtr3(OP);
+    if (dest->IsAllocType()) Var_Release(dest);
+    p->_refCount = 1;
+    dest->SetVecType(n);
+    dest->_vec = p;
     return false;
 }
 
