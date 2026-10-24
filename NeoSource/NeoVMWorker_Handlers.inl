@@ -668,25 +668,18 @@ NEOS_NOINLINE bool handle_VEC_MAKE(const SVMOperation& OP) {
     // 함수 진입에서 인자 영역까지 스택 범위와 해제 상한을 확정한다.
     // 새 벡터를 완성한 뒤 대상에 연결해 인자 오류가 기존 값을 바꾸지 않게 한다.
     VarInfo* args = GetStackFromBase(_iSP_VarsMax + 1);
-    CNeoVM* vm = GetVM();
-    VecInfo* p = vm->VecAlloc();
+    float tmp[4];   // n 개만 쓰고 n 개만 복사한다
     for (int i = 0; i < n; ++i) {
         if (!args[i].IsNumber()) {
-            vm->FreeVec(p);
-            SetError(RTE_CALL_INVALID);
+            SetError(RTE_CALL_INVALID);   // 대상은 아직 건드리지 않았다
             return false;
         }
-        p->v[i] = (float)args[i].GetFloatNumber();
+        tmp[i] = (float)args[i].GetFloatNumber();
     }
-    if (OP.argFlag & NEOS_OP_CALL_NORESULT) {
-        vm->FreeVec(p);
-        return false;
-    }
-    VarInfo* dest = GetVarPtr3(OP);
-    if (dest->IsAllocType()) Var_Release(dest);
-    p->_refCount = 1;
-    dest->SetVecType(n);
-    dest->_vec = p;
+    if (OP.argFlag & NEOS_OP_CALL_NORESULT) return false;
+    // 대상이 단독 소유 벡터면 저장소를 재사용한다(루프 안 v = Vector3(...) 가 할당 0). 공유 중이면 VecStoreFor 가 새로 잡는다.
+    VecInfo* p = VecStoreFor(GetVarPtr3(OP), n);
+    for (int i = 0; i < n; ++i) p->v[i] = tmp[i];
     return false;
 }
 

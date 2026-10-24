@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -91,7 +91,16 @@ struct ArrayInfo : AllocBase
 			byte &= (u8)~bit;
 	}
 
+	// 같은 타입의 int/float 저장만 인라인한다. 변환·bool·벡터 저장은 드물어 아웃라인으로 보낸다
+	// (디스패치 루프의 인라인 크기가 곧 성능 — CltRead 의 배열 읽기와 같은 분리).
 	NEOS_FORCEINLINE bool AssignValue(int index, VarInfo* value)
+	{
+		const VAR_TYPE vt = value->GetType();
+		if (_elementType == NeoArrayElementType::Int && vt == VAR_INT) { IntData()[index] = value->_int; return true; }
+		if (_elementType == NeoArrayElementType::Float && vt == VAR_FLOAT) { FloatData()[index] = value->_float; return true; }
+		return AssignValueRare(index, value);
+	}
+	NEOS_NOINLINE bool AssignValueRare(int index, VarInfo* value)
 	{
 		switch (_elementType)
 		{

@@ -2736,15 +2736,20 @@ bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUs
 		SetErrorFormat(RTE_PROPERTY_NAMED, get ? "read" : "write", pStr ? pStr->_str.c_str() : "<unknown>");
 		return false;
 	}
-	if (!EnsureStackRange(_iSP_VarsMax, 0))
+	// 호스트 getter/setter 의 프레임을 현재 프레임이 쓰는 모든 슬롯 위(_iSP_Vars_Max2)에 둔다.
+	// 함수 진입 시 _iSP_Vars_Max2 는 _stackSlotCount(대기 중인 호출 인자 창 포함)까지 올라가 있으므로,
+	// 여기서 시작하면 평가 중인 인자가 덮이지 않는다 → 컴파일러가 선택자 읽기를 인자 창 충돌로 보지 않아도 된다.
+	const int hostBase = _iSP_Vars_Max2;
+	if (!EnsureStackRange(hostBase, 0))
 		return false;
 	int iSave = _iSP_Vars;
 	int iSave_SP_VarsMax = _iSP_VarsMax;
 	int iSaveBreakingCallStack = m_iBreakingCallStack;
-	_iSP_Vars = _iSP_VarsMax;
+	_iSP_Vars = hostBase;
+	_iSP_VarsMax = hostBase;
 	SetStackPointer(_iSP_Vars);
-	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1)
-		_iSP_Vars_Max2 = _iSP_VarsMax + 1;
+	if (_iSP_Vars_Max2 < hostBase + 1)
+		_iSP_Vars_Max2 = hostBase + 1;
 
 	bool nativeResult = (func)(this, pUserData, pStr, pRet, get);
 	if (nativeResult == false)

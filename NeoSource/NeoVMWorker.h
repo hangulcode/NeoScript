@@ -385,6 +385,8 @@ private:
 	void Per2(VarInfo* r, VarInfo* v2);
 	void LSh2(VarInfo* r, VarInfo* v2);
 	void RSh2(VarInfo* r, VarInfo* v2);
+	void LSh2Rare(VarInfo* r, VarInfo* v2);
+	void RSh2Rare(VarInfo* r, VarInfo* v2);
 	void And2(VarInfo* r, VarInfo* v2);
 	void Or2 (VarInfo* r, VarInfo* v2);
 	void Xor2(VarInfo* r, VarInfo* v2);
@@ -411,6 +413,8 @@ private:
 	void Per3(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void LSh3(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void RSh3(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	void LSh3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	void RSh3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void And3(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Or3(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Xor3(VarInfo* r, VarInfo* v1, VarInfo* v2);
@@ -426,7 +430,7 @@ private:
 	NEOS_NOINLINE bool CompareGRRare(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic);
 	NEOS_NOINLINE bool CompareGERare(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic);
 	bool For(VarInfo* v1);
-	bool ForRare(VarInfo* v1, int step);   // step<0 / step==0 (드문 경로, For 에서 분리)
+	bool ForRare(VarInfo* v1, int step);   // step != 1 (일반 양수 스텝·역방향·0) — For 의 인라인 본문을 step==1 로만 유지
 	// bTwoVar: foreach(var k, v in ...) 형태(컴파일러가 op argFlag 로 전달).
 	// list 는 2변수 순회를 지원하지 않으므로 런타임에 여기서 에러를 낸다.
 	bool ForEach(VarInfo* v1, VarInfo* v2, bool bTwoVar);
