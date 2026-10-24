@@ -1,7 +1,8 @@
-#include "NeoScript.h"
+﻿#include "NeoScript.h"
 #include <cmath>
 #include <codecvt>
 #include <cstdio>
+#include <cstdint>
 #include <ctime>
 #include <cwchar>
 #include <limits>
@@ -245,6 +246,54 @@ static void FractContracts(IRuntime* runtime, bool debug, bool image) {
     runtime->DestroyProgram(program);
 }
 
+static void ColorContracts(IRuntime* runtime, bool debug, bool image) {
+    auto program = Compile(runtime, "import math;"
+        "export fun RGB(var r,var g,var b){return math.ColorRGB(r,g,b);}"
+        "export fun ARGB(var a,var r,var g,var b){return math.ColorARGB(a,r,g,b);}", debug, image);
+    if (!program) return;
+    auto instance = runtime->CreateInstance(program);
+    Check(bool(instance), "color instance");
+    if (instance) {
+        const float nan = std::numeric_limits<float>::quiet_NaN();
+        const float infinity = std::numeric_limits<float>::infinity();
+        struct ChannelCase { const char* name; float value; uint32_t byte; };
+        const ChannelCase channels[] = {
+            {"NaN",nan,0},{"negative NaN",-nan,0},
+            {"positive infinity",infinity,255},{"negative infinity",-infinity,0},
+            {"negative",-1,0},{"negative zero",-0.0f,0},{"zero",0,0},
+            {"subnormal",std::numeric_limits<float>::denorm_min(),0},
+            {"quarter",0.25f,63},{"half",0.5f,127},{"three quarters",0.75f,191},
+            {"below one",std::nextafter(1.0f,0.0f),254},{"one",1,255},{"above one",2,255}
+        };
+        auto verify = [&](bool alpha, const float* values, const uint32_t* bytes, const std::string& label) {
+            auto call = runtime->Call(instance, alpha ? "ARGB" : "RGB");
+            if (alpha) call.argFloat(values[0]);
+            const auto status = call.argFloat(values[1]).argFloat(values[2]).argFloat(values[3]).invoke();
+            // 기대값은 unsigned 비트 조합으로 만들어 구현의 signed 산술과 독립적으로 검증한다.
+            const uint32_t expected = ((alpha ? bytes[0] : 255u) << 24) |
+                (bytes[3] << 16) | (bytes[2] << 8) | bytes[1];
+            Check(status == RunStatus::Completed && call.retType() == ValueType::Int &&
+                static_cast<uint32_t>(call.retInt()) == expected,
+                std::string(alpha ? "ARGB " : "RGB ") + label + " debug=" + std::to_string(debug) +
+                " image=" + std::to_string(image) + " " + call.error().message);
+        };
+        for (bool alpha : {false,true}) for (const auto& channel : channels) {
+            for (int index = alpha ? 0 : 1; index < 4; ++index) {
+                float values[] = {1.0f,0.25f,0.5f,0.75f};
+                uint32_t bytes[] = {255,63,127,191};
+                values[index] = channel.value;
+                bytes[index] = channel.byte;
+                verify(alpha, values, bytes, std::string(channel.name) + " channel=" + std::to_string(index));
+            }
+            const float values[] = {channel.value,channel.value,channel.value,channel.value};
+            const uint32_t bytes[] = {channel.byte,channel.byte,channel.byte,channel.byte};
+            verify(alpha, values, bytes, std::string(channel.name) + " all channels");
+        }
+        runtime->DestroyInstance(instance);
+    }
+    runtime->DestroyProgram(program);
+}
+
 static void CoroutineContracts(IRuntime* runtime, bool debug, bool image) {
     Script(runtime, "import coroutine;var after=0;export fun Probe(){var keep=\"local\";coroutine.close();"
         "after=1;return keep==\"local\";}export fun Verify(){return after==0;}", debug, image, "main context");
@@ -274,6 +323,7 @@ int main() {
         NumericContracts(runtime, debug, image);
         DateContracts(runtime, debug, image);
         FractContracts(runtime, debug, image);
+        ColorContracts(runtime, debug, image);
         CoroutineContracts(runtime, debug, image);
     }
     DestroyRuntime(runtime);

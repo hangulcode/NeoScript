@@ -149,6 +149,17 @@ fun Target(var a,var b){return a+b;}
 export fun Probe(){var n=3;var f=Target;var g=fun(var a,var b){return a+b+n;};
  var map={"f":f,"g":g};return f(1,2)==3 && g(1,2)==6 && map.f(2,3)==5 && map.g(2,3)==8;}
 )NS", debug, image);
+    Run(runtime, "function string representations", R"NS(
+fun Target(){return 7;}
+export fun Probe(){var f=Target;var n=3;var closure=fun(){return n;};var other=fun(){return n;};
+ var plain=fun(){return 9;};var values=[f,closure];var methods={"f":f,"g":closure};
+ return tostring(Target)=="function" && tostring(f)=="function" && tostring(plain)=="function"
+  && tostring(closure)=="function" && tostring(values[0])=="function" && tostring(methods.g)=="function"
+  && (""..Target)=="function" && (closure.."")=="function" && (Target..closure)=="functionfunction"
+  && format("%s",tostring(f))=="function" && tostring(null)=="null"
+  && type(f)=="function" && type(closure)=="function" && closure!=other && f==Target
+  && f()==7 && closure()==3 && plain()==9;}
+)NS", debug, image);
     Run(runtime, "native reentry depth", R"NS(
 fun Recur(var depth){if(depth==0)return 7;return Host.Reenter(fun(){return Recur(depth-1);});}
 export fun Probe(){return Recur(1000)==7;}
@@ -236,6 +247,16 @@ static void CollectionErrorCases(IRuntime* runtime, bool debug, bool image)
 
 static void NumericCases(IRuntime* runtime, bool debug, bool image)
 {
+    for (const char* expression : {"5.5%2.0", "5.5%2", "5%2.0"})
+        Run(runtime, "runtime float remainder rejection",
+            std::string("export fun Probe(){return ") + expression + ";}",
+            debug, image, "invalid operator '%'");
+    Run(runtime, "float compound remainder preserves destination",
+        "var value=5.5;export fun Probe(){value%=2.0;return false;}",
+        debug, image, "invalid operator '%='", false, "return value==5.5;");
+    Run(runtime, "floating remainder uses fmod",
+        "export fun Probe(){return math.fmod(5.5,2.0)==1.5&&math.fmod(-5.5,2.0)==-1.5;}",
+        debug, image);
     Run(runtime, "saturating integer conversion", R"NS(
 export fun Probe(){var zero=0.0;var inf=1.0/zero;var nan=zero/zero;
  return toint(inf)==2147483647 && toint(-inf)==-2147483648 && toint(nan)==0

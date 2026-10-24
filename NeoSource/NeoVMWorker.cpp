@@ -192,6 +192,9 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 		return v1->_bl ? "true" : "false";
 	case VAR_NONE:
 		return "null";
+	case VAR_FUN:
+	case VAR_FUN_NATIVE:
+		return "function";
 	case VAR_STRING:
 		return v1->_str->_str;
 	case VAR_VEC:
@@ -218,6 +221,8 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 		return "module";
 	case VAR_ASYNC:
 		return "async";
+	case VAR_CLOSURE:
+		return "function";
 	default:
 		break;
 	}

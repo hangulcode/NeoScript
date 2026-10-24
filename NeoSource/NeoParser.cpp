@@ -4894,6 +4894,11 @@ static bool EvalConstBinOp(SConstValue& a, TK_TYPE op, const SConstValue& b, CAr
 		return true;
 	case TK_DIV:
 	case TK_PERCENT:
+		if (op == TK_PERCENT && !bothInt)
+		{
+			SetParserCompileError(ar, PCE_CONST_INVALID_OP, GetTokenString(op).c_str());
+			return false;
+		}
 		if ((bothInt && b.i == 0) || (false == bothInt && b.Num() == 0))
 		{
 			SetParserCompileError(ar, PCE_CONST_DIV_ZERO);
@@ -4912,7 +4917,7 @@ static bool EvalConstBinOp(SConstValue& a, TK_TYPE op, const SConstValue& b, CAr
 		{
 			double x = a.Num(), y = b.Num();
 			a.type = NEO_DEFINE_TOKEN_FLOAT;
-			a.f = (op == TK_DIV) ? (x / y) : fmod(x, y);
+			a.f = x / y;
 		}
 		return true;
 	case TK_XOR: case TK_LSHIFT: case TK_RSHIFT: case TK_AND: case TK_OR:

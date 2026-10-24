@@ -83,6 +83,7 @@ print("count=" .. count);            // count=2
 print((count > 0) && (count < capacity)); // true
 ```
 
+- `%` and `%=` require integer operands. Floating-point `%` is also rejected in `const` and `case` expressions; use `math.fmod(x, y)` at run time.
 - Integer `/`, `%`, `/=`, and `%=` fail with a runtime error when the divisor is zero or
   the operands are `-2147483648` and `-1`. The destination is unchanged on failure.
   In `const` and `case` expressions, these are compile errors. Floating-point division
@@ -103,6 +104,7 @@ print((count > 0) && (count < capacity)); // true
   but `1.0 / 0.0` is positive infinity and `1.0 / -0.0` is negative infinity.
   The two zeros still identify the same map key.
 - Use `..`, not `+`, for string concatenation. It converts values to strings and joins them.
+- Function values, including captured lambdas, become `"function"` through `tostring`, string concatenation, and `print`. Null remains `"null"`.
 - `toint`, `tofloat`, `tostring`, `tosize`, and `type` require no import.
   They are keywords and cannot be stored in variables or passed as function callbacks.
 - In the default console, `print(value)` prints a line. To print several values,
@@ -811,6 +813,8 @@ print(math.MoveToward(0.0, 10.0, 2.0)); // 2
 - `math.Quaternion(w, x, y, z)` takes **w first**. Its runtime type name is `"Vector4"`.
   Do not interpret ordinary vector multiplication `*` as rotation composition.
 - `ColorRGB` and `ColorARGB` components range from 0.0 to 1.0, not integer values from 0 to 255.
+  Color conversion maps NaN to 0, clamps negative/positive infinity to 0/1, and truncates the scaled
+  components to bytes. `ColorRGB` always sets alpha to 255.
 
 ### Random numbers and reproducibility
 

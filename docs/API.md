@@ -33,6 +33,7 @@ Every signature and behavioural note below was verified by running it through
   is true and both zeros identify the same map key; their floating-point reciprocals
   are positive and negative infinity, respectively.
 - `const` floating-point expressions calculate in double precision, then become float32 values when used at run time. Their rounding can differ from a sequence of runtime float32 operations. Non-finite constant-expression results are compile errors.
+- `%` requires integer operands in runtime, `const`, and `case` expressions. Use `math.fmod` for floating-point remainders at run time.
 - **Arity is exact.** A wrong argument count or type raises the runtime error
   `invalid function call`. There are no optional parameters except where an entry says so.
 - Built-in module functions such as `math.sqrt` require a call; they cannot be stored as function values. Use a script wrapper for callbacks.
@@ -63,7 +64,7 @@ callback. Selectors may follow their results: `tostring(5).len()` is valid.
 
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
-| `tostring(x)` | `string` | Same conversion `print` uses. |
+| `tostring(x)` | `string` | Same conversion `print` uses. Function values, including captured lambdas, produce `"function"`; null produces `"null"`. |
 | `toint(x)` | `int` | Truncates a float toward zero, clamps to `-2147483648..2147483647`, and maps NaN to `0`; also parses a numeric string. |
 | `tofloat(x)` | `float` | Parses a numeric string. |
 | `tosize(x)` | `int` | string: UTF-8 character count. list/map/set/array: element count. Vector2/3/4/Quaternion: component count. Anything else: `0`. |
@@ -228,6 +229,10 @@ These accept vector **value types** only. A `list` of three numbers is rejected.
 | `math.ColorRGB(r: float, g: float, b: float)` | `int` | components are **0.0-1.0**, clamped. Packs `0xFFBBGGRR` (alpha forced to 255) |
 | `math.ColorARGB(a: float, r: float, g: float, b: float)` | `int` | components are **0.0-1.0**, clamped. Packs `0xAABBGGRR` |
 | `math.tostr(value: float)` | `string` | `%.9g`, round-trippable float text. `"" .. 0.1` gives `0.1`; `math.tostr(0.1)` gives `0.100000001` |
+
+Color conversion treats NaN components as `0`, clamps negative infinity to `0` and positive
+infinity to `1`, then truncates each scaled component to a byte. `ColorRGB` always keeps alpha
+at `255`, including when an RGB component is NaN.
 
 The engine's metadata table declares the `ColorRGB` / `ColorARGB` parameters as `int`. The
 implementation reads them as floats and clamps to `0..1` - the metadata string is stale, the

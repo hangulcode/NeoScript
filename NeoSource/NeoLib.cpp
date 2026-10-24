@@ -1352,26 +1352,31 @@ struct neo_libs
 		pN->ReturnValue(static_cast<int>(value));
 		return true;
 	}
+	static int MathColorByte(NS_FLOAT value)
+	{
+		// 색 채널의 NaN은 0으로 변환하고, 나머지는 기존 0..1 제한과 소수부 버림을 유지한다.
+		return NeoFloatToInt(MathClamp01Value(value) * (NS_FLOAT)255.0);
+	}
 	static bool Math_ColorRGB(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 3 || !NumericArg(pN, 1) || !NumericArg(pN, 2) || !NumericArg(pN, 3)) return false;
-		NS_FLOAT r = MathClamp01Value(pN->read<NS_FLOAT>(1));
-		NS_FLOAT g = MathClamp01Value(pN->read<NS_FLOAT>(2));
-		NS_FLOAT b = MathClamp01Value(pN->read<NS_FLOAT>(3));
-		int color = -16777216 + (int)(b * (NS_FLOAT)255.0) * 65536 + (int)(g * (NS_FLOAT)255.0) * 256 + (int)(r * (NS_FLOAT)255.0);
+		const int r = MathColorByte(pN->read<NS_FLOAT>(1));
+		const int g = MathColorByte(pN->read<NS_FLOAT>(2));
+		const int b = MathColorByte(pN->read<NS_FLOAT>(3));
+		const int color = -16777216 + b * 65536 + g * 256 + r;
 		pN->ReturnValue(color);
 		return true;
 	}
 	static bool Math_ColorARGB(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 4 || !NumericArg(pN, 1) || !NumericArg(pN, 2) || !NumericArg(pN, 3) || !NumericArg(pN, 4)) return false;
-		NS_FLOAT a = MathClamp01Value(pN->read<NS_FLOAT>(1));
-		NS_FLOAT r = MathClamp01Value(pN->read<NS_FLOAT>(2));
-		NS_FLOAT g = MathClamp01Value(pN->read<NS_FLOAT>(3));
-		NS_FLOAT b = MathClamp01Value(pN->read<NS_FLOAT>(4));
-		int ai = (int)(a * (NS_FLOAT)255.0);
-		int rgb = (int)(b * (NS_FLOAT)255.0) * 65536 + (int)(g * (NS_FLOAT)255.0) * 256 + (int)(r * (NS_FLOAT)255.0);
-		int color = ai < 128 ? ai * 16777216 + rgb : (ai - 256) * 16777216 + rgb;
+		const int a = MathColorByte(pN->read<NS_FLOAT>(1));
+		const int r = MathColorByte(pN->read<NS_FLOAT>(2));
+		const int g = MathColorByte(pN->read<NS_FLOAT>(3));
+		const int b = MathColorByte(pN->read<NS_FLOAT>(4));
+		const int rgb = b * 65536 + g * 256 + r;
+		// 각 채널은 0..255다. 알파를 먼저 부호 범위로 옮겨 int32 오버플로를 피한다.
+		const int color = a < 128 ? a * 16777216 + rgb : (a - 256) * 16777216 + rgb;
 		pN->ReturnValue(color);
 		return true;
 	}
