@@ -4666,7 +4666,6 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 	std::string tk1;
 	TK_TYPE tkType1;
-	TK_TYPE r;
 
 	SOperand iTempOffset;
 	std::vector<u8> byTempCheck;
@@ -4804,7 +4803,6 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 
 	std::string tk1;
 	TK_TYPE tkType1;
-	TK_TYPE r;
 
 	SOperand iTempOffset;
 

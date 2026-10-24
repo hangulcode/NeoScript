@@ -36,6 +36,39 @@ public:
 	}
 };
 
+// 네이티브 콜백이 예외로 끝나도 클로저 정리는 원래 스크립트 프레임을 읽어야 한다.
+// 임시 값의 해제는 여기서 하지 않는다. 예외 경로에서는 기존 상한을 유지해 실행 정리가 맡는다.
+class CNeoVMWorker::NativeFrameScope
+{
+	CNeoVMWorker& _worker;
+	CoroutineInfo* const _context;
+	std::vector<VarInfo>* const _stack;
+	const int _sp;
+	const int _max;
+	const int _breaking;
+	bool _restored = false;
+public:
+	explicit NativeFrameScope(CNeoVMWorker& worker)
+		: _worker(worker), _context(worker.m_pCur), _stack(worker.m_pVarStack_Base),
+		_sp(worker._iSP_Vars), _max(worker._iSP_VarsMax), _breaking(worker.m_iBreakingCallStack) {}
+	bool IsCurrent() const
+	{
+		return _worker.m_pCur == _context && _worker.m_pVarStack_Base == _stack;
+	}
+	void Restore()
+	{
+		if (_restored) return;
+		_restored = true;
+		// 중첩 호출이 실행 컨텍스트를 폐기했다면 이전 스택과 레지스터를 되살리지 않는다.
+		if (!IsCurrent()) return;
+		_worker._iSP_Vars = _sp;
+		_worker.SetStackPointer(_sp);
+		_worker._iSP_VarsMax = _max;
+		_worker.m_iBreakingCallStack = _breaking;
+	}
+	~NativeFrameScope() { Restore(); }
+};
+
 void SVarWrapper::SetNone() { _vmw->Var_SetNone(_var); }
 void SVarWrapper::SetInt(int v) { _vmw->Var_SetInt(_var, v); }
 void SVarWrapper::SetFloat(NS_FLOAT v) { _vmw->Var_SetFloat(_var, v); }
@@ -1234,8 +1267,10 @@ int CNeoVMWorker::RunHostCall(int iFunctionID, std::vector<VarInfo>& _args, VarI
 		const bool suspended = IsSuspended();
 		if (ok == false)
 		{
-			// Run의 오류 handler는 자식 프레임과 call stack을 이미 버렸다. 여기서
-			// outer를 되살리면 이후 ReleaseExecution이 base 0에서 그 캡처를 sync한다.
+			// 오류 opcode와 달리 C++ 예외는 자식 클로저가 아직 활성 상태일 수 있다.
+			// 호스트가 임시 슬롯을 정리하기 전에 현재 자식 프레임에서 캡처를 보존한다.
+			UnwindActiveClosures();
+			// outer를 되살리면 이후 ReleaseExecution이 자식 stack base에서 캡처를 sync한다.
 			ReleaseDetachedClosureWithoutSync(outerClosure);
 		}
 		else if (!suspended)
@@ -2367,8 +2402,10 @@ VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 		Var_Release(&(*m_pVarStack_Base)[1 + _iSP_Vars + iCur]);
 
 	++m_iDebugSuppressCount;
-	Run();
+	const bool ok = Run();
 	--m_iDebugSuppressCount;
+	// 예외로 남은 자식 클로저를 부모 프레임 복원 전에 동기화하고 실행 참조를 반납한다.
+	if (!ok) UnwindActiveClosures();
 
 //	_read(&(*m_pVarStack)[_iSP_Vars], *r);
 	VarInfo* r = &(*m_pVarStack_Base)[_iSP_Vars];
@@ -2381,7 +2418,7 @@ VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 	//GC();
 	
 	_isInitialized = true;
-	return r;
+	return ok ? r : nullptr;
 }
 
 VarInfo* CNeoVMWorker::testCall(VarInfo* function, VarInfo* args, int argc)
@@ -2422,8 +2459,10 @@ VarInfo* CNeoVMWorker::testCall(VarInfo* function, VarInfo* args, int argc)
 	++closure->_refCount; // RET/ERROR가 Sync 후 반납한다.
 	m_pActiveClosure = closure;
 	++m_iDebugSuppressCount;
-	Run();
+	const bool ok = Run();
 	--m_iDebugSuppressCount;
+	// 예외로 남은 자식 클로저를 부모 프레임 복원 전에 동기화하고 실행 참조를 반납한다.
+	if (!ok) UnwindActiveClosures();
 
 	VarInfo* result = &(*m_pVarStack_Base)[_iSP_Vars];
 	SetCodePtr(save_Code);
@@ -2431,7 +2470,7 @@ VarInfo* CNeoVMWorker::testCall(VarInfo* function, VarInfo* args, int argc)
 	_iSP_VarsMax = save__iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);
 	_isInitialized = true;
-	return result;
+	return ok ? result : nullptr;
 }
 
 void CNeoVMWorker::CallFunctionValue(int functionIndex, int argumentCount)
@@ -2582,21 +2621,18 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 	}
 	if (!EnsureStackRange(_iSP_VarsMax, n3))
 		return false;
-	int iSave = _iSP_Vars;
-	int iSave_SP_VarsMax = _iSP_VarsMax;
-	int iSaveBreakingCallStack = m_iBreakingCallStack;
+	NativeFrameScope frame(*this);
 	_iSP_Vars = _iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);
 	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1 + n3) // ??????? 이렇게 하면 맞나? 흠...
 		_iSP_Vars_Max2 = _iSP_VarsMax + 1 + n3;
 
 	bool nativeResult = (func)(this, pUserData, pStr, n3);
+	if (!frame.IsCurrent())
+		return false;
 	if (nativeResult == false)
 	{
-		_iSP_Vars = iSave;
-		SetStackPointer(_iSP_Vars);
-		_iSP_VarsMax = iSave_SP_VarsMax;
-		m_iBreakingCallStack = iSaveBreakingCallStack;
+		frame.Restore();
 		if (GetVM()->IsLastErrorMsg())
 			SetCodePtr(0);
 		else
@@ -2607,10 +2643,7 @@ bool CNeoVMWorker::CallNative(FunctionPtrNative functionPtrNative, void* pUserDa
 		Move(pRet, m_pVarStack_Pointer);
 
 	int argSP_Vars = _iSP_Vars;
-	_iSP_Vars = iSave;
-	SetStackPointer(_iSP_Vars);
-	_iSP_VarsMax = iSave_SP_VarsMax;
-	m_iBreakingCallStack = iSaveBreakingCallStack;
+	frame.Restore();
 	if (m_pRegisterActive != NULL)
 	{
 		switch(m_pRegisterActive->_sub_state)
@@ -2657,21 +2690,18 @@ bool CNeoVMWorker::CallDefaultNativeByIndex(int nativeIndex, int n3, VarInfo* pR
 {
 	if (!EnsureStackRange(_iSP_VarsMax, n3))
 		return false;
-	int iSave = _iSP_Vars;
-	int iSave_SP_VarsMax = _iSP_VarsMax;
-	int iSaveBreakingCallStack = m_iBreakingCallStack;
+	NativeFrameScope frame(*this);
 	_iSP_Vars = _iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);
 	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1 + n3)
 		_iSP_Vars_Max2 = _iSP_VarsMax + 1 + n3;
 
 	bool nativeResult = CNeoVM::CallDefaultNativeByIndex(nativeIndex, this, (short)n3);
+	if (!frame.IsCurrent())
+		return false;
 	if (nativeResult == false)
 	{
-		_iSP_Vars = iSave;
-		SetStackPointer(_iSP_Vars);
-		_iSP_VarsMax = iSave_SP_VarsMax;
-		m_iBreakingCallStack = iSaveBreakingCallStack;
+		frame.Restore();
 		if (GetVM()->IsLastErrorMsg())
 			SetCodePtr(0);
 		else
@@ -2682,10 +2712,7 @@ bool CNeoVMWorker::CallDefaultNativeByIndex(int nativeIndex, int n3, VarInfo* pR
 		Move(pRet, m_pVarStack_Pointer);
 
 	int argSP_Vars = _iSP_Vars;
-	_iSP_Vars = iSave;
-	SetStackPointer(_iSP_Vars);
-	_iSP_VarsMax = iSave_SP_VarsMax;
-	m_iBreakingCallStack = iSaveBreakingCallStack;
+	frame.Restore();
 	if (m_pRegisterActive != NULL)
 	{
 		switch(m_pRegisterActive->_sub_state)
@@ -2742,9 +2769,7 @@ bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUs
 	const int hostBase = _iSP_Vars_Max2;
 	if (!EnsureStackRange(hostBase, 0))
 		return false;
-	int iSave = _iSP_Vars;
-	int iSave_SP_VarsMax = _iSP_VarsMax;
-	int iSaveBreakingCallStack = m_iBreakingCallStack;
+	NativeFrameScope frame(*this);
 	_iSP_Vars = hostBase;
 	_iSP_VarsMax = hostBase;
 	SetStackPointer(_iSP_Vars);
@@ -2752,12 +2777,17 @@ bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUs
 		_iSP_Vars_Max2 = hostBase + 1;
 
 	bool nativeResult = (func)(this, pUserData, pStr, pRet, get);
+	if (!frame.IsCurrent())
+		return false;
+	int argSP_Vars = _iSP_Vars;
+	// 반환값은 호출자의 pRet에 있다. 호스트 프레임과 중첩 호출의 임시 값은 먼저
+	// 해제한 뒤 상한을 복원해야 반복 접근 시 슬롯 누적과 참조 누수가 모두 없다.
+	for (int i = hostBase; i < _iSP_Vars_Max2; ++i)
+		Var_Release(GetStackFromBase(i));
+	_iSP_Vars_Max2 = hostBase;
+	frame.Restore();
 	if (nativeResult == false)
 	{
-		_iSP_Vars = iSave;
-		SetStackPointer(_iSP_Vars);
-		_iSP_VarsMax = iSave_SP_VarsMax;
-		m_iBreakingCallStack = iSaveBreakingCallStack;
 		if (GetVM()->IsLastErrorMsg())
 			SetCodePtr(0);
 		else
@@ -2765,13 +2795,6 @@ bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUs
 		return false;
 	}
 
-//	Move(pRet, GetReturnVar());
-
-	int argSP_Vars = _iSP_Vars;
-	_iSP_Vars = iSave;
-	SetStackPointer(_iSP_Vars);
-	_iSP_VarsMax = iSave_SP_VarsMax;
-	m_iBreakingCallStack = iSaveBreakingCallStack;
 	if (m_pRegisterActive != NULL)
 	{
 		switch (m_pRegisterActive->_sub_state)

@@ -78,6 +78,7 @@ class CNeoVMWorker : public INeoVMWorker, public AllocBase, public CoroutineBase
 	friend		neo_libs;
 	friend		neo_DCalllibs;
 private:
+	class NativeFrameScope;
 	// 컴파일 이미지(코드/함수테이블/디버그정보/상수)는 프로그램이 소유하고 워커들이 공유한다.
 	CNeoVMProgram*			_pProgram = nullptr;
 	const u8 *				_pCodeBegin = nullptr;   // = _pProgram->GetCodeBegin()

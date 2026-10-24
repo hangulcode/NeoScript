@@ -479,6 +479,8 @@ result before it can return to Script A, so Script B does not own a resumable ex
   cooperative slices are different: synchronous callbacks finish before the next debugger slice.
 - Native `CallContext` arguments and borrowed argument strings remain valid across synchronous reentry,
   including while the child `Invocation` exists and after its destruction. The child uses a separate stack frame.
+- Native property getters and setters also use a separate temporary frame, preserving pending script call arguments.
+  That frame is released after each callback, so repeated property access does not accumulate stack usage.
 - A synchronous callback may call ordinary functions and return values normally. For delayed work, have the native
   API schedule a new top-level `ExecuteTop`/`ResumeTop` execution instead of invoking Script B synchronously.
 
