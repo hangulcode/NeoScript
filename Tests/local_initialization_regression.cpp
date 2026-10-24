@@ -1,9 +1,6 @@
 ﻿#include "NeoScript.h"
 
-#include "NeoVMProgram.h"
-
 #include <cstdio>
-#include <cstring>
 #include <string>
 #include <utility>
 #include <vector>
@@ -52,27 +49,6 @@ static bool HostMethod(CallContext& context, StringView name)
     return false;
 }
 
-static void CheckImageMarkers(const std::vector<uint8_t>& bytes)
-{
-    // 선언 분석 전용 표식과 임시 원래 슬롯 번호가 저장 이미지에 섞이지 않아야 한다.
-    bool clean = bytes.size() >= sizeof(SNeoVMHeader);
-    SNeoVMHeader header{};
-    if (clean)
-    {
-        std::memcpy(&header, bytes.data(), sizeof(header));
-        clean = header._iCodeSize >= 0 && header._iCodeSize % sizeof(SVMOperation) == 0 &&
-            static_cast<std::size_t>(header._iCodeSize) <= bytes.size() - sizeof(header);
-    }
-    if (clean) for (int offset = 0; offset < header._iCodeSize; offset += sizeof(SVMOperation))
-    {
-        SVMOperation op{};
-        std::memcpy(&op, bytes.data() + sizeof(header) + offset, sizeof(op));
-        if (op.op == NOP_VAR_CLEAR && ((op.argFlag & NEOS_ARG_N3_IMMEDIATE) || op.n2 || op.n3))
-            clean = false;
-    }
-    Check(clean, "saved bytecode has no declaration-analysis marker");
-}
-
 static ProgramHandle Compile(IRuntime* runtime, const std::string& source,
     bool debug, bool image, Error& error)
 {
@@ -84,7 +60,6 @@ static ProgramHandle Compile(IRuntime* runtime, const std::string& source,
     {
         std::vector<uint8_t> bytes;
         error = runtime->CompileToBytecode(desc, bytes);
-        if (error.ok()) CheckImageMarkers(bytes);
         return error.ok() ? runtime->LoadProgram(bytes, &error) : ProgramHandle{};
     }
     auto compiled = runtime->Compile(desc);
@@ -149,15 +124,15 @@ static std::vector<BehaviorCase> BehaviorCases()
         {"native reentry observes capture", "var x;var good=Host.CaptureIsNull(fun(){return x;});x=9;return good&&x==9;"},
         {"native RHS assigns", "var x;x=Host.Value();return x==9;"},
         {"multiple declarations", "var x;var y;if(first){x=1;y=2;}else{x=3;y=4;}if(first)return x+y==3;return x+y==7;"},
-        {"candidate followed by null assignment", "var x;var y;x=y;y=9;return x==null&&y==9;"},
-        {"null temporary retargets another local", "var x;var y=null;x=9;return y==null&&x==9;"},
+        {"copy from uninitialized local", "var x;var y;x=y;y=9;return x==null&&y==9;"},
+        {"explicit null initializes another local", "var x;var y=null;x=9;return y==null&&x==9;"},
         {"scalar and shared container branches", "var x;if(first)x=[2];else x=3;if(first){var alias=x;alias[0]=5;return x[0]==5;}return x==3;"},
         {"vector COW after complete assignment", "var original=math.Vector2(2,3);var x;if(first)x=original;else x=math.Vector2(4,5);x[0]=9;if(first)return original[0]==2&&x[1]==3;return original[0]==2&&x[1]==5;"},
-        {"range surrounds candidates", "var sum=0;for(var i in 0,4){var x;if(i<2)x=1;else x=2;sum+=x;}return sum==6;"},
-        {"while surrounds candidates", "var i=0;var sum=0;while(i<4){var x;if(i<2)x=1;else x=2;sum+=x;i++;}return sum==6;"},
-        {"switch surrounds candidate", "var key=0;if(first)key++;if(second)key+=2;var sum=0;switch(key){case 0:{var x;if(second)x=10;else x=11;sum=x;}case 1:{var x;if(second)x=20;else x=21;sum=x;}case 2:{var x;if(second)x=30;else x=31;sum=x;}default:{var x;if(second)x=40;else x=41;sum=x;}}if(key==0)return sum==11;if(key==1)return sum==21;if(key==2)return sum==30;return sum==40;"},
+        {"range loop contains declarations", "var sum=0;for(var i in 0,4){var x;if(i<2)x=1;else x=2;sum+=x;}return sum==6;"},
+        {"while loop contains declarations", "var i=0;var sum=0;while(i<4){var x;if(i<2)x=1;else x=2;sum+=x;i++;}return sum==6;"},
+        {"switch branches contain declarations", "var key=0;if(first)key++;if(second)key+=2;var sum=0;switch(key){case 0:{var x;if(second)x=10;else x=11;sum=x;}case 1:{var x;if(second)x=20;else x=21;sum=x;}case 2:{var x;if(second)x=30;else x=31;sum=x;}default:{var x;if(second)x=40;else x=41;sum=x;}}if(key==0)return sum==11;if(key==1)return sum==21;if(key==2)return sum==30;return sum==40;"},
         {"nested switch jump targets", "var key=0;if(first)key++;if(second)key+=2;var result=0;switch(key){case 0,1:{var x;if(first)x=1;else x=2;switch(x){case 1:result=11;default:result=12;}}default:{var x;if(first)x=3;else x=4;switch(x){case 3:result=23;default:result=24;}}}if(key==0)return result==12;if(key==1)return result==11;if(key==2)return result==24;return result==23;"},
-        {"switch writes candidate", "var x;switch(first){case false:x=1;default:x=2;}if(first)return x==2;return x==1;"},
+        {"switch assigns local", "var x;switch(first){case false:x=1;default:x=2;}if(first)return x==2;return x==1;"},
         {"switch missing default", "var x;switch(first){case true:x=9;}if(first)return x==9;return x==null;"},
         {"switch and loop exits", "var total=0;for(var i in 0,5){var x;if(i<2)x=1;else x=2;switch(i){case 0:continue;case 1:total+=x;default:{var y;if(first)y=3;else y=4;total+=x+y;}}if(i==3)break;}if(first)return total==11;return total==13;"}
     };
@@ -180,7 +155,7 @@ export fun Probe(){return observed&&value==9;}
             operation + "return true;}export fun Probe(){Seed();return Exercise();}", true});
     }
 #ifdef CSTYLE_FOR
-    cases.push_back({"classic for surrounds candidates", R"NS(
+    cases.push_back({"classic for contains declarations", R"NS(
 export fun Probe(){var sum=0;for(var i=0;i<4;i++){var x;if(i<2)x=1;else x=2;sum+=x;}return sum==6;}
 )NS"});
 #endif
@@ -237,43 +212,42 @@ struct ShapeCase
 {
     const char* name;
     const char* source;
-    int optimizedClears;
-    int debugClears;
+    int clears;
 };
 
 static void RunShapes(IRuntime* runtime, bool debug, bool image)
 {
-    // 실행 결과만 같아도 초기화 명령이 남을 수 있으므로 실제 CLR 개수를 검사한다.
+    // 이후 대입 여부와 디버그 정보 유무에 관계없이 선언의 CLR이 유지되는지 검사한다.
     const ShapeCase cases[] = {
-        {"straight overwrite", "export fun Probe(){var x;x=9;return x;}", 0, 1},
-        {"float overwrite", "export fun Probe(){var x;x=1.25;return x;}", 0, 1},
-        {"local copy overwrite", "export fun Probe(var value){var x;x=value;return x+1;}", 0, 1},
-        {"copy fused into return stays conservative", "export fun Probe(var value){var x;x=value;return x;}", 1, 1},
-        {"explicit null overwrite", "export fun Probe(){var x;x=null;return x;}", 1, 2},
-        {"both branch overwrites", "export fun Probe(var c){var x;if(c)x=1;else x=2;return x;}", 0, 1},
-        {"nested branch overwrites", "export fun Probe(var c,var d){var x;if(c){if(d)x=1;else x=2;}else{if(d)x=3;else x=4;}return x;}", 0, 1},
-        {"separated candidates", "export fun Probe(){var x;x=1;var y;y=2;return x+y;}", 0, 2},
-        {"other local write is a barrier", "export fun Probe(var c){var x;var y;if(c){x=1;y=2;}else{x=3;y=4;}return x+y;}", 2, 2},
-        {"read second candidate before write", "export fun Probe(){var x;var y;x=y;y=9;return x;}", 2, 2},
-        {"null temporary is not a declaration", "export fun Probe(){var x;var y=null;x=9;return y;}", 2, 2},
-        {"allocation is a barrier", "export fun Probe(){var x;var other=[1];x=9;return x;}", 1, 1},
-        {"incomplete branch", "export fun Probe(var c){var x;if(c)x=1;return x;}", 1, 1},
-        {"condition reads candidate", "export fun Probe(){var x;if(x==null)x=1;else x=2;return x;}", 2, 2},
-        {"RHS reads candidate", "export fun Probe(){var x;x=(x==null);return x;}", 2, 2},
-        {"self assignment reads candidate", "export fun Probe(){var x;x=x;return x;}", 1, 1},
-        {"compound reads candidate", "export fun Probe(){var x;x+=1;return x;}", 1, 1},
-        {"increment reads candidate", "export fun Probe(){var x;x++;return x;}", 1, 1},
-        {"range may not execute", "export fun Probe(var n){var x;for(var i in 0,n)x=1;return x;}", 1, 1},
-        {"while may not execute", "export fun Probe(var c){var x;while(c){x=1;break;}return x;}", 1, 1},
-        {"range descriptor reads upper", "export fun Probe(var n){var x;if(n>=0&&n<=x)x=1;else x=2;return x;}", 1, 1},
-        {"range descriptor reads lower", "export fun Probe(var n){var x;if(n>=x&&n<=9)x=1;else x=2;return x;}", 1, 1},
-        {"local range condition permits overwrite", "export fun Probe(var n){var x;if(n>=0&&n<=9)x=1;else x=2;return x;}", 0, 1},
-        {"global condition is a barrier", "var condition=true;export fun Probe(){var x;if(condition)x=1;else x=2;return x;}", 1, 1},
-        {"global copy is a barrier", "var value=3;export fun Probe(){var x;x=value;return x+1;}", 1, 1},
-        {"call before overwrite", "export fun Probe(){var x;Host.Value();x=9;return x;}", 1, 1},
-        {"call supplies overwrite", "export fun Probe(){var x;x=Host.Value();return x;}", 1, 1},
-        {"closure reads candidate", "export fun Probe(){var x;var read=fun(){return x;};x=9;return read();}", 1, 1},
-        {"global remains initialized", "export var x;x=9;export fun Probe(){return x;}", 1, 1}
+        {"straight overwrite", "export fun Probe(){var x;x=9;return x;}", 1},
+        {"float overwrite", "export fun Probe(){var x;x=1.25;return x;}", 1},
+        {"local copy overwrite", "export fun Probe(var value){var x;x=value;return x+1;}", 1},
+        {"copy followed by return", "export fun Probe(var value){var x;x=value;return x;}", 1},
+        {"explicit null overwrite", "export fun Probe(){var x;x=null;return x;}", 2},
+        {"both branch overwrites", "export fun Probe(var c){var x;if(c)x=1;else x=2;return x;}", 1},
+        {"nested branch overwrites", "export fun Probe(var c,var d){var x;if(c){if(d)x=1;else x=2;}else{if(d)x=3;else x=4;}return x;}", 1},
+        {"separate declarations", "export fun Probe(){var x;x=1;var y;y=2;return x+y;}", 2},
+        {"multiple locals assigned in branches", "export fun Probe(var c){var x;var y;if(c){x=1;y=2;}else{x=3;y=4;}return x+y;}", 2},
+        {"copy from uninitialized second local", "export fun Probe(){var x;var y;x=y;y=9;return x;}", 2},
+        {"bare declaration and explicit null", "export fun Probe(){var x;var y=null;x=9;return y;}", 2},
+        {"allocation before assignment", "export fun Probe(){var x;var other=[1];x=9;return x;}", 1},
+        {"incomplete branch", "export fun Probe(var c){var x;if(c)x=1;return x;}", 1},
+        {"condition reads uninitialized local", "export fun Probe(){var x;if(x==null)x=1;else x=2;return x;}", 2},
+        {"assignment reads uninitialized local", "export fun Probe(){var x;x=(x==null);return x;}", 2},
+        {"self assignment reads null", "export fun Probe(){var x;x=x;return x;}", 1},
+        {"compound assignment reads null", "export fun Probe(){var x;x+=1;return x;}", 1},
+        {"increment reads null", "export fun Probe(){var x;x++;return x;}", 1},
+        {"range may not execute", "export fun Probe(var n){var x;for(var i in 0,n)x=1;return x;}", 1},
+        {"while may not execute", "export fun Probe(var c){var x;while(c){x=1;break;}return x;}", 1},
+        {"range descriptor reads upper", "export fun Probe(var n){var x;if(n>=0&&n<=x)x=1;else x=2;return x;}", 1},
+        {"range descriptor reads lower", "export fun Probe(var n){var x;if(n>=x&&n<=9)x=1;else x=2;return x;}", 1},
+        {"local range condition before assignment", "export fun Probe(var n){var x;if(n>=0&&n<=9)x=1;else x=2;return x;}", 1},
+        {"global condition before assignment", "var condition=true;export fun Probe(){var x;if(condition)x=1;else x=2;return x;}", 1},
+        {"copy from global", "var value=3;export fun Probe(){var x;x=value;return x+1;}", 1},
+        {"call before overwrite", "export fun Probe(){var x;Host.Value();x=9;return x;}", 1},
+        {"call supplies overwrite", "export fun Probe(){var x;x=Host.Value();return x;}", 1},
+        {"closure captures uninitialized local", "export fun Probe(){var x;var read=fun(){return x;};x=9;return read();}", 1},
+        {"global remains initialized", "export var x;x=9;export fun Probe(){return x;}", 1}
     };
     for (const auto& test : cases)
     {
@@ -288,7 +262,7 @@ static void RunShapes(IRuntime* runtime, bool debug, bool image)
         int count = 0;
         for (const auto& instruction : instructions)
             if (instruction.assembly.compare(0, 5, "CLR  ") == 0) ++count;
-        const int expected = debug ? test.debugClears : test.optimizedClears;
+        const int expected = test.clears;
         Check(!instructions.empty() && count == expected,
             label + " CLR=" + std::to_string(count) + " expected=" + std::to_string(expected));
         runtime->DestroyProgram(program);

@@ -598,18 +598,6 @@ struct SFunctionInfo
 		//_code->Write(&r, sizeof(r));
 		Push_NoFlag(r, 0, 0);
 	}
-	// 선언 CLR만 표시한다. n2에 원래 슬롯을 남겨 재타겟된 명령은 후보에서 제외한다.
-	// 최종화에서 이 플래그와 n2를 복원하므로 저장 이미지에는 표시가 남지 않는다.
-	static constexpr ArgFlag DECLARATION_CLEAR_FLAG = NEOS_ARG_N3_IMMEDIATE;
-	void Push_DeclarationClear(CArchiveRdWC& ar, int slot)
-	{
-		Push_OP1(ar, NOP_VAR_CLEAR, slot);
-		if (ar._debug || slot <= 0 || slot >= COMPILE_LOCALTMP_VAR_BEGIN)
-			return;
-		SVMOperation* op = GetOPPointer(_iLastOPOffset);
-		op->argFlag = DECLARATION_CLEAR_FLAG;
-		op->n2 = (short)slot;
-	}
 	void	Push_OP0(CArchiveRdWC& ar, eNOperation op)
 	{
 		AddDebugData(ar);
