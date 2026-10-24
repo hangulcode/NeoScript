@@ -6,6 +6,8 @@
 #include "NeoTextLoader.h"
 #include <sstream>
 #include <locale>
+#include <clocale>
+#include <cstdlib>
 
 namespace NeoScript
 {
@@ -374,10 +376,23 @@ bool StringToDouble(double& r, const char* p) {
 		if (*p != '\0')
 			return false;
 
-        std::istringstream decimal(original);
-        decimal.imbue(std::locale::classic());
-        double precise;
-        if (decimal >> precise) value = std::fabs(precise);
+        // 정확한 반올림은 C 런타임의 strtod 가 보장한다(MSVC UCRT/glibc/bionic 모두 올바른 반올림).
+        // 소수점 기호가 '.' 인 로케일에서만 쓰고, 호스트가 다른 로케일을 걸었으면 classic 스트림으로 간다.
+        // 리터럴마다 istringstream 을 만들고 imbue 하는 비용(약 2–3 µs)을 없앤다.
+        const char* decimalPoint = std::localeconv()->decimal_point;
+        if (decimalPoint != nullptr && decimalPoint[0] == '.' && decimalPoint[1] == '\0')
+        {
+            char* end = nullptr;
+            const double precise = std::strtod(original, &end);
+            if (end != original) value = std::fabs(precise);
+        }
+        else
+        {
+            std::istringstream decimal(original);
+            decimal.imbue(std::locale::classic());
+            double precise;
+            if (decimal >> precise) value = std::fabs(precise);
+        }
 		r = negative ? -value : value;
 		return true;
 	}

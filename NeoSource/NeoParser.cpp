@@ -399,7 +399,7 @@ static bool TryPushImmediate(CArchiveRdWC& ar, SFunctions& funs, int dest, const
 		return false;   // double 빌드: 상수 풀 경유로 되돌아간다(슬롯은 그대로 둔다)
 
 	if (canReclaim)
-		funs._staticVars.pop_back();
+		funs.PopLastStatic();
 	return true;
 }
 
@@ -1992,8 +1992,26 @@ TK_TYPE Try_ParseIntNum(int& iResultInt, CArchiveRdWC& ar, SFunctions& funs, SVa
 	return TK_NONE;
 }
 
-static bool ExpressionMayMutate(CArchiveRdWC& ar, TK_TYPE e1, TK_TYPE e2, TK_TYPE e3,
+// 식을 끝까지 미리 훑어 부작용 종류를 돌려준다(비트 집합). 토큰 분류만 하고 코드는 내지 않는다.
+//  ASSIGN: =, op=, ++, --   CALL: 이름/']'/')' 뒤의 '('   HOST: 등록된 호스트 객체의 선택자(Host.x, Host[k]) — getter 가 전역을 바꿀 수 있다
+enum { EXPR_EFFECT_ASSIGN = 1, EXPR_EFFECT_CALL = 2, EXPR_EFFECT_HOST = 4,
+       EXPR_EFFECT_ALL = EXPR_EFFECT_ASSIGN | EXPR_EFFECT_CALL | EXPR_EFFECT_HOST };
+static int ScanExpressionEffects(CArchiveRdWC& ar, SVars& vars, TK_TYPE e1, TK_TYPE e2, TK_TYPE e3,
     TK_TYPE e4, TK_TYPE e5, TK_TYPE e6);
+// '(' 바로 뒤에서 호출 인자 목록을 짝 ')' 까지 훑어 인자별 부작용 플래그를 모은다. EOF 면 false.
+static bool ScanCallArguments(CArchiveRdWC& ar, SVars& vars, std::vector<int>& argEffects);
+// 뒤따르는 코드가 실행되기 전에 이 피연산자를 임시로 복사해 둬야 하는가.
+//  - 임시/상수: 아무도 바꾸지 못한다.
+//  - 지역·인자: 호출된 함수는 호출자의 지역을 바꿀 수 없다(캡처는 값 복사). 같은 식 안의 대입(=, op=, ++, --)만 위험.
+//  - 전역: 호출된 함수와 호스트 객체 getter 가 바꿀 수 있다. 스크립트 값의 선택자 읽기(a[i], m.k)는 값을 바꾸지 않는다.
+static bool NeedsSnapshot(int slot, int effects)
+{
+    if (slot == INVALID_ERROR_PARSEJOB || IsTempVar(slot) || IsCompileConstant(slot))
+        return false;
+    if (slot <= COMPILE_GLOBAL_VAR_BEGIN)
+        return (effects & (EXPR_EFFECT_ASSIGN | EXPR_EFFECT_CALL | EXPR_EFFECT_HOST)) != 0;
+    return (effects & EXPR_EFFECT_ASSIGN) != 0;
+}
 
 bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
@@ -2007,7 +2025,14 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 	if (tkType1 == TK_L_SMALL)
 	{
         ResolveContainer(iResultStack, ar, funs);
-        if (!pFun && iResultStack._iVar != INVALID_ERROR_PARSEJOB)
+        // 인자 목록을 한 번만 훑어 인자별 부작용을 얻는다. 수신자 복사, 인자 복사, 인자 창 융합 판정이 함께 쓴다.
+        std::vector<int> argEffects;
+        const bool argsScanned = ScanCallArguments(ar, vars, argEffects);
+        int allArgEffects = argsScanned ? 0 : EXPR_EFFECT_ALL;
+        for (size_t i = 0; i < argEffects.size(); ++i) allArgEffects |= argEffects[i];
+        // 수신자(lst.len() 의 lst)는 인자 평가가 그것을 다시 묶을 수 있을 때만 복사한다.
+        // 인자가 없거나 단순 값뿐이면 복사할 이유가 없다(이전에는 호출마다 MOV 하나를 냈다).
+        if (!pFun && iResultStack._iVar != INVALID_ERROR_PARSEJOB && NeedsSnapshot(iResultStack._iVar, allArgEffects))
         {
             SOperand receiver(iResultStack._iVar);
             SnapshotValue(receiver, ar, funs);
@@ -2038,17 +2063,28 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 			//}
 			//else
 			{
-                argMayClobberCallWindow.push_back(ExpressionMayMutate(ar, TK_SEMICOLON, TK_COMMA,
-                    TK_R_SMALL, TK_R_ARRAY, TK_UNUSED, TK_UNUSED));
+                // 이 인자 뒤의 인자들이 가진 부작용. 인자 창(CALLARG) 을 다시 쓰는 것은 호출뿐이다 —
+                // 호스트 getter 는 PropertyNative 가 프레임을 _iSP_Vars_Max2 위에 잡으므로 창을 건드리지 않는다.
+                const int thisArgEffects = (argsScanned && iParamCount < (int)argEffects.size()) ? argEffects[iParamCount] : EXPR_EFFECT_ALL;
+                int laterArgEffects = argsScanned ? 0 : EXPR_EFFECT_ALL;
+                for (size_t later = (size_t)iParamCount + 1; later < argEffects.size(); ++later) laterArgEffects |= argEffects[later];
+                argMayClobberCallWindow.push_back((thisArgEffects & EXPR_EFFECT_CALL) != 0);
 				int iCodeOffBefore = funs._cur->_code->GetBufferOffset();
 				iTempVar.Reset();
+				// 인자 식의 ParseJob 은 방금 훑은 이 인자의 비트를 그대로 쓴다(재스캔 생략).
+				funs._presetExprEffects = thisArgEffects;
+				funs._presetExprOffset = ar.GetBufferOffset();
 				tkType3 = ParseShortCircuitLogic(true, iTempVar, ar, funs, vars);
+				funs._presetExprEffects = -1;
 				if (iTempVar.IsInvalidValue())
 				{
 					SetParserCompileError(ar, PCE_INVALID_CALL_ARGUMENT);
 					return false;
 				}
-				SnapshotValue(iTempVar, ar, funs);
+				// 컨테이너 읽기는 여기서 실체화하고, 변수는 뒤 인자가 그 값을 바꿀 수 있을 때만 복사한다.
+				MaterializeValue(iTempVar, ar, funs);
+				if (NeedsSnapshot(iTempVar._iVar, laterArgEffects))
+					SnapshotValue(iTempVar, ar, funs);
 				argOperands.push_back(iTempVar);
 
 				// 인자 식 전체가 "임시변수에 쓰는 단일 op" 로 끝났으면 나중에
@@ -2880,40 +2916,247 @@ bool ParseToType(int& iResultStack, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 //case TK_COMMA:		// ,
 //case TK_R_SMALL:	// )
 //case TK_R_ARRAY:	// ]
-static bool ExpressionMayMutate(CArchiveRdWC& ar, TK_TYPE e1, TK_TYPE e2, TK_TYPE e3,
-    TK_TYPE e4, TK_TYPE e5, TK_TYPE e6)
+static bool IsAssignmentToken(TK_TYPE type)
 {
-    struct Restore { CArchiveRdWC& ar; CArchiveRdWC::Cursor cursor; ~Restore(){ ar.RestoreCursor(std::move(cursor)); } } restore{ar, ar.SaveCursor()};
-    int depth = 0;
-    TK_TYPE previous = TK_NONE;
-    for (;;)
-    {
-        std::string token;
-        const TK_TYPE type = GetToken(ar, token);
-        if (type == TK_NONE) return false;
-        if (depth == 0 && (type == e1 || type == e2 || type == e3 || type == e4 ||
-            (e5 != TK_UNUSED && type == e5) || (e6 != TK_UNUSED && type == e6))) return false;
-        if (type == TK_EQUAL || type == TK_PLUS_EQ || type == TK_MINUS_EQ || type == TK_MUL_EQ ||
-            type == TK_DIV_EQ || type == TK_PERCENT_EQ || type == TK_LSHIFT_EQ || type == TK_RSHIFT_EQ ||
-            type == TK_AND_EQ || type == TK_OR_EQ || type == TK_XOR_EQ || type == TK_PLUS2 || type == TK_MINUS2)
-            return true;
-        // Native selector reads may invoke host property callbacks.
-        if (type == TK_DOT || type == TK_L_ARRAY) return true;
-        if (type == TK_L_SMALL && (previous == TK_STRING || previous == TK_R_ARRAY || previous == TK_R_SMALL)) return true;
-        if (type == TK_QUOTE1 || type == TK_QUOTE2)
-        {
-            if (!GetQuotationString(ar, token, type == TK_QUOTE1 ? '\'' : '"')) return true;
-        }
-        if (type == TK_L_SMALL || type == TK_L_ARRAY || type == TK_L_MIDDLE) ++depth;
-        else if (type == TK_R_SMALL || type == TK_R_ARRAY || type == TK_R_MIDDLE)
-        {
-            if (depth == 0) return false;
-            --depth;
-        }
-        previous = type;
-    }
+    return type == TK_EQUAL || type == TK_PLUS_EQ || type == TK_MINUS_EQ || type == TK_MUL_EQ ||
+        type == TK_DIV_EQ || type == TK_PERCENT_EQ || type == TK_LSHIFT_EQ || type == TK_RSHIFT_EQ ||
+        type == TK_AND_EQ || type == TK_OR_EQ || type == TK_XOR_EQ || type == TK_PLUS2 || type == TK_MINUS2;
 }
 
+// ---------------------------------------------------------------------------
+// 식 선스캔. 토큰을 만들지 않고 소스 문자를 직접 훑는다 — GetToken 은 토큰마다 std::string 을 만들고
+// define 표를 찾기 때문에, 식마다 한 번 더 어휘분석하면 컴파일 시간이 중첩 깊이에 제곱으로 늘었다.
+// 판정에 필요한 것만 본다: 대입 연산자, 호출 '(', 등록된 호스트 객체의 선택자, 괄호 깊이, 종결 토큰.
+// 문자열·주석은 건너뛴다. 해석할 수 없는 상황이면 보수적으로 EXPR_EFFECT_ALL 을 돌려준다.
+// ---------------------------------------------------------------------------
+namespace
+{
+enum EffectPrev { EP_NONE, EP_IDENT, EP_CLOSE };   // 직전 토큰: 이름 / ')' ']' / 그 외
+
+struct EffectScanner
+{
+    CArchiveRdWC& ar;
+    SVars& vars;
+    const TK_TYPE* ends;      // 종결 토큰(depth 0 에서만), 최대 6개, TK_NONE/TK_UNUSED 는 무시
+    int endCount;
+    bool splitArgs;           // 호출 인자 모드: depth 0 의 ',' 로 나누고 ')' 에서 끝난다
+    std::vector<int>* perArg;
+
+    int effects = 0;          // splitArgs 면 현재 인자의 비트
+    int depth = 0;
+    EffectPrev prev = EP_NONE;
+    bool prevHost = false;    // 직전 이름이 등록된 호스트 객체인가
+    bool sawArgToken = false;
+    bool complete = false;    // 종결 토큰(또는 짝 ')')을 만나 정상 종료했는가
+    int k = 0;                // 현재 오프셋에서의 상대 위치
+    u16 pendingQuote = 0;     // 큐의 마지막 토큰이 따옴표면 본문이 아직 소스에 남아 있다 — 먼저 건너뛴다
+
+    EffectScanner(CArchiveRdWC& a, SVars& v, const TK_TYPE* e, int n, bool split, std::vector<int>* out)
+        : ar(a), vars(v), ends(e), endCount(n), splitArgs(split), perArg(out) {}
+
+    u16 Peek(int d = 0) { return ar.PeekData(k + d); }
+    bool AtEnd() { return ar.GetBufferOffset() + k >= ar.GetBufferSize(); }
+    bool IsEndType(TK_TYPE t)
+    {
+        for (int i = 0; i < endCount; ++i) if (ends[i] == t) return true;
+        return false;
+    }
+    void SetIdent(const std::string& name) { prev = EP_IDENT; prevHost = vars._hostGlobals.count(name) != 0; }
+    void Add(int bits) { effects |= bits; }
+    bool AllKnown() const { return !splitArgs && effects == EXPR_EFFECT_ALL; }
+
+    // depth 0 의 닫는 괄호/종결 문자. true 면 스캔 종료.
+    bool Closer(TK_TYPE t, bool isParen)
+    {
+        if (depth > 0) { --depth; prev = isParen ? EP_CLOSE : EP_NONE; return false; }
+        if (splitArgs) { if (t == TK_R_SMALL) { if (sawArgToken) perArg->push_back(effects); complete = true; } return true; }
+        complete = true;   // 짝이 맞지 않는 닫힘도 식의 끝이다(원래 토큰 스캐너와 같은 규칙)
+        return true;
+    }
+    bool Separator(TK_TYPE t)   // ';' ',' ':' '&&' '||'
+    {
+        if (depth > 0) { prev = EP_NONE; return false; }
+        if (splitArgs && t == TK_COMMA) { perArg->push_back(effects); effects = 0; sawArgToken = false; prev = EP_NONE; return false; }
+        if (IsEndType(t)) { complete = true; return true; }
+        prev = EP_NONE;
+        return false;
+    }
+
+    // 1) 밀어 둔 토큰(PushToken) 이 먼저 나온다.
+    bool Queued()
+    {
+        for (const SToken& st : ar.m_sTokenQueue)
+        {
+            const TK_TYPE t = st._type;
+            if (t == TK_NONE) return true;
+            if (pendingQuote != 0) { effects = EXPR_EFFECT_ALL; return true; }   // 따옴표 뒤에 또 토큰: 해석 불가
+            sawArgToken = true;
+            if (IsAssignmentToken(t)) { Add(EXPR_EFFECT_ASSIGN); prev = EP_NONE; continue; }
+            switch (t)
+            {
+            case TK_STRING: SetIdent(st._tk); continue;
+            case TK_QUOTE1: pendingQuote = '\''; prev = EP_NONE; continue;
+            case TK_QUOTE2: pendingQuote = '"'; prev = EP_NONE; continue;
+            case TK_L_SMALL:
+                if (prev == EP_IDENT || prev == EP_CLOSE) Add(EXPR_EFFECT_CALL);
+                ++depth; prev = EP_NONE; continue;
+            case TK_L_ARRAY:
+                if (prev == EP_IDENT && prevHost) Add(EXPR_EFFECT_HOST);
+                ++depth; prev = EP_NONE; continue;
+            case TK_DOT:
+                if (prev == EP_IDENT && prevHost) Add(EXPR_EFFECT_HOST);
+                prev = EP_NONE; continue;
+            case TK_L_MIDDLE: ++depth; prev = EP_NONE; continue;
+            case TK_R_SMALL: if (Closer(t, true)) return true; continue;
+            case TK_R_ARRAY: if (Closer(t, true)) return true; continue;
+            case TK_R_MIDDLE: if (Closer(t, false)) return true; continue;
+            case TK_SEMICOLON: case TK_COMMA: case TK_COLON: case TK_AND2: case TK_OR2:
+                if (Separator(t)) return true; continue;
+            default: prev = EP_NONE; continue;
+            }
+        }
+        return false;
+    }
+
+    // 2) 소스 문자. 반환 true 면 종료.
+    bool Chars()
+    {
+        if (pendingQuote != 0)
+        {
+            for (;;)
+            {
+                if (AtEnd()) { effects = EXPR_EFFECT_ALL; return true; }
+                const u16 d = Peek();
+                if (d == '\\') { k += 2; continue; }
+                ++k;
+                if (d == pendingQuote) break;
+            }
+            pendingQuote = 0;
+        }
+        for (;;)
+        {
+            if (AllKnown()) return true;
+            if (AtEnd()) return true;   // complete=false (EOF)
+            const u16 c = Peek();
+            if (c == ' ' || c == '\t' || c == '\r' || c == '\n') { ++k; continue; }
+            if (c == '/')
+            {
+                const u16 n = Peek(1);
+                if (n == '/') { k += 2; while (!AtEnd() && Peek() != '\n') ++k; continue; }
+                if (n == '*')
+                {
+                    k += 2;
+                    for (;;) { if (AtEnd()) { effects = EXPR_EFFECT_ALL; return true; } if (Peek() == '*' && Peek(1) == '/') { k += 2; break; } ++k; }
+                    continue;
+                }
+                sawArgToken = true;
+                if (n == '=') { Add(EXPR_EFFECT_ASSIGN); k += 2; } else ++k;
+                prev = EP_NONE; continue;
+            }
+            sawArgToken = true;
+            if (c == '"' || c == '\'')
+            {
+                ++k;
+                for (;;)
+                {
+                    if (AtEnd()) { effects = EXPR_EFFECT_ALL; return true; }
+                    const u16 d = Peek();
+                    if (d == '\\') { k += 2; continue; }
+                    ++k;
+                    if (d == c) break;
+                }
+                prev = EP_NONE; continue;
+            }
+            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c >= 0x80)
+            {
+                char name[64]; int len = 0; bool ascii = true;
+                while (!AtEnd())
+                {
+                    const u16 d = Peek();
+                    if (!((d >= 'a' && d <= 'z') || (d >= 'A' && d <= 'Z') || (d >= '0' && d <= '9') || d == '_' || d >= 0x80)) break;
+                    if (d >= 0x80 || len >= 63) ascii = false; else name[len++] = (char)d;
+                    ++k;
+                }
+                name[len] = 0;
+                prev = EP_IDENT; prevHost = ascii && len > 0 && vars._hostGlobals.count(std::string(name, len)) != 0;
+                continue;
+            }
+            if (c >= '0' && c <= '9')
+            {
+                while (!AtEnd())
+                {
+                    const u16 d = Peek();
+                    if ((d >= '0' && d <= '9') || (d >= 'a' && d <= 'z') || (d >= 'A' && d <= 'Z') || d == '_') { ++k; continue; }
+                    if (d == '.' && Peek(1) >= '0' && Peek(1) <= '9') { ++k; continue; }
+                    if ((d == '+' || d == '-') && (Peek(-1) == 'e' || Peek(-1) == 'E')) { ++k; continue; }
+                    break;
+                }
+                prev = EP_NONE; continue;
+            }
+            ++k;
+            const u16 n = Peek();
+            switch (c)
+            {
+            case '(':
+                if (prev == EP_IDENT || prev == EP_CLOSE) Add(EXPR_EFFECT_CALL);
+                ++depth; prev = EP_NONE; break;
+            case '[':
+                if (prev == EP_IDENT && prevHost) Add(EXPR_EFFECT_HOST);
+                ++depth; prev = EP_NONE; break;
+            case '{': ++depth; prev = EP_NONE; break;
+            case ')': if (Closer(TK_R_SMALL, true)) return true; break;
+            case ']': if (Closer(TK_R_ARRAY, true)) return true; break;
+            case '}': if (Closer(TK_R_MIDDLE, false)) return true; break;
+            case '.':
+                if (n == '.') { ++k; prev = EP_NONE; break; }   // '..' 잇기
+                if (prev == EP_IDENT && prevHost) Add(EXPR_EFFECT_HOST);
+                prev = EP_NONE; break;
+            case ';': if (Separator(TK_SEMICOLON)) return true; break;
+            case ',': if (Separator(TK_COMMA)) return true; break;
+            case ':': if (Separator(TK_COLON)) return true; break;
+            case '=': if (n == '=') ++k; else Add(EXPR_EFFECT_ASSIGN); prev = EP_NONE; break;
+            case '!': if (n == '=') ++k; prev = EP_NONE; break;
+            case '<': case '>':
+                if (n == c) { ++k; if (Peek() == '=') { ++k; Add(EXPR_EFFECT_ASSIGN); } }
+                else if (n == '=') ++k;
+                prev = EP_NONE; break;
+            case '+': case '-':
+                if (n == c || n == '=') { ++k; Add(EXPR_EFFECT_ASSIGN); }
+                prev = EP_NONE; break;
+            case '*': case '%': case '^':
+                if (n == '=') { ++k; Add(EXPR_EFFECT_ASSIGN); }
+                prev = EP_NONE; break;
+            case '&':
+                if (n == '&') { ++k; if (Separator(TK_AND2)) return true; break; }
+                if (n == '=') { ++k; Add(EXPR_EFFECT_ASSIGN); }
+                prev = EP_NONE; break;
+            case '|':
+                if (n == '|') { ++k; if (Separator(TK_OR2)) return true; break; }
+                if (n == '=') { ++k; Add(EXPR_EFFECT_ASSIGN); }
+                prev = EP_NONE; break;
+            default: prev = EP_NONE; break;
+            }
+        }
+    }
+};
+} // namespace
+
+static int ScanExpressionEffects(CArchiveRdWC& ar, SVars& vars, TK_TYPE e1, TK_TYPE e2, TK_TYPE e3,
+    TK_TYPE e4, TK_TYPE e5, TK_TYPE e6)
+{
+    const TK_TYPE ends[6] = { e1, e2, e3, e4, e5, e6 };
+    EffectScanner scan(ar, vars, ends, 6, false, nullptr);
+    if (!scan.Queued()) scan.Chars();
+    return scan.effects;
+}
+static bool ScanCallArguments(CArchiveRdWC& ar, SVars& vars, std::vector<int>& argEffects)
+{
+    argEffects.clear();
+    EffectScanner scan(ar, vars, nullptr, 0, true, &argEffects);
+    if (!scan.Queued()) scan.Chars();
+    if (!scan.complete) { argEffects.clear(); return false; }
+    return true;
+}
 TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef,
 	TK_TYPE tkEnd1, TK_TYPE tkEnd2, TK_TYPE tkEnd3, TK_TYPE tkEnd4, std::vector<SJumpValue>* pContinueJumps, TK_TYPE tkEnd5, TK_TYPE tkEnd6)
 {
@@ -2930,7 +3173,12 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 	std::vector<TK_TYPE> operators;
 	bool blApperOperator = false;
 
-    const bool mayMutate = ExpressionMayMutate(ar, tkEnd1, tkEnd2, tkEnd3, tkEnd4, tkEnd5, tkEnd6);
+    int exprEffects;
+    if (funs._presetExprEffects >= 0 && funs._presetExprOffset == ar.GetBufferOffset())
+        exprEffects = funs._presetExprEffects;
+    else
+        exprEffects = ScanExpressionEffects(ar, vars, tkEnd1, tkEnd2, tkEnd3, tkEnd4, tkEnd5, tkEnd6);
+    funs._presetExprEffects = -1;
     auto reduce = [&](int maximumPriority) -> bool
     {
 	while (operators.empty() == false)
@@ -3049,10 +3297,15 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			break;
 		case TK_L_SMALL:
 			iTempOffset = INVALID_ERROR_PARSEJOB;
+			// 괄호 안은 이 식의 부분 범위다 — 바깥 비트가 상한이므로 다시 훑지 않는다.
+			funs._presetExprEffects = exprEffects;
+			funs._presetExprOffset = ar.GetBufferOffset();
 			if (TK_R_SMALL != ParseShortCircuitLogic(bReqReturn, iTempOffset, ar, funs, vars))
 			{
+				funs._presetExprEffects = -1;
 				return TK_NONE;
 			}
+			funs._presetExprEffects = -1;
 			if (!ParsePostfixSelectors(iTempOffset, ar, funs, vars)) return TK_NONE;
 			operands.push_back(SOperand(iTempOffset));
 			blApperOperator = true;
@@ -3103,7 +3356,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
                 blApperOperator = true;
                 break;
             }
-            if (mayMutate) SnapshotValue(operands.back(), ar, funs);
+            if (NeedsSnapshot(operands.back()._iVar, exprEffects)) SnapshotValue(operands.back(), ar, funs);
             else ResolveContainer(operands.back(), ar, funs);
             {
                 int priority = 0;
@@ -3147,7 +3400,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				SetParserCompileError(ar, PCE_INVALID_OPERATOR, tk1.c_str());
 				return TK_NONE;
 			}
-            if (mayMutate) SnapshotValue(operands.back(), ar, funs);
+            if (NeedsSnapshot(operands.back()._iVar, exprEffects)) SnapshotValue(operands.back(), ar, funs);
             else ResolveContainer(operands.back(), ar, funs);
             {
                 int priority = 0;
