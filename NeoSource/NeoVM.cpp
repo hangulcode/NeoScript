@@ -7,6 +7,7 @@
 #include "NeoVMWorker.h"
 #include "NeoArchive.h"
 #include "UTFString.h"
+#include "NeoStringLimits.h"
 
 #ifdef _WIN32
 #include "HttpRequest.h"
@@ -32,7 +33,7 @@ FunctionPtrNative NeoVMSystem::RegisterNative(Neo_NativeFunction func)
 	return fun;
 }
 bool	NeoVMSystem::RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFunction func, Neo_NativeProperty property,
-	const void* identityType, const void* identityObject)
+	const void* identityType, const void* identityObject, const std::shared_ptr<void>& payloadOwner)
 {
 	// 일반 VAR_MAP을 변환하지 않는다. VAR_FP_NATIVE를 생성한 뒤에만 바인딩한다.
 	if (p == nullptr || p->GetType() != VAR_FP_NATIVE || p->_fpNative == nullptr) return false;
@@ -41,6 +42,7 @@ bool	NeoVMSystem::RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeF
 	fp->_pUserData = pUserData;
 	fp->_identityType = identityType;
 	fp->_identityObject = identityObject;
+	fp->_payloadOwner = payloadOwner;
 	CNeoVMWorker::neo_pushcclosureNative(&fp->_fun, func);
 	CNeoVMWorker::neo_pushcclosureNative(&fp->_fun, property);
 
@@ -575,17 +577,19 @@ static NEOS_FORCEINLINE T* CycleList_PopFront(T*& head, T*& tail)
 
 void CNeoVM::Var_SetString(VarInfo *d, const char* str)
 {
+	CheckRuntimeStringSize(strlen(str));
 	std::string s(str);
 	Var_SetStringA(d, s);
 }
 void CNeoVM::Var_SetStringA(VarInfo *d, const std::string& str)
 {
+	// Allocate first: str may alias the old value, and failure must preserve it.
+	StringInfo* value = StringAlloc(str);
+	++value->_refCount;
 	if (d->IsAllocType())
 		Var_Release(d);
-
 	d->SetType(VAR_STRING);
-	d->_str = StringAlloc(str);
-	++d->_str->_refCount;
+	d->_str = value;
 }
 void CNeoVM::Var_SetTable(VarInfo *d, MapInfo* p)
 {
@@ -697,6 +701,7 @@ void CNeoVM::FreeCoroutine(VarInfo *d)
 
 StringInfo* CNeoVM::StringAlloc(const std::string& str)
 {
+	CheckRuntimeStringSize(str.size());
 	// 일반 문자열은 임시 문자열 루프를 위해 인터너와 해시 계산을 건너뛴다.
 	// 해시가 필요해지면 VMString::GetHash()가 그때 한 번 채운다.
 	StringInfo* p = m_sPool_String.Receive();// new StringInfo();
@@ -704,7 +709,15 @@ StringInfo* CNeoVM::StringAlloc(const std::string& str)
 	p->_interned = false;
 	p->_refCount = 0;
 
-	p->_str = str;
+	try
+	{
+		p->_str = str;
+	}
+	catch (...)
+	{
+		m_sPool_String.Confer(p);
+		throw;
+	}
 	p->_StringLen = utf_string::UTF8_LENGTH(str);
 
 	++m_sAllocStats.strings;
@@ -713,6 +726,7 @@ StringInfo* CNeoVM::StringAlloc(const std::string& str)
 
 StringInfo* CNeoVM::StringIntern(const std::string& str)
 {
+	CheckRuntimeStringSize(str.size());
 	const u32 hash = GetHashCode(str);
 	if (StringInfo* existing = FindInternedString(str, hash))
 		return existing;
@@ -1008,8 +1022,17 @@ MapInfo* CNeoVM::TableAlloc(int cnt)
 	pTable->_lastFree = -1;
 	pTable->_Bucket = nullptr;
 
+	try
+	{
+		if (cnt > 0) pTable->Reserve(cnt);
+	}
+	catch (...)
+	{
+		pTable->Free();
+		m_sPool_TableInfo.Confer(pTable);
+		throw;
+	}
 	LiveList_Insert(_sTableHead, pTable);
-	if (cnt > 0) pTable->Reserve(cnt);
 	++m_sAllocStats.maps;
 	return pTable;
 }
@@ -1044,6 +1067,7 @@ void CNeoVM::FreeFunctionProperty(FunctionPropertyInfo* fp)
 	fp->_pUserData = NULL;
 	fp->_identityType = nullptr;
 	fp->_identityObject = nullptr;
+	fp->_payloadOwner.reset();
 	m_sPool_FunctionProperty.Confer(fp);
 }
 ListInfo* CNeoVM::ListAlloc(int cnt)

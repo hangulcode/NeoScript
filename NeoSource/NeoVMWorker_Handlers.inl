@@ -6,12 +6,26 @@
 // Return 'true' to exit the RunInternal loop, 'false' to continue.
 
 NEOS_NOINLINE bool handle_STR_ADD(const SVMOperation& OP) {
-    Var_SetStringA(GetVarPtrF1(OP), ToString(GetVarPtr2(OP)) + ToString(GetVarPtr3(OP)));
+    VarInfo* first = GetVarPtr2(OP);
+    VarInfo* second = GetVarPtr3(OP);
+    if (first->GetType() == VAR_STRING && second->GetType() == VAR_STRING)
+        CheckRuntimeStringGrowth(first->_str->_str.size(), second->_str->_str.size());
+    std::string left = ToString(first), right = ToString(second);
+    CheckRuntimeStringGrowth(left.size(), right.size());
+    left += right;
+    Var_SetStringA(GetVarPtrF1(OP), left);
     return false;
 }
 
 NEOS_NOINLINE bool handle_STR_ADD_L(const SVMOperation& OP) {
-    Var_SetStringA(GetVarPtr_L(OP.n1), ToString(GetVarPtr_L(OP.n2)) + ToString(GetVarPtr_L(OP.n3)));
+    VarInfo* first = GetVarPtr_L(OP.n2);
+    VarInfo* second = GetVarPtr_L(OP.n3);
+    if (first->GetType() == VAR_STRING && second->GetType() == VAR_STRING)
+        CheckRuntimeStringGrowth(first->_str->_str.size(), second->_str->_str.size());
+    std::string left = ToString(first), right = ToString(second);
+    CheckRuntimeStringGrowth(left.size(), right.size());
+    left += right;
+    Var_SetStringA(GetVarPtr_L(OP.n1), left);
     return false;
 }
 
@@ -137,6 +151,10 @@ NEOS_FORCEINLINE bool handle_CALL_L(const SVMOperation& OP) {
 // pFunName 은 원본과 같이 분기 안에서 늦게 뽑는다(n2 == -1 센티널 보호).
 NEOS_NOINLINE bool handle_PTRCALL_native(const SVMOperation& OP, VarInfo* pVar1, VarInfo* pFunNamePre) {
     short n3 = OP.n3;
+    if ((OP.argFlag & NEOS_ARG_N2_LOCAL) == 0 && OP.n2 == -1) {
+        SetErrorUnsupport(g_sNeoRuntimeErrors[RTE_CALL_VALUE], pVar1);
+        return false;
+    }
     VarInfo* pFunName = nullptr;
     switch (pVar1->GetType())
     {
@@ -163,7 +181,7 @@ NEOS_NOINLINE bool handle_PTRCALL_native(const SVMOperation& OP, VarInfo* pVar1,
 
             if (pVarMeta->GetType() == VAR_FUN)
             {
-                Call(pVarMeta->_fun_index, n3);
+                CallFunctionValue(pVarMeta->_fun_index, n3);
                 break;
             }
             if (pVarMeta->GetType() == VAR_CLOSURE)
@@ -210,17 +228,23 @@ NEOS_FORCEINLINE bool handle_PTRCALL_impl(const SVMOperation& OP, VarInfo* pVar1
     switch (pVar1->GetType())
     {
     case VAR_FUN:
-        if ((OP.argFlag & NEOS_ARG_N2_LOCAL) == 0 && -1 == OP.n2)
-            Call(pVar1->_fun_index, OP.n3);
-        return false;
+        if ((OP.argFlag & NEOS_ARG_N2_LOCAL) == 0 && -1 == OP.n2) {
+            CallFunctionValue(pVar1->_fun_index, OP.n3);
+            return false;
+        }
+        break;
     case VAR_FUN_NATIVE:
-        if ((OP.argFlag & NEOS_ARG_N2_LOCAL) == 0 && -1 == OP.n2)
+        if ((OP.argFlag & NEOS_ARG_N2_LOCAL) == 0 && -1 == OP.n2) {
             Call(pVar1->_funPtr, OP.n3);
-        return false;
+            return false;
+        }
+        break;
     case VAR_CLOSURE:
-        if ((OP.argFlag & NEOS_ARG_N2_LOCAL) == 0 && -1 == OP.n2)
+        if ((OP.argFlag & NEOS_ARG_N2_LOCAL) == 0 && -1 == OP.n2) {
             Call(pVar1->_closure, OP.n3);
-        return false;
+            return false;
+        }
+        break;
     default:
         break;
     }
@@ -280,7 +304,7 @@ NEOS_FORCEINLINE bool handle_RETURN_impl(VarInfo* pSrc) {
         else
             Move(m_pVarStack_Pointer, pSrc);
 
-        if (m_iBreakingCallStack == 0 && IsMainCoroutine(m_pCur) == false)
+        if (m_iBreakingCallStack == 0 && !IsNativeScriptCallActive() && IsMainCoroutine(m_pCur) == false)
         {
             if (StopCoroutine(true) == true) // Other Coroutine Active (No Stop)
                 return false; // break, continue loop
@@ -517,9 +541,17 @@ NEOS_FORCEINLINE void handle_CLT_WRITE_REF(const SVMOperation& OP) {
         target = kt == VAR_STRING ? owner->_tbl->FindString(key->_str) :
             kt == VAR_INT ? owner->_tbl->FindInt(key->_int) : owner->_tbl->Find(key);
     }
-    else if (owner->GetType() == VAR_ARRAY && owner->_array->VectorDimension() &&
-             key->GetType() == VAR_INT && owner->_array->IsValidIndex(key->_int))
+    else if (owner->GetType() == VAR_ARRAY && owner->_array->VectorDimension()) {
+        if (key->GetType() != VAR_INT) {
+            SetError(RTE_ARRAY_INDEX_TYPE);
+            return;
+        }
+        if (!owner->_array->IsValidIndex(key->_int)) {
+            SetError(RTE_ARRAY_INDEX_WRITE);
+            return;
+        }
         target = &owner->_array->VectorValues()[key->_int];
+    }
 
     if (target) {
         if (target->IsVector()) WriteStoredVector(target, temp);
@@ -597,6 +629,7 @@ NEOS_NOINLINE bool handle_IDLE(const SVMOperation& OP) {
 			// Continue the loop so RunInternal reports the VM error.
             return false;
         }
+        _iSP_Vars_Max2 = (std::max)(_iSP_Vars_Max2, _iSP_VarsMax + 3);
         Var_SetBool(GetStackFromBase(_iSP_VarsMax + 1), p->_success);
         Var_SetStringA(GetStackFromBase(_iSP_VarsMax + 2), p->_resultValue);
 		VarInfo callback;
@@ -625,15 +658,28 @@ NEOS_NOINLINE bool handle_IDLE(const SVMOperation& OP) {
 // VecStoreFor 를 인라인으로 옮긴 뒤로는 이 핸들러가 디스패치 루프에 전개되면 그만큼
 // 루프가 커진다. 생성은 성분 쓰기·산술만큼 자주 돌지 않으므로 루프 밖에 둔다.
 NEOS_NOINLINE bool handle_VEC_MAKE(const SVMOperation& OP) {
-    if (OP.argFlag & NEOS_OP_CALL_NORESULT) return false;
     // n2 = 인자 수 = 성분 수. Vector2/3/4/Quaternion 이 모두 이 op 으로 패치되며,
     // 무엇으로 해석할지는(예: wxyz 쿼터니언) 사용자 규약이지 VM 의 타입이 아니다.
-    int n = OP.n2;
-    if (n < 1) n = 1; else if (n > 4) n = 4;
+    const int n = OP.n2;
+    if (n < 2 || n > 4) {
+        SetError(RTE_CALL_INVALID);
+        return false;
+    }
+    // 함수 진입에서 인자 영역까지 스택 범위와 해제 상한을 확정한다.
+    // 새 벡터를 완성한 뒤 대상에 연결해 인자 오류가 기존 값을 바꾸지 않게 한다.
+    VarInfo* args = GetStackFromBase(_iSP_VarsMax + 1);
+    float tmp[4];   // n 개만 쓰고 n 개만 복사한다
+    for (int i = 0; i < n; ++i) {
+        if (!args[i].IsNumber()) {
+            SetError(RTE_CALL_INVALID);   // 대상은 아직 건드리지 않았다
+            return false;
+        }
+        tmp[i] = (float)args[i].GetFloatNumber();
+    }
+    if (OP.argFlag & NEOS_OP_CALL_NORESULT) return false;
+    // 대상이 단독 소유 벡터면 저장소를 재사용한다(루프 안 v = Vector3(...) 가 할당 0). 공유 중이면 VecStoreFor 가 새로 잡는다.
     VecInfo* p = VecStoreFor(GetVarPtr3(OP), n);
-    for (int i = 0; i < n; i++)
-        p->v[i] = (float)GetStackFromBase(_iSP_VarsMax + 1 + i)->GetFloatNumber();
-    if (_iSP_Vars_Max2 < _iSP_VarsMax + 1 + n) _iSP_Vars_Max2 = _iSP_VarsMax + 1 + n;
+    for (int i = 0; i < n; ++i) p->v[i] = tmp[i];
     return false;
 }
 

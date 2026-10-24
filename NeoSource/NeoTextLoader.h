@@ -140,6 +140,7 @@ public:
 	bool	_debug = false;
 
 	int		_iTableDeep = 0;
+	int _parserDepth = 0;
 
 	std::list<SToken> m_sTokenQueue;
 	std::string m_sErrorString;
@@ -222,6 +223,21 @@ public:
 		return m_iSize;
 	}
 
+    struct Cursor
+    {
+        int offset, line, column;
+        std::list<SToken> tokens;
+        std::string error;
+        NeoCompileDiagnostic location;
+    };
+    Cursor SaveCursor() const { return {m_iOffset, m_iCurLine, m_iCurCol, m_sTokenQueue, m_sErrorString, m_errorLocation}; }
+    void RestoreCursor(Cursor&& cursor)
+    {
+        m_iOffset = cursor.offset; m_iCurLine = cursor.line; m_iCurCol = cursor.column;
+        m_sTokenQueue = std::move(cursor.tokens);
+        m_sErrorString = std::move(cursor.error); m_errorLocation = std::move(cursor.location);
+    }
+
 	void PushToken(TK_TYPE tk, const std::string& str)
 	{
 		SToken st;
@@ -265,10 +281,10 @@ struct ParsedNumber
 {
 	enum class Type { Int, Float };
 	Type    type;
-	int32_t intValue;    // type == Int 일 때 유효(정확한 32비트 값). Float 여도 (int32)근사 보관.
+	int32_t intValue;    // type == Int 일 때 유효(정확한 32비트 값). Float values store zero here.
 	double  floatValue;  // 항상 채움(정수 리터럴의 크기 = (double)magnitude). Float 일 때 실제 값.
 };
 // 토큰 문자열을 ParsedNumber 로 파싱. 잘못된 형식이면 false.
-bool	StringToNumber(ParsedNumber& out, const char *p);
+bool	StringToNumber(ParsedNumber& out, const char *p, bool allowMinMagnitude = false);
 
 };

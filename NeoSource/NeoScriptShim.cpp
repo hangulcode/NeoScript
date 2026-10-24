@@ -15,6 +15,7 @@
 #include "NeoVMWorker.h"  // INeoVMWorker inline Var_Set*/Var_Release 정의
 #include "NeoArchive.h"   // CNArchive (CompileToBytecode: 소스→바이트코드)
 
+#include <atomic>
 #include <cstring>
 #include <deque>
 #include <functional>
@@ -98,6 +99,7 @@ struct DefineSetRec
 // per-Runtime auto-Shutdown 은 폐지(마지막 dtor 가 전역을 wipe → 타 스레드 compile 과
 // 레이스 나던 문제 제거). Shutdown 은 필요 시 앱 종료 시점에 명시적으로 1회.
 std::once_flag g_vmInitOnce;
+std::atomic<uint64_t> g_runtimeIdentity{0};
 
 // print/error 훅: 내부 IO_Print 는 (const char*) 시그니처라 공개 (StringView) 콜백을
 // 그대로 대입할 수 없다 → 트램폴린으로 감싼다. 전역이지만 g_vmInitOnce(최초 init) 안에서만
@@ -126,7 +128,7 @@ struct FunctionRef;
 struct ObjectBinding
 {
     RuntimeImpl*            runtime = nullptr;
-    InstanceRec*            inst = nullptr;
+    uint64_t                generation = 0;
     const RegisteredObject* obj = nullptr;
     void*                   userData = nullptr;
     InstanceHandle          handle;   // CreateInstance 완료 후 채움(트램폴린이 ctx.instance() 로 노출)
@@ -207,6 +209,11 @@ struct InstanceRec
     InstanceHandle handle;             // 자기 핸들(CreateInstance 에서 채움; 중첩 바인딩이 사용)
     ProgramHandle program;
     void* instanceUserData = nullptr;
+    bool lifecycleBusy = false;
+    unsigned nativeCallbackDepth = 0;
+    uint64_t bindingGeneration = 1;
+    size_t invocationCount = 0;
+    uint64_t debugSliceBudget = 0;
     bool  runGlobalInit = true;        // CreateInstance 때의 설정(ResetInstance 가 그대로 재현)
     // 객체명 -> 이 인스턴스에서의 userData (BindObject). 미지정이면 RegisteredObject.userData.
     std::unordered_map<std::string, void*> objectUserData;
@@ -219,17 +226,19 @@ struct InstanceRec
     NeoHostCallBegin pendingBegin = NeoHostCallBegin::Acquired;
     bool             pendingNested = false;
 	// Invocation 이 정지한 경우에는 반환 슬롯을 빌리지 않지만 실행 컨텍스트는
-	// ResumeTop이 이어서 쓴다. nested depth는 최종 Resume/Cancel 때 한 번만 푼다.
+	// ResumeTop이 이어서 쓴다. 원래 Invocation이 살아 있으면 완료 결과도 보존한다.
 	bool             suspendedHostCall = false;
+    bool             suspendedResultOwnerAlive = false;
+    uint64_t         suspendedSeq = 0;
 	bool             suspendedNested = false;
-    // 이 인스턴스의 객체 바인딩. reserve(objectCount) 로 안정 주소 유지(트램폴린이 &bindings[i] 보관).
-    std::vector<ObjectBinding> bindings;
+    // 이 인스턴스의 객체 바인딩. 네이티브 값과 공유하여 별칭이 남은 동안 주소를 유지한다.
+    std::vector<std::shared_ptr<ObjectBinding>> bindings;
     // setObject/pushObject 로 반환값에 중첩된 바인딩 객체들. 반환 맵/리스트가 호출 종료 후에도
-    // 스크립트에 남아 메서드 호출될 수 있으므로 인스턴스 수명까지 유지(deque=주소 안정).
+    // 스크립트에 남아 메서드 호출될 수 있으므로 네이티브 값과 수명을 공유한다.
     // (ObjectType, userData) 기준 dedup → 같은 userData 를 서로 다른 타입으로 반환해도 각각 1개만
-    // (userData 단독 키였을 때: 두 타입 교대 반환 시 재사용 실패로 deque 무한증가하던 버그 수정). O(1) 해시.
-    std::deque<ObjectBinding> nestedBindings;
-    std::unordered_map<std::pair<const void*, const void*>, ObjectBinding*, PtrPairHash> nestedByKey; // key=(RegisteredObject*, userData)
+    // userData가 같아도 다른 타입은 별도 바인딩으로 보관한다. O(1) 해시.
+    // 다른 인스턴스의 별칭을 포함해 네이티브 값들이 공유 바인딩의 수명을 유지한다.
+    std::unordered_map<std::pair<const void*, const void*>, std::shared_ptr<ObjectBinding>, PtrPairHash> nestedByKey; // 키는 (RegisteredObject*, userData) 쌍이다.
 
     // Invocation 스크래치 (한 인스턴스에 동시 1개 Invocation). 인자를 VM VarInfo 로 직접 축적.
     int                  callFID = -1;
@@ -237,6 +246,8 @@ struct InstanceRec
     // 일반 함수 호출은 VAR_NONE이다.
     VarInfo              callClosure;
     std::vector<VarInfo> callArgs;
+    // 재진입 중에도 실행 인자와 준비 인자를 분리한다. 캐시에는 참조 없는 빈 버퍼만 둔다.
+    std::vector<std::vector<VarInfo>> spareCallArgs;
     int32_t              callTimeoutMs = -1;
     uint32_t             callBudget = 0;
     RunStatus            callStatus = RunStatus::Failed;
@@ -245,9 +256,10 @@ struct InstanceRec
     //              → armedSeq!=0 이면 두 번째 Call 을 거부(callFID/callArgs 덮임 방지). invoke() 시작 시 0.
     //  pendingSeq= 반환 컨텍스트(hostCallPending)를 소유한, invoke() 된 Invocation 의 seq. 0=없음.
     //              → 소멸자는 자기 seq 가 소유한 것만 정리한다(이전 Invocation 이 나중 호출 pending 을 닫는 버그 방지).
-    uint32_t             callSeq = 0;
-    uint32_t             armedSeq = 0;
-    uint32_t             pendingSeq = 0;
+    uint64_t             callSeq = 0;
+    uint64_t             armedSeq = 0;
+    uint64_t             pendingSeq = 0;
+    uint64_t             resultSeq = 0;
     // 직전 호출의 에러 스냅샷(Invocation::error 가 참조 반환 → InstanceRec 수명 동안 안정).
     Error                callError;
     // 이번 호출 중 네이티브가 CallContext::fail 로 준 코드(0=없음). 첫 호출만 유효.
@@ -310,17 +322,18 @@ static void ClearCallClosure(InstanceRec* inst)
 } // namespace
 
 FunctionHandle::FunctionHandle(const FunctionHandle& other)
-    : index(other.index), programId(other.programId), programGeneration(other.programGeneration), m_impl(other.m_impl)
+    : index(other.index), programId(other.programId), programGeneration(other.programGeneration), runtimeId(other.runtimeId), m_impl(other.m_impl)
 {
     FunctionRefAdd(static_cast<FunctionRef*>(m_impl));
 }
 
 FunctionHandle::FunctionHandle(FunctionHandle&& other) noexcept
-    : index(other.index), programId(other.programId), programGeneration(other.programGeneration), m_impl(other.m_impl)
+    : index(other.index), programId(other.programId), programGeneration(other.programGeneration), runtimeId(other.runtimeId), m_impl(other.m_impl)
 {
     other.index = UINT32_MAX;
     other.programId = 0;
     other.programGeneration = 0;
+    other.runtimeId = 0;
     other.m_impl = nullptr;
 }
 
@@ -331,6 +344,7 @@ FunctionHandle& FunctionHandle::operator=(const FunctionHandle& other)
     index = other.index;
     programId = other.programId;
     programGeneration = other.programGeneration;
+    runtimeId = other.runtimeId;
     m_impl = other.m_impl;
     FunctionRefAdd(static_cast<FunctionRef*>(m_impl));
     return *this;
@@ -343,10 +357,12 @@ FunctionHandle& FunctionHandle::operator=(FunctionHandle&& other) noexcept
     index = other.index;
     programId = other.programId;
     programGeneration = other.programGeneration;
+    runtimeId = other.runtimeId;
     m_impl = other.m_impl;
     other.index = UINT32_MAX;
     other.programId = 0;
     other.programGeneration = 0;
+    other.runtimeId = 0;
     other.m_impl = nullptr;
     return *this;
 }
@@ -476,27 +492,27 @@ struct NeoScriptInternal
     static MapReader   mapR(const void* i)  { MapReader r;    r.m_impl = i; return r; }
     static ListReader  listR(const void* i) { ListReader r;   r.m_impl = i; return r; }
     static ArrayView   arrayV(const void* i) { ArrayView a;  a.m_impl = i; return a; }
-    static Invocation  inv(void* i, uint32_t seq) { Invocation v; v.m_impl = i; v.m_seq = seq; return v; }
+    static Invocation  inv(void* i, uint64_t seq) { Invocation v; v.m_impl = i; v.m_seq = seq; ++static_cast<InstanceRec*>(i)->invocationCount; return v; }
     static void*       invImpl(const Invocation& v) { return v.m_impl; }
     static void*       funImpl(const FunctionHandle& f) { return f.m_impl; }
-    static FunctionHandle fun(uint32_t index, uint32_t programId, uint32_t programGeneration)
+    static FunctionHandle fun(uint32_t index, uint32_t programId, uint32_t programGeneration, uint64_t runtimeId)
     {
-        return FunctionHandle(index, programId, programGeneration);
+        return FunctionHandle(index, programId, programGeneration, runtimeId);
     }
     static uint32_t funIndex(const FunctionHandle& f) { return f.index; }
-    static bool functionMatchesProgram(const FunctionHandle& f, ProgramHandle p)
+    static bool functionMatchesProgram(const FunctionHandle& f, ProgramHandle p, uint64_t runtimeId)
     {
-        return f.programId == p.id && f.programGeneration == p.generation;
+        return f.runtimeId == runtimeId && f.programId == p.id && f.programGeneration == p.generation;
     }
     // ObjectType 은 불투명 void*(RegisteredObject*) — 구성/해석은 여기서만(공개 API 에 노출 안 함).
     static ObjectType  objType(void* i)     { ObjectType t; t.m_impl = i; return t; }
     static void*       objImpl(ObjectType t) { return t.m_impl; }
     // CallResult 저장(invokeR 이 스칼라 반환을 값으로 스냅샷).
-    static void setResult(CallResult& r, ValueType t, int32_t i, const float* f4, const char* s)
+    static void setResult(CallResult& r, ValueType t, int32_t i, const float* f4, StringView s)
     {
         r.m_type = t; r.m_i = i;
         if (f4) { r.m_f[0]=f4[0]; r.m_f[1]=f4[1]; r.m_f[2]=f4[2]; r.m_f[3]=f4[3]; }
-        if (s)  r.m_s = s;
+        if (s.data()) r.m_s.assign(s.data(), s.size());
     }
 };
 
@@ -539,7 +555,7 @@ public:
     void FreezeBindings() override;
     ObjectType GetObjectType(StringView name) override;
     // setObject/pushObject 내부용: 중첩 바인딩을 (type,userData) 로 dedup 재사용(주소 안정).
-    ObjectBinding* AcquireNestedBinding(InstanceHandle handle, const RegisteredObject* ro, void* userData);
+    std::shared_ptr<ObjectBinding> AcquireNestedBinding(InstanceHandle handle, const RegisteredObject* ro, void* userData);
 
     //--- Program ---
     CompileResult Compile(const CompileDesc& desc) override;
@@ -553,6 +569,8 @@ public:
     //--- Instance ---
     InstanceHandle CreateInstance(ProgramHandle program, const InstanceDesc& desc) override;
     void DestroyInstance(InstanceHandle instance) override;
+    bool CanDestroyInstance(InstanceHandle instance) const override;
+    bool CanDestroy() const override;
     bool IsAlive(InstanceHandle instance) const override;
     bool ResetInstance(InstanceHandle instance) override;
     InstanceState GetState(InstanceHandle instance) const override;
@@ -594,9 +612,14 @@ public:
 
     // 내부: 글로벌 인터페이스 훅에서 등록 객체를 워커 맵에 바인딩
     void BindRegisteredObjects(INeoVMWorker* worker, InstanceRec* inst);
-    const std::vector<RegisteredObject>& registeredObjects() const { return m_objects; }
+    const std::deque<RegisteredObject>& registeredObjects() const { return m_objects; }
     // Invocation 이 쓰는 내부 훅
+    uint64_t identity() const { return m_identity; }
     InstanceRec* resolveInstance(InstanceHandle h) const { return m_instances.get(h.id, h.generation); }
+    InstanceRec* instanceForWorker(INeoVMWorker* worker) const {
+        const auto it = m_workerHandle.find(worker);
+        return it == m_workerHandle.end() ? nullptr : resolveInstance(it->second);
+    }
     void FlushPendingCall(InstanceRec* inst);
     // 호출 에러 스냅샷: 실행 전 VM 에러 상태를 비우고(스티키 에러가 새 에러를 가리는 것 방지),
     // 실행 후 실패했으면 VM 상세 메시지 + fail() 코드를 인스턴스에 스냅샷한다.
@@ -617,6 +640,7 @@ private:
                             NeoGlobalSymbolTable& gtab, NeoCompileDefines& inlineDefines, std::string& dbgPath);
 
     RuntimeDesc m_desc;
+    const uint64_t m_identity;
     LoaderAdapter m_loaderAdapter;   // 공개 ILoader* 배선(nativeLoader 없을 때 사용)
     CNeoVM* m_vm = nullptr;
     NeoExecContextPool* m_pool = nullptr;
@@ -625,7 +649,7 @@ private:
     std::unordered_map<INeoVMWorker*, InstanceHandle> m_workerHandle; // worker→instance (디버거 역참조)
     std::string m_lastError;                                          // TakeLastError 반환 뷰 소유
 
-    std::vector<RegisteredObject> m_objects;              // FreezeBindings 전 등록
+    std::deque<RegisteredObject> m_objects;              // FreezeBindings 전 등록
     std::vector<NeoGlobalSymbol> m_globalSymbols;         // 컴파일에 넘길 전역 심볼
     mutable HandleTable<ProgramRec> m_programs;
     mutable HandleTable<InstanceRec> m_instances;
@@ -635,7 +659,7 @@ private:
 //------------------------------------------------------------------------------
 // 수명주기
 //------------------------------------------------------------------------------
-RuntimeImpl::RuntimeImpl(const RuntimeDesc& desc) : m_desc(desc)
+RuntimeImpl::RuntimeImpl(const RuntimeDesc& desc) : m_desc(desc), m_identity(++g_runtimeIdentity)
 {
     // 프로세스-1회 전역 초기화. call_once → 멀티스레드에서 각 스레드가 Runtime 을 만들어도
     // 최초 1회만, 그 사이 다른 스레드는 완료까지 블록. print/error 훅도 여기서만 설정한다
@@ -685,7 +709,9 @@ RuntimeImpl::~RuntimeImpl()
 //------------------------------------------------------------------------------
 bool RuntimeImpl::RegisterObject(const NativeObjectDesc& desc)
 {
-    if (m_frozen || desc.name.data() == nullptr) return false;
+    if (m_frozen || desc.name.empty() || desc.name.data() == nullptr) return false;
+    for (const RegisteredObject& existing : m_objects)
+        if (existing.name == desc.name.str()) return false;
     RegisteredObject o;
     o.name = desc.name.str();
     o.method = desc.method;
@@ -720,7 +746,7 @@ ObjectType RuntimeImpl::GetObjectType(StringView name)
     return ObjectType{}; // 미발견 = falsy
 }
 
-ObjectBinding* RuntimeImpl::AcquireNestedBinding(InstanceHandle handle, const RegisteredObject* ro, void* userData)
+std::shared_ptr<ObjectBinding> RuntimeImpl::AcquireNestedBinding(InstanceHandle handle, const RegisteredObject* ro, void* userData)
 {
     InstanceRec* inst = resolveInstance(handle);
     if (inst == nullptr) return nullptr;
@@ -729,16 +755,14 @@ ObjectBinding* RuntimeImpl::AcquireNestedBinding(InstanceHandle handle, const Re
     auto it = inst->nestedByKey.find(key);
     if (it != inst->nestedByKey.end())
         return it->second;
-    ObjectBinding b;
-    b.runtime  = this;
-    b.inst     = inst;
-    b.obj      = ro;
-    b.userData = userData;
-    b.handle   = inst->handle;
-    inst->nestedBindings.push_back(b);   // deque = 주소 안정(트램폴린이 포인터 보관)
-    ObjectBinding* p = &inst->nestedBindings.back();
-    inst->nestedByKey[key] = p;
-    return p;
+    auto binding = std::make_shared<ObjectBinding>();
+    binding->runtime = this;
+    binding->generation = inst->bindingGeneration;
+    binding->obj = ro;
+    binding->userData = userData;
+    binding->handle = inst->handle;
+    inst->nestedByKey.emplace(key, binding);
+    return binding;
 }
 
 //------------------------------------------------------------------------------
@@ -919,6 +943,8 @@ InstanceHandle RuntimeImpl::CreateInstance(ProgramHandle programHandle, const In
     inst->runtime = this;
     inst->program = programHandle;
     inst->instanceUserData = desc.userData;
+    inst->runGlobalInit = desc.runGlobalInit;
+    inst->lifecycleBusy = true;
 
     // LoadVM 훅(ShimGlobalInterface→onInstanceBind→BindObjectInto)이 워커→핸들 조회를 하므로
     // 핸들을 LoadVM 전에 확보한다(과거엔 LoadVM 후 설정 → 중첩 바인딩이 핸들 못 찾던 버그).
@@ -936,6 +962,7 @@ InstanceHandle RuntimeImpl::CreateInstance(ProgramHandle programHandle, const In
     INeoVMWorker* worker = m_vm->LoadVM(&vparam, prog->program, /*mainWorker=*/false, /*init=*/desc.runGlobalInit);
     if (worker == nullptr) { m_instances.remove(h.id, h.generation); delete inst; return {}; }
     inst->worker = worker;
+    inst->lifecycleBusy = false;
     m_workerHandle[worker] = h;      // 디버거 역참조 + 이후 조회용(훅 중엔 BindRegisteredObjects 에서 이미 등록)
     return h;
 }
@@ -961,17 +988,16 @@ void RuntimeImpl::BindRegisteredObjects(INeoVMWorker* worker, InstanceRec* inst)
         auto it = inst->objectUserData.find(o.name);
         if (it != inst->objectUserData.end()) userData = it->second;
 
-        ObjectBinding binding;
-        binding.runtime = this;
-        binding.inst = inst;
-        binding.obj = &o;
-        binding.userData = userData;
-        binding.handle = inst->handle;   // 훅 전에 확보한 핸들(트램폴린이 ctx.instance() 로 노출)
+        auto binding = std::make_shared<ObjectBinding>();
+        binding->runtime = this;
+        binding->generation = inst->bindingGeneration;
+        binding->obj = &o;
+        binding->userData = userData;
+        binding->handle = inst->handle;
         inst->bindings.push_back(binding);
-        ObjectBinding* b = &inst->bindings.back(); // reserve() 로 주소 안정
-        NeoVMSystem::RegisterTableCallBack(pVar, b,
+        NeoVMSystem::RegisterTableCallBack(pVar, binding.get(),
             (o.method != nullptr) ? &MethodTrampoline : nullptr,
-            (o.property != nullptr) ? &PropertyTrampoline : nullptr, &o, userData);
+            (o.property != nullptr) ? &PropertyTrampoline : nullptr, &o, userData, binding);
     }
     // 소비자의 전역 바인딩 훅 트리거. 훅은 인스턴스 핸들로 BindGlobalObject/BindGlobalMapObject 호출.
     if (m_desc.onInstanceBind)
@@ -984,10 +1010,24 @@ static void ShimGlobalInterface(INeoVMWorker* worker, void* param)
     if (inst && inst->runtime) inst->runtime->BindRegisteredObjects(worker, inst);
 }
 
+bool RuntimeImpl::CanDestroyInstance(InstanceHandle h) const
+{
+    const InstanceRec* inst = resolveInstance(h);
+    return !inst || (!inst->lifecycleBusy && inst->nativeCallbackDepth == 0 && inst->invocationCount == 0 &&
+        (!inst->worker || !inst->worker->IsInterpreterRunning()));
+}
+bool RuntimeImpl::CanDestroy() const
+{
+    bool allowed = true;
+    m_instances.forEachLive([&](InstanceRec* inst) {
+        if (!CanDestroyInstance(inst->handle)) allowed = false;
+    });
+    return allowed;
+}
 void RuntimeImpl::DestroyInstance(InstanceHandle h)
 {
     InstanceRec* inst = resolveInstance(h);
-    if (!inst) return;
+    if (!inst || !CanDestroyInstance(h)) return;
     FlushPendingCall(inst); // 지연된 borrowed 컨텍스트 반납
     ClearCallClosure(inst);
     InvalidateFunctionRefs(inst);
@@ -1038,13 +1078,13 @@ void RuntimeImpl::BindObjectInto(void* worker, void* mapVar, StringView key, Obj
     if (!w || !pMap || pMap->GetType() != VAR_MAP || !pMap->_tbl || !ro) return;
     auto it = m_workerHandle.find(w);   // 워커 → 인스턴스 핸들
     if (it == m_workerHandle.end()) return;
-    ObjectBinding* bind = AcquireNestedBinding(it->second, ro, userData);
+    auto bind = AcquireNestedBinding(it->second, ro, userData);
     if (!bind) return;
     VarInfo v{};
     w->ResetVarType(&v, VAR_FP_NATIVE);
-    NeoVMSystem::RegisterTableCallBack(&v, bind,
+    NeoVMSystem::RegisterTableCallBack(&v, bind.get(),
         (ro->method)   ? &MethodTrampoline   : nullptr,
-        (ro->property) ? &PropertyTrampoline : nullptr, ro, userData);
+        (ro->property) ? &PropertyTrampoline : nullptr, ro, userData, bind);
     pMap->_tbl->Insert(std::string(key.data(), key.size()), &v);
     w->Var_Release(&v);
 }
@@ -1059,11 +1099,11 @@ void RuntimeImpl::BindObjectToVar(void* worker, void* varInfo, ObjectType type, 
     auto it = m_workerHandle.find(w);
     if (it == m_workerHandle.end()) return;
     if (!w->ResetVarType(pVar, VAR_FP_NATIVE)) return;
-    ObjectBinding* bind = AcquireNestedBinding(it->second, ro, userData);
+    auto bind = AcquireNestedBinding(it->second, ro, userData);
     if (!bind) return;
-    NeoVMSystem::RegisterTableCallBack(pVar, bind,
+    NeoVMSystem::RegisterTableCallBack(pVar, bind.get(),
         (ro->method)   ? &MethodTrampoline   : nullptr,
-        (ro->property) ? &PropertyTrampoline : nullptr, ro, userData);
+        (ro->property) ? &PropertyTrampoline : nullptr, ro, userData, bind);
 }
 
 bool RuntimeImpl::ResetInstance(InstanceHandle h)
@@ -1071,10 +1111,12 @@ bool RuntimeImpl::ResetInstance(InstanceHandle h)
     InstanceRec* inst = resolveInstance(h);
     if (!inst) return false;
     // 살아있는 Invocation 이 이 인스턴스의 워커/스크래치를 붙들고 있으면 재생성이 UB → 거부.
-    if (inst->armedSeq != 0) return false;
+    if (!CanDestroyInstance(h)) return false;
     ProgramRec* prog = resolveProgram(inst->program);
     if (!prog || !prog->program) return false;
 
+    inst->lifecycleBusy = true;
+    ++inst->bindingGeneration;
     // 1) 옛 워커에 매달린 것 전부 정리. callArgs 는 옛 워커 소유 VarInfo 라 반드시 먼저 해제.
     FlushPendingCall(inst);
     if (inst->worker)
@@ -1087,8 +1129,8 @@ bool RuntimeImpl::ResetInstance(InstanceHandle h)
         inst->worker = nullptr;
     }
     inst->callArgs.clear();
+    inst->spareCallArgs.clear();
     inst->bindings.clear();          // LoadVM 훅(BindRegisteredObjects)이 새로 채운다
-    inst->nestedBindings.clear();
     inst->nestedByKey.clear();
     inst->readMapPool.clear();
     inst->readListPool.clear();
@@ -1099,6 +1141,8 @@ bool RuntimeImpl::ResetInstance(InstanceHandle h)
     inst->armedSeq = 0;
     inst->pendingSeq = 0;
 	inst->suspendedHostCall = false;
+    inst->suspendedResultOwnerAlive = false;
+    inst->suspendedSeq = 0;
 	inst->suspendedNested = false;
     inst->callError = Error();
     inst->failCode = 0;
@@ -1119,6 +1163,7 @@ bool RuntimeImpl::ResetInstance(InstanceHandle h)
         return false;
     }
     inst->worker = worker;
+    inst->lifecycleBusy = false;
     m_workerHandle[worker] = h;
     return true;
 }
@@ -1126,7 +1171,11 @@ bool RuntimeImpl::ResetInstance(InstanceHandle h)
 RunStatus RuntimeImpl::RunGlobalInit(InstanceHandle h)
 {
     InstanceRec* inst = resolveInstance(h);
-    if (!inst) return RunStatus::Failed;
+    if (!inst || inst->lifecycleBusy || inst->armedSeq || inst->worker->IsInterpreterRunning()) return RunStatus::Failed;
+    FlushPendingCall(inst);
+    if (inst->worker->GetExecutionState() != NeoExecutionState::Idle) return RunStatus::Failed;
+    inst->worker->SetTimeout(-1, NEO_DEFAULT_CHECKOP);
+    inst->worker->SetInstructionBudget(inst->debugSliceBudget, false);
     BeginCallError(inst); // 스티키 VM 에러 제거(이번 실행 사유만 남김)
     std::vector<VarInfo> args;
     const RunStatus status = mapExecStatus(inst->worker->ExecuteTop(0, args));
@@ -1175,7 +1224,7 @@ FunctionHandle RuntimeImpl::FindFunction(ProgramHandle h, StringView name) const
     if (!rec || !rec->program) return {};
     int idx = rec->program->FindFunction(std::string(name.data(), name.size()));
     if (idx < 0) return {};
-    return NeoScriptInternal::fun(static_cast<uint32_t>(idx), h.id, h.generation);
+    return NeoScriptInternal::fun(static_cast<uint32_t>(idx), h.id, h.generation, m_identity);
 }
 
 void RuntimeImpl::FlushPendingCall(InstanceRec* inst)
@@ -1184,7 +1233,7 @@ void RuntimeImpl::FlushPendingCall(InstanceRec* inst)
     inst->hostCallPending = false;
     inst->pendingSeq = 0;                            // pending 사라짐 → 소유자 없음
     inst->worker->EndHostCall(inst->pendingBegin);   // 여기서 반환 컨텍스트 반납 → 이전 리더 무효
-    if (inst->pendingNested) inst->worker->EndNestedScriptCall();
+    inst->pendingNested = false;
     inst->readMapPool.clear();
     inst->readListPool.clear();
 }
@@ -1192,13 +1241,13 @@ void RuntimeImpl::FlushPendingCall(InstanceRec* inst)
 Invocation RuntimeImpl::Call(InstanceHandle h, FunctionHandle fn)
 {
     InstanceRec* inst = resolveInstance(h);
-    if (!inst || !fn) return Invocation();
+    if (!inst || !fn || (inst->lifecycleBusy && !inst->worker->IsInterpreterRunning())) return Invocation();
     // 모든 v2 함수 핸들은 Runtime이 Program 소유권과 함께 발급한다. 다른 Program의
     // 인스턴스에 넘기면 호출 전 거부한다.
-    if (!NeoScriptInternal::functionMatchesProgram(fn, inst->program))
+    if (!NeoScriptInternal::functionMatchesProgram(fn, inst->program, m_identity))
         return Invocation();
     // 겹침 방지: 이전 Invocation 이 arm 된 채(invoke/파괴 전)면 두 번째 Call 을 안전 거부(상태 파괴 회피).
-    if (inst->armedSeq != 0) return Invocation();
+    if (inst->armedSeq != 0 || inst->worker->IsSuspended()) return Invocation();
     FlushPendingCall(inst);
     ClearCallClosure(inst);
     inst->callFID = static_cast<int>(NeoScriptInternal::funIndex(fn));
@@ -1217,7 +1266,7 @@ Invocation RuntimeImpl::Call(InstanceHandle h, FunctionHandle fn)
     inst->callTimeoutMs = -1;
     inst->callBudget = 0;
     inst->callStatus = RunStatus::Failed;
-    uint32_t seq = ++inst->callSeq;   // 이 Invocation 의 유일 소유권 토큰(0 은 "없음" 이라 pre-increment)
+    uint64_t seq = ++inst->callSeq;   // 이 Invocation 의 유일 소유권 토큰(0 은 "없음" 이라 pre-increment)
     inst->armedSeq = seq;
     return NeoScriptInternal::inv(inst, seq);
 }
@@ -1227,35 +1276,57 @@ Invocation RuntimeImpl::Call(InstanceHandle h, StringView functionName)
     if (!inst) return Invocation();
     int iFID = inst->worker->FindFunction(functionName.str());
     if (iFID < 0) return Invocation();
-    return Call(h, NeoScriptInternal::fun(static_cast<uint32_t>(iFID), inst->program.id, inst->program.generation));
+    return Call(h, NeoScriptInternal::fun(static_cast<uint32_t>(iFID), inst->program.id, inst->program.generation, m_identity));
 }
 
-RunStatus RuntimeImpl::Resume(InstanceHandle h, const ResumeDesc&)
+static RunStatus ResumeInstanceExecution(InstanceRec* inst)
 {
-    InstanceRec* inst = resolveInstance(h);
-    if (!inst) return RunStatus::Failed;
-    const RunStatus status = mapExecStatus(inst->worker->ResumeTop());
-    if (inst->suspendedHostCall)
+    const bool suspendedCall = inst->suspendedHostCall;
+    const uint64_t ownerSeq = inst->suspendedSeq;
+    const bool retainResult = suspendedCall && inst->suspendedResultOwnerAlive;
+    const RunStatus status = mapExecStatus(inst->worker->ResumeTop(retainResult));
+    if (suspendedCall)
     {
+        // 재개 중의 중첩 호출이 공유 상태를 쓰더라도 원래 호출의 소유권을 되살린다.
+        inst->resultSeq = ownerSeq;
         inst->callStatus = status;
+        inst->runtime->FlushPendingCall(inst);
         if (status != RunStatus::Suspended)
         {
-            // ResumeTop은 Completed/Error에서 실행 컨텍스트를 직접 반납한다.
-            // suspend 중에는 반환 슬롯을 빌리지 않았으므로 여기서 GC/EndHostCall은 하지 않는다.
-            if (status == RunStatus::Failed)
-                CaptureCallError(inst, status);
-            if (inst->suspendedNested)
-                inst->worker->EndNestedScriptCall();
+            if (status == RunStatus::Completed && retainResult)
+            {
+                if (inst->suspendedResultOwnerAlive)
+                {
+                    inst->hostCallPending = true;
+                    inst->pendingBegin = NeoHostCallBegin::Acquired;
+                    inst->pendingNested = false;
+                    inst->pendingSeq = ownerSeq;
+                }
+                else
+                    inst->worker->EndHostCall(NeoHostCallBegin::Acquired);
+            }
+            else if (status == RunStatus::Failed)
+                inst->runtime->CaptureCallError(inst, status);
             inst->suspendedHostCall = false;
+            inst->suspendedResultOwnerAlive = false;
+            inst->suspendedSeq = 0;
             inst->suspendedNested = false;
         }
     }
     return status;
 }
+RunStatus RuntimeImpl::Resume(InstanceHandle h, const ResumeDesc& desc)
+{
+    InstanceRec* inst = resolveInstance(h);
+    if (!inst || inst->lifecycleBusy || inst->armedSeq || inst->worker->IsInterpreterRunning()) return RunStatus::Failed;
+    if (inst->hostCallPending) return RunStatus::Failed;
+    inst->worker->SetInstructionBudget(desc.instructionBudget);
+    return ResumeInstanceExecution(inst);
+}
 bool RuntimeImpl::Cancel(InstanceHandle h)
 {
     InstanceRec* inst = resolveInstance(h);
-    if (!inst || !inst->worker) return false;
+    if (!inst || !inst->worker || inst->lifecycleBusy || inst->worker->IsInterpreterRunning()) return false;
     // 반환 컨텍스트를 붙들고 있던 지연 호출부터 정리(리더 무효화) — 그 뒤 실행 컨텍스트를 버린다.
     FlushPendingCall(inst);
     if (!inst->callArgs.empty()) { inst->worker->ReleaseArgs(inst->callArgs); inst->callArgs.clear(); }
@@ -1264,6 +1335,8 @@ bool RuntimeImpl::Cancel(InstanceHandle h)
 	if (inst->suspendedHostCall && inst->suspendedNested)
 		inst->worker->EndNestedScriptCall();
 	inst->suspendedHostCall = false;
+    inst->suspendedResultOwnerAlive = false;
+    inst->suspendedSeq = 0;
 	inst->suspendedNested = false;
     inst->callStatus = RunStatus::Cancelled;
     return true;
@@ -1272,7 +1345,7 @@ bool RuntimeImpl::Cancel(InstanceHandle h)
 bool RuntimeImpl::StartSliced(InstanceHandle h, StringView functionName, int32_t timeoutMs, uint32_t budget)
 {
     InstanceRec* inst = resolveInstance(h);
-    if (!inst) return false;
+    if (!inst || inst->lifecycleBusy || inst->armedSeq || inst->worker->IsInterpreterRunning()) return false;
     FlushPendingCall(inst);
     if (inst->worker->GetExecutionState() != NeoExecutionState::Idle)
         return false;
@@ -1283,7 +1356,8 @@ bool RuntimeImpl::StartSliced(InstanceHandle h, StringView functionName, int32_t
 
     // 첫 슬라이스도 ExecuteTop으로 바로 실행한다. 시간 제한으로 멈추면 컨텍스트는
     // SuspendedSlice 상태로 retain되고, 다음 UpdateSliced가 ResumeTop으로 잇는다.
-    inst->worker->SetTimeout(timeoutMs, budget > 0 ? static_cast<int>(budget) : NEO_DEFAULT_CHECKOP);
+    inst->worker->SetTimeout(timeoutMs, NEO_DEFAULT_CHECKOP);
+    inst->worker->SetInstructionBudget(budget);
     std::vector<VarInfo> args;
     const RunStatus status = mapExecStatus(inst->worker->ExecuteTop(iFID, args));
     if (status == RunStatus::Failed)
@@ -1296,7 +1370,7 @@ bool RuntimeImpl::StartSliced(InstanceHandle h, StringView functionName, int32_t
 RunStatus RuntimeImpl::UpdateSliced(InstanceHandle h)
 {
     InstanceRec* inst = resolveInstance(h);
-    if (!inst) return RunStatus::Failed;
+    if (!inst || inst->lifecycleBusy || inst->armedSeq || inst->worker->IsInterpreterRunning() || inst->hostCallPending) return RunStatus::Failed;
     if (inst->worker->IsOutOfMemoryPoisoned())
     {
         CaptureCallError(inst, RunStatus::Failed);
@@ -1305,7 +1379,7 @@ RunStatus RuntimeImpl::UpdateSliced(InstanceHandle h)
     if (inst->worker->GetExecutionState() == NeoExecutionState::Idle)
         return RunStatus::Completed;
 
-    const RunStatus status = mapExecStatus(inst->worker->ResumeTop());
+    const RunStatus status = ResumeInstanceExecution(inst);
     if (status == RunStatus::Failed)
     {
         CaptureCallError(inst, status);
@@ -1340,7 +1414,7 @@ bool RuntimeImpl::GetGlobalString(InstanceHandle h, StringView name, StringView&
     if (!inst) return false;
     VarInfo* v = inst->worker->GetVar(name.str());
     if (!v || v->GetType() != VAR_STRING) return false;
-    const char* s = inst->worker->PopString(v); out = StringView(s ? s : ""); return true;
+    out = StringView(v->_str->_str); return true;
 }
 bool RuntimeImpl::SetGlobalInt(InstanceHandle h, StringView name, int32_t vv)
 {
@@ -1450,7 +1524,7 @@ void RuntimeImpl::GetBuiltins(std::vector<BuiltinInfo>& out) const
 // 팩토리
 //==============================================================================
 IRuntime* CreateRuntime(const RuntimeDesc& desc) { return new RuntimeImpl(desc); }
-void      DestroyRuntime(IRuntime* runtime) { delete runtime; }
+void      DestroyRuntime(IRuntime* runtime) { if (runtime && runtime->CanDestroy()) delete runtime; }
 
 // 전역 로그 싱크 — 내부 NeoVMSystem::m_pFunPrint/m_pFunError(IO_Print=void(*)(const char*)) 를 직접 설정.
 // 콜백 시그니처가 동일해 트램폴린 없이 그대로 연결(널 종료 보장). RuntimeDesc.printFn 과 같은 전역을
@@ -1478,6 +1552,7 @@ void GetAllocStats(AllocStats& out)
 static CallContextImpl* Ctx(void* p) { return static_cast<CallContextImpl*>(p); }
 static VarInfo* CtxArgVar(CallContextImpl* c, std::size_t i)
 {
+    if (i >= static_cast<std::size_t>(c->argCount)) return nullptr;
     if (c->propertyVar && c->propertyIsArg && i == 0) return c->propertyVar;
     return c->worker->GetStackVar(static_cast<int>(i) + 1); // 인자 1-based
 }
@@ -1509,14 +1584,15 @@ InstanceHandle CallContext::instance() const { return Ctx(m_impl)->instance; }
 std::size_t CallContext::argCount() const { return static_cast<std::size_t>(Ctx(m_impl)->argCount); }
 ValueType CallContext::argType(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); VarInfo* v=CtxArgVar(c,i); return v?VarTypeToValueType(v):ValueType::None; }
 bool CallContext::argIsNativeObject(std::size_t i) const { VarInfo* v=CtxArgVar(Ctx(m_impl),i); return v && v->GetType()==VAR_FP_NATIVE; }
-int32_t CallContext::argInt(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); return c->worker->PopInt(CtxArgVar(c,i)); }
-float CallContext::argFloat(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); return static_cast<float>(c->worker->PopFloat(CtxArgVar(c,i))); }
-bool CallContext::argBool(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); return c->worker->PopBool(CtxArgVar(c,i)); }
+int32_t CallContext::argInt(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); VarInfo* v=CtxArgVar(c,i); return v ? c->worker->PopInt(v) : 0; }
+float CallContext::argFloat(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); VarInfo* v=CtxArgVar(c,i); return v ? static_cast<float>(c->worker->PopFloat(v)) : 0.0f; }
+bool CallContext::argBool(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); VarInfo* v=CtxArgVar(c,i); return v && c->worker->PopBool(v); }
 StringView CallContext::argString(std::size_t i) const
 {
     CallContextImpl* c=Ctx(m_impl); VarInfo* v=CtxArgVar(c,i);
     // 문자열은 NUL을 포함해 원래 길이를 보존한다. 다른 타입의 기존 변환은 유지한다.
     if (v && v->GetType() == VAR_STRING) return StringView(v->_str->_str);
+    if (!v) return StringView();
     const char* s=c->worker->PopString(v); return StringView(s?s:"");
 }
 void CallContext::argVec(std::size_t i, float out[4]) const { CallContextImpl* c=Ctx(m_impl); ReadVec(CtxArgVar(c,i), out); }
@@ -1527,10 +1603,10 @@ FunctionHandle CallContext::argFunction(std::size_t i) const
     // 저장해도 생성 시점의 지역 VarInfo 복사본이 살아 있게 한다.
     CallContextImpl* c=Ctx(m_impl); VarInfo* v=CtxArgVar(c,i);
     if (!v || (v->GetType() != VAR_FUN && v->GetType() != VAR_CLOSURE)) return FunctionHandle{};
-    InstanceRec* inst = c->runtime ? static_cast<RuntimeImpl*>(c->runtime)->resolveInstance(c->instance) : nullptr;
+    InstanceRec* inst = c->runtime ? static_cast<RuntimeImpl*>(c->runtime)->instanceForWorker(c->worker) : nullptr;
     if (!inst) return FunctionHandle{};
     const int funIndex = (v->GetType() == VAR_FUN) ? v->_fun_index : v->_closure->_funIndex;
-    FunctionHandle fh = NeoScriptInternal::fun(static_cast<uint32_t>(funIndex), inst->program.id, inst->program.generation);
+    FunctionHandle fh = NeoScriptInternal::fun(static_cast<uint32_t>(funIndex), inst->program.id, inst->program.generation, inst->runtime->identity());
     if (v->GetType() == VAR_CLOSURE)
     {
         FunctionRef* ref = new FunctionRef();
@@ -1605,7 +1681,7 @@ void CallContext::retInstanceGlobal(InstanceHandle instance, StringView name)
     CallContextImpl* c=Ctx(m_impl);
     INeoVMWorker* src = c->runtime ? static_cast<RuntimeImpl*>(c->runtime)->instanceWorker(instance) : nullptr;
     VarInfo* v = src ? src->GetVar(std::string(name.data(), name.size())) : nullptr;
-    if (v) c->worker->ReturnValue(v);          // Var_Move → 반환 슬롯(구 ReturnValue(GetVar) 재현)
+    if (v) c->worker->Var_Move(CtxRetVar(c), v);          // Var_Move → 반환 슬롯(구 ReturnValue(GetVar) 재현)
     else   c->worker->Var_Release(CtxRetVar(c)); // None
 }
 void CallContext::retVec3(float x, float y, float z) { CallContextImpl* c=Ctx(m_impl); c->worker->Var_SetVec3(CtxRetVar(c), x, y, z); }
@@ -1618,14 +1694,19 @@ void CallContext::retObject(ObjectType type, void* userData) {
     VarInfo* r=CtxRetVar(c); if(!ro||!r) return;
     c->worker->ResetVarType(r, VAR_FP_NATIVE);
     RuntimeImpl* rt=static_cast<RuntimeImpl*>(c->runtime);
-    ObjectBinding* b=rt->AcquireNestedBinding(c->instance, ro, userData); if(!b) return;
-    NeoVMSystem::RegisterTableCallBack(r, b, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr, ro, userData);
+    auto b=rt->AcquireNestedBinding(c->instance, ro, userData); if(!b) return;
+    NeoVMSystem::RegisterTableCallBack(r, b.get(), (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr, ro, userData, b);
 }
 void CallContext::retNull() { CallContextImpl* c=Ctx(m_impl); c->worker->ResetVarType(CtxRetVar(c), VAR_NONE); }
 void CallContext::fail(int32_t code, StringView message)
 {
     CallContextImpl* c = Ctx(m_impl);
-    if (c->runtime) static_cast<RuntimeImpl*>(c->runtime)->NativeFail(c->instance, code, message);
+    if (c->runtime)
+    {
+        RuntimeImpl* runtime = static_cast<RuntimeImpl*>(c->runtime);
+        InstanceRec* caller = runtime->instanceForWorker(c->worker);
+        runtime->NativeFail(caller ? caller->handle : c->instance, code, message);
+    }
 }
 
 //==============================================================================
@@ -1656,8 +1737,8 @@ void MapBuilder::setObject(StringView key, ObjectType type, void* userData) {
     const RegisteredObject* ro=static_cast<const RegisteredObject*>(NeoScriptInternal::objImpl(type)); if(!ro) return;
     VarInfo* slot=MapInsertKey(b, key); b->w->ResetVarType(slot, VAR_FP_NATIVE);
     RuntimeImpl* rt=static_cast<RuntimeImpl*>(b->ctx->runtime);
-    ObjectBinding* bind=rt->AcquireNestedBinding(b->ctx->instance, ro, userData); if(!bind) return;
-    NeoVMSystem::RegisterTableCallBack(slot, bind, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr, ro, userData);
+    auto bind=rt->AcquireNestedBinding(b->ctx->instance, ro, userData); if(!bind) return;
+    NeoVMSystem::RegisterTableCallBack(slot, bind.get(), (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr, ro, userData, bind);
 }
 
 void ListBuilder::reserve(int count) { static_cast<ListBuilderImpl*>(m_impl)->list->Reserve(count); }
@@ -1680,8 +1761,8 @@ void ListBuilder::pushObject(ObjectType type, void* userData) {
     int idx=b->list->GetCount(); b->list->Resize(idx+1);
     VarInfo* slot=b->list->GetValue(idx); b->w->ResetVarType(slot, VAR_FP_NATIVE);
     RuntimeImpl* rt=static_cast<RuntimeImpl*>(b->ctx->runtime);
-    ObjectBinding* bind=rt->AcquireNestedBinding(b->ctx->instance, ro, userData); if(!bind) return;
-    NeoVMSystem::RegisterTableCallBack(slot, bind, (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr, ro, userData);
+    auto bind=rt->AcquireNestedBinding(b->ctx->instance, ro, userData); if(!bind) return;
+    NeoVMSystem::RegisterTableCallBack(slot, bind.get(), (ro->method)?&MethodTrampoline:nullptr, (ro->property)?&PropertyTrampoline:nullptr, ro, userData, bind);
 }
 
 //==============================================================================
@@ -1786,7 +1867,7 @@ static InstanceRec* Inv(void* p) { return static_cast<InstanceRec*>(p); }
 // 소유권 정리: 이 Invocation(seq)이 소유한 것만 되돌린다.
 //  - 내가 arm 상태인데 invoke 없이 파괴 → un-arm(다음 Call 허용).
 //  - 내가 소유한 pending 컨텍스트만 flush(나중 Invocation 의 pending 은 안 건드림 — 저수준 겹침 버그 방지).
-static void InvFinish(void* p, uint32_t seq)
+static void InvFinish(void* p, uint64_t seq)
 {
     if (!p || seq == 0) return;
     InstanceRec* i = Inv(p);
@@ -1799,7 +1880,22 @@ static void InvFinish(void* p, uint32_t seq)
         ClearCallClosure(i);
     }
     if (i->pendingSeq == seq && i->runtime) i->runtime->FlushPendingCall(i); // 내 pending 만 반납
+    if (i->suspendedHostCall && i->suspendedSeq == seq) i->suspendedResultOwnerAlive = false;
+    --i->invocationCount;
 }
+
+static bool InvArmed(void* p, uint64_t seq)
+{
+    return p && seq && Inv(p)->armedSeq == seq;
+}
+static VarInfo* InvReturn(void* p, uint64_t seq)
+{
+    if (!p) return nullptr;
+    InstanceRec* i = Inv(p);
+    return i->pendingSeq == seq && i->hostCallPending && i->callStatus == RunStatus::Completed
+        ? i->worker->GetReturnVar() : nullptr;
+}
+Invocation::operator bool() const noexcept { return InvArmed(m_impl, m_seq); }
 
 Invocation& Invocation::operator=(Invocation&& o) noexcept
 {
@@ -1808,15 +1904,15 @@ Invocation& Invocation::operator=(Invocation&& o) noexcept
 }
 Invocation::~Invocation() { InvFinish(m_impl, m_seq); }
 
-Invocation& Invocation::argInt(int32_t v)    { if (m_impl){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetInt(&i->callArgs.back(), v); } return *this; }
-Invocation& Invocation::argFloat(float v)    { if (m_impl){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetFloat(&i->callArgs.back(), v); } return *this; }
-Invocation& Invocation::argBool(bool v)      { if (m_impl){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetBool(&i->callArgs.back(), v); } return *this; }
-Invocation& Invocation::argString(StringView v) { if (m_impl){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); SetVarString(i->worker, &i->callArgs.back(), v); } return *this; }
-Invocation& Invocation::argVec3(float x, float y, float z) { if (m_impl){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetVec3(&i->callArgs.back(), x, y, z); } return *this; }
+Invocation& Invocation::argInt(int32_t v)    { if (InvArmed(m_impl, m_seq)){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetInt(&i->callArgs.back(), v); } return *this; }
+Invocation& Invocation::argFloat(float v)    { if (InvArmed(m_impl, m_seq)){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetFloat(&i->callArgs.back(), v); } return *this; }
+Invocation& Invocation::argBool(bool v)      { if (InvArmed(m_impl, m_seq)){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetBool(&i->callArgs.back(), v); } return *this; }
+Invocation& Invocation::argString(StringView v) { if (InvArmed(m_impl, m_seq)){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); SetVarString(i->worker, &i->callArgs.back(), v); } return *this; }
+Invocation& Invocation::argVec3(float x, float y, float z) { if (InvArmed(m_impl, m_seq)){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetVec3(&i->callArgs.back(), x, y, z); } return *this; }
 Invocation& Invocation::argObject(ObjectType type, void* userData)
 {
     // 바인딩된 네이티브 객체를 인자 슬롯(callArgs)에 VAR_MAP 으로 바인딩(구 neo_globalinterface2 arg 대체).
-    if (m_impl)
+    if (InvArmed(m_impl, m_seq))
     {
         InstanceRec* i = Inv(m_impl);
         const RegisteredObject* ro = static_cast<const RegisteredObject*>(NeoScriptInternal::objImpl(type));
@@ -1824,105 +1920,150 @@ Invocation& Invocation::argObject(ObjectType type, void* userData)
         VarInfo* pVar = &i->callArgs.back();
         if (ro && i->runtime && i->worker->ResetVarType(pVar, VAR_FP_NATIVE))
         {
-            ObjectBinding* bind = i->runtime->AcquireNestedBinding(i->handle, ro, userData);
+            auto bind = i->runtime->AcquireNestedBinding(i->handle, ro, userData);
             if (bind)
-                NeoVMSystem::RegisterTableCallBack(pVar, bind,
+                NeoVMSystem::RegisterTableCallBack(pVar, bind.get(),
                     (ro->method)   ? &MethodTrampoline   : nullptr,
-                    (ro->property) ? &PropertyTrampoline : nullptr, ro, userData);
+                    (ro->property) ? &PropertyTrampoline : nullptr, ro, userData, bind);
         }
     }
     return *this;
 }
-Invocation& Invocation::timeout(int32_t ms)  { if (m_impl) Inv(m_impl)->callTimeoutMs = ms;  return *this; }
-Invocation& Invocation::budget(uint32_t ops) { if (m_impl) Inv(m_impl)->callBudget = ops;     return *this; }
+Invocation& Invocation::timeout(int32_t ms)  { if (InvArmed(m_impl, m_seq)) Inv(m_impl)->callTimeoutMs = ms;  return *this; }
+Invocation& Invocation::budget(uint32_t ops) { if (InvArmed(m_impl, m_seq)) Inv(m_impl)->callBudget = ops;     return *this; }
 
 RunStatus Invocation::invoke()
 {
-    if (!m_impl) return RunStatus::Failed;
+    if (!InvArmed(m_impl, m_seq)) return RunStatus::Failed;
     InstanceRec* inst = Inv(m_impl);
     INeoVMWorker* w = inst->worker;
-    inst->armedSeq = 0;                    // 소비 시작(arm 해제) → 스크립트 실행 중 중첩 Call 허용
-    inst->runtime->FlushPendingCall(inst); // 이전 borrowed 컨텍스트 반납
-    inst->runtime->BeginCallError(inst);   // 이번 호출의 에러만 남도록 VM 에러 상태 초기화
-    NeoHostCallBegin begin = w->BeginHostCall();
-    if (begin != NeoHostCallBegin::Acquired && begin != NeoHostCallBegin::Nested)
+    inst->armedSeq = 0;
+    inst->runtime->FlushPendingCall(inst);
+    inst->runtime->BeginCallError(inst);
+    const int fid = inst->callFID;
+    const int timeoutMs = inst->callTimeoutMs;
+    const uint32_t budget = inst->callBudget;
+    // 재진입 호출도 같은 준비 공간을 쓰므로 현재 호출 인자는 별도로 보관한다.
+    std::vector<VarInfo> args;
+    args.swap(inst->callArgs);
+    if (!inst->spareCallArgs.empty())
     {
-        w->ReleaseArgs(inst->callArgs); inst->callArgs.clear();
-        ClearCallClosure(inst);
-        inst->callStatus = RunStatus::Failed;
-        if (begin == NeoHostCallBegin::OutOfMemory)
+        inst->callArgs.swap(inst->spareCallArgs.back());
+        inst->spareCallArgs.pop_back();
+    }
+    VarInfo closure = inst->callClosure;
+    inst->callClosure = VarInfo();
+    NeoHostCallBegin begin = w->BeginHostCall();
+    const bool nested = begin == NeoHostCallBegin::Nested;
+    int execStatus = NEOEXEC_ERROR;
+    if (begin == NeoHostCallBegin::Acquired || nested)
+    {
+        if (nested && (timeoutMs >= 0 || budget > 0))
         {
-            // BeginHostCall의 컨텍스트 대여 자체가 실패해도 worker-local OOM
-            // 상태를 이 인스턴스의 오류로 스냅샷한다.
-            inst->runtime->CaptureCallError(inst, inst->callStatus);
+            inst->runtime->NativeFail(inst->handle, 1, "time-limited execution is not allowed during synchronous native-to-script calls");
         }
         else
+        {
+            if (!nested)
+            {
+                w->SetTimeout(timeoutMs, NEO_DEFAULT_CHECKOP);
+                w->SetInstructionBudget(budget);
+            }
+            if (nested) w->BeginNestedScriptCall();
+            execStatus = w->RunHostCall(fid, args, closure.GetType() == VAR_CLOSURE ? &closure : nullptr);
+            if (nested) w->EndNestedScriptCall();
+        }
+    }
+    w->ReleaseArgs(args);
+    args.clear();
+    // 콜백이 밖에 남긴 준비 호출은 건드리지 않고, 비어 있는 준비 공간에 큰 버퍼를 돌려준다.
+    if (inst->armedSeq == 0 && inst->callArgs.empty() && inst->callArgs.capacity() < args.capacity())
+        args.swap(inst->callArgs);
+    if (args.capacity() != 0 && inst->spareCallArgs.size() < inst->spareCallArgs.max_size())
+    {
+        try
+        {
+            inst->spareCallArgs.emplace_back();
+            inst->spareCallArgs.back().swap(args);
+        }
+        catch (const std::bad_alloc&)
+        {
+            // 선택적인 캐시 확장 실패는 호출 결과에 영향을 주지 않는다. 빈 버퍼만 해제한다.
+        }
+    }
+    if (closure.GetType() == VAR_CLOSURE) w->Var_Release(&closure);
+    inst->resultSeq = m_seq;
+    if (execStatus == NEOEXEC_SUSPENDED)
+    {
+        inst->runtime->FlushPendingCall(inst);
+        inst->callStatus = RunStatus::Suspended;
+        inst->suspendedHostCall = true;
+        inst->suspendedResultOwnerAlive = true;
+        inst->suspendedSeq = m_seq;
+        inst->suspendedNested = false;
+        return inst->callStatus;
+    }
+    if (execStatus == NEOEXEC_COMPLETED)
+    {
+        if (!nested) w->GC();
+        inst->callStatus = RunStatus::Completed;
+    }
+    else
+    {
+        inst->callStatus = RunStatus::Failed;
+        inst->runtime->CaptureCallError(inst, inst->callStatus);
+        if (begin != NeoHostCallBegin::Acquired && !nested && begin != NeoHostCallBegin::OutOfMemory)
         {
             inst->callError.code = 1;
             inst->callError.message = "instance is not callable (suspended or invalid state)";
         }
-        return RunStatus::Failed;
     }
-    const bool nested = (begin == NeoHostCallBegin::Nested);
-    if (nested) w->BeginNestedScriptCall();
-    if (inst->callTimeoutMs >= 0 || inst->callBudget > 0)
-        w->SetTimeout(inst->callTimeoutMs, inst->callBudget > 0 ? static_cast<int>(inst->callBudget) : NEO_DEFAULT_CHECKOP);
-    VarInfo* closureValue = inst->callClosure.GetType() == VAR_CLOSURE ? &inst->callClosure : nullptr;
-    const int execStatus = w->RunHostCall(inst->callFID, inst->callArgs, closureValue);
-    ClearCallClosure(inst); // 실행 프레임은 별도 보유분을 가졌으므로 arm 보유분은 즉시 반납
-    if (execStatus == NEOEXEC_SUSPENDED)
+    // 외부에 남은 자식 호출의 반환 대여를 닫고 바깥 호출에 반환 소유권을 준다.
+    inst->runtime->FlushPendingCall(inst);
+    if (begin == NeoHostCallBegin::Acquired || nested)
     {
-        // Setup은 callArgs의 alloc 참조를 실행 스택에 AddRef해 복사했다. 이 벡터를
-        // retain할 이유가 없고, vector::clear만 하면 문자열/컨테이너 참조가 누수된다.
-        w->ReleaseArgs(inst->callArgs);
-        inst->callArgs.clear();
-        inst->callStatus = RunStatus::Suspended;
-		inst->suspendedHostCall = true;
-		inst->suspendedNested = nested;
-        return inst->callStatus;
+        inst->hostCallPending = true;
+        inst->pendingBegin = begin;
+        inst->pendingNested = false;
+        inst->pendingSeq = m_seq;
     }
-    if (execStatus == NEOEXEC_COMPLETED) { if (!nested) w->GC(); inst->callStatus = RunStatus::Completed; }
-    else inst->callStatus = RunStatus::Failed;
-    inst->runtime->CaptureCallError(inst, inst->callStatus);   // 실패면 VM 상세 + fail() 코드 스냅샷
-    w->ReleaseArgs(inst->callArgs);
-    inst->callArgs.clear();
-    // 반환 읽기(retX)를 위해 컨텍스트 유지 — dtor/다음 Call 의 FlushPendingCall 에서 반납.
-    inst->hostCallPending = true; inst->pendingBegin = begin; inst->pendingNested = nested;
-    inst->pendingSeq = m_seq;              // 이 pending 컨텍스트의 소유자 = 나(소멸자 소유 검사용)
     return inst->callStatus;
 }
-RunStatus Invocation::status() const { return m_impl ? Inv(m_impl)->callStatus : RunStatus::Failed; }
+RunStatus Invocation::status() const { return m_impl && Inv(m_impl)->resultSeq == m_seq ? Inv(m_impl)->callStatus : RunStatus::Failed; }
 const Error& Invocation::error() const
 {
     static const Error empty;
-    return m_impl ? Inv(m_impl)->callError : empty;   // InstanceRec 소유 스냅샷(비파괴)
+    return m_impl && Inv(m_impl)->resultSeq == m_seq ? Inv(m_impl)->callError : empty;   // InstanceRec 소유 스냅샷(비파괴)
 }
 
-ValueType Invocation::retType() const { if(!m_impl) return ValueType::None; VarInfo* rv=Inv(m_impl)->worker->GetReturnVar(); return rv?VarTypeToValueType(rv):ValueType::None; }
-int32_t Invocation::retInt() const { if(!m_impl) return 0; InstanceRec* i=Inv(m_impl); return i->worker->PopInt(i->worker->GetReturnVar()); }
-float Invocation::retFloat() const { if(!m_impl) return 0.0f; InstanceRec* i=Inv(m_impl); return static_cast<float>(i->worker->PopFloat(i->worker->GetReturnVar())); }
-bool Invocation::retBool() const { if(!m_impl) return false; InstanceRec* i=Inv(m_impl); return i->worker->PopBool(i->worker->GetReturnVar()); }
-StringView Invocation::retString() const { if(!m_impl) return StringView(); InstanceRec* i=Inv(m_impl); const char* s=i->worker->PopString(i->worker->GetReturnVar()); return StringView(s?s:""); }
-void Invocation::retVec(float out[4]) const { ReadVec(m_impl ? Inv(m_impl)->worker->GetReturnVar() : nullptr, out); }
+ValueType Invocation::retType() const { VarInfo* v=InvReturn(m_impl,m_seq); return v?VarTypeToValueType(v):ValueType::None; }
+int32_t Invocation::retInt() const { VarInfo* v=InvReturn(m_impl,m_seq); return v?Inv(m_impl)->worker->PopInt(v):0; }
+float Invocation::retFloat() const { VarInfo* v=InvReturn(m_impl,m_seq); return v?static_cast<float>(Inv(m_impl)->worker->PopFloat(v)):0.0f; }
+bool Invocation::retBool() const { VarInfo* v=InvReturn(m_impl,m_seq); return v && Inv(m_impl)->worker->PopBool(v); }
+StringView Invocation::retString() const {
+    VarInfo* v=InvReturn(m_impl,m_seq);
+    if (!v) return StringView();
+    if (v->GetType()==VAR_STRING) return StringView(v->_str->_str);
+    const char* text=Inv(m_impl)->worker->PopString(v); return StringView(text?text:"");
+}
+void Invocation::retVec(float out[4]) const { ReadVec(InvReturn(m_impl,m_seq), out); }
 bool Invocation::retMap(MapReader& out) const
 {
-    if(!m_impl) return false; InstanceRec* i=Inv(m_impl); VarInfo* rv=i->worker->GetReturnVar();
+    if(!m_impl) return false; InstanceRec* i=Inv(m_impl); VarInfo* rv=InvReturn(m_impl,m_seq);
     if(!rv||rv->GetType()!=VAR_MAP||!rv->_tbl) return false;
-    i->readMapPool.clear(); i->readListPool.clear();
     i->readMapPool.push_back(MapReaderImpl{ i->worker, rv->_tbl, &i->readMapPool, &i->readListPool });
     out = NeoScriptInternal::mapR(&i->readMapPool.back()); return true;
 }
 bool Invocation::retList(ListReader& out) const
 {
-    if(!m_impl) return false; InstanceRec* i=Inv(m_impl); VarInfo* rv=i->worker->GetReturnVar();
+    if(!m_impl) return false; InstanceRec* i=Inv(m_impl); VarInfo* rv=InvReturn(m_impl,m_seq);
     if(!rv||rv->GetType()!=VAR_LIST||!rv->_lst) return false;
-    i->readMapPool.clear(); i->readListPool.clear();
     i->readListPool.push_back(ListReaderImpl{ i->worker, rv->_lst, &i->readMapPool, &i->readListPool });
     out = NeoScriptInternal::listR(&i->readListPool.back()); return true;
 }
 bool Invocation::retArray(ArrayView& out) const
 {
-    if(!m_impl) return false; InstanceRec* i=Inv(m_impl); VarInfo* rv=i->worker->GetReturnVar();
+    if(!m_impl) return false; InstanceRec* i=Inv(m_impl); VarInfo* rv=InvReturn(m_impl,m_seq);
     if(!rv||rv->GetType()!=VAR_ARRAY||!rv->_array) return false;
     out = NeoScriptInternal::arrayV(rv->_array); return true;
 }
@@ -1937,12 +2078,12 @@ CallResult Invocation::invokeR()
         InstanceRec* i = Inv(m_impl);
         // Completed 일 때만 반환 슬롯을 스냅샷한다. 실패면 CallResult 는 기본값(type None, 0/빈) 유지 →
         // asInt()==0 / asString()=="" 등 접근자의 무효값이 나온다(실패했는데 이전 성공 호출 값이 새는 것 방지).
-        VarInfo* rv = (r.status == RunStatus::Completed) ? i->worker->GetReturnVar() : nullptr;
+        VarInfo* rv = (r.status == RunStatus::Completed) ? InvReturn(m_impl,m_seq) : nullptr;
         if (rv)
         {
             ValueType vt = VarTypeToValueType(rv);
             if (vt == ValueType::String)
-                NeoScriptInternal::setResult(r, vt, 0, nullptr, i->worker->PopString(rv));
+                NeoScriptInternal::setResult(r, vt, 0, nullptr, StringView(rv->_str->_str));
             else
             {
                 float f4[4] = { 0, 0, 0, 0 }; int32_t iv = 0;
@@ -1950,14 +2091,14 @@ CallResult Invocation::invokeR()
                 {
                 case ValueType::Bool:  iv = i->worker->PopBool(rv) ? 1 : 0; f4[0] = static_cast<float>(iv); break;
                 case ValueType::Int:   iv = i->worker->PopInt(rv);          f4[0] = static_cast<float>(iv); break;
-                case ValueType::Float: f4[0] = static_cast<float>(i->worker->PopFloat(rv)); iv = static_cast<int32_t>(f4[0]); break;
+                case ValueType::Float: f4[0] = static_cast<float>(i->worker->PopFloat(rv)); iv = NeoFloatToInt(f4[0]); break;
                 case ValueType::Vec2: case ValueType::Vec3: case ValueType::Vec4: ReadVec(rv, f4); break;
                 default: break; // None/Map/List → 스칼라 없음
                 }
-                NeoScriptInternal::setResult(r, vt, iv, f4, nullptr);
+                NeoScriptInternal::setResult(r, vt, iv, f4, StringView());
             }
         }
-        i->runtime->FlushPendingCall(i);     // 스냅샷 완료 → 컨텍스트 즉시 반납
+        if (i->pendingSeq == m_seq) i->runtime->FlushPendingCall(i);     // 스냅샷 완료 → 컨텍스트 즉시 반납
     }
     return r;
 }
@@ -1970,14 +2111,14 @@ RunStatus Invocation::invokeReadMapImpl(void* ctx, void(*cb)(void*, MapReader))
     {
         InstanceRec* i = Inv(m_impl);
         // 실패(Completed 아님)면 콜백을 호출하지 않는다(반환 슬롯에 남은 이전 성공 호출의 map 누출 방지).
-        VarInfo* rv = (st == RunStatus::Completed) ? i->worker->GetReturnVar() : nullptr;
+        VarInfo* rv = (st == RunStatus::Completed) ? InvReturn(m_impl,m_seq) : nullptr;
         if (cb && rv && rv->GetType() == VAR_MAP && rv->_tbl)
         {
             i->readMapPool.clear(); i->readListPool.clear();
             i->readMapPool.push_back(MapReaderImpl{ i->worker, rv->_tbl, &i->readMapPool, &i->readListPool });
             cb(ctx, NeoScriptInternal::mapR(&i->readMapPool.back())); // 컨텍스트 살아있는 스코프에서만
         }
-        i->runtime->FlushPendingCall(i);     // 콜백 종료 → 반납
+        if (i->pendingSeq == m_seq) i->runtime->FlushPendingCall(i);     // 콜백 종료 → 반납
     }
     return st;
 }
@@ -1989,14 +2130,14 @@ RunStatus Invocation::invokeReadListImpl(void* ctx, void(*cb)(void*, ListReader)
     {
         InstanceRec* i = Inv(m_impl);
         // 실패(Completed 아님)면 콜백을 호출하지 않는다(반환 슬롯에 남은 이전 성공 호출의 list 누출 방지).
-        VarInfo* rv = (st == RunStatus::Completed) ? i->worker->GetReturnVar() : nullptr;
+        VarInfo* rv = (st == RunStatus::Completed) ? InvReturn(m_impl,m_seq) : nullptr;
         if (cb && rv && rv->GetType() == VAR_LIST && rv->_lst)
         {
             i->readMapPool.clear(); i->readListPool.clear();
             i->readListPool.push_back(ListReaderImpl{ i->worker, rv->_lst, &i->readMapPool, &i->readListPool });
             cb(ctx, NeoScriptInternal::listR(&i->readListPool.back()));
         }
-        i->runtime->FlushPendingCall(i);
+        if (i->pendingSeq == m_seq) i->runtime->FlushPendingCall(i);
     }
     return st;
 }
@@ -2007,10 +2148,10 @@ RunStatus Invocation::invokeReadArrayImpl(void* ctx, void(*cb)(void*, ArrayView)
     if (m_impl)
     {
         InstanceRec* i = Inv(m_impl);
-        VarInfo* rv = (st == RunStatus::Completed) ? i->worker->GetReturnVar() : nullptr;
+        VarInfo* rv = (st == RunStatus::Completed) ? InvReturn(m_impl,m_seq) : nullptr;
         if (cb && rv && rv->GetType() == VAR_ARRAY && rv->_array)
             cb(ctx, NeoScriptInternal::arrayV(rv->_array));
-        i->runtime->FlushPendingCall(i);
+        if (i->pendingSeq == m_seq) i->runtime->FlushPendingCall(i);
     }
     return st;
 }
@@ -2018,16 +2159,35 @@ RunStatus Invocation::invokeReadArrayImpl(void* ctx, void(*cb)(void*, ArrayView)
 //==============================================================================
 // 트램폴린 — 공개 NativeMethod/NativeProperty ↔ 내부 Neo_NativeFunction/Property
 //==============================================================================
+struct BindingCallbackScope
+{
+    InstanceRec* instance;
+    explicit BindingCallbackScope(InstanceRec* value) : instance(value) { ++instance->nativeCallbackDepth; }
+    ~BindingCallbackScope() { --instance->nativeCallbackDepth; }
+};
+static InstanceRec* BindingInstance(ObjectBinding* binding)
+{
+    if (!binding || !binding->runtime) return nullptr;
+    InstanceRec* instance = binding->runtime->resolveInstance(binding->handle);
+    if (!instance || instance->bindingGeneration != binding->generation)
+    {
+        binding->runtime->NativeFail(binding->handle, 1, "native object source instance is no longer alive");
+        return nullptr;
+    }
+    return instance;
+}
 static bool MethodTrampoline(INeoVMWorker* N, void* pUserData, const VMString* pStr, short args)
 {
     ObjectBinding* b = static_cast<ObjectBinding*>(pUserData);
     if (!b || !b->obj || !b->obj->method) return false;
+    InstanceRec* source = BindingInstance(b); if (!source) return false;
+    BindingCallbackScope scope(source);
     CallContextImpl impl;
     impl.worker = N;
     impl.runtime = static_cast<IRuntime*>(b->runtime);
     impl.instance = b->handle;
     impl.bindingUserData = b->userData;
-    impl.instanceUserData = b->inst ? b->inst->instanceUserData : nullptr;
+    impl.instanceUserData = source->instanceUserData;
     impl.argCount = args;
     CallContext ctx = NeoScriptInternal::ctx(&impl);
     return b->obj->method(ctx, VmName(pStr));
@@ -2036,12 +2196,14 @@ static bool PropertyTrampoline(INeoVMWorker* N, void* pUserData, const VMString*
 {
     ObjectBinding* b = static_cast<ObjectBinding*>(pUserData);
     if (!b || !b->obj || !b->obj->property) return false;
+    InstanceRec* source = BindingInstance(b); if (!source) return false;
+    BindingCallbackScope scope(source);
     CallContextImpl impl;
     impl.worker = N;
     impl.runtime = static_cast<IRuntime*>(b->runtime);
     impl.instance = b->handle;
     impl.bindingUserData = b->userData;
-    impl.instanceUserData = b->inst ? b->inst->instanceUserData : nullptr;
+    impl.instanceUserData = source->instanceUserData;
     impl.propertyVar = p;          // get: retX 가 p 에 씀 / set: argX(0) 가 p 를 읽음
     impl.propertyIsArg = !get;
     impl.argCount = get ? 0 : 1;
@@ -2106,10 +2268,16 @@ public:
     bool IsPaused(InstanceHandle i) override { INeoVMWorker* w = worker(i); return w ? w->DebugIsPaused() : false; }
     RunStatus Run(InstanceHandle i) override
     {
-        INeoVMWorker* w = worker(i); if (!w) return RunStatus::Failed;
-        bool ok = w->Run();
-        if (w->DebugIsPaused()) return RunStatus::Suspended;
-        return ok ? RunStatus::Completed : RunStatus::Failed;
+        INeoVMWorker* w = worker(i);
+        if (!w || w->IsInterpreterRunning() || w->GetExecutionState() == NeoExecutionState::Idle) return RunStatus::Failed;
+        InstanceRec* inst = m_rt->resolveInstance(i);
+        if (inst->hostCallPending || inst->armedSeq) return RunStatus::Failed;
+        w->SetInstructionBudget(inst->debugSliceBudget, false);
+        return mapExecStatus(w->ResumeTop());
+    }
+    void SetSliceBudget(InstanceHandle i, uint64_t budget) override {
+        if (InstanceRec* inst = m_rt->resolveInstance(i))
+            if (!inst->worker->IsInterpreterRunning()) inst->debugSliceBudget = budget;
     }
     DebugLocation GetLocation(InstanceHandle i) override { INeoVMWorker* w = worker(i); return w ? ToPublicLoc(w->DebugGetLocation()) : DebugLocation(); }
     void GetStackTrace(InstanceHandle i, std::vector<DebugStackFrame>& out) override

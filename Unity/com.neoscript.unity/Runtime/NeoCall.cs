@@ -49,7 +49,7 @@ namespace NeoScript
         public Vector2 AsVector2 => new Vector2(_f0, _f1);
         public Vector3 AsVector3 => new Vector3(_f0, _f1, _f2);
         public Vector4 AsVector4 => new Vector4(_f0, _f1, _f2, _f3);
-        public Quaternion AsQuaternion => new Quaternion(_f0, _f1, _f2, _f3);
+        public Quaternion AsQuaternion => new Quaternion(_f1, _f2, _f3, _f0);
 
         internal NeoException ToException(string what)
             => new NeoException($"{what} failed ({Status}): {_error ?? "no reason reported"}");

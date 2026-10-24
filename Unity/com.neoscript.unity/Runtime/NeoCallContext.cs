@@ -64,7 +64,7 @@ namespace NeoScript
         {
             float* v = stackalloc float[4];
             NeoNative.NsCtxArgVec(_ctx, index, v);
-            return new Quaternion(v[0], v[1], v[2], v[3]);
+            return new Quaternion(v[1], v[2], v[3], v[0]);
         }
 
         /// <summary>map 인자. 유효하지 않으면 IsValid==false.</summary>
@@ -128,7 +128,7 @@ namespace NeoScript
         public void Return(Vector2 value) => NeoNative.NsCtxRetVec2(_ctx, value.x, value.y);
         public void Return(Vector3 value) => NeoNative.NsCtxRetVec3(_ctx, value.x, value.y, value.z);
         public void Return(Vector4 value) => NeoNative.NsCtxRetVec4(_ctx, value.x, value.y, value.z, value.w);
-        public void Return(Quaternion value) => NeoNative.NsCtxRetVec4(_ctx, value.x, value.y, value.z, value.w);
+        public void Return(Quaternion value) => NeoNative.NsCtxRetVec4(_ctx, value.w, value.x, value.y, value.z);
         public void ReturnNull() => NeoNative.NsCtxRetNull(_ctx);
 
         public void Return(string value)

@@ -27,9 +27,14 @@ against the `Packages` folder):
 ## Updating the core and binding
 
 Rebuild the plugin after updating the package sources. The current C# binding
-requires C ABI 4 and rejects an old DLL at startup. Imported script APIs now
+requires C ABI 5 and rejects an old DLL at startup. Imported script APIs now
 use `public`; `export` remains the C# host visibility keyword. See the
 [migration notes and JSON/property examples](../docs/Unity.md).
+
+ABI 5 rejects disposal while calls or callbacks are active, preserves borrowed
+readers across calls on different instances, and validates object-type ownership.
+Quaternion helpers convert script w,x,y,z to Unity x,y,z,w; raw Vector4 and
+array views keep script order. Rebuild the plugin together with the package.
 
 ## Verification
 

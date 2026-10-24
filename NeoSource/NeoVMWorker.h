@@ -3,6 +3,8 @@
 #include <chrono>
 
 #include "NeoVMInternal.h"
+#include "NeoStringLimits.h"
+#include "NeoNumeric.h"
 #include "NeoVMError.h"
 
 #include "NeoVMProgram.h"
@@ -92,6 +94,8 @@ private:
 	int m_iTimeout = -1;
 	int m_iCheckOpCount = NEO_DEFAULT_CHECKOP;
 	int m_op_process = 0;
+	uint64_t m_instructionBudget = 0;
+	bool m_budgetRestrictsNested = true;
 	bool m_bSliceExpired = false; // 시간 제한으로 다음 ResumeTop까지 보류됨
 	int m_iBreakingCallStack = 0;
 	bool m_bTopExec = false;   // 최상위 실행/재개 중(=완료까지 실행)인지
@@ -119,10 +123,21 @@ private:
     EDebugRunMode m_eDebugRunMode = DBG_CONTINUE;
     bool m_bDebugPauseRequested = false;
 	bool m_bDebugFaulted = false;
-    int m_iDebugSkipFile = -1;
-    int m_iDebugSkipLine = -1;
-    int m_iDebugSkipOpIndex = -1;
+    struct DebugLineSkip
+    {
+        CoroutineInfo* context;
+        int depth;
+        int file;
+        int line;
+        int lastOp;
+        int stoppedOp;
+    };
+    std::vector<DebugLineSkip> m_sDebugLineSkips;
     int m_iDebugStepDepth = -1;
+    void PruneDebugLineSkips(CoroutineInfo* context, int maxDepth);
+    CoroutineInfo* m_pDebugStepContext = nullptr;
+    CoroutineInfo* m_pDebugStepReturnContext = nullptr;
+    void PrepareDebugResume(EDebugRunMode mode);
     int m_iDebugSuppressCount = 0;
     // Script A -> native API -> Script B 동기 재진입 범위에서만 증가한다.
     int m_iNativeScriptCallDepth = 0;
@@ -151,6 +166,13 @@ private:
 	NEOS_FORCEINLINE void SetCodePtr(int off) { _pCodeCurrent = (const SVMOperation*)(_pCodeBegin + off); }
 	// 점프 offset 은 op(SVMOperation) 단위. SVMOperation* 포인터 산술로 op 수만큼 이동.
 	NEOS_FORCEINLINE void SetCodeIncPtr(int opOff) { _pCodeCurrent += opOff; }
+	NEOS_FORCEINLINE bool IsErrorTrap() const { return (const u8*)_pCodeCurrent == _pCodeBegin; }
+	NEOS_FORCEINLINE void SetComparisonJump(int opOff)
+	{
+		// A failed comparison has already selected the error opcode.
+		if (!IsErrorTrap()) SetCodeIncPtr(opOff);
+	}
+	bool CheckNestedCallDepth();
 
 	// 워커 고유 상태 = 전역 변수 슬롯([static | global] 단일 배열).
 	// static 구간은 로드 시 프로그램의 상수 서술자에서 이 VM 의 할당자로 실체화한다.
@@ -188,18 +210,20 @@ private:
 			if (upperFirst)
 			{
 				if (upperInclusive ? CompareGR(test, upper) : CompareGE(test, upper)) return false;
-				return !(lowerInclusive ? CompareGR(lower, test) : CompareGE(lower, test));
+				if (IsErrorTrap()) return false;
+				return !(lowerInclusive ? CompareGR(lower, test, true) : CompareGE(lower, test, true));
 			}
-			if (lowerInclusive ? CompareGR(lower, test) : CompareGE(lower, test)) return false;
+			if (lowerInclusive ? CompareGR(lower, test, true) : CompareGE(lower, test, true)) return false;
+			if (IsErrorTrap()) return false;
 			return !(upperInclusive ? CompareGR(test, upper) : CompareGE(test, upper));
 		}
 		if (upperFirst)
 		{
-			if (!(upperInclusive ? CompareGE(upper, test) : CompareGR(upper, test))) return false;
+			if (!(upperInclusive ? CompareGE(upper, test, true) : CompareGR(upper, test, true))) return false;
 			return lowerInclusive ? CompareGE(test, lower) : CompareGR(test, lower);
 		}
 		if (!(lowerInclusive ? CompareGE(test, lower) : CompareGR(test, lower))) return false;
-		return upperInclusive ? CompareGE(upper, test) : CompareGR(upper, test);
+		return upperInclusive ? CompareGE(upper, test, true) : CompareGR(upper, test, true);
 	}
 	NEOS_FORCEINLINE const std::vector<debug_info>& DebugData() const { return _pProgram->debugData; }
 
@@ -250,7 +274,7 @@ private:
 	void    ReleaseCoroutineClosuresWithoutSync(CoroutineInfo* pCI);
 	void    UnwindActiveClosures();                    // return을 거치지 않는 error/cancel 정리
 	void    ReleaseExecution(bool discardParkedClosuresWithoutSync = false); // 최상위 실행 컨텍스트를 풀로 반납
-	int     RunSettle();                                // Run() 후 완료/정지/에러 판정 (NeoExecStatus)
+	int     RunSettle(bool retainCompletedResult = false);                                // Run() 후 완료/정지/에러 판정 (NeoExecStatus)
 	void    PoisonOutOfMemory() noexcept { m_bOutOfMemoryPoisoned = true; }
 	NEOS_NOINLINE bool ReportRunException();
 
@@ -273,7 +297,7 @@ private:
 	virtual bool	Setup(int iFunctionID, std::vector<VarInfo>& _args) override;
 	virtual bool	Run() override;
 	virtual int	ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args) override;
-	virtual int	ResumeTop() override;
+	virtual int	ResumeTop(bool retainCompletedResult = false) override;
 	virtual NeoExecutionState GetExecutionState() override;
 	virtual bool IsOutOfMemoryPoisoned() const override { return m_bOutOfMemoryPoisoned; }
 	virtual bool IsSuspended() override;
@@ -283,6 +307,7 @@ private:
 	virtual void EndNestedScriptCall() override;
 	virtual int RunHostCall(int iFunctionID, std::vector<VarInfo>& _args, VarInfo* closureValue = nullptr) override;
 	virtual bool CancelExecution() override;
+	virtual bool IsInterpreterRunning() const override { return m_bInRun; }
 
 	template<bool TIMEOUT, bool DEBUG>
 	bool	RunInternal(int iBreakingCallStack);
@@ -318,9 +343,16 @@ private:
 public:
 	NEOS_FORCEINLINE CNeoVM* GetVM() { return _pVM;  }
 	bool IsNativeScriptCallActive() const { return m_iNativeScriptCallDepth > 0; }
+	bool IsSynchronousExecutionLimited() const {
+		return m_iTimeout >= 0 || (m_instructionBudget != 0 && m_budgetRestrictsNested);
+	}
+	virtual void SetInstructionBudget(uint64_t budget, bool restrictNested = true) override {
+		m_instructionBudget = budget;
+		m_budgetRestrictsNested = restrictNested;
+	}
 	virtual void SetTimeout(int iTimeout, int iCheckOpCount) override {
 		m_iTimeout = iTimeout;
-		m_iCheckOpCount = iCheckOpCount;
+		m_iCheckOpCount = iCheckOpCount > 0 ? iCheckOpCount : NEO_DEFAULT_CHECKOP;
 	}
 private:
 
@@ -353,6 +385,8 @@ private:
 	void Per2(VarInfo* r, VarInfo* v2);
 	void LSh2(VarInfo* r, VarInfo* v2);
 	void RSh2(VarInfo* r, VarInfo* v2);
+	void LSh2Rare(VarInfo* r, VarInfo* v2);
+	void RSh2Rare(VarInfo* r, VarInfo* v2);
 	void And2(VarInfo* r, VarInfo* v2);
 	void Or2 (VarInfo* r, VarInfo* v2);
 	void Xor2(VarInfo* r, VarInfo* v2);
@@ -379,6 +413,8 @@ private:
 	void Per3(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void LSh3(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void RSh3(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	void LSh3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2);
+	void RSh3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void And3(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Or3(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void Xor3(VarInfo* r, VarInfo* v1, VarInfo* v2);
@@ -386,15 +422,15 @@ private:
 	void Inc(VarInfo* v1);
 	void Dec(VarInfo* v1);
 	bool CompareEQ(VarInfo* v1, VarInfo* v2);
-	bool CompareGR(VarInfo* v1, VarInfo* v2);
-	bool CompareGE(VarInfo* v1, VarInfo* v2);
+	bool CompareGR(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic = false);
+	bool CompareGE(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic = false);
 	// 숫자 외 비교는 interpreter switch 안에 복제하지 않는다. 문자열/벡터/오류 처리는
 	// 드문 경로라 noinline으로 두어 숫자 비교 opcode의 기계 코드가 안정적으로 유지된다.
 	NEOS_NOINLINE bool CompareEQRare(VarInfo* v1, VarInfo* v2);
-	NEOS_NOINLINE bool CompareGRRare(VarInfo* v1, VarInfo* v2);
-	NEOS_NOINLINE bool CompareGERare(VarInfo* v1, VarInfo* v2);
+	NEOS_NOINLINE bool CompareGRRare(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic);
+	NEOS_NOINLINE bool CompareGERare(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic);
 	bool For(VarInfo* v1);
-	bool ForRare(VarInfo* v1, int step);   // step<0 / step==0 (드문 경로, For 에서 분리)
+	bool ForRare(VarInfo* v1, int step);   // step != 1 (일반 양수 스텝·역방향·0) — For 의 인라인 본문을 step==1 로만 유지
 	// bTwoVar: foreach(var k, v in ...) 형태(컴파일러가 op argFlag 로 전달).
 	// list 는 2변수 순회를 지원하지 않으므로 런타임에 여기서 에러를 낸다.
 	bool ForEach(VarInfo* v1, VarInfo* v2, bool bTwoVar);
@@ -403,6 +439,7 @@ private:
 	int Sleep(int iTimeout, VarInfo* v1);
 	void Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue = NULL);
 	void Call(int n1, int n2, int returnValueIndex = -1);
+	void CallFunctionValue(int functionIndex, int argumentCount);
 	void Call(ClosureInfo* closure, int n2, int returnValueIndex = -1);
 	// return 값 슬롯은 Sync 뒤에도 caller가 읽으므로 보존한다. 나머지 캡처
 	// 슬롯은 closure 보관함으로 소유권을 넘긴다.

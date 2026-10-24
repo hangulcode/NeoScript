@@ -157,9 +157,9 @@ bool MapInfo::ReMap(int minCapacity)
 {
 	int newCapacity = _BucketCapa > 0 ? _BucketCapa : 2;
 	if (minCapacity <= 0)
-		minCapacity = newCapacity << 1;
+		minCapacity = GrowHashCapacity(newCapacity);
 	while (newCapacity < minCapacity)
-		newCapacity <<= 1;
+		newCapacity = GrowHashCapacity(newCapacity);
 
 	MapNode* oldBucket = _Bucket;
 	const int oldCapacity = _BucketCapa;
@@ -258,11 +258,9 @@ void MapInfo::Free()
 void MapInfo::Reserve(int sz)
 {
 	if (sz < 0) sz = 0;
-	int minCapacity = 2;
+	const int minCapacity = HashCapacityForItems(sz);
 	// Keep the same maximum load as Insert. Nodes live directly in this array,
 	// so a full table makes collision-chain lookup depend on key placement.
-	while ((long long)minCapacity * 3 < (long long)sz * 4)
-		minCapacity <<= 1;
 	if (minCapacity > _BucketCapa)
 		ReMap(minCapacity);
 }
@@ -285,7 +283,7 @@ VarInfo* MapInfo::Insert(VarInfo* pKey)
 	if (_BucketCapa == 0
 		|| (long long)(_itemCount + 1) * 4 > (long long)_BucketCapa * 3)
 	{
-		if (!ReMap(_BucketCapa > 0 ? _BucketCapa << 1 : 2))
+		if (!ReMap(GrowHashCapacity(_BucketCapa)))
 			return NULL;
 	}
 
@@ -295,7 +293,7 @@ VarInfo* MapInfo::Insert(VarInfo* pKey)
 		// _lastFree does not move back after removals. Rebuild at the same
 		// capacity to recover those holes; grow only when the table is full.
 		const int minCapacity = _itemCount + 1 >= _BucketCapa
-			? _BucketCapa << 1
+			? GrowHashCapacity(_BucketCapa)
 			: _BucketCapa;
 		if (!ReMap(minCapacity))
 			return NULL;

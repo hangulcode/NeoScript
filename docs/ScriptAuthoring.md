@@ -59,10 +59,23 @@ print(Describe(label, count));     // apple: 3
 print(optional == null);          // true
 ```
 
+A declaration without an initializer starts as `null` each time execution reaches it, including
+inside a loop. This initialization is retained in both debug and non-debug builds, even when
+later statements assign a value before it is read.
+
 Common operators include arithmetic `+ - * / %`, comparisons `== != < <= > >=`, logical `&& ||`,
 and bitwise `& | ^ ~ << >>`. Assignment, `+= -= *= /= %=`, and `++ --` are also available.
 Use explicit comparisons in logical expressions and parentheses to make mixed operations clear.
 `&&` and `||` short-circuit: the right operand is not evaluated once the result is known.
+Other operands and call arguments are evaluated left to right. Each scalar or vector value is
+fixed before the next operand runs. Container elements and globals are read or copied ahead whenever a
+call, a selector (which may reach a host getter), or an assignment follows in the same expression. A local
+variable is copied ahead only when the expression assigns to a variable, because callees and getters
+cannot rebind a caller's locals. Container arguments retain shared storage, so later mutation
+through an alias remains visible. A later reassignment of the original variable does not replace the argument.
+Function-value calls capture the callee before arguments. Dot calls retain their receiver but look
+up the member after arguments: if an argument changes `m.f`, `m.f(...)` calls the new member.
+Use `m["f"](...)` when the stored function must be captured before argument evaluation.
 
 ```cpp
 var count = 2;
@@ -73,6 +86,7 @@ print("count=" .. count);            // count=2
 print((count > 0) && (count < capacity)); // true
 ```
 
+- `%` and `%=` require integer operands. Floating-point `%` is also rejected in `const` and `case` expressions; use `math.fmod(x, y)` at run time.
 - Integer `/`, `%`, `/=`, and `%=` fail with a runtime error when the divisor is zero or
   the operands are `-2147483648` and `-1`. The destination is unchanged on failure.
   In `const` and `case` expressions, these are compile errors. Floating-point division
@@ -84,7 +98,16 @@ print((count > 0) && (count < capacity)); // true
 - For floating-point division, convert one operand with `tofloat` **before dividing**.
   `tofloat(count / capacity)` only converts the already-truncated result.
 - `float` is single precision. Converting a large integer ID to float and back may change its value.
+  Float-to-int conversion truncates toward zero, clamps overflow/infinity to the int32 endpoints,
+  and converts NaN to zero. Integer literals outside int32 are compile errors.
+  `const` floating-point expressions deliberately calculate in double precision before runtime
+  float32 conversion: `(16777216.0 + 1.0) - 16777216.0` is `1` as a const expression but `0`
+  when evaluated step by step at run time. Non-finite const results are compile errors.
+  Constants, assignments, and container values preserve signed zero. `0.0 == -0.0` is true,
+  but `1.0 / 0.0` is positive infinity and `1.0 / -0.0` is negative infinity.
+  The two zeros still identify the same map key.
 - Use `..`, not `+`, for string concatenation. It converts values to strings and joins them.
+- Function values, including captured lambdas, become `"function"` through `tostring`, string concatenation, and `print`. Null remains `"null"`.
 - `toint`, `tofloat`, `tostring`, `tosize`, and `type` require no import.
   They are keywords and cannot be stored in variables or passed as function callbacks.
 - In the default console, `print(value)` prints a line. To print several values,
@@ -117,7 +140,9 @@ fun IsOdd(var n)
 ```
 
 A declaration without a body, such as `fun IsEven(var n);`, is a **compile error**.
-Provide a single function definition. Direct calls to named script functions must use the correct argument count.
+Provide a single function definition. Both direct and function-value calls must use the exact argument count.
+A variable and a named function cannot share a name in the same module. Local variables and parameters
+shadow module aliases. Named nested functions cannot read or write an enclosing function's locals.
 Collecting declarations does not reorder imports or global initialization.
 
 ### Declare globals before function bodies that use them
@@ -316,12 +341,17 @@ print(sumAgain);                   // 60
   Do not use `for (var i = 0; i < n; i++)` in the current default build.
 - The start is inclusive and the end is exclusive. To traverse a list backward, use `len()-1` to `-1`.
 - The step can be a runtime value. A direction inconsistent with the range runs zero iterations; a zero step is a runtime error. An increment beyond the integer boundary ends the range without wrapping.
+- Numeric range bounds and steps are converted to int32 before iteration. Fractional parts are
+  truncated toward zero, so a step of `0.5` becomes zero and raises an error. Prefer integer inputs.
 - A single `foreach` variable over a list, dense array, or set holds the **value**, not the index.
   Use a range `for` when you need an index.
 - `foreach (var v in [1,2,3])`, containers returned by functions, and `m.keys()` are supported.
-  The source expression is evaluated once on entry, and its temporary result stays alive until the loop ends.
-  Nested loops keep independent sources; they do not deep-copy the containers.
+  The source expression is evaluated once on entry, and its value stays alive until the loop ends.
+  Reassigning the source variable in the body does not change the collection being traversed.
+  Nested loops keep independent sources; they do not deep-copy the containers. Changes through an alias
+  still affect the original storage and remain subject to the iteration mutation rules.
 - Maps support `foreach (var key in map)` and `foreach (var key, value in map)`.
+  Strings yield one character per iteration and accept only one iteration variable.
 - Avoid changing the element count during iteration. Changing a dense array's length is an error.
   To remove several map keys, iterate over the list returned by `keys()` and modify the original map.
 - `while (condition)` is also available. `break` exits the innermost loop or switch,
@@ -736,6 +766,10 @@ Trigonometric functions use lowercase names, such as `math.sin`, `math.cos`, and
 See the [math API](API.md#3-math) for complete argument order and types.
 `Lerp`, `InverseLerp`, and `Remap` do not automatically clamp to `[0, 1]`.
 Combine them with `Clamp01` when needed. Angle functions use radians.
+`DeltaAngle`, `LerpAngle`, and `MoveTowardAngle` handle large finite angles without losing the wrapped
+target; `LerpAngle(a,b,0)` and `LerpAngle(a,b,1)` return the wrapped endpoints. `PingPong` preserves
+small positions even when its positive length is large. `Normalize3` handles large finite components
+without overflowing the intermediate squared length; its small-vector fallback rule is unchanged.
 
 ```cpp
 import math;
@@ -754,6 +788,10 @@ print(math.Lerp(10.0, 20.0, 0.5));   // 15
 print(math.MoveToward(0.0, 10.0, 2.0)); // 2
 ```
 
+- Direct assignments such as `v = math.Vector3(x, y, z)` avoid an intermediate value copy.
+  Existing copies stay independent. Arguments are evaluated left to right before the constructor
+  writes `v`; invalid component types release the unfinished vector without overwriting it.
+  Argument side effects still occur.
 - Vectors and lists such as `[x, y, z]` are different types. Do not pass a list to a vector API.
 - Access components with `v[0]` and `v[1]`; `v.x`, `v.y`, and `v.z` are unsupported.
 - Component `+=`, `-=`, `*=`, and `/=` accept int/float operands and preserve value-copy semantics.
@@ -761,13 +799,17 @@ print(math.MoveToward(0.0, 10.0, 2.0)); // 2
 - A component write through a container element or a native property (`list[0][1] = n`, `obj.Position[0] += n`)
   reaches that element or property. Through a native property each statement costs one getter and one setter,
   so when changing several components copy into a variable, modify it, then store it back once.
-- Indexed assignments resolve the final containing element after evaluating the right-hand side.
+- Indexed assignments resolve the containing path after evaluating the right-hand side, except
+  for computed indices and function-produced containers retained as described below.
+  If the right-hand side replaces an intermediate list or map, the write follows the replacement.
   For example, if `F()` changes `i`, `list[i][0] += F()` reads and writes the element at the new `i`,
   just like a single-level indexed assignment. Parentheses around the target do not change this rule.
-  An index computed by a function call is evaluated once; its result is not recomputed for write-back.
+  Computed index expressions and calls that produce the target container run once before the right-hand
+  side; their results are retained. For example, `Get()[0] += Change()` retains the container returned
+  by `Get()`. Plain root or index variables are read for the write.
   List/map/vector-array writes may use a temporary internal reference; normal reads and assignment results
   remain values. Copies still stay independent, and native properties retain their getter/setter behavior.
-  WREF pairs with an ordinary write and handles vector write-back; rebuild older compiled scripts and caches for bytecode version 0130 (also required for checked shift folding and corrected NaN branch behavior).
+  WREF pairs with an ordinary write and handles vector write-back; rebuild older compiled scripts and caches for bytecode version 0133 (also required for signed-zero constants, foreach source retention, checked shift folding, and corrected NaN branch behavior).
 - A selector immediately after an indexed assignment can still modify the assigned vector:
   `(a[0][0] = math.Vector3(1,2,3))[1] = 9` stores `(1,9,3)` in `a[0][0]`.
   Assigning the result to a separate local instead keeps ordinary vector copy semantics.
@@ -778,6 +820,8 @@ print(math.MoveToward(0.0, 10.0, 2.0)); // 2
 - `math.Quaternion(w, x, y, z)` takes **w first**. Its runtime type name is `"Vector4"`.
   Do not interpret ordinary vector multiplication `*` as rotation composition.
 - `ColorRGB` and `ColorARGB` components range from 0.0 to 1.0, not integer values from 0 to 255.
+  Color conversion maps NaN to 0, clamps negative/positive infinity to 0/1, and truncates the scaled
+  components to bytes. `ColorRGB` always sets alpha to 255.
 
 ### Random numbers and reproducibility
 
@@ -985,6 +1029,13 @@ The compiler now supports larger constant indices and images, and global indices
 Some limits still apply, including:
 
 - Up to 32,767 global variables, independent of the constant count.
+- Runtime strings are limited to `2147483647` UTF-8 bytes; excessive concatenation or replacement is an error.
+- Map/set capacities are powers of two up to `1073741824` buckets, with at most `805306368` entries.
+  Available memory usually imposes a lower limit. Unrepresentable reserve requests fail without modifying the collection.
+- Nested native-to-script calls, including nested sort comparators, are limited to 64 per worker.
+- Compiler nesting is limited to 128 active parser levels across expressions, statements,
+  blocks, functions, and constant expressions. Deeply nested source reports a compile error;
+  this is a nesting budget, not a maximum line count.
 - Each string or symbol name stored in an image is limited to **32,767 UTF-8 bytes**.
   Do not confuse this with the character counts used by string methods.
 - Functions, local/temporary slots, arguments, relative jumps, and debug line numbers also have encoding limits.
@@ -1022,6 +1073,11 @@ When documentation and behavior disagree, verify with a small script and determi
 | Branches, returns, and null assignment | [control_flow_regression.cpp](../Tests/control_flow_regression.cpp) |
 | Selectors after calls | [postfix_regression.cpp](../Tests/postfix_regression.cpp) |
 | Indexed writes, evaluation order, and malformed selectors | [selector_regression.cpp](../Tests/selector_regression.cpp) |
+| Operand order, side effects, and deferred assignment targets | [hunt_evaluation_regression.cpp](../Tests/hunt_evaluation_regression.cpp) |
+| Runtime recovery and coroutine cleanup | [hunt_runtime_regression.cpp](../Tests/hunt_runtime_regression.cpp) |
+| Standard-library argument and date errors | [hunt_library_regression.cpp](../Tests/hunt_library_regression.cpp) |
+| Storage limits, integer keys, and numeric conversion | [hunt_storage_regression.cpp](../Tests/hunt_storage_regression.cpp) |
+| Parser boundary and syntax regressions | [hunt_parser_regression.cpp](../Tests/hunt_parser_regression.cpp) |
 | Compiler capacity limits | [compiler_limits_regression.cpp](../Tests/compiler_limits_regression.cpp) |
 | Host calls, captures, and lifetimes | [Embedding.md](Embedding.md) |
 | Repository workflow, builds, and regressions | [AGENTS.md](../AGENTS.md) |

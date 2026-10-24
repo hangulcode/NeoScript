@@ -333,8 +333,8 @@ namespace NeoScript
         {
             if (_handle == 0)
                 return;
-            if (!_runtime.IsDisposed)
-                NeoNative.NsDestroyInstance(_runtime.Handle, _handle);
+            if (!_runtime.IsDisposed && NeoNative.NsTryDestroyInstance(_runtime.Handle, _handle) == 0)
+                throw new NeoException("Cannot dispose an instance while an invocation or execution is active.");
             _handle = 0;
         }
     }

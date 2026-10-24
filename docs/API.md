@@ -26,10 +26,17 @@ Every signature and behavioural note below was verified by running it through
 ## Conventions
 
 - `name(arg: type, ...) -> ret`. `void` means the call evaluates to `null`.
+- A declaration without an initializer (`var value;`) starts as `null` whenever it executes; see the [declaration rules](ScriptAuthoring.md#basics).
 - `float` is `NS_FLOAT` (single precision). An `int` passed to a `float` parameter is converted
   silently; the result is still `float`.
+- Floating-point constants and stored values preserve the sign of zero. `0.0 == -0.0`
+  is true and both zeros identify the same map key; their floating-point reciprocals
+  are positive and negative infinity, respectively.
+- `const` floating-point expressions calculate in double precision, then become float32 values when used at run time. Their rounding can differ from a sequence of runtime float32 operations. Non-finite constant-expression results are compile errors.
+- `%` requires integer operands in runtime, `const`, and `case` expressions. Use `math.fmod` for floating-point remainders at run time.
 - **Arity is exact.** A wrong argument count or type raises the runtime error
   `invalid function call`. There are no optional parameters except where an entry says so.
+- Built-in module functions such as `math.sqrt` require a call; they cannot be stored as function values. Use a script wrapper for callbacks.
 - Module functions need `import` first (`import math;`). Keyword intrinsics and `print` do not.
 - `import name;` lowercases `name`, looks for `<libPath>/name.ns`, then falls back to the built-in
   module table. `import name as alias;` renames it locally. Import is a compile-time include;
@@ -53,12 +60,12 @@ Every signature and behavioural note below was verified by running it through
 ## 1. Keyword intrinsics - no import, one opcode each
 
 These are reserved words, not functions. They cannot be stored in a variable or passed as a
-callback.
+callback. Selectors may follow their results: `tostring(5).len()` is valid.
 
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
-| `tostring(x)` | `string` | Same conversion `print` uses. |
-| `toint(x)` | `int` | Truncates a float toward zero; parses a numeric string. |
+| `tostring(x)` | `string` | Same conversion `print` uses. Function values, including captured lambdas, produce `"function"`; null produces `"null"`. |
+| `toint(x)` | `int` | Truncates a float toward zero, clamps to `-2147483648..2147483647`, and maps NaN to `0`; also parses a numeric string. |
 | `tofloat(x)` | `float` | Parses a numeric string. |
 | `tosize(x)` | `int` | string: UTF-8 character count. list/map/set/array: element count. Vector2/3/4/Quaternion: component count. Anything else: `0`. |
 | `type(x)` | `string` | Exact strings in section 11. |
@@ -161,16 +168,16 @@ independent of compiler image capacity and other runtime string operations.
 | `math.SmoothStep(edge0: float, edge1: float, x: float)` | `float` | GLSL `smoothstep`: clamped Hermite between the two edges |
 | `math.MoveToward(current: float, target: float, maxDelta: float)` | `float` | steps at most `maxDelta` toward `target`; frame-rate independent when `maxDelta = rate * dt` |
 | `math.Repeat(x: float, length: float)` | `float` | positive modulo, `0 <= result < length` for finite inputs, including large magnitudes; zero results are positive zero; `length <= 0` returns `0` |
-| `math.PingPong(x: float, length: float)` | `float` | bounces between `0` and `length` |
+| `math.PingPong(x: float, length: float)` | `float` | bounces between `0` and positive `length`; preserves small positions and handles large finite lengths |
 
 ### 3.3 Angles (radians)
 
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
 | `math.WrapAngle(radian: float)` | `float` | wraps finite inputs into `(-pi, pi]`, including large magnitudes |
-| `math.DeltaAngle(from: float, to: float)` | `float` | shortest signed difference, in `(-pi, pi]` |
-| `math.LerpAngle(from: float, to: float, t: float)` | `float` | interpolates along the shortest arc |
-| `math.MoveTowardAngle(current: float, target: float, maxDelta: float)` | `float` | turns at most `maxDelta` along the shortest arc; result wrapped |
+| `math.DeltaAngle(from: float, to: float)` | `float` | shortest signed difference, in `(-pi, pi]`, including large finite endpoints |
+| `math.LerpAngle(from: float, to: float, t: float)` | `float` | interpolates along the shortest arc; `t=0/1` returns the wrapped endpoint, including large finite angles |
+| `math.MoveTowardAngle(current: float, target: float, maxDelta: float)` | `float` | turns at most `maxDelta` along the shortest arc; result wrapped; reaches large finite targets when the step covers the remaining arc |
 
 ### 3.4 Distances
 
@@ -181,7 +188,7 @@ independent of compiler image capacity and other runtime string operations.
 | `math.Length3(v: Vector3)` | `float` | |
 | `math.Distance3(a: Vector3, b: Vector3)` | `float` | `sqrt(DistanceSquared3)` |
 
-### 3.3 Random
+### 3.5 Random
 
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
@@ -190,7 +197,7 @@ independent of compiler image capacity and other runtime string operations.
 | `math.Rand01()` | `float` | `rand() / 32767` - 15-bit resolution, not a full-precision float |
 | `math.RandRange(min: float, max: float)` | `float` | `min + (max - min) * Rand01()` |
 
-### 3.4 Vector and quaternion constructors
+### 3.6 Vector and quaternion constructors
 
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
@@ -199,22 +206,27 @@ independent of compiler image capacity and other runtime string operations.
 | `math.Vector4(x: float, y: float, z: float, w: float)` | `Vector4` | same |
 | `math.Quaternion(w: float, x: float, y: float, z: float)` | `Quaternion` | **`w` comes first** |
 
+Direct constructor assignments to local or global variables write the completed result without
+an intermediate value copy. Arguments are evaluated and validated before replacing the destination;
+existing copies keep their values. An invalid component releases the unfinished vector and leaves
+the destination unchanged by the constructor.
+
 Section 10 describes what the resulting values support.
 
-### 3.5 Vector math
+### 3.7 Vector math
 
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
 | `math.Cross3(a: Vector3, b: Vector3)` | `Vector3` | |
 | `math.DistanceSquared3(a: Vector3, b: Vector3)` | `float` | squared, no `sqrt` |
-| `math.Normalize3(v: Vector3, fallback: Vector3)` | `Vector3` | returns `fallback` when `lengthSq < 1e-8`; `fallback` is required |
+| `math.Normalize3(v: Vector3, fallback: Vector3)` | `Vector3` | normalizes finite components without squared-length overflow; returns required `fallback` when `lengthSq < 1e-8` |
 | `math.RotateVectorByQuat(quat: Quaternion, v: Vector3)` | `Vector3` | quaternion first |
 | `math.quat_from_basis(right: Vector3, up: Vector3, forward: Vector3)` | `Quaternion` | |
 | `math.quat_slerp(a: Quaternion, b: Quaternion, t: float)` | `Quaternion` | |
 
 These accept vector **value types** only. A `list` of three numbers is rejected.
 
-### 3.6 Bit, colour, formatting
+### 3.8 Bit, colour, formatting
 
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
@@ -222,6 +234,10 @@ These accept vector **value types** only. A `list` of three numbers is rejected.
 | `math.ColorRGB(r: float, g: float, b: float)` | `int` | components are **0.0-1.0**, clamped. Packs `0xFFBBGGRR` (alpha forced to 255) |
 | `math.ColorARGB(a: float, r: float, g: float, b: float)` | `int` | components are **0.0-1.0**, clamped. Packs `0xAABBGGRR` |
 | `math.tostr(value: float)` | `string` | `%.9g`, round-trippable float text. `"" .. 0.1` gives `0.1`; `math.tostr(0.1)` gives `0.100000001` |
+
+Color conversion treats NaN components as `0`, clamps negative infinity to `0` and positive
+infinity to `1`, then truncates each scaled component to a byte. `ColorRGB` always keeps alpha
+at `255`, including when an RGB component is NaN.
 
 The engine's metadata table declares the `ColorRGB` / `ColorARGB` parameters as `int`. The
 implementation reads them as floats and clamps to `0..1` - the metadata string is stale, the
@@ -239,7 +255,7 @@ Use `import system;` before calling these functions.
 | `system.jsonDecode(text: string)` | `var` | Strict int32/float32 JSON conversion; any supported root. Failure returns null |
 | `system.jsonError()` | `string` | Last JSON conversion error in this execution instance, including data path; empty on success |
 | `system.time()` | `int` | Unix seconds |
-| `system.date(format: string, time: int)` | `string` | `strftime` + `localtime`, output capped at 79 chars |
+| `system.date(format: string, time: int)` | `string` | Local-time formatting; UTF-8 output limited to 79 bytes; invalid formats or oversized output raise an error |
 | `system.clock()` | `float` | `clock() / CLOCKS_PER_SEC` in seconds. Use for deltas, not wall time |
 | `system.array(initial: bool\|int\|float\|Vector2\|Vector3\|Vector4, size: int)` | `array` | Dense typed array. `initial` chooses the element type and fills the initial elements; `size` must be non-negative |
 | `system.load(source: string, name: string)` | `module` | Compiles `source` at run time. `name` is type-checked but unused. A compile failure raises `invalid function call`; it does not return `null` |
@@ -249,6 +265,12 @@ Use `import system;` before calling these functions.
 
 `system.pcall` is **not** a protected call. A runtime error inside the module propagates to the
 caller and aborts it, and there is no success/failure return value. The name is historical.
+The call is synchronous: `yield`, `sleep`, or another suspension from that module raises an error.
+
+`system.date` preserves UTF-8 literals and converts localized names to UTF-8. Empty format returns `""`.
+Its timestamp retains the unsigned 32-bit interpretation: a negative int denotes seconds above `2147483647`,
+not a date before 1970. Supported `strftime` directives and modifiers depend on the platform;
+unsupported or incomplete directives are rejected before calling the C library.
 
 A module value returned by `system.load` has no callable members; `system.pcall(m)` running the
 chunk's top level is the only thing you can do with one. To call named functions across files use
@@ -269,6 +291,8 @@ chunk's top level is the only thing you can do with one. To call named functions
 `yield` (the keyword) suspends. After the native `resume` callback, the VM switches to the
 coroutine before executing the caller's next statement. The coroutine runs until it yields or
 finishes, then the caller continues. Sleeping or host execution budgets can suspend the instance.
+Closing the main execution context is an error. Calls from native code back into script, including
+sort comparators, are limited to 64 nested calls per worker; exceeding this reports a runtime error.
 
 ---
 
@@ -278,6 +302,9 @@ Call these on a variable, function result, string literal, string constant, or p
 Selectors can continue after a call: `GetWords()[0].len()` and `GetText().split(",")[0].len()` work too.
 `"literal".len()`, `TEXT.len()` for a string const, and `("a" .. "b").len()` also work.
 Indexes and lengths are UTF-8 **character** counts, not bytes.
+A runtime string may contain at most `2147483647` UTF-8 bytes. Concatenation and replacement
+check growth before expanding; exceeding the limit raises a runtime error. Formatting has the
+smaller limit described in section 2.1. Compiled string literals have separate image limits.
 
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
@@ -370,7 +397,7 @@ each value; `foreach(var index, value in a)` is rejected.
   `system.array(math.Quaternion(w,x,y,z), n)` creates a Vector4 array with the same w,x,y,z order; there is no automatic
   conversion to a host quaternion layout. Resizing uses the vector initial value captured at creation.
 - int and float arrays convert between those two numeric types on assignment. Float to int truncates
-  toward zero. Bool arrays accept only bool values.
+  toward zero, clamps to the int32 range, and maps NaN to zero, matching `toint`. Bool arrays accept only bool values.
 - `a.append(value)` appends exactly one value. `a.resize(size)` changes the length; newly grown
   elements receive the initial value passed to `system.array`, while shrinking drops the tail.
   A negative size becomes zero, matching `list.resize`.
@@ -391,6 +418,8 @@ each value; `foreach(var index, value in a)` is rejected.
 
 `m.sort` details:
 
+- Sorted values are assigned in the map's current iteration order. Keys stay in place;
+  integer keys do not imply numeric order. Read `m.values()` to obtain the sorted sequence.
 - `cmp(a, b)` receives two values and must return `bool`; anything else counts as `false`.
 - The comparator may be a named function or a capturing lambda.
 - If the callback inserts or erases keys the sort aborts with the runtime error
@@ -476,16 +505,24 @@ value semantics: storage may be shared internally, but modifying a component det
 | `tosize(v)` | yes | component count: `2` / `3` / `4` / `4` |
 | `foreach` | **no** | raises `foreach does not support vector` |
 
-An indexed assignment resolves its final containing element after its right-hand side has run.
+Operands and call arguments are evaluated from left to right. A scalar or vector argument keeps
+the value observed at that point; a container argument retains a shared reference, not a deep copy.
+Function-value calls capture the callee before evaluating arguments. Dot calls retain the receiver
+but resolve its member after argument evaluation: changing `m.f` in an argument can change the
+function called by `m.f(...)`; use `m["f"](...)` to capture the stored function beforehand.
+An indexed assignment resolves its containing path after its right-hand side has run, subject
+to the retained results described below.
 If that side changes an index variable or replaces the element, the write uses the current value,
 including the other vector components. Parentheses around the target do not change evaluation order.
-Index expressions containing calls run once; the write-back does not repeat those calls.
+Computed index expressions and calls that produce the target container run once before the
+right-hand side, and their results are retained. Plain root or index variables are read for the write.
+For example, `Get()[0] += Change()` retains the container returned by `Get()`.
 List/map/vector-array component writes can modify the stored vector directly; shared vectors still
 detach on modification. Internal references do not escape the write or become script values.
 Native vector properties still call their getter and setter once per successful component write.
 WREF precedes an ordinary collection write. Stored vectors consume both atomically; other values
 use normal write dispatch. Native vector properties retain a resumable getter/setter boundary.
-There is no separate vector write-back opcode. Regenerate images older than bytecode version 0130 to apply checked shift folding and corrected NaN branch semantics.
+There is no separate vector write-back opcode. Regenerate images older than bytecode version 0133 to apply local initialization, ordered operand evaluation, deferred assignment paths, and the earlier signed-zero and foreach fixes.
 A selector immediately following an indexed assignment keeps the assigned slot writable:
 `(a[0][0] = math.Vector3(1,2,3))[1] = 9` updates `a[0][0]` to `(1,9,3)`.
 Reading that result into a local still makes an independent vector value via copy-on-write.

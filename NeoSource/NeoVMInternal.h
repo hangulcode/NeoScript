@@ -688,12 +688,12 @@ NEOS_FORCEINLINE VarInfo* MapInfo::FindString(StringInfo* pKeyStr)
 // 정수 키 전용 fast path. 문자열 키와 대칭 — 없으면 CltReadRare -> GetTableItem ->
 // MapInfo::Find -> GetHashCode(타입 switch) -> 일반 탐색으로
 // 아웃오브라인 호출 4단을 타게 된다(실측: 문자열 키의 1.8배).
-// 해시는 GetHashCode(VarInfo*) 의 VAR_INT 경로와 같아야 한다 = 값 그대로.
+// 해시는 GetHashCode(VarInfo*) 의 VAR_INT 경로와 같아야 한다.
 NEOS_FORCEINLINE VarInfo* MapInfo::FindInt(int key)
 {
 	if (_BucketCapa <= 0)
 		return NULL;
-	MapNode* node = _Bucket + ((u32)key & _HashBase);
+	MapNode* node = _Bucket + (HashIntegerKey(key) & _HashBase);
 	while (node->next != MAP_NODE_EMPTY)
 	{
 		if (node->data->key.GetType() == VAR_INT && node->data->key._int == key)
@@ -990,7 +990,7 @@ public:
 	// MapNode/SetNode 자체는 컬렉션별 연속 배열에 있고, key/value는 안정 주소의 별도 풀에 둔다.
 	CNVMAllocPool < MapData, 256> m_sPool_TableData;
 	CNVMAllocPool< MapInfo, 64> m_sPool_TableInfo;
-	CNVMAllocPool< FunctionPropertyInfo, 64> m_sPool_FunctionProperty;
+	CNVMInstPool< FunctionPropertyInfo, 64> m_sPool_FunctionProperty;
 	CNVMAllocPool < SetData, 256> m_sPool_SetData;
 	CNVMAllocPool< SetInfo, 32> m_sPool_SetInfo;
 	CNVMAllocPool< ListInfo, 64> m_sPool_ListInfo;

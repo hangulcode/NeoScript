@@ -185,14 +185,23 @@ struct ScratchMark
     std::size_t keys;
 };
 
+struct Scratch;
+template<class T> struct Borrowed
+{
+    T value;
+    Scratch* owner = nullptr;
+    IRuntime* runtime = nullptr;
+};
+
 struct Scratch
 {
-    Arena<MapBuilder>  mapBuilder;
-    Arena<ListBuilder> listBuilder;
-    Arena<MapReader>   mapReader;
-    Arena<ListReader>  listReader;
-    Arena<ArrayView>   arrayView;
-    // Own variable-sized results only until their issuing callback returns.
+    IRuntime* runtime = nullptr;
+    Arena<Borrowed<MapBuilder>>  mapBuilder;
+    Arena<Borrowed<ListBuilder>> listBuilder;
+    Arena<Borrowed<MapReader>>   mapReader;
+    Arena<Borrowed<ListReader>>  listReader;
+    Arena<Borrowed<ArrayView>>   arrayView;
+    // 가변 길이 결과는 자신을 발급한 콜백이나 호출과 수명을 함께한다.
     // unique_ptr keeps earlier results stable when these vectors grow.
     std::vector<std::unique_ptr<JsonScratch>> json;
     std::vector<std::unique_ptr<std::vector<NsStr>>> keys;
@@ -222,62 +231,123 @@ struct Scratch
     }
 };
 
-// 인스턴스가 스레드를 넘나들지 않는다는 전제(NeoScript.h 와 동일)라 thread_local 로 충분하다.
+// 콜백 깊이마다 별도 아레나를 재사용한다. 중첩 콜백에서 바깥 리더의
+// 하위 리더를 만들어도 원래 리더의 스코프에 남아 있어야 한다.
+struct CallbackScratchStack
+{
+    std::vector<std::unique_ptr<Scratch>> frames;
+    std::size_t depth = 0;
+};
+CallbackScratchStack& ScratchStack()
+{
+    static thread_local CallbackScratchStack s;
+    return s;
+}
 Scratch& TheScratch()
 {
-    static thread_local Scratch s;
-    return s;
+    auto& stack = ScratchStack();
+    if (stack.depth != 0) return *stack.frames[stack.depth - 1];
+    static thread_local Scratch fallback;
+    return fallback;
 }
 
 class ScratchFrame
 {
 public:
-    ScratchFrame() : m_mark(TheScratch().Mark()) {}
-    ~ScratchFrame() { TheScratch().Rewind(m_mark); }
+    explicit ScratchFrame(IRuntime* runtime)
+    {
+        auto& stack = ScratchStack();
+        if (stack.depth == stack.frames.size())
+            stack.frames.emplace_back(new Scratch());
+        m_scratch = stack.frames[stack.depth++].get();
+        m_mark = m_scratch->Mark();
+        m_scratch->runtime = runtime;
+    }
+    ~ScratchFrame()
+    {
+        m_scratch->Rewind(m_mark);
+        m_scratch->runtime = nullptr;
+        --ScratchStack().depth;
+    }
     ScratchFrame(const ScratchFrame&) = delete;
     ScratchFrame& operator=(const ScratchFrame&) = delete;
 
 private:
+    Scratch* m_scratch;
     ScratchMark m_mark;
 };
 
 // 값 → 핸들. 전부 "아레나에 복사하고 주소를 준다" 한 가지 패턴이다.
-inline NsMapBuilder* Hand(MapBuilder v)
+inline NsMapBuilder* Hand(MapBuilder v, Scratch& scratch = TheScratch(), IRuntime* runtime = nullptr)
 {
-    MapBuilder* p = TheScratch().mapBuilder.Alloc();
-    *p = v;
+    Borrowed<MapBuilder>* p = scratch.mapBuilder.Alloc();
+    p->value = v;
+    p->owner = &scratch;
+    p->runtime = runtime != nullptr ? runtime : scratch.runtime;
     return reinterpret_cast<NsMapBuilder*>(p);
 }
-inline NsListBuilder* Hand(ListBuilder v)
+inline MapBuilder* Deref(NsMapBuilder* h)
+{ return &reinterpret_cast<Borrowed<MapBuilder>*>(h)->value; }
+inline Scratch& Owner(NsMapBuilder* h)
+{ return *reinterpret_cast<Borrowed<MapBuilder>*>(h)->owner; }
+inline IRuntime* RuntimeOwner(NsMapBuilder* h)
+{ return reinterpret_cast<Borrowed<MapBuilder>*>(h)->runtime; }
+inline NsListBuilder* Hand(ListBuilder v, Scratch& scratch = TheScratch(), IRuntime* runtime = nullptr)
 {
-    ListBuilder* p = TheScratch().listBuilder.Alloc();
-    *p = v;
+    Borrowed<ListBuilder>* p = scratch.listBuilder.Alloc();
+    p->value = v;
+    p->owner = &scratch;
+    p->runtime = runtime != nullptr ? runtime : scratch.runtime;
     return reinterpret_cast<NsListBuilder*>(p);
 }
-inline NsMapReader* Hand(MapReader v)
+inline ListBuilder* Deref(NsListBuilder* h)
+{ return &reinterpret_cast<Borrowed<ListBuilder>*>(h)->value; }
+inline Scratch& Owner(NsListBuilder* h)
+{ return *reinterpret_cast<Borrowed<ListBuilder>*>(h)->owner; }
+inline IRuntime* RuntimeOwner(NsListBuilder* h)
+{ return reinterpret_cast<Borrowed<ListBuilder>*>(h)->runtime; }
+inline NsMapReader* Hand(MapReader v, Scratch& scratch = TheScratch(), IRuntime* runtime = nullptr)
 {
-    MapReader* p = TheScratch().mapReader.Alloc();
-    *p = v;
+    Borrowed<MapReader>* p = scratch.mapReader.Alloc();
+    p->value = v;
+    p->owner = &scratch;
+    p->runtime = runtime != nullptr ? runtime : scratch.runtime;
     return reinterpret_cast<NsMapReader*>(p);
 }
-inline NsListReader* Hand(ListReader v)
+inline MapReader* Deref(NsMapReader* h)
+{ return &reinterpret_cast<Borrowed<MapReader>*>(h)->value; }
+inline Scratch& Owner(NsMapReader* h)
+{ return *reinterpret_cast<Borrowed<MapReader>*>(h)->owner; }
+inline IRuntime* RuntimeOwner(NsMapReader* h)
+{ return reinterpret_cast<Borrowed<MapReader>*>(h)->runtime; }
+inline NsListReader* Hand(ListReader v, Scratch& scratch = TheScratch(), IRuntime* runtime = nullptr)
 {
-    ListReader* p = TheScratch().listReader.Alloc();
-    *p = v;
+    Borrowed<ListReader>* p = scratch.listReader.Alloc();
+    p->value = v;
+    p->owner = &scratch;
+    p->runtime = runtime != nullptr ? runtime : scratch.runtime;
     return reinterpret_cast<NsListReader*>(p);
 }
-inline NsArrayView* Hand(ArrayView v)
+inline ListReader* Deref(NsListReader* h)
+{ return &reinterpret_cast<Borrowed<ListReader>*>(h)->value; }
+inline Scratch& Owner(NsListReader* h)
+{ return *reinterpret_cast<Borrowed<ListReader>*>(h)->owner; }
+inline IRuntime* RuntimeOwner(NsListReader* h)
+{ return reinterpret_cast<Borrowed<ListReader>*>(h)->runtime; }
+inline NsArrayView* Hand(ArrayView v, Scratch& scratch = TheScratch(), IRuntime* runtime = nullptr)
 {
-    ArrayView* p = TheScratch().arrayView.Alloc();
-    *p = v;
+    Borrowed<ArrayView>* p = scratch.arrayView.Alloc();
+    p->value = v;
+    p->owner = &scratch;
+    p->runtime = runtime != nullptr ? runtime : scratch.runtime;
     return reinterpret_cast<NsArrayView*>(p);
 }
-
-inline MapBuilder*  Deref(NsMapBuilder* h)  { return reinterpret_cast<MapBuilder*>(h); }
-inline ListBuilder* Deref(NsListBuilder* h) { return reinterpret_cast<ListBuilder*>(h); }
-inline MapReader*   Deref(NsMapReader* h)   { return reinterpret_cast<MapReader*>(h); }
-inline ListReader*  Deref(NsListReader* h)  { return reinterpret_cast<ListReader*>(h); }
-inline ArrayView*   Deref(NsArrayView* h)   { return reinterpret_cast<ArrayView*>(h); }
+inline ArrayView* Deref(NsArrayView* h)
+{ return &reinterpret_cast<Borrowed<ArrayView>*>(h)->value; }
+inline Scratch& Owner(NsArrayView* h)
+{ return *reinterpret_cast<Borrowed<ArrayView>*>(h)->owner; }
+inline IRuntime* RuntimeOwner(NsArrayView* h)
+{ return reinterpret_cast<Borrowed<ArrayView>*>(h)->runtime; }
 inline CallContext* Deref(NsContext* h)     { return reinterpret_cast<CallContext*>(h); }
 
 } // namespace
@@ -293,9 +363,15 @@ std::mutex& ObjectTypeLock()
     return m;
 }
 
-std::vector<ObjectType>& ObjectTypeTable()
+struct ObjectTypeEntry
 {
-    static std::vector<ObjectType> t;
+    IRuntime* owner;
+    ObjectType value;
+};
+
+std::vector<ObjectTypeEntry>& ObjectTypeTable()
+{
+    static std::vector<ObjectTypeEntry> t;
     return t;
 }
 
@@ -305,15 +381,18 @@ std::map<std::pair<const void*, std::string>, uint32_t>& ObjectTypeIndex()
     return m;
 }
 
-bool LookupObjectType(NsObjectType handle, ObjectType& out)
+bool LookupObjectType(NsObjectType handle, ObjectType& out, IRuntime* owner)
 {
-    if (handle == 0)
+    if (handle == 0 || owner == nullptr)
         return false;
     std::lock_guard<std::mutex> guard(ObjectTypeLock());
-    std::vector<ObjectType>& table = ObjectTypeTable();
+    std::vector<ObjectTypeEntry>& table = ObjectTypeTable();
     if (handle > table.size())
         return false;
-    out = table[handle - 1];
+    const auto& entry = table[handle - 1];
+    if (entry.owner != owner)
+        return false;
+    out = entry.value;
     return true;
 }
 
@@ -409,7 +488,7 @@ bool DispatchMethod(int slot, CallContext& ctx, StringView method)
     NsRuntime* owner = g_slots[slot].owner;
     if (owner == nullptr || owner->desc.method == nullptr)
         return false;
-    ScratchFrame frame;   // 이 호출 안에서 발급한 빌더/리더는 반환과 동시에 무효가 된다
+    ScratchFrame frame(owner->rt);   // 이 호출 안에서 발급한 빌더/리더는 반환과 동시에 무효가 된다
     return owner->desc.method(owner->desc.user, slot,
                               reinterpret_cast<NsContext*>(&ctx),
                               method.data(), (int32_t)method.size()) != 0;
@@ -420,7 +499,7 @@ bool DispatchProperty(int slot, CallContext& ctx, StringView name, bool isGet)
     NsRuntime* owner = g_slots[slot].owner;
     if (owner == nullptr || owner->desc.property == nullptr)
         return false;
-    ScratchFrame frame;
+    ScratchFrame frame(owner->rt);
     return owner->desc.property(owner->desc.user, slot,
                                 reinterpret_cast<NsContext*>(&ctx),
                                 name.data(), (int32_t)name.size(), isGet ? 1 : 0) != 0;
@@ -473,7 +552,7 @@ void InstanceBindBridge(IRuntime* rt, InstanceHandle instance, void* instanceUse
     NsRuntime* wrapper = FindWrapper(rt);
     if (wrapper == nullptr || wrapper->desc.onInstanceBind == nullptr)
         return;
-    ScratchFrame frame;
+    ScratchFrame frame(rt);
     wrapper->desc.onInstanceBind(wrapper->desc.user, wrapper,
                                  Pack(instance.id, instance.generation), instanceUserData);
 }
@@ -508,28 +587,16 @@ struct NsCall
     NsRuntime*  owner = nullptr;
     Invocation  invocation;
     CallResult  result;       // NsCallResult.str 이 가리키는 문자열의 주인
-    ScratchMark mark;
-    bool        marked = false;
+    Scratch     scratch;     // 반환 리더는 호출 순서와 관계없이 이 호출에 속한다.
 };
 
 namespace {
 
-// NsCallEnd 는 LIFO 가 정상이다(중첩 네이티브→스크립트 호출이 그렇게 쌓인다).
-// 어긋나게 끝내도 터지지 않게, 스택 맨 위일 때만 아레나를 되감는다.
-// 바깥 호출이 끝날 때 어차피 전부 회수된다.
-std::vector<NsCall*>& CallStack()
-{
-    static thread_local std::vector<NsCall*> s;
-    return s;
-}
-
 NsCall* PushCall(NsRuntime* rt)
 {
     NsCall* call = new NsCall();
-    call->owner  = rt;
-    call->mark   = TheScratch().Mark();
-    call->marked = true;
-    CallStack().push_back(call);
+    call->owner = rt;
+    call->scratch.runtime = rt->rt;
     return call;
 }
 
@@ -626,8 +693,13 @@ NS_API NsRuntime* NS_CALL NsRuntimeCreate(const NsRuntimeDesc* desc)
 
 NS_API void NS_CALL NsRuntimeDestroy(NsRuntime* rt)
 {
-    if (rt == nullptr)
-        return;
+    (void)NsRuntimeTryDestroy(rt);
+}
+
+NS_API int32_t NS_CALL NsRuntimeTryDestroy(NsRuntime* rt)
+{
+    if (rt == nullptr) return 1;
+    if (rt->rt != nullptr && !rt->rt->CanDestroy()) return 0;
 
     // 이 런타임이 쥔 디스패치 슬롯을 놓아 준다. 유니티 도메인 리로드처럼 런타임이
     // 수시로 다시 만들어지는 호스트에서 슬롯이 마르지 않게 하는 게 핵심이다.
@@ -642,6 +714,14 @@ NS_API void NS_CALL NsRuntimeDestroy(NsRuntime* rt)
 
     IRuntime* inner = rt->rt;
     {
+        std::lock_guard<std::mutex> guard(ObjectTypeLock());
+        for (auto& entry : ObjectTypeTable())
+            if (entry.owner == inner) { entry.owner = nullptr; entry.value = ObjectType(); }
+        auto& index = ObjectTypeIndex();
+        for (auto it = index.begin(); it != index.end(); )
+            if (it->first.first == inner) it = index.erase(it); else ++it;
+    }
+    {
         std::lock_guard<std::mutex> guard(RuntimeLock());
         RuntimeIndex().erase(inner);
         LoaderIndex().erase(rt);
@@ -650,6 +730,7 @@ NS_API void NS_CALL NsRuntimeDestroy(NsRuntime* rt)
     if (inner != nullptr)
         DestroyRuntime(inner);
     delete rt;
+    return 1;
 }
 
 NS_API void NS_CALL NsRuntimeSetLibPath(NsRuntime* rt, const char* path, int32_t len)
@@ -731,8 +812,8 @@ NS_API NsObjectType NS_CALL NsGetObjectType(NsRuntime* rt, const char* name, int
         return 0;
 
     std::lock_guard<std::mutex> guard(ObjectTypeLock());
-    std::vector<ObjectType>& table = ObjectTypeTable();
-    table.push_back(type);
+    std::vector<ObjectTypeEntry>& table = ObjectTypeTable();
+    table.push_back({rt->rt, type});
     const uint32_t handle = (uint32_t)table.size();   // 1-기반
     ObjectTypeIndex()[indexKey] = handle;
     return handle;
@@ -980,8 +1061,15 @@ NS_API NsInstance NS_CALL NsCreateInstance(NsRuntime* rt, NsProgram program, con
 
 NS_API void NS_CALL NsDestroyInstance(NsRuntime* rt, NsInstance inst)
 {
-    if (rt != nullptr && rt->rt != nullptr && inst != 0)
-        rt->rt->DestroyInstance(ToInstance(inst));
+    (void)NsTryDestroyInstance(rt, inst);
+}
+
+NS_API int32_t NS_CALL NsTryDestroyInstance(NsRuntime* rt, NsInstance inst)
+{
+    if (rt == nullptr || rt->rt == nullptr || inst == 0) return 1;
+    if (!rt->rt->CanDestroyInstance(ToInstance(inst))) return 0;
+    rt->rt->DestroyInstance(ToInstance(inst));
+    return 1;
 }
 
 NS_API int32_t NS_CALL NsIsAlive(NsRuntime* rt, NsInstance inst)
@@ -1016,7 +1104,7 @@ NS_API void NS_CALL NsBindGlobalObject(NsRuntime* rt, NsInstance inst,
     if (rt == nullptr || rt->rt == nullptr)
         return;
     ObjectType resolved;
-    if (!LookupObjectType(type, resolved))
+    if (!LookupObjectType(type, resolved, rt->rt))
         return;
     rt->rt->BindGlobalObject(ToInstance(inst), SV(globalName, len), resolved, userData);
 }
@@ -1029,7 +1117,7 @@ NS_API void NS_CALL NsBindGlobalMapObject(NsRuntime* rt, NsInstance inst,
     if (rt == nullptr || rt->rt == nullptr)
         return;
     ObjectType resolved;
-    if (!LookupObjectType(type, resolved))
+    if (!LookupObjectType(type, resolved, rt->rt))
         return;
     rt->rt->BindGlobalMapObject(ToInstance(inst), SV(mapName, mapLen), SV(key, keyLen), resolved, userData);
 }
@@ -1131,8 +1219,10 @@ NS_API NsCall* NS_CALL NsCallBegin(NsRuntime* rt, NsInstance inst, NsFunction* f
 {
     if (rt == nullptr || rt->rt == nullptr || fn == nullptr)
         return nullptr;
+    Invocation invocation = rt->rt->Call(ToInstance(inst), fn->handle);
+    if (!invocation) return nullptr;
     NsCall* call = PushCall(rt);
-    call->invocation = rt->rt->Call(ToInstance(inst), fn->handle);
+    call->invocation = std::move(invocation);
     return call;
 }
 
@@ -1140,8 +1230,10 @@ NS_API NsCall* NS_CALL NsCallBeginName(NsRuntime* rt, NsInstance inst, const cha
 {
     if (rt == nullptr || rt->rt == nullptr)
         return nullptr;
+    Invocation invocation = rt->rt->Call(ToInstance(inst), SV(name, len));
+    if (!invocation) return nullptr;
     NsCall* call = PushCall(rt);
-    call->invocation = rt->rt->Call(ToInstance(inst), SV(name, len));
+    call->invocation = std::move(invocation);
     return call;
 }
 
@@ -1151,21 +1243,8 @@ NS_API void NS_CALL NsCallEnd(NsCall* call)
         return;
 
     // Invocation 소멸이 인스턴스의 실행 컨텍스트를 반납한다(EndHostCall).
-    // 아레나를 되감기 전에 먼저 죽여야 한다.
+    // 빌린 리더의 저장 공간을 없애기 전에 호출부터 해제한다.
     call->invocation = Invocation();
-
-    std::vector<NsCall*>& stack = CallStack();
-    const bool isTop = (!stack.empty() && stack.back() == call);
-    for (std::size_t i = stack.size(); i > 0; --i)
-    {
-        if (stack[i - 1] == call)
-        {
-            stack.erase(stack.begin() + (std::ptrdiff_t)(i - 1));
-            break;
-        }
-    }
-    if (isTop && call->marked)
-        TheScratch().Rewind(call->mark);
 
     delete call;
 }
@@ -1200,7 +1279,7 @@ NS_API void NS_CALL NsCallArgObject(NsCall* call, NsObjectType type, void* userD
     if (call == nullptr)
         return;
     ObjectType resolved;
-    if (!LookupObjectType(type, resolved))
+    if (!LookupObjectType(type, resolved, call->owner->rt))
         return;
     call->invocation.argObject(resolved, userData);
 }
@@ -1248,8 +1327,8 @@ NS_API int32_t NS_CALL NsCallInvokeReadMap(NsCall* call, NsReadMapFn fn, void* u
     if (fn == nullptr)
         return (int32_t)call->invocation.invoke();
 
-    return (int32_t)call->invocation.invokeReadMap([fn, user](MapReader reader) {
-        ScratchFrame frame;
+    return (int32_t)call->invocation.invokeReadMap([fn, user, call](MapReader reader) {
+        ScratchFrame frame(call->owner->rt);
         fn(user, Hand(reader));
     });
 }
@@ -1261,8 +1340,8 @@ NS_API int32_t NS_CALL NsCallInvokeReadList(NsCall* call, NsReadListFn fn, void*
     if (fn == nullptr)
         return (int32_t)call->invocation.invoke();
 
-    return (int32_t)call->invocation.invokeReadList([fn, user](ListReader reader) {
-        ScratchFrame frame;
+    return (int32_t)call->invocation.invokeReadList([fn, user, call](ListReader reader) {
+        ScratchFrame frame(call->owner->rt);
         fn(user, Hand(reader));
     });
 }
@@ -1274,8 +1353,8 @@ NS_API int32_t NS_CALL NsCallInvokeReadArray(NsCall* call, NsReadArrayFn fn, voi
     if (fn == nullptr)
         return (int32_t)call->invocation.invoke();
 
-    return (int32_t)call->invocation.invokeReadArray([fn, user](ArrayView view) {
-        ScratchFrame frame;
+    return (int32_t)call->invocation.invokeReadArray([fn, user, call](ArrayView view) {
+        ScratchFrame frame(call->owner->rt);
         fn(user, Hand(view));
     });
 }
@@ -1349,7 +1428,7 @@ NS_API NsMapReader* NS_CALL NsCallRetMap(NsCall* call)
     MapReader reader;
     if (!call->invocation.retMap(reader))
         return nullptr;
-    return Hand(reader);
+    return Hand(reader, call->scratch);
 }
 
 NS_API NsListReader* NS_CALL NsCallRetList(NsCall* call)
@@ -1359,7 +1438,7 @@ NS_API NsListReader* NS_CALL NsCallRetList(NsCall* call)
     ListReader reader;
     if (!call->invocation.retList(reader))
         return nullptr;
-    return Hand(reader);
+    return Hand(reader, call->scratch);
 }
 
 NS_API NsArrayView* NS_CALL NsCallRetArray(NsCall* call)
@@ -1369,7 +1448,7 @@ NS_API NsArrayView* NS_CALL NsCallRetArray(NsCall* call)
     ArrayView view;
     if (!call->invocation.retArray(view))
         return nullptr;
-    return Hand(view);
+    return Hand(view, call->scratch);
 }
 
 //==============================================================================
@@ -1610,7 +1689,7 @@ NS_API void NS_CALL NsCtxRetObject(NsContext* ctx, NsObjectType type, void* user
     if (ctx == nullptr)
         return;
     ObjectType resolved;
-    if (!LookupObjectType(type, resolved))
+    if (!LookupObjectType(type, resolved, Deref(ctx)->runtime()))
         return;
     Deref(ctx)->retObject(resolved, userData);
 }
@@ -1669,19 +1748,19 @@ NS_API void NS_CALL NsMapSetObject(NsMapBuilder* m, const char* k, int32_t klen,
     if (m == nullptr)
         return;
     ObjectType resolved;
-    if (!LookupObjectType(t, resolved))
+    if (!LookupObjectType(t, resolved, RuntimeOwner(m)))
         return;
     Deref(m)->setObject(SV(k, klen), resolved, userData);
 }
 
 NS_API NsMapBuilder* NS_CALL NsMapSetMap(NsMapBuilder* m, const char* k, int32_t klen)
 {
-    return m != nullptr ? Hand(Deref(m)->setMap(SV(k, klen))) : nullptr;
+    return m != nullptr ? Hand(Deref(m)->setMap(SV(k, klen)), Owner(m), RuntimeOwner(m)) : nullptr;
 }
 
 NS_API NsListBuilder* NS_CALL NsMapSetList(NsMapBuilder* m, const char* k, int32_t klen)
 {
-    return m != nullptr ? Hand(Deref(m)->setList(SV(k, klen))) : nullptr;
+    return m != nullptr ? Hand(Deref(m)->setList(SV(k, klen)), Owner(m), RuntimeOwner(m)) : nullptr;
 }
 
 NS_API void NS_CALL NsListReserve(NsListBuilder* l, int32_t count)
@@ -1734,7 +1813,7 @@ NS_API void NS_CALL NsListPushObject(NsListBuilder* l, NsObjectType t, void* use
     if (l == nullptr)
         return;
     ObjectType resolved;
-    if (!LookupObjectType(t, resolved))
+    if (!LookupObjectType(t, resolved, RuntimeOwner(l)))
         return;
     Deref(l)->pushObject(resolved, userData);
 }
@@ -1756,12 +1835,12 @@ NS_API void NS_CALL NsListSetString(NsListBuilder* l, int32_t index, const char*
 
 NS_API NsMapBuilder* NS_CALL NsListPushMap(NsListBuilder* l)
 {
-    return l != nullptr ? Hand(Deref(l)->pushMap()) : nullptr;
+    return l != nullptr ? Hand(Deref(l)->pushMap(), Owner(l), RuntimeOwner(l)) : nullptr;
 }
 
 NS_API NsListBuilder* NS_CALL NsListPushList(NsListBuilder* l)
 {
-    return l != nullptr ? Hand(Deref(l)->pushList()) : nullptr;
+    return l != nullptr ? Hand(Deref(l)->pushList(), Owner(l), RuntimeOwner(l)) : nullptr;
 }
 
 //==============================================================================
@@ -1803,7 +1882,7 @@ NS_API int32_t NS_CALL NsMapStringKeys(NsMapReader* m, const NsStr** keys,
         data->reserve(names.size());
         for (const auto name : names) data->push_back(ToNsStr(name));
         auto* view = data.get();
-        TheScratch().keys.push_back(std::move(data));
+        Owner(m).keys.push_back(std::move(data));
         *keys = view->data();
         *count = static_cast<int32_t>(view->size());
         return 1;
@@ -1871,7 +1950,7 @@ NS_API NsMapReader* NS_CALL NsMapGetMap(NsMapReader* m, const char* k, int32_t k
     MapReader reader;
     if (!Deref(m)->getMap(SV(k, klen), reader))
         return nullptr;
-    return Hand(reader);
+    return Hand(reader, Owner(m), RuntimeOwner(m));
 }
 
 NS_API NsListReader* NS_CALL NsMapGetList(NsMapReader* m, const char* k, int32_t klen)
@@ -1881,7 +1960,7 @@ NS_API NsListReader* NS_CALL NsMapGetList(NsMapReader* m, const char* k, int32_t
     ListReader reader;
     if (!Deref(m)->getList(SV(k, klen), reader))
         return nullptr;
-    return Hand(reader);
+    return Hand(reader, Owner(m), RuntimeOwner(m));
 }
 
 NS_API NsArrayView* NS_CALL NsMapGetArray(NsMapReader* m, const char* k, int32_t klen)
@@ -1891,7 +1970,7 @@ NS_API NsArrayView* NS_CALL NsMapGetArray(NsMapReader* m, const char* k, int32_t
     ArrayView view;
     if (!Deref(m)->getArray(SV(k, klen), view))
         return nullptr;
-    return Hand(view);
+    return Hand(view, Owner(m), RuntimeOwner(m));
 }
 
 NS_API int32_t NS_CALL NsListRdIsNull(NsListReader* l, int32_t index)
@@ -1969,7 +2048,7 @@ NS_API NsMapReader* NS_CALL NsListRdGetMap(NsListReader* l, int32_t index)
     MapReader reader;
     if (!Deref(l)->getMap(index, reader))
         return nullptr;
-    return Hand(reader);
+    return Hand(reader, Owner(l), RuntimeOwner(l));
 }
 
 NS_API NsListReader* NS_CALL NsListRdGetList(NsListReader* l, int32_t index)
@@ -1979,7 +2058,7 @@ NS_API NsListReader* NS_CALL NsListRdGetList(NsListReader* l, int32_t index)
     ListReader reader;
     if (!Deref(l)->getList(index, reader))
         return nullptr;
-    return Hand(reader);
+    return Hand(reader, Owner(l), RuntimeOwner(l));
 }
 
 NS_API NsArrayView* NS_CALL NsListRdGetArray(NsListReader* l, int32_t index)
@@ -1989,7 +2068,7 @@ NS_API NsArrayView* NS_CALL NsListRdGetArray(NsListReader* l, int32_t index)
     ArrayView view;
     if (!Deref(l)->getArray(index, view))
         return nullptr;
-    return Hand(view);
+    return Hand(view, Owner(l), RuntimeOwner(l));
 }
 
 NS_API int32_t NS_CALL NsArrayElementType(NsArrayView* a)

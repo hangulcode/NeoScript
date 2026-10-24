@@ -224,7 +224,7 @@ namespace NeoScript
         public const string Lib = "NeoScript";
 #endif
 
-        public const int AbiVersion = 4;
+        public const int AbiVersion = 5;
         public const int MaxObjectSlots = 64;
 
         private const CallingConvention Cdecl = CallingConvention.Cdecl;
@@ -238,6 +238,7 @@ namespace NeoScript
         // --- Runtime ---
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern IntPtr NsRuntimeCreate(ref NsRuntimeDesc desc);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern void NsRuntimeDestroy(IntPtr rt);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsRuntimeTryDestroy(IntPtr rt);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern void NsRuntimeSetLibPath(IntPtr rt, byte* path, int len);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsRegisterObject(IntPtr rt, ref NsObjectDesc desc, out int outSlot);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern void NsFreezeBindings(IntPtr rt);
@@ -265,6 +266,7 @@ namespace NeoScript
         // --- Instance ---
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern ulong NsCreateInstance(IntPtr rt, ulong program, ref NsInstanceDesc desc);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern void NsDestroyInstance(IntPtr rt, ulong inst);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsTryDestroyInstance(IntPtr rt, ulong inst);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsIsAlive(IntPtr rt, ulong inst);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsResetInstance(IntPtr rt, ulong inst);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsGetState(IntPtr rt, ulong inst);
@@ -418,16 +420,17 @@ namespace NeoScript
     {
         public static void Verify()
         {
-            Expect<NsStr>(16);
-            Expect<NsError>(48);
-            Expect<NsJsonResult>(48);
-            Expect<NsCallResult>(48);
+            bool wide = IntPtr.Size == 8;
+            Expect<NsStr>(wide ? 16 : 12);
+            Expect<NsError>(wide ? 48 : 40);
+            Expect<NsJsonResult>(wide ? 48 : 36);
+            Expect<NsCallResult>(wide ? 48 : 44);
             Expect<NsAllocStats>(64);
-            Expect<NsRuntimeDesc>(64);
-            Expect<NsObjectDesc>(40);
-            Expect<NsDefine>(40);
-            Expect<NsCompileDesc>(80);
-            Expect<NsInstanceDesc>(16);
+            Expect<NsRuntimeDesc>(wide ? 64 : 40);
+            Expect<NsObjectDesc>(wide ? 40 : 32);
+            Expect<NsDefine>(wide ? 40 : 32);
+            Expect<NsCompileDesc>(wide ? 80 : 64);
+            Expect<NsInstanceDesc>(wide ? 16 : 12);
         }
 
         private static void Expect<T>(int bytes) where T : struct

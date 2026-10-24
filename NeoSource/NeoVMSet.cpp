@@ -43,7 +43,7 @@ u32 GetHashCode(VarInfo* p)
 {
 	switch (p->GetType())
 	{
-	case VAR_INT:        return (u32)p->_int;
+	case VAR_INT:        return HashIntegerKey(p->_int);
 	case VAR_FLOAT:      return p->_float == 0.0f ? 0 : GetHashCode((u8*)&p->_float, sizeof(p->_float));
 	case VAR_BOOL:       return p->_bl;
 	case VAR_NONE:       return 0;
@@ -241,9 +241,9 @@ bool SetInfo::ReMap(int minCapacity)
 {
 	int newCapacity = _BucketCapa > 0 ? _BucketCapa : 2;
 	if (minCapacity <= 0)
-		minCapacity = newCapacity << 1;
+		minCapacity = GrowHashCapacity(newCapacity);
 	while (newCapacity < minCapacity)
-		newCapacity <<= 1;
+		newCapacity = GrowHashCapacity(newCapacity);
 
 	SetNode* oldBucket = _Bucket;
 	const int oldCapacity = _BucketCapa;
@@ -334,9 +334,7 @@ void SetInfo::Free()
 void SetInfo::Reserve(int sz)
 {
 	if (sz < 0) sz = 0;
-	int minCapacity = 2;
-	while ((long long)minCapacity * 3 < (long long)sz * 4)
-		minCapacity <<= 1;
+	const int minCapacity = HashCapacityForItems(sz);
 	if (minCapacity > _BucketCapa)
 		ReMap(minCapacity);
 }
@@ -358,7 +356,7 @@ bool SetInfo::Insert(VarInfo* pKey)
 	if (_BucketCapa == 0
 		|| (long long)(_itemCount + 1) * 4 > (long long)_BucketCapa * 3)
 	{
-		if (!ReMap(_BucketCapa > 0 ? _BucketCapa << 1 : 2))
+		if (!ReMap(GrowHashCapacity(_BucketCapa)))
 			return false;
 	}
 
@@ -368,7 +366,7 @@ bool SetInfo::Insert(VarInfo* pKey)
 		// _lastFree does not move back after removals. Rebuild at the same
 		// capacity to recover those holes; grow only when the table is full.
 		const int minCapacity = _itemCount + 1 >= _BucketCapa
-			? _BucketCapa << 1
+			? GrowHashCapacity(_BucketCapa)
 			: _BucketCapa;
 		if (!ReMap(minCapacity))
 			return false;

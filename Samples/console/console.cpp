@@ -2,7 +2,10 @@
 #include "console.h"
 #include "../../NeoSource/Neo.h"
 #include "../../NeoSource/NeoScript.h"   // v2 public API (RunFile 등이 사용; Neo.h 와 공존)
+#include "../../ThirdParty/yyjson/yyjson.h"
 #include <cctype>
+#include <filesystem>
+#include <limits>
 #include <algorithm>
 #include <chrono>
 #include <conio.h>
@@ -22,10 +25,9 @@ using namespace NeoScript;
 
 static std::string FullPathOrSelf(const std::string& path)
 {
-	char fullPath[_MAX_PATH];
-	if (_fullpath(fullPath, path.c_str(), _MAX_PATH) != nullptr)
-		return fullPath;
-	return path;
+    std::error_code error;
+    const auto full = std::filesystem::absolute(std::filesystem::u8path(path), error);
+    return error ? path : full.lexically_normal().u8string();
 }
 
 class CNeoLoader : public INeoLoader
@@ -44,7 +46,7 @@ public:
 	virtual bool        Load(const char* pFileName, void*& pBuffer, int& iLen) override
 	{
 		FILE* fp = NULL;
-		int error_t = fopen_s(&fp, pFileName, "rb");
+		int error_t = _wfopen_s(&fp, std::filesystem::u8path(pFileName).c_str(), L"rb");
 		if (error_t != 0)
 			return false;
 
@@ -1220,148 +1222,190 @@ static int RunCompilerErrorRegression()
 
 static std::string JsonEscape(const std::string& s)
 {
-	std::string out;
-	out.reserve(s.size() + 8);
-	for (char c : s)
-	{
-		switch (c)
-		{
-		case '\\': out += "\\\\"; break;
-		case '"': out += "\\\""; break;
-		case '\n': out += "\\n"; break;
-		case '\r': out += "\\r"; break;
-		case '\t': out += "\\t"; break;
-		default:
-			if ((unsigned char)c < 0x20)
-			{
-				char buf[7];
-				snprintf(buf, sizeof(buf), "\\u%04x", (unsigned char)c);
-				out += buf;
-			}
-			else
-			{
-				out += c;
-			}
-			break;
-		}
-	}
-	return out;
+    std::string out;
+    out.reserve(s.size() + 8);
+    for (unsigned char c : s)
+    {
+        switch (c)
+        {
+        case '\t': out += "\\t"; break;
+        case '\n': out += "\\n"; break;
+        case '\r': out += "\\r"; break;
+        case '"': out += "\\\""; break;
+        case '\\': out += "\\\\"; break;
+        default:
+            if (c < 0x20) { char buf[7]; snprintf(buf, sizeof(buf), "\\u%04x", c); out += buf; }
+            else out += static_cast<char>(c);
+            break;
+        }
+    }
+    return out;
 }
 
 static FILE* g_DapOutput = stdout;
 static std::mutex g_DapOutputMutex;
+static constexpr size_t ProtocolMaxBody = 8 * 1024 * 1024;
+static constexpr size_t ProtocolMaxHeader = 8192;
+
+static bool ProtocolContentLength(const std::string& header, size_t& length)
+{
+    bool found = false;
+    std::istringstream input(header);
+    std::string line;
+    while (std::getline(input, line))
+    {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        size_t colon = line.find(':');
+        if (colon == std::string::npos) return false;
+        std::string key = line.substr(0, colon);
+        std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c) { return static_cast<char>(tolower(c)); });
+        if (key != "content-length") continue;
+        if (found) return false;
+        found = true;
+        size_t pos = colon + 1;
+        while (pos < line.size() && (line[pos] == ' ' || line[pos] == '\t')) ++pos;
+        length = 0;
+        const size_t start = pos;
+        while (pos < line.size() && line[pos] >= '0' && line[pos] <= '9')
+        {
+            size_t digit = static_cast<size_t>(line[pos++] - '0');
+            if (length > (ProtocolMaxBody - digit) / 10) return false;
+            length = length * 10 + digit;
+        }
+        if (pos == start) return false;
+        while (pos < line.size() && (line[pos] == ' ' || line[pos] == '\t')) ++pos;
+        if (pos != line.size() || length == 0) return false;
+    }
+    return found;
+}
 
 static bool DapReadMessage(std::string& body)
 {
-	std::string line;
-	int contentLength = -1;
-	while (std::getline(std::cin, line))
-	{
-		if (!line.empty() && line.back() == '\r')
-			line.pop_back();
-		if (line.empty())
-			break;
-		const char* header = "Content-Length:";
-		if (line.compare(0, strlen(header), header) == 0)
-			contentLength = atoi(line.c_str() + strlen(header));
-	}
-	if (contentLength <= 0)
-		return false;
-	body.resize(contentLength);
-	std::cin.read(&body[0], contentLength);
-	return (int)std::cin.gcount() == contentLength;
+    std::string header;
+    char c;
+    while (std::cin.get(c))
+    {
+        header += c;
+        if (header.size() > ProtocolMaxHeader) return false;
+        if (header.size() >= 4 && header.compare(header.size() - 4, 4, "\r\n\r\n") == 0) break;
+    }
+    if (header.size() < 4 || header.compare(header.size() - 4, 4, "\r\n\r\n") != 0) return false;
+    size_t length = 0;
+    if (!ProtocolContentLength(header.substr(0, header.size() - 4), length)) return false;
+    body.resize(length);
+    std::cin.read(&body[0], static_cast<std::streamsize>(length));
+    return static_cast<size_t>(std::cin.gcount()) == length;
 }
+
+// VM과 디버거는 같은 스레드에서 처리하고 짧은 실행 구간 사이에 요청을 읽는다.
+class DapInput
+{
+    std::string buffered;
+    size_t expected = 0;
+public:
+    int Poll(std::string& body)
+    {
+        if (!expected)
+        {
+            size_t end = buffered.find("\r\n\r\n");
+            if (end != std::string::npos)
+            {
+                if (end > ProtocolMaxHeader || !ProtocolContentLength(buffered.substr(0, end), expected)) return -1;
+                buffered.erase(0, end + 4);
+            }
+            else if (buffered.size() > ProtocolMaxHeader) return -1;
+        }
+        if (expected && buffered.size() >= expected)
+        {
+            body.assign(buffered.data(), expected);
+            buffered.erase(0, expected);
+            expected = 0;
+            return 1;
+        }
+        HANDLE input = reinterpret_cast<HANDLE>(_get_osfhandle(_fileno(stdin)));
+        DWORD available = 8192;
+        if (GetFileType(input) == FILE_TYPE_PIPE)
+        {
+            if (!PeekNamedPipe(input, nullptr, 0, nullptr, &available, nullptr)) return -1;
+            if (!available) return 0;
+        }
+        char bytes[8192];
+        const int count = _read(_fileno(stdin), bytes, static_cast<unsigned>(std::min<DWORD>(available, sizeof(bytes))));
+        if (count <= 0) return -1;
+        buffered.append(bytes, static_cast<size_t>(count));
+        return 0;
+    }
+};
 
 static void DapSendMessage(const std::string& body)
 {
-	std::lock_guard<std::mutex> lock(g_DapOutputMutex);
-	FILE* out = g_DapOutput ? g_DapOutput : stdout;
-	fprintf(out, "Content-Length: %d\r\n\r\n", (int)body.size());
-	fwrite(body.data(), 1, body.size(), out);
-	fflush(out);
+    std::lock_guard<std::mutex> lock(g_DapOutputMutex);
+    FILE* out = g_DapOutput ? g_DapOutput : stdout;
+    fprintf(out, "Content-Length: %zu\r\n\r\n", body.size());
+    fwrite(body.data(), 1, body.size(), out);
+    fflush(out);
 }
 
-static int JsonInt(const std::string& body, const char* key, int defaultValue = 0)
+class ProtocolJson
 {
-	std::string pat = std::string("\"") + key + "\"";
-	size_t pos = body.find(pat);
-	if (pos == std::string::npos)
-		return defaultValue;
-	pos = body.find(':', pos + pat.size());
-	if (pos == std::string::npos)
-		return defaultValue;
-	++pos;
-	while (pos < body.size() && isspace((unsigned char)body[pos]))
-		++pos;
-	return atoi(body.c_str() + pos);
+    yyjson_doc* doc = nullptr;
+public:
+    explicit ProtocolJson(const std::string& body) : doc(yyjson_read(body.data(), body.size(), 0)) {}
+    ~ProtocolJson() { if (doc) yyjson_doc_free(doc); }
+    yyjson_val* Root() const { return doc ? yyjson_doc_get_root(doc) : nullptr; }
+};
+static yyjson_val* JsonMember(yyjson_val* object, const char* key) { return yyjson_obj_get(object, key); }
+static int JsonInt(yyjson_val* object, const char* key, int fallback = 0)
+{
+    yyjson_val* v = JsonMember(object, key);
+    if (!yyjson_is_int(v)) return fallback;
+    if (yyjson_is_uint(v) && yyjson_get_uint(v) > INT_MAX) return fallback;
+    int64_t n = yyjson_get_sint(v);
+    return n < INT_MIN || n > INT_MAX ? fallback : static_cast<int>(n);
+}
+static bool JsonBool(yyjson_val* object, const char* key, bool fallback = false)
+{
+    yyjson_val* v = JsonMember(object, key);
+    return yyjson_is_bool(v) ? yyjson_get_bool(v) : fallback;
+}
+static std::string JsonString(yyjson_val* object, const char* key)
+{
+    yyjson_val* v = JsonMember(object, key);
+    return yyjson_is_str(v) ? std::string(yyjson_get_str(v), yyjson_get_len(v)) : std::string();
+}
+static std::string JsonValueText(yyjson_val* value)
+{
+    if (!value) return "null";
+    size_t length = 0;
+    char* text = yyjson_val_write(value, 0, &length);
+    std::string result = text ? std::string(text, length) : "null";
+    free(text);
+    return result;
 }
 
-static bool JsonBool(const std::string& body, const char* key, bool defaultValue = false)
+struct ProtocolBreakpoint { int line; bool supported; };
+static std::vector<ProtocolBreakpoint> JsonBreakpoints(yyjson_val* arguments)
 {
-	std::string pat = std::string("\"") + key + "\"";
-	size_t pos = body.find(pat);
-	if (pos == std::string::npos)
-		return defaultValue;
-	pos = body.find(':', pos + pat.size());
-	if (pos == std::string::npos)
-		return defaultValue;
-	++pos;
-	while (pos < body.size() && isspace((unsigned char)body[pos]))
-		++pos;
-	if (body.compare(pos, 4, "true") == 0)
-		return true;
-	if (body.compare(pos, 5, "false") == 0)
-		return false;
-	return defaultValue;
+    std::vector<ProtocolBreakpoint> result;
+    yyjson_val* list = JsonMember(arguments, "breakpoints");
+    for (size_t i = 0; i < yyjson_arr_size(list); ++i)
+    {
+        yyjson_val* bp = yyjson_arr_get(list, i);
+        bool supported = !JsonMember(bp, "condition") && !JsonMember(bp, "hitCondition") && !JsonMember(bp, "logMessage");
+        result.push_back({JsonInt(bp, "line", -1), supported});
+    }
+    return result;
 }
 
-static std::string JsonString(const std::string& body, const char* key)
+// 파이프 읽기 경계에서 잘린 UTF-8 바이트를 보관하고 EOF의 미완성 문자만 대체한다.
+static size_t Utf8CompletePrefix(const std::string& text)
 {
-	std::string pat = std::string("\"") + key + "\"";
-	size_t pos = body.find(pat);
-	if (pos == std::string::npos)
-		return "";
-	pos = body.find(':', pos + pat.size());
-	if (pos == std::string::npos)
-		return "";
-	pos = body.find('"', pos);
-	if (pos == std::string::npos)
-		return "";
-	std::string out;
-	for (++pos; pos < body.size(); ++pos)
-	{
-		char c = body[pos];
-		if (c == '"')
-			break;
-		if (c == '\\' && pos + 1 < body.size())
-		{
-			char n = body[++pos];
-			if (n == 'n') out += '\n';
-			else if (n == 'r') out += '\r';
-			else if (n == 't') out += '\t';
-			else out += n;
-		}
-		else
-			out += c;
-	}
-	return out;
-}
-
-static std::vector<int> JsonBreakpointLines(const std::string& body)
-{
-	std::vector<int> lines;
-	size_t pos = body.find("\"breakpoints\"");
-	while (pos != std::string::npos)
-	{
-		pos = body.find("\"line\"", pos);
-		if (pos == std::string::npos)
-			break;
-		int line = JsonInt(body.substr(pos), "line", -1);
-		if (line > 0)
-			lines.push_back(line);
-		++pos;
-	}
-	return lines;
+    if (text.empty()) return 0;
+    size_t start = text.size() - 1;
+    while (start && (static_cast<unsigned char>(text[start]) & 0xc0) == 0x80) --start;
+    unsigned char lead = static_cast<unsigned char>(text[start]);
+    size_t width = lead < 0x80 ? 1 : lead < 0xe0 ? 2 : lead < 0xf0 ? 3 : 4;
+    return text.size() - start < width ? start : text.size();
 }
 
 static bool ParseNeoCompileError(const std::string& err, int& line, int& column, std::string& message)
@@ -1413,22 +1457,53 @@ public:
 	bool initialRunStarted = false;
 	bool noDebugMode = false;
 	int nextVariableReference = 1000000;
-	std::map<int, std::vector<DebugVariable>> variableReferences;
+    std::map<int, const std::vector<DebugVariable>*> variableReferences;
+    std::map<const std::vector<DebugVariable>*, int> childReferences;
+    std::map<int, std::vector<DebugVariable>> frameVariables;
+    std::vector<DebugStackFrame> stoppedFrames;
+    std::mutex sendMutex;
+    bool running = false;
+    bool pendingStop = false;
+    bool faultStopped = false;
+    std::string lastStopError;
+    int savedStdout = -1;
+    int captureWrite = -1;
+    std::thread outputThread;
+    std::ios::fmtflags oldCoutFlags{};
+
+    ~NeoDapSession() { StopCapture(); }
+
 
 	void ClearVariableReferences()
 	{
 		variableReferences.clear();
+        childReferences.clear();
+        frameVariables.clear();
+        stoppedFrames.clear();
 		nextVariableReference = 1000000;
 	}
 
-	int StoreVariableChildren(const std::vector<DebugVariable>& children)
-	{
-		if (children.empty())
-			return 0;
-		const int reference = nextVariableReference++;
-		variableReferences[reference] = children;
-		return reference;
-	}
+    const std::vector<DebugVariable>& GetFrameVariables(int frame)
+    {
+        static const std::vector<DebugVariable> empty;
+        if (frame < 0 || frame >= 64) return empty;
+        auto found = frameVariables.find(frame);
+        if (found != frameVariables.end()) return found->second;
+        if (faultStopped || !dbg) return empty;
+        auto& vars = frameVariables[frame];
+        dbg->GetFrameVariables(instance, frame, vars);
+        return vars;
+    }
+    int StoreVariableChildren(const std::vector<DebugVariable>& children)
+    {
+        if (children.empty()) return 0;
+        auto found = childReferences.find(&children);
+        if (found != childReferences.end()) return found->second;
+        const int reference = nextVariableReference++;
+        childReferences[&children] = reference;
+        variableReferences[reference] = &children;
+        return reference;
+    }
 
 	void WriteVariables(std::ostringstream& os, const std::vector<DebugVariable>& vars)
 	{
@@ -1443,33 +1518,40 @@ public:
 		os << "]}";
 	}
 
-	virtual void OnStopped(InstanceHandle, const DebugLocation& location, DebugStopReason reason) override
-	{
-		ClearVariableReferences();
-		lastStopReason = reason;
-		lastStopLocation = location;
-		const char* reasonText = "pause";
-		if (reason == DebugStopReason::Breakpoint)
-			reasonText = "breakpoint";
-		else if (reason == DebugStopReason::Step)
-			reasonText = "step";
-		else if (reason == DebugStopReason::Exception)
-			reasonText = "exception";
-		std::ostringstream os;
-		os << "{\"seq\":" << seq++ << ",\"type\":\"event\",\"event\":\"stopped\",\"body\":{\"reason\":\""
-			<< reasonText << "\",\"threadId\":1,\"allThreadsStopped\":true";
-		StringView err;
-		if (reason == DebugStopReason::Exception && runtime && runtime->PeekLastError(err))
-			os << ",\"description\":\"" << JsonEscape(std::string(err.data(), err.size())) << "\"";
-		os << "}}";
-		DapSendMessage(os.str());
-	}
+    virtual void OnStopped(InstanceHandle, const DebugLocation& location, DebugStopReason reason) override
+    {
+        ClearVariableReferences();
+        faultStopped = false;
+        lastStopReason = reason;
+        lastStopLocation = location;
+        pendingStop = true;
+        lastStopError.clear();
+        if (dbg)
+        {
+            dbg->GetStackTrace(instance, stoppedFrames);
+            if (stoppedFrames.size() > 64) stoppedFrames.resize(64);
+            if (reason == DebugStopReason::Exception)
+                for (const auto& frame : stoppedFrames) GetFrameVariables(frame.frameId);
+        }
+        faultStopped = reason == DebugStopReason::Exception;
+    }
+    void PublishStopped()
+    {
+        const char* reason = lastStopReason == DebugStopReason::Breakpoint ? "breakpoint" :
+            lastStopReason == DebugStopReason::Step ? "step" :
+            lastStopReason == DebugStopReason::Exception ? "exception" : "pause";
+        std::string body = "{\"reason\":\"" + std::string(reason) + "\",\"threadId\":1,\"allThreadsStopped\":true";
+        if (!lastStopError.empty()) body += ",\"description\":\"" + JsonEscape(lastStopError) + "\"";
+        SendEvent("stopped", body + "}");
+        pendingStop = false;
+    }
 
 	void SendResponse(int requestSeq, const std::string& command, const std::string& body = "{}", bool success = true, const std::string& message = "")
 	{
+        std::lock_guard<std::mutex> lock(sendMutex);
 		std::ostringstream os;
 		os << "{\"seq\":" << seq++ << ",\"type\":\"response\",\"request_seq\":" << requestSeq
-			<< ",\"success\":" << (success ? "true" : "false") << ",\"command\":\"" << command << "\"";
+			<< ",\"success\":" << (success ? "true" : "false") << ",\"command\":\"" << JsonEscape(command) << "\"";
 		if (!message.empty())
 			os << ",\"message\":\"" << JsonEscape(message) << "\"";
 		os << ",\"body\":" << body << "}";
@@ -1478,8 +1560,9 @@ public:
 
 	void SendEvent(const std::string& event, const std::string& body = "{}")
 	{
+        std::lock_guard<std::mutex> lock(sendMutex);
 		std::ostringstream os;
-		os << "{\"seq\":" << seq++ << ",\"type\":\"event\",\"event\":\"" << event << "\",\"body\":" << body << "}";
+		os << "{\"seq\":" << seq++ << ",\"type\":\"event\",\"event\":\"" << JsonEscape(event) << "\",\"body\":" << body << "}";
 		DapSendMessage(os.str());
 	}
 
@@ -1524,7 +1607,7 @@ public:
 		std::map<int, std::set<int>>::const_iterator itFile = executableLinesByFile.find(file);
 		if (itFile != executableLinesByFile.end())
 			return itFile->second.find(line) != itFile->second.end();
-		return executableLines.empty() || executableLines.find(line) != executableLines.end();
+		return instance && file == 0 && executableLines.find(line) != executableLines.end();
 	}
 
 	std::string SourcePathFromFileId(int fileId) const
@@ -1569,9 +1652,21 @@ public:
 
 	bool LoadProgram(const std::string& path, std::string& err, bool enableDebug)
 	{
-		compileError = Error{};
-		std::string fullPath = FullPathOrSelf(path);
-		std::ifstream in(fullPath.c_str(), std::ios::binary);
+        StopCapture();
+        if (runtime)
+        {
+            if (instance) runtime->DestroyInstance(instance);
+            if (program) runtime->DestroyProgram(program);
+            DestroyRuntime(runtime);
+        }
+        runtime = nullptr; dbg = nullptr; instance = {}; program = {};
+        running = pendingStop = faultStopped = initialRunStarted = false;
+        sourceFiles.clear(); sourcePath.clear();
+        executableLines.clear(); executableLinesByFile.clear(); breakpointsByFile.clear();
+        ClearVariableReferences();
+        compileError = Error{};
+        std::string fullPath = FullPathOrSelf(path);
+		std::ifstream in(std::filesystem::u8path(fullPath), std::ios::binary);
 		if (!in)
 		{
 			err = "cannot open program";
@@ -1606,6 +1701,8 @@ public:
 		idesc.runGlobalInit = false;              // BP 를 먼저 걸기 위해 전역 실행 지연
 		instance = runtime->CreateInstance(program, idesc);
 		dbg = runtime->GetDebugger();
+        if (!instance) { err = "cannot create script instance"; return false; }
+        if (dbg) dbg->SetSliceBudget(instance, 4096);
 
 		executableLines.clear();
 		executableLinesByFile.clear();
@@ -1628,92 +1725,106 @@ public:
 		return true;
 	}
 
-	void RunCurrent(bool initial)
-	{
-		if (!instance || terminated)
-			return;
-		if (initial)
-			SendOutput(noDebugMode ? "\x1b[32m[Neo Script] Run started.\x1b[0m\n" : "\x1b[32m[Neo Script] Debug started.\x1b[0m\n");
-		fflush(stdout);
-		int savedStdout = _dup(_fileno(stdout));
-		int pipeFd[2] = { -1, -1 };
-		bool captureActive = savedStdout >= 0 && _pipe(pipeFd, 4096, _O_BINARY) == 0;
-		std::ios::fmtflags oldCoutFlags = std::cout.flags();
-		std::thread outputThread;
-		if (captureActive)
-		{
-			_dup2(pipeFd[1], _fileno(stdout));
-			std::cout.setf(std::ios::unitbuf);
-			outputThread = std::thread([this, readFd = pipeFd[0]]()
-			{
-				char buffer[512];
-				for (;;)
-				{
-					int readSize = _read(readFd, buffer, sizeof(buffer));
-					if (readSize <= 0)
-						break;
-					SendOutput(std::string(buffer, buffer + readSize));
-				}
-				_close(readFd);
-			});
-		}
-		if (initial)
-		{
-			runtime->RunGlobalInit(instance);   // 전역 코드 실행
-		}
-		else if (dbg)
-		{
-			dbg->Run(instance);                 // Continue/Step 재개
-		}
-		fflush(stdout);
-		if (captureActive)
-		{
-			_dup2(savedStdout, _fileno(stdout));
-			_close(pipeFd[1]);
-			if (outputThread.joinable())
-				outputThread.join();
-			std::cout.flags(oldCoutFlags);
-		}
-		if (savedStdout >= 0)
-		{
-			_close(savedStdout);
-		}
-		const bool paused = dbg && dbg->IsPaused(instance);
-		StringView vmErr;
-		if (runtime && runtime->PeekLastError(vmErr) &&
-			(paused == false || lastStopReason == DebugStopReason::Exception))
-		{
-			std::string error(vmErr.data(), vmErr.size());
-			if (!error.empty() && error.back() != '\n')
-				error += "\n";
-			SendErrorOutput(error);
-		}
-		if (!paused && !terminated)
-		{
-			SendOutput(noDebugMode ? "\x1b[32m[Neo Script] Run finished.\x1b[0m\n" : "\x1b[32m[Neo Script] Debug finished.\x1b[0m\n");
-			terminated = true;
-			SendEvent("terminated");
-		}
-	}
+    void StartCapture()
+    {
+        if (savedStdout >= 0) return;
+        fflush(stdout);
+        savedStdout = _dup(_fileno(stdout));
+        int pipeFd[2] = {-1, -1};
+        if (savedStdout < 0 || _pipe(pipeFd, 4096, _O_BINARY) != 0)
+        {
+            if (savedStdout >= 0) _close(savedStdout);
+            savedStdout = -1;
+            return;
+        }
+        captureWrite = pipeFd[1];
+        _dup2(captureWrite, _fileno(stdout));
+        oldCoutFlags = std::cout.flags();
+        std::cout.setf(std::ios::unitbuf);
+        outputThread = std::thread([this, readFd = pipeFd[0]]()
+        {
+            std::string pending;
+            char buffer[512];
+            for (;;)
+            {
+                int count = _read(readFd, buffer, sizeof(buffer));
+                if (count <= 0) break;
+                pending.append(buffer, static_cast<size_t>(count));
+                size_t complete = Utf8CompletePrefix(pending);
+                SendOutput(pending.substr(0, complete));
+                pending.erase(0, complete);
+            }
+            if (!pending.empty()) SendOutput("\xef\xbf\xbd");
+            _close(readFd);
+        });
+    }
+    void StopCapture()
+    {
+        if (savedStdout < 0) return;
+        fflush(stdout);
+        _dup2(savedStdout, _fileno(stdout));
+        _close(captureWrite);
+        captureWrite = -1;
+        if (outputThread.joinable()) outputThread.join();
+        std::cout.flags(oldCoutFlags);
+        _close(savedStdout);
+        savedStdout = -1;
+    }
+    void RunCurrent(bool initial)
+    {
+        if (!instance || terminated || faultStopped) { running = false; return; }
+        if (initial) SendOutput(noDebugMode ? "[Neo Script] Run started.\n" : "[Neo Script] Debug started.\n");
+        StartCapture();
+        const RunStatus status = initial ? runtime->RunGlobalInit(instance) :
+            (dbg ? dbg->Run(instance) : RunStatus::Failed);
+        const bool paused = dbg && dbg->IsPaused(instance);
+        running = status == RunStatus::Suspended && !paused && !pendingStop;
+        if (running) { fflush(stdout); return; }
+        StopCapture(); // 정지 이벤트보다 앞선 출력을 모두 전송한다.
+        StringView error;
+        if (runtime && runtime->PeekLastError(error))
+        {
+            lastStopError.assign(error.data(), error.size());
+            if (!lastStopError.empty()) SendErrorOutput(lastStopError + "\n");
+        }
+        if (pendingStop) { PublishStopped(); return; }
+        if (!paused && !terminated)
+        {
+            SendOutput(noDebugMode ? "[Neo Script] Run finished.\n" : "[Neo Script] Debug finished.\n");
+            terminated = true;
+            SendEvent("terminated");
+        }
+    }
 
 	void Handle(const std::string& body)
 	{
-		int requestSeq = JsonInt(body, "seq", 0);
-		std::string command = JsonString(body, "command");
+        ProtocolJson json(body);
+        yyjson_val* root = json.Root();
+        const int requestSeq = JsonInt(root, "seq", 0);
+        const std::string command = JsonString(root, "command");
+        yyjson_val* arguments = JsonMember(root, "arguments");
+        if (!yyjson_is_obj(root) || JsonString(root, "type") != "request" || command.empty())
+        { SendResponse(requestSeq, command, "{}", false, "Invalid DAP request"); return; }
+        if (running && command != "pause" && command != "disconnect" && command != "threads")
+        { SendResponse(requestSeq, command, "{}", false, "Script is running"); return; }
+        if (command == "continue" || command == "stepIn" || command == "next" || command == "stepOut")
+        {
+            if (!initialRunStarted || !instance || !dbg || !dbg->IsPaused(instance) || faultStopped)
+            { SendResponse(requestSeq, command, "{}", false, "No resumable paused script"); return; }
+        }
 		if (command == "initialize")
 		{
 			SendResponse(requestSeq, command, "{\"supportsConfigurationDoneRequest\":true,\"supportsStepInTargetsRequest\":false,\"supportsExceptionInfoRequest\":true,\"supportsEvaluateForHovers\":true}");
 		}
 		else if (command == "launch")
 		{
-			std::string path = JsonString(body, "program");
+			std::string path = JsonString(arguments, "program");
 			if (path.empty())
-				path = JsonString(body, "path");
-			bool noDebug = JsonBool(body, "noDebug", false);
+				path = JsonString(arguments, "path");
+			bool noDebug = JsonBool(arguments, "noDebug", false);
 			noDebugMode = noDebug;
-			std::string libPath = JsonString(body, "libPath");
-			if (!libPath.empty() && loader)
-				loader->SetLibPath(libPath);
+			std::string libPath = JsonString(arguments, "libPath");
+            if (loader) loader->SetLibPath(libPath.empty() ? "Lib" : libPath);
 			std::string err;
 			bool ok = LoadProgram(path, err, !noDebug);
 			if (!ok)
@@ -1750,21 +1861,23 @@ public:
 		}
 		else if (command == "setBreakpoints")
 		{
-			std::string bpSourcePath = JsonString(body, "path");
+			std::string bpSourcePath = JsonString(JsonMember(arguments, "source"), "path");
 			int bpFile = FileIdFromSourcePath(bpSourcePath);
-			std::vector<int> breakpoints = JsonBreakpointLines(body);
+			            const auto requested = JsonBreakpoints(arguments);
+            std::vector<int> breakpoints;
+            for (const auto& bp : requested) if (bp.supported && bp.line > 0) breakpoints.push_back(bp.line);
 			if (bpFile >= 0)
 				breakpointsByFile[bpFile] = breakpoints;
 			ApplyBreakpoints();
 			std::ostringstream os;
 			os << "{\"breakpoints\":[";
-			for (size_t i = 0; i < breakpoints.size(); ++i)
+			for (size_t i = 0; i < requested.size(); ++i)
 			{
 				if (i) os << ",";
-				bool verified = (bpFile >= 0) && IsExecutableLine(bpFile, breakpoints[i]);
-				os << "{\"verified\":" << (verified ? "true" : "false") << ",\"line\":" << breakpoints[i];
+				bool verified = requested[i].supported && (bpFile >= 0) && IsExecutableLine(bpFile, requested[i].line);
+				os << "{\"verified\":" << (verified ? "true" : "false") << ",\"line\":" << requested[i].line;
 				if (!verified)
-					os << ",\"message\":\"No executable Neo Script instruction on this line\"";
+					os << ",\"message\":\"No executable instruction or unsupported breakpoint condition/log message\"";
 				os << "}";
 			}
 			os << "]}";
@@ -1772,6 +1885,7 @@ public:
 		}
 		else if (command == "configurationDone")
 		{
+            if (!instance) { SendResponse(requestSeq, command, "{}", false, "No loaded script"); return; }
 			SendResponse(requestSeq, command);
 			if (!initialRunStarted)
 			{
@@ -1809,8 +1923,7 @@ public:
 		}
 		else if (command == "stackTrace")
 		{
-			std::vector<DebugStackFrame> frames;
-			if (dbg) dbg->GetStackTrace(instance, frames);
+            const auto& frames = stoppedFrames;
 			std::ostringstream os;
 			os << "{\"stackFrames\":[";
 			for (size_t i = 0; i < frames.size(); ++i)
@@ -1828,35 +1941,35 @@ public:
 		}
 		else if (command == "scopes")
 		{
-			int frameId = JsonInt(body, "frameId", 0);
+			int frameId = JsonInt(arguments, "frameId", 0);
+            if (frameId < 0 || frameId >= static_cast<int>(stoppedFrames.size()))
+            { SendResponse(requestSeq, command, "{}", false, "Invalid stack frame"); return; }
 			std::ostringstream os;
 			os << "{\"scopes\":[{\"name\":\"Locals\",\"variablesReference\":" << (1000 + frameId) << ",\"expensive\":false}]}";
 			SendResponse(requestSeq, command, os.str());
 		}
 		else if (command == "variables")
 		{
-			int ref = JsonInt(body, "variablesReference", 1000);
-			std::vector<DebugVariable> vars;
-			std::map<int, std::vector<DebugVariable>>::const_iterator childIt = variableReferences.find(ref);
-			if (childIt != variableReferences.end())
-				vars = childIt->second;
-			else if (dbg && ref >= 1000 && ref < 1000000)
-				dbg->GetFrameVariables(instance, ref - 1000, vars);
-			std::ostringstream os;
-			WriteVariables(os, vars);
+			int ref = JsonInt(arguments, "variablesReference", 1000);
+            static const std::vector<DebugVariable> empty;
+            const std::vector<DebugVariable>* vars = &empty;
+            auto childIt = variableReferences.find(ref);
+            if (childIt != variableReferences.end()) vars = childIt->second;
+            else if (ref >= 1000 && ref < 1064) vars = &GetFrameVariables(ref - 1000);
+            std::ostringstream os;
+            WriteVariables(os, *vars);
 			SendResponse(requestSeq, command, os.str());
 		}
 		else if (command == "evaluate")
 		{
-			std::string expression = JsonString(body, "expression");
-			int frameId = JsonInt(body, "frameId", 0);
+			std::string expression = JsonString(arguments, "expression");
+			int frameId = JsonInt(arguments, "frameId", 0);
 			while (!expression.empty() && isspace((unsigned char)expression.front()))
 				expression.erase(expression.begin());
 			while (!expression.empty() && isspace((unsigned char)expression.back()))
 				expression.pop_back();
 
-			std::vector<DebugVariable> vars;
-			if (dbg) dbg->GetFrameVariables(instance, frameId, vars);
+            const auto& vars = GetFrameVariables(frameId);
 			const DebugVariable* found = nullptr;
 			for (const DebugVariable& var : vars)
 			{
@@ -1882,21 +1995,28 @@ public:
 		}
 		else if (command == "exceptionInfo")
 		{
-			StringView descErr;
-			std::string description = (runtime && runtime->PeekLastError(descErr)) ? std::string(descErr.data(), descErr.size()) : "";
+            const std::string& description = lastStopError;
 			std::ostringstream os;
 			os << "{\"exceptionId\":\"NeoScript.RuntimeError\",\"description\":\"" << JsonEscape(description)
 				<< "\",\"breakMode\":\"always\"}";
 			SendResponse(requestSeq, command, os.str());
 		}
-		else if (command == "disconnect")
+        else if (command == "pause")
+        {
+            if (!running || !dbg || noDebugMode) SendResponse(requestSeq, command, "{}", false, "No running debug script");
+            else { dbg->Pause(instance); SendResponse(requestSeq, command); }
+        }
+        else if (command == "setExceptionBreakpoints") SendResponse(requestSeq, command);
+        else if (command == "disconnect")
 		{
 			SendResponse(requestSeq, command);
+            running = false;
+            StopCapture();
 			terminated = true;
 		}
 		else
 		{
-			SendResponse(requestSeq, command, "{}", true);
+			SendResponse(requestSeq, command, "{}", false, "Unsupported DAP request");
 		}
 	}
 };
@@ -1921,9 +2041,17 @@ static int RunDebugAdapter(CNeoLoader* loader)
 	}
 	NeoDapSession session;
 	session.loader = loader;
-	std::string body;
-	while (!session.terminated && DapReadMessage(body))
-		session.Handle(body);
+    DapInput input;
+    std::string body;
+    while (!session.terminated)
+    {
+        int state = input.Poll(body);
+        if (state < 0) break;
+        if (state > 0) session.Handle(body);
+        if (!session.terminated && session.running) session.RunCurrent(false);
+        else if (state == 0) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    session.StopCapture();
 	if (session.runtime)
 	{
 		if (session.instance) session.runtime->DestroyInstance(session.instance);
@@ -1942,26 +2070,28 @@ static bool IsNeoIdentifierChar(char c)
 		(c >= '0' && c <= '9') || c == '_';
 }
 
-static std::string GetLspLinePrefix(const std::string& source, int line, int character)
+static std::string GetLspLinePrefix(const std::string& source, int line, int character, bool wholePrefix = false)
 {
-	if (line < 0 || character < 0)
-		return "";
-
-	size_t begin = 0;
-	for (int currentLine = 0; currentLine < line; ++currentLine)
-	{
-		begin = source.find('\n', begin);
-		if (begin == std::string::npos)
-			return "";
-		++begin;
-	}
-
-	size_t end = source.find('\n', begin);
-	if (end == std::string::npos)
-		end = source.size();
-	const size_t requestedCursor = begin + (size_t)character;
-	const size_t cursor = requestedCursor < end ? requestedCursor : end;
-	return source.substr(begin, cursor - begin);
+    if (line < 0 || character < 0) return "";
+    size_t begin = 0;
+    for (int current = 0; current < line; ++current)
+    {
+        begin = source.find('\n', begin);
+        if (begin == std::string::npos) return "";
+        ++begin;
+    }
+    size_t cursor = begin;
+    int units = 0;
+    while (cursor < source.size() && source[cursor] != '\n' && source[cursor] != '\r' && units < character)
+    {
+        unsigned char lead = static_cast<unsigned char>(source[cursor]);
+        size_t width = lead < 0x80 ? 1 : lead < 0xe0 ? 2 : lead < 0xf0 ? 3 : 4;
+        int cost = width == 4 ? 2 : 1;
+        if (units + cost > character || width > source.size() - cursor) break;
+        cursor += width;
+        units += cost;
+    }
+    return wholePrefix ? source.substr(0, cursor) : source.substr(begin, cursor - begin);
 }
 
 static void GetLspCompletionContext(const std::string& linePrefix, std::string& module, std::string& prefix)
@@ -1986,16 +2116,38 @@ static void GetLspCompletionContext(const std::string& linePrefix, std::string& 
 static const NeoBuiltinInfo* FindLspSignature(const std::vector<NeoBuiltinInfo>& builtins,
 	const std::string& linePrefix, int& activeParameter)
 {
-	activeParameter = 0;
-	const size_t openParen = linePrefix.rfind('(');
-	if (openParen == std::string::npos)
-		return nullptr;
-
-	for (size_t i = openParen + 1; i < linePrefix.size(); ++i)
-	{
-		if (linePrefix[i] == ',')
-			++activeParameter;
-	}
+    activeParameter = 0;
+    struct Delimiter { char kind; size_t offset; int commas; };
+    std::vector<Delimiter> stack;
+    char quote = 0;
+    bool escaped = false, lineComment = false, blockComment = false;
+    for (size_t i = 0; i < linePrefix.size(); ++i)
+    {
+        char c = linePrefix[i];
+        char next = i + 1 < linePrefix.size() ? linePrefix[i + 1] : 0;
+        if (lineComment) { if (c == '\n') lineComment = false; continue; }
+        if (blockComment) { if (c == '*' && next == '/') { blockComment = false; ++i; } continue; }
+        if (quote)
+        {
+            if (escaped) escaped = false;
+            else if (c == '\\') escaped = true;
+            else if (c == quote) quote = 0;
+            continue;
+        }
+        if (c == '/' && next == '/') { lineComment = true; ++i; continue; }
+        if (c == '/' && next == '*') { blockComment = true; ++i; continue; }
+        if (c == '"' || c == '\'') { quote = c; continue; }
+        if (c == '(' || c == '[' || c == '{') stack.push_back({c, i, 0});
+        else if (c == ')' || c == ']' || c == '}')
+        {
+            if (!stack.empty()) stack.pop_back();
+        }
+        else if (c == ',' && !stack.empty()) ++stack.back().commas;
+    }
+    auto call = std::find_if(stack.rbegin(), stack.rend(), [](const Delimiter& d) { return d.kind == '('; });
+    if (call == stack.rend()) return nullptr;
+    const size_t openParen = call->offset;
+    activeParameter = call->commas;
 
 	size_t nameEnd = openParen;
 	while (nameEnd > 0 && isspace((unsigned char)linePrefix[nameEnd - 1]))
@@ -2094,7 +2246,7 @@ public:
 		NeoVMSystem::GetBuiltins(builtins);
 	}
 
-	void SendResponse(int id, const std::string& result)
+	void SendResponse(const std::string& id, const std::string& result)
 	{
 		std::ostringstream os;
 		os << "{\"jsonrpc\":\"2.0\",\"id\":" << id << ",\"result\":" << result << "}";
@@ -2138,7 +2290,7 @@ public:
 		{
 			static const char* keywords[] = {
 				"var", "fun", "export", "if", "else", "while", "for", "foreach", "in", "continue", "break", "return",
-				"true", "false", "null", "import", "class", "yield", "sleep"
+				"true", "false", "null", "import", "public", "const", "switch", "case", "default", "yield", "sleep"
 			};
 			for (const char* keyword : keywords)
 			{
@@ -2183,7 +2335,7 @@ public:
 			source = document->second;
 
 		int activeParameter = 0;
-		const NeoBuiltinInfo* info = FindLspSignature(builtins, GetLspLinePrefix(source, line, character), activeParameter);
+		const NeoBuiltinInfo* info = FindLspSignature(builtins, GetLspLinePrefix(source, line, character, true), activeParameter);
 		if (info == nullptr)
 			return "null";
 
@@ -2199,41 +2351,58 @@ public:
 		return os.str();
 	}
 
-	void Handle(const std::string& body)
-	{
-		const std::string method = JsonString(body, "method");
-		const int id = JsonInt(body, "id", -1);
-		if (method == "initialize")
-		{
-			SendResponse(id, "{\"capabilities\":{\"textDocumentSync\":1,\"completionProvider\":{\"triggerCharacters\":[\".\"]}}}");
-		}
-		else if (method == "textDocument/didOpen" || method == "textDocument/didChange")
-		{
-			const std::string uri = JsonString(body, "uri");
-			if (!uri.empty())
-				documents[uri] = JsonString(body, "text");
-		}
-		else if (method == "textDocument/didClose")
-		{
-			documents.erase(JsonString(body, "uri"));
-		}
-		else if (method == "textDocument/completion")
-		{
-			SendResponse(id, BuildCompletionResult(JsonString(body, "uri"), JsonInt(body, "line"), JsonInt(body, "character")));
-		}
-		else if (method == "textDocument/signatureHelp")
-		{
-			SendResponse(id, BuildSignatureHelpResult(JsonString(body, "uri"), JsonInt(body, "line"), JsonInt(body, "character")));
-		}
-		else if (method == "shutdown")
-		{
-			SendResponse(id, "null");
-		}
-		else if (method == "exit")
-		{
-			terminated = true;
-		}
-	}
+    void SendError(const std::string& id, int code, const std::string& message)
+    {
+        DapSendMessage("{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"error\":{\"code\":" +
+            std::to_string(code) + ",\"message\":\"" + JsonEscape(message) + "\"}}");
+    }
+    void Handle(const std::string& body)
+    {
+        ProtocolJson json(body);
+        yyjson_val* root = json.Root();
+        if (!root) { SendError("null", -32700, "Invalid JSON"); return; }
+        yyjson_val* idValue = JsonMember(root, "id");
+        const bool request = idValue != nullptr;
+        const std::string id = JsonValueText(idValue);
+        const std::string method = JsonString(root, "method");
+        if (!yyjson_is_obj(root) || JsonString(root, "jsonrpc") != "2.0" || method.empty() ||
+            (request && !yyjson_is_str(idValue) && !yyjson_is_int(idValue) && !yyjson_is_null(idValue)))
+        { SendError("null", -32600, "Invalid request"); return; }
+        yyjson_val* params = JsonMember(root, "params");
+        yyjson_val* document = JsonMember(params, "textDocument");
+        const std::string uri = JsonString(document, "uri");
+        yyjson_val* position = JsonMember(params, "position");
+        if (method == "initialize")
+        {
+            if (request) SendResponse(id, "{\"capabilities\":{\"positionEncoding\":\"utf-16\",\"textDocumentSync\":1,\"completionProvider\":{\"triggerCharacters\":[\".\"]},\"signatureHelpProvider\":{\"triggerCharacters\":[\"(\",\",\"]}}}");
+        }
+        else if (method == "textDocument/didOpen")
+        {
+            if (!uri.empty()) documents[uri] = JsonString(document, "text");
+        }
+        else if (method == "textDocument/didChange")
+        {
+            yyjson_val* changes = JsonMember(params, "contentChanges");
+            for (size_t i = 0; i < yyjson_arr_size(changes); ++i)
+            {
+                yyjson_val* change = yyjson_arr_get(changes, i);
+                if (!uri.empty() && !JsonMember(change, "range")) documents[uri] = JsonString(change, "text");
+            }
+        }
+        else if (method == "textDocument/didClose") documents.erase(uri);
+        else if (method == "textDocument/completion")
+        {
+            if (request) SendResponse(id, BuildCompletionResult(uri, JsonInt(position, "line"), JsonInt(position, "character")));
+        }
+        else if (method == "textDocument/signatureHelp")
+        {
+            if (request) SendResponse(id, BuildSignatureHelpResult(uri, JsonInt(position, "line"), JsonInt(position, "character")));
+        }
+        else if (method == "shutdown") { if (request) SendResponse(id, "null"); }
+        else if (method == "exit") terminated = true;
+        else if (request) SendError(id, -32601, "Method not found");
+    }
+
 };
 
 static int RunLanguageServer()

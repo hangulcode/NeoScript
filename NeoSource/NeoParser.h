@@ -3,6 +3,7 @@
 #include "NeoArchive.h"
 #include "NeoVMWorker.h"
 #include "NeoTextLoader.h"
+#include <cmath>
 
 namespace NeoScript
 {
@@ -889,12 +890,16 @@ struct SRangeJumpCompile
 
 struct SFunctions
 {
+	std::set<std::string> _exportNames;
 	std::vector<SFunctionLayer*>			_funLayers;
 	std::map<int, SFunctionInfo*>			_funIDs;
 	std::list<SFunctionInfo*>				_funSequence;
 
 	SFunctionInfo*						_cur = nullptr;
 	std::vector<VarInfo>				_staticVars;
+	// 숫자 상수의 중복 제거 색인: NS_FLOAT 비트 / int 값 → 풀 인덱스. 선형 탐색은 리터럴 수의 제곱으로 느려졌다.
+	std::unordered_map<u32, int>	_floatConstants;
+	std::unordered_map<int, int>		_intConstants;
 	// String slots are never reclaimed by numeric immediate folding. Keep their
 	// lookup separate so large text pools do not require a quadratic scan.
 	std::unordered_map<std::string, int> _stringConstants;
@@ -902,6 +907,10 @@ struct SFunctions
 	// 리터럴을 즉값 명령으로 대체할 때, 그 뒤로 코드가 방출되지 않았다면
 	// 그 슬롯을 참조하는 명령도 있을 수 없다 — 이 비교 하나로 회수 가능 여부가 정해진다.
 	SFunctionInfo*						_lastStaticFun = nullptr;
+	// 바깥 파서가 이미 훑어 둔 식 부작용 비트. 다음 ParseJob 이 같은 소스 오프셋에서 시작하면 재스캔 없이 쓴다.
+	// (호출 인자·괄호 부분식은 바깥 범위의 부분집합이라 바깥 비트가 보수적 상한이다.)
+	int									_presetExprEffects = -1;
+	int									_presetExprOffset = -1;
 	int									_lastStaticCodeOffset = -1;
 	// 그 오프셋에서 시작된 상수 '묶음'의 첫 인덱스. 접기로 여러 개를 되돌릴 때 하한이 된다.
 	int									_staticRunBegin = 0;
@@ -1034,11 +1043,29 @@ struct SFunctions
 			return false;
 		return _lastStaticCodeOffset == _cur->_code->GetBufferOffset();
 	}
+	// 마지막 상수를 되돌린다. 색인도 함께 지워야 같은 값이 다시 올 때 새 슬롯을 만든다.
+	void PopLastStatic()
+	{
+		const VarInfo& v = _staticVars.back();
+		if (v.GetType() == VAR_FLOAT)
+		{
+			u32 bits = 0;
+			std::memcpy(&bits, &v._float, sizeof(bits));
+			auto it = _floatConstants.find(bits);
+			if (it != _floatConstants.end() && it->second == (int)_staticVars.size() - 1) _floatConstants.erase(it);
+		}
+		else if (v.GetType() == VAR_INT)
+		{
+			auto it = _intConstants.find(v._int);
+			if (it != _intConstants.end() && it->second == (int)_staticVars.size() - 1) _intConstants.erase(it);
+		}
+		_staticVars.pop_back();
+	}
 	bool TryPopStatic(int compileIndex)
 	{
 		if (CanPopLastStatic(compileIndex) == false)
 			return false;
-		_staticVars.pop_back();
+		PopLastStatic();
 		return true;
 	}
 	int NextStaticIndex() const
@@ -1049,21 +1076,16 @@ struct SFunctions
 	}
 	int	AddStaticInt(int num)
 	{
-		for (int i = (int)_staticVars.size() - 1; i >= 0; i--)
-		{
-			VarInfo& v2 = _staticVars[i];
-			if (VAR_INT == v2.GetType())
-			{
-				if (num == v2._int)
-					return StaticCompileIndex(i);
-			}
-		}
+		auto found = _intConstants.find(num);
+		if (found != _intConstants.end())
+			return StaticCompileIndex(found->second);
 		const int idx = NextStaticIndex();
 		VarInfo v;
 		v.SetType(VAR_INT);
 		v._int = num;
 
 		_staticVars.push_back(v);
+		_intConstants.emplace(num, (int)_staticVars.size() - 1);
 		MarkLastStaticOrigin();
 		return idx;
 	}
@@ -1091,23 +1113,22 @@ struct SFunctions
 
 	int	AddStaticNum(double num)
 	{
-		for (int i = (int)_staticVars.size() - 1; i >= 0; i--)
-		{
-			VarInfo& v2 = _staticVars[i];
-			if (VAR_FLOAT == v2.GetType())
-			{
-				if (num == v2._float)
-				{
-					return StaticCompileIndex(i);
-				}
-			}
-		}
+		// NS_FLOAT 로 바꾼 뒤 비트로 찾는다. double 과 float 을 그대로 비교하면 0.001 처럼 정확히
+		// 표현되지 않는 값은 절대 같지 않아 리터럴마다 새 상수가 생겼다. 비트 비교라 +0.0/-0.0 은 구분된다.
+		static_assert(sizeof(NS_FLOAT) == sizeof(u32), "NS_FLOAT must be 32-bit");
+		const NS_FLOAT f = (NS_FLOAT)num;
+		u32 bits = 0;
+		std::memcpy(&bits, &f, sizeof(bits));
+		auto found = _floatConstants.find(bits);
+		if (found != _floatConstants.end())
+			return StaticCompileIndex(found->second);
 		const int idx = NextStaticIndex();
 		VarInfo v;
 		v.SetType(VAR_FLOAT);
-		v._float = (NS_FLOAT)num;
+		v._float = f;
 
 		_staticVars.push_back(v);
+		_floatConstants.emplace(bits, (int)_staticVars.size() - 1);
 		MarkLastStaticOrigin();
 		return idx;
 	}

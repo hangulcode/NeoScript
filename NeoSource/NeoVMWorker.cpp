@@ -5,6 +5,7 @@
 #include <new>
 #include <thread>
 #include <chrono>
+#include <unordered_set>
 #include "NeoVMInternal.h"
 #include "NeoVMWorker.h"
 #include "NeoArchive.h"
@@ -191,6 +192,9 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 		return v1->_bl ? "true" : "false";
 	case VAR_NONE:
 		return "null";
+	case VAR_FUN:
+	case VAR_FUN_NATIVE:
+		return "function";
 	case VAR_STRING:
 		return v1->_str->_str;
 	case VAR_VEC:
@@ -217,6 +221,8 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 		return "module";
 	case VAR_ASYNC:
 		return "async";
+	case VAR_CLOSURE:
+		return "function";
 	default:
 		break;
 	}
@@ -229,7 +235,7 @@ int CNeoVMWorker::ToInt(VarInfo* v1)
 	case VAR_INT:
 		return v1->_int;
 	case VAR_FLOAT:
-		return (int)v1->_float;
+		return NeoFloatToInt(v1->_float);
 	case VAR_BOOL:
 		return v1->_bl ? 1 : 0;
 	case VAR_NONE:
@@ -616,83 +622,46 @@ std::string CNeoVMWorker::FormatStackTrace(int currentOpIndex)
 }
 bool CNeoVMWorker::CheckDebugStop(int iOPIndex)
 {
-	if (m_eDebugRunMode == DBG_PAUSED)
-		return true;
-	if (m_pDebugListener == nullptr && m_iDebugBreakCount <= 0 && m_eDebugRunMode == DBG_CONTINUE && m_bDebugPauseRequested == false)
-		return false;
-	if (IsDebugInfo() == false)
-		return false;
-	if ((int)DebugData().size() <= iOPIndex || iOPIndex < 0)
-		return false;
+    if (m_eDebugRunMode == DBG_PAUSED) return true;
+    if (!IsDebugInfo() || iOPIndex < 0 || iOPIndex >= static_cast<int>(DebugData().size())) return false;
+    const debug_info& info = DebugData()[iOPIndex];
+    const int file = info._fileseq, line = info._lineseq;
+    if (line <= 0) return false;
+    const int depth = m_pCallStack ? static_cast<int>(m_pCallStack->size()) : 0;
+    const bool sameContext = m_pCur == m_pDebugStepContext;
+    if (m_bDebugPauseRequested) { StopDebug(iOPIndex, NEO_DEBUG_STOP_PAUSE); return true; }
 
-	const debug_info& info = DebugData()[iOPIndex];
-	int file = info._fileseq;
-	int line = info._lineseq;
-	if (line <= 0)
-		return false;
-	int callDepth = m_pCallStack ? (int)m_pCallStack->size() : 0;
+    // 자식 중단점이 부모 호출 줄의 기록을 덮지 않는다. 복귀한 프레임 기록만 버린다.
+    PruneDebugLineSkips(m_pCur, depth);
+    for (auto it = m_sDebugLineSkips.begin(); it != m_sDebugLineSkips.end(); ++it)
+    {
+        if (it->context != m_pCur || it->depth != depth) continue;
+        const bool originalOp = iOPIndex == it->stoppedOp;
+        it->stoppedOp = -1;
+        const bool sameLine = file == it->file && line == it->line;
+        if (sameLine && (originalOp || iOPIndex > it->lastOp))
+        {
+            it->lastOp = iOPIndex;
+            return false;
+        }
+        // 다른 줄이나 역방향 점프에 도달하면 다음 반복의 중단점을 다시 허용한다.
+        m_sDebugLineSkips.erase(it);
+        break;
+    }
+    // 한 단계 건너뛰기 중에도 자식 함수·코루틴의 명시적 중단점은 유효하다.
+    if (m_iDebugBreakCount > 0 && IsDebugBreakpoint(file, line))
+    { StopDebug(iOPIndex, NEO_DEBUG_STOP_BREAKPOINT); return true; }
 
-	if (m_iDebugSkipOpIndex >= 0)
-	{
-		if (iOPIndex == m_iDebugSkipOpIndex)
-			return false;
-		m_iDebugSkipOpIndex = -1;
-	}
-
-	if (m_iDebugSkipLine >= 0)
-	{
-		bool sameSourceLine = (line == m_iDebugSkipLine) && (m_iDebugSkipFile < 0 || file == m_iDebugSkipFile);
-		if (sameSourceLine && m_bDebugPauseRequested == false)
-		{
-			if (m_eDebugRunMode == DBG_STEP_INTO)
-			{
-				if (callDepth <= m_iDebugStepDepth)
-					return false;
-			}
-			else
-			{
-				return false;
-			}
-		}
-		if (m_eDebugRunMode == DBG_STEP_OVER && callDepth > m_iDebugStepDepth)
-			return false;
-		m_iDebugSkipFile = -1;
-		m_iDebugSkipLine = -1;
-	}
-
-	if (m_bDebugPauseRequested)
-	{
-		StopDebug(iOPIndex, NEO_DEBUG_STOP_PAUSE);
-		return true;
-	}
-	if (m_eDebugRunMode == DBG_STEP_INTO)
-	{
-		StopDebug(iOPIndex, NEO_DEBUG_STOP_STEP);
-		return true;
-	}
-	if (m_eDebugRunMode == DBG_STEP_OVER)
-	{
-		if (callDepth <= m_iDebugStepDepth)
-		{
-			StopDebug(iOPIndex, NEO_DEBUG_STOP_STEP);
-			return true;
-		}
-	}
-	if (m_eDebugRunMode == DBG_STEP_OUT)
-	{
-		if (callDepth < m_iDebugStepDepth)
-		{
-			StopDebug(iOPIndex, NEO_DEBUG_STOP_STEP);
-			return true;
-		}
-	}
-	if (m_iDebugBreakCount > 0 && IsDebugBreakpoint(file, line))
-	{
-		StopDebug(iOPIndex, NEO_DEBUG_STOP_BREAKPOINT);
-		return true;
-	}
-	return false;
+    bool step = m_eDebugRunMode == DBG_STEP_INTO;
+    if (m_eDebugRunMode == DBG_STEP_OVER) step = sameContext && depth <= m_iDebugStepDepth;
+    if (m_eDebugRunMode == DBG_STEP_OUT)
+        // 중첩 함수의 yield는 반환이 아니다. 코루틴 진입 함수에서만 재개자 복귀를 인정한다.
+        step = (sameContext && depth < m_iDebugStepDepth) ||
+            (m_iDebugStepDepth == 0 && !sameContext && m_pDebugStepReturnContext && m_pCur == m_pDebugStepReturnContext);
+    if (step) { StopDebug(iOPIndex, NEO_DEBUG_STOP_STEP); return true; }
+    return false;
 }
+
 void CNeoVMWorker::StopDebug(int iOPIndex, NeoDebugStopReason reason)
 {
 	const debug_info& info = DebugData()[iOPIndex];
@@ -708,6 +677,8 @@ void CNeoVMWorker::StopDebug(int iOPIndex, NeoDebugStopReason reason)
 }
 void CNeoVMWorker::ResetFaultStateForNewExecution()
 {
+    m_pDebugStepContext = m_pDebugStepReturnContext = nullptr;
+    m_sDebugLineSkips.clear();
 	m_bDebugFaulted = false;
 	// 에러 위치는 실행 단위로 리셋해야 한다. SetError 는 _isErrorOPIndex 가 0 일 때만 기록하므로
 	// (= 가장 안쪽 원인 보존), 여기서 안 지우면 다음 실행의 에러가 이전 에러의 함수/라인/스택으로
@@ -856,6 +827,10 @@ void CNeoVMWorker::UnwindActiveClosures()
 			const SClosureCallState& state = (*m_pClosureCallStack)[i];
 			if (state._closure == nullptr) continue;
 			SyncClosureAtFrame(state._closure, state._iSP_Vars);
+			// The saved pointer can alias a parent when its named callee fails.
+			// Clear only that alias: a direct yield parks an independent active ref.
+			if (m_pCur && m_pCur->_activeClosure == state._closure)
+				m_pCur->_activeClosure = nullptr;
 			VarInfo active(VAR_CLOSURE);
 			active._closure = state._closure;
 			Var_Release(&active);
@@ -872,6 +847,15 @@ void CNeoVMWorker::UnwindActiveClosures()
 // (코루틴 컨텍스트는 각자의 VarInfo 가 GC/스택 해제될 때 FreeCoroutine 으로 반납된다.)
 void CNeoVMWorker::ReleaseExecution(bool discardParkedClosuresWithoutSync)
 {
+    m_sDebugLineSkips.clear();
+	// The running coroutine's saved high-water is updated only on a switch.
+	// Preserve it before error unwinding, including a failure on first resume.
+	if (m_pCur != nullptr) m_pCur->_info = *(CoroutineBase*)this;
+	CoroutineInfo* activeCoroutine = (m_pCur != m_pMainCtx) ? m_pCur : nullptr;
+	if (activeCoroutine != nullptr) ++activeCoroutine->_refCount;
+	for (CoroutineInfo* context : m_sCoroutines)
+		if (context != m_pMainCtx && context != activeCoroutine) ++context->_refCount;
+
 	// cancel/강제 정리는 RET를 밟지 않으므로, 아직 프레임에 남은 closure 참조와
 	// 캡처 슬롯을 실행 컨텍스트 반납 전에 정리한다.
 	UnwindActiveClosures();
@@ -895,6 +879,11 @@ void CNeoVMWorker::ReleaseExecution(bool discardParkedClosuresWithoutSync)
 				DrainCoroutineClosures(pCI);
 		}
 	}
+	// These contexts belong to the discarded execution. Hold them until all
+	// stacks are cleared because a parent stack may own its running child.
+	if (activeCoroutine != nullptr) DeadCoroutine(activeCoroutine);
+	for (CoroutineInfo* context : m_sCoroutines)
+		if (context != m_pMainCtx && context != activeCoroutine) DeadCoroutine(context);
 	if (m_pMainCtx != nullptr && m_pPool != nullptr)
 	{
 		// 정상 완료 시 m_pCur == m_pMainCtx 이며 high-water 는 워커의 _iSP_Vars_Max2.
@@ -914,6 +903,15 @@ void CNeoVMWorker::ReleaseExecution(bool discardParkedClosuresWithoutSync)
 		CleanupContextVars(m_pMainCtx, usedMax);
 		m_pPool->Release(m_pMainCtx);
 	}
+	if (activeCoroutine != nullptr)
+	{
+		VarInfo held(VAR_COROUTINE); held._cor = activeCoroutine; Var_Release(&held);
+	}
+	for (CoroutineInfo* context : m_sCoroutines)
+	{
+		if (context == m_pMainCtx || context == activeCoroutine) continue;
+		VarInfo held(VAR_COROUTINE); held._cor = context; Var_Release(&held);
+	}
 	m_pCur = nullptr;
 	m_pMainCtx = nullptr;
 	m_pRegisterActive = nullptr;
@@ -927,8 +925,8 @@ void CNeoVMWorker::ReleaseExecution(bool discardParkedClosuresWithoutSync)
 	m_pVarStack_Pointer = nullptr;
 }
 
-// Run() 실행 후 완료/정지/에러를 판정. 정지가 아니면 컨텍스트를 반납한다.
-int CNeoVMWorker::RunSettle()
+// Run() 후 완료/정지/오류를 판정한다. 완료된 반환값 보유 요청이 없으면 컨텍스트를 반납한다.
+int CNeoVMWorker::RunSettle(bool retainCompletedResult)
 {
 	m_bTopExec = true;
 	bool ok = Run();
@@ -946,7 +944,7 @@ int CNeoVMWorker::RunSettle()
 	}
 	else
 	{
-		ReleaseExecution();
+		if (!retainCompletedResult) ReleaseExecution();
 		status = NEOEXEC_COMPLETED;
 	}
 	return status;
@@ -998,15 +996,16 @@ int CNeoVMWorker::ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args)
 }
 
 // 정지된 최상위 실행을 이어서 재개 (retain 된 컨텍스트/레지스터로 계속).
-int CNeoVMWorker::ResumeTop()
+int CNeoVMWorker::ResumeTop(bool retainCompletedResult)
 {
+	if (m_bInRun) return NEOEXEC_ERROR;
 	try
 	{
 		if (m_bOutOfMemoryPoisoned)
 			return NEOEXEC_ERROR;
 		if (m_pMainCtx == nullptr)
 			return NEOEXEC_COMPLETED;   // 정지 상태 아님
-		int status = RunSettle();
+		int status = RunSettle(retainCompletedResult);
 		GetVM()->PublishAllocStats();
 		return status;
 	}
@@ -1128,6 +1127,14 @@ bool CNeoVMWorker::CancelExecution()
 	return true;
 }
 
+bool CNeoVMWorker::CheckNestedCallDepth()
+{
+	// Every synchronous callback keeps native C++ frames alive as well as VM frames.
+	if (m_iNativeScriptCallDepth <= 64) return true;
+	SetError(RTE_CALL_STACK_OVERFLOW);
+	return false;
+}
+
 void CNeoVMWorker::BeginNestedScriptCall()
 {
 	++m_iNativeScriptCallDepth;
@@ -1154,9 +1161,10 @@ int CNeoVMWorker::RunHostCall(int iFunctionID, std::vector<VarInfo>& _args, VarI
 		// Script A -> native API -> Script B는 동일한 코드 버퍼를 공유한다.
 		// Script B가 정상 반환하면 Script A의 다음 opcode부터 계속 실행해야 한다.
 		const bool isNestedScriptCall = (m_iNativeScriptCallDepth > 0);
-		if (isNestedScriptCall && m_iTimeout >= 0)
+		if (!CheckNestedCallDepth()) return NEOEXEC_ERROR;
+		if (isNestedScriptCall && IsSynchronousExecutionLimited())
 		{
-			SetErrorFormat(RTE_NESTED_NOT_ALLOWED, "time-limited execution");
+			SetErrorFormat(RTE_NESTED_NOT_ALLOWED, "limited execution");
 			return NEOEXEC_ERROR;
 		}
 		const int returnCodePtr = isNestedScriptCall ? GetCodeptr() : 0;
@@ -1267,7 +1275,7 @@ bool	CNeoVMWorker::Setup(int iFunctionID, std::vector<VarInfo>& _args)
 	int iArgs = (int)_args.size();
 	if (iArgs != fun._argsCount)
 		return false;
-	if (!EnsureStackRange(_iSP_Vars, fun._localAddCount - 1))
+	if (!EnsureStackRange(_iSP_Vars, fun._stackSlotCount - 1))
 		return false;
 
 	SetCodePtr(fun._codePtr);
@@ -1275,8 +1283,8 @@ bool	CNeoVMWorker::Setup(int iFunctionID, std::vector<VarInfo>& _args)
 //	_iSP_Vars = 0;// _header._iStaticVarCount;
 	SetStackPointer(_iSP_Vars);
 	_iSP_VarsMax = _iSP_Vars + fun._localAddCount;
-	if(_iSP_Vars_Max2 < _iSP_VarsMax)
-		_iSP_Vars_Max2 = _iSP_VarsMax;
+	if (_iSP_Vars_Max2 < _iSP_Vars + fun._stackSlotCount)
+		_iSP_Vars_Max2 = _iSP_Vars + fun._stackSlotCount;
 
 	if (iArgs > fun._argsCount)
 		iArgs = fun._argsCount;
@@ -1396,42 +1404,30 @@ void CNeoVMWorker::DebugGetExecutableLocations(std::vector<NeoDebugLocation>& lo
 		}
 	}
 }
-void CNeoVMWorker::DebugContinue()
+void CNeoVMWorker::PruneDebugLineSkips(CoroutineInfo* context, int maxDepth)
 {
-	m_bDebugPauseRequested = false;
-	m_eDebugRunMode = DBG_CONTINUE;
-	m_iDebugSkipFile = m_sDebugLocation.file;
-	m_iDebugSkipLine = m_sDebugLocation.line;
-	m_iDebugSkipOpIndex = m_sDebugLocation.opIndex;
-	m_iDebugStepDepth = -1;
+    for (auto it = m_sDebugLineSkips.begin(); it != m_sDebugLineSkips.end(); )
+    {
+        if (it->context == context && it->depth > maxDepth) it = m_sDebugLineSkips.erase(it);
+        else ++it;
+    }
 }
-void CNeoVMWorker::DebugStepInto()
+void CNeoVMWorker::PrepareDebugResume(EDebugRunMode mode)
 {
-	m_bDebugPauseRequested = false;
-	m_eDebugRunMode = DBG_STEP_INTO;
-	m_iDebugSkipFile = m_sDebugLocation.file;
-	m_iDebugSkipLine = m_sDebugLocation.line;
-	m_iDebugSkipOpIndex = m_sDebugLocation.opIndex;
-	m_iDebugStepDepth = m_sDebugLocation.callDepth;
+    m_bDebugPauseRequested = false;
+    m_eDebugRunMode = mode;
+    m_iDebugStepDepth = m_sDebugLocation.callDepth;
+    PruneDebugLineSkips(m_pCur, m_iDebugStepDepth - 1);
+    m_sDebugLineSkips.push_back({m_pCur, m_iDebugStepDepth, m_sDebugLocation.file,
+        m_sDebugLocation.line, m_sDebugLocation.opIndex, m_sDebugLocation.opIndex});
+    m_pDebugStepContext = m_pCur;
+    m_pDebugStepReturnContext = m_sCoroutines.empty() ? nullptr : m_sCoroutines.front();
 }
-void CNeoVMWorker::DebugStepOver()
-{
-	m_bDebugPauseRequested = false;
-	m_eDebugRunMode = DBG_STEP_OVER;
-	m_iDebugSkipFile = m_sDebugLocation.file;
-	m_iDebugSkipLine = m_sDebugLocation.line;
-	m_iDebugSkipOpIndex = m_sDebugLocation.opIndex;
-	m_iDebugStepDepth = m_sDebugLocation.callDepth;
-}
-void CNeoVMWorker::DebugStepOut()
-{
-	m_bDebugPauseRequested = false;
-	m_eDebugRunMode = DBG_STEP_OUT;
-	m_iDebugSkipFile = m_sDebugLocation.file;
-	m_iDebugSkipLine = m_sDebugLocation.line;
-	m_iDebugSkipOpIndex = m_sDebugLocation.opIndex;
-	m_iDebugStepDepth = m_sDebugLocation.callDepth;
-}
+void CNeoVMWorker::DebugContinue() { PrepareDebugResume(DBG_CONTINUE); }
+void CNeoVMWorker::DebugStepInto() { PrepareDebugResume(DBG_STEP_INTO); }
+void CNeoVMWorker::DebugStepOver() { PrepareDebugResume(DBG_STEP_OVER); }
+void CNeoVMWorker::DebugStepOut() { PrepareDebugResume(DBG_STEP_OUT); }
+
 void CNeoVMWorker::DebugPause()
 {
 	m_bDebugPauseRequested = true;
@@ -1447,8 +1443,36 @@ NeoDebugLocation CNeoVMWorker::DebugGetLocation()
 static const int NEO_DEBUG_MAX_COLLECTION_DEPTH = 4;
 static const int NEO_DEBUG_MAX_COLLECTION_ITEMS = 64;
 
-static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collectionDepth = 0)
+struct NeoDebugSnapshotBudget
 {
+    int nodes = 1024;
+    size_t bytes = 64 * 1024;
+    std::unordered_set<const void*> visited;
+    std::string Text(const std::string& value)
+    {
+        size_t count = std::min(value.size(), std::min<size_t>(bytes, 4096));
+        if (count < value.size())
+            while (count && (static_cast<unsigned char>(value[count]) & 0xc0) == 0x80) --count;
+        bytes -= count;
+        std::string text(value.data(), count);
+        if (count < value.size()) text += "...";
+        return text;
+    }
+};
+static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, NeoDebugSnapshotBudget& budget, int collectionDepth = 0)
+{
+    if (!pVar || budget.nodes <= 0) { out.type = "unavailable"; out.value = "snapshot limit"; return; }
+    --budget.nodes;
+    bool shared = false;
+    if (pVar->GetType() == VAR_LIST || pVar->GetType() == VAR_MAP ||
+        pVar->GetType() == VAR_ARRAY || pVar->GetType() == VAR_CLOSURE)
+        {
+        const void* identity = pVar->GetType() == VAR_LIST ? static_cast<void*>(pVar->_lst) :
+            pVar->GetType() == VAR_MAP ? static_cast<void*>(pVar->_tbl) :
+            pVar->GetType() == VAR_ARRAY ? static_cast<void*>(pVar->_array) : static_cast<void*>(pVar->_closure);
+        shared = !budget.visited.insert(identity).second;
+    }
+    const bool expand = !shared && budget.nodes > 0 && collectionDepth < NEO_DEBUG_MAX_COLLECTION_DEPTH;
 	char buf[128];
 	switch (pVar->GetType())
 	{
@@ -1485,7 +1509,7 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 		break;
 	case VAR_STRING:
 		out.type = "string";
-		out.value = pVar->_str ? pVar->_str->_str : "";
+		out.value = pVar->_str ? budget.Text(pVar->_str->_str) : "";
 		break;
 	case VAR_VEC:
 	{
@@ -1508,14 +1532,15 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 		out.type = "array";
 		snprintf(buf, sizeof(buf), "array<%s>(%d)", array ? GetArrayElementTypeName(array->_elementType) : "?", count);
 		out.value = buf;
-		if (array != nullptr && collectionDepth < NEO_DEBUG_MAX_COLLECTION_DEPTH)
+		if (array != nullptr && expand)
 		{
 			const int childCount = count < NEO_DEBUG_MAX_COLLECTION_ITEMS ? count : NEO_DEBUG_MAX_COLLECTION_ITEMS;
 			out.children.reserve(childCount + (count > childCount ? 1 : 0));
-			for (int i = 0; i < childCount; ++i)
+			for (int i = 0; i < childCount && budget.nodes > 0; ++i)
 			{
 				NeoDebugVariable child;
 				child.name = "[" + std::to_string(i) + "]";
+				--budget.nodes;
 				switch (array->_elementType)
 				{
 				case NeoArrayElementType::Bool:
@@ -1564,24 +1589,24 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 			MapInfo* map = pVar->_tbl;
 			const int count = map ? map->GetCount() : 0;
 			snprintf(buf, sizeof(buf), "map(%d)", count);
-			if (map != nullptr && collectionDepth < NEO_DEBUG_MAX_COLLECTION_DEPTH)
+			if (map != nullptr && expand)
 			{
 				const int childCount = count < NEO_DEBUG_MAX_COLLECTION_ITEMS ? count : NEO_DEBUG_MAX_COLLECTION_ITEMS;
 				out.children.reserve(childCount + (count > childCount ? 1 : 0));
 				CollectionIterator iterator = map->FirstNode();
-				for (int i = 0; i < childCount && iterator._pTableNode != nullptr; ++i)
+				for (int i = 0; i < childCount && budget.nodes > 0 && iterator._pTableNode != nullptr; ++i)
 				{
 					MapNode* node = iterator._pTableNode;
 					NeoDebugVariable child;
 					if (node->data->key.GetType() == VAR_STRING && node->data->key._str != nullptr)
-						child.name = "[\"" + node->data->key._str->_str + "\"]";
+						child.name = "[\"" + budget.Text(node->data->key._str->_str) + "\"]";
 					else
 					{
 						NeoDebugVariable key;
-						NeoDebugFormatValue(&node->data->key, key, collectionDepth + 1);
+						NeoDebugFormatValue(&node->data->key, key, budget, collectionDepth + 1);
 						child.name = "[" + key.value + "]";
 					}
-					NeoDebugFormatValue(&node->data->value, child, collectionDepth + 1);
+					NeoDebugFormatValue(&node->data->value, child, budget, collectionDepth + 1);
 					out.children.push_back(std::move(child));
 					map->NextNode(iterator);
 				}
@@ -1602,11 +1627,11 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 		{
 			const int count = pVar->_lst ? pVar->_lst->GetCount() : 0;
 			snprintf(buf, sizeof(buf), "list(%d)", count);
-			if (pVar->_lst != nullptr && collectionDepth < NEO_DEBUG_MAX_COLLECTION_DEPTH)
+			if (pVar->_lst != nullptr && expand)
 			{
 				const int childCount = count < NEO_DEBUG_MAX_COLLECTION_ITEMS ? count : NEO_DEBUG_MAX_COLLECTION_ITEMS;
 				out.children.reserve(childCount + (count > childCount ? 1 : 0));
-				for (int i = 0; i < childCount; ++i)
+				for (int i = 0; i < childCount && budget.nodes > 0; ++i)
 				{
 					VarInfo* pChildValue = pVar->_lst->GetValue(i);
 					if (pChildValue == nullptr)
@@ -1614,7 +1639,7 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 
 					NeoDebugVariable child;
 					child.name = "[" + std::to_string(i) + "]";
-					NeoDebugFormatValue(pChildValue, child, collectionDepth + 1);
+					NeoDebugFormatValue(pChildValue, child, budget, collectionDepth + 1);
 					out.children.push_back(std::move(child));
 				}
 				if (count > childCount)
@@ -1655,16 +1680,16 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 		}
 		snprintf(buf, sizeof(buf), "#%d", pVar->_closure->_funIndex);
 		out.value = buf;
-		if (collectionDepth < NEO_DEBUG_MAX_COLLECTION_DEPTH)
+		if (expand)
 		{
 			std::vector<VarInfo>& captures = pVar->_closure->_captures;
 			const int childCount = (int)std::min<size_t>(captures.size(), NEO_DEBUG_MAX_COLLECTION_ITEMS);
 			out.children.reserve(childCount + (captures.size() > (size_t)childCount ? 1 : 0));
-			for (int i = 0; i < childCount; ++i)
+			for (int i = 0; i < childCount && budget.nodes > 0; ++i)
 			{
 				NeoDebugVariable child;
 				child.name = "capture[" + std::to_string(i) + "]";
-				NeoDebugFormatValue(&captures[i], child, collectionDepth + 1);
+				NeoDebugFormatValue(&captures[i], child, budget, collectionDepth + 1);
 				out.children.push_back(std::move(child));
 			}
 			if (captures.size() > (size_t)childCount)
@@ -1682,6 +1707,7 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, int collec
 		out.value = "unknown";
 		break;
 	}
+    if (shared) out.value += " [shared]";
 }
 void CNeoVMWorker::DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames)
 {
@@ -1698,7 +1724,7 @@ void CNeoVMWorker::DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames)
 	{
 		auto itName = _pProgram->debugFunctionNames.find(cur.functionId);
 		if (itName != _pProgram->debugFunctionNames.end())
-			cur.functionName = itName->second;
+			cur.functionName = itName->second.substr(0, 4096);
 	}
 	cur.opIndex = codeOffset / (int)sizeof(SVMOperation);
 	cur.file = (cur.opIndex >= 0 && cur.opIndex < (int)DebugData().size()) ? DebugData()[cur.opIndex]._fileseq : -1;
@@ -1716,7 +1742,7 @@ void CNeoVMWorker::DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames)
 	if (m_pCallStack == nullptr)
 		return;
 
-	for (int i = (int)m_pCallStack->size() - 1; i >= 0; --i)
+	for (int i = (int)m_pCallStack->size() - 1; i >= 0 && frames.size() < 64; --i)
 	{
 		SCallStack& cs = (*m_pCallStack)[i];
 		NeoDebugStackFrame frame;
@@ -1729,7 +1755,7 @@ void CNeoVMWorker::DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames)
 		{
 			auto itName = _pProgram->debugFunctionNames.find(frame.functionId);
 			if (itName != _pProgram->debugFunctionNames.end())
-				frame.functionName = itName->second;
+				frame.functionName = itName->second.substr(0, 4096);
 		}
 		frame.file = (frame.opIndex >= 0 && frame.opIndex < (int)DebugData().size()) ? DebugData()[frame.opIndex]._fileseq : -1;
 		frame.line = GetDebugLine(frame.opIndex);
@@ -1746,6 +1772,7 @@ void CNeoVMWorker::DebugGetStackTrace(std::vector<NeoDebugStackFrame>& frames)
 void CNeoVMWorker::DebugGetFrameVariables(int frameId, std::vector<NeoDebugVariable>& vars)
 {
 	vars.clear();
+    NeoDebugSnapshotBudget budget;
 	// Worker가 실행 컨텍스트에 바인딩되기 전에는 변수 스택이 없다.
 	// 이 시점의 디버그 UI 조회는 빈 변수 목록으로 처리한다.
 	if (m_pVarStack_Base == nullptr)
@@ -1761,7 +1788,7 @@ void CNeoVMWorker::DebugGetFrameVariables(int frameId, std::vector<NeoDebugVaria
 	int total = 1 + frame.argsCount + frame.localCount + frame.tempCount;
 	auto itFunNames = _pProgram->debugVarNames.find(frame.functionId);
 	bool hasDebugVarNames = itFunNames != _pProgram->debugVarNames.end();
-	for (int i = 0; i < total; ++i)
+	for (int i = 0; i < total && budget.nodes > 0; ++i)
 	{
 		int stackIndex = base + i;
 		if (stackIndex < 0 || stackIndex >= (int)m_pVarStack_Base->size())
@@ -1776,7 +1803,7 @@ void CNeoVMWorker::DebugGetFrameVariables(int frameId, std::vector<NeoDebugVaria
 			{
 				auto itName = itFunNames->second.find(i);
 				if (itName != itFunNames->second.end())
-					var.name = itName->second;
+					var.name = budget.Text(itName->second);
 			}
 			if (hasDebugVarNames && var.name.empty())
 				continue;
@@ -1792,23 +1819,23 @@ void CNeoVMWorker::DebugGetFrameVariables(int frameId, std::vector<NeoDebugVaria
 		}
 
 		var.stackIndex = stackIndex;
-		NeoDebugFormatValue(&(*m_pVarStack_Base)[stackIndex], var);
+		NeoDebugFormatValue(&(*m_pVarStack_Base)[stackIndex], var, budget);
 		if (i == 0 && var.type == "none")
 			continue;
 		vars.push_back(var);
 	}
-	if (frameId == 0)
+	// 선택한 호출 프레임에서도 전역을 표시한다. 같은 이름의 지역값은 앞에서 먼저 조회된다.
 	{
-		for (auto it = _pProgram->debugGlobalNames.begin(); it != _pProgram->debugGlobalNames.end(); ++it)
+		for (auto it = _pProgram->debugGlobalNames.begin(); it != _pProgram->debugGlobalNames.end() && budget.nodes > 0; ++it)
 		{
 			int globalIndex = it->first;
 			if (!_pProgram->IsGlobalVariable(globalIndex))
 				continue;
 
 			NeoDebugVariable var;
-			var.name = it->second;
+			var.name = budget.Text(it->second);
 			var.stackIndex = globalIndex;
-			NeoDebugFormatValue(NEOS_GLOBAL_VAR(globalIndex), var);
+			NeoDebugFormatValue(NEOS_GLOBAL_VAR(globalIndex), var, budget);
 			vars.push_back(var);
 		}
 	}
@@ -1817,7 +1844,9 @@ NEOS_NOINLINE bool CNeoVMWorker::ReportRunException()
 {
 	try
 	{
-		SetError(RTE_EXCEPTION);
+		try { throw; }
+		catch (const std::length_error& error) { SetError(error.what()); }
+		catch (...) { SetError(RTE_EXCEPTION); }
 		bool blDebugInfo = IsDebugInfo();
 		int _lineseq = -1;
 		if (blDebugInfo)
@@ -1877,7 +1906,7 @@ bool	CNeoVMWorker::Run()
 		bool topExec = m_bTopExec;
 		m_bTopExec = false;
 		int breakingCallStack = (topExec || debugActive) ? 0 : (int)m_pCallStack->size();
-		if(m_iTimeout >= 0)
+		if (m_iTimeout >= 0 || (m_instructionBudget != 0 && !nestedRun))
 			b = debugActive ? RunInternal<true, true>(breakingCallStack) : RunInternal<true, false>(breakingCallStack);
 		else
 			b = debugActive ? RunInternal<false, true>(breakingCallStack) : RunInternal<false, false>(breakingCallStack);
@@ -1963,15 +1992,23 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 //	char chMsg[256];
 
 	m_op_process = m_iCheckOpCount;
-	if(TIMEOUT)
+	const bool countInstructions = TIMEOUT && m_instructionBudget != 0 && m_iNativeScriptCallDepth == 0;
+	uint64_t remainingInstructions = m_instructionBudget;
+	if (TIMEOUT && m_iTimeout >= 0)
 		_preClock = std::chrono::steady_clock::now();
 
 	VarInfo* pVarTemp = nullptr;
 	while (true)
 	{
-		if(TIMEOUT)
+		if (TIMEOUT)
 		{
-			if (--m_op_process <= 0)
+			// 마지막 허용 명령이 실패해도 오류 처리를 다음 슬라이스로 미루지 않는다.
+			if (countInstructions && remainingInstructions == 0 && !IsErrorTrap())
+			{
+				m_bSliceExpired = true;
+				break;
+			}
+			if (m_iTimeout >= 0 && --m_op_process <= 0)
 			{
 				m_op_process = m_iCheckOpCount;
 //				if (isTimeout)
@@ -1994,6 +2031,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 				return true;
 		}
 
+		if (TIMEOUT && countInstructions && remainingInstructions != 0) --remainingInstructions;
 		const SVMOperation& OP = *GetOP();
 		switch (OP.op)
 		{
@@ -2036,8 +2074,8 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_XOR3:          Xor3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
 		case NOP_GREAT:         Var_SetBool(GetVarPtrF1(OP), CompareGR(GetVarPtr2(OP), GetVarPtr3(OP))); break;
 		case NOP_GREAT_EQ:      Var_SetBool(GetVarPtrF1(OP), CompareGE(GetVarPtr2(OP), GetVarPtr3(OP))); break;
-		case NOP_LESS:          Var_SetBool(GetVarPtrF1(OP), CompareGR(GetVarPtr3(OP), GetVarPtr2(OP))); break;
-		case NOP_LESS_EQ:       Var_SetBool(GetVarPtrF1(OP), CompareGE(GetVarPtr3(OP), GetVarPtr2(OP))); break;
+		case NOP_LESS:          Var_SetBool(GetVarPtrF1(OP), CompareGR(GetVarPtr3(OP), GetVarPtr2(OP), true)); break;
+		case NOP_LESS_EQ:       Var_SetBool(GetVarPtrF1(OP), CompareGE(GetVarPtr3(OP), GetVarPtr2(OP), true)); break;
 		case NOP_EQUAL2:        Var_SetBool(GetVarPtrF1(OP), CompareEQ(GetVarPtr2(OP), GetVarPtr3(OP))); break;
 		case NOP_NEQUAL:        Var_SetBool(GetVarPtrF1(OP), !CompareEQ(GetVarPtr2(OP), GetVarPtr3(OP))); break;
 		case NOP_AND:           And(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
@@ -2048,14 +2086,14 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_JMP:           SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_FALSE:     if (false == GetVarPtr2(OP)->IsTrue()) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_TRUE:      if (true == GetVarPtr2(OP)->IsTrue()) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_GREAT:     if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr2(OP), GetVarPtr3(OP))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_GREAT_L:   if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_GREAT_EQ:  if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr2(OP), GetVarPtr3(OP))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_GREAT_EQ_L:if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_LESS:      if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr3(OP), GetVarPtr2(OP))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_LESS_L:    if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr_L(OP.n3), GetVarPtr_L(OP.n2))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_LESS_EQ:   if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr3(OP), GetVarPtr2(OP))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_LESS_EQ_L: if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr_L(OP.n3), GetVarPtr_L(OP.n2))) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_GREAT:     if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr2(OP), GetVarPtr3(OP))) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_GREAT_L:   if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3))) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_GREAT_EQ:  if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr2(OP), GetVarPtr3(OP))) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_GREAT_EQ_L:if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3))) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_LESS:      if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr3(OP), GetVarPtr2(OP), true)) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_LESS_L:    if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr_L(OP.n3), GetVarPtr_L(OP.n2), true)) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_LESS_EQ:   if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr3(OP), GetVarPtr2(OP), true)) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_LESS_EQ_L: if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr_L(OP.n3), GetVarPtr_L(OP.n2), true)) SetComparisonJump(OP.n1); break;
 		case NOP_JMP_EQUAL2:    if (true == CompareEQ(GetVarPtr2(OP), GetVarPtr3(OP))) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_EQUAL2_L:  if (true == CompareEQ(GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3))) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_NEQUAL:    if (false == CompareEQ(GetVarPtr2(OP), GetVarPtr3(OP))) SetCodeIncPtr(OP.n1); break;
@@ -2116,10 +2154,10 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_VEC_MAKE:      handle_VEC_MAKE(OP); break;
 
 		case NOP_CLT_READ_STATIC_STRING: handle_CLT_READ_STATIC_STRING(OP); break;
-		case NOP_JMP_RANGE_INSIDE: if (IsRangeInside<true>(OP, false)) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_RANGE_OUTSIDE: if (IsRangeInside(OP, false) == false) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_RANGE_INSIDE_L: if (IsRangeInside<true>(OP, true)) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_RANGE_OUTSIDE_L: if (IsRangeInside(OP, true) == false) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_RANGE_INSIDE: if (IsRangeInside<true>(OP, false)) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_RANGE_OUTSIDE: if (IsRangeInside(OP, false) == false) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_RANGE_INSIDE_L: if (IsRangeInside<true>(OP, true)) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_RANGE_OUTSIDE_L: if (IsRangeInside(OP, true) == false) SetComparisonJump(OP.n1); break;
 
 		case NOP_CLT_WRITE_REF: handle_CLT_WRITE_REF(OP); break;
 		case NOP_CLT_READ_RESULT: handle_CLT_READ_RESULT(OP); break;
@@ -2139,6 +2177,7 @@ void	CNeoVMWorker::DeadCoroutine(CoroutineInfo* pCI)
 {
 	if (pCI == nullptr)
 		return;
+    if (!m_sDebugLineSkips.empty()) PruneDebugLineSkips(pCI, -1);
 	DrainCoroutineClosures(pCI);
 	pCI->_state = COROUTINE_STATE_DEAD;
 	int iSP_Vars_Max2 = pCI->_info._iSP_Vars_Max2;
@@ -2186,6 +2225,11 @@ void CNeoVMWorker::DrainCoroutineClosures(CoroutineInfo* pCI)
 }
 bool CNeoVMWorker::StopCoroutine(bool doDead)
 {
+	if (m_pCur == nullptr || (doDead && IsMainCoroutine(m_pCur)))
+	{
+		SetError("cannot close the main coroutine");
+		return false;
+	}
 	CoroutineBase* pThis = (CoroutineBase*)this;
 	m_pCur->_info = *pThis;
 	m_pCur->_activeClosure = m_pActiveClosure;
@@ -2244,9 +2288,11 @@ bool CNeoVMWorker::StartCoroutione(int argSP_Vars, int n3)
 
 		if (m_pCur->_info._pCodeCurrent == NULL) // first run
 		{
+            // 중단된 코루틴이 해제된 뒤 풀 주소가 재사용되어도 이전 기록은 이어받지 않는다.
+            if (!m_sDebugLineSkips.empty()) PruneDebugLineSkips(m_pCur, -1);
 			int iResumeParamCount = n3 - 1;
 			const SFunctionTable& fun = Functions()[m_pCur->_fun_index];
-			if (!EnsureStackRange(0, fun._localAddCount - 1))
+			if (!EnsureStackRange(0, fun._stackSlotCount - 1))
 				return false;
 			for (int i = 0; i < fun._argsCount; i++)
 			{
@@ -2258,7 +2304,7 @@ bool CNeoVMWorker::StartCoroutione(int argSP_Vars, int n3)
 			SetCodePtr(fun._codePtr);
 			_iSP_Vars = 0;// iSP_VarsMax;
 			_iSP_VarsMax = _iSP_Vars + fun._localAddCount;
-			_iSP_Vars_Max2 = _iSP_VarsMax;
+			_iSP_Vars_Max2 = _iSP_Vars + fun._stackSlotCount;
 			if (m_pCur->_function.GetType() == VAR_CLOSURE)
 			{
 				ClosureInfo* closure = m_pCur->_function._closure;
@@ -2286,13 +2332,13 @@ bool CNeoVMWorker::StartCoroutione(int argSP_Vars, int n3)
 
 VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 {
-	if (_isInitialized == false)
+	if (_isInitialized == false || !CheckNestedCallDepth())
 		return NULL;
 
 	const SFunctionTable& fun = Functions()[iFID];
 	if (argc != fun._argsCount)
 		return NULL;
-	if (!EnsureStackRange(_iSP_VarsMax, fun._localAddCount - 1))
+	if (!EnsureStackRange(_iSP_VarsMax, fun._stackSlotCount - 1))
 		return NULL;
 
 	int save_Code = GetCodeptr();
@@ -2306,8 +2352,8 @@ VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 	_iSP_Vars = _iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);
 	_iSP_VarsMax = _iSP_Vars + fun._localAddCount;
-	if (_iSP_Vars_Max2 < _iSP_VarsMax)
-		_iSP_Vars_Max2 = _iSP_VarsMax;
+	if (_iSP_Vars_Max2 < _iSP_Vars + fun._stackSlotCount)
+		_iSP_Vars_Max2 = _iSP_Vars + fun._stackSlotCount;
 
 	//_iSP_Vars_Max2 = iSP_VarsMax;
 
@@ -2340,7 +2386,7 @@ VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 
 VarInfo* CNeoVMWorker::testCall(VarInfo* function, VarInfo* args, int argc)
 {
-	if (function == nullptr)
+	if (function == nullptr || !CheckNestedCallDepth())
 		return NULL;
 	if (function->GetType() == VAR_FUN)
 		return testCall(function->_fun_index, args, argc);
@@ -2353,7 +2399,7 @@ VarInfo* CNeoVMWorker::testCall(VarInfo* function, VarInfo* args, int argc)
 		return NULL;
 	const SFunctionTable& fun = Functions()[closure->_funIndex];
 	if (argc != fun._argsCount || closure->_captures.size() != fun._captures.size() ||
-		!EnsureStackRange(_iSP_VarsMax, fun._localAddCount - 1))
+		!EnsureStackRange(_iSP_VarsMax, fun._stackSlotCount - 1))
 		return NULL;
 
 	const int save_Code = GetCodeptr();
@@ -2365,8 +2411,8 @@ VarInfo* CNeoVMWorker::testCall(VarInfo* function, VarInfo* args, int argc)
 	_iSP_Vars = _iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);
 	_iSP_VarsMax = _iSP_Vars + fun._localAddCount;
-	if (_iSP_Vars_Max2 < _iSP_VarsMax)
-		_iSP_Vars_Max2 = _iSP_VarsMax;
+	if (_iSP_Vars_Max2 < _iSP_Vars + fun._stackSlotCount)
+		_iSP_Vars_Max2 = _iSP_Vars + fun._stackSlotCount;
 
 	for (int i = 0; i < argc; ++i)
 		Move(&(*m_pVarStack_Base)[1 + _iSP_Vars + i], &args[i]);
@@ -2388,6 +2434,21 @@ VarInfo* CNeoVMWorker::testCall(VarInfo* function, VarInfo* args, int argc)
 	return result;
 }
 
+void CNeoVMWorker::CallFunctionValue(int functionIndex, int argumentCount)
+{
+	if (functionIndex < 0 || functionIndex >= (int)Functions().size())
+	{
+		SetError(RTE_CALL_INVALID);
+		return;
+	}
+	if (argumentCount != Functions()[functionIndex]._argsCount)
+	{
+		SetError(RTE_CALL_ARG_COUNT);
+		return;
+	}
+	Call(functionIndex, argumentCount);
+}
+
 void CNeoVMWorker::Call(ClosureInfo* closure, int n2, int returnValueIndex)
 {
 	if (closure == nullptr || closure->_funIndex < 0 ||
@@ -2397,8 +2458,13 @@ void CNeoVMWorker::Call(ClosureInfo* closure, int n2, int returnValueIndex)
 		return;
 	}
 	const SFunctionTable& fun = Functions()[closure->_funIndex];
+	if (n2 != fun._argsCount)
+	{
+		SetError(RTE_CALL_ARG_COUNT);
+		return;
+	}
 	if (closure->_captures.size() != fun._captures.size() ||
-		!EnsureStackRange(_iSP_VarsMax, fun._localAddCount - 1))
+		!EnsureStackRange(_iSP_VarsMax, fun._stackSlotCount - 1))
 	{
 		SetError(RTE_CALL_INVALID);
 		return;
@@ -2436,8 +2502,8 @@ void CNeoVMWorker::Call(ClosureInfo* closure, int n2, int returnValueIndex)
 	_iSP_Vars = _iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);
 	_iSP_VarsMax = _iSP_Vars + fun._localAddCount;
-	if (_iSP_Vars_Max2 < _iSP_VarsMax)
-		_iSP_Vars_Max2 = _iSP_VarsMax;
+	if (_iSP_Vars_Max2 < _iSP_Vars + fun._stackSlotCount)
+		_iSP_Vars_Max2 = _iSP_Vars + fun._stackSlotCount;
 
 	for (size_t i = 0; i < fun._captures.size(); ++i)
 		Move(GetVarPtr_L(fun._captures[i].second), &closure->_captures[i]);
@@ -2670,15 +2736,20 @@ bool CNeoVMWorker::PropertyNative(FunctionPtrNative functionPtrNative, void* pUs
 		SetErrorFormat(RTE_PROPERTY_NAMED, get ? "read" : "write", pStr ? pStr->_str.c_str() : "<unknown>");
 		return false;
 	}
-	if (!EnsureStackRange(_iSP_VarsMax, 0))
+	// 호스트 getter/setter 의 프레임을 현재 프레임이 쓰는 모든 슬롯 위(_iSP_Vars_Max2)에 둔다.
+	// 함수 진입 시 _iSP_Vars_Max2 는 _stackSlotCount(대기 중인 호출 인자 창 포함)까지 올라가 있으므로,
+	// 여기서 시작하면 평가 중인 인자가 덮이지 않는다 → 컴파일러가 선택자 읽기를 인자 창 충돌로 보지 않아도 된다.
+	const int hostBase = _iSP_Vars_Max2;
+	if (!EnsureStackRange(hostBase, 0))
 		return false;
 	int iSave = _iSP_Vars;
 	int iSave_SP_VarsMax = _iSP_VarsMax;
 	int iSaveBreakingCallStack = m_iBreakingCallStack;
-	_iSP_Vars = _iSP_VarsMax;
+	_iSP_Vars = hostBase;
+	_iSP_VarsMax = hostBase;
 	SetStackPointer(_iSP_Vars);
-	if (_iSP_Vars_Max2 < _iSP_VarsMax + 1)
-		_iSP_Vars_Max2 = _iSP_VarsMax + 1;
+	if (_iSP_Vars_Max2 < hostBase + 1)
+		_iSP_Vars_Max2 = hostBase + 1;
 
 	bool nativeResult = (func)(this, pUserData, pStr, pRet, get);
 	if (nativeResult == false)
@@ -2767,7 +2838,7 @@ bool CNeoVMWorker::ChangeNumber(VarInfo* p)
 			return true;
 		case VAR_FLOAT:
 			p->SetType(VAR_INT);
-			p->_int = (int)p->_float;
+			p->_int = NeoFloatToInt(p->_float);
 			return true;
 		default:
 			break;

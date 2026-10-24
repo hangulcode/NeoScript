@@ -345,7 +345,8 @@ NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItemValid(VarInfo* pTable, VarIn
 	VarInfo* r = GetTableItem(pTable, pKey);
 	if (r != NULL)
 		return r;
-	SetError(RTE_KEY_NOT_FOUND);
+	if (!IsErrorTrap())
+		SetError(pTable->GetType() == VAR_LIST ? RTE_LIST_INDEX_WRITE : RTE_KEY_NOT_FOUND);
 	return NULL;
 }
 NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItemValid(VarInfo* pTable, int Array)
@@ -354,7 +355,8 @@ NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItemValid(VarInfo* pTable, int A
 	VarInfo* r = GetTableItem(pTable, &Key);
 	if (r != NULL)
 		return r;
-	SetError(RTE_KEY_NOT_FOUND);
+	if (!IsErrorTrap())
+		SetError(pTable->GetType() == VAR_LIST ? RTE_LIST_INDEX_WRITE : RTE_KEY_NOT_FOUND);
 	return NULL;
 }
 
@@ -744,6 +746,7 @@ NEOS_NOINLINE void CNeoVMWorker::Add3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	case VAR_STRING:
 		if (v2->GetType() == VAR_STRING)
 		{
+			CheckRuntimeStringGrowth(v1->_str->_str.size(), v2->_str->_str.size());
 			Var_SetStringA(r, v1->_str->_str + v2->_str->_str);
 			return;
 		}
@@ -920,9 +923,44 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CheckShiftCount(int count)
 	SetError(RTE_INTEGER_SHIFT_RANGE);
 	return false;
 }
-// Keep checked shifts out of the dispatch loop: replicating their validation
-// across opcode specializations also increases the cost of unrelated operations.
-NEOS_NOINLINE void CNeoVMWorker::LSh3(VarInfo* r, VarInfo* v1, VarInfo* v2)
+// int<<int(count 0..31) 만 인라인한다. 오류·비정수 경로는 *Rare 로 분리해 디스패치 루프를 키우지 않는다.
+NEOS_FORCEINLINE void CNeoVMWorker::LSh3(VarInfo* r, VarInfo* v1, VarInfo* v2)
+{
+	if (v1->GetType() == VAR_INT && v2->GetType() == VAR_INT && static_cast<unsigned int>(v2->_int) < 32)
+	{
+		Var_SetInt(r, NeoShiftLeft32(v1->_int, v2->_int));
+		return;
+	}
+	LSh3Rare(r, v1, v2);
+}
+NEOS_FORCEINLINE void CNeoVMWorker::RSh3(VarInfo* r, VarInfo* v1, VarInfo* v2)
+{
+	if (v1->GetType() == VAR_INT && v2->GetType() == VAR_INT && static_cast<unsigned int>(v2->_int) < 32)
+	{
+		Var_SetInt(r, NeoShiftRight32(v1->_int, v2->_int));
+		return;
+	}
+	RSh3Rare(r, v1, v2);
+}
+NEOS_FORCEINLINE void CNeoVMWorker::LSh2(VarInfo* r, VarInfo* v2)
+{
+	if (r->GetType() == VAR_INT && v2->GetType() == VAR_INT && static_cast<unsigned int>(v2->_int) < 32)
+	{
+		r->_int = NeoShiftLeft32(r->_int, v2->_int);
+		return;
+	}
+	LSh2Rare(r, v2);
+}
+NEOS_FORCEINLINE void CNeoVMWorker::RSh2(VarInfo* r, VarInfo* v2)
+{
+	if (r->GetType() == VAR_INT && v2->GetType() == VAR_INT && static_cast<unsigned int>(v2->_int) < 32)
+	{
+		r->_int = NeoShiftRight32(r->_int, v2->_int);
+		return;
+	}
+	RSh2Rare(r, v2);
+}
+NEOS_NOINLINE void CNeoVMWorker::LSh3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
 	{
@@ -949,7 +987,7 @@ NEOS_NOINLINE void CNeoVMWorker::LSh3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	}
 	SetErrorOperator("<<", v1, v2);
 }
-NEOS_NOINLINE void CNeoVMWorker::RSh3(VarInfo* r, VarInfo* v1, VarInfo* v2)
+NEOS_NOINLINE void CNeoVMWorker::RSh3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
 	{
@@ -1126,7 +1164,7 @@ NEOS_NOINLINE bool CNeoVMWorker::CompareEQRare(VarInfo* v1, VarInfo* v2)
 	return false;
 }
 
-NEOS_FORCEINLINE bool CNeoVMWorker::CompareGR(VarInfo* v1, VarInfo* v2)
+NEOS_FORCEINLINE bool CNeoVMWorker::CompareGR(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic)
 {
 	const VAR_TYPE t1 = v1->GetType();
 	const VAR_TYPE t2 = v2->GetType();
@@ -1144,18 +1182,18 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareGR(VarInfo* v1, VarInfo* v2)
 		if (t2 == VAR_FLOAT)
 			return v1->_float > v2->_float;
 	}
-	return CompareGRRare(v1, v2);
+	return CompareGRRare(v1, v2, reverseDiagnostic);
 }
 
-NEOS_NOINLINE bool CNeoVMWorker::CompareGRRare(VarInfo* v1, VarInfo* v2)
+NEOS_NOINLINE bool CNeoVMWorker::CompareGRRare(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic)
 {
 	if (v1->GetType() == VAR_STRING && v2->GetType() == VAR_STRING)
 		return v1->_str->_str > v2->_str->_str;
-	SetErrorOperator(">", v1, v2);
+	SetErrorOperator(reverseDiagnostic ? "<" : ">", reverseDiagnostic ? v2 : v1, reverseDiagnostic ? v1 : v2);
 	return false;
 }
 
-NEOS_FORCEINLINE bool CNeoVMWorker::CompareGE(VarInfo* v1, VarInfo* v2)
+NEOS_FORCEINLINE bool CNeoVMWorker::CompareGE(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic)
 {
 	const VAR_TYPE t1 = v1->GetType();
 	const VAR_TYPE t2 = v2->GetType();
@@ -1173,14 +1211,14 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareGE(VarInfo* v1, VarInfo* v2)
 		if (t2 == VAR_FLOAT)
 			return v1->_float >= v2->_float;
 	}
-	return CompareGERare(v1, v2);
+	return CompareGERare(v1, v2, reverseDiagnostic);
 }
 
-NEOS_NOINLINE bool CNeoVMWorker::CompareGERare(VarInfo* v1, VarInfo* v2)
+NEOS_NOINLINE bool CNeoVMWorker::CompareGERare(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic)
 {
 	if (v1->GetType() == VAR_STRING && v2->GetType() == VAR_STRING)
 		return v1->_str->_str >= v2->_str->_str;
-	SetErrorOperator(">=", v1, v2);
+	SetErrorOperator(reverseDiagnostic ? "<=" : ">=", reverseDiagnostic ? v2 : v1, reverseDiagnostic ? v1 : v2);
 	return false;
 }
 
@@ -1211,6 +1249,7 @@ NEOS_NOINLINE void CNeoVMWorker::Add2Rare(VarInfo* r, VarInfo* v2)
 	case VAR_STRING:
 		if (v2->GetType() == VAR_STRING)
 		{
+			CheckRuntimeStringGrowth(r->_str->_str.size(), v2->_str->_str.size());
 			Var_SetStringA(r, r->_str->_str + v2->_str->_str);
 			return;
 		}
@@ -1341,7 +1380,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Per2(VarInfo* r, VarInfo* v2)
 	}
 	SetErrorOperator("%=", r, v2);
 }
-NEOS_NOINLINE void CNeoVMWorker::LSh2(VarInfo* r, VarInfo* v2)
+NEOS_NOINLINE void CNeoVMWorker::LSh2Rare(VarInfo* r, VarInfo* v2)
 {
 	switch (r->GetType())
 	{
@@ -1364,7 +1403,7 @@ NEOS_NOINLINE void CNeoVMWorker::LSh2(VarInfo* r, VarInfo* v2)
 	}
 	SetErrorOperator("<<=", r, v2);
 }
-NEOS_NOINLINE void CNeoVMWorker::RSh2(VarInfo* r, VarInfo* v2)
+NEOS_NOINLINE void CNeoVMWorker::RSh2Rare(VarInfo* r, VarInfo* v2)
 {
 	switch (r->GetType())
 	{
@@ -1477,16 +1516,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::For(VarInfo* pCur)
 		++pCur_Inter->_int;
 		return true;
 	}
-	if (step > 0)
-	{
-		if (pCur->_int < pCur[2]._int)
-		{
-			const int64_t next = static_cast<int64_t>(pCur_Inter->_int) + step;
-			pCur_Inter->_int = next >= pCur[2]._int ? pCur[2]._int : static_cast<int>(next);
-			return true;
-		}
-		return false;
-	}
+	// step != 1 은 int64 덧셈·포화가 들어가 인라인 본문을 키운다(실측: step 1 루프까지 느려짐) → ForRare.
 	return ForRare(pCur, step);
 }
 // 드문 경로: step<0(역방향) 과 step==0(에러). 인라인하지 않아 For 의 hot path 를 작게 유지한다.
@@ -1495,6 +1525,16 @@ NEOS_NOINLINE bool CNeoVMWorker::ForRare(VarInfo* pCur, int step)
 	if (step == 0)
 	{
 		SetErrorFormat(RTE_FOR_STEP_ZERO);   // step==0 은 영원히 끝나지 않는다
+		return false;
+	}
+	if (step > 0)
+	{
+		if (pCur->_int < pCur[2]._int)
+		{
+			const int64_t next = static_cast<int64_t>(pCur[1]._int) + step;
+			pCur[1]._int = next >= pCur[2]._int ? pCur[2]._int : static_cast<int>(next);
+			return true;
+		}
 		return false;
 	}
 	if (pCur->_int > pCur[2]._int)           // 역방향은 비교 방향이 반대
@@ -1517,6 +1557,12 @@ NEOS_NOINLINE bool CNeoVMWorker::ForEachRare(VarInfo* pClt, VarInfo* pKey, bool 
 	{
 	case VAR_STRING:
 	{
+		if (bTwoVar)
+		{
+			pIterator->ClearType();
+			SetError(RTE_FOREACH_STRING_TWOVAR);
+			return false;
+		}
 		std::string* str = &pClt->_str->_str;
 		if (pIterator->GetType() != VAR_ITERATOR)
 		{

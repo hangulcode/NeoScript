@@ -83,6 +83,10 @@ visible to other modules unless also marked `public` (`export public`).
 call it every frame with no per-call string lookup. `Call(inst, fn)` returns an `Invocation`: push args,
 `invoke()`, then read the return.
 
+Argument buffer capacity is reused per instance, including synchronous nested calls after warm-up.
+Only empty storage is cached: argument values are released after execution has accepted them,
+and a separately prepared Invocation keeps its own arguments. Reset releases the spare nested-call buffers.
+
 The **return value lives in the instance's shared, borrowed context**, so reading it must not outlive that
 context. Prefer the **safe return terminals** — they detach the result from the Invocation's lifetime:
 
@@ -114,10 +118,16 @@ and are invalidated by the next `Call` on the same instance:
 ```cpp
 Invocation a = rt->Call(inst, "GetScore"); a.invoke();
 Invocation b = rt->Call(inst, "GetHp");    b.invoke();  // ← flushes a's return context
-int score = a.retInt();  // ⚠️ no longer 100 — use invokeR() for this pattern
+int score = a.retInt();  // Invalidated return: 0. Use invokeR() to keep the original value.
 ```
 
-Collection readers preserve the full byte length of string values, including embedded NUL.
+Reading an Invocation before execution, while suspended, or after its result has been invalidated
+returns an empty/default value (`None`, zero, false, or an empty view). It never exposes the
+result of a newer call. Invocation arguments and execution are one-shot: a consumed handle
+cannot modify or execute a later prepared call.
+
+String arguments, global reads, borrowed returns, owned `CallResult` strings, and collection
+readers preserve the full byte length of string values, including embedded NUL.
 `CallContext::argString()` also preserves a string argument's full length; non-string coercion
 retains its existing behavior. Hosts validating text must use `StringView::size()`.
 `MapReader::stringKeys(out, &unsupportedKeyType)` enumerates borrowed string-key views;
@@ -151,11 +161,13 @@ Scalar arrays return dimension zero; `floats()` remains exclusive to scalar floa
 Quaternion arrays retain script w,x,y,z component order. The view is still borrowed, but the
 components copied into the host's own buffer can be retained.
 
-So: **one live `Invocation` per instance** at a time — a second `Call` while one is still armed (built but
-not yet invoked) returns a falsy `Invocation`; and a value read with `retX` is only valid until the next
-`Call`. Use `invokeR` / `invokeReadMap` to avoid both footguns. (Nested native→script calls *during*
-`invoke()` are still allowed.) `FunctionHandle` also carries its owning program, so passing a handle to an
-instance of a different program is rejected.
+Only one Invocation may be prepared on an instance at a time. A second `Call` while the first
+is armed or suspended returns a falsy Invocation. Borrowed results and their nested readers remain
+valid until that Invocation ends or a subsequent call invalidates its completed return context;
+repeated `retMap()` or `retList()` reads within the same call do not invalidate earlier readers.
+Use `invokeR` / `invokeReadMap` when the result does not need a longer borrowed lifetime.
+Synchronous native-to-script calls during execution are still allowed. `FunctionHandle` includes
+its owning runtime/program identity; using it with another runtime or program is rejected.
 
 **Captured anonymous functions.** An anonymous function captures only the surrounding function's local
 values that it reads; globals retain their normal global lookup. A captured `FunctionHandle` owns its
@@ -238,6 +250,27 @@ rt->StartSliced(inst, "run", /*timeoutMs*/0, /*budget*/10);   // 10 instructions
 while (rt->IsRunning(inst)) rt->UpdateSliced(inst);           // advance one slice per frame
 ```
 
+`Invocation::budget(n)`, `StartSliced(..., budget)`, and `ResumeDesc::instructionBudget`
+limit actual VM dispatch work; zero means no instruction limit. A fused stored-vector reference
+and its write count as one dispatch unit. `Resume` applies the supplied budget to that slice
+(including zero); `UpdateSliced` retains the current sliced-execution settings. A fresh ordinary
+Invocation starts with no time or instruction limit, independently of previous calls.
+Native callbacks cannot be preempted while their C++ code is running. `ResumeDesc::deltaTime`
+is reserved and currently ignored; script sleep uses the existing clock.
+
+If an Invocation suspends, keep that original Invocation alive while calling `Resume` or
+`UpdateSliced`. When execution completes, its `retX` methods can read the final return value.
+Destroying the Invocation while it is suspended lets execution continue but relinquishes the
+right to read its eventual return. Starting another call or rerunning global initialization
+while the instance is suspended is rejected.
+
+`ResetInstance`, `Cancel`, `Resume`, `UpdateSliced`, and debugger execution reject unsafe
+reentry from a currently executing callback. Destruction is also refused while an instance
+is executing or still has live Invocation owners. Use `CanDestroyInstance` / `CanDestroy`
+to check this before releasing host resources, and release Invocations before their instance
+and runtime. Reset preserves the instance's original `runGlobalInit` setting.
+
+
 **Native method dispatcher** — one function exposes many script methods; `ctx.userData()` is the
 per-instance object bound above:
 
@@ -248,6 +281,15 @@ bool GameObjectMethod(CallContext& ctx, StringView method) {
     return false;   // unknown method
 }
 ```
+
+**Sharing native objects.** `CallContext::retInstanceGlobal` can return any stored script value,
+including native objects nested in maps or lists. Shared native values retain their binding
+metadata. They do not own the host `userData` object: the host must keep it alive while its
+source instance remains valid. Resetting or destroying that source invalidates the old binding;
+subsequent access from another instance reports a runtime error. Native callbacks retain the
+source object instance identity, while function arguments belong to the actual executing
+instance's program, and custom failure codes are reported on that executing instance. Object types are runtime-specific and remain stable when more objects are
+registered; duplicate object type names are rejected.
 
 **Debugger** is a separate optional interface: `IDebugger* dbg = rt->GetDebugger();` (null in non-debug
 builds) — used only by the editor / DAP adapter.
@@ -432,8 +474,9 @@ result before it can return to Script A, so Script B does not own a resumable ex
 - Breakpoints, stepping, and a requested debugger pause are suppressed while Script B is running. Debug Script A
   before the native call, or debug Script B through a top-level entry point instead.
 - `sleep(...)`, `yield`, `async.get(...)`, `async.post(...)`, and `async.wait()` are rejected with a runtime error in
-  Script B. A worker configured for time-limited execution cannot start Script B at all. These restrictions prevent
-  Script B from being suspended after its native caller has already returned to Script A.
+  Script B. A worker with a host time limit or a nonzero restrictive instruction budget cannot start Script B at all. These restrictions prevent
+  Script B from being suspended after its native caller has already returned to Script A. Debugger
+  cooperative slices are different: synchronous callbacks finish before the next debugger slice.
 - Native `CallContext` arguments and borrowed argument strings remain valid across synchronous reentry,
   including while the child `Invocation` exists and after its destruction. The child uses a separate stack frame.
 - A synchronous callback may call ordinary functions and return values normally. For delayed work, have the native
@@ -442,13 +485,15 @@ result before it can return to Script A, so Script B does not own a resumable ex
 > Note: `NeoExecContextPool_Create` returns an opaque handle; its full type lives in the internal headers.
 > Only the pointer, the two factory functions, and `NeoLoadVMParam::execPool` are part of the public API.
 
-### Compiled image capacity (format 0123)
+### Compiled image capacity
 
-Recompile cached images when updating to format **0123**, including images from **0122**: removing
-unused collection removal opcodes changes subsequent opcode numbers. Indexed null assignment uses
-the ordinary assignment instruction; lists keep their positions and maps remove the key at runtime.
-Instructions remain eight bytes. `LOADK` sits beside the `MOV` instructions; its destination flag
-handles both local and global storage.
+The current image format is **0133**. Recompile older cached images: this format includes local
+initialization, ordered operand evaluation, and deferred assignment paths. Host lifecycle and
+load-validation fixes retain format 0133.
+
+Indexed null assignment uses the ordinary assignment instruction; lists keep their positions
+and maps remove the key at runtime. Instructions remain eight bytes. `LOADK` sits beside the
+`MOV` instructions; its destination flag handles both local and global storage.
 
 - Constant indices 0–14,999 use the existing direct 16-bit operand path. Larger indices use `LOADK`
   with a 32-bit constant index and a 16-bit destination. A direct assignment needs one instruction;
@@ -506,3 +551,10 @@ This removes the extra global-destination conversion and keeps opcode and call-s
 consistent, without growing instructions or call frames. It does not change the constant/global
 limits; any performance difference needs measurement. Producers and consumers must use the same
 representation. Call frames are runtime state and do not add a separate image-format requirement.
+
+
+Loading an image validates section lengths and counts before allocation, along with opcode,
+operand, function, branch, and switch-table bounds. Truncated sections, invalid boolean bytes,
+and unsupported internal opcodes are rejected. Per-function writable stack capacity includes
+outgoing call slots and is checked before argument preparation, including coroutine entry.
+This validation does not change the serialized image format.

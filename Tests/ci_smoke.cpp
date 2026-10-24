@@ -17,8 +17,8 @@ static bool SetStorageRegression()
     if (set == nullptr)
         return false;
 
-    // All keys collide at every power-of-two capacity.  This exercises chain
-    // relocation, rehashing, deletion, and reuse of deleted slots.
+    // Aligned keys exercise mixed integer hashing, chain relocation,
+    // rehashing, deletion, and reuse of deleted slots.
     for (int i = 0; i < 64; ++i)
     {
         VarInfo value(i * 128);
@@ -418,13 +418,13 @@ int main()
         "export fun mapSortNormal() {\n"
         "  var m = {3, 1, 2};\n"
         "  m.sort(fun(var a, var b) { return a < b; });\n"
-        "  return m[0] * 100 + m[1] * 10 + m[2];\n"
+        "  var values = m.values();\n"
+        "  return values[0] * 100 + values[1] * 10 + values[2];\n"
         "}\n"
         "export fun mapSortMutation() {\n"
         "  sortMutationMap = {3, 1, 2};\n"
         "  sortMutationMap.sort(sortMutating);\n"
         "  return 0;\n"
-        "}\n"
         "}\n";
     CompileDesc desc;
     desc.source = source;

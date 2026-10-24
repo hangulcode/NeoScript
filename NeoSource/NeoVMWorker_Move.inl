@@ -38,7 +38,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Call(int n1, int n2, int returnValueIndex)
 	const SFunctionTable& fun = Functions()[n1];
 	// n2 is Arg Count not use
 	// 호출 스택을 push하거나 현재 프레임을 변경하기 전에 새 프레임 전체를 검증한다.
-	if (!EnsureStackRange(_iSP_VarsMax, fun._localAddCount - 1))
+	if (!EnsureStackRange(_iSP_VarsMax, fun._stackSlotCount - 1))
 		return;
 #if _DEBUG
 	SCallStack callStack;
@@ -71,6 +71,6 @@ NEOS_FORCEINLINE void CNeoVMWorker::Call(int n1, int n2, int returnValueIndex)
 	_iSP_Vars = _iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);
 	_iSP_VarsMax = _iSP_Vars + fun._localAddCount;
-	if (_iSP_Vars_Max2 < _iSP_VarsMax)
-		_iSP_Vars_Max2 = _iSP_VarsMax;
+	if (_iSP_Vars_Max2 < _iSP_Vars + fun._stackSlotCount)
+		_iSP_Vars_Max2 = _iSP_Vars + fun._stackSlotCount;
 }

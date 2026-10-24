@@ -1,8 +1,40 @@
 ﻿#pragma once
 
+#include <stdexcept>
+
 namespace NeoScript
 {
 extern u32 GetHashCode(const std::string& str);
+
+// 연속 키의 가까운 배치를 유지하면서 정렬된 ID와 압축 좌표를 섞는다.
+// 상위 워드에 홀수를 곱해 행을 2의 거듭제곱 버킷에 분산하고,
+// 같은 행에는 고정 XOR를 적용해 연속된 하위 워드의 지역성을 보존한다.
+NEOS_FORCEINLINE u32 HashIntegerKey(int key)
+{
+	const u32 h = static_cast<u32>(key);
+	return h ^ ((h >> 16) * 0x9e3779b9U);
+}
+
+constexpr int MAX_HASH_CAPACITY = 1 << 30;
+constexpr int MAX_HASH_ITEMS = (MAX_HASH_CAPACITY / 4) * 3;
+
+inline int GrowHashCapacity(int current)
+{
+	if (current <= 0) return 2;
+	if (current > MAX_HASH_CAPACITY / 2)
+		throw std::length_error("collection capacity exceeds limit");
+	return current * 2;
+}
+
+inline int HashCapacityForItems(int count)
+{
+	if (count > MAX_HASH_ITEMS)
+		throw std::length_error("collection capacity exceeds limit");
+	int capacity = 2;
+	while (static_cast<long long>(capacity) * 3 < static_cast<long long>(count) * 4)
+		capacity = GrowHashCapacity(capacity);
+	return capacity;
+}
 
 struct VMString
 {

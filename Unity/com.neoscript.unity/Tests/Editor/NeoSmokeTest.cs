@@ -28,6 +28,8 @@ namespace NeoScript.Tests
         internal bool JsonOk;
         internal Vector3 Position = new Vector3(1, 2, 3);
         internal int PositionGets, PositionSets;
+        internal NeoRuntime Runtime;
+        internal NeoInstance Instance;
 
         public bool Invoke(NeoCallContext ctx, NeoName method)
         {
@@ -99,6 +101,27 @@ namespace NeoScript.Tests
                 return true;
             }
 
+            if (method.Is("Dispose"))
+            {
+                bool runtimeRefused = false, instanceRefused = false;
+                try { Runtime.Dispose(); } catch (NeoException) { runtimeRefused = true; }
+                try { Instance.Dispose(); } catch (NeoException) { instanceRefused = true; }
+                ctx.Return(runtimeRefused && instanceRefused && !Runtime.IsDisposed && Instance.IsAlive);
+                return true;
+            }
+            if (method.Is("Vector4"))
+            {
+                ctx.Return(ctx.ArgVector4(0));
+                return true;
+            }
+            if (method.Is("Quaternion"))
+            {
+                Quaternion q = ctx.ArgQuaternion(0);
+                bool ordered = q.x == 2f && q.y == 3f && q.z == 4f && q.w == 1f;
+                ctx.Return(ordered ? q : new Quaternion(0f, 0f, 0f, 0f));
+                return true;
+            }
+
             if (method.Is("Move"))
             {
                 // 스크립트의 Vector3 가 유니티 Vector3 로 그대로 넘어온다.
@@ -160,6 +183,7 @@ export fun Add(var a, var b) { return a + b; }
 export fun Greet(var who) { return ""hi "" + who; }
 export fun Bump() { counter = counter + 1; return counter; }
 export fun HostDouble(var v) { return Host.Double(v); }
+export fun HostDispose() { return Host.Dispose(); }
 export fun HostEcho(var s) { return Host.Echo(s); }
 export fun HostMove() { return Host.Move(math.Vector3(1.0, 2.0, 3.0)); }
 export fun HostStatsHp() { var r = Host.Stats(); return r[""hp""]; }
@@ -167,6 +191,9 @@ export fun HostSum() { return Host.SumList([1, 2, 3, 4]); }
 export fun HostVersion() { return Host.version; }
 export fun Loot() { var m = {}; m[""gold""] = 77; m[""name""] = ""chest""; return m; }
 export fun Where() { return math.Vector3(4.0, 5.0, 6.0); }
+export fun Rotation() { return math.Quaternion(1.0, 2.0, 3.0, 4.0); }
+export fun HostRotation() { return Host.Quaternion(math.Quaternion(1.0, 2.0, 3.0, 4.0)); }
+export fun HostRawVector4() { return Host.Vector4(math.Vector4(1.0, 2.0, 3.0, 4.0)); }
 export fun ViaImport(var v) { return util.triple(v); }
 export fun Boom() { return Host.Nope(); }
 export fun Busy() { var s = 0; for (var i in 0, 400000) { s = s + 1; } return s; }
@@ -248,6 +275,8 @@ export fun Update(var dt)
                     },
                 });
                 Check(true, "runtime created");
+                NeoNativeLayout.Verify();
+                Check(true, "managed ABI layout matches this pointer size");
 
                 runtime.RegisterObject("Host", host);
                 runtime.Freeze();
@@ -257,7 +286,11 @@ export fun Update(var dt)
                 Check(true, "script compiled");
 
                 instance = program.CreateInstance();
+                host.Runtime = runtime;
+                host.Instance = instance;
                 Check(instance.IsAlive, "instance alive");
+                Check(instance.Call("HostDispose").Invoke().AsBool,
+                    "active Dispose is rejected without releasing managed handles");
                 Check(printed.Contains("script global init ran"), "print reached the managed log sink");
 
                 // --- 스칼라 ---
@@ -287,6 +320,18 @@ export fun Update(var dt)
                 Check(moved == new Vector3(1f, 3f, 3f), "Vector3 round-trips through C# ({0})", moved);
                 Vector3 where = instance.Call("Where").InvokeVector3();
                 Check(where == new Vector3(4f, 5f, 6f), "script Vector3 return ({0})", where);
+
+                NeoResult rotation = instance.Call("Rotation").Invoke();
+                Quaternion q = rotation.AsQuaternion;
+                Check(q.x == 2f && q.y == 3f && q.z == 4f && q.w == 1f,
+                    "Quaternion result converts script w,x,y,z to Unity x,y,z,w");
+                Check(rotation.AsVector4 == new Vector4(1f, 2f, 3f, 4f),
+                    "raw Vector4 preserves script component order");
+                NeoResult roundTrip = instance.Call("HostRotation").Invoke();
+                Check(roundTrip.AsVector4 == new Vector4(1f, 2f, 3f, 4f),
+                    "Quaternion argument and return convert in opposite directions");
+                Check(instance.Call("HostRawVector4").Invoke().AsVector4 == new Vector4(1f, 2f, 3f, 4f),
+                    "Vector4 argument and return keep raw component order");
 
                 // --- 컬렉션 반환 ---
                 int gold = 0;
