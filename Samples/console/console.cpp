@@ -4,17 +4,16 @@
 #include "../../NeoSource/NeoScript.h"   // v2 public API (RunFile 등이 사용; Neo.h 와 공존)
 #include "../../ThirdParty/yyjson/yyjson.h"
 #include <cctype>
-#include <filesystem>
 #include <limits>
 #include <algorithm>
 #include <chrono>
 #include <conio.h>
 #include <cstdlib>
-#include <fstream>
 #include <iostream>
 #include <fcntl.h>
 #include <io.h>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <set>
 #include <sstream>
@@ -23,11 +22,45 @@
 
 using namespace NeoScript;
 
+static bool Utf8PathToWide(const std::string& path, std::wstring& wide)
+{
+    if (path.empty())
+    {
+        wide.clear();
+        return true;
+    }
+    if (path.size() > static_cast<size_t>((std::numeric_limits<int>::max)()))
+        return false;
+    const int size = static_cast<int>(path.size());
+    const int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path.data(), size, nullptr, 0);
+    if (count == 0)
+        return false;
+    wide.resize(count);
+    return MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path.data(), size, &wide[0], count) == count;
+}
+
 static std::string FullPathOrSelf(const std::string& path)
 {
-    std::error_code error;
-    const auto full = std::filesystem::absolute(std::filesystem::u8path(path), error);
-    return error ? path : full.lexically_normal().u8string();
+    std::wstring wide;
+    if (!Utf8PathToWide(path, wide))
+        return path;
+    // UTF-8 경로를 유지하면서 현재 디렉터리와 . / .. 를 Windows 규칙으로 해석한다.
+    const DWORD capacity = GetFullPathNameW(wide.c_str(), 0, nullptr, nullptr);
+    if (capacity == 0)
+        return path;
+    std::vector<wchar_t> buffer(capacity);
+    const DWORD length = GetFullPathNameW(wide.c_str(), capacity, buffer.data(), nullptr);
+    if (length == 0 || length >= capacity || length > static_cast<DWORD>((std::numeric_limits<int>::max)()))
+        return path;
+    const int count = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, buffer.data(), static_cast<int>(length),
+        nullptr, 0, nullptr, nullptr);
+    if (count == 0)
+        return path;
+    std::string full(count, '\0');
+    if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, buffer.data(), static_cast<int>(length),
+        &full[0], count, nullptr, nullptr) != count)
+        return path;
+    return full;
 }
 
 class CNeoLoader : public INeoLoader
@@ -45,8 +78,11 @@ public:
 	}
 	virtual bool        Load(const char* pFileName, void*& pBuffer, int& iLen) override
 	{
+		std::wstring widePath;
+		if (pFileName == nullptr || !Utf8PathToWide(pFileName, widePath))
+			return false;
 		FILE* fp = NULL;
-		int error_t = _wfopen_s(&fp, std::filesystem::u8path(pFileName).c_str(), L"rb");
+		int error_t = _wfopen_s(&fp, widePath.c_str(), L"rb");
 		if (error_t != 0)
 			return false;
 
@@ -1665,14 +1701,25 @@ public:
         executableLines.clear(); executableLinesByFile.clear(); breakpointsByFile.clear();
         ClearVariableReferences();
         compileError = Error{};
-        std::string fullPath = FullPathOrSelf(path);
-		std::ifstream in(std::filesystem::u8path(fullPath), std::ios::binary);
-		if (!in)
+		std::string fullPath = FullPathOrSelf(path);
+		std::wstring widePath;
+		FILE* fp = nullptr;
+		if (!Utf8PathToWide(fullPath, widePath) || _wfopen_s(&fp, widePath.c_str(), L"rb") != 0)
 		{
 			err = "cannot open program";
 			return false;
 		}
-		std::string src((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+		std::unique_ptr<FILE, int (*)(FILE*)> sourceFile(fp, &fclose);
+		std::string src;
+		char sourceBuffer[4096];
+		size_t readCount = 0;
+		while ((readCount = fread(sourceBuffer, 1, sizeof(sourceBuffer), sourceFile.get())) != 0)
+			src.append(sourceBuffer, readCount);
+		if (ferror(sourceFile.get()))
+		{
+			err = "cannot read program";
+			return false;
+		}
 
 		RuntimeDesc rd;
 		rd.nativeLoader = loader;                 // import 해석
@@ -1741,7 +1788,8 @@ public:
         _dup2(captureWrite, _fileno(stdout));
         oldCoutFlags = std::cout.flags();
         std::cout.setf(std::ios::unitbuf);
-        outputThread = std::thread([this, readFd = pipeFd[0]]()
+        const int readFd = pipeFd[0];
+        outputThread = std::thread([this, readFd]()
         {
             std::string pending;
             char buffer[512];

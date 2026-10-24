@@ -64,7 +64,15 @@ static void Script(IRuntime* runtime, const std::string& source, bool debug, boo
     runtime->DestroyProgram(program);
 }
 
-struct NumericFunction { const char* name; int arity; bool integer = false; };
+struct NumericFunction
+{
+    const char* name;
+    int arity;
+    bool integer;
+
+    NumericFunction(const char* functionName, int argumentCount, bool integerOnly = false)
+        : name(functionName), arity(argumentCount), integer(integerOnly) {}
+};
 static void NumericContracts(IRuntime* runtime, bool debug, bool image) {
     const NumericFunction functions[] = {
         {"abs",1},{"acos",1},{"asin",1},{"atan",1},{"ceil",1},{"floor",1},{"round",1},

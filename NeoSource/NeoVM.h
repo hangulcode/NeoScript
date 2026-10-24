@@ -772,11 +772,15 @@ public:
 // 소스 텍스트(preCompileHeader) 주입 대신 구조화 테이블로 전역 변수를 사전 선언한다.
 struct NeoGlobalSymbol
 {
+	constexpr NeoGlobalSymbol(const char* value = nullptr, bool isExported = true)
+		: name(value), exported(isExported) {}
 	const char* name;
 	bool        exported = true;   // true 면 GetVar 로 호스트가 바인딩 가능
 };
 struct NeoGlobalSymbolTable
 {
+	constexpr NeoGlobalSymbolTable(const NeoGlobalSymbol* values = nullptr, int size = 0)
+		: symbols(values), count(size) {}
 	const NeoGlobalSymbol* symbols = nullptr;
 	int                    count = 0;
 };

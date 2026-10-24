@@ -71,8 +71,13 @@ struct BehaviorCase
 {
     const char* name;
     std::string source;
-    bool fails = false;
-    bool reinitializeGlobals = false;
+    bool fails;
+    bool reinitializeGlobals;
+
+    BehaviorCase(const char* caseName, std::string sourceText,
+                 bool shouldFail = false, bool initializeAgain = false)
+        : name(caseName), source(std::move(sourceText)), fails(shouldFail),
+          reinitializeGlobals(initializeAgain) {}
 };
 
 static std::string BranchCase(const char* body)

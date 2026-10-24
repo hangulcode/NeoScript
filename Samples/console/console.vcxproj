@@ -293,7 +293,6 @@ exit /b 0</Command>
     <ClCompile Include="callback.cpp" />
     <ClCompile Include="cycle_ref.cpp" />
     <ClCompile Include="console.cpp">
-      <LanguageStandard>stdcpp17</LanguageStandard>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="etc.cpp" />

@@ -511,22 +511,35 @@ bool MethodThunk(CallContext& ctx, StringView method) { return DispatchMethod(N,
 template <int N>
 bool PropertyThunk(CallContext& ctx, StringView name, bool isGet) { return DispatchProperty(N, ctx, name, isGet); }
 
+// C++11에서도 슬롯 순서대로 썽크를 생성한다.
 template <std::size_t... I>
-std::array<NativeMethod, sizeof...(I)> MakeMethodThunks(std::index_sequence<I...>)
+struct IndexSequence {};
+
+template <std::size_t N, std::size_t... I>
+struct MakeIndexSequence : MakeIndexSequence<N - 1, N - 1, I...> {};
+
+template <std::size_t... I>
+struct MakeIndexSequence<0, I...>
+{
+    typedef IndexSequence<I...> Type;
+};
+
+template <std::size_t... I>
+std::array<NativeMethod, sizeof...(I)> MakeMethodThunks(IndexSequence<I...>)
 {
     return { { &MethodThunk<(int)I>... } };
 }
 
 template <std::size_t... I>
-std::array<NativeProperty, sizeof...(I)> MakePropertyThunks(std::index_sequence<I...>)
+std::array<NativeProperty, sizeof...(I)> MakePropertyThunks(IndexSequence<I...>)
 {
     return { { &PropertyThunk<(int)I>... } };
 }
 
 const std::array<NativeMethod, NS_MAX_OBJECT_SLOTS> g_methodThunks =
-    MakeMethodThunks(std::make_index_sequence<NS_MAX_OBJECT_SLOTS>{});
+    MakeMethodThunks(MakeIndexSequence<NS_MAX_OBJECT_SLOTS>::Type());
 const std::array<NativeProperty, NS_MAX_OBJECT_SLOTS> g_propertyThunks =
-    MakePropertyThunks(std::make_index_sequence<NS_MAX_OBJECT_SLOTS>{});
+    MakePropertyThunks(MakeIndexSequence<NS_MAX_OBJECT_SLOTS>::Type());
 
 //------------------------------------------------------------------------------
 // 전역 로그 훅. SetLogHandler 는 user 포인터를 받지 않으므로 여기 세워 둔다.
@@ -1598,7 +1611,7 @@ NS_API int32_t NS_CALL NsCtxArgToJson(NsContext* ctx, int32_t i, int32_t sortKey
     if (!ctx || i < 0) return JsonFailure(out, "$: missing JSON argument");
     try
     {
-        auto data = std::make_unique<JsonScratch>();
+        std::unique_ptr<JsonScratch> data(new JsonScratch());
         const bool ok = Deref(ctx)->argToJson(static_cast<std::size_t>(i), data->text, data->result, sortKeys != 0);
         return PublishJson(std::move(data), ok, out);
     }
@@ -1616,7 +1629,7 @@ NS_API int32_t NS_CALL NsCtxRetJson(NsContext* ctx, const char* text, int32_t le
     }
     try
     {
-        auto data = std::make_unique<JsonScratch>();
+        std::unique_ptr<JsonScratch> data(new JsonScratch());
         const bool ok = Deref(ctx)->retJson(SV(text, len), data->result, strictIntegers != 0, requireMap != 0);
         return PublishJson(std::move(data), ok, out);
     }
@@ -1878,7 +1891,7 @@ NS_API int32_t NS_CALL NsMapStringKeys(NsMapReader* m, const NsStr** keys,
             return 0;
         }
         if (names.size() > static_cast<std::size_t>(std::numeric_limits<int32_t>::max())) return 0;
-        auto data = std::make_unique<std::vector<NsStr>>();
+        std::unique_ptr<std::vector<NsStr>> data(new std::vector<NsStr>());
         data->reserve(names.size());
         for (const auto name : names) data->push_back(ToNsStr(name));
         auto* view = data.get();

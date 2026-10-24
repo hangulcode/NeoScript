@@ -8,6 +8,10 @@ Embed a C-like scripting language in your game. Keep native objects in C++ or C#
 expose the methods and properties your scripts need, and drive game behavior from
 your own update loop. NeoScript includes a compiler, bytecode VM, and VS Code tooling.
 
+**Requirements:** a C++11-compatible compiler or newer. The core, public C++ API,
+C ABI, console, and mini game host support C++11. CMake builds require CMake 3.21+
+and default to C++11 unless the embedding project selects a newer standard.
+
 - **Native game objects:** bind C++ methods, properties, and script callbacks through
   a public Runtime / Program / Instance API. Compile once, create independent instances.
 - **Game-oriented math and execution:** value-type vectors and quaternions,
@@ -29,7 +33,7 @@ your own update loop. NeoScript includes a compiler, bytecode VM, and VS Code to
 
 *Offline replay of positions calculated by the C++ host; NeoScript runs natively.*
 
-The [mini game host](Samples/minigame) is a complete C++17 project with no engine
+The [mini game host](Samples/minigame) is a complete C++11 project with no engine
 checkout or graphics SDK required. Two native objects share compiled code, keep
 separate script state, and call this behavior every tick:
 
@@ -49,7 +53,7 @@ GameObject.AddEvent("OnUpdate", OnUpdate);
 The full example also shows host logging, native argument validation, per-instance
 globals, and resource cleanup. It can record positions for an offline browser replay.
 
-From the repository root, with **CMake 3.21+ and a C++17 toolchain** installed:
+From the repository root, with **CMake 3.21+ and a C++11-compatible toolchain** installed:
 
 ```sh
 cmake -S Samples/minigame -B build/minigame
@@ -394,6 +398,9 @@ Neo   : NeoScript (console.exe, Release x64)
 Lua   : Lua 5.5.0 (official Win64 binary)
 C++   : MSVC 19.51 /O2 /std:c++17 (x64)
 ```
+
+These settings describe the recorded benchmark run, including its C++ reference build.
+NeoScript's minimum supported C++ standard is C++11.
 
 Lower is better. **ms**, best of 5 in-process repetitions, minimum across 7 interleaved runs of the
 three languages. `x Neo` = how many times faster than Neo (so `1.22x` means Lua finished in 82% of

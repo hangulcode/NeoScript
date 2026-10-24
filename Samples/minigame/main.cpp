@@ -1,17 +1,120 @@
-#include "NeoScript.h"
+﻿#include "NeoScript.h"
 
 #include <array>
 #include <cmath>
-#include <filesystem>
-#include <fstream>
+#include <cerrno>
+#include <cstdio>
 #include <iomanip>
 #include <iostream>
-#include <iterator>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
-namespace fs = std::filesystem;
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <shellapi.h>
+#else
+#include <unistd.h>
+#endif
+
+#ifdef _WIN32
+static std::string ToUtf8(const std::wstring& text)
+{
+    if (text.empty()) return std::string();
+    const int size = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+        text.c_str(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
+    if (!size) throw std::runtime_error("Cannot convert path to UTF-8");
+    std::string result(size, '\0');
+    if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.c_str(),
+        static_cast<int>(text.size()), &result[0], size, nullptr, nullptr))
+        throw std::runtime_error("Cannot convert path to UTF-8");
+    return result;
+}
+
+static std::wstring FromUtf8(const std::string& text)
+{
+    if (text.empty()) return std::wstring();
+    const int size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+        text.c_str(), static_cast<int>(text.size()), nullptr, 0);
+    if (!size) throw std::runtime_error("Invalid UTF-8 path");
+    std::wstring result(size, L'\0');
+    if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.c_str(),
+        static_cast<int>(text.size()), &result[0], size))
+        throw std::runtime_error("Invalid UTF-8 path");
+    return result;
+}
+#endif
+
+static std::vector<std::string> CommandLine(int argc, char** argv)
+{
+#ifdef _WIN32
+    // 좁은 argv가 시스템 코드 페이지에서 잃은 경로 문자를 복구한다.
+    int count = 0;
+    wchar_t** nativeArgs = CommandLineToArgvW(GetCommandLineW(), &count);
+    if (!nativeArgs) throw std::runtime_error("Cannot read command line");
+    const std::unique_ptr<void, decltype(&LocalFree)> ownedArgs(nativeArgs, &LocalFree);
+    std::vector<std::string> args;
+    for (int i = 0; i < count; ++i) args.push_back(ToUtf8(nativeArgs[i]));
+    (void)argc;
+    (void)argv;
+    return args;
+#else
+    return std::vector<std::string>(argv, argv + argc);
+#endif
+}
+
+static std::string DefaultScript(const std::string& executable)
+{
+    std::string path;
+#ifdef _WIN32
+    // 실행 파일의 경로를 사용하므로 작업 폴더와 한글 경로에 영향을 받지 않는다.
+    std::vector<wchar_t> buffer(512);
+    for (;;)
+    {
+        const DWORD size = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+        if (!size) throw std::runtime_error("Cannot locate executable");
+        if (size < buffer.size())
+        {
+            path = ToUtf8(std::wstring(buffer.data(), size));
+            break;
+        }
+        buffer.resize(buffer.size() * 2);
+    }
+    (void)executable;
+    const std::string::size_type separator = path.find_last_of("/\\");
+#else
+    path = executable;
+    if (path.empty() || path[0] != '/')
+    {
+        std::vector<char> buffer(512);
+        while (!getcwd(buffer.data(), buffer.size()))
+        {
+            if (errno != ERANGE) throw std::runtime_error("Cannot read working directory");
+            buffer.resize(buffer.size() * 2);
+        }
+        path = std::string(buffer.data()) + '/' + path;
+    }
+    const std::string::size_type separator = path.find_last_of('/');
+#endif
+    return path.substr(0, separator == std::string::npos ? 0 : separator + 1) + "scripts/mover.ns";
+}
+
+static std::FILE* OpenFile(const std::string& path, bool write)
+{
+#ifdef _WIN32
+    return _wfopen(FromUtf8(path).c_str(), write ? L"wb" : L"rb");
+#else
+    return std::fopen(path.c_str(), write ? "wb" : "rb");
+#endif
+}
+
+typedef std::unique_ptr<std::FILE, int (*)(std::FILE*)> File;
+
 using namespace NeoScript;
 
 struct GameObject
@@ -82,20 +185,35 @@ static void BindInstance(IRuntime* runtime, InstanceHandle instance, void* userD
     runtime->BindGlobalObject(instance, "Services", runtime->GetObjectType("SceneServices"), nullptr);
 }
 
-static std::string ReadScript(const fs::path& path)
+static std::string ReadScript(const std::string& path)
 {
-    std::ifstream file(path, std::ios::binary);
-    if (!file) throw std::runtime_error("Cannot read script: " + path.string());
-    std::string text{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
-    if (file.bad()) throw std::runtime_error("Failed while reading script: " + path.string());
+    File file(OpenFile(path, false), &std::fclose);
+    if (!file) throw std::runtime_error("Cannot read script: " + path);
+    std::string text;
+    char buffer[8192];
+    std::size_t size;
+    while ((size = std::fread(buffer, 1, sizeof(buffer), file.get())) != 0)
+        text.append(buffer, size);
+    if (std::ferror(file.get())) throw std::runtime_error("Failed while reading script: " + path);
     if (text.compare(0, 3, "\xEF\xBB\xBF") == 0) text.erase(0, 3);
     return text;
+}
+
+static void WriteRecording(const std::string& path, const std::string& frames)
+{
+    File file(OpenFile(path, true), &std::fclose);
+    if (!file) throw std::runtime_error("Cannot write recording: " + path);
+    const std::string text = "window.neoScene = {\"fps\":60,\"frames\":[\n" + frames + "\n]};\n";
+    if (std::fwrite(text.data(), 1, text.size(), file.get()) != text.size())
+        throw std::runtime_error("Cannot write recording: " + path);
+    if (std::fclose(file.release()) != 0)
+        throw std::runtime_error("Cannot write recording: " + path);
 }
 
 class MiniGame
 {
 public:
-    // Native objects have stable addresses and outlive their script instances.
+    // 네이티브 객체는 주소를 유지하며 스크립트 인스턴스보다 오래 살아 있다.
     std::array<GameObject, 2> objects{{
         {"Red", {-2.0f, 0.0f, -0.5f}, {}, {}},
         {"Blue", {2.0f, 0.5f, 0.5f}, {}, {}}
@@ -110,14 +228,14 @@ public:
         if (!runtime) return;
         for (auto& object : objects)
         {
-            object.onUpdate = {}; // Drop retained callbacks before destroying instances.
+            object.onUpdate = {}; // 인스턴스를 없애기 전에 보관한 콜백을 해제한다.
             if (object.instance) runtime->DestroyInstance(object.instance);
         }
         if (program) runtime->DestroyProgram(program);
         DestroyRuntime(runtime);
     }
 
-    void Load(const fs::path& path)
+    void Load(const std::string& path)
     {
         const std::string source = ReadScript(path);
         RuntimeDesc desc;
@@ -125,7 +243,7 @@ public:
         runtime = CreateRuntime(desc);
         if (!runtime) throw std::runtime_error("Cannot create NeoScript runtime");
 
-        // Declare the names visible to the compiler, then register dispatchers.
+        // 컴파일러에 보이는 이름을 선언한 뒤 호출 처리 함수를 등록한다.
         NativeObjectDesc global;
         global.name = "GameObject";
         Register(global);
@@ -144,14 +262,18 @@ public:
         Register(services);
         runtime->FreezeBindings();
 
-        const std::string sourceName = path.generic_string();
+        std::string sourceName = path;
+#ifdef _WIN32
+        for (char& character : sourceName)
+            if (character == '\\') character = '/';
+#endif
         CompileDesc compile;
         compile.source = source;
         compile.sourceName = sourceName;
         compile.includeDebugInfo = true;
         const CompileResult result = runtime->Compile(compile);
         if (!result.program) throw std::runtime_error(result.error.message);
-        program = result.program; // Compile once; both objects share this program.
+        program = result.program; // 한 번 컴파일한 프로그램을 두 객체가 공유한다.
 
         for (auto& body : objects)
         {
@@ -160,7 +282,7 @@ public:
             instance.runGlobalInit = false;
             body.instance = runtime->CreateInstance(program, instance);
             if (!body.instance) ThrowLastError("Cannot create script instance");
-            // Binding has already happened; top-level code registers its callback.
+            // 바인딩이 끝났으므로 최상위 코드에서 콜백을 등록한다.
             if (runtime->RunGlobalInit(body.instance) != RunStatus::Completed)
                 ThrowLastError("Global initialization did not complete");
             if (!body.onUpdate) throw std::runtime_error("Script did not register OnUpdate");
@@ -177,7 +299,7 @@ public:
                 throw std::runtime_error(std::string(object.name) + ": OnUpdate did not complete. "
                     + call.error().message);
         }
-        runtime->CollectCycles(false); // Once per host tick, not per object.
+        runtime->CollectCycles(false); // 객체마다가 아니라 호스트 틱마다 한 번 실행한다.
     }
 
     bool Verify() const
@@ -244,17 +366,18 @@ int main(int argc, char** argv)
 {
     try
     {
-        fs::path script = fs::absolute(fs::path(argv[0])).parent_path() / "scripts/mover.ns";
-        fs::path record;
+        const std::vector<std::string> args = CommandLine(argc, argv);
+        std::string script = DefaultScript(args[0]);
+        std::string record;
         bool verify = false;
-        for (int i = 1; i < argc; ++i)
+        for (std::size_t i = 1; i < args.size(); ++i)
         {
-            const std::string arg = argv[i];
+            const std::string& arg = args[i];
             if (arg == "--verify") verify = true;
-            else if ((arg == "--script" || arg == "--record") && i + 1 < argc)
+            else if ((arg == "--script" || arg == "--record") && i + 1 < args.size())
             {
-                if (arg == "--script") script = fs::path(argv[++i]);
-                else record = fs::path(argv[++i]);
+                if (arg == "--script") script = args[++i];
+                else record = args[++i];
             }
             else if (arg == "--help")
             {
@@ -281,11 +404,8 @@ int main(int argc, char** argv)
         if (verify && !game.Verify()) return 1;
         if (!record.empty())
         {
-            std::ofstream file(record, std::ios::binary);
-            file << "window.neoScene = {\"fps\":60,\"frames\":[\n" << frames.str() << "\n]};\n";
-            file.close();
-            if (!file) throw std::runtime_error("Cannot write recording: " + record.string());
-            std::cout << "Recorded " << record.string() << ". Open viewer.html beside this file.\n";
+            WriteRecording(record, frames.str());
+            std::cout << "Recorded " << record << ". Open viewer.html beside this file.\n";
         }
         return 0;
     }

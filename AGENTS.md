@@ -24,6 +24,7 @@
 4. 리소스 이름은 소문자로 쓴다.
 5. 워킹트리를 되돌릴 때 `git checkout --` 로 남의 수정을 날리지 않는다. 계측용 수정은 백업 후 진행한다.
 6. **`switch`의 `case`는 반드시 값의 오름차순으로 배치한다.** enum은 실제 열거값 순서를 따르며, `default`는 마지막에 둔다. 재배치할 때 fallthrough 동작을 보존한다.
+7. **코어·공개 API·C ABI·콘솔·미니게임은 C++11 호환을 유지한다.** C++14 이상 전용 문법·라이브러리를 추가하지 않는다.
 
 ## 빌드 · 회귀
 
@@ -35,15 +36,14 @@
        console.exe --compiler-error-regression   (20/20)
 ```
 
-**회귀는 `Samples\console` 에서 돌린다.** 테스트가 `../../TestScript/` 를 상대 경로로 열기 때문에,
-exe 가 있는 폴더에서 돌리면 `file read error` 로 엉뚱하게 실패한다.
+**회귀는 `Samples\console` 에서 돌린다.** 테스트가 `../../TestScript/` 를 상대 경로로 열기 때문에, exe 가 있는 폴더에서 돌리면 `file read error` 로 엉뚱하게 실패한다.
 
 `--debug-smoke` 는 이전부터 실패한다(알려진 상태).
 
 **비 Windows 확인은 반드시 한다.** 과거 `_countof` 를 무방비로 써서 Linux/Android 빌드를 깬 적이 있다.
 ```
 NDK clang : %LOCALAPPDATA%\Android\Sdk\ndk\25.1.8937393\toolchains\llvm\prebuilt\windows-x86_64\bin\clang++.exe
-            --target=aarch64-linux-android24 -std=c++17 -fsyntax-only -INeoSource <각 .cpp>
+            --target=aarch64-linux-android24 -std=c++11 -Werror=c++14-extensions -Werror=c++17-extensions -fsyntax-only -INeoSource <각 .cpp>
 ```
 
 ## Unity

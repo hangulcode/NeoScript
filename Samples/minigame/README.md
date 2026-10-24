@@ -1,6 +1,6 @@
 # Mini game host: two objects, one script
 
-A small C++17 project showing an engine-style NeoScript integration. Two native
+A small C++11 project showing an engine-style NeoScript integration. Two native
 objects share one compiled program while keeping their own script globals and
 `OnUpdate` callbacks. No engine checkout, graphics SDK, or game assets are needed.
 
@@ -28,7 +28,7 @@ through frames. It works offline without a web server. Keep `scene-data.js` besi
 
 ## Build from source
 
-Requirements: CMake 3.21+, a C++17 compiler, and a C/C++ build toolchain.
+Requirements: CMake 3.21+, a C++11 compiler, and a C/C++ build toolchain.
 Windows: install Visual Studio's **Desktop development with C++** workload.
 Linux: install GCC or Clang, CMake, and your generator's build tool.
 

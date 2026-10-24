@@ -76,7 +76,7 @@ jobs:
         env:
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=11 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF "-DCMAKE_CXX_FLAGS=-Werror=c++14-extensions -Werror=c++17-extensions"
       - name: Build
         run: cmake --build build --parallel
       - name: Run smoke test

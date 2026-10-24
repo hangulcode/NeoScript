@@ -94,6 +94,7 @@ private:
 //------------------------------------------------------------------------------
 struct ProgramHandle
 {
+    constexpr ProgramHandle(uint32_t value = 0, uint32_t version = 0) noexcept : id(value), generation(version) {}
     uint32_t id = 0;
     uint32_t generation = 0;
     explicit operator bool() const noexcept { return id != 0; }
@@ -101,6 +102,7 @@ struct ProgramHandle
 
 struct InstanceHandle
 {
+    constexpr InstanceHandle(uint32_t value = 0, uint32_t version = 0) noexcept : id(value), generation(version) {}
     uint32_t id = 0;
     uint32_t generation = 0;
     explicit operator bool() const noexcept { return id != 0; }
@@ -453,6 +455,7 @@ struct CompileDefine
 // (문자열 생성 + 해시맵 할당)을 피한다. CreateDefineSet 으로 한 번 만들어 여러 CompileDesc 에 넘긴다.
 struct DefineSetHandle
 {
+    constexpr DefineSetHandle(uint32_t value = 0, uint32_t version = 0) noexcept : id(value), generation(version) {}
     uint32_t id = 0;
     uint32_t generation = 0;
     explicit operator bool() const noexcept { return id != 0; }
@@ -892,7 +895,7 @@ void GetAllocStats(AllocStats& out);
 } // namespace NeoScript
 
 //==============================================================================
-// 사용 예시 (C++17 — 지정초기화 미사용)
+// 사용 예시 (C++11)
 //==============================================================================
 #if 0
 // 반환 컬렉션 빌드 (기존 _tbl->Insert 대체) — 전부 타입드 in-place, owning Value 없음.
