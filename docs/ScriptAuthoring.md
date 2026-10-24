@@ -84,6 +84,9 @@ print((count > 0) && (count < capacity)); // true
 - For floating-point division, convert one operand with `tofloat` **before dividing**.
   `tofloat(count / capacity)` only converts the already-truncated result.
 - `float` is single precision. Converting a large integer ID to float and back may change its value.
+  Constants, assignments, and container values preserve signed zero. `0.0 == -0.0` is true,
+  but `1.0 / 0.0` is positive infinity and `1.0 / -0.0` is negative infinity.
+  The two zeros still identify the same map key.
 - Use `..`, not `+`, for string concatenation. It converts values to strings and joins them.
 - `toint`, `tofloat`, `tostring`, `tosize`, and `type` require no import.
   They are keywords and cannot be stored in variables or passed as function callbacks.
@@ -773,7 +776,7 @@ print(math.MoveToward(0.0, 10.0, 2.0)); // 2
   An index computed by a function call is evaluated once; its result is not recomputed for write-back.
   List/map/vector-array writes may use a temporary internal reference; normal reads and assignment results
   remain values. Copies still stay independent, and native properties retain their getter/setter behavior.
-  WREF pairs with an ordinary write and handles vector write-back; rebuild older compiled scripts and caches for bytecode version 0131 (also required for foreach source retention, checked shift folding, and corrected NaN branch behavior).
+  WREF pairs with an ordinary write and handles vector write-back; rebuild older compiled scripts and caches for bytecode version 0132 (also required for signed-zero constants, foreach source retention, checked shift folding, and corrected NaN branch behavior).
 - A selector immediately after an indexed assignment can still modify the assigned vector:
   `(a[0][0] = math.Vector3(1,2,3))[1] = 9` stores `(1,9,3)` in `a[0][0]`.
   Assigning the result to a separate local instead keeps ordinary vector copy semantics.

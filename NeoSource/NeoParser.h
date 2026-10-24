@@ -3,6 +3,7 @@
 #include "NeoArchive.h"
 #include "NeoVMWorker.h"
 #include "NeoTextLoader.h"
+#include <cmath>
 
 namespace NeoScript
 {
@@ -1096,7 +1097,9 @@ struct SFunctions
 			VarInfo& v2 = _staticVars[i];
 			if (VAR_FLOAT == v2.GetType())
 			{
-				if (num == v2._float)
+				// Equal zeros still have distinct observable signs in stored values.
+				if (num == v2._float &&
+					(num != 0.0 || std::signbit(num) == std::signbit(v2._float)))
 				{
 					return StaticCompileIndex(i);
 				}

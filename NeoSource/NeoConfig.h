@@ -81,7 +81,8 @@ struct debug_info
 // 0129: ordered jumps preserve logical negation for NaN; regenerate cached images.
 // 0130: checked shift counts and defined folding; rebuild images with previously folded shifts.
 // 0131: retain every foreach source on entry; regenerate previously compiled loops.
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('3' << 8) | ('1'))
+// 0132: preserve signed-zero constants; rebuild images with previously merged zeros.
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('3' << 8) | ('2'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline

@@ -28,6 +28,9 @@ Every signature and behavioural note below was verified by running it through
 - `name(arg: type, ...) -> ret`. `void` means the call evaluates to `null`.
 - `float` is `NS_FLOAT` (single precision). An `int` passed to a `float` parameter is converted
   silently; the result is still `float`.
+- Floating-point constants and stored values preserve the sign of zero. `0.0 == -0.0`
+  is true and both zeros identify the same map key; their floating-point reciprocals
+  are positive and negative infinity, respectively.
 - **Arity is exact.** A wrong argument count or type raises the runtime error
   `invalid function call`. There are no optional parameters except where an entry says so.
 - Module functions need `import` first (`import math;`). Keyword intrinsics and `print` do not.
@@ -485,7 +488,7 @@ detach on modification. Internal references do not escape the write or become sc
 Native vector properties still call their getter and setter once per successful component write.
 WREF precedes an ordinary collection write. Stored vectors consume both atomically; other values
 use normal write dispatch. Native vector properties retain a resumable getter/setter boundary.
-There is no separate vector write-back opcode. Regenerate images older than bytecode version 0131 to apply foreach source retention, checked shift folding, and corrected NaN branch semantics.
+There is no separate vector write-back opcode. Regenerate images older than bytecode version 0132 to preserve signed-zero constants and apply foreach source retention, checked shift folding, and corrected NaN branch semantics.
 A selector immediately following an indexed assignment keeps the assigned slot writable:
 `(a[0][0] = math.Vector3(1,2,3))[1] = 9` updates `a[0][0]` to `(1,9,3)`.
 Reading that result into a local still makes an independent vector value via copy-on-write.
