@@ -26,6 +26,7 @@ Every signature and behavioural note below was verified by running it through
 ## Conventions
 
 - `name(arg: type, ...) -> ret`. `void` means the call evaluates to `null`.
+- A declaration without an initializer (`var value;`) starts as `null` whenever it executes; see the [declaration rules](ScriptAuthoring.md#basics).
 - `float` is `NS_FLOAT` (single precision). An `int` passed to a `float` parameter is converted
   silently; the result is still `float`.
 - Floating-point constants and stored values preserve the sign of zero. `0.0 == -0.0`

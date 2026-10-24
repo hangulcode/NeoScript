@@ -3,6 +3,7 @@
 #include "NeoConfig.h"
 #include "NeoNumeric.h"
 #include "NeoVMHash.h"
+#include <memory>
 
 namespace NeoScript
 {
@@ -305,6 +306,7 @@ struct FunctionPropertyInfo
 	// 달라도 (등록 타입, 호스트 핸들)이 같으면 동일한 객체다. null 타입은 구 API다.
 	const void*		_identityType;
 	const void*		_identityObject;
+	std::shared_ptr<void> _payloadOwner; // 네이티브 값의 별칭들이 선택적으로 바인딩 수명을 공유한다.
 };
 
 #pragma pack(1)
@@ -737,7 +739,7 @@ public:
 	virtual bool	Run() =0;
 	// 최상위 실행/재개 (NeoExecStatus 반환). IsSuspended() 가 true 면 ResumeTop() 을 호출한다.
 	virtual int	ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args) = 0;
-	virtual int	ResumeTop() = 0;
+	virtual int	ResumeTop(bool retainCompletedResult = false) = 0;
 	virtual NeoExecutionState GetExecutionState() = 0;
 	// OOM은 이 워커의 실행 상태를 복구 불가로 만든다. 호스트는 워커를 가진
 	// 인스턴스를 폐기하거나 ResetInstance로 새 워커를 만들어야 한다.
@@ -759,6 +761,9 @@ public:
 	// 인터프리터 실행 중(네이티브 콜백 안 등)에는 컨텍스트를 해제할 수 없으므로 false 를 반환한다.
 	virtual bool CancelExecution() = 0;
 	virtual void SetTimeout(int iTimeout, int iCheckOpCount) = 0;
+	// 0은 슬라이스별 명령 제한을 해제한다. 디버거 슬라이스는 동기 콜백을 허용할 수 있다.
+	virtual void SetInstructionBudget(uint64_t budget, bool restrictNested = true) = 0;
+	virtual bool IsInterpreterRunning() const = 0;
 	virtual VarInfo* GetVar(const std::string& name) = 0;
 };
 
@@ -835,7 +840,8 @@ struct NeoVMSystem
 	static IO_Print m_pFunError;
 
 	static bool	RegisterTableCallBack(VarInfo* p, void* pUserData, Neo_NativeFunction func, Neo_NativeProperty property,
-		const void* identityType = nullptr, const void* identityObject = nullptr);
+		const void* identityType = nullptr, const void* identityObject = nullptr,
+		const std::shared_ptr<void>& payloadOwner = {});
 
 	static CNeoVM* 	CreateVM();
 	static void		ReleaseVM(CNeoVM* pVM);

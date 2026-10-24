@@ -500,7 +500,7 @@ struct neo_libs
 		if (compare->GetType() != VAR_FUN && compare->GetType() != VAR_CLOSURE) return false;
 		// The native sort cannot suspend and resume its C++ frame. Never disable
 		// a host's time limit to run a comparator: it may loop forever.
-		if (pN->m_iTimeout >= 0)
+		if (pN->IsSynchronousExecutionLimited())
 		{
 			pN->SetError("list.sort is not allowed during time-limited execution");
 			return false;
@@ -1401,7 +1401,7 @@ struct neo_libs
 		if (compare->GetType() != VAR_FUN && compare->GetType() != VAR_CLOSURE) return false;
 		// The native sort cannot suspend and resume its C++ frame. Never disable
 		// a host's time limit to run a comparator: it may loop forever.
-		if (pN->m_iTimeout >= 0)
+		if (pN->IsSynchronousExecutionLimited())
 		{
 			pN->SetError("map.sort is not allowed during time-limited execution");
 			return false;

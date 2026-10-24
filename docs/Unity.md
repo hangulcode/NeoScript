@@ -23,10 +23,13 @@ into every engine build that nothing in that build calls.
 ## Updating from an older checkout
 
 Close Unity, update the UPM sources, then rebuild the native plugin for each
-target platform. The current binding requires **C ABI 4**; an older DLL is
+target platform. The current binding requires **C ABI 5**; an older DLL is
 rejected at runtime construction with an ABI mismatch. This is the native
 binding revision, not a package or bytecode version. Recompile cached bytecode
 with the current core; old images may be rejected by its image-version check.
+ABI 5 adds `NsRuntimeTryDestroy` and `NsTryDestroyInstance`, which the managed
+binding uses to reject unsafe disposal without releasing its managed handles.
+Existing C ABI structure layouts are unchanged. Update the package and plugin together.
 
 The binding now exposes the shared JSON codec, collection null/native-object
 checks, storage identity and string-key enumeration. See the examples below.
@@ -42,6 +45,7 @@ not need separate C# implementations. See [API.md](API.md).
 ```powershell
 pwsh Unity\build_windows.ps1                 # editor + Win64 player
 pwsh Unity\build_android.ps1                 # arm64-v8a
+pwsh Unity\build_android.ps1 -Abi armeabi-v7a
 ```
 
 ```bash
@@ -110,6 +114,17 @@ program?.Dispose();
 runtime?.Dispose();
 ```
 
+`NeoInstance.Dispose()` and `NeoRuntime.Dispose()` throw `NeoException` while
+an invocation or executing callback still needs the target. Rejection leaves
+the native owner, managed wrapper, binding slots, and GC handles intact. Finish
+or abandon outstanding calls, return from callbacks, then retry disposal.
+`NeoInstance.Reset()` returns `false` under the same active-use guard; successful
+reset preserves the original `runGlobalInit` creation setting.
+
+For direct C ABI use, `NsTryDestroyInstance` and `NsRuntimeTryDestroy` return
+`0` on refusal and `1` on success. The existing void destroy functions delegate
+to the same guard. They do not queue a deferred destruction.
+
 ## Exposing a C# object to script
 
 `INeoObject` receives every method through one dispatcher. Implement
@@ -149,8 +164,12 @@ var t = Unity.time;
 comparing with `method.ToString()` allocates once per call and piles up garbage
 every frame. Compare with `Is()`, which does not allocate.
 
-`Vector2/3/4` and `Quaternion` are VM value types, so they cross to the Unity
-types as-is. There is no conversion cost.
+`Vector2/3/4` and `Quaternion` are VM value types. Vector helpers preserve
+component order. Script quaternions use **w,x,y,z**, while Unity's constructor
+uses **x,y,z,w**: `ArgQuaternion`, `NeoResult.AsQuaternion`, and `Return(Quaternion)`
+reorder those four components. For example, `math.Quaternion(1,2,3,4)` becomes
+`new Quaternion(2,3,4,1)` in Unity. Raw `Vector4` helpers and array views preserve
+script order, including when the four components represent a quaternion.
 
 ## Constraints worth knowing up front
 
@@ -168,10 +187,29 @@ most one live call at a time (a nested native-to-script call is the exception).
 nothing is copied. Carry one outside its dispatcher call or its `InvokeReadMap`
 callback and it points at dead memory. Copy out what you need while inside.
 
+At the lower C ABI level, `NsCallRetMap`, `NsCallRetList`, `NsCallRetArray`,
+their descendant handles, and borrowed key descriptor arrays belong to the
+issuing `NsCall`. Calls on different instances can interleave and end in either
+order without invalidating one another's readers. Repeated return-reader access
+within the same call preserves earlier readers. End that call with `NsCallEnd`
+before destroying its instance. Starting another call on the same instance
+invalidates the earlier borrowed return. Native-dispatch and `InvokeRead*`
+callback readers still expire when their issuing callback returns.
+
 ```csharp
 int gold = 0;
 instance.Call("GetInventory").InvokeReadMap(map => map.TryGet("gold", out gold));
 ```
+
+**Native object aliases retain their source instance identity.** When a native
+object is shared into another instance, directly or inside a map/list, its
+callback still identifies the source instance. Resetting or destroying that
+source invalidates old native aliases; a later method/property access fails
+instead of using a released binding. A successful reset creates fresh bindings
+for newly obtained objects. This does not transfer ownership of host `userData`.
+Object-type tokens belong to their runtime, are invalid after its destruction,
+and are rejected by C ABI operations targeting another runtime. Repeated type
+lookup in a live runtime returns the same token.
 
 **At most 64 native object types can be registered.** The VM's dispatcher is a
 bare function pointer with nowhere to carry context, so each type needs its own
@@ -244,6 +282,11 @@ to special-case.
 | Windows player x64 (**IL2CPP**) | `NeoScript.dll` | same | yes — PlayMode tests pass inside the built player |
 | Android arm64-v8a (**IL2CPP**) | `libNeoScript.so` | same | APK verified structurally; never run on a device |
 | iOS arm64 | `libNeoScriptUnity.a` | `DllImport("__Internal")` — dynamic loading is forbidden, so it links statically | no — needs macOS with Xcode |
+
+The Android build script also accepts `-Abi armeabi-v7a` and `-Abi x86_64`.
+Managed layout verification selects the expected native sizes from `IntPtr.Size`,
+so 32-bit ARMv7 does not use the 64-bit structure sizes. This layout support does
+not imply device testing of those targets.
 
 The IL2CPP run matters more than the platform it ran on. iOS has no alternative
 to IL2CPP, and AOT adds steps Mono never takes: generating reverse P/Invoke
@@ -469,7 +512,14 @@ than inside a P/Invoke host.
 cmake -S . -B build\unity -A x64
 cmake --build build\unity --config Release --target neoscript_c_abi_smoke
 build\unity\Release\neoscript_c_abi_smoke.exe
+cmake --build build\unity --config Release --target neoscript_host_c_abi_regression
+build\unity\Release\neoscript_host_c_abi_regression.exe
 ```
+
+The host C ABI regression covers interleaved borrowed readers, invalid calls,
+object-type ownership, disposal guards, and native structure sizes. The managed
+smoke suite also checks Quaternion conversion, raw Vector4 order, layout
+verification, and rejected disposal from a callback.
 
 On the Unity side there are three suites, because each is blind to what the
 others catch. The edit-mode smoke test sweeps the whole binding surface.

@@ -243,8 +243,8 @@ static void CheckSortSliced(IRuntime* runtime, bool debug)
             untouched = runtime->GetGlobalInt(instance, "calls", calls) && calls==0;
             if (rejected)
             {
-                // Explicitly clear the worker's retained time-limit setting.
-                const bool started = runtime->StartSliced(instance, "Verify", -1, 10);
+                // 시간 제한(-1)과 명령 수 제한(0)을 모두 무제한으로 되돌려 같은 목록을 정렬한다.
+                const bool started = runtime->StartSliced(instance, "Verify", -1, 0);
                 int32_t verified = 0;
                 reusable = started && !runtime->IsRunning(instance)
                     && runtime->GetGlobalInt(instance, "verified", verified) && verified==1;

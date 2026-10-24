@@ -4695,7 +4695,10 @@ bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport,
     {
         const int slot = AddLocalVarName(ar, funs, vars, blExport, blPublic, name);
         if (slot == -1) return false;
-        funs._cur->Push_OP1(ar, NOP_VAR_CLEAR, slot);
+        if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME)
+            funs._cur->Push_OP1(ar, NOP_VAR_CLEAR, slot);
+        else
+            funs._cur->Push_DeclarationClear(ar, slot);
         return true;
     }
     if (next != TK_EQUAL)
@@ -5563,18 +5566,223 @@ static bool IsRelativeJumpOp(eNOperation op)
 	switch (op)
 	{
 	case NOP_JMP:			case NOP_JMP_FALSE:		case NOP_JMP_TRUE:
-	case NOP_JMP_GREAT:		case NOP_JMP_GREAT_EQ:
-	case NOP_JMP_LESS:		case NOP_JMP_LESS_EQ:
-	case NOP_JMP_EQUAL2:	case NOP_JMP_NEQUAL:
+	case NOP_JMP_GREAT:		case NOP_JMP_GREAT_L:
+	case NOP_JMP_GREAT_EQ:	case NOP_JMP_GREAT_EQ_L:
+	case NOP_JMP_LESS:		case NOP_JMP_LESS_L:
+	case NOP_JMP_LESS_EQ:	case NOP_JMP_LESS_EQ_L:
+	case NOP_JMP_EQUAL2:	case NOP_JMP_EQUAL2_L:
+	case NOP_JMP_NEQUAL:	case NOP_JMP_NEQUAL_L:
 	case NOP_JMP_AND:		case NOP_JMP_OR:
 	case NOP_JMP_NAND:		case NOP_JMP_NOR:
 	case NOP_JMP_FOR:		case NOP_JMP_FOREACH:
 	case NOP_JMP_RANGE_INSIDE:	case NOP_JMP_RANGE_OUTSIDE:
+	case NOP_JMP_RANGE_INSIDE_L:	case NOP_JMP_RANGE_OUTSIDE_L:
 		return true;
 	default:
 		return false;
 	}
 	// NOP_SWITCH 는 offset 이 n1 이 아니라 테이블에 있으므로 제외.
+}
+
+// 참조 해제를 늦추기 전후로 달라질 수 있는 전역과 확인하지 못한 슬롯은 사용으로 본다.
+static bool IsLocalInitializationReadSafe(const SFunctions& funs, int operand, short candidateSlot)
+{
+	if (operand == candidateSlot)
+		return false;
+	const int args = (int)funs._cur->_args.size();
+	if (operand > 0 && operand < COMPILE_LOCALTMP_VAR_BEGIN)
+		return operand <= args + funs._cur->_localVarCount;
+	if (operand >= COMPILE_LOCALTMP_VAR_BEGIN && operand < COMPILE_STATIC_VAR_BEGIN)
+		return operand >= COMPILE_LOCALTMP_VAR_BEGIN + 1 + args &&
+			operand < COMPILE_LOCALTMP_VAR_BEGIN + 1 + args + funs._cur->_localTempMax;
+	if (operand >= COMPILE_STATIC_VAR_BEGIN && operand < COMPILE_CALLARG_VAR_BEGIN)
+		return (size_t)(operand - COMPILE_STATIC_VAR_BEGIN) < funs._staticVars.size();
+	return false;
+}
+
+// 다른 슬롯의 쓰기도 이전 참조를 해제할 수 있으므로 통과시키지 않는다.
+// 명시한 단순 덮어쓰기와 읽기 전용 분기 외에는 모두 사용 여부를 모르는 장벽이다.
+static bool IsLocalNullOverwritten(const SFunctions& funs, const SVMOperation* ops, int count,
+	int candidate, std::vector<int>& visited, int stamp, int& remainingVisits)
+{
+	const short slot = ops[candidate].n1;
+	std::vector<int> pending;
+	pending.push_back(candidate + 1);
+	int candidateVisits = 0;
+	while (pending.empty() == false)
+	{
+		const int i = pending.back();
+		pending.pop_back();
+		if (i < 0 || i >= count)
+			return false;
+		if (visited[i] == stamp)
+			continue;
+		if (++candidateVisits > 4096 || remainingVisits-- <= 0)
+			return false;
+		visited[i] = stamp;
+		const SVMOperation& op = ops[i];
+		bool conditional = false;
+		switch (op.op)
+		{
+		case NOP_MOV:
+			if (op.n1 != slot || ((op.argFlag & NEOS_ARG_N2_IMMEDIATE) == 0 &&
+				!IsLocalInitializationReadSafe(funs, op.n2, slot)))
+				return false;
+			continue;
+		case NOP_MOVI:
+		case NOP_MOVF:
+			if (op.n1 != slot)
+				return false;
+			continue;
+		case NOP_LOADK:
+			if (op.n1 != slot || op.n23 < 0 || (size_t)op.n23 >= funs._staticVars.size())
+				return false;
+			continue;
+		case NOP_VAR_CLEAR:
+			if (op.n1 != slot)
+				return false;
+			continue;
+		case NOP_JMP:
+			break;
+		case NOP_JMP_FALSE:
+		case NOP_JMP_TRUE:
+			if (!IsLocalInitializationReadSafe(funs, op.n2, slot))
+				return false;
+			conditional = true;
+			break;
+		case NOP_JMP_GREAT:
+		case NOP_JMP_GREAT_EQ:
+		case NOP_JMP_LESS:
+		case NOP_JMP_LESS_EQ:
+		case NOP_JMP_EQUAL2:
+		case NOP_JMP_NEQUAL:
+		case NOP_JMP_AND:
+		case NOP_JMP_OR:
+		case NOP_JMP_NAND:
+		case NOP_JMP_NOR:
+			if (!IsLocalInitializationReadSafe(funs, op.n2, slot) ||
+				!IsLocalInitializationReadSafe(funs, op.n3, slot))
+				return false;
+			conditional = true;
+			break;
+		case NOP_JMP_RANGE_INSIDE:
+		case NOP_JMP_RANGE_OUTSIDE:
+		{
+			const size_t rangeIndex = (u16)op.n3;
+			if (rangeIndex >= funs._rangeJumps.size())
+				return false;
+			const SRangeJumpCompile& range = funs._rangeJumps[rangeIndex];
+			if (range._ownerFunction != funs._cur->_funID ||
+				!IsLocalInitializationReadSafe(funs, op.n2, slot) ||
+				!IsLocalInitializationReadSafe(funs, range._lower, slot) ||
+				!IsLocalInitializationReadSafe(funs, range._upper, slot))
+				return false;
+			conditional = true;
+			break;
+		}
+		default:
+			return false;
+		}
+		// 뒤로 향하는 경로와 함수 끝은 덮어쓰기를 보장하지 못한다.
+		const int target = i + 1 + op.n1;
+		if (target <= i || target >= count)
+			return false;
+		pending.push_back(target);
+		if (conditional)
+			pending.push_back(i + 1);
+	}
+	return true;
+}
+
+static void RemoveRedundantLocalInitializations(SFunctions& funs, u8* code, int& codeSize)
+{
+	const int count = codeSize / (int)sizeof(SVMOperation);
+	SVMOperation* ops = (SVMOperation*)code;
+	std::vector<int> candidates;
+	for (int i = 0; i < count; ++i)
+	{
+		SVMOperation& op = ops[i];
+		if (op.op != NOP_VAR_CLEAR || (op.argFlag & SFunctionInfo::DECLARATION_CLEAR_FLAG) == 0)
+			continue;
+		if (op.n1 > (int)funs._cur->_args.size() && op.n1 < COMPILE_LOCALTMP_VAR_BEGIN && op.n1 == op.n2)
+			candidates.push_back(i);
+		// 분석을 생략하거나 예산이 소진되어도 컴파일 전용 표시는 반드시 제거한다.
+		op.argFlag &= ~SFunctionInfo::DECLARATION_CLEAR_FLAG;
+		op.n2 = 0;
+	}
+	if (candidates.empty() || funs._cur->_pDebugData != nullptr || funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME)
+		return;
+
+	std::vector<int> visited(count, 0);
+	std::vector<u8> remove(count, 0);
+	int remainingVisits = 128 * 1024;
+	int removed = 0;
+	for (size_t c = 0; c < candidates.size() && remainingVisits > 0; ++c)
+	{
+		if (IsLocalNullOverwritten(funs, ops, count, candidates[c], visited, (int)c + 1, remainingVisits))
+		{
+			remove[candidates[c]] = 1;
+			++removed;
+		}
+	}
+	if (removed == 0)
+		return;
+
+	// 다른 구간의 점프도 삭제된 명령을 가로지를 수 있다. 수정 전에 모든 대상을 확인한다.
+	for (int i = 0; i < count; ++i)
+	{
+		if (IsRelativeJumpOp(ops[i].op))
+		{
+			const int target = i + 1 + ops[i].n1;
+			if (target < 0 || target > count)
+				return;
+		}
+		else if (ops[i].op == NOP_SWITCH)
+		{
+			const size_t tableIndex = (u16)ops[i].n1;
+			if (tableIndex >= funs._switchTables.size())
+				return;
+			const SSwitchTableCompile& table = funs._switchTables[tableIndex];
+			const int base = i + 1;
+			if (table._defaultOffset < -base || table._defaultOffset > count - base)
+				return;
+			for (size_t c = 0; c < table._cases.size(); ++c)
+				if (table._cases[c]._jumpOffset < -base || table._cases[c]._jumpOffset > count - base)
+					return;
+		}
+	}
+
+	std::vector<int> remap(count + 1);
+	int next = 0;
+	for (int i = 0; i < count; ++i)
+	{
+		remap[i] = next;
+		if (remove[i] == 0)
+			++next;
+	}
+	remap[count] = next;
+	for (int i = 0; i < count; ++i)
+	{
+		if (remove[i])
+			continue;
+		SVMOperation op = ops[i];
+		if (IsRelativeJumpOp(op.op))
+			op.n1 = (short)(remap[i + 1 + op.n1] - (remap[i] + 1));
+		else if (op.op == NOP_SWITCH)
+		{
+			SSwitchTableCompile& table = funs._switchTables[(u16)op.n1];
+			const int oldBase = i + 1;
+			const int newBase = remap[i] + 1;
+			table._defaultOffset = remap[oldBase + table._defaultOffset] - newBase;
+			for (size_t c = 0; c < table._cases.size(); ++c)
+				table._cases[c]._jumpOffset = remap[oldBase + table._cases[c]._jumpOffset] - newBase;
+		}
+		ops[remap[i]] = op;
+	}
+	// 이후에는 본문을 더 생성하지 않는다. 기존 위치로 된 peephole 정보도 남기지 않는다.
+	funs._cur->_jumpTargetOffsets.clear();
+	funs._cur->ClearLastOP();
+	codeSize = next * (int)sizeof(SVMOperation);
 }
 
 // 값을 읽는 오퍼랜드 중 (a) static 상수가 올 수 있고 (b) _L 변형이 있어 승격 이득이 나는
@@ -5736,6 +5944,8 @@ void FinalizeFuction(SFunctions& funs)
 
 	funs._codeTemp.SetBufferOffset(iCode_Begin);
 	u8* pSrc = (u8*)funs._codeTemp.GetDataCurrent();
+
+	RemoveRedundantLocalInitializations(funs, pSrc, funs._cur->_iCode_Size);
 
 	// 루프 상수를 hidden 지역변수로 올리고 본문 참조를 재작성한다(제자리 수정).
 	// 점프가 op 단위 상대라 앞에 프롤로그를 붙여도 함수 내부 점프는 보정이 필요 없다.

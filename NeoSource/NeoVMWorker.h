@@ -94,6 +94,8 @@ private:
 	int m_iTimeout = -1;
 	int m_iCheckOpCount = NEO_DEFAULT_CHECKOP;
 	int m_op_process = 0;
+	uint64_t m_instructionBudget = 0;
+	bool m_budgetRestrictsNested = true;
 	bool m_bSliceExpired = false; // 시간 제한으로 다음 ResumeTop까지 보류됨
 	int m_iBreakingCallStack = 0;
 	bool m_bTopExec = false;   // 최상위 실행/재개 중(=완료까지 실행)인지
@@ -121,10 +123,21 @@ private:
     EDebugRunMode m_eDebugRunMode = DBG_CONTINUE;
     bool m_bDebugPauseRequested = false;
 	bool m_bDebugFaulted = false;
-    int m_iDebugSkipFile = -1;
-    int m_iDebugSkipLine = -1;
-    int m_iDebugSkipOpIndex = -1;
+    struct DebugLineSkip
+    {
+        CoroutineInfo* context;
+        int depth;
+        int file;
+        int line;
+        int lastOp;
+        int stoppedOp;
+    };
+    std::vector<DebugLineSkip> m_sDebugLineSkips;
     int m_iDebugStepDepth = -1;
+    void PruneDebugLineSkips(CoroutineInfo* context, int maxDepth);
+    CoroutineInfo* m_pDebugStepContext = nullptr;
+    CoroutineInfo* m_pDebugStepReturnContext = nullptr;
+    void PrepareDebugResume(EDebugRunMode mode);
     int m_iDebugSuppressCount = 0;
     // Script A -> native API -> Script B 동기 재진입 범위에서만 증가한다.
     int m_iNativeScriptCallDepth = 0;
@@ -261,7 +274,7 @@ private:
 	void    ReleaseCoroutineClosuresWithoutSync(CoroutineInfo* pCI);
 	void    UnwindActiveClosures();                    // return을 거치지 않는 error/cancel 정리
 	void    ReleaseExecution(bool discardParkedClosuresWithoutSync = false); // 최상위 실행 컨텍스트를 풀로 반납
-	int     RunSettle();                                // Run() 후 완료/정지/에러 판정 (NeoExecStatus)
+	int     RunSettle(bool retainCompletedResult = false);                                // Run() 후 완료/정지/에러 판정 (NeoExecStatus)
 	void    PoisonOutOfMemory() noexcept { m_bOutOfMemoryPoisoned = true; }
 	NEOS_NOINLINE bool ReportRunException();
 
@@ -284,7 +297,7 @@ private:
 	virtual bool	Setup(int iFunctionID, std::vector<VarInfo>& _args) override;
 	virtual bool	Run() override;
 	virtual int	ExecuteTop(int iFunctionID, std::vector<VarInfo>& _args) override;
-	virtual int	ResumeTop() override;
+	virtual int	ResumeTop(bool retainCompletedResult = false) override;
 	virtual NeoExecutionState GetExecutionState() override;
 	virtual bool IsOutOfMemoryPoisoned() const override { return m_bOutOfMemoryPoisoned; }
 	virtual bool IsSuspended() override;
@@ -294,6 +307,7 @@ private:
 	virtual void EndNestedScriptCall() override;
 	virtual int RunHostCall(int iFunctionID, std::vector<VarInfo>& _args, VarInfo* closureValue = nullptr) override;
 	virtual bool CancelExecution() override;
+	virtual bool IsInterpreterRunning() const override { return m_bInRun; }
 
 	template<bool TIMEOUT, bool DEBUG>
 	bool	RunInternal(int iBreakingCallStack);
@@ -329,9 +343,16 @@ private:
 public:
 	NEOS_FORCEINLINE CNeoVM* GetVM() { return _pVM;  }
 	bool IsNativeScriptCallActive() const { return m_iNativeScriptCallDepth > 0; }
+	bool IsSynchronousExecutionLimited() const {
+		return m_iTimeout >= 0 || (m_instructionBudget != 0 && m_budgetRestrictsNested);
+	}
+	virtual void SetInstructionBudget(uint64_t budget, bool restrictNested = true) override {
+		m_instructionBudget = budget;
+		m_budgetRestrictsNested = restrictNested;
+	}
 	virtual void SetTimeout(int iTimeout, int iCheckOpCount) override {
 		m_iTimeout = iTimeout;
-		m_iCheckOpCount = iCheckOpCount;
+		m_iCheckOpCount = iCheckOpCount > 0 ? iCheckOpCount : NEO_DEFAULT_CHECKOP;
 	}
 private:
 

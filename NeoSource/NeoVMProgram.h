@@ -46,6 +46,7 @@ struct SFunctionTable
 	short				_localTempMax;
 	int					_localVarCount;
 	int					_localAddCount; // No Save (로드 시 계산)
+	int					_stackSlotCount; // 로드 시 계산한 쓰기 범위. 다음 호출의 인자 슬롯까지 포함한다.
 	FUNCTION_TYPE		_funType;
 	// 익명 함수 생성 시 부모 프레임에서 복사할 슬롯과, 호출 프레임에서
 	// 값을 받을 숨은 지역 슬롯. 캡처가 없으면 빈 벡터라 기존 함수 호출은
@@ -117,6 +118,7 @@ class CNeoVMProgram
 	CNeoVMProgram& operator=(const CNeoVMProgram&) = delete;
 
 	bool Load(CNArchive& ar, std::string* err);
+	bool VerifyCode(const std::vector<int>& codeOwners, std::string* err);
 	// PTRCALL2(native 이름) → NATIVECALL(native index) / intrinsic opcode 치환.
 	// Create() 안에서 딱 한 번만 실행된다.
 	void PatchNativeCalls();

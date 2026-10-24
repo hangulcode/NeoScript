@@ -59,6 +59,11 @@ print(Describe(label, count));     // apple: 3
 print(optional == null);          // true
 ```
 
+A declaration without an initializer starts as `null` each time execution reaches it, including
+inside a loop. In builds without debug information, the compiler may omit this initialization
+when every analyzed path assigns a value before it can be read or observed. Debug builds retain
+the initialization so the variable is shown as `null` when inspected before assignment.
+
 Common operators include arithmetic `+ - * / %`, comparisons `== != < <= > >=`, logical `&& ||`,
 and bitwise `& | ^ ~ << >>`. Assignment, `+= -= *= /= %=`, and `++ --` are also available.
 Use explicit comparisons in logical expressions and parentheses to make mixed operations clear.

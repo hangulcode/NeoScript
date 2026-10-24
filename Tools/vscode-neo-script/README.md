@@ -45,6 +45,26 @@ Supported debugger actions:
 - Variables
 - Runtime exception stop and `exceptionInfo`
 
+The adapter runs bounded VM slices on its request thread, so pause, disconnect, and input
+closure are handled between slices even during a script loop. Native callbacks must return
+before the adapter can process another request. Runtime faults retain a read-only snapshot
+for stack, variable, and exception inspection until the session is disconnected or relaunched.
+
+Stepping respects explicit breakpoints in called functions. Step over follows the caller across
+coroutine execution; step out can return to a coroutine's resumer. Only unconditional line
+breakpoints are supported. Conditional breakpoints, hit conditions, and logpoints are returned
+as unverified instead of being treated as ordinary breakpoints.
+
+Variable snapshots limit expansion depth, container items, nodes, and text size. Repeated or
+cyclic container references are summarized without further expansion, and repeated hover
+requests reuse the paused snapshot. At most 64 stack frames are exposed; each frame has a
+1,024-value traversal budget, 64 KiB text budget, and a 4,096-byte per-string display limit.
+Globals are included when inspecting any frame, with locals taking precedence for evaluation.
+Debug line numbers are limited to 65,535 by the bytecode format. The adapter accepts framed
+JSON bodies up to 8 MiB. UTF-8 paths/output and LSP UTF-16 character positions are supported.
+
+`libPath` defaults to `Lib` inside `cwd`. Set it explicitly if the libraries live elsewhere.
+
 ## Editing
 
 The extension includes TextMate highlighting, snippets, and completion for common Neo Script patterns.
@@ -66,3 +86,15 @@ Common snippets include:
 - `if`
 - `import`
 - `print`
+
+
+## Adapter regression checks
+
+After building the console, run the bounded DAP/LSP protocol checks with Python 3:
+
+```powershell
+python Tests/debug_adapter_regression.py Samples/console/x64/Release/console.exe
+```
+
+The checks drive the adapter over standard input/output, including Unicode paths,
+stepping, coroutine transitions, paused variable snapshots, faults, and cancellation.

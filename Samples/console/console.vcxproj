@@ -292,7 +292,10 @@ exit /b 0</Command>
     <ClCompile Include="neov2_smoke.cpp" />
     <ClCompile Include="callback.cpp" />
     <ClCompile Include="cycle_ref.cpp" />
-    <ClCompile Include="console.cpp" />
+    <ClCompile Include="console.cpp">
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="etc.cpp" />
     <ClCompile Include="map_callback.cpp" />
     <ClCompile Include="slice_run.cpp" />

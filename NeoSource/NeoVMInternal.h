@@ -990,7 +990,7 @@ public:
 	// MapNode/SetNode 자체는 컬렉션별 연속 배열에 있고, key/value는 안정 주소의 별도 풀에 둔다.
 	CNVMAllocPool < MapData, 256> m_sPool_TableData;
 	CNVMAllocPool< MapInfo, 64> m_sPool_TableInfo;
-	CNVMAllocPool< FunctionPropertyInfo, 64> m_sPool_FunctionProperty;
+	CNVMInstPool< FunctionPropertyInfo, 64> m_sPool_FunctionProperty;
 	CNVMAllocPool < SetData, 256> m_sPool_SetData;
 	CNVMAllocPool< SetInfo, 32> m_sPool_SetInfo;
 	CNVMAllocPool< ListInfo, 64> m_sPool_ListInfo;

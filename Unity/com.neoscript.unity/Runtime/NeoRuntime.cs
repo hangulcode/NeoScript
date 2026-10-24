@@ -204,8 +204,9 @@ namespace NeoScript
                 return;
             // 네이티브는 런타임이 죽을 때 디스패치 슬롯을 놓아 준다. 관리 쪽 대상 테이블도
             // 같이 비워야 죽은 객체를 붙잡지 않는다 (유니티 도메인 리로드마다 반복된다).
+            if (NeoNative.NsRuntimeTryDestroy(_handle) == 0)
+                throw new NeoException("Cannot dispose a runtime while an invocation or execution is active.");
             ReleaseSlots();
-            NeoNative.NsRuntimeDestroy(_handle);
             _handle = IntPtr.Zero;
             _objectTypes.Clear();
             s_live.Remove(this);

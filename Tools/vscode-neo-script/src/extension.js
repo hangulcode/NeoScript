@@ -123,7 +123,7 @@ class NeoScriptDebugConfigurationProvider {
 
     config.program = resolveVariables(config.program, folder);
     config.cwd = resolveVariables(config.cwd || "${workspaceFolder}", folder);
-    config.libPath = resolveVariables(config.libPath, folder);
+    config.libPath = resolveVariables(config.libPath, folder) || path.join(config.cwd || path.dirname(config.program), "Lib");
     config.adapterPath = findAdapterPath(this.context, folder, config.adapterPath);
 
     if (!config.program) {

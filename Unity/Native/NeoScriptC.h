@@ -53,7 +53,7 @@ extern "C" {
 // ABI 버전. 구조체 레이아웃이나 함수 시그니처가 바뀌면 올린다. 바인딩(C#)은 기동 시
 // NsGetAbiVersion() 으로 확인해서 어긋나면 바로 실패시킬 것 — 조용한 메모리 깨짐보다 낫다.
 //------------------------------------------------------------------------------
-#define NS_ABI_VERSION 4
+#define NS_ABI_VERSION 5
 
 // 한 프로세스에서 등록할 수 있는 네이티브 객체 타입 수. 디스패처가 컨텍스트 없는
 // 함수 포인터라 슬롯마다 고정 썽크가 필요해서 상한이 있다.
@@ -76,7 +76,8 @@ typedef struct NsArrayView   NsArrayView;
 typedef uint64_t NsProgram;
 typedef uint64_t NsInstance;
 typedef uint64_t NsDefineSet;
-// 런타임이 보유한 ObjectType 테이블의 1-기반 인덱스. 0 이면 무효.
+// 런타임 소유 ObjectType 토큰. 런타임 파괴 후 무효이며 재사용하지 않는다.
+// 다른 런타임의 토큰은 거부한다. 0은 무효다.
 typedef uint32_t NsObjectType;
 
 //------------------------------------------------------------------------------
@@ -284,6 +285,9 @@ NS_API void NS_CALL NsSinkWrite(void* sink, const void* data, int32_t len);
 //==============================================================================
 NS_API NsRuntime* NS_CALL NsRuntimeCreate(const NsRuntimeDesc* desc);
 NS_API void       NS_CALL NsRuntimeDestroy(NsRuntime* rt);
+// 살아 있는 호출이나 실행이 있으면 아무것도 해제하지 않고 0을 반환한다.
+// 기존 void 파괴 함수도 이때 소유 객체를 그대로 유지한다.
+NS_API int32_t    NS_CALL NsRuntimeTryDestroy(NsRuntime* rt);
 NS_API void       NS_CALL NsRuntimeSetLibPath(NsRuntime* rt, const char* path, int32_t len);
 
 // 성공하면 1 을 반환하고 *outSlot 에 타입 슬롯을 채운다. 슬롯이 동나거나 Freeze 이후면 0.
@@ -328,6 +332,7 @@ NS_API int32_t     NS_CALL NsFunctionValid(NsFunction* fn);
 //==============================================================================
 NS_API NsInstance NS_CALL NsCreateInstance(NsRuntime* rt, NsProgram program, const NsInstanceDesc* desc);
 NS_API void       NS_CALL NsDestroyInstance(NsRuntime* rt, NsInstance inst);
+NS_API int32_t    NS_CALL NsTryDestroyInstance(NsRuntime* rt, NsInstance inst);
 NS_API int32_t    NS_CALL NsIsAlive(NsRuntime* rt, NsInstance inst);
 NS_API int32_t    NS_CALL NsResetInstance(NsRuntime* rt, NsInstance inst);
 NS_API int32_t    NS_CALL NsGetState(NsRuntime* rt, NsInstance inst);
@@ -369,6 +374,9 @@ NS_API int32_t NS_CALL NsSetGlobalString(NsRuntime* rt, NsInstance inst, const c
 //   NsCallEnd(c);                       // ← 반드시. 인스턴스의 실행 컨텍스트를 반납한다.
 //
 // NsCallEnd 는 인스턴스가 파괴되기 전에 불려야 한다.
+// 서로 다른 인스턴스의 호출은 교차 실행하고 임의 순서로 종료해도 된다.
+// 반환 컬렉션 핸들과 하위 핸들은 자신을 발급한 호출에 속한다.
+// 유효한 호출을 준비할 수 없으면 NsCallBegin/Name은 NULL을 반환한다.
 //==============================================================================
 NS_API NsCall* NS_CALL NsCallBegin(NsRuntime* rt, NsInstance inst, NsFunction* fn);
 NS_API NsCall* NS_CALL NsCallBeginName(NsRuntime* rt, NsInstance inst, const char* name, int32_t len);

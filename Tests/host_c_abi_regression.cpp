@@ -1,0 +1,209 @@
+#include "NeoScriptC.h"
+#include <cstdio>
+#include <cstring>
+#include <vector>
+
+#if UINTPTR_MAX == UINT64_MAX
+static_assert(sizeof(NsStr)==16 && sizeof(NsError)==48 && sizeof(NsJsonResult)==48, "64-bit string layouts");
+static_assert(sizeof(NsCallResult)==48 && sizeof(NsRuntimeDesc)==64 && sizeof(NsObjectDesc)==40, "64-bit call layouts");
+static_assert(sizeof(NsDefine)==40 && sizeof(NsCompileDesc)==80 && sizeof(NsInstanceDesc)==16, "64-bit descriptors");
+#else
+static_assert(sizeof(NsStr)==12 && sizeof(NsError)==40 && sizeof(NsJsonResult)==36, "32-bit string layouts");
+static_assert(sizeof(NsCallResult)==44 && sizeof(NsRuntimeDesc)==40 && sizeof(NsObjectDesc)==32, "32-bit call layouts");
+static_assert(sizeof(NsDefine)==32 && sizeof(NsCompileDesc)==64 && sizeof(NsInstanceDesc)==12, "32-bit descriptors");
+#endif
+static_assert(sizeof(NsAllocStats)==64, "allocation statistics layout");
+
+static int checks=0, failures=0;
+static void Check(bool ok,const char* label) { ++checks; if(!ok){++failures; std::printf("FAIL: %s\n",label);} }
+static NsStr Str(const char* p) { return {p,static_cast<int32_t>(std::strlen(p)),0}; }
+static bool Name(const char* p,int32_t n,const char* q) { return n==static_cast<int32_t>(std::strlen(q)) && std::memcmp(p,q,n)==0; }
+struct Host
+{
+    NsRuntime* rt=nullptr;
+    NsInstance instance=0;
+    NsObjectType type=0;
+    NsCall* retained=nullptr;
+    NsMapReader* fromCallback=nullptr;
+};
+static int32_t NS_CALL Method(void* user,int32_t,NsContext* ctx,const char* name,int32_t len)
+{
+    Host& host=*static_cast<Host*>(user);
+    if(Name(name,len,"Value")){NsCtxRetInt(ctx,77);return 1;}
+    if(Name(name,len,"Object")){NsCtxRetObject(ctx,host.type,nullptr);return 1;}
+    if(Name(name,len,"Objects"))
+    {
+        NsMapBuilder* map=NsCtxRetMap(ctx);
+        NsMapSetObject(map,"obj",3,host.type,nullptr);
+        NsListBuilder* list=NsMapSetList(map,"list",4);
+        NsListPushObject(list,host.type,nullptr);
+        NsMapSetInt(NsListPushMap(list),"n",1,9);
+        return 1;
+    }
+    if(Name(name,len,"Dispose"))
+    {
+        Check(NsRuntimeTryDestroy(host.rt)==0,"active runtime destruction refused");
+        Check(NsTryDestroyInstance(host.rt,host.instance)==0,"active instance destruction refused");
+        NsRuntimeDestroy(host.rt);
+        NsDestroyInstance(host.rt,host.instance);
+        Check(NsIsAlive(host.rt,host.instance)!=0,"void destroy also retains active owner");
+        NsCtxRetInt(ctx,13);
+        return 1;
+    }
+    if(Name(name,len,"ReadOther"))
+    {
+        host.fromCallback=NsMapGetMap(NsCallRetMap(host.retained),"child",5);
+        NsCtxRetInt(ctx,5);
+        return 1;
+    }
+    return 0;
+}
+static NsRuntime* Runtime(Host& host)
+{
+    NsRuntimeDesc desc={};desc.structSize=sizeof(desc);desc.user=&host;desc.method=&Method;
+    host.rt=NsRuntimeCreate(&desc);
+    Check(host.rt!=nullptr,"runtime create");
+    NsObjectDesc object={};object.structSize=sizeof(object);object.name=Str("Host");object.hasMethod=1;object.declareGlobal=1;
+    int32_t slot=-1;
+    Check(NsRegisterObject(host.rt,&object,&slot)!=0,"register Host");
+    NsFreezeBindings(host.rt);
+    host.type=NsGetObjectType(host.rt,"Host",4);
+    Check(host.type!=0,"object type exists");
+    return host.rt;
+}
+static const char* source=
+    "import math;import system;export var object;export var objects={};"
+    "export fun Map(var n){return {\"who\":n,\"child\":{\"n\":n},\"list\":[{\"n\":n}],\"array\":system.array(n,2)};}"
+    "export fun List(var n){return [{\"n\":n},[{\"n\":n}],system.array(n,2)];}"
+    "export fun Array(var n){return system.array(n,2);}"
+    "export fun Number(){return 42;}export fun Dispose(){return Host.Dispose()+1;}"
+    "export fun ReadOther(){return Host.ReadOther();}"
+    "export fun IsObject(){return object!=null;}export fun Value(){return object.Value();}"
+    "export fun MapObject(){return objects.item!=null;}"
+    "export fun ArgObject(var v){return v!=null;}"
+    "export fun RetObject(){return Host.Object()!=null;}"
+    "export fun BuiltObjects(){var m=Host.Objects();return m.obj!=null && m.list[0]!=null && m.list[1].n==9;}"
+    "export fun Quaternion(){return math.Quaternion(1,2,3,4);}";
+static NsProgram Compile(NsRuntime* rt,bool debug,bool image)
+{
+    NsCompileDesc desc={};desc.structSize=sizeof(desc);desc.source=Str(source);desc.sourceName=Str("host-c-abi.ns");desc.includeDebugInfo=debug;
+    NsError error={};NsProgram program=0;
+    if(image){NsStr bytes={};Check(NsCompileToBytecode(rt,&desc,&bytes,&error)!=0,"compile image");program=NsLoadProgram(rt,bytes.data,bytes.len,&error);}
+    else program=NsCompile(rt,&desc,&error);
+    if(!program)std::printf("compile: %.*s\n",error.message.len,error.message.data);
+    Check(program!=0,"compile program");return program;
+}
+static NsCall* Begin(NsRuntime* rt,NsInstance inst,const char* name)
+{
+    NsCall* call=NsCallBeginName(rt,inst,name,static_cast<int32_t>(std::strlen(name)));
+    Check(call!=nullptr,"begin valid call");return call;
+}
+static int InvokeInt(NsRuntime* rt,NsInstance inst,const char* name)
+{
+    NsCall* call=Begin(rt,inst,name);NsCallResult result={};
+    Check(NsCallInvokeR(call,&result)==NS_RUN_COMPLETED,"invoke value");NsCallEnd(call);return result.i;
+}
+static bool MapInt(NsMapReader* map,const char* key,int expected)
+{
+    int32_t value=-999;return NsMapGetInt(map,key,static_cast<int32_t>(std::strlen(key)),&value)!=0 && value==expected;
+}
+static bool ArrayInt(NsArrayView* a,int expected)
+{
+    int32_t* data=NsArrayInts(a);return NsArrayCount(a)==2 && data!=nullptr && data[0]==expected;
+}
+static void Readers(Host& host,NsProgram program,bool closeFirst)
+{
+    NsInstance a=NsCreateInstance(host.rt,program,nullptr),b=NsCreateInstance(host.rt,program,nullptr);
+    Check(a && b,"reader instances");
+    NsCall* ca=Begin(host.rt,a,"Map");NsCallArgInt(ca,1);
+    NsCall* cb=Begin(host.rt,b,"List");NsCallArgInt(cb,2);
+    Check(NsCallInvoke(ca)==NS_RUN_COMPLETED,"invoke A after B begins");
+    NsMapReader* ma=NsCallRetMap(ca);
+    NsMapReader* child=NsMapGetMap(ma,"child",5);
+    NsMapReader* listChild=NsListRdGetMap(NsMapGetList(ma,"list",4),0);
+    NsArrayView* array=NsMapGetArray(ma,"array",5);
+    const NsStr* keys=nullptr;int32_t count=0;
+    Check(NsMapStringKeys(child,&keys,&count,nullptr)!=0 && count==1,"keys owned by reader call");
+    Check(NsCallInvoke(cb)==NS_RUN_COMPLETED,"invoke B");
+    NsListReader* lb=NsCallRetList(cb);
+    NsMapReader* bchild=NsListRdGetMap(lb,0);
+    NsMapReader* nested=NsListRdGetMap(NsListRdGetList(lb,1),0);
+    NsArrayView* barray=NsListRdGetArray(lb,2);
+    NsCallEnd(closeFirst?ca:cb);
+    NsInstance reusable=closeFirst?a:b;
+    for(int i=0;i<12;++i)
+    {
+        NsCall* current=Begin(host.rt,reusable,"Map");NsCallArgInt(current,99);
+        Check(NsCallInvoke(current)==NS_RUN_COMPLETED,"replacement call");
+        NsMapReader* replacement=NsCallRetMap(current);
+        (void)NsMapGetMap(replacement,"child",5);
+        if(closeFirst)
+        {
+            Check(MapInt(bchild,"n",2) && MapInt(nested,"n",2),"non-LIFO surviving list descendants");
+            Check(ArrayInt(barray,2),"non-LIFO surviving array");
+        }
+        else
+        {
+            Check(MapInt(ma,"who",1) && MapInt(child,"n",1) && MapInt(listChild,"n",1),"LIFO interleaving retains A descendants");
+            Check(ArrayInt(array,1),"A nested array retained");
+            Check(count==1 && Name(keys[0].data,keys[0].len,"n"),"A key descriptors retained");
+        }
+        NsCallEnd(current);
+    }
+    if(!closeFirst)
+    {
+        host.retained=ca;
+        Check(InvokeInt(host.rt,b,"ReadOther")==5,"read live call from native callback");
+        Check(MapInt(host.fromCallback,"n",1),"call reader created during callback survives callback");
+        host.retained=nullptr;
+    }
+    NsCallEnd(closeFirst?cb:ca);
+    NsCall* ac=Begin(host.rt,a,"Array");NsCallArgInt(ac,7);Check(NsCallInvoke(ac)==NS_RUN_COMPLETED,"direct array return");
+    NsArrayView* av=NsCallRetArray(ac);
+    Check(InvokeInt(host.rt,b,"Number")==42 && ArrayInt(av,7),"direct array survives other call");
+    NsCallEnd(ac);NsDestroyInstance(host.rt,a);NsDestroyInstance(host.rt,b);
+}
+static void Run(bool debug,bool image)
+{
+    Host dead;Runtime(dead);const NsObjectType stale=dead.type;NsRuntimeDestroy(dead.rt);
+    Host host;Runtime(host);const NsObjectType valid=host.type;
+    Check(valid!=stale,"object type tokens are not recycled");
+    Check(NsGetObjectType(host.rt,"Host",4)==valid,"same runtime type cache");
+    NsProgram program=Compile(host.rt,debug,image);if(!program){NsRuntimeDestroy(host.rt);return;}
+    host.instance=NsCreateInstance(host.rt,program,nullptr);Check(host.instance!=0,"instance create");
+    Check(NsCallBeginName(host.rt,host.instance,"Missing",7)==nullptr,"missing call returns null");
+    NsFunction* fn=NsFindFunction(host.rt,program,"Number",6);
+    NsInstance deadInstance=NsCreateInstance(host.rt,program,nullptr);NsDestroyInstance(host.rt,deadInstance);
+    Check(NsCallBegin(host.rt,deadInstance,fn)==nullptr,"dead instance call returns null");NsFunctionRelease(fn);
+    Host foreign;Runtime(foreign);
+    for(NsObjectType invalid : {stale,foreign.type})
+    {
+        NsBindGlobalObject(host.rt,host.instance,"object",6,invalid,nullptr);
+        Check(InvokeInt(host.rt,host.instance,"IsObject")==0,"invalid type cannot bind global");
+        NsBindGlobalMapObject(host.rt,host.instance,"objects",7,"item",4,invalid,nullptr);
+        Check(InvokeInt(host.rt,host.instance,"MapObject")==0,"invalid type cannot bind map");
+        host.type=invalid;Check(InvokeInt(host.rt,host.instance,"RetObject")==0,"invalid returned type rejected");
+        Check(InvokeInt(host.rt,host.instance,"BuiltObjects")==0,"invalid builder type rejected");
+    }
+    host.type=valid;NsRuntimeDestroy(foreign.rt);
+    NsBindGlobalObject(host.rt,host.instance,"object",6,valid,nullptr);
+    Check(InvokeInt(host.rt,host.instance,"Value")==77,"fresh type uses fresh runtime binding");
+    Check(InvokeInt(host.rt,host.instance,"BuiltObjects")==1,"valid nested builder objects");
+    NsCall* call=Begin(host.rt,host.instance,"Dispose");
+    Check(NsRuntimeTryDestroy(host.rt)==0 && NsTryDestroyInstance(host.rt,host.instance)==0,"prepared call blocks destruction");
+    NsCallResult result={};Check(NsCallInvokeR(call,&result)==NS_RUN_COMPLETED && result.i==14,"execution continues after refused disposal");
+    Check(NsRuntimeTryDestroy(host.rt)==0 && NsTryDestroyInstance(host.rt,host.instance)==0,"consumed live call blocks destruction");
+    NsCallEnd(call);
+    Check(InvokeInt(host.rt,host.instance,"Value")==77,"refused disposal preserves binding cache");
+    call=Begin(host.rt,host.instance,"Quaternion");Check(NsCallInvokeR(call,&result)==NS_RUN_COMPLETED,"raw quaternion call");
+    Check(result.f[0]==1 && result.f[1]==2 && result.f[2]==3 && result.f[3]==4,"C ABI retains quaternion script order");NsCallEnd(call);
+    Readers(host,program,false);Readers(host,program,true);
+    Check(NsTryDestroyInstance(host.rt,host.instance)!=0,"instance disposal allowed after calls end");
+    NsDestroyProgram(host.rt,program);Check(NsRuntimeTryDestroy(host.rt)!=0,"runtime disposal allowed after calls end");
+}
+int main()
+{
+    for(bool debug:{false,true})for(bool image:{false,true})Run(debug,image);
+    std::printf("host_c_abi_regression: %d checks, %d failures\n",checks,failures);
+    return failures?1:0;
+}

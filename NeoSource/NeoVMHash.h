@@ -6,16 +6,13 @@ namespace NeoScript
 {
 extern u32 GetHashCode(const std::string& str);
 
-// Mix high bits into the bucket mask, including for aligned integer IDs.
+// 연속 키의 가까운 배치를 유지하면서 정렬된 ID와 압축 좌표를 섞는다.
+// 상위 워드에 홀수를 곱해 행을 2의 거듭제곱 버킷에 분산하고,
+// 같은 행에는 고정 XOR를 적용해 연속된 하위 워드의 지역성을 보존한다.
 NEOS_FORCEINLINE u32 HashIntegerKey(int key)
 {
-	u32 h = static_cast<u32>(key);
-	h ^= h >> 16;
-	h *= 0x7feb352dU;
-	h ^= h >> 15;
-	h *= 0x846ca68bU;
-	h ^= h >> 16;
-	return h;
+	const u32 h = static_cast<u32>(key);
+	return h ^ ((h >> 16) * 0x9e3779b9U);
 }
 
 constexpr int MAX_HASH_CAPACITY = 1 << 30;

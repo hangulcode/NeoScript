@@ -629,6 +629,7 @@ NEOS_NOINLINE bool handle_IDLE(const SVMOperation& OP) {
 			// Continue the loop so RunInternal reports the VM error.
             return false;
         }
+        _iSP_Vars_Max2 = (std::max)(_iSP_Vars_Max2, _iSP_VarsMax + 3);
         Var_SetBool(GetStackFromBase(_iSP_VarsMax + 1), p->_success);
         Var_SetStringA(GetStackFromBase(_iSP_VarsMax + 2), p->_resultValue);
 		VarInfo callback;

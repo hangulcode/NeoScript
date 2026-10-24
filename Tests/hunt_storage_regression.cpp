@@ -1,7 +1,8 @@
-#include "NeoScript.h"
+﻿#include "NeoScript.h"
 #include "NeoVMInternal.h"
 #include "NeoNumeric.h"
 #include "NeoStringLimits.h"
+#include <algorithm>
 #include <climits>
 #include <cmath>
 #include <cstdio>
@@ -83,6 +84,81 @@ static void StorageLimits()
     vm.FreeSet(set);
 }
 
+static void IntegerKeyPatterns()
+{
+    struct Pattern { const char* name; std::vector<int> keys; };
+    std::vector<Pattern> patterns = {
+        {"sequential", {}}, {"large positive sequential", {}}, {"negative sequential", {}},
+        {"minimum integer sequential", {}}, {"maximum integer sequential", {}},
+        {"word boundary sequential", {}}, {"aligned IDs", {}}, {"packed grid", {}},
+        {"negative packed grid", {}}
+    };
+    for (int i = 0; i < 4096; ++i)
+    {
+        patterns[0].keys.push_back(i);
+        patterns[1].keys.push_back(0x40000000 + i);
+        patterns[2].keys.push_back(-4096 + i);
+        patterns[3].keys.push_back(INT_MIN + i);
+        patterns[4].keys.push_back(INT_MAX - 4095 + i);
+        patterns[5].keys.push_back(64000 + i);
+        patterns[6].keys.push_back((i - 2048) * 65536);
+    }
+    for (int x = 0; x < 128; ++x) for (int y = 0; y < 128; ++y)
+    {
+        patterns[7].keys.push_back(x * 65536 + y);
+        patterns[8].keys.push_back((x - 64) * 65536 + y);
+    }
+    CNeoVM vm;
+    for (const auto& pattern : patterns)
+    {
+        auto map = vm.TableAlloc();
+        auto set = vm.SetAlloc();
+        const int count = static_cast<int>(pattern.keys.size());
+        for (int i = 0; i < count; ++i)
+        {
+            VarInfo key(pattern.keys[i]);
+            if (i & 1) map->Insert(&key, i + 1); else map->Insert(key._int, i + 1);
+            set->Insert(&key);
+        }
+        Check(map->GetCount() == count && set->GetCount() == count, pattern.name);
+        // 실제 맵과 집합 노드에서 버킷 분포를 확인한다.
+        // 정렬된 ID나 압축 좌표가 긴 충돌 사슬로 몰리는 회귀를 잡는다.
+        std::vector<int> mapBuckets(map->_BucketCapa), setBuckets(set->_BucketCapa);
+        for (int i = 0; i < map->_BucketCapa; ++i)
+            if (IsMapNodeUsed(map->_Bucket[i])) ++mapBuckets[map->_Bucket[i].hash & map->_HashBase];
+        for (int i = 0; i < set->_BucketCapa; ++i)
+            if (IsSetNodeUsed(set->_Bucket[i])) ++setBuckets[set->_Bucket[i].hash & set->_HashBase];
+        Check(*std::max_element(mapBuckets.begin(), mapBuckets.end()) <= 16,
+            std::string(pattern.name) + " map bucket distribution");
+        Check(*std::max_element(setBuckets.begin(), setBuckets.end()) <= 16,
+            std::string(pattern.name) + " set bucket distribution");
+        map->Reserve(count * 2);
+        set->Reserve(count * 2);
+        for (int i = 0; i < count; ++i)
+        {
+            VarInfo key(pattern.keys[i]);
+            auto value = map->Find(&key);
+            Check(value && value == map->FindInt(key._int) && value->_int == i + 1,
+                std::string(pattern.name) + " read after rehash");
+            Check(set->Find(&key), std::string(pattern.name) + " set after rehash");
+            if (i % 3 == 0) { map->Remove(&key); set->Remove(&key); }
+        }
+        for (int i = 0; i < count; ++i)
+        {
+            VarInfo key(pattern.keys[i]);
+            auto value = map->FindInt(key._int);
+            Check((value != nullptr) == (i % 3 != 0) && (!value || value->_int == i + 1),
+                std::string(pattern.name) + " map after deletion");
+            Check(set->Find(&key) == (i % 3 != 0), std::string(pattern.name) + " set after deletion");
+            if (i % 3 == 0) { map->Insert(&key, i + 1); set->Insert(&key); }
+        }
+        Check(map->GetCount() == count && set->GetCount() == count,
+            std::string(pattern.name) + " reinsertion");
+        vm.FreeTable(map);
+        vm.FreeSet(set);
+    }
+}
+
 static void Scripts(IRuntime* runtime, bool debug, bool image)
 {
     CompileDesc desc;
@@ -152,6 +228,7 @@ export fun Text() {
 int main()
 {
     StorageLimits();
+    IntegerKeyPatterns();
     auto runtime = CreateRuntime();
     runtime->FreezeBindings();
     for (bool debug : {false, true}) for (bool image : {false, true}) Scripts(runtime, debug, image);

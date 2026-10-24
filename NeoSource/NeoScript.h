@@ -120,11 +120,12 @@ public:
 private:
     // Runtime만 유효한 함수 인덱스와 Program 소유권을 함께 발급한다. 임의의 정수
     // 인덱스로 다른 Program/Instance를 호출하는 레거시 우회는 v2에서 지원하지 않는다.
-    FunctionHandle(uint32_t i, uint32_t program, uint32_t generation) noexcept
-        : index(i), programId(program), programGeneration(generation) {}
+    FunctionHandle(uint32_t i, uint32_t program, uint32_t generation, uint64_t runtime) noexcept
+        : index(i), programId(program), programGeneration(generation), runtimeId(runtime) {}
     uint32_t index = UINT32_MAX;
     uint32_t programId = 0;
     uint32_t programGeneration = 0;
+    uint64_t runtimeId = 0;
     // 캡처 람다일 때만 내부 참조 카운트 객체를 가리킨다. 따라서 FunctionHandle은
     // 더 이상 POD가 아니다: memcpy/union/raw serialization 대신 정상 복사·이동·소멸을
     // 사용해야 한다. 일반 함수는 nullptr 이므로 기존의 정수 함수 호출 비용은 유지된다.
@@ -536,6 +537,7 @@ public:
     Invocation(const Invocation&) = delete;
     Invocation& operator=(const Invocation&) = delete;
     ~Invocation();
+    explicit operator bool() const noexcept; // 아직 실행하지 않은 유효한 일회 호출이면 true
 
     // 인자 push (호출 순서대로)
     Invocation& argInt(int32_t v);
@@ -591,7 +593,7 @@ private:
     RunStatus invokeReadListImpl(void* ctx, void(*cb)(void*, ListReader));
     RunStatus invokeReadArrayImpl(void* ctx, void(*cb)(void*, ArrayView));
     void* m_impl = nullptr;   // InstanceRec* (인스턴스별 호출 스크래치)
-    uint32_t m_seq = 0;       // 이 Invocation 의 호출 시퀀스(소유권 토큰). Call 이 부여, 소멸자가 소유 확인에 사용.
+    uint64_t m_seq = 0;       // 이 Invocation 의 호출 시퀀스(소유권 토큰). Call 이 부여, 소멸자가 소유 확인에 사용.
 };
 
 //------------------------------------------------------------------------------
@@ -669,6 +671,8 @@ public:
     virtual bool IsPaused(InstanceHandle instance) = 0;
     // Continue/Step 로 재개 모드를 설정한 뒤(콜백 밖에서) 실행을 다음 정지/종료까지 진행한다.
     virtual RunStatus Run(InstanceHandle instance) = 0;
+    // 디버거의 협력형 실행 분할 전용이다. 0이면 분할하지 않는다.
+    virtual void SetSliceBudget(InstanceHandle instance, uint64_t budget) = 0;
 
     virtual DebugLocation GetLocation(InstanceHandle instance) = 0;
     virtual void GetStackTrace(InstanceHandle instance, std::vector<DebugStackFrame>& frames) = 0;
@@ -753,6 +757,9 @@ public:
     //--- Instance (프로그램별 실행 상태 + 전역변수) ---
     virtual InstanceHandle CreateInstance(ProgramHandle program, const InstanceDesc& desc = {}) = 0;
     virtual void DestroyInstance(InstanceHandle instance) = 0;
+    // Invocation 또는 실행 중인 코드가 인스턴스를 쓰는 동안 파괴와 초기화를 거부한다.
+    virtual bool CanDestroyInstance(InstanceHandle instance) const = 0;
+    virtual bool CanDestroy() const = 0;
     virtual bool IsAlive(InstanceHandle instance) const = 0;   // 핸들이 아직 유효한 인스턴스인지(파괴 후 false)
     // 인스턴스를 **핸들을 유지한 채** 갓 생성된 상태로 되돌린다(전역변수 초기화 + 바인딩 재구성 +
     // CreateInstance 때의 runGlobalInit 재실행). FindFunction으로 얻은 일반 FunctionHandle은

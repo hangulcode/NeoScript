@@ -5,6 +5,8 @@
 #include "NeoArchive.h"
 #include "NeoTextLoader.h"   // FormatAsm / FormatBytes
 #include <algorithm>
+#include <memory>
+#include <stdexcept>
 
 namespace NeoScript
 {
@@ -31,8 +33,8 @@ void ProgramSwitchTable::Build()
 	if (entries.empty())
 		return;
 
-	int capa = 8;
-	while (capa < (int)entries.size() * 2)
+	size_t capa = 8;
+	while (capa < entries.size() * 2)
 		capa <<= 1;
 	buckets.assign(capa, -1);
 
@@ -77,12 +79,36 @@ int ProgramSwitchTable::Find(VarInfo* pKey) const
 	return defaultOffset;
 }
 
+struct ImageLoadError { const char* message; };
+static size_t ImageBytesRemaining(CNArchive& ar)
+{
+	return (size_t)(ar.GetBufferSize() - ar.GetBufferOffset());
+}
+static void RequireImageCount(CNArchive& ar, size_t count, size_t minimumBytes, const char* message)
+{
+	if (minimumBytes == 0 || count > ImageBytesRemaining(ar) / minimumBytes)
+		throw ImageLoadError{message};
+}
+template<typename T> static void ReadRequired(CNArchive& ar, T& value)
+{
+	if (ar.Read(&value, sizeof(value)) != sizeof(value))
+		throw ImageLoadError{"Truncated script image (required field)"};
+}
+
+static bool ReadImageBool(CNArchive& ar)
+{
+	u8 value = 0;
+	ReadRequired(ar, value);
+	if (value > 1) throw ImageLoadError{"Invalid boolean constant"};
+	return value != 0;
+}
+
 static bool ReadString(CNArchive& ar, std::string& str)
 {
 	short nLen = 0;
 	if (ar.Read(&nLen, sizeof(nLen)) == 0)
 		return false;
-	if (nLen < 0)
+	if (nLen < 0 || (size_t)nLen > ImageBytesRemaining(ar))
 		return false;
 
 	str.resize(nLen);
@@ -110,7 +136,9 @@ static bool ReadCount(CNArchive& ar, u32& out)
 static void SetLoadError(std::string* err, const char* msg)
 {
 	if (err != nullptr)
-		*err = msg;
+	{
+		try { *err = msg; } catch (const std::bad_alloc&) {}
+	}
 }
 
 CNeoVMProgram* CNeoVMProgram::Create(const void* pBuffer, int iSize, std::string* err)
@@ -121,27 +149,27 @@ CNeoVMProgram* CNeoVMProgram::Create(const void* pBuffer, int iSize, std::string
 		return nullptr;
 	}
 
-	// 코드 패치가 전역 native 등록부(InitLib)에 의존한다. Initialize() 보다 먼저
-	// 프로그램을 만들어도 패치가 누락되지 않도록 여기서 보장한다(재진입 무해).
-	CNeoVM::InitLib();
-
-	CNArchive ar(const_cast<void*>(pBuffer), iSize);
-	CNeoVMProgram* p = new CNeoVMProgram();
-	p->byteSize = iSize;
-	if (false == p->Load(ar, err))
+	try
 	{
-		p->Release();
-		return nullptr;
+		CNeoVM::InitLib();
+		CNArchive ar(const_cast<void*>(pBuffer), iSize);
+		auto release = [](CNeoVMProgram* program) { if (program) program->Release(); };
+		std::unique_ptr<CNeoVMProgram, decltype(release)> p(new CNeoVMProgram(), release);
+		p->byteSize = iSize;
+		if (!p->Load(ar, err)) return nullptr;
+		p->PatchNativeCalls();
+		p->PatchStaticStringReads();
+		if (!p->PatchLocalOps(err)) return nullptr;
+		return p.release();
 	}
-	p->PatchNativeCalls();
-	p->PatchStaticStringReads();
-	// native/정적 문자열 치환 뒤에 돌린다 — 원본 opcode 판정이 먼저 확정되어야 한다.
-	if (p->PatchLocalOps(err) == false)
+	catch (const ImageLoadError& error) { SetLoadError(err, error.message); }
+	catch (const std::length_error&) { SetLoadError(err, "Invalid script image allocation size"); }
+	catch (const std::bad_alloc&)
 	{
-		p->Release();
-		return nullptr;
+		// 메모리 부족 메시지 작성 중에도 예외가 로더 API 밖으로 새어 나가지 않게 한다.
+		try { SetLoadError(err, "Out of memory while loading script image"); } catch (...) {}
 	}
-	return p;
+	return nullptr;
 }
 
 bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
@@ -179,12 +207,13 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 	if (header._iFunctionCount < 0 || header._iStaticVarCount < 0 ||
 		header._iGlobalVarCount < 0 || header._iGlobalVarCount > 32767 || header._iExportVarCount < 0 ||
 		header._iStaticVarCount > INT_MAX - header._iGlobalVarCount - 1 ||
-		header._iFunctionCount > SHRT_MAX + 1)
+		header._iFunctionCount > SHRT_MAX + 1 || header.m_iDebugCount < 0)
 	{
 		SetLoadError(err, "Invalid script image counts");
 		return false;
 	}
 
+	RequireImageCount(ar, header._iCodeSize, 1, "Truncated script image (code size)");
 	code.resize(header._iCodeSize / sizeof(SVMOperation));
 	if (header._iCodeSize > 0 && ar.Read(code.data(), header._iCodeSize) == 0)
 	{
@@ -192,27 +221,31 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 		return false;
 	}
 
+	RequireImageCount(ar, header._iFunctionCount, 19, "Truncated script image (function count)");
 	functions.resize(header._iFunctionCount);
+	std::vector<bool> functionIDs(header._iFunctionCount, false);
 	std::string name;
 	for (int i = 0; i < header._iFunctionCount; i++)
 	{
 		int iID = -1;
-		SFunctionTable fun;
-		memset(&fun, 0, sizeof(SFunctionTable));
+		SFunctionTable fun{};
 
 		if (ar.Read(&iID, sizeof(iID)) == 0)
 		{
 			SetLoadError(err, "Truncated script image (function table)");
 			return false;
 		}
-		ar >> fun._codePtr >> fun._argsCount >> fun._localTempMax >> fun._localVarCount >> fun._funType;
-		if (fun._argsCount < 0 || fun._localTempMax < 0 || fun._localVarCount < 0)
+		ReadRequired(ar, fun._codePtr); ReadRequired(ar, fun._argsCount);
+		ReadRequired(ar, fun._localTempMax); ReadRequired(ar, fun._localVarCount); ReadRequired(ar, fun._funType);
+		if (fun._argsCount < 0 || fun._localTempMax < 0 || fun._localVarCount < 0 || fun._funType > FUNT_BUILT_IN ||
+			(int64_t)fun._argsCount + fun._localTempMax + fun._localVarCount + 1 > SHRT_MAX)
 		{
 			SetLoadError(err, "Invalid function local counts");
 			return false;
 		}
 		u16 captureCount = 0;
-		ar >> captureCount;
+		ReadRequired(ar, captureCount);
+		RequireImageCount(ar, captureCount, 2 * sizeof(short), "Truncated script image (captures)");
 		if (captureCount > (u16)fun._localVarCount)
 		{
 			SetLoadError(err, "Invalid function closure capture count");
@@ -221,14 +254,14 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 		fun._captures.resize(captureCount);
 		for (u16 c = 0; c < captureCount; ++c)
 		{
-			ar >> fun._captures[c].first >> fun._captures[c].second;
+			ReadRequired(ar, fun._captures[c].first); ReadRequired(ar, fun._captures[c].second);
 			if (fun._captures[c].first <= 0 || fun._captures[c].second <= 0)
 			{
 				SetLoadError(err, "Invalid function closure capture slot");
 				return false;
 			}
 		}
-		if (iID < 0 || iID >= header._iFunctionCount)
+		if (iID < 0 || iID >= header._iFunctionCount || functionIDs[iID])
 		{
 			SetLoadError(err, "Invalid function id");
 			return false;
@@ -257,7 +290,8 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 				return false;
 			}
 		}
-		functions[iID] = fun;
+		functionIDs[iID] = true;
+		functions[iID] = std::move(fun);
 	}
 
 	// FMOV가 읽는 capture sourceSlot은 생성한 함수(직속 부모)의 스택 기준이다.
@@ -268,7 +302,7 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 	for (int i = 0; i < (int)functions.size(); ++i)
 	{
 		const int codePtr = functions[i]._codePtr;
-		if (codePtr < 0 || codePtr > header._iCodeSize ||
+		if (codePtr < 2 * (int)sizeof(SVMOperation) || codePtr >= header._iCodeSize ||
 			(codePtr % (int)sizeof(SVMOperation)) != 0)
 		{
 			SetLoadError(err, "Invalid function code offset");
@@ -282,13 +316,50 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 	{
 		const int begin = functionStarts[i].first;
 		const int end = (i + 1 < functionStarts.size()) ? functionStarts[i + 1].first : (int)code.size();
-		if (begin > end)
+		if (begin >= end)
 		{
 			SetLoadError(err, "Invalid function code range");
 			return false;
 		}
 		for (int opIndex = begin; opIndex < end; ++opIndex)
 			codeOwners[opIndex] = functionStarts[i].second;
+	}
+	// 호출 인자를 만드는 명령은 CALL보다 먼저 실행된다. 호출자 진입 시 전체 인자
+	// 범위를 확보하되, 다음 프레임의 시작 위치는 기존 _localAddCount로 유지한다.
+	for (SFunctionTable& fun : functions) fun._stackSlotCount = fun._localAddCount;
+	for (size_t i = 0; i < code.size(); ++i)
+	{
+		if (codeOwners[i] < 0) continue;
+		SFunctionTable& fun = functions[codeOwners[i]];
+		const SVMOperation& op = code[i];
+		int outgoing = -1;
+		switch (op.op)
+		{
+		case NOP_CALL:
+		case NOP_CALL_L: outgoing = op.n2; break;
+		case NOP_PTRCALL:
+		case NOP_PTRCALL_L: outgoing = op.n3; break;
+		case NOP_PTRCALL2:
+		case NOP_PTRCALL2_L:
+		case NOP_NATIVECALL:
+		case NOP_VEC_MAKE: outgoing = op.n2; break;
+		default: break;
+		}
+		if (outgoing >= 0)
+			fun._stackSlotCount = (std::max)(fun._stackSlotCount, fun._localAddCount + outgoing + 1);
+	}
+	// 피연산자 값으로 프레임을 늘리면 잘못된 큰 인덱스도 정상으로 인정하게 된다.
+	// 호출 인자 수로 범위를 먼저 확정하고, 접힌 getter가 쓰는 반환 슬롯만 따로 허용한다.
+	for (size_t i = 0; i < code.size(); ++i)
+	{
+		if (codeOwners[i] < 0) continue;
+		SFunctionTable& fun = functions[codeOwners[i]];
+		const SVMOperation& op = code[i];
+		const short slots[] = { op.n1, op.n2, op.n3 };
+		const u8 flags[] = { NEOS_ARG_N1_LOCAL, NEOS_ARG_N2_LOCAL, NEOS_ARG_N3_LOCAL };
+		for (int n = 0; n < 3; ++n)
+			if ((op.argFlag & flags[n]) && slots[n] == fun._localAddCount)
+				fun._stackSlotCount = (std::max)(fun._stackSlotCount, fun._localAddCount + 1);
 	}
 	// WREF consumes its next instruction only for stored vectors. Validate the
 	// immutable pair once here, so ordinary collection writes need no hot checks.
@@ -365,6 +436,7 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 		}
 	}
 
+	RequireImageCount(ar, header._iExportVarCount, sizeof(int) + sizeof(short), "Truncated script image (export count)");
 	for (int i = 0; i < header._iExportVarCount; i++)
 	{
 		int idx = -1;
@@ -386,6 +458,7 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 		exportVariables[name] = idx;
 	}
 
+	RequireImageCount(ar, header._iStaticVarCount, sizeof(VAR_TYPE) + sizeof(bool), "Truncated script image (constant count)");
 	staticValues.resize(header._iStaticVarCount);
 	for (int i = 0; i < header._iStaticVarCount; i++)
 	{
@@ -400,13 +473,13 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 		switch (type)
 		{
 		case VAR_INT:
-			ar >> sc._int;
+			ReadRequired(ar, sc._int);
 			break;
 		case VAR_FLOAT:
-			ar >> sc._float;
+			ReadRequired(ar, sc._float);
 			break;
 		case VAR_BOOL:
-			ar >> sc._bl;
+			sc._bl = ReadImageBool(ar);
 			break;
 		case VAR_STRING:
 			if (false == ReadString(ar, sc._str))
@@ -423,8 +496,9 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 
 	if (header.m_iDebugCount > 0)
 	{
+		RequireImageCount(ar, header.m_iDebugCount, sizeof(debug_info), "Truncated script image (debug count)");
 		debugData.resize(header.m_iDebugCount);
-		if (ar.Read(&debugData[0], sizeof(debug_info) * header.m_iDebugCount) == 0)
+		if (ar.Read(&debugData[0], (int)(sizeof(debug_info) * (size_t)header.m_iDebugCount)) == 0)
 		{
 			SetLoadError(err, "Truncated script image (debug info)");
 			return false;
@@ -432,32 +506,35 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 	}
 
 	// 선택 청크: 디버그 변수명(BVDN) / 함수명(NFDN). 미지의 magic 을 만나면 되돌리고 종료.
-	while (ar.GetBufferOffset() + (int)sizeof(u32) <= ar.GetBufferSize())
+	while (ImageBytesRemaining(ar) != 0)
 	{
 		u32 magic = 0;
 		int oldOffset = ar.GetBufferOffset();
-		ar >> magic;
+		ReadRequired(ar, magic);
 		if (magic == 0x4E445642)
 		{
 			u32 funCount = 0;
 			if (false == ReadCount(ar, funCount))
-				return true;
+				throw ImageLoadError{"Invalid or truncated script image chunk"};
+			RequireImageCount(ar, funCount, sizeof(int) + sizeof(short), "Invalid debug function count");
 			for (u32 i = 0; i < funCount; ++i)
 			{
 				int funId = -1;
 				if (ar.Read(&funId, sizeof(funId)) == 0)
-					return true;
+					throw ImageLoadError{"Invalid or truncated script image chunk"};
 				u32 nameCount = 0;
 				if (false == ReadCount(ar, nameCount))
-					return true;
+					throw ImageLoadError{"Invalid or truncated script image chunk"};
+				RequireImageCount(ar, nameCount, sizeof(int) + sizeof(short), "Invalid debug variable count");
+				if (funId < -1 || funId >= (int)functions.size()) throw ImageLoadError{"Invalid debug function id"};
 				std::map<int, std::string>& names = (funId == -1) ? debugGlobalNames : debugVarNames[funId];
 				for (u32 n = 0; n < nameCount; ++n)
 				{
 					int slot = -1;
 					if (ar.Read(&slot, sizeof(slot)) == 0)
-						return true;
+						throw ImageLoadError{"Invalid or truncated script image chunk"};
 					if (false == ReadString(ar, name))
-						return true;
+						throw ImageLoadError{"Invalid or truncated script image chunk"};
 					names[slot] = name;
 				}
 			}
@@ -466,14 +543,16 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 		{
 			u32 funCount = 0;
 			if (false == ReadCount(ar, funCount))
-				return true;
+				throw ImageLoadError{"Invalid or truncated script image chunk"};
+			RequireImageCount(ar, funCount, sizeof(int) + sizeof(short), "Invalid debug function count");
 			for (u32 i = 0; i < funCount; ++i)
 			{
 				int funId = -1;
 				if (ar.Read(&funId, sizeof(funId)) == 0)
-					return true;
+					throw ImageLoadError{"Invalid or truncated script image chunk"};
 				if (false == ReadString(ar, name))
-					return true;
+					throw ImageLoadError{"Invalid or truncated script image chunk"};
+				if (funId < 0 || funId >= (int)functions.size()) throw ImageLoadError{"Invalid debug function id"};
 				debugFunctionNames[funId] = name;
 			}
 		}
@@ -481,40 +560,43 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 		{
 			u32 tableCount = 0;
 			if (false == ReadCount(ar, tableCount))
-				return true;
+				throw ImageLoadError{"Invalid or truncated script image chunk"};
+			RequireImageCount(ar, tableCount, sizeof(int) + sizeof(u16), "Invalid switch table count");
+			if (tableCount > (u32)USHRT_MAX + 1) throw ImageLoadError{"Invalid switch table count"};
 			switchTables.resize(tableCount);
 			for (u32 t = 0; t < tableCount; ++t)
 			{
 				ProgramSwitchTable& tbl = switchTables[t];
 				if (ar.Read(&tbl.defaultOffset, sizeof(tbl.defaultOffset)) == 0)
-					return true;
+					throw ImageLoadError{"Invalid or truncated script image chunk"};
 				u32 caseCount = 0;
 				if (false == ReadCount(ar, caseCount))
-					return true;
+					throw ImageLoadError{"Invalid or truncated script image chunk"};
+				RequireImageCount(ar, caseCount, sizeof(u8) + sizeof(bool) + sizeof(int), "Invalid switch case count");
 				tbl.entries.resize(caseCount);
 				for (u32 c = 0; c < caseCount; ++c)
 				{
 					ProgramSwitchEntry& e = tbl.entries[c];
 					u8 keyType = 0;
 					if (ar.Read(&keyType, sizeof(keyType)) == 0)
-						return true;
+						throw ImageLoadError{"Invalid or truncated script image chunk"};
 					e.key._type = (VAR_TYPE)keyType;
 					switch (e.key._type)
 					{
 					case VAR_INT:
-						if (ar.Read(&e.key._int, sizeof(e.key._int)) == 0) return true;
+						if (ar.Read(&e.key._int, sizeof(e.key._int)) == 0) throw ImageLoadError{"Invalid or truncated script image chunk"};
 						break;
 					case VAR_BOOL:
-						if (ar.Read(&e.key._bl, sizeof(e.key._bl)) == 0) return true;
+						e.key._bl = ReadImageBool(ar);
 						break;
 					case VAR_STRING:
-						if (false == ReadString(ar, e.key._str)) return true;
+						if (false == ReadString(ar, e.key._str)) throw ImageLoadError{"Invalid or truncated script image chunk"};
 						break;
 					default:
-						return true;   // 손상된 이미지
+						throw ImageLoadError{"Invalid or truncated script image chunk"};   // 손상된 이미지
 					}
 					if (ar.Read(&e.jumpOffset, sizeof(e.jumpOffset)) == 0)
-						return true;
+						throw ImageLoadError{"Invalid or truncated script image chunk"};
 				}
 				tbl.Build();
 			}
@@ -523,7 +605,8 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 		{
 			u32 rangeCount = 0;
 			if (false == ReadCount(ar, rangeCount) || rangeCount > (u32)USHRT_MAX + 1)
-				return true;
+				throw ImageLoadError{"Invalid or truncated script image chunk"};
+			RequireImageCount(ar, rangeCount, 2 * sizeof(short) + sizeof(u8), "Invalid range descriptor count");
 			rangeJumps.resize(rangeCount);
 			for (u32 i = 0; i < rangeCount; ++i)
 			{
@@ -532,11 +615,11 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 					ar.Read(&range.upper, sizeof(range.upper)) == 0 ||
 					ar.Read(&range.flags, sizeof(range.flags)) == 0)
 				{
-					return true;
+					throw ImageLoadError{"Invalid or truncated script image chunk"};
 				}
 				if (range.flags & ~(NEOS_RANGE_LOWER_LOCAL | NEOS_RANGE_UPPER_LOCAL |
 					NEOS_RANGE_LOWER_INCLUSIVE | NEOS_RANGE_UPPER_INCLUSIVE | NEOS_RANGE_UPPER_FIRST))
-					return true;
+					throw ImageLoadError{"Invalid or truncated script image chunk"};
 			}
 		}
 		else
@@ -585,7 +668,176 @@ bool CNeoVMProgram::Load(CNArchive& ar, std::string* err)
 			return false;
 		}
 	}
-	return true;
+	return VerifyCode(codeOwners, err);
+}
+
+// 저장된 명령 형식을 한 번 검증한다. 로드 후 치환용 opcode는 파일에서 받지 않고,
+// 아래의 패치 단계에서 원본 명령 검증을 마친 뒤에만 만든다.
+bool CNeoVMProgram::VerifyCode(const std::vector<int>& owners, std::string* err)
+{
+    auto reject = [&](const char* reason) { SetLoadError(err, reason); return false; };
+    if (functions.empty() || code.size() < 3 || code[0].op != NOP_ERROR || code[1].op != NOP_IDLE ||
+        owners[2] < 0)
+        return reject("Invalid script entry instructions");
+    const u8 L1 = NEOS_ARG_N1_LOCAL, L2 = NEOS_ARG_N2_LOCAL, L3 = NEOS_ARG_N3_LOCAL;
+    for (size_t i = 2; i < code.size(); ++i)
+    {
+        if (owners[i] < 0) return reject("Instruction outside function");
+        const SVMOperation& op = code[i];
+        const SFunctionTable& fun = functions[owners[i]];
+        unsigned slots = 0, writes = 0;
+        int argumentCount = -1;
+        bool jump = false, terminal = false;
+        const bool noResult = (op.argFlag & NEOS_OP_CALL_NORESULT) != 0;
+        switch (op.op)
+        {
+        case NOP_MOV: slots = 3; writes = 1; break;
+        case NOP_MOVI:
+        case NOP_MOVF: slots = writes = 1; break;
+        case NOP_LOADK:
+            slots = writes = 1;
+            if (op.n23 < 0 || op.n23 >= header._iStaticVarCount) return reject("Invalid constant operand");
+            break;
+        case NOP_MOV_MINUS:
+        case NOP_LOG_NOT:
+        case NOP_ADD2:
+        case NOP_SUB2:
+        case NOP_MUL2:
+        case NOP_DIV2:
+        case NOP_PERSENT2:
+        case NOP_LSHIFT2:
+        case NOP_RSHIFT2:
+        case NOP_AND2:
+        case NOP_OR2:
+        case NOP_XOR2: slots = 3; writes = 1; break;
+        case NOP_VAR_CLEAR:
+        case NOP_INC:
+        case NOP_DEC: slots = writes = 1; break;
+        case NOP_ADD3:
+        case NOP_SUB3:
+        case NOP_MUL3:
+        case NOP_DIV3:
+        case NOP_PERSENT3:
+        case NOP_LSHIFT3:
+        case NOP_RSHIFT3:
+        case NOP_AND3:
+        case NOP_OR3:
+        case NOP_XOR3:
+        case NOP_GREAT:
+        case NOP_GREAT_EQ:
+        case NOP_LESS:
+        case NOP_LESS_EQ:
+        case NOP_EQUAL2:
+        case NOP_NEQUAL:
+        case NOP_AND:
+        case NOP_OR:
+        case NOP_LOG_AND:
+        case NOP_LOG_OR: slots = 7; writes = 1; break;
+        case NOP_JMP: jump = terminal = true; break;
+        case NOP_JMP_FALSE:
+        case NOP_JMP_TRUE: slots = 2; jump = true; break;
+        case NOP_JMP_GREAT:
+        case NOP_JMP_GREAT_EQ:
+        case NOP_JMP_LESS:
+        case NOP_JMP_LESS_EQ:
+        case NOP_JMP_EQUAL2:
+        case NOP_JMP_NEQUAL:
+        case NOP_JMP_AND:
+        case NOP_JMP_OR:
+        case NOP_JMP_NAND:
+        case NOP_JMP_NOR: slots = 6; jump = true; break;
+        case NOP_JMP_FOR:
+            slots = writes = 2; jump = true;
+            if (!(op.argFlag & L2) || op.n2 < 0 || op.n2 > fun._localAddCount - 4)
+                return reject("Invalid for frame span");
+            break;
+        case NOP_JMP_FOREACH:
+            slots = 6; writes = 4; jump = true;
+            if (op.argFlag & L3) {
+                if (op.n3 < 0 || op.n3 > fun._localAddCount - 4) return reject("Invalid foreach frame span");
+            } else if (!IsGlobalVariable(op.n3) || !IsGlobalVariable((int)op.n3 + 3))
+                return reject("Invalid foreach global span");
+            break;
+        case NOP_SWITCH: slots = 2; terminal = true; break;
+        case NOP_STR_ADD: slots = 7; writes = 1; break;
+        case NOP_TOSTRING:
+        case NOP_TOINT:
+        case NOP_TOFLOAT:
+        case NOP_TOSIZE:
+        case NOP_GETTYPE: slots = 3; writes = 1; break;
+        case NOP_SLEEP: slots = 2; break;
+        case NOP_FMOV1: slots = writes = 1; break;
+        case NOP_FMOV2: slots = 3; writes = 1; break;
+        case NOP_CALL:
+            slots = writes = noResult ? 0 : 4;
+            argumentCount = op.n2;
+            if (op.n1 < 0 || op.n1 >= (int)functions.size() || argumentCount != functions[op.n1]._argsCount)
+                return reject("Invalid call target or argument count");
+            break;
+        case NOP_PTRCALL:
+            slots = ((op.argFlag & L2) || op.n2 != -1) ? 3 : 1;
+            argumentCount = op.n3;
+            break;
+        case NOP_PTRCALL2:
+            slots = noResult ? 1 : 5; writes = noResult ? 0 : 4; argumentCount = op.n2; break;
+        case NOP_RETURN: slots = noResult ? 0 : 1; terminal = true; break;
+        case NOP_TABLE_ALLOC: slots = writes = 1; break;
+        case NOP_CLT_READ: slots = 7; writes = 4; break;
+        case NOP_CLT_MOV:
+        case NOP_TABLE_ADD2:
+        case NOP_TABLE_SUB2:
+        case NOP_TABLE_MUL2:
+        case NOP_TABLE_DIV2:
+        case NOP_TABLE_PERSENT2: slots = 7; writes = 1; break;
+        case NOP_LIST_ALLOC: slots = writes = 1; break;
+        case NOP_VERIFY_TYPE: slots = 1; break;
+        case NOP_CHANGE_INT: slots = writes = 1; break;
+        case NOP_YIELD: break;
+        case NOP_JMP_RANGE_INSIDE:
+        case NOP_JMP_RANGE_OUTSIDE: slots = 2; jump = true; break;
+        case NOP_CLT_WRITE_REF: slots = 7; writes = 5; break;
+        case NOP_CLT_READ_RESULT: slots = 7; writes = 4; break;
+        case NOP_NONE: break;
+        case NOP_ERROR: terminal = true; break;
+        default: return reject("Invalid saved instruction opcode");
+        }
+        if ((op.op == NOP_CALL || op.op == NOP_PTRCALL || op.op == NOP_PTRCALL2) && argumentCount < 0)
+            return reject("Invalid call argument count");
+        if ((op.op == NOP_TABLE_ALLOC || op.op == NOP_LIST_ALLOC) && op.n23 < 0)
+            return reject("Invalid collection allocation count");
+        const short values[] = {op.n1, op.n2, op.n3};
+        const u8 flags[] = {L1, L2, L3};
+        for (unsigned n = 0; n < 3; ++n)
+        {
+            if (!(slots & (1u << n))) continue;
+            if (op.argFlag & (flags[n] << 3)) return reject("Immediate flag on variable operand");
+            const int value = values[n];
+            if (op.argFlag & flags[n]) {
+                if (value < 0 || value >= fun._stackSlotCount) return reject("Invalid local operand");
+            } else if ((writes & (1u << n)) ? !IsGlobalVariable(value) : !IsGlobalOperand(value))
+                return reject("Invalid global operand");
+        }
+        auto validJump = [&](int offset) {
+            const int64_t target = (int64_t)i + 1 + offset;
+            if (target < 2 || target >= (int64_t)code.size() || owners[(size_t)target] != owners[i]) return false;
+            const auto targetOp = code[(size_t)target].op;
+            const bool writeTail = targetOp == NOP_CLT_MOV || (targetOp >= NOP_TABLE_ADD2 && targetOp <= NOP_TABLE_PERSENT2);
+            return !(writeTail && (code[(size_t)target].argFlag & NEOS_OP_REF_WRITE));
+        };
+        if (jump && !validJump(op.n1)) return reject("Invalid branch target");
+        if (op.op == NOP_SWITCH)
+        {
+            const size_t tableIndex = (u16)op.n1;
+            if (tableIndex >= switchTables.size()) return reject("Invalid switch table reference");
+            const auto& table = switchTables[tableIndex];
+            if (!validJump(table.defaultOffset)) return reject("Invalid switch default target");
+            for (const auto& entry : table.entries)
+                if (!validJump(entry.jumpOffset)) return reject("Invalid switch case target");
+        }
+        if (!terminal && (i + 1 >= code.size() || owners[i + 1] != owners[i]))
+            return reject("Instruction falls through function boundary");
+    }
+    return true;
 }
 
 void CNeoVMProgram::PatchNativeCalls()
