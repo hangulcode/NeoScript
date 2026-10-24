@@ -247,6 +247,11 @@ if(NEOSCRIPT_BUILD_SMOKE)
     add_test(NAME neoscript_callback_reentry_regression COMMAND neoscript_callback_reentry_regression)
     set_tests_properties(neoscript_callback_reentry_regression PROPERTIES TIMEOUT 30)
 
+    add_executable(neoscript_property_stack_regression Tests/property_stack_regression.cpp)
+    target_link_libraries(neoscript_property_stack_regression PRIVATE neoscript Threads::Threads)
+    add_test(NAME neoscript_property_stack_regression COMMAND neoscript_property_stack_regression)
+    set_tests_properties(neoscript_property_stack_regression PROPERTIES TIMEOUT 60)
+
     add_executable(neoscript_call_error_regression Tests/call_error_regression.cpp)
     target_link_libraries(neoscript_call_error_regression PRIVATE neoscript Threads::Threads)
     add_test(NAME neoscript_call_error_regression COMMAND neoscript_call_error_regression)
