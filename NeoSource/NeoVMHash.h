@@ -1,8 +1,43 @@
 ﻿#pragma once
 
+#include <stdexcept>
+
 namespace NeoScript
 {
 extern u32 GetHashCode(const std::string& str);
+
+// Mix high bits into the bucket mask, including for aligned integer IDs.
+NEOS_FORCEINLINE u32 HashIntegerKey(int key)
+{
+	u32 h = static_cast<u32>(key);
+	h ^= h >> 16;
+	h *= 0x7feb352dU;
+	h ^= h >> 15;
+	h *= 0x846ca68bU;
+	h ^= h >> 16;
+	return h;
+}
+
+constexpr int MAX_HASH_CAPACITY = 1 << 30;
+constexpr int MAX_HASH_ITEMS = (MAX_HASH_CAPACITY / 4) * 3;
+
+inline int GrowHashCapacity(int current)
+{
+	if (current <= 0) return 2;
+	if (current > MAX_HASH_CAPACITY / 2)
+		throw std::length_error("collection capacity exceeds limit");
+	return current * 2;
+}
+
+inline int HashCapacityForItems(int count)
+{
+	if (count > MAX_HASH_ITEMS)
+		throw std::length_error("collection capacity exceeds limit");
+	int capacity = 2;
+	while (static_cast<long long>(capacity) * 3 < static_cast<long long>(count) * 4)
+		capacity = GrowHashCapacity(capacity);
+	return capacity;
+}
 
 struct VMString
 {

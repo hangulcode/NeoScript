@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "NeoConfig.h"
+#include "NeoNumeric.h"
 #include "NeoVMHash.h"
 
 namespace NeoScript
@@ -578,7 +579,7 @@ public:
 		case VAR_INT:
 			return V->_int;
 		case VAR_FLOAT:
-			return (int)V->_float;
+			return NeoFloatToInt(V->_float);
 		default:
 			break;
 		}

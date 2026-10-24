@@ -345,7 +345,8 @@ NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItemValid(VarInfo* pTable, VarIn
 	VarInfo* r = GetTableItem(pTable, pKey);
 	if (r != NULL)
 		return r;
-	SetError(RTE_KEY_NOT_FOUND);
+	if (!IsErrorTrap())
+		SetError(pTable->GetType() == VAR_LIST ? RTE_LIST_INDEX_WRITE : RTE_KEY_NOT_FOUND);
 	return NULL;
 }
 NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItemValid(VarInfo* pTable, int Array)
@@ -354,7 +355,8 @@ NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItemValid(VarInfo* pTable, int A
 	VarInfo* r = GetTableItem(pTable, &Key);
 	if (r != NULL)
 		return r;
-	SetError(RTE_KEY_NOT_FOUND);
+	if (!IsErrorTrap())
+		SetError(pTable->GetType() == VAR_LIST ? RTE_LIST_INDEX_WRITE : RTE_KEY_NOT_FOUND);
 	return NULL;
 }
 
@@ -744,6 +746,7 @@ NEOS_NOINLINE void CNeoVMWorker::Add3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	case VAR_STRING:
 		if (v2->GetType() == VAR_STRING)
 		{
+			CheckRuntimeStringGrowth(v1->_str->_str.size(), v2->_str->_str.size());
 			Var_SetStringA(r, v1->_str->_str + v2->_str->_str);
 			return;
 		}
@@ -1126,7 +1129,7 @@ NEOS_NOINLINE bool CNeoVMWorker::CompareEQRare(VarInfo* v1, VarInfo* v2)
 	return false;
 }
 
-NEOS_FORCEINLINE bool CNeoVMWorker::CompareGR(VarInfo* v1, VarInfo* v2)
+NEOS_FORCEINLINE bool CNeoVMWorker::CompareGR(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic)
 {
 	const VAR_TYPE t1 = v1->GetType();
 	const VAR_TYPE t2 = v2->GetType();
@@ -1144,18 +1147,18 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareGR(VarInfo* v1, VarInfo* v2)
 		if (t2 == VAR_FLOAT)
 			return v1->_float > v2->_float;
 	}
-	return CompareGRRare(v1, v2);
+	return CompareGRRare(v1, v2, reverseDiagnostic);
 }
 
-NEOS_NOINLINE bool CNeoVMWorker::CompareGRRare(VarInfo* v1, VarInfo* v2)
+NEOS_NOINLINE bool CNeoVMWorker::CompareGRRare(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic)
 {
 	if (v1->GetType() == VAR_STRING && v2->GetType() == VAR_STRING)
 		return v1->_str->_str > v2->_str->_str;
-	SetErrorOperator(">", v1, v2);
+	SetErrorOperator(reverseDiagnostic ? "<" : ">", reverseDiagnostic ? v2 : v1, reverseDiagnostic ? v1 : v2);
 	return false;
 }
 
-NEOS_FORCEINLINE bool CNeoVMWorker::CompareGE(VarInfo* v1, VarInfo* v2)
+NEOS_FORCEINLINE bool CNeoVMWorker::CompareGE(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic)
 {
 	const VAR_TYPE t1 = v1->GetType();
 	const VAR_TYPE t2 = v2->GetType();
@@ -1173,14 +1176,14 @@ NEOS_FORCEINLINE bool CNeoVMWorker::CompareGE(VarInfo* v1, VarInfo* v2)
 		if (t2 == VAR_FLOAT)
 			return v1->_float >= v2->_float;
 	}
-	return CompareGERare(v1, v2);
+	return CompareGERare(v1, v2, reverseDiagnostic);
 }
 
-NEOS_NOINLINE bool CNeoVMWorker::CompareGERare(VarInfo* v1, VarInfo* v2)
+NEOS_NOINLINE bool CNeoVMWorker::CompareGERare(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic)
 {
 	if (v1->GetType() == VAR_STRING && v2->GetType() == VAR_STRING)
 		return v1->_str->_str >= v2->_str->_str;
-	SetErrorOperator(">=", v1, v2);
+	SetErrorOperator(reverseDiagnostic ? "<=" : ">=", reverseDiagnostic ? v2 : v1, reverseDiagnostic ? v1 : v2);
 	return false;
 }
 
@@ -1211,6 +1214,7 @@ NEOS_NOINLINE void CNeoVMWorker::Add2Rare(VarInfo* r, VarInfo* v2)
 	case VAR_STRING:
 		if (v2->GetType() == VAR_STRING)
 		{
+			CheckRuntimeStringGrowth(r->_str->_str.size(), v2->_str->_str.size());
 			Var_SetStringA(r, r->_str->_str + v2->_str->_str);
 			return;
 		}
@@ -1517,6 +1521,12 @@ NEOS_NOINLINE bool CNeoVMWorker::ForEachRare(VarInfo* pClt, VarInfo* pKey, bool 
 	{
 	case VAR_STRING:
 	{
+		if (bTwoVar)
+		{
+			pIterator->ClearType();
+			SetError(RTE_FOREACH_STRING_TWOVAR);
+			return false;
+		}
 		std::string* str = &pClt->_str->_str;
 		if (pIterator->GetType() != VAR_ITERATOR)
 		{

@@ -333,6 +333,9 @@ Scripts can declare their own compile-time constants with `const`.
 Like host defines, a `const` is resolved during tokenization: it creates no runtime
 variable, costs nothing at runtime, and participates in constant folding.
 Because the name is replaced at compile time, a `const` can never be modified.
+Floating-point constant expressions use double precision during folding, then convert to float32
+when used by the VM; rounding can differ from runtime float32 arithmetic. Non-finite const results
+are compile errors. See [evaluation and numeric rules](docs/ScriptAuthoring.md#basics).
 
 ```cpp
 const BTN_START_GAME = 10;

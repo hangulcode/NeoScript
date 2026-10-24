@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstring>
 #include "NeoVMVector.h"
+#include "NeoNumeric.h"
 
 namespace NeoScript
 {
@@ -107,7 +108,7 @@ struct ArrayInfo : AllocBase
 			}
 			if (value->GetType() == VAR_FLOAT)
 			{
-				IntData()[index] = (int)value->_float;
+				IntData()[index] = NeoFloatToInt(value->_float);
 				return true;
 			}
 			return false;

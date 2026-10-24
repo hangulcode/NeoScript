@@ -173,12 +173,13 @@ NEOS_FORCEINLINE void INeoVMWorker::Var_SetString(VarInfo* d, const char* str)
 
 NEOS_FORCEINLINE void INeoVMWorker::Var_SetStringA(VarInfo* d, const std::string& str)
 {
+	// Keep aliased input and the old destination intact until allocation succeeds.
+	StringInfo* value = _pVM->StringAlloc(str);
+	++value->_refCount;
 	if (d->IsAllocType())
 		Var_Release(d);
-
 	d->SetType(VAR_STRING);
-	d->_str = _pVM->StringAlloc(str);
-	++d->_str->_refCount;
+	d->_str = value;
 }
 NEOS_FORCEINLINE void INeoVMWorker::Var_SetTable(VarInfo* d, MapInfo* p)
 {

@@ -890,6 +890,7 @@ struct SRangeJumpCompile
 
 struct SFunctions
 {
+	std::set<std::string> _exportNames;
 	std::vector<SFunctionLayer*>			_funLayers;
 	std::map<int, SFunctionInfo*>			_funIDs;
 	std::list<SFunctionInfo*>				_funSequence;

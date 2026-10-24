@@ -177,6 +177,31 @@ if(NEOSCRIPT_BUILD_SMOKE)
     add_test(NAME neoscript_math_boundary_regression COMMAND neoscript_math_boundary_regression)
     set_tests_properties(neoscript_math_boundary_regression PROPERTIES TIMEOUT 60)
 
+    add_executable(neoscript_hunt_runtime_regression Tests/hunt_runtime_regression.cpp)
+    target_link_libraries(neoscript_hunt_runtime_regression PRIVATE neoscript Threads::Threads)
+    add_test(NAME neoscript_hunt_runtime_regression COMMAND neoscript_hunt_runtime_regression)
+    set_tests_properties(neoscript_hunt_runtime_regression PROPERTIES TIMEOUT 60)
+
+    add_executable(neoscript_hunt_library_regression Tests/hunt_library_regression.cpp)
+    target_link_libraries(neoscript_hunt_library_regression PRIVATE neoscript Threads::Threads)
+    add_test(NAME neoscript_hunt_library_regression COMMAND neoscript_hunt_library_regression)
+    set_tests_properties(neoscript_hunt_library_regression PROPERTIES TIMEOUT 60)
+
+    add_executable(neoscript_hunt_parser_regression Tests/hunt_parser_regression.cpp)
+    target_link_libraries(neoscript_hunt_parser_regression PRIVATE neoscript Threads::Threads)
+    add_test(NAME neoscript_hunt_parser_regression COMMAND neoscript_hunt_parser_regression)
+    set_tests_properties(neoscript_hunt_parser_regression PROPERTIES TIMEOUT 60)
+
+    add_executable(neoscript_hunt_storage_regression Tests/hunt_storage_regression.cpp)
+    target_link_libraries(neoscript_hunt_storage_regression PRIVATE neoscript Threads::Threads)
+    add_test(NAME neoscript_hunt_storage_regression COMMAND neoscript_hunt_storage_regression)
+    set_tests_properties(neoscript_hunt_storage_regression PROPERTIES TIMEOUT 60)
+
+    add_executable(neoscript_hunt_evaluation_regression Tests/hunt_evaluation_regression.cpp)
+    target_link_libraries(neoscript_hunt_evaluation_regression PRIVATE neoscript Threads::Threads)
+    add_test(NAME neoscript_hunt_evaluation_regression COMMAND neoscript_hunt_evaluation_regression)
+    set_tests_properties(neoscript_hunt_evaluation_regression PROPERTIES TIMEOUT 60)
+
     add_executable(neoscript_signed_zero_regression Tests/signed_zero_regression.cpp)
     target_link_libraries(neoscript_signed_zero_regression PRIVATE neoscript Threads::Threads)
     add_test(NAME neoscript_signed_zero_regression COMMAND neoscript_signed_zero_regression)

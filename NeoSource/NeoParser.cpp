@@ -163,6 +163,13 @@ struct SOperand
     // A completed indexed assignment is still an lvalue, but its next value
     // consumer uses the captured component rather than rereading the owner.
     bool _assignedResult = false;
+    // A selector path is resolved by its consuming read/write. Plain variable
+    // roots and keys retain their slots; computed expressions retain their values.
+    int _pathRoot = INVALID_ERROR_PARSEJOB;
+    std::vector<int> _pathKeys;
+    std::vector<int> _pathOwners;
+    bool _pathResolved = false;
+
 	// Compile-time address of the immediate container, e.g. (list, i) for
 	// list[i][component]. Keep the address until a consumer chooses read/write.
 	// Parentheses never decide that choice, and no future tokens are inspected.
@@ -193,6 +200,8 @@ struct SOperand
 	{
 		_readOnly = false;
         _assignedResult = false;
+        _pathRoot = INVALID_ERROR_PARSEJOB;
+        _pathKeys.clear(); _pathOwners.clear(); _pathResolved = false;
 		_container = ContainerAccess();
 		_iVar = _iArrayIndex = INVALID_ERROR_PARSEJOB;
 		_operandType = Data_NR;
@@ -234,9 +243,32 @@ struct SOperand
 // Resolve the container at the consuming operation. Assignment calls this
 // after its RHS, just as a single-level indexed assignment does. R-value
 // boundaries resolve it before later arguments/operands can have side effects.
+static void PrepareContainerPath(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs)
+{
+    if (operand._assignedResult || operand._pathResolved || operand._pathKeys.empty()) return;
+    int owner = operand._pathRoot;
+    for (size_t i = 0; i + 2 < operand._pathKeys.size(); ++i)
+    {
+        const int next = operand._pathOwners[i];
+        funs._cur->Push_TableRead(ar, owner, operand._pathKeys[i], next, false);
+        owner = next;
+    }
+    operand._container = SOperand::ContainerAccess();
+    if (operand._pathKeys.size() > 1)
+    {
+        operand._container.owner = owner;
+        operand._container.key = operand._pathKeys[operand._pathKeys.size() - 2];
+        operand._iVar = operand._pathOwners.back();
+    }
+    else operand._iVar = owner;
+    operand._iArrayIndex = operand._pathKeys.back();
+    operand._pathResolved = true;
+}
+
 static void ResolveContainer(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs)
 {
     if (operand._assignedResult) return;
+    PrepareContainerPath(operand, ar, funs);
 	auto& access = operand._container;
 	if (access.owner != INVALID_ERROR_PARSEJOB && !access.loaded)
 	{
@@ -260,7 +292,16 @@ static void ReadElement(SOperand& operand, int dest, CArchiveRdWC& ar, SFunction
 static void WriteElement(SOperand& operand, eNOperation op, int value, bool immediate,
 	CArchiveRdWC& ar, SFunctions& funs)
 {
-    const auto access = operand._container;
+    PrepareContainerPath(operand, ar, funs);
+    if (op == NOP_LSHIFT2 || op == NOP_RSHIFT2 || op == NOP_AND2 || op == NOP_OR2 || op == NOP_XOR2)
+    {
+        const int updated = funs._cur->AllocLocalTempVar();
+        ReadElement(operand, updated, ar, funs);
+        funs._cur->Push_OP2(ar, op, updated, value, immediate);
+        WriteElement(operand, NOP_MOV, updated, false, ar, funs);
+        return;
+    }
+	const auto access = operand._container;
     if (access.owner != INVALID_ERROR_PARSEJOB &&
         (op == NOP_MOV || op == NOP_ADD2 || op == NOP_SUB2 ||
          op == NOP_MUL2 || op == NOP_DIV2 || op == NOP_PERSENT2))
@@ -306,6 +347,17 @@ static void MaterializeValue(SOperand& operand, CArchiveRdWC& ar, SFunctions& fu
 // ParseNum 이 만들어 둔 상수 풀 항목은, 아무도 참조하지 않는 것이 확실할 때만 되돌린다.
 // 판정은 CanPopLastStatic 이 O(1) 로 한다 — 명령을 내면 코드 오프셋이 달라지므로
 // 반드시 방출 '전에' 물어봐야 한다.
+static void SnapshotValue(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs)
+{
+    MaterializeValue(operand, ar, funs);
+    if (!operand.IsInvalidValue() && !IsTempVar(operand._iVar) && !IsCompileConstant(operand._iVar))
+    {
+        const int value = funs._cur->AllocLocalTempVar();
+        funs._cur->Push_OP2(ar, NOP_MOV, value, operand._iVar, operand.IsShort());
+        operand = SOperand(value);
+    }
+}
+
 static bool TryPushImmediate(CArchiveRdWC& ar, SFunctions& funs, int dest, const SOperand& source, int iDebugLine = -1)
 {
 	if (source.IsArray())
@@ -475,7 +527,9 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 TK_TYPE ParseShortCircuitLogic(bool bReqReturn, SOperand& sResultStack, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, TK_TYPE tkEnd1 = TK_SEMICOLON, TK_TYPE tkEnd2 = TK_COMMA, TK_TYPE tkEnd3 = TK_R_SMALL, TK_TYPE tkEnd4 = TK_R_ARRAY, std::vector<SJumpValue>* pOutFalseJumps = NULL);
 bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport, bool blPublic);
 // bStopAtCase: switch 본문 파싱용. case/default/'}' 를 만나면 소비하지 않고(PushToken) 종료한다.
-bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* alwaysReturns = NULL, std::vector<SJumpValue>* pContinueJumps = NULL, bool bStopAtCase = false);
+static bool ParseSingleStatement(std::vector<SJumpValue>* breaks, CArchiveRdWC& ar,
+    SFunctions& funs, SVars& vars, bool* returns, std::vector<SJumpValue>* continues);
+bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* alwaysReturns = NULL, std::vector<SJumpValue>* pContinueJumps = NULL, bool bStopAtCase = false, bool allowEof = false, bool singleStatement = false);
 bool ParseSwitch(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* alwaysReturns, std::vector<SJumpValue>* pContinueJumps);
 bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool addOPFunEnd = true);
 
@@ -1287,6 +1341,17 @@ TK_TYPE GetToken(CArchiveRdWC& ar, std::string& tk)
 	return (tk.size() != 0) ? TK_STRING : TK_NONE;
 }
 
+struct ParserDepthGuard
+{
+    CArchiveRdWC& archive;
+    explicit ParserDepthGuard(CArchiveRdWC& value) : archive(value)
+    {
+        CheckCompileRange("parser nesting depth", archive._parserDepth + 1, 0, 128);
+        ++archive._parserDepth;
+    }
+    ~ParserDepthGuard() { --archive._parserDepth; }
+};
+
 bool UseableName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, const std::string& name, bool checkName)
 {
 	if (checkName && false == AbleName(name))
@@ -1295,6 +1360,11 @@ bool UseableName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, const std::str
 		return false;
 	}
 	SLayerVar* pCurLayer = vars.GetCurrentLayer();
+	if (vars._varsFunction.size() == 1 && funs.FindFun(name) != nullptr)
+	{
+		SetCompileError(ar, "variable '%s' conflicts with a function in this module", name.c_str());
+		return false;
+	}
 
 	if (pCurLayer->FindVarOnlyCurrentBlock(vars.DeclarationName(name)) != -1 ||
 		(vars._varsFunction.size() == 1 && pCurLayer->_varsLayer.size() == 1 &&
@@ -1312,7 +1382,7 @@ int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExp
 		return -1;
 	// export var 는 호스트가 이름으로 찾는 변수(모듈에는 안 보임), public var 는 다른 모듈이
 	// 별칭으로 읽고 쓰는 변수다. 호스트 이름이 충돌하면 모호한 이미지를 만들지 않는다.
-	if (blExport && vars._exportSlots.count(name) != 0)
+	if (blExport && (vars._exportSlots.count(name) != 0 || funs._exportNames.count(name) != 0))
 	{
 		SetCompileError(ar, "duplicate exported variable '%s'", name.c_str());
 		return -1;
@@ -1335,6 +1405,7 @@ int  AddLocalVarName(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExp
 		{
 			vars._varsExport.push_back(name);
 			vars._exportSlots[name] = iLocalVar;
+			funs._exportNames.insert(name);
 		}
 		else
 		{
@@ -1388,9 +1459,10 @@ static int FindReadableVar(SFunctions& funs, SVars& vars, const std::string& nam
 	int slot = vars.FindVar(name, &owner);
 	if (slot == -1)
 		return -1;
-	if (owner == nullptr || owner == vars.GetCurrentLayer() || slot <= 0 ||
-		funs._cur == nullptr || funs._cur->_funType != FUNT_ANONYMOUS)
+	if (owner == nullptr || owner == vars.GetCurrentLayer() || slot <= 0)
 		return slot;
+	if (funs._cur == nullptr || funs._cur->_funType != FUNT_ANONYMOUS)
+		return -1;
 
 	int ownerIndex = -1;
 	for (int i = 0; i < (int)vars._varsFunction.size(); ++i)
@@ -1592,6 +1664,7 @@ bool ParseImport(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	ar2._allowGlobalInitLogic = ar._allowGlobalInitLogic;
 	ar2._debug = ar._debug;
+	ar2._parserDepth = ar._parserDepth;
 	ar2.m_pDefines = ar.m_pDefines;
 	ar2.m_pLoader = ar.m_pLoader;                 // 중첩 import 도 같은 loader 로 해석
 	ar2.m_sModuleName = fileName;
@@ -1893,6 +1966,9 @@ TK_TYPE Try_ParseIntNum(int& iResultInt, CArchiveRdWC& ar, SFunctions& funs, SVa
 	return TK_NONE;
 }
 
+static bool ExpressionMayMutate(CArchiveRdWC& ar, TK_TYPE e1, TK_TYPE e2, TK_TYPE e3,
+    TK_TYPE e4, TK_TYPE e5, TK_TYPE e6);
+
 bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
 	std::string tk1, tk2;
@@ -1904,7 +1980,13 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 == TK_L_SMALL)
 	{
-		ResolveContainer(iResultStack, ar, funs);
+        ResolveContainer(iResultStack, ar, funs);
+        if (!pFun && iResultStack._iVar != INVALID_ERROR_PARSEJOB)
+        {
+            SOperand receiver(iResultStack._iVar);
+            SnapshotValue(receiver, ar, funs);
+            iResultStack._iVar = receiver._iVar;
+        }
 		int iCallLine = ar.CurLine();
 		int iParamCount = 0;
 		// 각 인자를 평가하되, 호출-인자 슬롯(COMPILE_CALLARG_VAR_BEGIN)으로의 복사는
@@ -1912,7 +1994,8 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 		// 같은 호출-인자 윈도우를 재사용하므로, 즉시 복사할 경우 먼저 평가된 인자가 덮어써진다.
 		std::vector<SOperand> argOperands;
 		std::vector<int> argDefOffsets;  // 인자 결과를 만든 단일 op 의 오프셋 (융합 불가면 -1)
-		std::vector<int> argCallCounts;  // 이 인자 평가 완료 시점의 call emit 카운트
+		std::vector<bool> argMayClobberCallWindow;
+        std::vector<int> argCallCounts;  // 이 인자 평가 완료 시점의 call emit 카운트
 		while (true)
 		{
 			tkType2 = GetToken(ar, tk2);
@@ -1929,6 +2012,8 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 			//}
 			//else
 			{
+                argMayClobberCallWindow.push_back(ExpressionMayMutate(ar, TK_SEMICOLON, TK_COMMA,
+                    TK_R_SMALL, TK_R_ARRAY, TK_UNUSED, TK_UNUSED));
 				int iCodeOffBefore = funs._cur->_code->GetBufferOffset();
 				iTempVar.Reset();
 				tkType3 = ParseShortCircuitLogic(true, iTempVar, ar, funs, vars);
@@ -1937,7 +2022,7 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 					SetParserCompileError(ar, PCE_INVALID_CALL_ARGUMENT);
 					return false;
 				}
-				ResolveContainer(iTempVar, ar, funs);
+				SnapshotValue(iTempVar, ar, funs);
 				argOperands.push_back(iTempVar);
 
 				// 인자 식 전체가 "임시변수에 쓰는 단일 op" 로 끝났으면 나중에
@@ -1976,7 +2061,12 @@ bool ParseFunCall(SOperand& iResultStack, TK_TYPE tkTypePre, SFunctionInfo* pFun
 			// 융합: 인자 producer 의 dest 를 호출-인자 슬롯으로 직접 패치하고 MOV 생략.
 			// 조건: 이후 인자들의 평가에 함수 호출이 없어야 함 — 호출은 같은 인자
 			// 윈도우를 재사용하므로 일찍 쓴 슬롯이 덮어써진다 (지연 복사의 이유).
-			if (argDefOffsets[i] != -1 && argCallCounts[i] == iFinalCallCount)
+            bool laterMayClobber = false;
+            for (int later = i + 1; later < iParamCount; ++later)
+                laterMayClobber = laterMayClobber || argMayClobberCallWindow[later];
+            // Host getters/setters can use the call window without a CALL
+            // opcode. Preserve earlier values in temps until those finish.
+			if (argDefOffsets[i] != -1 && argCallCounts[i] == iFinalCallCount && !laterMayClobber)
 			{
 				funs._cur->SetN(argDefOffsets[i], 0, (s16)(COMPILE_CALLARG_VAR_BEGIN + 1 + i));
 				continue;
@@ -2079,7 +2169,7 @@ bool ParseNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArch
 	if (iResultStack._iVar != -1)
 		return true;
 
-	if (true == StringToNumber(num, tk1.c_str()))
+	if (true == StringToNumber(num, tk1.c_str(), tkTypePre == TK_MINUS))
 	{
 		u16 c = ar.GetData(false);
 		if (num.type == ParsedNumber::Type::Float) // 통째로 들어온 float(1.5, 1e+20 등)
@@ -2122,7 +2212,10 @@ bool ParseNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArch
 	}
 	else
 	{
-		SetParserCompileError(ar, PCE_UNKNOWN_IDENTIFIER, tk1.c_str());
+		if (!tk1.empty() && (tk1[0] >= '0' && tk1[0] <= '9'))
+            SetCompileError(ar, "invalid or out-of-range integer literal '%s'", tk1.c_str());
+        else
+            SetParserCompileError(ar, PCE_UNKNOWN_IDENTIFIER, tk1.c_str());
 		return false;
 	}
 	return true;
@@ -2229,6 +2322,7 @@ TK_TYPE ParseListDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs,
 	// 문장이면 상위에서 `;`를, 함수 인자면 ParseFunCall이 `)`/`,`를 확인한다. 여기서 `;`를
 	// 강제하면 리스트 리터럴을 함수 인자로 쓸 때(예: x.append([1,2,3])) 잘못된 에러가 난다.
 	tkType1 = GetToken(ar, tk1);
+	ar.PushToken(tkType1, tk1);
 	if (iItemCount > 0)
 	{
 	//	iStaticString = funs.AddStaticString("resize");
@@ -2296,7 +2390,7 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 		{
 			// Resolve the key before parsing the value: that expression can mutate
 			// its source container. A container operand is not the element itself.
-			MaterializeValue(iTempOffsetKey, ar, funs);
+			SnapshotValue(iTempOffsetKey, ar, funs);
 			tkType2 = ParseShortCircuitLogic(true, iTempOffsetValue, ar, funs, vars, TK_COMMA, TK_R_MIDDLE, TK_NONE, TK_NONE);
 			if (tkType2 == TK_NONE)
 			{
@@ -2342,6 +2436,7 @@ TK_TYPE ParseTableDef(SOperand& iResultStack, CArchiveRdWC& ar, SFunctions& funs
 	// 맵/테이블 뒤의 토큰은 소비해서 반환만 하고, 유효성은 호출자가 검증한다(ParseListDef와 동일).
 	// 여기서 `;`를 강제하면 맵 리터럴을 함수 인자로 쓸 때 잘못된 에러가 난다.
 	tkType1 = GetToken(ar, tk1);
+	ar.PushToken(tkType1, tk1);
 	if (iItemCount > 0)
 	{
 		//iStaticString = funs.AddStaticString("reserve");
@@ -2406,6 +2501,7 @@ static bool ParsePostfixSelectors(SOperand& operand, CArchiveRdWC& ar, SFunction
 		}
 
 		SOperand key;
+        const int keyCodeStart = funs._cur->_code->GetBufferOffset();
 		if (type == TK_L_ARRAY)
 		{
 			if (ParseTable(key, ar, funs, vars) != TK_R_ARRAY)
@@ -2427,27 +2523,39 @@ static bool ParsePostfixSelectors(SOperand& operand, CArchiveRdWC& ar, SFunction
 			key = funs.AddStaticString(member);
 		}
 
-		MaterializeValue(key, ar, funs);
-		ResolveContainer(operand, ar, funs);
-		if (operand.IsArray())
-		{
-			SOperand child(funs._cur->AllocLocalTempVar());
-			child._container.owner = operand._iVar;
-			child._container.key = operand._iArrayIndex;
-			if (operand._assignedResult)
-			{
-				// Read the completed assignment without losing its owning slot.
-				// A later component write needs that address for COW/writeback;
-				// a captured scalar result must still fail if indexed again.
-				ReadElement(operand, child._iVar, ar, funs);
-				child._container.loaded = true;
-			}
-			operand = child;
-		}
-		else
-			MaterializeValue(operand, ar, funs);
-		operand._iArrayIndex = key._iVar;
-		operand._operandType = key.IsShort() ? Data_TS : Data_TR;
+        // Assignment/prefix keys can return a named slot despite having already
+        // executed. Preserve their resulting value; only an unevaluated plain
+        // variable key keeps the documented late lookup at the eventual write.
+        if (funs._cur->_code->GetBufferOffset() != keyCodeStart) SnapshotValue(key, ar, funs);
+        else MaterializeValue(key, ar, funs);
+        if (operand._assignedResult || (operand.IsArray() && operand._pathKeys.empty()))
+        {
+            ResolveContainer(operand, ar, funs);
+            SOperand child(funs._cur->AllocLocalTempVar());
+            child._container.owner = operand._iVar;
+            child._container.key = operand._iArrayIndex;
+            if (operand._assignedResult)
+            {
+                ReadElement(operand, child._iVar, ar, funs);
+                child._container.loaded = true;
+            }
+            operand = child;
+            operand._iArrayIndex = key._iVar;
+        }
+        else
+        {
+            if (!operand.IsArray())
+            {
+                MaterializeValue(operand, ar, funs);
+                operand._pathRoot = operand._iVar;
+            }
+            else operand._pathOwners.push_back(funs._cur->AllocLocalTempVar());
+            operand._pathKeys.push_back(key._iVar);
+            operand._pathResolved = false;
+            operand._iArrayIndex = key._iVar;
+            if (!operand._pathOwners.empty()) operand._iVar = operand._pathOwners.back();
+        }
+        operand._operandType = key.IsShort() ? Data_TS : Data_TR;
 		lastSelectorWasDot = type == TK_DOT;
 	}
 }
@@ -2522,10 +2630,11 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 		return false;
 	}
 
+	const int lexicalSlot = FindReadableVar(funs, vars, tk1);
 	SFunctionLayer* pOtherModule = nullptr;
 	std::string moduleName;
 	auto it = funs._curModule->_defModules.find(tk1);
-	if (it != funs._curModule->_defModules.end())
+	if (lexicalSlot == -1 && it != funs._curModule->_defModules.end())
 	{
 		moduleName = tk1;
 		if (!ReadModuleMember(ar, tk2))
@@ -2536,7 +2645,7 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 
 	SOperand value;
 	if (pOtherModule == nullptr)
-		value._iVar = FindReadableVar(funs, vars, tk1);
+		value._iVar = lexicalSlot;
 	else
 	{
 		const auto constant = pOtherModule->_exportedConsts.values.find(tk1);
@@ -2570,6 +2679,11 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 			else
 			{
 				// 호출하지 않은 함수 이름은 컴파일 전용 함수 참조로 유지한다.
+                if (pOtherModule != nullptr && pOtherModule->_blBuiltInModule)
+                {
+                    SetCompileError(ar, "native function '%s.%s' must be called directly", moduleName.c_str(), tk1.c_str());
+                    return false;
+                }
 				value = SOperand(pFun->_funID, INVALID_ERROR_PARSEJOB, Data_Fun);
 			}
 		}
@@ -2612,44 +2726,98 @@ bool ParseString(SOperand& operand, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 	return true;
 }
 
-bool ParseLogicNotOperand(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
+bool ParseToType(int& result, TK_TYPE prefix, CArchiveRdWC& ar, SFunctions& funs, SVars& vars);
+
+static bool ParseUnaryOperand(SOperand& operand, TK_TYPE prefix, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
-	std::string tkNext;
-	TK_TYPE tkNextType = GetToken(ar, tkNext);
-	if (tkNextType == TK_LOGIC_NOT)
-	{
-		if (false == ParseLogicNotOperand(operand, ar, funs, vars))
-			return false;
-	}
-	else if (tkNextType == TK_L_SMALL)
-	{
-		if (TK_R_SMALL != ParseShortCircuitLogic(true, operand, ar, funs, vars))
-		{
-			return false;
-		}
-	}
-	else if (tkNextType == TK_TRUE || tkNextType == TK_FALSE)
-	{
-		operand = SOperand(funs.AddStaticBool(tkNextType == TK_TRUE));
-	}
-	else
-	{
-		ar.PushToken(tkNextType, tkNext);
-		if (false == ParseString(operand, TK_NONE, ar, funs, vars))
-			return false;
-	}
-
-	if (operand.IsInvalidValue())
-	{
-		SetParserCompileError(ar, PCE_EXPECTED_LOGIC_NOT_OPERAND);
-		return false;
-	}
-	MaterializeValue(operand, ar, funs);
-
-	int iNot = funs._cur->AllocLocalTempVar();
-	funs._cur->Push_OP2(ar, NOP_LOG_NOT, iNot, operand._iVar, operand.IsShort());
-	operand = SOperand(iNot);
-	return true;
+    ParserDepthGuard depth(ar);
+    std::string token;
+    const TK_TYPE type = GetToken(ar, token);
+    bool appliedSign = false;
+    if (type == TK_PLUS || type == TK_MINUS || type == TK_NOT || type == TK_LOGIC_NOT)
+    {
+        if (!ParseUnaryOperand(operand, type, ar, funs, vars)) return false;
+    }
+    else if (type == TK_PLUS2 || type == TK_MINUS2)
+    {
+        if (!ParseUnaryOperand(operand, TK_PLUS, ar, funs, vars)) return false;
+        if (operand.IsFun() || operand._readOnly || (!operand.IsArray() &&
+            (IsTempVar(operand._iVar) || IsCompileConstant(operand._iVar))))
+        {
+            SetParserCompileError(ar, PCE_INVALID_INCREMENT_TARGET, token.c_str());
+            return false;
+        }
+        if (operand.IsArray())
+            WriteElement(operand, type == TK_PLUS2 ? NOP_ADD2 : NOP_SUB2, funs.AddStaticInt(1), false, ar, funs);
+        else funs._cur->Push_OP1(ar, type == TK_PLUS2 ? NOP_INC : NOP_DEC, operand._iVar);
+    }
+    else if (type == TK_L_SMALL)
+    {
+        if (ParseShortCircuitLogic(true, operand, ar, funs, vars) != TK_R_SMALL) return false;
+        if (!ParsePostfixSelectors(operand, ar, funs, vars)) return false;
+    }
+    else if (type == TK_TOSTRING || type == TK_TOINT || type == TK_TOFLOAT || type == TK_TOSIZE || type == TK_GETTYPE)
+    {
+        if (!ParseToType(operand._iVar, type, ar, funs, vars)) return false;
+        if (!ParsePostfixSelectors(operand, ar, funs, vars)) return false;
+    }
+    else if (type == TK_TRUE || type == TK_FALSE)
+        operand = SOperand(funs.AddStaticBool(type == TK_TRUE));
+    else if (type == TK_NULL)
+    {
+        operand = SOperand(funs._cur->AllocLocalTempVar());
+        funs._cur->Push_OP1(ar, NOP_VAR_CLEAR, operand._iVar);
+    }
+    else if (type == TK_QUOTE1 || type == TK_QUOTE2 || type == TK_STRING_LITERAL)
+    {
+        if (type != TK_STRING_LITERAL && !GetQuotationString(ar, token, type == TK_QUOTE1 ? '\'' : '"')) return false;
+        operand = SOperand(funs.AddStaticString(token));
+        if (!ParsePostfixSelectors(operand, ar, funs, vars)) return false;
+    }
+    else if (type == TK_L_ARRAY || type == TK_L_MIDDLE)
+    {
+        const TK_TYPE end = type == TK_L_ARRAY ? ParseListDef(operand, ar, funs, vars) : ParseTableDef(operand, ar, funs, vars);
+        if (end == TK_NONE || !ParsePostfixSelectors(operand, ar, funs, vars)) return false;
+    }
+    else
+    {
+        ar.PushToken(type, token);
+        appliedSign = prefix == TK_MINUS && type == TK_STRING && !token.empty() && token[0] >= '0' && token[0] <= '9';
+        if (!ParseString(operand, appliedSign ? TK_MINUS : TK_NONE, ar, funs, vars)) return false;
+    }
+    // Postfix mutation binds more tightly than the leading unary operator.
+    const TK_TYPE next = GetToken(ar, token);
+    if (next == TK_PLUS2 || next == TK_MINUS2)
+    {
+        if (operand.IsFun() || operand._readOnly || (!operand.IsArray() &&
+            (IsTempVar(operand._iVar) || IsCompileConstant(operand._iVar))))
+        {
+            SetParserCompileError(ar, PCE_INVALID_INCREMENT_TARGET, token.c_str());
+            return false;
+        }
+        const int old = funs._cur->AllocLocalTempVar();
+        ReadElement(operand, old, ar, funs);
+        if (operand.IsArray())
+            WriteElement(operand, next == TK_PLUS2 ? NOP_ADD2 : NOP_SUB2, funs.AddStaticInt(1), false, ar, funs);
+        else
+            funs._cur->Push_OP1(ar, next == TK_PLUS2 ? NOP_INC : NOP_DEC, operand._iVar);
+        operand = SOperand(old);
+    }
+    else ar.PushToken(next, token);
+    if (operand.IsInvalidValue())
+    {
+        SetParserCompileError(ar, PCE_EXPECTED_EXPRESSION);
+        return false;
+    }
+    if (appliedSign || prefix == TK_PLUS) return true;
+    MaterializeValue(operand, ar, funs);
+    const int result = funs._cur->AllocLocalTempVar();
+    if (prefix == TK_NOT)
+        funs._cur->Push_OP(ar, NOP_XOR3, result, operand._iVar, funs.AddStaticInt(-1), false, false);
+    else
+        funs._cur->Push_OP2(ar, prefix == TK_MINUS ? NOP_MOV_MINUS : NOP_LOG_NOT, result, operand._iVar, false);
+    operand = SOperand(result);
+    return true;
 }
 
 bool ParseToType(int& iResultStack, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
@@ -2686,9 +2854,44 @@ bool ParseToType(int& iResultStack, TK_TYPE tkTypePre, CArchiveRdWC& ar, SFuncti
 //case TK_COMMA:		// ,
 //case TK_R_SMALL:	// )
 //case TK_R_ARRAY:	// ]
+static bool ExpressionMayMutate(CArchiveRdWC& ar, TK_TYPE e1, TK_TYPE e2, TK_TYPE e3,
+    TK_TYPE e4, TK_TYPE e5, TK_TYPE e6)
+{
+    struct Restore { CArchiveRdWC& ar; CArchiveRdWC::Cursor cursor; ~Restore(){ ar.RestoreCursor(std::move(cursor)); } } restore{ar, ar.SaveCursor()};
+    int depth = 0;
+    TK_TYPE previous = TK_NONE;
+    for (;;)
+    {
+        std::string token;
+        const TK_TYPE type = GetToken(ar, token);
+        if (type == TK_NONE) return false;
+        if (depth == 0 && (type == e1 || type == e2 || type == e3 || type == e4 ||
+            (e5 != TK_UNUSED && type == e5) || (e6 != TK_UNUSED && type == e6))) return false;
+        if (type == TK_EQUAL || type == TK_PLUS_EQ || type == TK_MINUS_EQ || type == TK_MUL_EQ ||
+            type == TK_DIV_EQ || type == TK_PERCENT_EQ || type == TK_LSHIFT_EQ || type == TK_RSHIFT_EQ ||
+            type == TK_AND_EQ || type == TK_OR_EQ || type == TK_XOR_EQ || type == TK_PLUS2 || type == TK_MINUS2)
+            return true;
+        // Native selector reads may invoke host property callbacks.
+        if (type == TK_DOT || type == TK_L_ARRAY) return true;
+        if (type == TK_L_SMALL && (previous == TK_STRING || previous == TK_R_ARRAY || previous == TK_R_SMALL)) return true;
+        if (type == TK_QUOTE1 || type == TK_QUOTE2)
+        {
+            if (!GetQuotationString(ar, token, type == TK_QUOTE1 ? '\'' : '"')) return true;
+        }
+        if (type == TK_L_SMALL || type == TK_L_ARRAY || type == TK_L_MIDDLE) ++depth;
+        else if (type == TK_R_SMALL || type == TK_R_ARRAY || type == TK_R_MIDDLE)
+        {
+            if (depth == 0) return false;
+            --depth;
+        }
+        previous = type;
+    }
+}
+
 TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool bAllowVarDef,
 	TK_TYPE tkEnd1, TK_TYPE tkEnd2, TK_TYPE tkEnd3, TK_TYPE tkEnd4, std::vector<SJumpValue>* pContinueJumps, TK_TYPE tkEnd5, TK_TYPE tkEnd6)
 {
+	ParserDepthGuard depth(ar);
 	std::string tk1, tk2;
 	TK_TYPE tkType1, tkType2;
 	TK_TYPE r = TK_NONE;
@@ -2700,6 +2903,80 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 	std::vector<SOperand> operands;
 	std::vector<TK_TYPE> operators;
 	bool blApperOperator = false;
+
+    const bool mayMutate = ExpressionMayMutate(ar, tkEnd1, tkEnd2, tkEnd3, tkEnd4, tkEnd5, tkEnd6);
+    auto reduce = [&](int maximumPriority) -> bool
+    {
+	while (operators.empty() == false)
+	{
+		int iTempPriority;
+		int iFindOffset = -1;
+		int iFindPriority = 100;
+		for (int i = 0; i < (int)operators.size(); i++)
+		{
+			TokenToOP(operators[i], iTempPriority);
+			if (i == 0 || iFindPriority > iTempPriority)
+			{
+				iFindPriority = iTempPriority;
+				iFindOffset = i;
+			}
+		}
+		if (iFindPriority > maximumPriority) break;
+		auto op = TokenToOP(operators[iFindOffset], iTempPriority);
+		RemoveAt<TK_TYPE>(operators, iFindOffset);
+
+		SOperand& a = operands[iFindOffset];
+		auto b = operands[iFindOffset + 1];
+
+		// 양쪽이 숫자 리터럴이면 여기서 계산해 버린다(런타임 연산이 통째로 사라진다).
+		// 결과 리터럴이 다시 피연산자가 되므로 (2 + 3) * 4 처럼 중첩된 식도 끝까지 접힌다.
+		if (TryFoldLiteralBinOp(a, op, b, funs))
+		{
+			operands[iFindOffset] = a;
+			RemoveAt<SOperand>(operands, iFindOffset + 1);
+			continue;
+		}
+
+		// Check the destination before the function-value assignment path too.
+		if (op < NOP_VAR_CLEAR && (a.IsFun() || a._readOnly ||
+			(!a.IsArray() && (IsTempVar(a._iVar) || IsCompileConstant(a._iVar)))))
+		{
+			SetParserCompileError(ar, PCE_EXPECTED_LVALUE);
+			return false;
+		}
+		if (op < NOP_VAR_CLEAR)
+		{
+			if (b.IsFun() && op == NOP_MOV)
+			{
+				if (a.IsArray())
+					WriteElement(a, NOP_FMOV2, b._iVar, false, ar, funs);
+				else
+					funs._cur->Push_OP2(ar, NOP_FMOV1, a._iVar, b._iVar, false);
+			}
+			else if (op == NOP_MOV && !a.IsArray() && b.IsArray())
+				ReadElement(b, a._iVar, ar, funs); // retain READ-to-destination fusion
+			else
+			{
+				MaterializeValue(b, ar, funs); // complete the RHS before resolving the destination
+				if (a.IsArray())
+					WriteElement(a, op, b._iVar, b.IsShort(), ar, funs);
+				else if (op != NOP_MOV || !TryPushImmediate(ar, funs, a._iVar, b))
+					funs._cur->Push_OP2(ar, op, a._iVar, b._iVar, b.IsShort());
+			}
+		}
+		else
+		{
+			MaterializeValue(a, ar, funs);
+			MaterializeValue(b, ar, funs);
+			const int iTempOffset2 = funs._cur->AllocLocalTempVar();
+			funs._cur->Push_OP(ar, op, iTempOffset2, a._iVar, b._iVar, a.IsShort(), b.IsShort());
+			operands[iFindOffset] = iTempOffset2;
+		}
+		RemoveAt<SOperand>(operands, iFindOffset + 1);
+	}
+
+        return true;
+    };
 
 	bool blEnd = false;
 	while (blEnd == false)
@@ -2791,51 +3068,30 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			break;
 		case TK_PLUS:		// +
 		case TK_MINUS:		// -
-			if (blApperOperator == false)
-			{
-				// 단항 +/-. 다음 토큰이 '(' 이면 괄호식을 평가한 뒤 부호를 적용한다.
-				// ParseString은 식별자/숫자만 처리하므로 -(expr) 형태는 여기서 직접 다룬다.
-				std::string tkNext;
-				TK_TYPE tkNextType = GetToken(ar, tkNext);
-				if (tkNextType == TK_L_SMALL)
-				{
-					SOperand a;
-					if (TK_R_SMALL != ParseShortCircuitLogic(bReqReturn, a, ar, funs, vars))
-					{
-						return TK_NONE;
-					}
-					if (tkType1 == TK_MINUS)
-					{
-						MaterializeValue(a, ar, funs);
-						int iNeg = funs._cur->AllocLocalTempVar();
-						funs._cur->Push_OP2(ar, NOP_MOV_MINUS, iNeg, a._iVar, false);
-						a = SOperand(iNeg);
-					}
-					operands.push_back(a);
-					blApperOperator = true;
-					break;
-				}
-				ar.PushToken(tkNextType, tkNext);
-
-				SOperand a;
-				if (false == ParseString(a, tkType1, ar, funs, vars))
-				{
-					return TK_NONE;
-				}
-
-				operands.push_back(a);
-				blApperOperator = true;
-				break;
-			}
-			ResolveContainer(operands.back(), ar, funs);
+            if (!blApperOperator)
+            {
+                SOperand value;
+                if (!ParseUnaryOperand(value, tkType1, ar, funs, vars)) return TK_NONE;
+                operands.push_back(value);
+                blApperOperator = true;
+                break;
+            }
+            if (mayMutate) SnapshotValue(operands.back(), ar, funs);
+            else ResolveContainer(operands.back(), ar, funs);
+            {
+                int priority = 0;
+                TokenToOP(tkType1, priority);
+                if (!reduce(priority)) return TK_NONE;
+            }
 			operators.push_back(tkType1);
 			blApperOperator = false;
 			break;
+		case TK_NOT:
 		case TK_LOGIC_NOT:	// !
 			if (blApperOperator == false)
 			{
 				SOperand a;
-				if (false == ParseLogicNotOperand(a, ar, funs, vars))
+				if (false == ParseUnaryOperand(a, tkType1, ar, funs, vars))
 					return TK_NONE;
 				operands.push_back(a);
 				blApperOperator = true;
@@ -2864,7 +3120,13 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				SetParserCompileError(ar, PCE_INVALID_OPERATOR, tk1.c_str());
 				return TK_NONE;
 			}
-			ResolveContainer(operands.back(), ar, funs);
+            if (mayMutate) SnapshotValue(operands.back(), ar, funs);
+            else ResolveContainer(operands.back(), ar, funs);
+            {
+                int priority = 0;
+                TokenToOP(tkType1, priority);
+                if (!reduce(priority)) return TK_NONE;
+            }
 			operators.push_back(tkType1);
 			blApperOperator = false;
 			break;
@@ -2936,9 +3198,9 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			// 실패를 무시하고 계속 진행하면 사유 없는 컴파일 실패로 이어진다.
 			if (r == TK_NONE)
 				return TK_NONE;
+			if (!ParsePostfixSelectors(iTempOffset, ar, funs, vars)) return TK_NONE;
 			operands.push_back(iTempOffset);
 			blApperOperator = true;
-			blEnd = true;
 			break;
 		case TK_L_ARRAY:
 			iTempOffset.Reset();
@@ -2947,9 +3209,9 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			ar._iTableDeep--;
 			if (r == TK_NONE)
 				return TK_NONE;
+			if (!ParsePostfixSelectors(iTempOffset, ar, funs, vars)) return TK_NONE;
 			operands.push_back(iTempOffset);
 			blApperOperator = true;
-			blEnd = true;
 			break;
 
 		case TK_NULL:
@@ -2977,7 +3239,8 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			iTempOffset.Reset();
 			if (false == ParseToType(iTempOffset._iVar, tkType1, ar, funs, vars))
 				return TK_NONE;
-			operands.push_back(SOperand(iTempOffset._iVar));
+			if (!ParsePostfixSelectors(iTempOffset, ar, funs, vars)) return TK_NONE;
+			operands.push_back(iTempOffset);
 			blApperOperator = true;
 			break;
 		case TK_PLUS2: // ++
@@ -3102,72 +3365,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		SetParserCompileError(ar, PCE_INVALID_OPERATOR, tk1.c_str());
 		return TK_NONE;
 	}
-	while (operators.empty() == false)
-	{
-		int iTempPriority;
-		int iFindOffset = -1;
-		int iFindPriority = 100;
-		for (int i = 0; i < (int)operators.size(); i++)
-		{
-			TokenToOP(operators[i], iTempPriority);
-			if (i == 0 || iFindPriority > iTempPriority)
-			{
-				iFindPriority = iTempPriority;
-				iFindOffset = i;
-			}
-		}
-		auto op = TokenToOP(operators[iFindOffset], iTempPriority);
-		RemoveAt<TK_TYPE>(operators, iFindOffset);
-
-		SOperand& a = operands[iFindOffset];
-		auto b = operands[iFindOffset + 1];
-
-		// 양쪽이 숫자 리터럴이면 여기서 계산해 버린다(런타임 연산이 통째로 사라진다).
-		// 결과 리터럴이 다시 피연산자가 되므로 (2 + 3) * 4 처럼 중첩된 식도 끝까지 접힌다.
-		if (TryFoldLiteralBinOp(a, op, b, funs))
-		{
-			operands[iFindOffset] = a;
-			RemoveAt<SOperand>(operands, iFindOffset + 1);
-			continue;
-		}
-
-		// Check the destination before the function-value assignment path too.
-		if (op < NOP_VAR_CLEAR && (a.IsFun() || a._readOnly ||
-			(!a.IsArray() && (IsTempVar(a._iVar) || IsCompileConstant(a._iVar)))))
-		{
-			SetParserCompileError(ar, PCE_EXPECTED_LVALUE);
-			return TK_NONE;
-		}
-		if (op < NOP_VAR_CLEAR)
-		{
-			if (b.IsFun() && op == NOP_MOV)
-			{
-				if (a.IsArray())
-					WriteElement(a, NOP_FMOV2, b._iVar, false, ar, funs);
-				else
-					funs._cur->Push_OP2(ar, NOP_FMOV1, a._iVar, b._iVar, false);
-			}
-			else if (op == NOP_MOV && !a.IsArray() && b.IsArray())
-				ReadElement(b, a._iVar, ar, funs); // retain READ-to-destination fusion
-			else
-			{
-				MaterializeValue(b, ar, funs); // complete the RHS before resolving the destination
-				if (a.IsArray())
-					WriteElement(a, op, b._iVar, b.IsShort(), ar, funs);
-				else if (op != NOP_MOV || !TryPushImmediate(ar, funs, a._iVar, b))
-					funs._cur->Push_OP2(ar, op, a._iVar, b._iVar, b.IsShort());
-			}
-		}
-		else
-		{
-			MaterializeValue(a, ar, funs);
-			MaterializeValue(b, ar, funs);
-			const int iTempOffset2 = funs._cur->AllocLocalTempVar();
-			funs._cur->Push_OP(ar, op, iTempOffset2, a._iVar, b._iVar, a.IsShort(), b.IsShort());
-			operands[iFindOffset] = iTempOffset2;
-		}
-		RemoveAt<SOperand>(operands, iFindOffset + 1);
-	}
+	if (!reduce(100)) return TK_NONE;
 
 	// 빈 리스트/맵의 첫 원소처럼 종결 토큰을 바로 만난 경우에는 값이 없다.
 	// operands[0] 접근은 UB이며, 호출자가 빈 컨테이너를 정상 종료로 처리할 수 있게 한다.
@@ -3574,6 +3772,7 @@ eNOperation ConvertCheckOPToOptimizeInv(eNOperation n)
 //	for Check
 bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
+    ParserDepthGuard depth(ar);
 	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
 		SetParserCompileError(ar, PCE_LOGIC_NOT_ALLOWED_GLOBAL, "for");
@@ -3676,16 +3875,10 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_MIDDLE) // {
 	{
-		ar.PushToken(tkType1, tk1);
-		iTempOffset = INVALID_ERROR_PARSEJOB;
-		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, &sContinueJumps);
-		if (TK_SEMICOLON != r)
-		{
-			SetParserCompileError(ar, PCE_INVALID_STATEMENT_END);
-			return false;
-		}
-		ClearTempVars(funs);
-	}
+        ar.PushToken(tkType1, tk1);
+        if (!ParseSingleStatement(&sJumps, ar, funs, vars, NULL, &sContinueJumps)) return false;
+        ClearTempVars(funs);
+    }
 	else
 	{
 		if (false == ParseMiddleArea(&sJumps, ar, funs, vars, NULL, &sContinueJumps))
@@ -3744,6 +3937,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 #else
 bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
+    ParserDepthGuard depth(ar);
 	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
 		SetParserCompileError(ar, PCE_LOGIC_NOT_ALLOWED_GLOBAL, "for");
@@ -3926,16 +4120,10 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_MIDDLE) // {
 	{
-		ar.PushToken(tkType1, tk1);
-		iTempVar = INVALID_ERROR_PARSEJOB;
-		r = ParseJob(false, iTempVar, &sJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, &sContinueJumps);
-		if (TK_SEMICOLON != r)
-		{
-			SetParserCompileError(ar, PCE_INVALID_STATEMENT_END);
-			return false;
-		}
-		ClearTempVars(funs);
-	}
+        ar.PushToken(tkType1, tk1);
+        if (!ParseSingleStatement(&sJumps, ar, funs, vars, NULL, &sContinueJumps)) return false;
+        ClearTempVars(funs);
+    }
 	else
 	{
 		if (false == ParseMiddleArea(&sJumps, ar, funs, vars, NULL, &sContinueJumps))
@@ -3968,6 +4156,7 @@ bool ParseFor(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 
 bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
+    ParserDepthGuard depth(ar);
 	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
 		SetParserCompileError(ar, PCE_LOGIC_NOT_ALLOWED_GLOBAL, "foreach");
@@ -4127,16 +4316,10 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_MIDDLE) // {
 	{
-		ar.PushToken(tkType1, tk1);
-		iTempOffset = INVALID_ERROR_PARSEJOB;
-		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, &sContinueJumps);
-		if (TK_SEMICOLON != r)
-		{
-			SetParserCompileError(ar, PCE_INVALID_STATEMENT_END);
-			return false;
-		}
-		ClearTempVars(funs);
-	}
+        ar.PushToken(tkType1, tk1);
+        if (!ParseSingleStatement(&sJumps, ar, funs, vars, NULL, &sContinueJumps)) return false;
+        ClearTempVars(funs);
+    }
 	else
 	{
 		if (false == ParseMiddleArea(&sJumps, ar, funs, vars, NULL, &sContinueJumps))
@@ -4171,6 +4354,7 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 }
 bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 {
+    ParserDepthGuard depth(ar);
 	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
 		SetParserCompileError(ar, PCE_LOGIC_NOT_ALLOWED_GLOBAL, "while");
@@ -4182,8 +4366,8 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	TK_TYPE r;
 
 	SOperand iTempOffset;
-	u8 byTempCheck[128 * 8];
-	debug_info DebugCheck[128];
+	std::vector<u8> byTempCheck;
+	std::vector<debug_info> DebugCheck;
 
 	int iDebugLoopLine = ar.CurLine();
 
@@ -4234,12 +4418,9 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	}
 	funs._cur->_code->SetPointer(Pos1, SEEK_SET);
 	int iCheckCodeSize = (int)Pos2 - Pos1;
-	if (iCheckCodeSize > (int)sizeof(byTempCheck))
-	{
-		SetParserCompileError(ar, PCE_CODE_BLOCK_TOO_LARGE, "while condition", iCheckCodeSize);
-		return false;
-	}
-	funs._cur->_code->Read(byTempCheck, iCheckCodeSize);
+	byTempCheck.resize(iCheckCodeSize);
+	if (ar._debug) DebugCheck.resize(iCheckCodeSize / 8);
+	funs._cur->_code->Read(byTempCheck.data(), iCheckCodeSize);
 	funs._cur->_code->SetPointer(Pos1, SEEK_SET);
 	if (ar._debug)
 	{
@@ -4254,16 +4435,10 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	tkType1 = GetToken(ar, tk1);
 	if (tkType1 != TK_L_MIDDLE) // {
 	{
-		ar.PushToken(tkType1, tk1);
-		iTempOffset = INVALID_ERROR_PARSEJOB;
-		r = ParseJob(false, iTempOffset, &sJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, &sContinueJumps);
-		if (TK_SEMICOLON != r)
-		{
-			SetParserCompileError(ar, PCE_INVALID_STATEMENT_END);
-			return false;
-		}
-		ClearTempVars(funs);
-	}
+        ar.PushToken(tkType1, tk1);
+        if (!ParseSingleStatement(&sJumps, ar, funs, vars, NULL, &sContinueJumps)) return false;
+        ClearTempVars(funs);
+    }
 	else
 	{
 		if (false == ParseMiddleArea(&sJumps, ar, funs, vars, NULL, &sContinueJumps))
@@ -4276,7 +4451,7 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	{
 		funs._cur->Set_JumpOffet(sContinueJumps[i], continuePos);
 	}
-	funs._cur->_code->Write(byTempCheck, iCheckCodeSize);
+	funs._cur->_code->Write(byTempCheck.data(), iCheckCodeSize);
 	if (false == isCheckOPOpt)
 		funs._cur->Push_JMPTrue(ar, iStackCheckVar, PosLoopTop, iDebugLoopLine);
 	else
@@ -4316,6 +4491,7 @@ bool ParseWhile(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 }
 bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* alwaysReturns, std::vector<SJumpValue>* pContinueJumps = NULL)
 {
+    ParserDepthGuard depth(ar);
 	if (funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME && false == ar._allowGlobalInitLogic)
 	{
 		SetParserCompileError(ar, PCE_LOGIC_NOT_ALLOWED_GLOBAL, "if");
@@ -4427,17 +4603,9 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 	}
 	else
 	{
-		thenAlwaysReturns = tkType1 == TK_RETURN;
-		ar.PushToken(tkType1, tk1);
-		iTempOffset = INVALID_ERROR_PARSEJOB;
-		r = ParseJob(false, iTempOffset, pJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, pContinueJumps);
-
-		if (TK_SEMICOLON != r)
-		{
-			SetParserCompileError(ar, PCE_INVALID_STATEMENT_END);
-			return false;
-		}
-	}
+            ar.PushToken(tkType1, tk1);
+            if (!ParseSingleStatement(pJumps, ar, funs, vars, &thenAlwaysReturns, pContinueJumps)) return false;
+        }
 
 	ClearTempVars(funs);
 
@@ -4498,17 +4666,9 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 		}
 		else
 		{
-			elseAlwaysReturns = tkType1 == TK_RETURN;
-			ar.PushToken(tkType1, tk1);
-			iTempOffset = INVALID_ERROR_PARSEJOB;
-			r = ParseJob(false, iTempOffset, pJumps, ar, funs, vars, false, TK_SEMICOLON, TK_COMMA, TK_R_SMALL, TK_R_ARRAY, pContinueJumps);
-
-			if (TK_SEMICOLON != r)
-			{
-				SetParserCompileError(ar, PCE_INVALID_STATEMENT_END);
-				return false;
-			}
-		}
+            ar.PushToken(tkType1, tk1);
+            if (!ParseSingleStatement(pJumps, ar, funs, vars, &elseAlwaysReturns, pContinueJumps)) return false;
+        }
 		ClearTempVars(funs);
 		if (!thenAlwaysReturns)
 			funs._cur->Set_JumpOffet(jmp2, funs._cur->_code->GetBufferOffset());
@@ -4524,35 +4684,40 @@ bool ParseIF(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs
 
 bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport, bool blPublic)
 {
-	std::string tk1;
-	TK_TYPE tkType1;
-	TK_TYPE r;
-
-	SLayerVar* pCurLayer = vars.GetCurrentLayer();
-
-	tkType1 = GetToken(ar, tk1);
-	if (tkType1 == TK_STRING)
-	{
-		int iLocalVar = AddLocalVarName(ar, funs, vars, blExport, blPublic, tk1);
-		if (iLocalVar == -1)
-			return false;
-
-		ar.PushToken(tkType1, tk1);
-
-		SOperand iTempLocalVar;
-		r = ParseJob(false, iTempLocalVar, NULL, ar, funs, vars);
-		if (TK_SEMICOLON != r)
-		{
-			//SetCompileError(ar, "Error (%d, %d): ", ar.CurLine(), ar.CurCol());
-			return false;
-		}
-	}
-	else
-	{
-		SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "variable name after 'var'", tk1.c_str());
-		return false;
-	}
-	return true;
+    std::string name, token;
+    if (GetToken(ar, name) != TK_STRING || !UseableName(ar, funs, vars, name, true))
+    {
+        SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "variable name after 'var'", name.c_str());
+        return false;
+    }
+    const TK_TYPE next = GetToken(ar, token);
+    if (next == TK_SEMICOLON)
+    {
+        const int slot = AddLocalVarName(ar, funs, vars, blExport, blPublic, name);
+        if (slot == -1) return false;
+        funs._cur->Push_OP1(ar, NOP_VAR_CLEAR, slot);
+        return true;
+    }
+    if (next != TK_EQUAL)
+    {
+        SetParserCompileError(ar, PCE_EXPECTED_TOKEN, "'=' or ';' after variable name", token.c_str());
+        return false;
+    }
+    SOperand value;
+    if (ParseShortCircuitLogic(true, value, ar, funs, vars) != TK_SEMICOLON || value.IsInvalidValue())
+    {
+        SetParserCompileError(ar, PCE_EXPECTED_EXPRESSION);
+        return false;
+    }
+    const int slot = AddLocalVarName(ar, funs, vars, blExport, blPublic, name);
+    if (slot == -1) return false;
+    if (value.IsFun())
+        funs._cur->Push_OP2(ar, NOP_FMOV1, slot, value._iVar, false);
+    else if (value.IsArray())
+        ReadElement(value, slot, ar, funs);
+    else if (!TryPushImmediate(ar, funs, slot, value))
+        funs._cur->Push_OP2(ar, NOP_MOV, slot, value._iVar, value.IsShort());
+    return true;
 }
 
 // ---------------- 스크립트 const (컴파일타임 상수 선언) ----------------
@@ -4571,8 +4736,9 @@ struct SConstValue
 
 static bool ParseConstExpr(SConstValue& out, int minPrec, CArchiveRdWC& ar, SFunctions& funs);
 
-static bool ParseConstPrimary(SConstValue& out, CArchiveRdWC& ar, SFunctions& funs)
+static bool ParseConstPrimary(SConstValue& out, CArchiveRdWC& ar, SFunctions& funs, bool allowMinMagnitude = false)
 {
+	ParserDepthGuard depth(ar);
 	std::string tk;
 	TK_TYPE tkType = GetToken(ar, tk);
 	if (tkType == TK_STRING)
@@ -4598,10 +4764,13 @@ static bool ParseConstPrimary(SConstValue& out, CArchiveRdWC& ar, SFunctions& fu
 	case TK_STRING:
 	{
 		ParsedNumber num;
-		if (false == StringToNumber(num, tk.c_str()))
+		if (false == StringToNumber(num, tk.c_str(), allowMinMagnitude))
 		{
 			// define/const 로 치환되지 않은 식별자 → 컴파일 타임 상수가 아님
-			SetParserCompileError(ar, PCE_CONST_INVALID_VALUE, tk.c_str());
+			if (!tk.empty() && tk[0] >= '0' && tk[0] <= '9')
+                SetCompileError(ar, "invalid or out-of-range integer literal '%s'", tk.c_str());
+            else
+                SetParserCompileError(ar, PCE_CONST_INVALID_VALUE, tk.c_str());
 			return false;
 		}
 		bool isFloat = (num.type == ParsedNumber::Type::Float); // 통째로 들어온 "1.5", "1e+20" 등
@@ -4642,7 +4811,7 @@ static bool ParseConstPrimary(SConstValue& out, CArchiveRdWC& ar, SFunctions& fu
 		}
 		return true;
 	case TK_MINUS:
-		if (false == ParseConstPrimary(out, ar, funs))
+		if (false == ParseConstPrimary(out, ar, funs, true))
 			return false;
 		if (out.type == NEO_DEFINE_TOKEN_INT) { out.i = NegateParsedInteger(out.i); return true; }
 		if (out.type == NEO_DEFINE_TOKEN_FLOAT) { out.f = -out.f; return true; }
@@ -4843,6 +5012,11 @@ bool ParseConstDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool exporte
 		break;
 	case NEO_DEFINE_TOKEN_FLOAT:
 	{
+		if (!std::isfinite(v.f))
+		{
+			SetCompileError(ar, "non-finite const result cannot be represented");
+			return false;
+		}
 		char buf[64];
 		snprintf(buf, sizeof(buf), "%.17g", v.f);
 		d.type = NEO_DEFINE_TOKEN_FLOAT;
@@ -5077,8 +5251,9 @@ bool ParseSwitch(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* alwaysRe
 	return true;
 }
 
-bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* alwaysReturns, std::vector<SJumpValue>* pContinueJumps, bool bStopAtCase)
+bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool* alwaysReturns, std::vector<SJumpValue>* pContinueJumps, bool bStopAtCase, bool allowEof, bool singleStatement)
 {
+	ParserDepthGuard depth(ar);
 	// 마지막 OP 대신 문과 분기의 구조로 블록 전체의 반환을 추적한다.
 	bool blockAlwaysReturns = false;
 	const std::size_t initialBreakJumps = pJumps ? pJumps->size() : 0;
@@ -5118,7 +5293,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 		switch (tkType1)
 		{
 		case TK_NONE:
-			if (funs.GetCurFunName() != GLOBAL_INIT_FUN_NAME)
+			if (!allowEof)
 			{
 				SetParserCompileError(ar, PCE_UNEXPECTED_FUNCTION_END, funs.GetCurFunName().c_str());
 				return false;
@@ -5140,7 +5315,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				blEnd = true;
 				break;
 			}
-			if (ar._allowGlobalInitLogic == false && funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME)
+			if (allowEof || singleStatement)
 			{
 				SetParserCompileError(ar, PCE_UNEXPECTED_GLOBAL_BLOCK_END);
 				return false;
@@ -5261,11 +5436,25 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 				return false;
 			break;
 		case TK_STRING:
+        case TK_TOSTRING:
+        case TK_TOINT:
+        case TK_TOFLOAT:
+        case TK_TOSIZE:
+        case TK_GETTYPE:
+        case TK_TRUE:
+        case TK_FALSE:
+        case TK_NULL:
+        case TK_SOURCE_LINE:
 		case TK_PLUS2:
 		case TK_MINUS2:
+        case TK_PLUS:
+        case TK_MINUS:
+        case TK_NOT:
 		case TK_L_SMALL:
+        case TK_L_ARRAY:
 		case TK_QUOTE2:
 		case TK_QUOTE1:
+        case TK_LOGIC_NOT:
 		case TK_YIELD:
 		case TK_STRING_LITERAL:
 			ar.PushToken(tkType1, tk1);
@@ -5325,6 +5514,7 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 		{
 			funType = FUNT_NORMAL;
 			blPublic = false;
+			if (singleStatement) break;
 		}
 	}
 	// 바깥 루프의 break/continue 는 뒤의 return 을 건너뛸 수 있으므로 반환을 단정하지 않는다.
@@ -5334,6 +5524,15 @@ bool ParseMiddleArea(std::vector<SJumpValue>* pJumps, CArchiveRdWC& ar, SFunctio
 			(!pJumps || pJumps->size() == initialBreakJumps) &&
 			(!pContinueJumps || pContinueJumps->size() == initialContinueJumps);
 	return true;
+}
+
+static bool ParseSingleStatement(std::vector<SJumpValue>* breaks, CArchiveRdWC& ar,
+    SFunctions& funs, SVars& vars, bool* returns, std::vector<SJumpValue>* continues)
+{
+    AddLocalVar(vars.GetCurrentLayer());
+    const bool ok = ParseMiddleArea(breaks, ar, funs, vars, returns, continues, false, false, true);
+    DelLocalVar(vars.GetCurrentLayer());
+    return ok;
 }
 
 // ---------------------------------------------------------------------------
@@ -5581,7 +5780,7 @@ bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool add
 	bool bodyAlwaysReturns = false;
 	try
 	{
-		if (false == ParseMiddleArea(NULL, ar, funs, vars, &bodyAlwaysReturns))
+		if (false == ParseMiddleArea(NULL, ar, funs, vars, &bodyAlwaysReturns, NULL, false, funs.GetCurFunName() == GLOBAL_INIT_FUN_NAME))
 			return false;
 	}
 	catch (const CompileLimitError& e)
@@ -5602,6 +5801,12 @@ bool ParseFunctionBody(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool add
 }
 bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string& fname, FUNCTION_TYPE funType)
 {
+    if (funType == FUNT_EXPORT && !funs._exportNames.insert(fname).second)
+    {
+        SetCompileError(ar, "duplicate exported name '%s'", fname.c_str());
+        return false;
+    }
+
 	//funs._cur->Clear();
 	//funs._cur->_name = fname;
 	SFunctionInfo* pF = funs.FindFun(fname);
@@ -5681,6 +5886,7 @@ bool ParseFunction(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string&
 }
 int ParseFunctionBase(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, std::string fname, FUNCTION_TYPE funType)
 {
+	ParserDepthGuard depth(ar);
 	std::string tk3;
 	auto tkType3 = GetToken(ar, tk3);
 	if (tkType3 == TK_L_SMALL) // 함수

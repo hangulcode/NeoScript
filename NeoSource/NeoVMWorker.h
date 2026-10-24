@@ -3,6 +3,8 @@
 #include <chrono>
 
 #include "NeoVMInternal.h"
+#include "NeoStringLimits.h"
+#include "NeoNumeric.h"
 #include "NeoVMError.h"
 
 #include "NeoVMProgram.h"
@@ -151,6 +153,13 @@ private:
 	NEOS_FORCEINLINE void SetCodePtr(int off) { _pCodeCurrent = (const SVMOperation*)(_pCodeBegin + off); }
 	// 점프 offset 은 op(SVMOperation) 단위. SVMOperation* 포인터 산술로 op 수만큼 이동.
 	NEOS_FORCEINLINE void SetCodeIncPtr(int opOff) { _pCodeCurrent += opOff; }
+	NEOS_FORCEINLINE bool IsErrorTrap() const { return (const u8*)_pCodeCurrent == _pCodeBegin; }
+	NEOS_FORCEINLINE void SetComparisonJump(int opOff)
+	{
+		// A failed comparison has already selected the error opcode.
+		if (!IsErrorTrap()) SetCodeIncPtr(opOff);
+	}
+	bool CheckNestedCallDepth();
 
 	// 워커 고유 상태 = 전역 변수 슬롯([static | global] 단일 배열).
 	// static 구간은 로드 시 프로그램의 상수 서술자에서 이 VM 의 할당자로 실체화한다.
@@ -188,18 +197,20 @@ private:
 			if (upperFirst)
 			{
 				if (upperInclusive ? CompareGR(test, upper) : CompareGE(test, upper)) return false;
-				return !(lowerInclusive ? CompareGR(lower, test) : CompareGE(lower, test));
+				if (IsErrorTrap()) return false;
+				return !(lowerInclusive ? CompareGR(lower, test, true) : CompareGE(lower, test, true));
 			}
-			if (lowerInclusive ? CompareGR(lower, test) : CompareGE(lower, test)) return false;
+			if (lowerInclusive ? CompareGR(lower, test, true) : CompareGE(lower, test, true)) return false;
+			if (IsErrorTrap()) return false;
 			return !(upperInclusive ? CompareGR(test, upper) : CompareGE(test, upper));
 		}
 		if (upperFirst)
 		{
-			if (!(upperInclusive ? CompareGE(upper, test) : CompareGR(upper, test))) return false;
+			if (!(upperInclusive ? CompareGE(upper, test, true) : CompareGR(upper, test, true))) return false;
 			return lowerInclusive ? CompareGE(test, lower) : CompareGR(test, lower);
 		}
 		if (!(lowerInclusive ? CompareGE(test, lower) : CompareGR(test, lower))) return false;
-		return upperInclusive ? CompareGE(upper, test) : CompareGR(upper, test);
+		return upperInclusive ? CompareGE(upper, test, true) : CompareGR(upper, test, true);
 	}
 	NEOS_FORCEINLINE const std::vector<debug_info>& DebugData() const { return _pProgram->debugData; }
 
@@ -386,13 +397,13 @@ private:
 	void Inc(VarInfo* v1);
 	void Dec(VarInfo* v1);
 	bool CompareEQ(VarInfo* v1, VarInfo* v2);
-	bool CompareGR(VarInfo* v1, VarInfo* v2);
-	bool CompareGE(VarInfo* v1, VarInfo* v2);
+	bool CompareGR(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic = false);
+	bool CompareGE(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic = false);
 	// 숫자 외 비교는 interpreter switch 안에 복제하지 않는다. 문자열/벡터/오류 처리는
 	// 드문 경로라 noinline으로 두어 숫자 비교 opcode의 기계 코드가 안정적으로 유지된다.
 	NEOS_NOINLINE bool CompareEQRare(VarInfo* v1, VarInfo* v2);
-	NEOS_NOINLINE bool CompareGRRare(VarInfo* v1, VarInfo* v2);
-	NEOS_NOINLINE bool CompareGERare(VarInfo* v1, VarInfo* v2);
+	NEOS_NOINLINE bool CompareGRRare(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic);
+	NEOS_NOINLINE bool CompareGERare(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic);
 	bool For(VarInfo* v1);
 	bool ForRare(VarInfo* v1, int step);   // step<0 / step==0 (드문 경로, For 에서 분리)
 	// bTwoVar: foreach(var k, v in ...) 형태(컴파일러가 op argFlag 로 전달).
@@ -403,6 +414,7 @@ private:
 	int Sleep(int iTimeout, VarInfo* v1);
 	void Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue = NULL);
 	void Call(int n1, int n2, int returnValueIndex = -1);
+	void CallFunctionValue(int functionIndex, int argumentCount);
 	void Call(ClosureInfo* closure, int n2, int returnValueIndex = -1);
 	// return 값 슬롯은 Sync 뒤에도 caller가 읽으므로 보존한다. 나머지 캡처
 	// 슬롯은 closure 보관함으로 소유권을 넘긴다.

@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <cwchar>
 #include <iomanip>
 #include <locale>
 #include <new>
@@ -15,6 +16,7 @@
 #include "NeoVMWorker.h"
 #include "NeoArchive.h"
 #include "NeoJson.h"
+#include "NeoStringLimits.h"
 //#include "NeoTime.h"
 #include "UTFString.h"
 #include <chrono>
@@ -30,6 +32,14 @@ namespace NeoScript
 
 struct neo_libs
 {
+	// Native host accessors intentionally allow conversions. Library contracts
+	// accept only int/float numbers, and validate before any observable work.
+	static NEOS_FORCEINLINE bool NumericArg(CNeoVMWorker* worker, int index)
+	{
+		const auto type = worker->GetStack(index)->GetType();
+		return type == VAR_INT || type == VAR_FLOAT;
+	}
+
 	// VM values are not C++ smart pointers. Hold references across callbacks,
 	// return-slot replacement and exceptions, then release them on every exit.
 	struct HeldValue
@@ -46,7 +56,7 @@ struct neo_libs
 	static bool Str_sub(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (pVar->GetType() != VAR_STRING) return false;
-		if (args != 2) return false;
+		if (args != 2 || pN->GetStack(1)->GetType() != VAR_INT || pN->GetStack(2)->GetType() != VAR_INT) return false;
 
 		int len = pVar->_str->_StringLen;
 		std::string* p = &pVar->_str->_str;
@@ -167,7 +177,10 @@ struct neo_libs
 		std::string str = pVar->_str->_str;
 		const size_t found = str.find(pFind->_str->_str);
 		if (found != std::string::npos)
+		{
+			CheckRuntimeStringGrowth(str.size() - pFind->_str->_str.size(), pReplace->_str->_str.size());
 			str.replace(found, pFind->_str->_str.length(), pReplace->_str->_str);
+		}
 		pN->ReturnValue(str.c_str());
 		return true;
 	}
@@ -189,11 +202,14 @@ struct neo_libs
 			for (size_t found = source.find(needle); found != std::string::npos;
 				found = source.find(needle, begin))
 			{
+				CheckRuntimeStringGrowth(result.size(), found - begin);
 				result.append(source, begin, found - begin);
+				CheckRuntimeStringGrowth(result.size(), replacement.size());
 				result += replacement;
 				begin = found + needle.size();
 			}
 		}
+		CheckRuntimeStringGrowth(result.size(), source.size() - begin);
 		result.append(source, begin, std::string::npos);
 		pN->ReturnValue(result.c_str());
 		return true;
@@ -373,7 +389,7 @@ struct neo_libs
 	static bool List_resize(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (pVar->GetType() != VAR_LIST) return false;
-		if (args != 1) return false;
+		if (args != 1 || pN->GetStack(1)->GetType() != VAR_INT) return false;
 
 		int size = pN->read<int>(1);
 		pVar->_lst->Resize(size);
@@ -399,7 +415,7 @@ struct neo_libs
 	static bool Array_resize(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (pVar->GetType() != VAR_ARRAY) return false;
-		if (args != 1) return false;
+		if (args != 1 || pN->GetStack(1)->GetType() != VAR_INT) return false;
 
 		pN->GetVM()->ArrayResize(pVar->_array, pN->read<int>(1));
 		pN->ReturnValue();
@@ -565,7 +581,7 @@ struct neo_libs
 	}
 	static bool Math_abs(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 
 		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::abs(v));
@@ -573,7 +589,7 @@ struct neo_libs
 	}
 	static bool Math_acos(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 
 		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::acos(v));
@@ -581,7 +597,7 @@ struct neo_libs
 	}
 	static bool Math_asin(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 
 		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::asin(v));
@@ -589,7 +605,7 @@ struct neo_libs
 	}
 	static bool Math_atan(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 
 		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::atan(v));
@@ -597,7 +613,7 @@ struct neo_libs
 	}
 	static bool Math_ceil(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 
 		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::ceil(v));
@@ -605,7 +621,7 @@ struct neo_libs
 	}
 	static bool Math_floor(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 
 		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::floor(v));
@@ -613,7 +629,7 @@ struct neo_libs
 	}
 	static bool Math_round(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 
 		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::round(v));
@@ -621,7 +637,7 @@ struct neo_libs
 	}
 	static bool Math_sin(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 
 		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::sin(v));
@@ -629,7 +645,7 @@ struct neo_libs
 	}
 	static bool Math_cos(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 
 		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::cos(v));
@@ -637,7 +653,7 @@ struct neo_libs
 	}
 	static bool Math_tan(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 
 		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::tan(v));
@@ -645,7 +661,7 @@ struct neo_libs
 	}
 	static bool Math_log(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 
 		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::log(v));
@@ -653,7 +669,7 @@ struct neo_libs
 	}
 	static bool Math_log10(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 
 		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::log10(v));
@@ -661,7 +677,7 @@ struct neo_libs
 	}
 	static bool Math_exp(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 
 		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::exp(v));
@@ -669,7 +685,7 @@ struct neo_libs
 	}
 	static bool Math_pow(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 2) return false;
+		if (args != 2 || !NumericArg(pN, 1) || !NumericArg(pN, 2)) return false;
 
 		NS_FLOAT v1 = pN->read<NS_FLOAT>(1);
 		NS_FLOAT v2 = pN->read<NS_FLOAT>(2);
@@ -678,7 +694,7 @@ struct neo_libs
 	}
 	static bool Math_deg(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 
 		NS_FLOAT radian = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(((radian) * (180.0f / MATH_PI)));
@@ -686,7 +702,7 @@ struct neo_libs
 	}
 	static bool Math_rad(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 
 		NS_FLOAT degree = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(((degree) * (MATH_PI / 180.0f)));
@@ -694,7 +710,7 @@ struct neo_libs
 	}
 	static bool Math_sqrt(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 
 		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(::sqrt(v));
@@ -750,13 +766,13 @@ struct neo_libs
 
 	static bool Math_atan2(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 2) return false;
+		if (args != 2 || !NumericArg(pN, 1) || !NumericArg(pN, 2)) return false;
 		pN->ReturnValue(::atan2(pN->read<NS_FLOAT>(1), pN->read<NS_FLOAT>(2)));
 		return true;
 	}
 	static bool Math_hypot(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 2) return false;
+		if (args != 2 || !NumericArg(pN, 1) || !NumericArg(pN, 2)) return false;
 		NS_FLOAT x = pN->read<NS_FLOAT>(1);
 		NS_FLOAT y = pN->read<NS_FLOAT>(2);
 		pN->ReturnValue(::sqrt(x * x + y * y));
@@ -764,7 +780,7 @@ struct neo_libs
 	}
 	static bool Math_fmod(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 2) return false;
+		if (args != 2 || !NumericArg(pN, 1) || !NumericArg(pN, 2)) return false;
 		NS_FLOAT x = pN->read<NS_FLOAT>(1);
 		NS_FLOAT y = pN->read<NS_FLOAT>(2);
 		// C 의 fmod(x, 0) 은 NaN 이다. 스크립트에 NaN 을 흘리지 않는다.
@@ -773,45 +789,49 @@ struct neo_libs
 	}
 	static bool Math_trunc(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 		pN->ReturnValue(::trunc(pN->read<NS_FLOAT>(1)));
 		return true;
 	}
 	static bool Math_fract(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 		NS_FLOAT x = pN->read<NS_FLOAT>(1);
-		pN->ReturnValue(x - ::floor(x));
+		NS_FLOAT result = x - ::floor(x);
+		// The exact fraction is below one, but a tiny negative input can round
+		// up to one in binary32. Keep finite results inside the promised range.
+		if (result == (NS_FLOAT)1.0) result = std::nextafter((NS_FLOAT)1.0, (NS_FLOAT)0.0);
+		pN->ReturnValue(result);
 		return true;
 	}
 	static bool Math_sinh(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 		pN->ReturnValue(::sinh(pN->read<NS_FLOAT>(1)));
 		return true;
 	}
 	static bool Math_cosh(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 		pN->ReturnValue(::cosh(pN->read<NS_FLOAT>(1)));
 		return true;
 	}
 	static bool Math_tanh(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 		pN->ReturnValue(::tanh(pN->read<NS_FLOAT>(1)));
 		return true;
 	}
 	static bool Math_Sign(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 		NS_FLOAT x = pN->read<NS_FLOAT>(1);
 		pN->ReturnValue(x > (NS_FLOAT)0 ? (NS_FLOAT)1 : (x < (NS_FLOAT)0 ? (NS_FLOAT)-1 : (NS_FLOAT)0));
 		return true;
 	}
 	static bool Math_Min(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 2) return false;
+		if (args != 2 || !NumericArg(pN, 1) || !NumericArg(pN, 2)) return false;
 		NS_FLOAT a = pN->read<NS_FLOAT>(1);
 		NS_FLOAT b = pN->read<NS_FLOAT>(2);
 		pN->ReturnValue(a < b ? a : b);
@@ -819,7 +839,7 @@ struct neo_libs
 	}
 	static bool Math_Max(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 2) return false;
+		if (args != 2 || !NumericArg(pN, 1) || !NumericArg(pN, 2)) return false;
 		NS_FLOAT a = pN->read<NS_FLOAT>(1);
 		NS_FLOAT b = pN->read<NS_FLOAT>(2);
 		pN->ReturnValue(a > b ? a : b);
@@ -827,13 +847,13 @@ struct neo_libs
 	}
 	static bool Math_Repeat(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 2) return false;
+		if (args != 2 || !NumericArg(pN, 1) || !NumericArg(pN, 2)) return false;
 		pN->ReturnValue(NsRepeat(pN->read<NS_FLOAT>(1), pN->read<NS_FLOAT>(2)));
 		return true;
 	}
 	static bool Math_PingPong(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 2) return false;
+		if (args != 2 || !NumericArg(pN, 1) || !NumericArg(pN, 2)) return false;
 		NS_FLOAT x = pN->read<NS_FLOAT>(1);
 		NS_FLOAT length = pN->read<NS_FLOAT>(2);
 		if (length > 0 && std::isfinite(length) && std::isfinite(x))
@@ -849,13 +869,13 @@ struct neo_libs
 	}
 	static bool Math_WrapAngle(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 		pN->ReturnValue(NsWrapAngle(pN->read<NS_FLOAT>(1)));
 		return true;
 	}
 	static bool Math_DeltaAngle(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 2) return false;
+		if (args != 2 || !NumericArg(pN, 1) || !NumericArg(pN, 2)) return false;
 		const NS_FLOAT from = pN->read<NS_FLOAT>(1), to = pN->read<NS_FLOAT>(2);
 		if (std::isfinite(from) && std::isfinite(to))
 			pN->ReturnValue(NsAngleResult(NsWrapAngleWide(to) - NsWrapAngleWide(from)));
@@ -865,7 +885,7 @@ struct neo_libs
 	}
 	static bool Math_LerpAngle(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 3) return false;
+		if (args != 3 || !NumericArg(pN, 1) || !NumericArg(pN, 2) || !NumericArg(pN, 3)) return false;
 		NS_FLOAT a = pN->read<NS_FLOAT>(1);
 		NS_FLOAT b = pN->read<NS_FLOAT>(2), t = pN->read<NS_FLOAT>(3);
 		if (std::isfinite(a) && std::isfinite(b) && std::isfinite(t))
@@ -889,13 +909,13 @@ struct neo_libs
 	}
 	static bool Math_MoveToward(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 3) return false;
+		if (args != 3 || !NumericArg(pN, 1) || !NumericArg(pN, 2) || !NumericArg(pN, 3)) return false;
 		pN->ReturnValue(NsMoveToward(pN->read<NS_FLOAT>(1), pN->read<NS_FLOAT>(2), pN->read<NS_FLOAT>(3)));
 		return true;
 	}
 	static bool Math_MoveTowardAngle(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 3) return false;
+		if (args != 3 || !NumericArg(pN, 1) || !NumericArg(pN, 2) || !NumericArg(pN, 3)) return false;
 		NS_FLOAT cur = pN->read<NS_FLOAT>(1);
 		NS_FLOAT target = pN->read<NS_FLOAT>(2), maxDelta = pN->read<NS_FLOAT>(3);
 		if (std::isfinite(cur) && std::isfinite(target) && std::isfinite(maxDelta) && maxDelta >= 0)
@@ -914,7 +934,7 @@ struct neo_libs
 	}
 	static bool Math_InverseLerp(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 3) return false;
+		if (args != 3 || !NumericArg(pN, 1) || !NumericArg(pN, 2) || !NumericArg(pN, 3)) return false;
 		NS_FLOAT a = pN->read<NS_FLOAT>(1);
 		NS_FLOAT b = pN->read<NS_FLOAT>(2);
 		NS_FLOAT v = pN->read<NS_FLOAT>(3);
@@ -923,7 +943,7 @@ struct neo_libs
 	}
 	static bool Math_Remap(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 5) return false;
+		if (args != 5 || !NumericArg(pN, 1) || !NumericArg(pN, 2) || !NumericArg(pN, 3) || !NumericArg(pN, 4) || !NumericArg(pN, 5)) return false;
 		NS_FLOAT v = pN->read<NS_FLOAT>(1);
 		NS_FLOAT inMin = pN->read<NS_FLOAT>(2);
 		NS_FLOAT inMax = pN->read<NS_FLOAT>(3);
@@ -935,7 +955,7 @@ struct neo_libs
 	}
 	static bool Math_SmoothStep(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 3) return false;
+		if (args != 3 || !NumericArg(pN, 1) || !NumericArg(pN, 2) || !NumericArg(pN, 3)) return false;
 		NS_FLOAT e0 = pN->read<NS_FLOAT>(1);
 		NS_FLOAT e1 = pN->read<NS_FLOAT>(2);
 		NS_FLOAT x = pN->read<NS_FLOAT>(3);
@@ -945,7 +965,7 @@ struct neo_libs
 	}
 	static bool Math_Distance2(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 4) return false;
+		if (args != 4 || !NumericArg(pN, 1) || !NumericArg(pN, 2) || !NumericArg(pN, 3) || !NumericArg(pN, 4)) return false;
 		NS_FLOAT dx = pN->read<NS_FLOAT>(3) - pN->read<NS_FLOAT>(1);
 		NS_FLOAT dy = pN->read<NS_FLOAT>(4) - pN->read<NS_FLOAT>(2);
 		pN->ReturnValue(::sqrt(dx * dx + dy * dy));
@@ -982,26 +1002,26 @@ struct neo_libs
 	}
 	static bool Math_Vector2(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 2) return false;
+		if (args != 2 || !NumericArg(pN, 1) || !NumericArg(pN, 2)) return false;
 		pN->Var_SetVec2(pN->GetReturnVar(), (float)pN->read<NS_FLOAT>(1), (float)pN->read<NS_FLOAT>(2));
 		return true;
 	}
 	static bool Math_Vector3(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 3) return false;
+		if (args != 3 || !NumericArg(pN, 1) || !NumericArg(pN, 2) || !NumericArg(pN, 3)) return false;
 		pN->Var_SetVec3(pN->GetReturnVar(), (float)pN->read<NS_FLOAT>(1), (float)pN->read<NS_FLOAT>(2), (float)pN->read<NS_FLOAT>(3));
 		return true;
 	}
 	static bool Math_Vector4(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 4) return false;
+		if (args != 4 || !NumericArg(pN, 1) || !NumericArg(pN, 2) || !NumericArg(pN, 3) || !NumericArg(pN, 4)) return false;
 		pN->Var_SetVec4(pN->GetReturnVar(), (float)pN->read<NS_FLOAT>(1), (float)pN->read<NS_FLOAT>(2),
 			(float)pN->read<NS_FLOAT>(3), (float)pN->read<NS_FLOAT>(4));
 		return true;
 	}
 	static bool Math_Quaternion(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 4) return false;
+		if (args != 4 || !NumericArg(pN, 1) || !NumericArg(pN, 2) || !NumericArg(pN, 3) || !NumericArg(pN, 4)) return false;
 		pN->Var_SetQuat(pN->GetReturnVar(), (float)pN->read<NS_FLOAT>(1), (float)pN->read<NS_FLOAT>(2),
 			(float)pN->read<NS_FLOAT>(3), (float)pN->read<NS_FLOAT>(4));
 		return true;
@@ -1020,26 +1040,26 @@ struct neo_libs
 	}
 	static bool Math_Clamp01(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 		pN->ReturnValue(MathClamp01Value(pN->read<NS_FLOAT>(1)));
 		return true;
 	}
 	static bool Math_Clamp(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 3) return false;
+		if (args != 3 || !NumericArg(pN, 1) || !NumericArg(pN, 2) || !NumericArg(pN, 3)) return false;
 		pN->ReturnValue(MathClampValue(pN->read<NS_FLOAT>(1), pN->read<NS_FLOAT>(2), pN->read<NS_FLOAT>(3)));
 		return true;
 	}
 	static bool Math_SmoothStep01(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 		NS_FLOAT x = MathClamp01Value(pN->read<NS_FLOAT>(1));
 		pN->ReturnValue(x * x * ((NS_FLOAT)3.0 - (NS_FLOAT)2.0 * x));
 		return true;
 	}
 	static bool Math_Lerp(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 3) return false;
+		if (args != 3 || !NumericArg(pN, 1) || !NumericArg(pN, 2) || !NumericArg(pN, 3)) return false;
 		NS_FLOAT a = pN->read<NS_FLOAT>(1);
 		NS_FLOAT b = pN->read<NS_FLOAT>(2);
 		NS_FLOAT t = pN->read<NS_FLOAT>(3);
@@ -1078,7 +1098,7 @@ struct neo_libs
 	}
 	static bool Math_Lerp3(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 3) return false;
+		if (args != 3 || !NumericArg(pN, 3)) return false;
 
 		float a[3], b[3];
 		if (ReadVec3(pN->GetStackVar(1), a) == false) return false;
@@ -1222,7 +1242,7 @@ struct neo_libs
 	}
 	static bool Math_quat_slerp(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 3) return false;
+		if (args != 3 || !NumericArg(pN, 3)) return false;
 
 		float a[4], b[4];   // wxyz
 		if (ReadQuat(pN->GetStackVar(1), a) == false) return false;
@@ -1270,7 +1290,7 @@ struct neo_libs
 	}
 	static bool	Math_srand(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || pN->GetStack(1)->GetType() != VAR_INT) return false;
 
 		int init = pN->read<int>(1);
 		//::srand((u32)init);
@@ -1296,7 +1316,7 @@ struct neo_libs
 	// 그대로 파일에 넣어도 된다.
 	static bool	Math_ToStr(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || !NumericArg(pN, 1)) return false;
 
 		char ch[64];
 		snprintf(ch, sizeof(ch), "%.9g", (double)pN->read<NS_FLOAT>(1));
@@ -1311,7 +1331,7 @@ struct neo_libs
 	}
 	static bool Math_RandRange(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 2) return false;
+		if (args != 2 || !NumericArg(pN, 1) || !NumericArg(pN, 2)) return false;
 		NS_FLOAT a = pN->read<NS_FLOAT>(1);
 		NS_FLOAT b = pN->read<NS_FLOAT>(2);
 		NS_FLOAT t = (NS_FLOAT)pN->m_sRand.rnd() / (NS_FLOAT)32767.0;
@@ -1320,7 +1340,7 @@ struct neo_libs
 	}
 	static bool Math_Hash32(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 1) return false;
+		if (args != 1 || pN->GetStack(1)->GetType() != VAR_INT) return false;
 
 		// Keep the exact unsigned 32-bit overflow behavior used by native gameplay code.
 		std::uint32_t value = static_cast<std::uint32_t>(pN->read<int>(1));
@@ -1334,7 +1354,7 @@ struct neo_libs
 	}
 	static bool Math_ColorRGB(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 3) return false;
+		if (args != 3 || !NumericArg(pN, 1) || !NumericArg(pN, 2) || !NumericArg(pN, 3)) return false;
 		NS_FLOAT r = MathClamp01Value(pN->read<NS_FLOAT>(1));
 		NS_FLOAT g = MathClamp01Value(pN->read<NS_FLOAT>(2));
 		NS_FLOAT b = MathClamp01Value(pN->read<NS_FLOAT>(3));
@@ -1344,7 +1364,7 @@ struct neo_libs
 	}
 	static bool Math_ColorARGB(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
-		if (args != 4) return false;
+		if (args != 4 || !NumericArg(pN, 1) || !NumericArg(pN, 2) || !NumericArg(pN, 3) || !NumericArg(pN, 4)) return false;
 		NS_FLOAT a = MathClamp01Value(pN->read<NS_FLOAT>(1));
 		NS_FLOAT r = MathClamp01Value(pN->read<NS_FLOAT>(2));
 		NS_FLOAT g = MathClamp01Value(pN->read<NS_FLOAT>(3));
@@ -1367,7 +1387,7 @@ struct neo_libs
 	static bool map_reserve(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (pVar->GetType() != VAR_MAP) return false;
-		if (args != 1) return false;
+		if (args != 1 || pN->GetStack(1)->GetType() != VAR_INT) return false;
 
 		int size = pN->read<int>(1);
 		pVar->_tbl->Reserve(size);
@@ -1684,29 +1704,87 @@ struct neo_libs
 		pN->ReturnValue((int)currentTime);
 		return true;
 	}
+	static bool DateDirective(char code, char modifier)
+	{
+		if (code == 0 || std::strchr("aAbBcCdDeFgGhHIjmMnprRStTuUVwWxXyYzZ%", code) == nullptr)
+			return false;
+		if (modifier == 0) return true;
+#ifdef _WIN32
+		// The Windows CRT accepts # but treats unsupported E/O as an invalid
+		// parameter, which may terminate the host before we can report an error.
+		return modifier == '#';
+#else
+		if (modifier == 'E') return std::strchr("cCxXyY", code) != nullptr;
+		if (modifier == 'O') return std::strchr("deHImMSuUVwWy", code) != nullptr;
+		return false;
+#endif
+	}
+	static bool DateFormat(const std::string& format, const std::tm& timeinfo, std::string& result)
+	{
+		// Keep literal UTF-8 bytes out of locale-dependent narrow strftime.
+		// Wide directive output also preserves localized month/time-zone names.
+		for (size_t pos = 0; pos < format.size();)
+		{
+			if (format[pos] != '%')
+			{
+				if (format[pos] == 0 || result.size() == 79) return false;
+				result += format[pos++];
+				continue;
+			}
+			++pos;
+			char modifier = 0;
+			if (pos < format.size() && (format[pos] == '#' || format[pos] == 'E' || format[pos] == 'O'))
+				modifier = format[pos++];
+			if (pos == format.size() || !DateDirective(format[pos], modifier)) return false;
+			wchar_t directive[5] = {L'!', L'%', 0, 0, 0};
+			int end = 2;
+			if (modifier) directive[end++] = static_cast<wchar_t>(modifier);
+			directive[end] = static_cast<wchar_t>(format[pos++]);
+			wchar_t buffer[81];
+			// A sentinel distinguishes valid empty %z/%Z output from overflow.
+			const size_t count = std::wcsftime(buffer, 81, directive, &timeinfo);
+			if (count == 0) return false;
+			std::u16string utf16;
+			for (size_t i = 1; i < count; ++i)
+			{
+				const u32 point = static_cast<u32>(buffer[i]);
+				if (point <= 0xFFFF) utf16 += static_cast<char16_t>(point);
+				else if (point <= 0x10FFFF)
+				{
+					utf16 += static_cast<char16_t>(0xD800 + ((point - 0x10000) >> 10));
+					utf16 += static_cast<char16_t>(0xDC00 + ((point - 0x10000) & 0x3FF));
+				}
+				else return false;
+			}
+			std::string text;
+			if (utf_string::UNICODE_UTF8(utf16.data(), static_cast<int>(utf16.size()), text) < 0 ||
+				text.size() > 79 - result.size()) return false;
+			result += text;
+		}
+		return true;
+	}
 	static bool sys_date(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 2) return false;
-
 		VarInfo* pArg1 = pN->GetStack(1);
 		VarInfo* pArg2 = pN->GetStack(2);
+		if (pArg1->GetType() != VAR_STRING || pArg2->GetType() != VAR_INT) return false;
 
-		if (pArg1->GetType() != VAR_STRING || pArg2->GetType() != VAR_INT)
-			return false;
-
-		std::time_t currentTime = (u32)pArg2->_int;
-		char buffer[80];
+		// Retain the existing unsigned 32-bit timestamp interpretation.
+		const std::time_t currentTime = static_cast<u32>(pArg2->_int);
+		std::tm timeinfo;
 #ifdef _WIN32
-		struct tm timeinfo;
-		if (localtime_s(&timeinfo, &currentTime) != 0) 
-			return false;
-		std::strftime(buffer, sizeof(buffer), pArg1->_str->_str.c_str(), &timeinfo);
+		if (localtime_s(&timeinfo, &currentTime) != 0) return false;
 #else
-		if(0 == std::strftime(buffer, sizeof(buffer), pArg1->_str->_str.c_str(), std::localtime(&currentTime)))
-			return false;
+		if (localtime_r(&currentTime, &timeinfo) == nullptr) return false;
 #endif
-
-		pN->ReturnValue(buffer);
+		std::string result;
+		if (!DateFormat(pArg1->_str->_str, timeinfo, result))
+		{
+			pN->SetError("invalid system.date format or output exceeds 79 bytes");
+			return false;
+		}
+		pN->ReturnValue(result.c_str());
 		return true;
 	}
 	static bool sys_clock(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -1821,9 +1899,25 @@ struct neo_libs
 		VarInfo* pArg1 = pN->GetStack(1);
 		if (pArg1->GetType() != VAR_MODULE) return false;
 
+		// This native frame cannot survive suspension of a loaded module.
+		// Apply the same synchronous boundary used by native sort callbacks.
+		struct SynchronousCall
+		{
+			INeoVMWorker* worker;
+			explicit SynchronousCall(INeoVMWorker* value) : worker(value) { worker->BeginNestedScriptCall(); }
+			~SynchronousCall() { worker->EndNestedScriptCall(); }
+		} synchronousCall(pArg1->_module);
 		std::vector<VarInfo> moduleArgs;
-		if (pArg1->_module->ExecuteTop(0, moduleArgs) == NEOEXEC_ERROR)
+		const int status = pArg1->_module->ExecuteTop(0, moduleArgs);
+		if (status != NEOEXEC_COMPLETED)
+		{
+			if (status == NEOEXEC_SUSPENDED)
+			{
+				pArg1->_module->CancelExecution();
+				pN->SetError("system.pcall cannot suspend");
+			}
 			return false;
+		}
 
 		pN->ReturnValue();
 		return true;
@@ -1922,6 +2016,11 @@ struct neo_libs
 			pCI = pN->m_pCur;
 		}
 
+		if (pN->IsMainCoroutine(pCI))
+		{
+			pN->SetError("coroutine.close cannot close the main context");
+			return false;
+		}
 
 		pN->m_pRegisterActive = pCI;
 		pCI->_sub_state = COROUTINE_SUB_CLOSE;

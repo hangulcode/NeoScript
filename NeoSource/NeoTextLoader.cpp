@@ -4,6 +4,8 @@
 
 #include "UTFString.h"
 #include "NeoTextLoader.h"
+#include <sstream>
+#include <locale>
 
 namespace NeoScript
 {
@@ -242,6 +244,7 @@ int hexValue(char c) {
 // 문자열에 약간의 오류라도 있으면 false를 리턴하고,
 // 올바른 경우에만 변환한 값을 r에 대입합니다.
 bool StringToDouble(double& r, const char* p) {
+    const char* original = p;
 	// 선행 공백(공백, 탭) 건너뛰기
 /*	while (*p == ' ' || *p == '\t')
 		p++;
@@ -296,7 +299,7 @@ bool StringToDouble(double& r, const char* p) {
 				return false;  // 지수부는 최소 한 자리 숫자 필요
 			int exp = 0;
 			while (std::isdigit(*p)) {
-				exp = exp * 10 + (*p - '0');
+				if (exp < 100000) exp = exp * 10 + (*p - '0');
 				p++;
 			}
 			if (expNegative)
@@ -359,7 +362,7 @@ bool StringToDouble(double& r, const char* p) {
 				return false;  // 지수부는 최소 한 자리 숫자 필요
 			int exp = 0;
 			while (std::isdigit(*p)) {
-				exp = exp * 10 + (*p - '0');
+				if (exp < 100000) exp = exp * 10 + (*p - '0');
 				p++;
 			}
 			if (expNegative)
@@ -371,6 +374,10 @@ bool StringToDouble(double& r, const char* p) {
 		if (*p != '\0')
 			return false;
 
+        std::istringstream decimal(original);
+        decimal.imbue(std::locale::classic());
+        double precise;
+        if (decimal >> precise) value = std::fabs(precise);
 		r = negative ? -value : value;
 		return true;
 	}
@@ -380,7 +387,7 @@ bool StringToDouble(double& r, const char* p) {
 
 // 정수/실수를 명시적으로 구분해 파싱. 정수는 double 을 거치지 않고 int32 로 정확히 만든다.
 // (0xffffffff → uint32 4294967295 → int32 재해석 -1. 예전 (int)(double) 은 범위초과 시 INT_MIN 이었음.)
-bool StringToNumber(ParsedNumber& out, const char* p)
+bool StringToNumber(ParsedNumber& out, const char* p, bool allowMinMagnitude)
 {
 	const char* orig = p;
 	bool negative = false;
@@ -391,7 +398,7 @@ bool StringToNumber(ParsedNumber& out, const char* p)
 		const char* q = p + 2;
 		uint64_t uval = 0;
 		int digits = 0;
-		while (isHexDigit(*q)) { uval = uval * 16 + (uint64_t)hexValue(*q); q++; digits++; }
+		while (isHexDigit(*q)) { q++; digits++; }
 		if (digits == 0)
 			return false;
 
@@ -402,11 +409,16 @@ bool StringToNumber(ParsedNumber& out, const char* p)
 				return false;
 			out.type = ParsedNumber::Type::Float;
 			out.floatValue = d;
-			out.intValue = (int32_t)(long long)d;
+			out.intValue = 0;
 			return true;
 		}
 		if (*q != '\0')
 			return false;
+		for (const char* digit = p + 2; digit != q; ++digit)
+		{
+			if (uval > (UINT32_MAX - hexValue(*digit)) / 16u) return false;
+			uval = uval * 16u + hexValue(*digit);
+		}
 
 		uint32_t u32 = (uint32_t)uval;              // 32비트로 절단 후 int32 비트패턴
 		double   mag = (double)uval;
@@ -428,15 +440,20 @@ bool StringToNumber(ParsedNumber& out, const char* p)
 			return false;
 		out.type = ParsedNumber::Type::Float;
 		out.floatValue = d;
-		out.intValue = (int32_t)(long long)d;
+		out.intValue = 0;
 		return true;
 	}
 
 	// 10진 정수: int64 누적 후 int32
-	long long ival = 0;
+	uint64_t ival = 0;
+	const uint64_t maximum = negative || allowMinMagnitude ? uint64_t(INT32_MAX) + 1 : uint64_t(INT32_MAX);
 	int digits = 0;
 	const char* r = p;
-	while (valid_digit(*r)) { ival = ival * 10 + (long long)(*r - '0'); r++; digits++; }
+	while (valid_digit(*r))
+	{
+		if (ival > (maximum - (*r - '0')) / 10) return false;
+		ival = ival * 10 + (*r - '0'); ++r; ++digits;
+	}
 	if (digits == 0 || *r != '\0')
 		return false;
 

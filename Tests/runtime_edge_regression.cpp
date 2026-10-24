@@ -66,9 +66,9 @@ int main() {
             "return n==a && !true==false;}", debug, image);
         for (const char* source : {"var a=8;var b=2;var ab=77;var x=a/*comment*/b;",
             "/*", "var x=1;/*unfinished", "fun F(){/*unfinished", "var x=(;",
-            "var x=[0,1][1];", "var x={\"a\":7}.a;", "var x=[1].len();",
             "var x=[;", "var x={;", "var x=[1]x;", "var x=1 2;", "fun F(){return (;}"})
             Reject(runtime, source, debug, image);
+        Run(runtime, "export fun Probe(){return [0,1][1]==1 && {\"a\":7}.a==7 && [1].len()==1;}", debug, image);
         for (const char* value : {"true", "1.0", "null", "\"x\"", "[]", "{}"})
             Run(runtime, std::string("export fun Probe(){var a=3;var b=") + value + ";return a<<b;}", debug, image, "<<");
         Run(runtime, "export fun Probe(){var n=0;var sum=0;for(var i in 2147483646,2147483647,2){"

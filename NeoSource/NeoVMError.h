@@ -15,6 +15,7 @@ namespace NeoScript
 	X(RTE_INDEX_READ,              "cannot read by index from %s") \
 	X(RTE_INDEX_WRITE,             "cannot assign by index to %s") \
 	X(RTE_NATIVE_PROPERTY_KEY,     "native object property name must be a string") \
+	X(RTE_LIST_INDEX_WRITE,       "list index out of range on assign") \
 	X(RTE_KEY_NOT_FOUND,           "key not found in map") \
 	X(RTE_VECTOR_INDEX_READ,       "vector index out of range on read") \
 	X(RTE_VECTOR_INDEX_WRITE,      "vector index out of range on assign") \
@@ -27,6 +28,7 @@ namespace NeoScript
 	X(RTE_FOREACH_MODIFIED,        "collection was modified during foreach") \
 	X(RTE_FOREACH_LIST_TWOVAR,     "foreach on list does not support two variables. use: foreach(var v in list)") \
 	X(RTE_FOREACH_ARRAY_TWOVAR,    "foreach on array does not support two variables. use: foreach(var v in array)") \
+	X(RTE_FOREACH_STRING_TWOVAR,   "foreach on string does not support two variables. use: foreach(var v in string)") \
 	X(RTE_FOREACH_SET_TWOVAR,      "foreach on set does not support two variables. use: foreach(var v in set)") \
 	/* 호출 */ \
 	X(RTE_CALL_INVALID,            "invalid function call") \

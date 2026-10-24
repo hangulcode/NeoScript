@@ -229,7 +229,7 @@ int CNeoVMWorker::ToInt(VarInfo* v1)
 	case VAR_INT:
 		return v1->_int;
 	case VAR_FLOAT:
-		return (int)v1->_float;
+		return NeoFloatToInt(v1->_float);
 	case VAR_BOOL:
 		return v1->_bl ? 1 : 0;
 	case VAR_NONE:
@@ -856,6 +856,10 @@ void CNeoVMWorker::UnwindActiveClosures()
 			const SClosureCallState& state = (*m_pClosureCallStack)[i];
 			if (state._closure == nullptr) continue;
 			SyncClosureAtFrame(state._closure, state._iSP_Vars);
+			// The saved pointer can alias a parent when its named callee fails.
+			// Clear only that alias: a direct yield parks an independent active ref.
+			if (m_pCur && m_pCur->_activeClosure == state._closure)
+				m_pCur->_activeClosure = nullptr;
 			VarInfo active(VAR_CLOSURE);
 			active._closure = state._closure;
 			Var_Release(&active);
@@ -872,6 +876,14 @@ void CNeoVMWorker::UnwindActiveClosures()
 // (코루틴 컨텍스트는 각자의 VarInfo 가 GC/스택 해제될 때 FreeCoroutine 으로 반납된다.)
 void CNeoVMWorker::ReleaseExecution(bool discardParkedClosuresWithoutSync)
 {
+	// The running coroutine's saved high-water is updated only on a switch.
+	// Preserve it before error unwinding, including a failure on first resume.
+	if (m_pCur != nullptr) m_pCur->_info = *(CoroutineBase*)this;
+	CoroutineInfo* activeCoroutine = (m_pCur != m_pMainCtx) ? m_pCur : nullptr;
+	if (activeCoroutine != nullptr) ++activeCoroutine->_refCount;
+	for (CoroutineInfo* context : m_sCoroutines)
+		if (context != m_pMainCtx && context != activeCoroutine) ++context->_refCount;
+
 	// cancel/강제 정리는 RET를 밟지 않으므로, 아직 프레임에 남은 closure 참조와
 	// 캡처 슬롯을 실행 컨텍스트 반납 전에 정리한다.
 	UnwindActiveClosures();
@@ -895,6 +907,11 @@ void CNeoVMWorker::ReleaseExecution(bool discardParkedClosuresWithoutSync)
 				DrainCoroutineClosures(pCI);
 		}
 	}
+	// These contexts belong to the discarded execution. Hold them until all
+	// stacks are cleared because a parent stack may own its running child.
+	if (activeCoroutine != nullptr) DeadCoroutine(activeCoroutine);
+	for (CoroutineInfo* context : m_sCoroutines)
+		if (context != m_pMainCtx && context != activeCoroutine) DeadCoroutine(context);
 	if (m_pMainCtx != nullptr && m_pPool != nullptr)
 	{
 		// 정상 완료 시 m_pCur == m_pMainCtx 이며 high-water 는 워커의 _iSP_Vars_Max2.
@@ -913,6 +930,15 @@ void CNeoVMWorker::ReleaseExecution(bool discardParkedClosuresWithoutSync)
 		}
 		CleanupContextVars(m_pMainCtx, usedMax);
 		m_pPool->Release(m_pMainCtx);
+	}
+	if (activeCoroutine != nullptr)
+	{
+		VarInfo held(VAR_COROUTINE); held._cor = activeCoroutine; Var_Release(&held);
+	}
+	for (CoroutineInfo* context : m_sCoroutines)
+	{
+		if (context == m_pMainCtx || context == activeCoroutine) continue;
+		VarInfo held(VAR_COROUTINE); held._cor = context; Var_Release(&held);
 	}
 	m_pCur = nullptr;
 	m_pMainCtx = nullptr;
@@ -1128,6 +1154,14 @@ bool CNeoVMWorker::CancelExecution()
 	return true;
 }
 
+bool CNeoVMWorker::CheckNestedCallDepth()
+{
+	// Every synchronous callback keeps native C++ frames alive as well as VM frames.
+	if (m_iNativeScriptCallDepth <= 64) return true;
+	SetError(RTE_CALL_STACK_OVERFLOW);
+	return false;
+}
+
 void CNeoVMWorker::BeginNestedScriptCall()
 {
 	++m_iNativeScriptCallDepth;
@@ -1154,6 +1188,7 @@ int CNeoVMWorker::RunHostCall(int iFunctionID, std::vector<VarInfo>& _args, VarI
 		// Script A -> native API -> Script B는 동일한 코드 버퍼를 공유한다.
 		// Script B가 정상 반환하면 Script A의 다음 opcode부터 계속 실행해야 한다.
 		const bool isNestedScriptCall = (m_iNativeScriptCallDepth > 0);
+		if (!CheckNestedCallDepth()) return NEOEXEC_ERROR;
 		if (isNestedScriptCall && m_iTimeout >= 0)
 		{
 			SetErrorFormat(RTE_NESTED_NOT_ALLOWED, "time-limited execution");
@@ -1817,7 +1852,9 @@ NEOS_NOINLINE bool CNeoVMWorker::ReportRunException()
 {
 	try
 	{
-		SetError(RTE_EXCEPTION);
+		try { throw; }
+		catch (const std::length_error& error) { SetError(error.what()); }
+		catch (...) { SetError(RTE_EXCEPTION); }
 		bool blDebugInfo = IsDebugInfo();
 		int _lineseq = -1;
 		if (blDebugInfo)
@@ -2036,8 +2073,8 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_XOR3:          Xor3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
 		case NOP_GREAT:         Var_SetBool(GetVarPtrF1(OP), CompareGR(GetVarPtr2(OP), GetVarPtr3(OP))); break;
 		case NOP_GREAT_EQ:      Var_SetBool(GetVarPtrF1(OP), CompareGE(GetVarPtr2(OP), GetVarPtr3(OP))); break;
-		case NOP_LESS:          Var_SetBool(GetVarPtrF1(OP), CompareGR(GetVarPtr3(OP), GetVarPtr2(OP))); break;
-		case NOP_LESS_EQ:       Var_SetBool(GetVarPtrF1(OP), CompareGE(GetVarPtr3(OP), GetVarPtr2(OP))); break;
+		case NOP_LESS:          Var_SetBool(GetVarPtrF1(OP), CompareGR(GetVarPtr3(OP), GetVarPtr2(OP), true)); break;
+		case NOP_LESS_EQ:       Var_SetBool(GetVarPtrF1(OP), CompareGE(GetVarPtr3(OP), GetVarPtr2(OP), true)); break;
 		case NOP_EQUAL2:        Var_SetBool(GetVarPtrF1(OP), CompareEQ(GetVarPtr2(OP), GetVarPtr3(OP))); break;
 		case NOP_NEQUAL:        Var_SetBool(GetVarPtrF1(OP), !CompareEQ(GetVarPtr2(OP), GetVarPtr3(OP))); break;
 		case NOP_AND:           And(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
@@ -2048,14 +2085,14 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_JMP:           SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_FALSE:     if (false == GetVarPtr2(OP)->IsTrue()) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_TRUE:      if (true == GetVarPtr2(OP)->IsTrue()) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_GREAT:     if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr2(OP), GetVarPtr3(OP))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_GREAT_L:   if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_GREAT_EQ:  if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr2(OP), GetVarPtr3(OP))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_GREAT_EQ_L:if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_LESS:      if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr3(OP), GetVarPtr2(OP))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_LESS_L:    if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr_L(OP.n3), GetVarPtr_L(OP.n2))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_LESS_EQ:   if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr3(OP), GetVarPtr2(OP))) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_LESS_EQ_L: if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr_L(OP.n3), GetVarPtr_L(OP.n2))) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_GREAT:     if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr2(OP), GetVarPtr3(OP))) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_GREAT_L:   if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3))) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_GREAT_EQ:  if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr2(OP), GetVarPtr3(OP))) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_GREAT_EQ_L:if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3))) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_LESS:      if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr3(OP), GetVarPtr2(OP), true)) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_LESS_L:    if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGR(GetVarPtr_L(OP.n3), GetVarPtr_L(OP.n2), true)) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_LESS_EQ:   if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr3(OP), GetVarPtr2(OP), true)) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_LESS_EQ_L: if (((OP.argFlag & NEOS_OP_COMPARE_INVERT) == 0) == CompareGE(GetVarPtr_L(OP.n3), GetVarPtr_L(OP.n2), true)) SetComparisonJump(OP.n1); break;
 		case NOP_JMP_EQUAL2:    if (true == CompareEQ(GetVarPtr2(OP), GetVarPtr3(OP))) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_EQUAL2_L:  if (true == CompareEQ(GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3))) SetCodeIncPtr(OP.n1); break;
 		case NOP_JMP_NEQUAL:    if (false == CompareEQ(GetVarPtr2(OP), GetVarPtr3(OP))) SetCodeIncPtr(OP.n1); break;
@@ -2116,10 +2153,10 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_VEC_MAKE:      handle_VEC_MAKE(OP); break;
 
 		case NOP_CLT_READ_STATIC_STRING: handle_CLT_READ_STATIC_STRING(OP); break;
-		case NOP_JMP_RANGE_INSIDE: if (IsRangeInside<true>(OP, false)) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_RANGE_OUTSIDE: if (IsRangeInside(OP, false) == false) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_RANGE_INSIDE_L: if (IsRangeInside<true>(OP, true)) SetCodeIncPtr(OP.n1); break;
-		case NOP_JMP_RANGE_OUTSIDE_L: if (IsRangeInside(OP, true) == false) SetCodeIncPtr(OP.n1); break;
+		case NOP_JMP_RANGE_INSIDE: if (IsRangeInside<true>(OP, false)) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_RANGE_OUTSIDE: if (IsRangeInside(OP, false) == false) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_RANGE_INSIDE_L: if (IsRangeInside<true>(OP, true)) SetComparisonJump(OP.n1); break;
+		case NOP_JMP_RANGE_OUTSIDE_L: if (IsRangeInside(OP, true) == false) SetComparisonJump(OP.n1); break;
 
 		case NOP_CLT_WRITE_REF: handle_CLT_WRITE_REF(OP); break;
 		case NOP_CLT_READ_RESULT: handle_CLT_READ_RESULT(OP); break;
@@ -2186,6 +2223,11 @@ void CNeoVMWorker::DrainCoroutineClosures(CoroutineInfo* pCI)
 }
 bool CNeoVMWorker::StopCoroutine(bool doDead)
 {
+	if (m_pCur == nullptr || (doDead && IsMainCoroutine(m_pCur)))
+	{
+		SetError("cannot close the main coroutine");
+		return false;
+	}
 	CoroutineBase* pThis = (CoroutineBase*)this;
 	m_pCur->_info = *pThis;
 	m_pCur->_activeClosure = m_pActiveClosure;
@@ -2286,7 +2328,7 @@ bool CNeoVMWorker::StartCoroutione(int argSP_Vars, int n3)
 
 VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 {
-	if (_isInitialized == false)
+	if (_isInitialized == false || !CheckNestedCallDepth())
 		return NULL;
 
 	const SFunctionTable& fun = Functions()[iFID];
@@ -2340,7 +2382,7 @@ VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 
 VarInfo* CNeoVMWorker::testCall(VarInfo* function, VarInfo* args, int argc)
 {
-	if (function == nullptr)
+	if (function == nullptr || !CheckNestedCallDepth())
 		return NULL;
 	if (function->GetType() == VAR_FUN)
 		return testCall(function->_fun_index, args, argc);
@@ -2388,6 +2430,21 @@ VarInfo* CNeoVMWorker::testCall(VarInfo* function, VarInfo* args, int argc)
 	return result;
 }
 
+void CNeoVMWorker::CallFunctionValue(int functionIndex, int argumentCount)
+{
+	if (functionIndex < 0 || functionIndex >= (int)Functions().size())
+	{
+		SetError(RTE_CALL_INVALID);
+		return;
+	}
+	if (argumentCount != Functions()[functionIndex]._argsCount)
+	{
+		SetError(RTE_CALL_ARG_COUNT);
+		return;
+	}
+	Call(functionIndex, argumentCount);
+}
+
 void CNeoVMWorker::Call(ClosureInfo* closure, int n2, int returnValueIndex)
 {
 	if (closure == nullptr || closure->_funIndex < 0 ||
@@ -2397,6 +2454,11 @@ void CNeoVMWorker::Call(ClosureInfo* closure, int n2, int returnValueIndex)
 		return;
 	}
 	const SFunctionTable& fun = Functions()[closure->_funIndex];
+	if (n2 != fun._argsCount)
+	{
+		SetError(RTE_CALL_ARG_COUNT);
+		return;
+	}
 	if (closure->_captures.size() != fun._captures.size() ||
 		!EnsureStackRange(_iSP_VarsMax, fun._localAddCount - 1))
 	{
@@ -2767,7 +2829,7 @@ bool CNeoVMWorker::ChangeNumber(VarInfo* p)
 			return true;
 		case VAR_FLOAT:
 			p->SetType(VAR_INT);
-			p->_int = (int)p->_float;
+			p->_int = NeoFloatToInt(p->_float);
 			return true;
 		default:
 			break;
