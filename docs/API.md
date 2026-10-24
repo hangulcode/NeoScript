@@ -161,16 +161,16 @@ independent of compiler image capacity and other runtime string operations.
 | `math.SmoothStep(edge0: float, edge1: float, x: float)` | `float` | GLSL `smoothstep`: clamped Hermite between the two edges |
 | `math.MoveToward(current: float, target: float, maxDelta: float)` | `float` | steps at most `maxDelta` toward `target`; frame-rate independent when `maxDelta = rate * dt` |
 | `math.Repeat(x: float, length: float)` | `float` | positive modulo, `0 <= result < length` for finite inputs, including large magnitudes; zero results are positive zero; `length <= 0` returns `0` |
-| `math.PingPong(x: float, length: float)` | `float` | bounces between `0` and `length` |
+| `math.PingPong(x: float, length: float)` | `float` | bounces between `0` and positive `length`; preserves small positions and handles large finite lengths |
 
 ### 3.3 Angles (radians)
 
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
 | `math.WrapAngle(radian: float)` | `float` | wraps finite inputs into `(-pi, pi]`, including large magnitudes |
-| `math.DeltaAngle(from: float, to: float)` | `float` | shortest signed difference, in `(-pi, pi]` |
-| `math.LerpAngle(from: float, to: float, t: float)` | `float` | interpolates along the shortest arc |
-| `math.MoveTowardAngle(current: float, target: float, maxDelta: float)` | `float` | turns at most `maxDelta` along the shortest arc; result wrapped |
+| `math.DeltaAngle(from: float, to: float)` | `float` | shortest signed difference, in `(-pi, pi]`, including large finite endpoints |
+| `math.LerpAngle(from: float, to: float, t: float)` | `float` | interpolates along the shortest arc; `t=0/1` returns the wrapped endpoint, including large finite angles |
+| `math.MoveTowardAngle(current: float, target: float, maxDelta: float)` | `float` | turns at most `maxDelta` along the shortest arc; result wrapped; reaches large finite targets when the step covers the remaining arc |
 
 ### 3.4 Distances
 
@@ -207,7 +207,7 @@ Section 10 describes what the resulting values support.
 | :--- | :--- | :--- |
 | `math.Cross3(a: Vector3, b: Vector3)` | `Vector3` | |
 | `math.DistanceSquared3(a: Vector3, b: Vector3)` | `float` | squared, no `sqrt` |
-| `math.Normalize3(v: Vector3, fallback: Vector3)` | `Vector3` | returns `fallback` when `lengthSq < 1e-8`; `fallback` is required |
+| `math.Normalize3(v: Vector3, fallback: Vector3)` | `Vector3` | normalizes finite components without squared-length overflow; returns required `fallback` when `lengthSq < 1e-8` |
 | `math.RotateVectorByQuat(quat: Quaternion, v: Vector3)` | `Vector3` | quaternion first |
 | `math.quat_from_basis(right: Vector3, up: Vector3, forward: Vector3)` | `Quaternion` | |
 | `math.quat_slerp(a: Quaternion, b: Quaternion, t: float)` | `Quaternion` | |
@@ -485,7 +485,7 @@ detach on modification. Internal references do not escape the write or become sc
 Native vector properties still call their getter and setter once per successful component write.
 WREF precedes an ordinary collection write. Stored vectors consume both atomically; other values
 use normal write dispatch. Native vector properties retain a resumable getter/setter boundary.
-There is no separate vector write-back opcode. Regenerate images older than bytecode version 0130 to apply checked shift folding and corrected NaN branch semantics.
+There is no separate vector write-back opcode. Regenerate images older than bytecode version 0131 to apply foreach source retention, checked shift folding, and corrected NaN branch semantics.
 A selector immediately following an indexed assignment keeps the assigned slot writable:
 `(a[0][0] = math.Vector3(1,2,3))[1] = 9` updates `a[0][0]` to `(1,9,3)`.
 Reading that result into a local still makes an independent vector value via copy-on-write.

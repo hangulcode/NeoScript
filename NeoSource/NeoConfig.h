@@ -80,7 +80,8 @@ struct debug_info
 // 0128: WREF tails are ordinary collection writes; regenerate cached images.
 // 0129: ordered jumps preserve logical negation for NaN; regenerate cached images.
 // 0130: checked shift counts and defined folding; rebuild images with previously folded shifts.
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('3' << 8) | ('0'))
+// 0131: retain every foreach source on entry; regenerate previously compiled loops.
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('3' << 8) | ('1'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline

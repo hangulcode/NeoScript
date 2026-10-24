@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <iostream>
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <iomanip>
@@ -714,6 +715,24 @@ struct neo_libs
 		if (a <= -kNsPi) a += kNsTwoPi;
 		return a;
 	}
+	static double NsWrapAngleWide(double a)
+	{
+		// Keep the language's existing float pi/tau, but reduce before large
+		// endpoints are subtracted or a small angular step is added to them.
+		if (a > kNsPi || a <= -kNsPi)
+		{
+			a = ::fmod(a, static_cast<double>(kNsTwoPi));
+			if (a > kNsPi) a -= kNsTwoPi;
+			if (a <= -kNsPi) a += kNsTwoPi;
+		}
+		return a;
+	}
+	static NS_FLOAT NsAngleResult(double a)
+	{
+		const NS_FLOAT result = static_cast<NS_FLOAT>(NsWrapAngleWide(a));
+		// Rounding a double just above -pi can land on the excluded endpoint.
+		return result <= -kNsPi ? kNsPi : result;
+	}
 	static NS_FLOAT NsRepeat(NS_FLOAT x, NS_FLOAT length)
 	{
 		if (length <= (NS_FLOAT)0) return (NS_FLOAT)0;
@@ -815,8 +834,16 @@ struct neo_libs
 	static bool Math_PingPong(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 2) return false;
+		NS_FLOAT x = pN->read<NS_FLOAT>(1);
 		NS_FLOAT length = pN->read<NS_FLOAT>(2);
-		NS_FLOAT t = NsRepeat(pN->read<NS_FLOAT>(1), length * (NS_FLOAT)2);
+		if (length > 0 && std::isfinite(length) && std::isfinite(x))
+		{
+			const double period = static_cast<double>(length) * 2.0;
+			const double t = ::fmod(::fabs(static_cast<double>(x)), period);
+			pN->ReturnValue(static_cast<NS_FLOAT>(t <= length ? t : period - t));
+			return true;
+		}
+		NS_FLOAT t = NsRepeat(x, length * (NS_FLOAT)2);
 		pN->ReturnValue(length - ::fabs(t - length));
 		return true;
 	}
@@ -829,15 +856,35 @@ struct neo_libs
 	static bool Math_DeltaAngle(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 2) return false;
-		pN->ReturnValue(NsWrapAngle(pN->read<NS_FLOAT>(2) - pN->read<NS_FLOAT>(1)));
+		const NS_FLOAT from = pN->read<NS_FLOAT>(1), to = pN->read<NS_FLOAT>(2);
+		if (std::isfinite(from) && std::isfinite(to))
+			pN->ReturnValue(NsAngleResult(NsWrapAngleWide(to) - NsWrapAngleWide(from)));
+		else
+			pN->ReturnValue(NsWrapAngle(to - from));
 		return true;
 	}
 	static bool Math_LerpAngle(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 3) return false;
 		NS_FLOAT a = pN->read<NS_FLOAT>(1);
-		NS_FLOAT d = NsWrapAngle(pN->read<NS_FLOAT>(2) - a);
-		pN->ReturnValue(NsWrapAngle(a + d * pN->read<NS_FLOAT>(3)));
+		NS_FLOAT b = pN->read<NS_FLOAT>(2), t = pN->read<NS_FLOAT>(3);
+		if (std::isfinite(a) && std::isfinite(b) && std::isfinite(t))
+		{
+			if (t == 0) pN->ReturnValue(NsWrapAngle(a));
+			else if (t == 1) pN->ReturnValue(NsWrapAngle(b));
+			else
+			{
+				const double start = NsWrapAngleWide(a);
+				const double delta = NsWrapAngleWide(NsWrapAngleWide(b) - start);
+				// Reduce the product first: even double loses start beside a huge t.
+				pN->ReturnValue(NsAngleResult(start + NsWrapAngleWide(delta * t)));
+			}
+		}
+		else
+		{
+			NS_FLOAT d = NsWrapAngle(b - a);
+			pN->ReturnValue(NsWrapAngle(a + d * t));
+		}
 		return true;
 	}
 	static bool Math_MoveToward(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -850,8 +897,19 @@ struct neo_libs
 	{
 		if (args != 3) return false;
 		NS_FLOAT cur = pN->read<NS_FLOAT>(1);
-		NS_FLOAT d = NsWrapAngle(pN->read<NS_FLOAT>(2) - cur);
-		pN->ReturnValue(NsWrapAngle(NsMoveToward(cur, cur + d, pN->read<NS_FLOAT>(3))));
+		NS_FLOAT target = pN->read<NS_FLOAT>(2), maxDelta = pN->read<NS_FLOAT>(3);
+		if (std::isfinite(cur) && std::isfinite(target) && std::isfinite(maxDelta) && maxDelta >= 0)
+		{
+			const double start = NsWrapAngleWide(cur);
+			const double delta = NsWrapAngleWide(NsWrapAngleWide(target) - start);
+			pN->ReturnValue(::fabs(delta) <= maxDelta ? NsWrapAngle(target) :
+				NsAngleResult(start + (delta > 0 ? static_cast<double>(maxDelta) : -static_cast<double>(maxDelta))));
+		}
+		else
+		{
+			NS_FLOAT d = NsWrapAngle(target - cur);
+			pN->ReturnValue(NsWrapAngle(NsMoveToward(cur, cur + d, maxDelta)));
+		}
 		return true;
 	}
 	static bool Math_InverseLerp(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -1056,6 +1114,14 @@ struct neo_libs
 		NS_FLOAT lenSq = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
 		if (lenSq < (NS_FLOAT)0.00000001)
 			return WriteVec3(pN, fallback[0], fallback[1], fallback[2]);
+		if (std::isinf(lenSq) && std::isfinite(v[0]) && std::isfinite(v[1]) && std::isfinite(v[2]))
+		{
+			// Only finite overflow needs the wider path. Preserve the usual float
+			// calculation and its small-vector fallback threshold.
+			const double x = v[0], y = v[1], z = v[2];
+			const double invLen = 1.0 / ::sqrt(x * x + y * y + z * z);
+			return WriteVec3(pN, static_cast<float>(x * invLen), static_cast<float>(y * invLen), static_cast<float>(z * invLen));
+		}
 
 		float invLen = (float)((NS_FLOAT)1.0 / (NS_FLOAT)::sqrt(lenSq));
 		return WriteVec3(pN, v[0] * invLen, v[1] * invLen, v[2] * invLen);

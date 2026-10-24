@@ -172,6 +172,11 @@ if(NEOSCRIPT_BUILD_SMOKE)
     add_test(NAME neoscript_runtime_edge_regression COMMAND neoscript_runtime_edge_regression)
     set_tests_properties(neoscript_runtime_edge_regression PROPERTIES TIMEOUT 60)
 
+    add_executable(neoscript_math_boundary_regression Tests/math_boundary_regression.cpp)
+    target_link_libraries(neoscript_math_boundary_regression PRIVATE neoscript Threads::Threads)
+    add_test(NAME neoscript_math_boundary_regression COMMAND neoscript_math_boundary_regression)
+    set_tests_properties(neoscript_math_boundary_regression PROPERTIES TIMEOUT 60)
+
     add_executable(neoscript_callback_reentry_regression Tests/callback_reentry_regression.cpp)
     target_link_libraries(neoscript_callback_reentry_regression PRIVATE neoscript Threads::Threads)
     add_test(NAME neoscript_callback_reentry_regression COMMAND neoscript_callback_reentry_regression)

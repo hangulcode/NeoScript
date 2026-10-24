@@ -319,8 +319,10 @@ print(sumAgain);                   // 60
 - A single `foreach` variable over a list, dense array, or set holds the **value**, not the index.
   Use a range `for` when you need an index.
 - `foreach (var v in [1,2,3])`, containers returned by functions, and `m.keys()` are supported.
-  The source expression is evaluated once on entry, and its temporary result stays alive until the loop ends.
-  Nested loops keep independent sources; they do not deep-copy the containers.
+  The source expression is evaluated once on entry, and its value stays alive until the loop ends.
+  Reassigning the source variable in the body does not change the collection being traversed.
+  Nested loops keep independent sources; they do not deep-copy the containers. Changes through an alias
+  still affect the original storage and remain subject to the iteration mutation rules.
 - Maps support `foreach (var key in map)` and `foreach (var key, value in map)`.
 - Avoid changing the element count during iteration. Changing a dense array's length is an error.
   To remove several map keys, iterate over the list returned by `keys()` and modify the original map.
@@ -736,6 +738,10 @@ Trigonometric functions use lowercase names, such as `math.sin`, `math.cos`, and
 See the [math API](API.md#3-math) for complete argument order and types.
 `Lerp`, `InverseLerp`, and `Remap` do not automatically clamp to `[0, 1]`.
 Combine them with `Clamp01` when needed. Angle functions use radians.
+`DeltaAngle`, `LerpAngle`, and `MoveTowardAngle` handle large finite angles without losing the wrapped
+target; `LerpAngle(a,b,0)` and `LerpAngle(a,b,1)` return the wrapped endpoints. `PingPong` preserves
+small positions even when its positive length is large. `Normalize3` handles large finite components
+without overflowing the intermediate squared length; its small-vector fallback rule is unchanged.
 
 ```cpp
 import math;
@@ -767,7 +773,7 @@ print(math.MoveToward(0.0, 10.0, 2.0)); // 2
   An index computed by a function call is evaluated once; its result is not recomputed for write-back.
   List/map/vector-array writes may use a temporary internal reference; normal reads and assignment results
   remain values. Copies still stay independent, and native properties retain their getter/setter behavior.
-  WREF pairs with an ordinary write and handles vector write-back; rebuild older compiled scripts and caches for bytecode version 0130 (also required for checked shift folding and corrected NaN branch behavior).
+  WREF pairs with an ordinary write and handles vector write-back; rebuild older compiled scripts and caches for bytecode version 0131 (also required for foreach source retention, checked shift folding, and corrected NaN branch behavior).
 - A selector immediately after an indexed assignment can still modify the assigned vector:
   `(a[0][0] = math.Vector3(1,2,3))[1] = 9` stores `(1,9,3)` in `a[0][0]`.
   Assigning the result to a separate local instead keeps ordinary vector copy semantics.

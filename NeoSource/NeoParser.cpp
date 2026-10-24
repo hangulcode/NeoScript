@@ -4098,21 +4098,13 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 		return false;
 	}
 	if (operand.IsFun()) MaterializeValue(operand, ar, funs);
-	if (operand.IsArray())
-	{
-		iTable = AddLocalVar(ar, funs, vars);
-		ReadElement(operand, iTable, ar, funs);
-	}
-	else if (IsTempVar(operand._iVar))
-	{
-		// 리터럴·함수 반환값의 식 임시 슬롯은 본문의 ClearTempVars 뒤에 재사용된다.
-		// 순회 대상은 루프 전체에서 살아 있어야 하므로 숨은 로컬에 한 번만 보관한다.
-		// 컨테이너를 복제하지 않아 원소 변경 감지와 기존 참조 의미는 그대로 유지한다.
-		iTable = AddLocalVar(ar, funs, vars);
-		funs._cur->Push_OP2(ar, NOP_MOV, iTable, operand._iVar, false);
-	}
-	else
-		iTable = operand._iVar;
+	// Retain every source once, including plain locals/globals/parameters. The
+	// body may rebind that variable or reuse an expression's temporary slot.
+	// This copies the reference, preserving element updates and mutation checks.
+	iTable = AddLocalVar(ar, funs, vars);
+	if (iTable == -1)
+		return false;
+	ReadElement(operand, iTable, ar, funs);
 
 
 	funs._cur->Push_OP1(ar, NOP_VAR_CLEAR, iKey);
@@ -4168,6 +4160,10 @@ bool ParseForEach(CArchiveRdWC& ar, SFunctions& funs, SVars& vars)
 	{
 		funs._cur->Set_JumpOffet(sJumps[i], forEndPos);
 	}
+
+	// Normal completion and break release the retained source. At file scope
+	// this hidden slot is global, so scope-name cleanup alone would retain it.
+	funs._cur->Push_OP1(ar, NOP_VAR_CLEAR, iTable);
 
 	DelLocalVar(vars.GetCurrentLayer());
 
