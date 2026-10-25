@@ -20,6 +20,9 @@ with Clang/GCC. See Microsoft's [language-standard options](https://learn.micros
   a public Runtime / Program / Instance API. Compile once, create independent instances.
 - **Game-oriented math and execution:** value-type vectors and quaternions,
   coroutines, and host-controlled execution budgets for time-sliced work.
+- **Time APIs:** UTC formatting, int64 Unix milliseconds, monotonic stopwatches,
+  and immutable millisecond durations. See the [time reference](docs/API.md#41-durations-and-elapsed-time)
+  and [console sample](TestScript/time.ns).
 - **Unity from C#:** a flat C ABI and UPM package for Windows, Android, and iOS.
   See the [Unity setup and sample](docs/Unity.md).
 - **Debug your scripts:** VS Code completion, signature help, breakpoints, stepping,

@@ -12,6 +12,7 @@
     <ClCompile Include="..\NeoSource\NeoRegex.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="..\NeoSource\NeoRegexVendor.c"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="..\NeoSource\NeoLib.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="..\NeoSource\NeoTime.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="..\NeoSource\NeoParser.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="..\NeoSource\NeoScriptShim.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="..\NeoSource\NeoTextLoader.cpp"><Filter>Source Files</Filter></ClCompile>
@@ -24,6 +25,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\NeoSource\NeoRegex.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoTime.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="..\NeoSource\NeoHttp.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="..\NeoSource\Neo.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="..\NeoSource\NeoArchive.h"><Filter>Header Files</Filter></ClInclude>

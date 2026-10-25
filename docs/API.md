@@ -255,8 +255,13 @@ Use `import system;` before calling these functions.
 | `system.jsonDecode(text: string)` | `var` | Strict int64/float32 JSON conversion; any supported root. Failure returns null |
 | `system.jsonError()` | `string` | Last JSON conversion error in this execution instance, including data path; empty on success |
 | `system.time()` | `int` | Unix seconds |
+| `system.time_ms()` | `int` | Unix milliseconds as an exact int64 value; wall clock, subject to clock corrections |
 | `system.date(format: string, time: int)` | `string` | Local-time formatting; UTF-8 output limited to 79 bytes; invalid formats or oversized output raise an error |
+| `system.utc_date(format: string, time: int)` | `string` | UTC formatting of signed Unix **seconds**, years 1900 through 9999; same format and output limit as `date` |
 | `system.clock()` | `float` | `clock() / CLOCKS_PER_SEC` in seconds. Use for deltas, not wall time |
+| `system.stopwatch()` | `stopwatch` | Starts a monotonic elapsed-time measurement immediately |
+| `system.time_span(days: int, hours: int, minutes: int, seconds: int, milliseconds: int)` | `time_span` | Immutable duration; signed components are summed in milliseconds with checked int64 arithmetic |
+| `system.time_span_ms(milliseconds: int)` | `time_span` | Immutable duration from signed int64 milliseconds, including both endpoints |
 | `system.array(initial: bool\|int\|float\|Vector2\|Vector3\|Vector4, size: int)` | `array` | Dense typed array. `initial` chooses the element type and fills the initial elements; `size` must be non-negative |
 | `system.load(source: string, name: string)` | `module` | Compiles `source` at run time. `name` is type-checked but unused. A compile failure raises `invalid function call`; it does not return `null` |
 | `system.pcall(m: module)` | `void` | Runs the module's top-level code |
@@ -275,9 +280,61 @@ range retain their unsigned 32-bit interpretation, rather than representing date
 Other negative values and unsupported timestamps are rejected. Supported `strftime` directives and modifiers depend on the platform;
 unsupported or incomplete directives are rejected before calling the C library.
 
+`system.utc_date` interprets negative timestamps as dates before 1970, without the legacy
+unsigned reinterpretation used by `date`. Its range is `-2208988800..253402300799` seconds
+(1900-01-01 through 9999-12-31 23:59:59 UTC), independent of `time_t` width. `%z` is always
+`+0000` and `%Z` is always `UTC`; other directives follow the platform and current locale.
+Leap seconds are not represented. Pass `system.time_ms() / 1000` when starting with a current
+millisecond timestamp; passing milliseconds directly is a units error. Use `stopwatch` for
+elapsed time, since `time()` and `time_ms()` can move backwards when the wall clock is corrected.
+
 A module value returned by `system.load` has no callable members; `system.pcall(m)` running the
 chunk's top level is the only thing you can do with one. To call named functions across files use
 `import file as alias;` and `alias.Fn()`, which the parser resolves at compile time.
+
+### 4.1. Durations and elapsed time
+
+| Method | Returns | Notes |
+| :--- | :--- | :--- |
+| `span.total_milliseconds()` | `int` | Exact signed int64 milliseconds |
+| `span.total_seconds()` | `float` | Approximate float32 seconds; large durations lose precision |
+| `span.parts()` | `map` | Fresh map: `sign` (-1, 0, 1), non-negative `days`, `hours` (0..23), `minutes` (0..59), `seconds` (0..59), `milliseconds` (0..999) |
+| `span.format()` | `string` | Locale-independent `[-]d.hh:mm:ss.mmm`, with a day field even when zero |
+| `span.add(other: time_span)` | `time_span` | New duration; int64 overflow raises a runtime error |
+| `span.subtract(other: time_span)` | `time_span` | New duration; int64 overflow raises a runtime error |
+| `span.compare(other: time_span)` | `int` | -1, 0, or 1, comparing milliseconds without subtraction overflow |
+| `watch.elapsed()` | `time_span` | Snapshot of elapsed monotonic time, truncated to whole milliseconds |
+| `watch.elapsed_ms()` | `int` | Elapsed whole milliseconds without allocating a duration object |
+| `watch.restart()` | `void` | Resets the start point to now; all aliases observe the restart |
+
+All five `time_span` components are required and must be integers. Components need not be
+normalized: 25 hours becomes 1 day and 1 hour; mixed signs are allowed. Each multiplication
+and accumulated sum, in argument order, must fit int64 even if later components would cancel it.
+One day is exactly 24 hours; durations do not model months, years, local-time transitions, or dates.
+Negative durations have one sign and absolute components; even `INT64_MIN` decomposes safely.
+
+TimeSpan and Stopwatch use managed native objects. Assignments, containers, and closures retain
+their lifetime. `==` compares object identity; use `span.compare(other) == 0` for equal durations.
+TimeSpan methods never change the original. Mutating the map from `parts()` does not change it.
+For persistence or host transfer, use `total_milliseconds()` and `time_span_ms()`; JSON does not
+encode these objects. They follow the existing native-object `type()` convention (reported as
+`"null"`), so use the documented API rather than `type()` to identify them.
+
+Stopwatch uses `std::chrono::steady_clock`, independent of wall-clock or timezone changes.
+It includes time while script execution is paused or the host is idle. Counting time during
+operating-system suspend depends on the platform. It does not follow game pause or time scale.
+Engine delta time, pause state, and scaled gameplay time remain host-provided APIs.
+
+```cpp
+import system;
+var duration = system.time_span(0, 1, 2, 3, 4);
+print(duration.format());                         // 0.01:02:03.004
+print(system.utc_date("%Y-%m-%dT%H:%M:%SZ", system.time()));
+var watch = system.stopwatch();
+// Run the operation to measure here.
+print(watch.elapsed_ms());
+watch.restart();
+```
 
 ---
 

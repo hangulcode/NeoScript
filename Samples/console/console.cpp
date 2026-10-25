@@ -158,6 +158,7 @@ static void PrintSampleList()
 	printf("literal_totype\n");
 	printf("cycle\n");
 	printf("regex\n");
+	printf("time\n");
 }
 
 static std::string s_path = "../../TestScript/";
@@ -184,6 +185,7 @@ static int RunSample(INeoLoader* pLoader, const std::string& key)
 	if (key == "18" || key == "cycle") return SAMPLE_cycle_ref(pLoader, s_path + "cycle_ref.ns");
 
 	if (key == "19" || key == "regex") return SAMPLE_etc(pLoader, s_path + "regex.ns", nullptr);
+	if (key == "20" || key == "time") return SAMPLE_etc(pLoader, s_path + "time.ns", nullptr);
 
 	printf("unknown sample: %s\n", key.c_str());
 	return -1;
@@ -2639,6 +2641,7 @@ static int ConsoleMain(int argc, char* argv[])
 		printf("%d literal_totype\n", idx++);
 		printf("%d cycle\n", idx++);
 		printf("%d regex\n", idx++);
+		printf("%d time\n", idx++);
 
 		printf("\nESC press to exit\n");
 		printf("press the number and enter ...\n");

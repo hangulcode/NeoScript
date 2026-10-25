@@ -75,6 +75,7 @@
     <ClCompile Include="..\NeoSource\NeoRegex.cpp" />
     <ClCompile Include="..\NeoSource\NeoRegexVendor.c"><LanguageStandard_C>stdc11</LanguageStandard_C></ClCompile>
     <ClCompile Include="..\NeoSource\NeoLib.cpp" />
+    <ClCompile Include="..\NeoSource\NeoTime.cpp" />
     <ClCompile Include="..\NeoSource\NeoParser.cpp" />
     <ClCompile Include="..\NeoSource\NeoScriptShim.cpp" />
     <ClCompile Include="..\NeoSource\NeoTextLoader.cpp" />
@@ -88,6 +89,7 @@
   <ItemGroup>
     <ClInclude Include="..\NeoSource\NeoHttp.h" />
     <ClInclude Include="..\NeoSource\NeoRegex.h" />
+    <ClInclude Include="..\NeoSource\NeoTime.h" />
     <ClInclude Include="..\NeoSource\Neo.h" />
     <ClInclude Include="..\NeoSource\NeoArchive.h" />
     <ClInclude Include="..\NeoSource\NeoCompileLimits.h" />

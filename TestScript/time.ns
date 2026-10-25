@@ -1,0 +1,27 @@
+﻿import system;
+
+// 현재 시각은 Unix 기준이며, UTC 포맷에는 초 단위를 전달한다.
+print("Unix seconds: " .. system.time());
+print("Unix milliseconds: " .. system.time_ms());
+print("UTC: " .. system.utc_date("%Y-%m-%dT%H:%M:%SZ", system.time()));
+print("Before epoch: " .. system.utc_date("%Y-%m-%d %H:%M:%S %Z", -1));
+
+// 기간은 정수 밀리초를 보관하고 더하기와 빼기는 새 기간을 반환한다.
+var duration = system.time_span(1, 2, 3, 4, 5);
+var longer = duration.add(system.time_span_ms(995));
+print("Duration: " .. duration.format());
+print("Added: " .. longer.format());
+print("Difference: " .. longer.subtract(duration).total_milliseconds());
+print("Compare: " .. duration.compare(longer));
+var parts = system.time_span_ms(-90250).parts();
+print("Negative parts: " .. system.jsonEncode(parts, true));
+
+// 실제 경과 시간은 시스템 시계가 조정돼도 역행하지 않는 Stopwatch로 잰다.
+var watch = system.stopwatch();
+var total = 0;
+for (var i in 0, 1000) total += i;
+print("Sum: " .. total);
+print("Elapsed milliseconds: " .. watch.elapsed_ms());
+print("Elapsed duration: " .. watch.elapsed().format());
+watch.restart();
+print("Restarted: " .. watch.elapsed_ms());

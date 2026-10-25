@@ -971,11 +971,50 @@ Also consult the host contract for per-frame resumption, execution budgets, canc
 | Type checking | `type(x)` returns strings such as `"int"`, `"float"`, `"list"`, `"map"`, `"array"`, and `"function"` |
 | Size across types | `tosize(x)` supports strings, lists, maps, arrays, sets, and vectors |
 | Source line number | `__LINE__` is the current line number in the source |
-| Time | `system.time()` returns Unix seconds; `system.date(format, time)` formats local time |
-| Timing | `system.clock()` returns seconds based on C `clock()`; do not assume it measures wall-clock time |
+| Time | `system.time()` returns Unix seconds; `time_ms()` returns int64 Unix milliseconds; `date(format, time)` formats local time and `utc_date(format, time)` formats UTC seconds |
+| Timing | `system.stopwatch()` starts a monotonic clock; `elapsed_ms()` reads integer milliseconds and `restart()` resets it. The older `system.clock()` uses C `clock()` |
+| Durations | `system.time_span(days, hours, minutes, seconds, milliseconds)` or `time_span_ms(milliseconds)` creates an immutable duration |
 | Dynamic code | `system.load(source, name)` creates a module; `system.pcall(module)` runs its top-level code |
 | HTTP | `system.aysnc_create()` creates a request object. **The actual API spelling is aysnc** |
 | Editor support | The VS Code extension provides completion, signature help, breakpoints, stepping, call stacks, and local-variable inspection |
+
+### UTC time, Stopwatch, and TimeSpan
+
+```cpp
+import system;
+print(system.utc_date("%Y-%m-%dT%H:%M:%SZ", system.time()));
+var now_ms = system.time_ms();
+var delay = system.time_span(0, 0, 1, 30, 250);
+print(delay.total_milliseconds());             // 90250
+print(delay.format());                         // 0.00:01:30.250
+var shorter = delay.subtract(system.time_span_ms(500));
+print(shorter.parts().milliseconds);           // 750
+print(shorter.compare(delay));                 // -1
+var watch = system.stopwatch();
+// Do work here; elapsed time also includes time spent outside the script.
+print(watch.elapsed_ms());
+print(watch.elapsed().format());
+watch.restart();
+```
+
+`utc_date` takes **seconds**, not milliseconds. Unlike legacy `date`, negative UTC timestamps
+represent dates before 1970. The supported UTC range is 1900 through 9999; `%z` and `%Z` always
+produce `+0000` and `UTC`. Output is limited to 79 UTF-8 bytes, as with local `date`.
+
+TimeSpan stores exact signed int64 milliseconds. `total_seconds()` is only an approximate float32
+conversion. All five component arguments are required integers and each conversion/sum must fit
+int64; overflows raise errors. Components may exceed their usual ranges or have mixed signs.
+`parts()` returns a fresh map with `sign`, `days`, `hours`, `minutes`, `seconds`, and `milliseconds`;
+components are non-negative and the sign applies to the whole duration. A day is exactly 24 hours.
+`add` and `subtract` create new durations, and `compare` returns -1, 0, or 1. Use `compare` to check
+duration equality; `==` on these native objects checks identity. Store `total_milliseconds()` in
+JSON and restore it with `time_span_ms()`.
+
+Stopwatch starts on creation and uses a monotonic clock. It ignores wall-clock corrections and
+game time scale; host idle time counts, while operating-system suspend behavior is platform-specific.
+Copying a stopwatch shares it, including `restart()`. TimeSpan snapshots remain unchanged.
+See the [time API reference](API.md#41-durations-and-elapsed-time) and the console `time` sample.
+UTC calendar construction and ISO 8601 parsing are not provided yet.
 
 ### JSON conversion (also available in the console)
 

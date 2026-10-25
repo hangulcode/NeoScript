@@ -46,6 +46,7 @@ set(NEOSCRIPT_SOURCES
     NeoSource/NeoRegex.cpp
     NeoSource/NeoRegexVendor.c
     NeoSource/NeoLib.cpp
+    NeoSource/NeoTime.cpp
     NeoSource/NeoParser.cpp
     NeoSource/NeoScriptShim.cpp
     NeoSource/NeoTextLoader.cpp
@@ -163,6 +164,10 @@ if(NEOSCRIPT_BUILD_SMOKE)
     target_link_libraries(neoscript_c_abi_smoke PRIVATE neoscript Threads::Threads)
 
     enable_testing()
+    add_executable(neoscript_time_regression Tests/time_regression.cpp)
+    target_link_libraries(neoscript_time_regression PRIVATE neoscript Threads::Threads)
+    add_test(NAME neoscript_time_regression COMMAND neoscript_time_regression)
+    set_tests_properties(neoscript_time_regression PROPERTIES TIMEOUT 30)
     add_executable(neoscript_http_regex_regression Tests/http_regex_regression.cpp)
     target_link_libraries(neoscript_http_regex_regression PRIVATE neoscript Threads::Threads)
     add_test(NAME neoscript_http_regex_regression COMMAND neoscript_http_regex_regression)

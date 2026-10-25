@@ -18,7 +18,7 @@
 #include "NeoArchive.h"
 #include "NeoJson.h"
 #include "NeoStringLimits.h"
-//#include "NeoTime.h"
+#include "NeoTime.h"
 #include "UTFString.h"
 #include <chrono>
 
@@ -2016,11 +2016,9 @@ struct neo_libs
 	{
 		if (args != 0) return false;
 
-		auto now = std::chrono::system_clock::now();
-		std::time_t currentTime = std::chrono::system_clock::to_time_t(now);
-		//std::localtime(&currentTime)
-
-		pN->ReturnValue((int)currentTime);
+		// time_t가 32비트인 호스트에서도 초 값을 중간에 잘라내지 않는다.
+		const auto now = std::chrono::system_clock::now().time_since_epoch();
+		pN->ReturnValue(static_cast<NS_INT>(std::chrono::duration_cast<std::chrono::seconds>(now).count()));
 		return true;
 	}
 	static bool DateDirective(char code, char modifier)
@@ -2038,7 +2036,7 @@ struct neo_libs
 		return false;
 #endif
 	}
-	static bool DateFormat(const std::string& format, const std::tm& timeinfo, std::string& result)
+	static bool DateFormat(const std::string& format, const std::tm& timeinfo, std::string& result, bool utc = false)
 	{
 		// Keep literal UTF-8 bytes out of locale-dependent narrow strftime.
 		// Wide directive output also preserves localized month/time-zone names.
@@ -2055,6 +2053,14 @@ struct neo_libs
 			if (pos < format.size() && (format[pos] == '#' || format[pos] == 'E' || format[pos] == 'O'))
 				modifier = format[pos++];
 			if (pos == format.size() || !DateDirective(format[pos], modifier)) return false;
+			// UTC에서는 CRT가 프로세스의 로컬 시간대를 참조하지 않도록 직접 출력한다.
+			if (utc && (format[pos] == 'z' || format[pos] == 'Z'))
+			{
+				const std::string zone = format[pos++] == 'z' ? "+0000" : "UTC";
+				if (zone.size() > 79 - result.size()) return false;
+				result += zone;
+				continue;
+			}
 			wchar_t directive[5] = {L'!', L'%', 0, 0, 0};
 			int end = 2;
 			if (modifier) directive[end++] = static_cast<wchar_t>(modifier);
@@ -2108,6 +2114,25 @@ struct neo_libs
 			return false;
 		}
 		pN->ReturnValue(result.c_str());
+		return true;
+	}
+	static bool sys_utc_date(CNeoVMWorker* worker, VarInfo*, short args)
+	{
+		if (args != 2 || worker->GetStack(1)->GetType() != VAR_STRING ||
+			worker->GetStack(2)->GetType() != VAR_INT) return false;
+		std::tm calendar;
+		if (!TimeLibrary::UtcCalendar(worker->GetStack(2)->_int, calendar))
+		{
+			worker->SetError("system.utc_date timestamp must be in years 1900 through 9999");
+			return false;
+		}
+		std::string result;
+		if (!DateFormat(worker->GetStack(1)->_str->_str, calendar, result, true))
+		{
+			worker->SetError("invalid system.utc_date format or output exceeds 79 bytes");
+			return false;
+		}
+		worker->ReturnValue(result.c_str());
 		return true;
 	}
 	static bool sys_clock(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -2699,6 +2724,15 @@ static void AddGlobalLibFun()
 
 	g_sCurrentSystem.clear();
 	AddDefaultNativeFun("format", &neo_libs::io_format);
+	// 기존 네이티브 함수의 인덱스 순서를 유지하도록 새 함수는 등록부 끝에 추가한다.
+	g_sCurrentSystem = "system";
+	AddSystemFun("time_ms", &TimeLibrary::TimeMilliseconds, "int");
+	AddSystemFun("utc_date", &neo_libs::sys_utc_date, "string", "string format", "int time");
+	AddSystemFun("time_span", &TimeLibrary::TimeSpan, "time_span", "int days", "int hours", "int minutes", "int seconds", "int milliseconds");
+	AddSystemFun("time_span_ms", &TimeLibrary::TimeSpanMilliseconds, "time_span", "int milliseconds");
+	AddSystemFun("stopwatch", &TimeLibrary::Stopwatch, "stopwatch");
+
+	g_sCurrentSystem.clear();
 }
 bool CNeoVM::IsGlobalLibFun(std::string& FunName)
 {
@@ -2861,6 +2895,7 @@ void NeoVMSystem::GetBuiltins(std::vector<NeoBuiltinInfo>& out)
 	emitTable("map", g_sNeoFunLib_Map);
 	emitTable("set", g_sNeoFunLib_Set);
 	emitTable("async", g_sNeoFunLib_Async);
+	TimeLibrary::GetBuiltins(out);
 }
 
 };
