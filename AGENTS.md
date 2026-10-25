@@ -30,10 +30,10 @@
 
 ```
 빌드 : Samples\console\console.sln   Configuration=Release Platform=x64
-회귀 : console.exe --smoke                      (compiler regression 2785)
+회귀 : console.exe --smoke                      (compiler regression 2828)
        console.exe --run cycle                  (cycle_ref 368)
        console.exe --v2smoke                    (0 failures)
-       console.exe --compiler-error-regression   (20/20)
+       console.exe --compiler-error-regression   (28/28)
 ```
 
 **회귀는 `Samples\console` 에서 돌린다.** 테스트가 `../../TestScript/` 를 상대 경로로 열기 때문에, exe 가 있는 폴더에서 돌리면 `file read error` 로 엉뚱하게 실패한다.

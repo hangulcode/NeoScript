@@ -10,6 +10,7 @@
 //#include "NeoVMWorker.h"
 #include "NeoVMMemoryPool.h"
 #include "NeoQueue.h"
+#include "NeoRegex.h"
 
 #include "NeoVMMap.h"
 #include "NeoVMSet.h"
@@ -783,6 +784,7 @@ private:
 	std::mutex _httpCancellationMutex;
 	std::shared_ptr<std::atomic<bool> > _httpCancellation;
 	size_t _maxRegexPatternBytes = 16 * 1024;
+	RegexEngine _regex;
 	NeoThreadSafeQueue<AsyncInfo*> _job_completed;
 	SNeoVMAllocStats m_sAllocStats;
 	SNeoVMAllocStats m_sPublishedAllocStats;

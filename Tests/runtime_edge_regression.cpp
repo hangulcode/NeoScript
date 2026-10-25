@@ -60,6 +60,15 @@ int main() {
     auto runtime = CreateRuntime();
     runtime->FreezeBindings();
     for (bool debug : {false, true}) for (bool image : {false, true}) {
+        Run(runtime, "export var Out; fun Next(var n){return n+1;} fun Assign(){Out=Next(1);return Out;}"
+            "export fun Probe(){var r=Assign();return r==2 && Out==2;}", debug, image);
+        Run(runtime, "var hidden; fun Next(var n){return n+1;} fun Assign(){hidden=Next(1);return hidden;}"
+            "export fun Probe(){var r=Assign();return r==2 && hidden==2;}", debug, image);
+        Run(runtime, "fun Next(var n){return n+1;} fun Counter(){var n=0;return fun(){n=Next(n);return n;};}"
+            "export fun Probe(){var f=Counter();var a=f();var b=f();var c=f();return a==1 && b==2 && c==3;}", debug, image);
+        Run(runtime, "export fun Probe(){sleep(4294967296);return true;}", debug, image, "sleep");
+        Run(runtime, "export fun Probe(){sleep(2147483648.0);return true;}", debug, image, "sleep");
+        Run(runtime, "export fun Probe(){sleep(-9223372036854775808);return true;}", debug, image);
         for (const char* source : {
             R"ns(export fun Probe(){return "abc".split("");})ns",
             R"ns(export fun Probe(){return "".split("");})ns",

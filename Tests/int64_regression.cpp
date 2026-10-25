@@ -3,6 +3,10 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <type_traits>
+static_assert(!std::is_convertible<int, NeoScript::ProgramHandle>::value, "program handles reject integers");
+static_assert(!std::is_convertible<int, NeoScript::InstanceHandle>::value, "instance handles reject integers");
+static_assert(!std::is_convertible<int, NeoScript::DefineSetHandle>::value, "define handles reject integers");
 using namespace NeoScript;
 static int checks=0, failures=0;
 static void Check(bool ok,const char* label) { ++checks; if(!ok){++failures;std::fprintf(stderr,"FAIL %s\n",label);} }
@@ -59,7 +63,7 @@ int main(){
   }
   rt->DestroyProgram(p);
  }
- for(const char* expr:{"[3][4294967296]","math.Vector2(1,2)[4294967296]","system.array(1,2)[4294967296]","system.array(1,4294967296)","1<<64"}){
+ for(const char* expr:{"[3][4294967296]","math.Vector2(1,2)[4294967296]","system.array(1,2)[4294967296]","system.array(1,4294967296)","[].resize(4294967296)","[].reserve(4294967296)","system.array(0,0).resize(4294967296)","system.array(0,0).reserve(4294967296)","{}.reserve(4294967296)","1<<64"}){
   std::string text=std::string("import system;import math;export fun Probe(){return ")+expr+";}";CompileDesc d;d.source=text;
   auto r=rt->Compile(d);Check(bool(r.program),(std::string(expr)+": "+r.error.message).c_str());if(!r.program)continue;
   auto i=rt->CreateInstance(r.program);{auto c=rt->Call(i,"Probe");Check(c.invoke()==RunStatus::Failed,"wide index/count rejected");}

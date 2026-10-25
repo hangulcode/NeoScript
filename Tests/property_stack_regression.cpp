@@ -2,6 +2,7 @@
 #include "NeoVMWorker.h"
 #include <cstdio>
 #include <stdexcept>
+#include <limits>
 #include <string>
 #include <vector>
 using namespace NeoScript;
@@ -446,9 +447,56 @@ static void FailedTestCall(bool debug, bool closure)
     NeoExecContextPool_Destroy(pool);
 }
 
+static int ThrowFunctionValue(INeoVMWorker*, FunctionPtr*, short)
+{
+    throw std::runtime_error("native function value exception");
+}
+static void FunctionValueException(bool debug, bool nested)
+{
+    const std::string source =
+        "export var Cb;export var Probe;export var Out;"
+        "export fun SetCb(var f){Cb=f;}"
+        "export fun Prepare(){var n=7;Probe=fun(var fail){n+=1;if(fail)Cb(123,456);return n;};}"
+        "export fun Invoke(var fail){Out=Probe(fail);}"
+        "export fun Child(){Invoke(true);}"
+        "export fun Outer(){Out=Host.Value;}";
+    auto pool = NeoExecContextPool_Create();
+    NeoLoadVMParam load; load.execPool = pool;
+    NeoCompilerParam compile(source.c_str(), (int)source.size());
+    const NeoGlobalSymbol symbol = {"Host", true}; const NeoGlobalSymbolTable globals = {&symbol,1};
+    compile.globalSymbols=&globals; compile.debug=debug;
+    std::string error; compile.err=&error;
+    auto vm=NeoVMSystem::CompileAndLoadVM(compile,&load);
+    Check(vm!=nullptr, "function value exception compile: "+error);
+    if(vm)
+    {
+        INeoVMWorker* w=vm->GetMainWorker();
+        VarInfo wide;long narrow=0;
+        w->Var_SetInt(&wide,INT64_MAX);w->_read(&wide,narrow);
+        Check(narrow==(std::numeric_limits<long>::max)(),"long read upper bound");
+        w->Var_SetInt(&wide,INT64_MIN);w->_read(&wide,narrow);
+        Check(narrow==(std::numeric_limits<long>::min)(),"long read lower bound");
+        FailedCallState state;state.child=w->FindFunction("Child");
+        auto host=w->GetVar("Host");w->ResetVarType(host,VAR_FP_NATIVE);
+        NeoVMSystem::RegisterTableCallBack(host,&state,nullptr,SwallowFailure);
+        Check(w->ExecuteN(0)==NEOEXEC_COMPLETED,"function value init");
+        NeoFunction fn;fn._pWorker=nullptr;fn._fun_index=-1;
+        fn._fun._argCount=2;fn._fun._fn=ThrowFunctionValue;fn._fun._func=&state;
+        Check(w->ExecuteN(w->FindFunction("SetCb"),fn)==NEOEXEC_COMPLETED,"function value binding");
+        Check(w->ExecuteN(w->FindFunction("Prepare"))==NEOEXEC_COMPLETED,"function value captures");
+        Check(w->ExecuteN(w->FindFunction("Invoke"),false)==NEOEXEC_COMPLETED && w->GetVar("Out")->_int==8,"capture before exception");
+        const int status=nested?w->ExecuteN(w->FindFunction("Outer")):w->ExecuteN(w->FindFunction("Invoke"),true);
+        Check(status==NEOEXEC_ERROR,"function value exception reported");
+        Check(w->ExecuteN(w->FindFunction("Invoke"),false)==NEOEXEC_COMPLETED && w->GetVar("Out")->_int==10,"capture preserved after exception");
+        NeoVMSystem::ReleaseVM(vm);
+    }
+    NeoExecContextPool_Destroy(pool);
+}
+
 int main()
 {
     NeoVMSystem::Initialize();
+    for (bool debug : {false, true}) for (bool nested : {false, true}) FunctionValueException(debug, nested);
     for (bool debug : {false, true}) for (bool closure : {false, true}) FailedTestCall(debug, closure);
     for (bool debug : {false, true})
         for (bool setter : {false, true})

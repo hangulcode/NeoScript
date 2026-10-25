@@ -623,11 +623,11 @@ struct SFunctionInfo
 				ArgFlag* preArgFlag = (ArgFlag*)((u8*)_code->GetData() + sizeof(OpType) + _iLastOPOffset);
 				short* preDest = (short*)((u8*)_code->GetData() + sizeof(OpType) + sizeof(ArgFlag) + _iLastOPOffset);
 				short* preSrc = preDest + 1;
-				// A jump can land at the current write position. Replacing the
-				// preceding MOV in place would make that jump skip the new RET.
+				// 점프 도착 지점의 MOV를 RET로 바꾸면 반환을 건너뛴다.
+				// 관찰 가능한 변수 대입도 남겨 두고 임시 슬롯만 합친다.
 				const bool isControlFlowJoin =
 					_jumpTargetOffsets.find(_code->GetBufferOffset()) != _jumpTargetOffsets.end();
-				if (*preDest == r && isControlFlowJoin == false)
+				if (*preDest == r && IsTempVar(r) && isControlFlowJoin == false)
 				{
 					*(OpType*)((u8*)_code->GetData() + _iLastOPOffset) = optype;
 					*preDest = *preSrc;

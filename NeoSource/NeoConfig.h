@@ -91,7 +91,8 @@ struct debug_info
 // 0132: preserve signed-zero constants; rebuild images with previously merged zeros.
 // 0133: initialize locals and enforce ordered operands and deferred assignment paths.
 // 0134: 정수 값과 직렬화된 정수 상수를 64비트로 확장한다.
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('3' << 8) | ('4'))
+// 0135: 반환 직전 전역·캡처 대입을 보존하므로 기존 이미지를 다시 컴파일한다.
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('3' << 8) | ('5'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline

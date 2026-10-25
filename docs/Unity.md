@@ -34,7 +34,7 @@ Collection lengths, indices, handles, and statuses retain their existing widths.
 
 ABI 5 added `NsRuntimeTryDestroy` and `NsTryDestroyInstance`, which the managed
 binding uses to reject unsafe disposal without releasing its managed handles.
-Existing C ABI structure layouts are unchanged. Update the package and plugin together.
+ABI 5 preserved ABI 4 structure layouts; ABI 6 changed integer payloads and `NsCallResult` as described above. Update the package and plugin together.
 
 The binding now exposes the shared JSON codec, collection null/native-object
 checks, storage identity and string-key enumeration. See the examples below.
@@ -345,10 +345,27 @@ bind their calls into our copy, leaving two libc++ instances on one heap. After
 both, the `.so` exports its `Ns*` C entry points and nothing else, and needs
 only `libc`, `libm` and `libdl`.
 
-HTTP requests use a host-supplied transport. The stock C ABI and Unity binding do not currently
-expose transport registration, so HTTP callbacks report `HTTP transport is not configured`.
-The console supplies its own libcurl adapter; C++ hosts can register an `IHttpTransport`.
-The VM starts a background thread only when an HTTP request is submitted.
+HTTP requests use a host-supplied transport. Set `NeoRuntimeOptions.HttpTransport` to a synchronous
+`Func<NeoHttpRequest, NeoHttpResponse>` before constructing the runtime. It runs on a background
+thread: do not call Unity APIs or reenter the VM there. Poll `request.IsCancellationRequested`
+while waiting, including with `TimeoutMs == -1`. Cancellation can only be read during the callback;
+method, URL, body and headers are copied managed values.
+
+`NeoHttpClientTransport` is an optional .NET HTTP/HTTPS adapter with normal TLS validation, no
+redirect following, and an 8 MiB response buffer limit. Keep it alive until all runtimes using it
+have been disposed. It does not own the runtime:
+
+```csharp
+using (var transport = new NeoHttpClientTransport())
+using (var runtime = new NeoRuntime(new NeoRuntimeOptions { HttpTransport = transport.Send }))
+{
+    // Create and run scripts here.
+}
+```
+
+A missing transport still reports `HTTP transport is not configured`. The new registration entry
+point requires rebuilding the native plugin, even though the unchanged descriptor layouts remain
+ABI 6. The VM starts a background thread only when an HTTP request is submitted.
 
 ## Rebuilding the native plugin
 
@@ -526,7 +543,8 @@ build\unity\Release\neoscript_host_c_abi_regression.exe
 The host C ABI regression covers interleaved borrowed readers, invalid calls,
 object-type ownership, disposal guards, and native structure sizes. The managed
 smoke suite also checks Quaternion conversion, raw Vector4 order, layout
-verification, and rejected disposal from a callback.
+verification, rejected disposal from a callback, and managed HTTP request/response, exception and
+shutdown cancellation behavior.
 
 On the Unity side there are three suites, because each is blind to what the
 others catch. The edit-mode smoke test sweeps the whole binding surface.
@@ -570,7 +588,7 @@ Unity.exe -batchmode -nographics -projectPath <project> `
 
 `NeoScriptC.h` and `NeoNative.cs` mirror each other. Rather than corrupting
 memory quietly, a mismatch fails loudly at startup: struct sizes are compared
-(`NeoNativeLayout.Verify`) and the ABI version is checked. When you change the C
-ABI, raise `NS_ABI_VERSION` and raise `NeoNative.AbiVersion` on the C# side to
-match. The C++ enums and the C constants are pinned by `static_assert` in
+(`NeoNativeLayout.Verify`) and the ABI version is checked. When you change C
+ABI layouts or existing function signatures, raise `NS_ABI_VERSION` and raise
+`NeoNative.AbiVersion` on the C# side to match. The C++ enums and the C constants are pinned by `static_assert` in
 `NeoScriptC.cpp`.

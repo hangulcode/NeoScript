@@ -263,6 +263,8 @@ export fun Update(var dt)
                 // 에디터에서 도는 것만으로는 부족하다. 네이티브 플러그인이 PluginImporter 로
                 // 잡혀 있지 않으면 플레이어 빌드에 안 실리는데, 빌드해 보기 전까지는 모른다.
                 CheckPluginImport();
+                NeoHttpRegression.Run();
+                Check(true, "Managed HTTP transport regression");
 
                 runtime = new NeoRuntime(new NeoRuntimeOptions
                 {

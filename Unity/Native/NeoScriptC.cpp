@@ -667,7 +667,52 @@ NS_API void NS_CALL NsSinkWrite(void* sink, const void* data, int32_t len)
 //==============================================================================
 // Runtime
 //==============================================================================
+namespace {
+struct HttpBridge : IHttpTransport
+{
+    NsHttpSendFn send;
+    void* user;
+    HttpBridge(NsHttpSendFn callback, void* context) : send(callback), user(context) {}
+    HttpResponse Send(const HttpRequest& request) override
+    {
+        HttpResponse response;
+        response.error = "HTTP transport returned no response";
+        send(user, reinterpret_cast<const NsHttpRequest*>(&request), &response);
+        return response;
+    }
+};
+const HttpRequest* Http(const NsHttpRequest* request) { return reinterpret_cast<const HttpRequest*>(request); }
+}
+NS_API NsStr NS_CALL NsHttpMethod(const NsHttpRequest* r) { return r ? ToNsStr(Http(r)->method) : NsStr{}; }
+NS_API NsStr NS_CALL NsHttpUrl(const NsHttpRequest* r) { return r ? ToNsStr(Http(r)->url) : NsStr{}; }
+NS_API NsStr NS_CALL NsHttpBody(const NsHttpRequest* r) { return r ? ToNsStr(Http(r)->body) : NsStr{}; }
+NS_API int32_t NS_CALL NsHttpTimeout(const NsHttpRequest* r) { return r ? Http(r)->timeoutMs : 0; }
+NS_API int32_t NS_CALL NsHttpHeaderCount(const NsHttpRequest* r) { return r ? static_cast<int32_t>(Http(r)->headers.size()) : 0; }
+NS_API int32_t NS_CALL NsHttpHeader(const NsHttpRequest* r, int32_t index, NsStr* name, NsStr* value)
+{
+    if (!r || !name || !value || index < 0 || size_t(index) >= Http(r)->headers.size()) return 0;
+    *name = ToNsStr(Http(r)->headers[index].first); *value = ToNsStr(Http(r)->headers[index].second); return 1;
+}
+NS_API int32_t NS_CALL NsHttpIsCancelled(const NsHttpRequest* r) { return !r || Http(r)->IsCancelled(); }
+NS_API int32_t NS_CALL NsHttpRespond(void* output, int32_t success, const char* text, int32_t length)
+{
+    if (!output || length < 0 || (!text && length)) return 0;
+    try
+    {
+        HttpResponse& response = *static_cast<HttpResponse*>(output);
+        std::string value(text ? text : "", static_cast<size_t>(length));
+        if (success) { response.body.swap(value); response.error.clear(); }
+        else { response.error.swap(value); response.body.clear(); }
+        response.success = success != 0;
+        return 1;
+    }
+    catch (...) { return 0; }
+}
 NS_API NsRuntime* NS_CALL NsRuntimeCreate(const NsRuntimeDesc* desc)
+{
+    return NsRuntimeCreateWithHttpTransport(desc, nullptr, nullptr);
+}
+NS_API NsRuntime* NS_CALL NsRuntimeCreateWithHttpTransport(const NsRuntimeDesc* desc, NsHttpSendFn send, void* httpUser)
 {
     if (desc == nullptr || desc->structSize != (uint32_t)sizeof(NsRuntimeDesc))
         return nullptr;
@@ -686,6 +731,7 @@ NS_API NsRuntime* NS_CALL NsRuntimeCreate(const NsRuntimeDesc* desc)
 
     RuntimeDesc rd;
     rd.loader         = loader.get();
+    if (send) rd.httpTransport = std::make_shared<HttpBridge>(send, httpUser);
     rd.onInstanceBind = desc->onInstanceBind != nullptr ? &InstanceBindBridge : nullptr;
 
     wrapper->rt = CreateRuntime(rd);

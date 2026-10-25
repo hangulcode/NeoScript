@@ -59,6 +59,9 @@ namespace NeoScript
         /// <summary>import 를 해석한다. Unity 에서는 보통 Resources 나 에셋번들을 읽는다.</summary>
         public NeoLoader Loader;
 
+        /// <summary>작업 스레드에서 동기 실행하는 HTTP 전송. Unity API나 VM을 호출하지 않는다.</summary>
+        public Func<NeoHttpRequest, NeoHttpResponse> HttpTransport;
+
         /// <summary>import 상대 경로의 기준이 되는 경로.</summary>
         public string LibPath = string.Empty;
 
@@ -72,6 +75,7 @@ namespace NeoScript
         private static readonly NsLogFn s_print = OnPrint;
         private static readonly NsLogFn s_error = OnError;
         private static readonly NsLoadFn s_load = OnLoad;
+        private static readonly NsHttpSendFn s_http = OnHttp;
         private static readonly NsBindFn s_bind = OnBind;
         private static readonly NsMethodFn s_method = OnMethod;
         private static readonly NsPropertyFn s_property = OnProperty;
@@ -145,8 +149,14 @@ namespace NeoScript
                             len = libLen,
                         },
                     };
-                    _handle = NeoNative.NsRuntimeCreate(ref desc);
+                    _handle = _options.HttpTransport == null ? NeoNative.NsRuntimeCreate(ref desc) :
+                        NeoNative.NsRuntimeCreateWithHttpTransport(ref desc, Marshal.GetFunctionPointerForDelegate(s_http), desc.user);
                 }
+            }
+            catch
+            {
+                _self.Free();
+                throw;
             }
             finally
             {
@@ -500,6 +510,30 @@ namespace NeoScript
         {
             try { s_errorSink?.Invoke(NeoUtf8.ToString(msg, len)); }
             catch { }
+        }
+
+        [MonoPInvokeCallback(typeof(NsHttpSendFn))]
+        private static void OnHttp(IntPtr user, IntPtr nativeRequest, IntPtr response)
+        {
+            NeoHttpRequest request = null;
+            try
+            {
+                var runtime = GCHandle.FromIntPtr(user).Target as NeoRuntime;
+                request = new NeoHttpRequest(nativeRequest);
+                var result = runtime._options.HttpTransport(request);
+                byte[] bytes = System.Text.Encoding.UTF8.GetBytes(result.Text ?? string.Empty);
+                fixed (byte* p = bytes) NeoNative.NsHttpRespond(response, result.Success ? 1 : 0, p, bytes.Length);
+            }
+            catch (Exception error)
+            {
+                try
+                {
+                    byte[] bytes = System.Text.Encoding.UTF8.GetBytes(error.Message);
+                    fixed (byte* p = bytes) NeoNative.NsHttpRespond(response, 0, p, bytes.Length);
+                }
+                catch { }
+            }
+            finally { request?.Close(); }
         }
 
         [MonoPInvokeCallback(typeof(NsLoadFn))]

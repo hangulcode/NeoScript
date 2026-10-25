@@ -95,7 +95,8 @@ private:
 //------------------------------------------------------------------------------
 struct ProgramHandle
 {
-    constexpr ProgramHandle(uint32_t value = 0, uint32_t version = 0) noexcept : id(value), generation(version) {}
+    constexpr ProgramHandle() noexcept = default;
+    explicit constexpr ProgramHandle(uint32_t value, uint32_t version = 0) noexcept : id(value), generation(version) {}
     uint32_t id = 0;
     uint32_t generation = 0;
     explicit operator bool() const noexcept { return id != 0; }
@@ -103,7 +104,8 @@ struct ProgramHandle
 
 struct InstanceHandle
 {
-    constexpr InstanceHandle(uint32_t value = 0, uint32_t version = 0) noexcept : id(value), generation(version) {}
+    constexpr InstanceHandle() noexcept = default;
+    explicit constexpr InstanceHandle(uint32_t value, uint32_t version = 0) noexcept : id(value), generation(version) {}
     uint32_t id = 0;
     uint32_t generation = 0;
     explicit operator bool() const noexcept { return id != 0; }
@@ -458,7 +460,8 @@ struct CompileDefine
 // (문자열 생성 + 해시맵 할당)을 피한다. CreateDefineSet 으로 한 번 만들어 여러 CompileDesc 에 넘긴다.
 struct DefineSetHandle
 {
-    constexpr DefineSetHandle(uint32_t value = 0, uint32_t version = 0) noexcept : id(value), generation(version) {}
+    constexpr DefineSetHandle() noexcept = default;
+    explicit constexpr DefineSetHandle(uint32_t value, uint32_t version = 0) noexcept : id(value), generation(version) {}
     uint32_t id = 0;
     uint32_t generation = 0;
     explicit operator bool() const noexcept { return id != 0; }

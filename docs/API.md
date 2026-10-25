@@ -268,7 +268,8 @@ caller and aborts it, and there is no success/failure return value. The name is 
 The call is synchronous: `yield`, `sleep`, or another suspension from that module raises an error.
 
 `system.date` preserves UTF-8 literals and converts localized names to UTF-8. Empty format returns `""`.
-Positive timestamps accept signed 64-bit Unix seconds, up to `253402300799` (the end of year 9999),
+Windows CRT date conversion has a narrower upper bound in year 3001. On other platforms,
+positive timestamps accept signed 64-bit Unix seconds, up to `253402300799` (the end of year 9999),
 subject to platform `time_t` limits. For compatibility, negative values in the former signed 32-bit
 range retain their unsigned 32-bit interpretation, rather than representing dates before 1970.
 Other negative values and unsupported timestamps are rejected. Supported `strftime` directives and modifiers depend on the platform;
@@ -321,22 +322,30 @@ smaller limit described in section 2.1. Compiled string literals have separate i
 | `s.rtrim()` | `string` | trailing spaces |
 | `s.replace(find: string, to: string)` | `string` | **first occurrence only**; no match returns the original text |
 | `s.replaceAll(find: string, to: string)` | `string` | all non-overlapping literal matches, left to right; no match or empty `find` returns the original text |
-| `s.regexMatch(pattern: string [, ignoreCase: bool])` | `bool` | whole-string ECMAScript match; case-sensitive by default |
-| `s.regexSearch(pattern: string [, ignoreCase: bool])` | `list` or `null` | first match: element 0 is the full match, subsequent elements are capture groups; unmatched optional groups are empty strings |
-| `s.regexReplace(pattern: string, replacement: string [, ignoreCase: bool])` | `string` | replaces every non-overlapping match; `$&` is the full match, `$1` etc. are captures, `$$` is a literal dollar |
+| `s.regex_match(pattern: string [, ignoreCase: bool])` | `bool` | whole-string PCRE2 match; case-sensitive by default |
+| `s.regex_search(pattern: string [, ignoreCase: bool])` | `list` or `null` | first match: element 0 is the full match, subsequent elements are capture groups; unmatched optional groups are empty strings |
+| `s.regex_replace(pattern: string, replacement: string [, ignoreCase: bool])` | `string` | replaces every non-overlapping match; `$&` is the full match, `$1` etc. are captures, `$$` is a literal dollar |
 | `s.split(sep: string)` | `list` | multi-character separators work; always returns at least one element; pass a non-empty separator |
 | `s.format(...)` | `string` | uses `s` as the pattern; see section 2.1 |
 
-Regex methods use C++11 `std::regex` with ECMAScript grammar and the classic locale. Patterns
-are compiled per call. They operate on UTF-8 **bytes**, not Unicode code points: literal UTF-8 text
+Regex methods use vendored PCRE2 10.49 in 8-bit, non-JIT mode. Syntax is PCRE2 with JavaScript-style
+`\uXXXX`/`\xXX` escapes and unset backreferences matching empty text; it is not a complete ECMAScript
+implementation. PCRE2-specific constructs may be accepted, and some formerly accepted ECMAScript
+patterns may be rejected. Check existing patterns when upgrading. A runtime-local LRU cache retains
+up to 16 patterns and 2 MiB of pattern/compiled data (oversized entries are not cached).
+They operate on UTF-8 **bytes**, not Unicode code points: literal UTF-8 text
 matches, but `.`, character classes, and case folding are not Unicode-aware. Use doubled backslashes
 in script strings (`"\\d+"`). Empty matches are supported and replacement always advances.
 Invalid patterns, wrong argument types, and regex complexity errors are runtime errors.
 Patterns exceeding the host's byte limit (16,384 UTF-8 bytes by default) fail before regex compilation.
 The C++ host can configure `RuntimeDesc::maxRegexPatternBytes`; zero allows only empty patterns.
-This size limit does not guarantee a bound on matching time.
+Pattern nesting is limited to 128 and compiled patterns to 1 MiB. Each operation also has a shared
+1,000,000-work-unit budget, match depth 1,000, and an 8 MiB match heap limit. Input/replacement,
+output, and total captured text are each limited to 8 MiB. Limit violations are runtime errors.
+These are resource bounds, not a wall-clock deadline. Empty replacement matches always advance;
+a nonempty match ending at the end of the input does not add a second empty match there.
 The native regex engine cannot yield or obey a VM execution budget: regex calls are rejected during
-time-limited execution, like collection sorting. Without a limit, complex patterns can take a long time.
+time-limited execution, like collection sorting. The same implementation and limits apply on every platform.
 
 These methods return a new value and do not modify `s`. `replaceAll` never searches text
 inserted by the replacement. For compatibility, `replace("", x)` still prepends `x` once;
@@ -363,7 +372,7 @@ string APIs cannot preserve an embedded NUL. `"\\u0041"` keeps the backslash-u t
 | `l.insert(index: int, value)` | `void` | inserts before index; `0 <= index <= l.len()` |
 | `l.remove(index: int)` | `var` | returns the removed value, shifts the tail left; `0 <= index < l.len()` |
 | `l.pop()` | `var` | removes and returns the last element; empty lists are runtime errors |
-| `l.removeSwap(index: int)` | `var` | removes and returns the indexed element, moves the last element into its place; `0 <= index < l.len()` |
+| `l.remove_swap(index: int)` | `var` | removes and returns the indexed element, moves the last element into its place; `0 <= index < l.len()` |
 | `l.sort(cmp: function)` | `void` | stable in-place sort; `cmp(a,b)` returns bool: true when a belongs before b |
 | `l.find(value)` | `int` | first matching index, or -1; uses script `==` |
 | `l.contains(value)` | `bool` | whether `find(value)` succeeds |
@@ -385,9 +394,9 @@ that element's value. This differs from assigning `null` to a map entry, which r
 
 Invalid insert/remove indices and non-integer indices are runtime errors. Aliases observe the
 same list changes. Removal preserves references in the returned value, including nested containers.
-Insertion, removal (including `pop` and `removeSwap`) and sorting during foreach invalidate the active iterator.
-`removeSwap` does not preserve order and moves at most one element, unlike `remove`, which shifts
-the remaining tail. Removing the last element requires no replacement. Both `pop` and `removeSwap`
+Insertion, removal (including `pop` and `remove_swap`) and sorting during foreach invalidate the active iterator.
+`remove_swap` does not preserve order and moves at most one element, unlike `remove`, which shifts
+the remaining tail. Removing the last element requires no replacement. Both `pop` and `remove_swap`
 retain capacity and return the removed value with its normal reference/vector value semantics.
 A null element can be returned normally; an empty `pop` is a distinct runtime error.
 
@@ -602,7 +611,7 @@ detach on modification. Internal references do not escape the write or become sc
 Native vector properties still call their getter and setter once per successful component write.
 WREF precedes an ordinary collection write. Stored vectors consume both atomically; other values
 use normal write dispatch. Native vector properties retain a resumable getter/setter boundary.
-There is no separate vector write-back opcode. Regenerate images older than bytecode version 0134 for 64-bit integers, local initialization, ordered operand evaluation, deferred assignment paths, and the earlier signed-zero and foreach fixes.
+There is no separate vector write-back opcode. Regenerate images older than bytecode version 0135 to preserve assignments before return, 64-bit integers, local initialization, ordered operand evaluation, deferred assignment paths, and the earlier signed-zero and foreach fixes.
 A selector immediately following an indexed assignment keeps the assigned slot writable:
 `(a[0][0] = math.Vector3(1,2,3))[1] = 9` updates `a[0][0]` to `(1,9,3)`.
 Reading that result into a local still makes an independent vector value via copy-on-write.
@@ -680,3 +689,21 @@ produced, so `!= null` is the presence test to use.
   shared state, recursion, or writes reaching the enclosing frame.
 - **Reference cycles need the host.** Nothing in script reclaims a cycle; the host must call
   `CollectCycles`. A map holding a lambda that captured that map is a cycle.
+
+### Boundary and ownership rules
+
+Method names now use `regex_match`, `regex_search`, `regex_replace`, and `remove_swap`.
+The former `regexMatch`, `regexSearch`, `regexReplace`, and `removeSwap` names are removed,
+without aliases. Update existing scripts and rebuild cached bytecode.
+
+Collection sizes above `INT32_MAX` are rejected before narrowing; hash containers also enforce
+their existing bucket limits. No configurable allocation quota is imposed. A representable large
+request can still exhaust memory, and leave its worker unusable; the host must destroy the instance or reset it with a new worker. Negative list/array
+`resize` and map `reserve` clamp to zero; list/array `reserve` rejects negative values. `fill` changes
+existing elements and does not allocate a new capacity. `sleep` accepts finite millisecond values up
+to `INT32_MAX`, truncates fractional values, clamps negatives to zero, and rejects larger/NaN/infinite
+values. Legacy signed `int` and `long` host reads saturate to their destination width.
+
+NaN keys retain ordinary NaN inequality: insertion succeeds but equality-based lookup/removal cannot
+find that key. A map key named `clear`, `clone`, `contains`, `remove`, or another method name shadows
+that method. `toint` string overflow saturates; integer literals and JSON integer overflow are errors.

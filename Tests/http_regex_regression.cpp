@@ -1,4 +1,5 @@
 ﻿#include "NeoScript.h"
+#include "NeoRegex.h"
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -32,7 +33,12 @@ static void Script(IRuntime* runtime, const std::string& source, bool expected =
             const auto status = call.invoke();
             Check(expected ? status == RunStatus::Completed && call.retType() == ValueType::Bool && call.retBool()
                            : status != RunStatus::Completed, source.c_str());
-            if (expectedError) Check(call.error().message.find(expectedError) != std::string::npos, "specific runtime error");
+            if (expectedError && call.error().message.find(expectedError) == std::string::npos)
+            {
+                Check(false, "specific runtime error");
+                std::printf("expected %s; got %s\n", expectedError, call.error().message.c_str());
+            }
+            else if (expectedError) Check(true, "specific runtime error");
             if (expected && status != RunStatus::Completed) std::printf("%s\n", call.error().message.c_str());
         }
         runtime->DestroyInstance(instance);
@@ -114,56 +120,86 @@ static void PatternLimits()
     auto runtime = CreateRuntime();
     // 문자 클래스 하나로 컴파일 비용과 무관하게 기본 상한의 포함 경계를 검사한다.
     const std::string pattern = "[" + std::string(16382, 'a') + "]";
-    Script(runtime, "export fun Test(){return \"a\".regexMatch(\"" + pattern + "\");}");
-    for (const char* method : {"regexMatch", "regexSearch", "regexReplace"})
+    Script(runtime, "export fun Test(){return \"a\".regex_match(\"" + pattern + "\");}");
+    for (const char* method : {"regex_match", "regex_search", "regex_replace"})
     {
         std::string source = "export fun Test(){var p=\"" + pattern + "\"; p=p..\"a\"; return \"a\"." + method + "(p";
-        if (std::string(method) == "regexReplace") source += ",\"b\"";
+        if (std::string(method) == "regex_replace") source += ",\"b\"";
         Script(runtime, source + ");}", false, -1, error);
     }
     DestroyRuntime(runtime);
     RuntimeDesc desc; desc.maxRegexPatternBytes = 5;
     runtime = CreateRuntime(desc);
-    Script(runtime, u8R"ns(export fun Test(){return "가".regexMatch("(가)");})ns");
-    Script(runtime, u8R"ns(export fun Test(){return "가".regexMatch("(가a)");})ns", false, -1, error);
+    Script(runtime, u8R"ns(export fun Test(){return "가".regex_match("(가)");})ns");
+    Script(runtime, u8R"ns(export fun Test(){return "가".regex_match("(가a)");})ns", false, -1, error);
     DestroyRuntime(runtime);
     desc.maxRegexPatternBytes = 16385;
     runtime = CreateRuntime(desc);
-    Script(runtime, "export fun Test(){return \"a\".regexMatch(\"[" + std::string(16383, 'a') + "]\");}");
+    Script(runtime, "export fun Test(){return \"a\".regex_match(\"[" + std::string(16383, 'a') + "]\");}");
     DestroyRuntime(runtime);
     desc.maxRegexPatternBytes = 0;
     runtime = CreateRuntime(desc);
-    Script(runtime, R"ns(export fun Test(){return "".regexMatch("");})ns");
-    Script(runtime, R"ns(export fun Test(){return "a".regexMatch("a");})ns", false, -1, error);
+    Script(runtime, R"ns(export fun Test(){return "".regex_match("");})ns");
+    Script(runtime, R"ns(export fun Test(){return "a".regex_match("a");})ns", false, -1, error);
     DestroyRuntime(runtime);
+}
+
+static void RegexBounds()
+{
+    RegexEngine engine;
+    const auto limited = [&engine](const std::string& text, const std::string& pattern, const std::string& replacement, int operation)
+    {
+        bool failed = false;
+        try { engine.Run(text, pattern, replacement, operation, false); }
+        catch (const std::runtime_error&) { failed = true; }
+        Check(failed, "regex resource bound");
+    };
+    limited(std::string(8 * 1024 * 1024 + 1, 'a'), "a", "", 1);
+    limited("a", std::string(129, '(') + "a" + std::string(129, ')'), "", 0);
+    limited("a", "a", std::string(1000001, 'x'), 2);
+    const std::string binary("a\0b", 3);
+    Check(engine.Run(binary, "b", "c", 2, false).text == std::string("a\0c", 3), "regex embedded NUL output");
+    Check(engine.Run("abc", "b", "$$:$&:$`:$'", 2, false).text == "a$:b:a:cc", "replacement special tokens");
+    Check(engine.Run("ab", "(a)(b)", "$2$1:$12:$01", 2, false).text == "ba::a", "replacement capture numbers");
+    Check(engine.Run("a\nb", "a.*b", "", 0, false).matched == false, "dot excludes newline");
+    Check(engine.Run("a\n", "a$", "", 1, false).matched == false, "dollar matches absolute end");
+    Check(engine.Run("abc", "a(?=b)", "", 1, false).captures[0] == "a", "positive lookahead");
+    Check(engine.Run("ac", "a(?!b)", "", 1, false).captures[0] == "a", "negative lookahead");
 }
 
 int main()
 {
+    RegexBounds();
     Cancellation();
     PatternLimits();
     auto runtime = CreateRuntime();
     for (const char* expression : {
-        R"ns("\uD55C\uAE00".regexMatch("\uD55C\uAE00"))ns",
-        R"ns("a12".regexSearch("\\d+")[0]=="12")ns",
-        R"ns("abc123".regexMatch("[a-z]+[0-9]+"))ns",
-        R"ns(!"xabc".regexMatch("abc"))ns",
-        R"ns("ABC".regexMatch("abc",true))ns",
-        R"ns(!"ABC".regexMatch("abc"))ns",
-        R"ns("ab12cd".regexSearch("([a-z]+)([0-9]+)")[2]=="12")ns",
-        R"ns("no match".regexSearch("[0-9]+") == null)ns",
-        R"ns("b".regexSearch("(a)?b")[1]=="")ns",
-        R"ns("".regexMatch(""))ns",
-        R"ns("ab".regexReplace("", "-")=="-a-b-")ns",
-        R"ns("a1 b2".regexReplace("([a-z])([0-9])", "$2$1")=="1a 2b")ns",
-        R"ns("Aa".regexReplace("a", "b",true)=="bb")ns",
-        R"ns("abc".regexReplace("z", "x")=="abc")ns"
+        R"ns("\uD55C\uAE00".regex_match("\uD55C\uAE00"))ns",
+        R"ns("a12".regex_search("\\d+")[0]=="12")ns",
+        R"ns("abc123".regex_match("[a-z]+[0-9]+"))ns",
+        R"ns(!"xabc".regex_match("abc"))ns",
+        R"ns("ABC".regex_match("abc",true))ns",
+        R"ns(!"ABC".regex_match("abc"))ns",
+        R"ns("ab12cd".regex_search("([a-z]+)([0-9]+)")[2]=="12")ns",
+        R"ns("no match".regex_search("[0-9]+") == null)ns",
+        R"ns("b".regex_search("(a)?b")[1]=="")ns",
+        R"ns("".regex_match(""))ns",
+        R"ns("ab".regex_replace("", "-")=="-a-b-")ns",
+        R"ns("a1 b2".regex_replace("([a-z])([0-9])", "$2$1")=="1a 2b")ns",
+        R"ns("Aa".regex_replace("a", "b",true)=="bb")ns",
+        R"ns("abc".regex_replace("z", "x")=="abc")ns"
     }) Script(runtime, std::string("export fun Test(){return ") + expression + ";}");
-    Script(runtime, R"ns(export fun Test(){var s="abc123"; s=s.regexReplace("[0-9]+","x"); return s=="abcx";})ns");
-    Script(runtime, R"ns(export fun Test(){return "a".regexMatch("[");})ns", false);
-    Script(runtime, R"ns(export fun Test(){return "a".regexMatch(1);})ns", false);
-    Script(runtime, R"ns(export fun Test(){return "a".regexMatch("a",1);})ns", false);
-    Script(runtime, R"ns(export fun Test(){return "a".regexMatch("a");})ns", false, 1000);
+    // 플랫폼별 재귀 스택 대신 제한된 PCRE2 인터프리터를 사용하는지 검사한다.
+    Script(runtime, R"ns(export fun Test(){var s="";for(var i in 0,20000)s=s.."a"; return s.regex_search("(a|b)*c")==null;})ns", false, -1, "limit");
+    Script(runtime, R"ns(export fun Test(){return "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!".regex_match("(a*)*b");})ns", false, -1, "limit");
+    Script(runtime, R"ns(export fun Test(){return "aaa".regex_replace("a*","-")=="-";})ns");
+    Script(runtime, R"ns(export fun Test(){return "ab".regex_match("a|ab") && "aa".regex_match("(a)\\1");})ns");
+    Script(runtime, R"ns(export fun Test(){for(var i in 0,40){var p="a"..i; if(!p.regex_match(p))return false;} return "A".regex_match("a",true) && !"A".regex_match("a");})ns");
+    Script(runtime, R"ns(export fun Test(){var s="abc123"; s=s.regex_replace("[0-9]+","x"); return s=="abcx";})ns");
+    Script(runtime, R"ns(export fun Test(){return "a".regex_match("[");})ns", false);
+    Script(runtime, R"ns(export fun Test(){return "a".regex_match(1);})ns", false);
+    Script(runtime, R"ns(export fun Test(){return "a".regex_match("a",1);})ns", false);
+    Script(runtime, R"ns(export fun Test(){return "a".regex_match("a");})ns", false, 1000);
     Script(runtime, R"ns(import system; var ok=false; fun Done(var success,var text){ok=!success && text=="HTTP transport is not configured";}
         export fun Test(){var a=system.aysnc_create(); a.get(1000,"https://unused",Done); return a.wait() && ok;})ns");
     DestroyRuntime(runtime);

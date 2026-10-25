@@ -127,9 +127,13 @@ bool ListInfo::Remove(int idx)
 
 bool ListInfo::InsertLast(VarInfo* pValue)
 {
-	if (_itemCount + 1 >= _BucketCapa)
+	if (_itemCount == INT32_MAX)
+		throw std::length_error("collection capacity exceeds limit");
+	if (_itemCount >= _BucketCapa)
 	{
-		Reserve(_BucketCapa == 0 ? 2 : _BucketCapa * 2);
+		const int capacity = _BucketCapa == 0 ? 2 :
+			_BucketCapa > INT32_MAX / 2 ? INT32_MAX : _BucketCapa * 2;
+		Reserve(capacity);
 	}
 	if (pValue->IsContainerType())
 		MarkContainerChild();
@@ -139,9 +143,13 @@ bool ListInfo::InsertLast(VarInfo* pValue)
 }
 bool ListInfo::InsertLast(const std::string& str)
 {
-	if (_itemCount + 1 >= _BucketCapa)
+	if (_itemCount == INT32_MAX)
+		throw std::length_error("collection capacity exceeds limit");
+	if (_itemCount >= _BucketCapa)
 	{
-		Reserve(_BucketCapa == 0 ? 2 : _BucketCapa * 2);
+		const int capacity = _BucketCapa == 0 ? 2 :
+			_BucketCapa > INT32_MAX / 2 ? INT32_MAX : _BucketCapa * 2;
+		Reserve(capacity);
 	}
 	_pVM->Var_SetStringA(&_Bucket[_itemCount++], str);
 	++_mutationVersion;

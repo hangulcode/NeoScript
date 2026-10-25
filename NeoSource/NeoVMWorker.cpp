@@ -165,10 +165,13 @@ int CNeoVMWorker::Sleep(int iTimeout, VarInfo* v1)
 	switch (v1->GetType())
 	{
 	case VAR_INT:
-		iSleepTick = NeoNarrowInt(v1->_int);
+		if (v1->_int > INT32_MAX) { SetError(RTE_SLEEP_VALUE); return -1; }
+		iSleepTick = v1->_int < 0 ? 0 : static_cast<int>(v1->_int);
 		break;
 	case VAR_FLOAT:
-		iSleepTick = (int)v1->_float;
+		if (!std::isfinite(v1->_float) || double(v1->_float) > INT32_MAX)
+		{ SetError(RTE_SLEEP_VALUE); return -1; }
+		iSleepTick = v1->_float < 0 ? 0 : static_cast<int>(v1->_float);
 		break;
 	default:
 		SetError(RTE_SLEEP_VALUE);
@@ -405,10 +408,7 @@ void CNeoVMWorker::Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue)
 		SetError(RTE_CALL_NULL);
 		return;
 	}
-	int op = GetCodeptr();
-	int iSave_SP_Vars = _iSP_Vars;
-	int iSave_SP_VarsMax = _iSP_VarsMax;
-	int iSaveBreakingCallStack = m_iBreakingCallStack;
+	NativeFrameScope frame(*this);
 
 	_iSP_Vars = _iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);
@@ -417,20 +417,14 @@ void CNeoVMWorker::Call(FunctionPtr* fun, int n2, VarInfo* pReturnValue)
 	{
 		// SetError 는 오류 opcode로 점프시키므로 코드 포인터는 복구하지 않는다.
 		// 다만 native 호출 프레임으로 옮긴 스택 레지스터는 부모 프레임으로 되돌려야 한다.
-		_iSP_Vars = iSave_SP_Vars;
-		_iSP_VarsMax = iSave_SP_VarsMax;
-		m_iBreakingCallStack = iSaveBreakingCallStack;
-		SetStackPointer(_iSP_Vars);
+		frame.Restore();
 		if (GetVM()->IsLastErrorMsg())
 			SetCodePtr(0);
 		else
 			SetError(RTE_CALL_ARG_COUNT);
 		return;
 	}
-	_iSP_Vars = iSave_SP_Vars;
-	SetStackPointer(_iSP_Vars);
-	_iSP_VarsMax = iSave_SP_VarsMax;
-	m_iBreakingCallStack = iSaveBreakingCallStack;
+	frame.Restore();
 }
 
 // CNeoVMWorker::Call(int,int,int) 는 NeoVMWorker_Move.inl 로 옮겼다(핫패스 인라인 실험).
@@ -1274,6 +1268,7 @@ int CNeoVMWorker::RunHostCall(int iFunctionID, std::vector<VarInfo>& _args, VarI
 			UnwindActiveClosures();
 			// outer를 되살리면 이후 ReleaseExecution이 자식 stack base에서 캡처를 sync한다.
 			ReleaseDetachedClosureWithoutSync(outerClosure);
+			SetCodePtr(0);
 		}
 		else if (!suspended)
 		{

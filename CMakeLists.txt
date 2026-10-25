@@ -8,6 +8,12 @@ if(NOT DEFINED CMAKE_CXX_STANDARD)
 endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+# PCRE2 공급 소스는 C99이며, C++ 코어의 언어 표준은 바꾸지 않는다.
+set_source_files_properties(NeoSource/NeoRegexVendor.c PROPERTIES LANGUAGE C)
+if(NOT DEFINED CMAKE_C_STANDARD)
+    set(CMAKE_C_STANDARD 99)
+endif()
+set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # Single-config generators (for example Ninja and Unix Makefiles) otherwise
 # leave CMAKE_BUILD_TYPE empty, which means no optimization flags by default.
@@ -37,6 +43,8 @@ set(NEOSCRIPT_SOURCES
     NeoSource/NeoExport.cpp
     NeoSource/NeoJson.cpp
     NeoSource/NeoJsonVendor.cpp
+    NeoSource/NeoRegex.cpp
+    NeoSource/NeoRegexVendor.c
     NeoSource/NeoLib.cpp
     NeoSource/NeoParser.cpp
     NeoSource/NeoScriptShim.cpp
@@ -51,7 +59,7 @@ set(NEOSCRIPT_SOURCES
 
 add_library(neoscript STATIC ${NEOSCRIPT_SOURCES})
 target_include_directories(neoscript PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/NeoSource)
-target_compile_features(neoscript PUBLIC cxx_std_11)
+target_compile_features(neoscript PUBLIC cxx_std_11 PRIVATE c_std_99)
 
 if(WIN32)
     target_compile_definitions(neoscript PRIVATE WIN_PRJ)
@@ -65,7 +73,7 @@ if(NEOSCRIPT_BUILD_SHARED)
     target_include_directories(NeoScriptShared PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/NeoSource
         ${NEOSCRIPT_C_ABI_DIR})
-    target_compile_features(NeoScriptShared PUBLIC cxx_std_11)
+    target_compile_features(NeoScriptShared PUBLIC cxx_std_11 PRIVATE c_std_99)
     target_compile_definitions(NeoScriptShared PRIVATE NEOSCRIPT_C_BUILD_SHARED)
     # The DLL name is load-bearing: Unity resolves DllImport("NeoScript") by it.
     # Its Windows import library would then be NeoScript.lib, which is the same
@@ -126,7 +134,7 @@ if(NEOSCRIPT_BUILD_STATIC_C_ABI)
     target_include_directories(NeoScriptStatic PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/NeoSource
         ${NEOSCRIPT_C_ABI_DIR})
-    target_compile_features(NeoScriptStatic PUBLIC cxx_std_11)
+    target_compile_features(NeoScriptStatic PUBLIC cxx_std_11 PRIVATE c_std_99)
     # NEOSCRIPT_C_BUILD_SHARED is deliberately absent: NS_API must stay empty so
     # the symbols are ordinary static-library symbols the linker can resolve.
     set_target_properties(NeoScriptStatic PROPERTIES OUTPUT_NAME NeoScriptUnity)

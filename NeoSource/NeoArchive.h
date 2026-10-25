@@ -131,7 +131,7 @@ public:
 		if (nMax == 0) return 0;
 		if (end > m_iSize && !Alloc(end))
 			throw CompileLimitError("script image/code bytes", end, 0, m_iMaxSize);
-		memcpy(m_lpBufStart + m_iOffset, lpBuf, nMax);
+		memcpy(m_lpBufStart + m_iOffset, lpBuf, static_cast<size_t>(nMax));
 		m_iOffset = end;
 		return (u32)nMax;
 	}

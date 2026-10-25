@@ -11,7 +11,6 @@
 #include <new>
 #include <sstream>
 #include <stdexcept>
-#include <regex>
 #include <iterator>
 
 #include "NeoVMInternal.h"
@@ -216,27 +215,7 @@ struct neo_libs
 		pN->ReturnValue(result.c_str());
 		return true;
 	}
-	// 정규식 치환이 문자열 상한을 넘기기 전에 출력을 중단한다.
-	struct RegexOutput
-	{
-		typedef std::output_iterator_tag iterator_category;
-		typedef void value_type;
-		typedef void difference_type;
-		typedef void pointer;
-		typedef void reference;
-		std::string* output;
-		explicit RegexOutput(std::string& text) : output(&text) {}
-		RegexOutput& operator*() { return *this; }
-		RegexOutput& operator++() { return *this; }
-		RegexOutput operator++(int) { return *this; }
-		RegexOutput& operator=(char c)
-		{
-			CheckRuntimeStringGrowth(output->size(), 1);
-			output->push_back(c);
-			return *this;
-		}
-	};
-
+	// 결과를 완성한 뒤 반환 슬롯에 기록해 수신자와 슬롯이 겹치는 경우를 보호한다.
 	static bool StringRegex(CNeoVMWorker* pN, VarInfo* pVar, short args, int operation)
 	{
 		const int required = operation == 2 ? 2 : 1;
@@ -249,54 +228,38 @@ struct neo_libs
 			pN->SetError("regular expression pattern exceeds the host byte limit");
 			return false;
 		}
-		// 표준 정규식 엔진 내부는 VM 실행 예산으로 중단할 수 없다.
+		// 정규식 자체의 작업량 제한은 호스트의 VM 시간 예산과 별개다.
 		if (pN->IsSynchronousExecutionLimited())
 		{
 			pN->SetError("regular expressions are not allowed during time-limited execution");
 			return false;
 		}
+		RegexResult result;
 		try
 		{
-			std::regex expression;
-			expression.imbue(std::locale::classic());
-			auto flags = std::regex_constants::ECMAScript;
-			if (args > required && pN->GetStack(args)->_bl) flags |= std::regex_constants::icase;
-			expression.assign(pN->GetStack(1)->_str->_str, flags);
-			// 반환 슬롯이 수신자와 겹칠 수 있으므로 결과 문자열을 먼저 완성한다.
-			const std::string& source = pVar->_str->_str;
-			if (operation == 0)
-				pN->ReturnValue(std::regex_match(source, expression));
-			else if (operation == 1)
-			{
-				std::smatch match;
-				if (!std::regex_search(source, match, expression)) pN->ReturnValue();
-				else
-				{
-					std::vector<std::string> captures;
-					for (size_t i = 0; i < match.size(); ++i) captures.push_back(match[i].str());
-					ListInfo* list = pN->GetVM()->ListAlloc();
-					pN->Var_SetList(pN->GetStack(0), list);
-					for (const auto& capture : captures) list->InsertLast(capture);
-				}
-			}
-			else
-			{
-				std::string output;
-				std::regex_replace(RegexOutput(output), source.begin(), source.end(), expression,
-					pN->GetStack(2)->_str->_str);
-				pN->ReturnValue(output.c_str());
-			}
-			return true;
+			result = pN->GetVM()->_regex.Run(pVar->_str->_str,
+				pN->GetStack(1)->_str->_str, operation == 2 ? pN->GetStack(2)->_str->_str : std::string(),
+				operation, args > required && pN->GetStack(args)->_bl);
 		}
-		catch (const std::regex_error&)
+		catch (const std::runtime_error& error)
 		{
-			pN->SetError("invalid regular expression or regex complexity limit exceeded");
+			pN->SetError(error.what());
 			return false;
 		}
+		if (operation == 0) pN->ReturnValue(result.matched);
+		else if (operation == 2) pN->Var_SetStringA(pN->GetReturnVar(), result.text);
+		else if (!result.matched) pN->ReturnValue();
+		else
+		{
+			ListInfo* list = pN->GetVM()->ListAlloc();
+			pN->Var_SetList(pN->GetStack(0), list);
+			for (const auto& capture : result.captures) list->InsertLast(capture);
+		}
+		return true;
 	}
-	static bool Str_regexMatch(CNeoVMWorker* pN, VarInfo* pVar, short args) { return StringRegex(pN, pVar, args, 0); }
-	static bool Str_regexSearch(CNeoVMWorker* pN, VarInfo* pVar, short args) { return StringRegex(pN, pVar, args, 1); }
-	static bool Str_regexReplace(CNeoVMWorker* pN, VarInfo* pVar, short args) { return StringRegex(pN, pVar, args, 2); }
+	static bool Str_regex_match(CNeoVMWorker* pN, VarInfo* pVar, short args) { return StringRegex(pN, pVar, args, 0); }
+	static bool Str_regex_search(CNeoVMWorker* pN, VarInfo* pVar, short args) { return StringRegex(pN, pVar, args, 1); }
+	static bool Str_regex_replace(CNeoVMWorker* pN, VarInfo* pVar, short args) { return StringRegex(pN, pVar, args, 2); }
 
 	static bool Str_split(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
@@ -491,15 +454,28 @@ struct neo_libs
 		pN->ReturnValue();
 		return true;
 	}
+	static bool ReadCollectionSize(CNeoVMWorker* worker, int argument, int& size)
+	{
+		const NS_INT value = worker->GetStack(argument)->_int;
+		if (value > INT32_MAX)
+		{
+			worker->SetError("collection capacity exceeds limit");
+			return false;
+		}
+		// 음수 resize/map.reserve의 기존 빈 컬렉션 규칙은 유지한다.
+		size = value < 0 ? 0 : static_cast<int>(value);
+		return true;
+	}
 	static bool Sequence_reserve(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 1 || pN->GetStack(1)->GetType() != VAR_INT) return false;
-		const int capacity = pN->read<int>(1);
-		if (capacity < 0)
+		int capacity;
+		if (pN->GetStack(1)->_int < 0)
 		{
 			pN->SetError("reserve capacity must not be negative");
 			return false;
 		}
+		if (!ReadCollectionSize(pN, 1, capacity)) return false;
 		if (pVar->GetType() == VAR_LIST) pVar->_lst->Reserve(capacity);
 		else if (pVar->GetType() == VAR_ARRAY) pN->GetVM()->ArrayReserve(pVar->_array, capacity);
 		else return false;
@@ -700,7 +676,8 @@ struct neo_libs
 		if (pVar->GetType() != VAR_LIST) return false;
 		if (args != 1 || pN->GetStack(1)->GetType() != VAR_INT) return false;
 
-		int size = pN->read<int>(1);
+		int size;
+		if (!ReadCollectionSize(pN, 1, size)) return false;
 		pVar->_lst->Resize(size);
 		pN->ReturnValue();
 		return true;
@@ -726,7 +703,9 @@ struct neo_libs
 		if (pVar->GetType() != VAR_ARRAY) return false;
 		if (args != 1 || pN->GetStack(1)->GetType() != VAR_INT) return false;
 
-		pN->GetVM()->ArrayResize(pVar->_array, pN->read<int>(1));
+		int size;
+		if (!ReadCollectionSize(pN, 1, size)) return false;
+		pN->GetVM()->ArrayResize(pVar->_array, size);
 		pN->ReturnValue();
 		return true;
 	}
@@ -811,7 +790,7 @@ struct neo_libs
 		if (pVar->GetType() != VAR_LIST || args != 1 || pN->GetStack(1)->GetType() != VAR_INT) return false;
 		return ListRemoveAt(pN, pVar, pN->read<int>(1), false);
 	}
-	static bool List_removeSwap(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	static bool List_remove_swap(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (pVar->GetType() != VAR_LIST || args != 1 || pN->GetStack(1)->GetType() != VAR_INT) return false;
 		return ListRemoveAt(pN, pVar, pN->read<int>(1), true);
@@ -1728,7 +1707,8 @@ struct neo_libs
 		if (pVar->GetType() != VAR_MAP) return false;
 		if (args != 1 || pN->GetStack(1)->GetType() != VAR_INT) return false;
 
-		int size = pN->read<int>(1);
+		int size;
+		if (!ReadCollectionSize(pN, 1, size)) return false;
 		pVar->_tbl->Reserve(size);
 		pN->ReturnValue();
 		return true;
@@ -2763,9 +2743,9 @@ void CNeoVM::RegObjLibrary()
 	g_sNeoFunLib_String.Add("rtrim", &neo_libs::Str_rtrim);
 	g_sNeoFunLib_String.Add("replace", &neo_libs::Str_replace);
 	g_sNeoFunLib_String.Add("replaceAll", &neo_libs::Str_replaceAll);
-	g_sNeoFunLib_String.Add("regexMatch", &neo_libs::Str_regexMatch);
-	g_sNeoFunLib_String.Add("regexSearch", &neo_libs::Str_regexSearch);
-	g_sNeoFunLib_String.Add("regexReplace", &neo_libs::Str_regexReplace);
+	g_sNeoFunLib_String.Add("regex_match", &neo_libs::Str_regex_match);
+	g_sNeoFunLib_String.Add("regex_search", &neo_libs::Str_regex_search);
+	g_sNeoFunLib_String.Add("regex_replace", &neo_libs::Str_regex_replace);
 	g_sNeoFunLib_String.Add("split", &neo_libs::Str_split);
 	g_sNeoFunLib_String.Add("format", &neo_libs::Str_format);
 
@@ -2775,7 +2755,7 @@ void CNeoVM::RegObjLibrary()
 	g_sNeoFunLib_List.Add("len", &neo_libs::List_len);
 	g_sNeoFunLib_List.Add("clear", &neo_libs::Collection_clear);
 	g_sNeoFunLib_List.Add("clone", &neo_libs::Collection_clone);
-	g_sNeoFunLib_List.Add("removeSwap", &neo_libs::List_removeSwap);
+	g_sNeoFunLib_List.Add("remove_swap", &neo_libs::List_remove_swap);
 	g_sNeoFunLib_List.Add("pop", &neo_libs::List_pop);
 	g_sNeoFunLib_List.Add("find", &neo_libs::Sequence_find);
 	g_sNeoFunLib_List.Add("contains", &neo_libs::Sequence_contains);

@@ -196,6 +196,9 @@ namespace NeoScript
     public delegate int NsLoadFn(IntPtr user, IntPtr path, int pathLen, IntPtr sink);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate void NsHttpSendFn(IntPtr user, IntPtr request, IntPtr response);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate void NsBindFn(IntPtr user, IntPtr rt, ulong inst, IntPtr instanceUserData);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -237,6 +240,15 @@ namespace NeoScript
 
         // --- Runtime ---
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern IntPtr NsRuntimeCreate(ref NsRuntimeDesc desc);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern IntPtr NsRuntimeCreateWithHttpTransport(ref NsRuntimeDesc desc, IntPtr send, IntPtr user);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern NsStr NsHttpMethod(IntPtr request);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern NsStr NsHttpUrl(IntPtr request);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern NsStr NsHttpBody(IntPtr request);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsHttpTimeout(IntPtr request);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsHttpHeaderCount(IntPtr request);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsHttpHeader(IntPtr request, int index, out NsStr name, out NsStr value);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsHttpIsCancelled(IntPtr request);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsHttpRespond(IntPtr response, int success, byte* text, int length);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern void NsRuntimeDestroy(IntPtr rt);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsRuntimeTryDestroy(IntPtr rt);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern void NsRuntimeSetLibPath(IntPtr rt, byte* path, int len);

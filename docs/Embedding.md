@@ -36,8 +36,10 @@ Solutions use `x86`; direct `.vcxproj` builds use `Win32`. Match the host's plat
 configuration, CRT and MSVC toolset. The project currently uses v145, disables RTTI,
 and keeps its sources compatible with C++11. MSVC's minimum selectable mode is
 C++14; the project uses that default, while Clang/GCC enforce C++11 compatibility.
+Source-based hosts must also compile `NeoSource/NeoRegexVendor.c` as C99 (MSVC: C11), alongside
+`NeoSource/*.cpp`. PCRE2 sources and their license are vendored under `ThirdParty/pcre2`.
 Add `NeoSource` to the host's include
-path and include `NeoScript.h`. The Windows socket dependency is linked automatically.
+path and include `NeoScript.h`. The core does not link sockets or TLS; the selected HTTP transport supplies those dependencies.
 
 Outputs and intermediate files are relative to the library project, so multiple
 solutions reuse the same build. Build solutions sharing the same configuration
@@ -525,7 +527,7 @@ result before it can return to Script A, so Script B does not own a resumable ex
 
 ### Compiled image capacity
 
-The current image format is **0134**, with signed 64-bit integer constants and values.
+The current image format is **0135**, preserving assignments immediately before return and signed 64-bit integer constants and values.
 Recompile older cached images; they are rejected rather than interpreted using the new layout.
 `MOVI` retains a signed 32-bit immediate, sign-extended to 64 bits. Larger integer literals
 use the constant pool, with `LOADK` when needed; instructions remain eight bytes.
@@ -633,13 +635,19 @@ must stop the transfer and return promptly, even with an unlimited timeout. Runt
 cancellation, discards queued work, and joins the worker before freeing its state. A transport that
 ignores cancellation can still delay shutdown. Cancellation never targets another runtime's requests,
 even when the transport object is shared.
-The C ABI does not currently expose transport registration.
+C hosts can use `NsRuntimeCreateWithHttpTransport(desc, send, user)`. The synchronous callback reads
+method, URL, body, timeout and headers through `NsHttp*` accessors, polls `NsHttpIsCancelled`, and
+calls `NsHttpRespond` to copy its body/error before returning. Request/response pointers are valid
+only during that callback. Keep `user` and the callback alive until runtime destruction returns;
+do not reenter the VM from the transport thread. These are additive ABI 6 entry points.
 
 Regex patterns default to a maximum of 16,384 UTF-8 bytes. Set `RuntimeDesc::maxRegexPatternBytes`
 before `CreateRuntime` to change this limit; zero permits only empty patterns. The legacy equivalent
 is the second argument to `NeoVMSystem::CreateVM(transport, maxRegexPatternBytes)`. The limit is
 checked before compiling each pattern, including patterns constructed at runtime. It limits pattern
-size, not matching time; short patterns can still take a long time on large or difficult input.
+size. PCRE2 additionally enforces work, depth, heap and text limits, and caches compiled patterns;
+see the [regex limits and syntax](API.md#6-string-methods). These resource limits do not promise a
+wall-clock deadline; regex remains unavailable inside time-limited VM invocations.
 
 `Samples/console/HttpTransport.cpp` is the portable libcurl adapter. The Windows console project
 builds static libcurl through `BuildConfig/ConsoleCurl.targets`; its cached source and libraries live

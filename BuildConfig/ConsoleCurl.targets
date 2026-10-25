@@ -16,9 +16,16 @@
       <AdditionalDependencies>$(NeoCurlInstall)\lib\libcurl$(NeoCurlSuffix).lib;ws2_32.lib;crypt32.lib;secur32.lib;bcrypt.lib;iphlpapi.lib;normaliz.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
-  <Target Name="BuildConsoleCurl" BeforeTargets="ClCompile" Condition="'$(DesignTimeBuild)'!='true'">
+  <Target Name="InvalidateConsoleCurlCache" BeforeTargets="BuildConsoleCurl"
+          Condition="!Exists('$(NeoCurlInstall)\lib\libcurl$(NeoCurlSuffix).lib') Or !Exists('$(NeoCurlInstall)\include\curl\curl.h')">
+    <Delete Files="$(NeoCurlInstall)\built-$(PlatformToolset).stamp" />
+  </Target>
+  <Target Name="BuildConsoleCurl" BeforeTargets="ClCompile" Condition="'$(DesignTimeBuild)'!='true'"
+          Inputs="$(MSBuildThisFileFullPath);$(MSBuildThisFileDirectory)curl\CMakeLists.txt"
+          Outputs="$(NeoCurlInstall)\built-$(PlatformToolset).stamp">
     <Exec Command="cmake -S &quot;$(MSBuildThisFileDirectory)curl&quot; -B &quot;$(NeoCurlBuild)&quot; -G &quot;Visual Studio 18 2026&quot; -A $(NeoCurlArch) -T $(PlatformToolset)" />
     <Exec Command="cmake --build &quot;$(NeoCurlBuild)&quot; --config $(Configuration) --parallel" />
     <Exec Command="cmake --install &quot;$(NeoCurlBuild)&quot; --config $(Configuration) --prefix &quot;$(NeoCurlInstall)&quot;" />
+    <Touch Files="$(NeoCurlInstall)\built-$(PlatformToolset).stamp" AlwaysCreate="true" />
   </Target>
 </Project>

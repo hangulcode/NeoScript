@@ -128,15 +128,15 @@ int main() {
         }) Run(runtime, std::string("import system;import math;export fun Probe(){") + body + "}", debug, image);
         for (const char* body : {
             R"ns(var a=[1,2,null];var alias=a;var n=a.pop();return n==null && a.pop()==2 && alias.len()==1 && a[0]==1;)ns",
-            R"ns(var a=[1,2,3,4];var alias=a;return a.removeSwap(1)==2 && alias.len()==3 && a[0]==1 && a[1]==4 && a[2]==3;)ns",
-            R"ns(var a=[1];return a.removeSwap(0)==1 && a.len()==0;)ns",
-            R"ns(var a=[1,2];return a.removeSwap(1)==2 && a.len()==1 && a[0]==1;)ns",
+            R"ns(var a=[1,2,3,4];var alias=a;return a.remove_swap(1)==2 && alias.len()==3 && a[0]==1 && a[1]==4 && a[2]==3;)ns",
+            R"ns(var a=[1];return a.remove_swap(0)==1 && a.len()==0;)ns",
+            R"ns(var a=[1,2];return a.remove_swap(1)==2 && a.len()==1 && a[0]==1;)ns",
             R"ns(var a=[];a.append(a);var b=a.pop();return b==a && a.len()==0;)ns",
-            R"ns(var a=[];a.append(a);a.append(3);var b=a.removeSwap(0);return b==a && a.len()==1 && a[0]==3;)ns",
-            R"ns(var a=[];a.append(3);a.append(a);return a.removeSwap(0)==3 && a[0]==a;)ns",
-            R"ns(var x=[1];var a=[x,x];var b=a.removeSwap(0);b[0]=9;return a.len()==1 && a[0][0]==9 && b==x;)ns",
-            R"ns(var v=math.Vector2(1,2);var a=[v,v];var b=a.removeSwap(0);b[0]=9;return a[0][0]==1 && v[0]==1;)ns",
-            R"ns(var a=[1];a=a.pop();var b=[[2],3];b=b.removeSwap(0);return a==1 && b[0]==2;)ns",
+            R"ns(var a=[];a.append(a);a.append(3);var b=a.remove_swap(0);return b==a && a.len()==1 && a[0]==3;)ns",
+            R"ns(var a=[];a.append(3);a.append(a);return a.remove_swap(0)==3 && a[0]==a;)ns",
+            R"ns(var x=[1];var a=[x,x];var b=a.remove_swap(0);b[0]=9;return a.len()==1 && a[0][0]==9 && b==x;)ns",
+            R"ns(var v=math.Vector2(1,2);var a=[v,v];var b=a.remove_swap(0);b[0]=9;return a[0][0]==1 && v[0]==1;)ns",
+            R"ns(var a=[1];a=a.pop();var b=[[2],3];b=b.remove_swap(0);return a==1 && b[0]==2;)ns",
             R"ns(var m={};m[1]=false;return m.contains(1) && !m.contains(1.0) && !m.remove(1.0) && m.remove(1) && !m.remove(1);)ns",
             R"ns(var m={};m[null]=3;m[true]=4;return m.contains(null) && m.contains(true) && m.remove(null) && !m.contains(null) && m.len()==1;)ns",
             R"ns(var m={"a":1};var alias=m;return m.remove("a") && alias.len()==0 && !m.contains("a");)ns",
@@ -155,19 +155,19 @@ int main() {
         }) Run(runtime, std::string("import system;import math;export fun Probe(){")+body+"}",debug,image);
         for (int size = 1; size <= 12; ++size) for (int index = 0; index < size; ++index)
             Run(runtime, std::string("export fun Probe(){var a=[];for(var i in 0,")+std::to_string(size)+
-                "){a.append(i);}var k="+std::to_string(index)+";var n=a.len();var r=a.removeSwap(k);"
+                "){a.append(i);}var k="+std::to_string(index)+";var n=a.len();var r=a.remove_swap(k);"
                 "if(r!=k || a.len()!=n-1)return false;for(var j in 0,a.len()){"
                 "var expected=j;if(j==k)expected=n-1;if(a[j]!=expected)return false;}return true;}",debug,image);
         Run(runtime, "export fun Probe(){return [].pop();}", debug,image,"cannot pop an empty list");
         for (const char* index : {"-1","2","2147483647","-2147483648"})
-            Run(runtime,std::string("export fun Probe(){var a=[1,2];return a.removeSwap(")+index+");}",debug,image,"index out of range");
+            Run(runtime,std::string("export fun Probe(){var a=[1,2];return a.remove_swap(")+index+");}",debug,image,"index out of range");
         for (const char* body : {
             "var a=[1,2];foreach(var v in a){a.pop();}",
-            "var a=[1,2];foreach(var v in a){a.removeSwap(0);}",
+            "var a=[1,2];foreach(var v in a){a.remove_swap(0);}",
             "var m={1:2};foreach(var k in m){m.remove(k);}"
         }) Run(runtime,std::string("export fun Probe(){")+body+"return true;}",debug,image,"collection was modified during foreach");
-        for (const char* expr : {"[1].pop(0)", "[1].removeSwap()", "[1].removeSwap(0.0)", "[1].removeSwap(true)",
-            "[1].removeSwap(0,1)", "{}.contains()", "{}.contains(1,2)", "{}.remove()", "{}.remove(1,2)",
+        for (const char* expr : {"[1].pop(0)", "[1].remove_swap()", "[1].remove_swap(0.0)", "[1].remove_swap(true)",
+            "[1].remove_swap(0,1)", "{}.contains()", "{}.contains(1,2)", "{}.remove()", "{}.remove(1,2)",
             "system.set([]).values(1)"})
             Run(runtime,std::string("import system;export fun Probe(){return ")+expr+";}",debug,image,"");
         Run(runtime, "import system;export fun Probe(){var m={};var s=system.set([]);"

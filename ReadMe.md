@@ -9,7 +9,8 @@ expose the methods and properties your scripts need, and drive game behavior fro
 your own update loop. NeoScript includes a compiler, bytecode VM, and VS Code tooling.
 
 **Requirements:** a C++11-compatible compiler or newer. The core, public C++ API,
-C ABI, console, and mini game host support C++11. CMake builds require CMake 3.21+
+C ABI, console, and mini game host support C++11. The vendored PCRE2 engine also requires
+a C99 compiler. CMake builds require CMake 3.21+
 and default to C++11 unless the embedding project selects a newer standard.
 MSVC has no C++11 mode and uses its default C++14 mode on Windows; this does not
 raise NeoScript's source requirement. C++11 compatibility is checked separately
@@ -247,6 +248,13 @@ The VS Code debugger currently supports:
   float precision at 1,024, and the full result at 1 MiB. See [API.md](docs/API.md#21-string-formatting).
 
 ### Numeric precision
+
+Integer literals now use 64-bit widths: `0xffffffff` is `4294967295`, and `0x80000000` is
+`2147483648`. Use `-1` (or `0xffffffffffffffff`) for an all-bits-set signed mask. Regenerate cached
+bytecode; older return optimizations could omit assignments to globals and closure captures.
+Use `regex_match`, `regex_search`, `regex_replace`, and `remove_swap`; their previous camelCase
+spellings are no longer registered. See the [API migration notes](docs/API.md#boundary-and-ownership-rules).
+
 The default `int` type is a signed **64-bit integer**, from `-9223372036854775808` to
 `9223372036854775807`. Integer addition, subtraction, multiplication, negation, and
 increment/decrement wrap to the low 64 bits. Shift counts must be in `0..63`. Integer
@@ -256,7 +264,7 @@ Host integer values use C++/C `int64_t` and C# `long`; integer arrays use eight 
 element. On 64-bit targets the general value slot remains 16 bytes; on 32-bit targets it
 grows from 8 to 16 bytes (or 12 with four-byte integer alignment). Rebuild native hosts
 and Unity plugins for **C ABI 6**, and regenerate cached
-bytecode for image format **0134**. Container lengths, indices, and host handles keep
+bytecode for image format **0135**. Container lengths, indices, and host handles keep
 their existing widths and limits. Mixing an int with a float uses float32 arithmetic,
 so large integers can lose precision.
 

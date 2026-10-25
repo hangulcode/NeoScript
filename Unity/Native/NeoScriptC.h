@@ -284,6 +284,20 @@ NS_API void NS_CALL NsSinkWrite(void* sink, const void* data, int32_t len);
 // Runtime
 //==============================================================================
 NS_API NsRuntime* NS_CALL NsRuntimeCreate(const NsRuntimeDesc* desc);
+// HTTP 콜백은 작업 스레드에서 동기 호출한다. request/response는 콜백 안에서만 유효하다.
+// user와 콜백 코드는 RuntimeDestroy가 반환할 때까지 살아 있어야 한다. VM 재진입은 금지한다.
+typedef struct NsHttpRequest NsHttpRequest;
+typedef void (NS_CALL* NsHttpSendFn)(void* user, const NsHttpRequest* request, void* response);
+NS_API NsRuntime* NS_CALL NsRuntimeCreateWithHttpTransport(const NsRuntimeDesc* desc, NsHttpSendFn send, void* user);
+NS_API NsStr NS_CALL NsHttpMethod(const NsHttpRequest* request);
+NS_API NsStr NS_CALL NsHttpUrl(const NsHttpRequest* request);
+NS_API NsStr NS_CALL NsHttpBody(const NsHttpRequest* request);
+NS_API int32_t NS_CALL NsHttpTimeout(const NsHttpRequest* request);
+NS_API int32_t NS_CALL NsHttpHeaderCount(const NsHttpRequest* request);
+NS_API int32_t NS_CALL NsHttpHeader(const NsHttpRequest* request, int32_t index, NsStr* name, NsStr* value);
+NS_API int32_t NS_CALL NsHttpIsCancelled(const NsHttpRequest* request);
+// 문자열을 즉시 복사한다. 성공=본문, 실패=오류 메시지. 할당 실패/잘못된 인수는 0을 반환한다.
+NS_API int32_t NS_CALL NsHttpRespond(void* response, int32_t success, const char* text, int32_t length);
 NS_API void       NS_CALL NsRuntimeDestroy(NsRuntime* rt);
 // 살아 있는 호출이나 실행이 있으면 아무것도 해제하지 않고 0을 반환한다.
 // 기존 void 파괴 함수도 이때 소유 객체를 그대로 유지한다.

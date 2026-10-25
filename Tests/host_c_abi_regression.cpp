@@ -1,4 +1,8 @@
 #include "NeoScriptC.h"
+#include <atomic>
+#include <chrono>
+#include <thread>
+#include <string>
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -201,8 +205,50 @@ static void Run(bool debug,bool image)
     Check(NsTryDestroyInstance(host.rt,host.instance)!=0,"instance disposal allowed after calls end");
     NsDestroyProgram(host.rt,program);Check(NsRuntimeTryDestroy(host.rt)!=0,"runtime disposal allowed after calls end");
 }
+struct HttpState { std::atomic<bool> entered{false}, cancelled{false}; bool block=false; };
+static void NS_CALL HttpSend(void* user,const NsHttpRequest* request,void* output)
+{
+    auto& state=*static_cast<HttpState*>(user);
+    state.entered=true;
+    if(state.block)
+    {
+        const auto until=std::chrono::steady_clock::now()+std::chrono::seconds(3);
+        while(!NsHttpIsCancelled(request) && std::chrono::steady_clock::now()<until)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        state.cancelled=NsHttpIsCancelled(request)!=0;
+        NsHttpRespond(output,0,"cancelled",9);return;
+    }
+    NsStr name={},value={};NsStr method=NsHttpMethod(request),url=NsHttpUrl(request),body=NsHttpBody(request);
+    const bool ok=Name(method.data,method.len,"POST") && Name(url.data,url.len,"https://test") &&
+        Name(body.data,body.len,"payload") && NsHttpTimeout(request)==-1 && NsHttpHeaderCount(request)==1 &&
+        NsHttpHeader(request,0,&name,&value) && Name(name.data,name.len,"X-Test") && Name(value.data,value.len,"v");
+    std::string response="copied response";NsHttpRespond(output,ok?1:0,response.data(),(int)response.size());
+}
+static void HttpTransport(bool block)
+{
+    HttpState state;state.block=block;NsRuntimeDesc desc={};desc.structSize=sizeof(desc);
+    auto rt=NsRuntimeCreateWithHttpTransport(&desc,HttpSend,&state);Check(rt!=nullptr,"C HTTP runtime");if(!rt)return;
+    std::string text="import system;var ok=false;fun Done(var success,var text){ok=success && text==\"copied response\";}"
+        "var a=system.aysnc_create();a.add_header(\"X-Test\",\"v\");a.post(-1,\"https://test\",\"payload\",Done);";
+    if(!block)text+="a.wait();export fun Probe(){if(ok)return 1;return 0;}";
+    NsCompileDesc cd={};cd.structSize=sizeof(cd);cd.source=Str(text.c_str());NsError error={};auto p=NsCompile(rt,&cd,&error);
+    Check(p!=0,"C HTTP compile");if(!p)std::printf("%.*s\n",error.message.len,error.message.data);
+    if(p)
+    {
+        NsInstanceDesc id={};id.structSize=sizeof(id);auto instance=NsCreateInstance(rt,p,&id);
+        Check(NsRunGlobalInit(rt,instance)==NS_RUN_COMPLETED,"C HTTP init");
+        if(!block)Check(InvokeInt(rt,instance,"Probe")==1,"C HTTP response copied and callback invoked");
+        const auto until=std::chrono::steady_clock::now()+std::chrono::seconds(2);
+        while(!state.entered && std::chrono::steady_clock::now()<until)std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        Check(state.entered,"C HTTP callback started");
+    }
+    NsRuntimeDestroy(rt);
+    if(block)Check(state.cancelled,"C HTTP shutdown cancellation");
+}
+
 int main()
 {
+    HttpTransport(false);HttpTransport(true);
     for(bool debug:{false,true})for(bool image:{false,true})Run(debug,image);
     std::printf("host_c_abi_regression: %d checks, %d failures\n",checks,failures);
     return failures?1:0;

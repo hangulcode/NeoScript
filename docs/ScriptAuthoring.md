@@ -426,13 +426,13 @@ changing the length; n must be a nonnegative integer.
 `remove` returns the removed value, shifts later elements, and reduces the length. Assigning `null` keeps the slot.
 Insertion positions range from 0 to length; removal positions range from 0 to length-1. Invalid types or ranges are errors.
 `pop()` removes and returns the last element; it raises an error on an empty list, while a stored null
-is a normal return value. `removeSwap(index)` removes and returns the selected element and moves the
+is a normal return value. `remove_swap(index)` removes and returns the selected element and moves the
 last element into that position. Use it when order is unimportant: only one element is moved instead
 of shifting the tail. Both methods preserve capacity, affect aliases, and invalidate active foreach iterators.
 
 ```cpp
 var active = [10, 20, 30, 40];
-print(active.removeSwap(1));       // 20; active is now [10, 40, 30]
+print(active.remove_swap(1));       // 20; active is now [10, 40, 30]
 print(active.pop());               // 30; active is now [10, 40]
 ```
 
@@ -741,19 +741,19 @@ Run the complete [regex sample](../TestScript/regex.ns) with `console.exe --run 
 `Samples/console`, or select `19 regex` from the interactive menu.
 
 ```cpp
-print("item42".regexMatch("[a-z]+[0-9]+"));
-var parts = "item42".regexSearch("([a-z]+)([0-9]+)");
+print("item42".regex_match("[a-z]+[0-9]+"));
+var parts = "item42".regex_search("([a-z]+)([0-9]+)");
 print(parts[1]);                         // item
-print("item42".regexReplace("[0-9]+", "X")); // itemX
-print("ABC".regexMatch("abc", true));    // Ignore case
+print("item42".regex_replace("[0-9]+", "X")); // itemX
+print("ABC".regex_match("abc", true));    // Ignore case
 ```
 
-These methods need no import. `regexSearch` returns `null` if there is no match. Syntax is
-C++11 ECMAScript; double backslashes in string literals. Regex operates on UTF-8 bytes, so a
+These methods need no import. `regex_search` returns `null` if there is no match. Syntax is
+PCRE2 with JavaScript-style character escapes; double backslashes in string literals. Regex operates on UTF-8 bytes, so a
 literal Korean word can match but `.` and case folding are not Unicode-aware. Invalid patterns
 raise runtime errors. Patterns are limited to 16,384 UTF-8 bytes by default, including patterns built
 at runtime; the host can configure the limit. Oversized patterns fail before compilation. This is not
-a matching-time guarantee. Regex is synchronous and is rejected when the host enables execution limits.
+a wall-clock guarantee: matching also has work, depth, memory and 8 MiB text limits. Regex is synchronous and is rejected when the host enables execution limits.
 
 ### HTTP and HTTPS requests
 
@@ -905,7 +905,7 @@ print(math.MoveToward(0.0, 10.0, 2.0)); // 2
   by `Get()`. Plain root or index variables are read for the write.
   List/map/vector-array writes may use a temporary internal reference; normal reads and assignment results
   remain values. Copies still stay independent, and native properties retain their getter/setter behavior.
-  WREF pairs with an ordinary write and handles vector write-back; rebuild older compiled scripts and caches for bytecode version 0134 (64-bit integers; also required for signed-zero constants, foreach source retention, checked shift folding, and corrected NaN branch behavior).
+  WREF pairs with an ordinary write and handles vector write-back; rebuild older compiled scripts and caches for bytecode version 0135 (64-bit integers; also required for signed-zero constants, foreach source retention, checked shift folding, and corrected NaN branch behavior).
 - A selector immediately after an indexed assignment can still modify the assigned vector:
   `(a[0][0] = math.Vector3(1,2,3))[1] = 9` stores `(1,9,3)` in `a[0][0]`.
   Assigning the result to a separate local instead keeps ordinary vector copy semantics.

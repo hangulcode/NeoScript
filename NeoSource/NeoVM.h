@@ -652,7 +652,11 @@ public:
 	inline void		_read(VarInfo* V, unsigned char& r) { r = (unsigned char)PopInt(V); }
 	inline void		_read(VarInfo* V, short& r) { r = (short)PopInt(V); }
 	inline void		_read(VarInfo* V, unsigned short& r) { r = (unsigned short)PopInt(V); }
-	inline void		_read(VarInfo* V, long& r) { r = (long)PopInt(V); }
+	inline void		_read(VarInfo* V, long& r) {
+		const NS_INT value = PopInt(V);
+		r = value > (std::numeric_limits<long>::max)() ? (std::numeric_limits<long>::max)() :
+			value < (std::numeric_limits<long>::min)() ? (std::numeric_limits<long>::min)() : static_cast<long>(value);
+	}
 	inline void		_read(VarInfo* V, unsigned long& r) { r = (unsigned long)PopInt(V); }
 	inline void		_read(VarInfo* V, int& r) { r = NeoNarrowInt(PopInt(V)); }
 	inline void		_read(VarInfo* V, unsigned int& r) { r = (unsigned int)PopInt(V); }
