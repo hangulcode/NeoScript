@@ -1,0 +1,25 @@
+﻿// 전체 일치와 대소문자 무시를 확인한다.
+print("full match: " .. "item42".regexMatch("[a-z]+[0-9]+"));
+print("whole string required: " .. "x-item42".regexMatch("[a-z]+[0-9]+"));
+print("ignore case: " .. "NEOSCRIPT".regexMatch("neoscript", true));
+
+// 검색 결과의 0번은 전체 일치, 이후 원소는 괄호로 캡처한 그룹이다.
+var parts = "Order: item42".regexSearch("([a-z]+)([0-9]+)");
+if (parts != null)
+{
+    print("match: " .. parts[0]);
+    print("name: " .. parts[1]);
+    print("number: " .. parts[2]);
+}
+print("no match: " .. ("abc".regexSearch("[0-9]+") == null));
+
+// 스크립트 문자열에서는 역슬래시를 두 번 쓴다.
+print("digits: " .. "id=123".regexSearch("\\d+")[0]);
+
+// 모든 일치 구간을 치환한다. $1과 $2로 캡처한 값을 재사용한다.
+print("replace: " .. "a1 b2".regexReplace("([a-z])([0-9])", "$2$1"));
+print("redact: " .. "id=123, score=456".regexReplace("[0-9]+", "#"));
+print("empty match: " .. "ab".regexReplace("", "-"));
+
+// 한글 리터럴은 일치하지만 점(.)과 문자 클래스는 UTF-8 바이트 기준이다.
+print("literal UTF-8: " .. "한글".regexMatch("한글"));

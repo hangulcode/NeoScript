@@ -24,6 +24,15 @@ public:
         cond_.notify_one();
     }
 
+    // 완료 상태와 이벤트를 큐 공개와 함께 갱신한다. 소비자는 잠금 해제 후에만 접근한다.
+    template<typename Publish>
+    void PushAndPublish(const T& value, Publish publish) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        queue_.push_back(value);
+        publish();
+        cond_.notify_one();
+    }
+
     void WaitAndPop(T& value) {
         std::unique_lock<std::mutex> lock(mutex_);
         cond_.wait(lock, [this] { return !queue_.empty(); });

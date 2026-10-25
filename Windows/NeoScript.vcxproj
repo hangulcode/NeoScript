@@ -84,7 +84,7 @@
     <ClCompile Include="..\NeoSource\NeoVMWorker.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\NeoSource\HttpRequest.h" />
+    <ClInclude Include="..\NeoSource\NeoHttp.h" />
     <ClInclude Include="..\NeoSource\Neo.h" />
     <ClInclude Include="..\NeoSource\NeoArchive.h" />
     <ClInclude Include="..\NeoSource\NeoCompileLimits.h" />

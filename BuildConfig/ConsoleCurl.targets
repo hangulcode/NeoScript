@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <NeoCurlBuild>$(MSBuildThisFileDirectory)..\Build\curl-$(Platform)</NeoCurlBuild>
+    <NeoCurlInstall>$(NeoCurlBuild)\install\$(Configuration)</NeoCurlInstall>
+    <NeoCurlArch Condition="'$(Platform)'=='Win32'">Win32</NeoCurlArch>
+    <NeoCurlArch Condition="'$(Platform)'=='x64'">x64</NeoCurlArch>
+    <NeoCurlSuffix Condition="'$(Configuration)'=='Debug'">-d</NeoCurlSuffix>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(NeoCurlInstall)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>CURL_STATICLIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>$(NeoCurlInstall)\lib\libcurl$(NeoCurlSuffix).lib;ws2_32.lib;crypt32.lib;secur32.lib;bcrypt.lib;iphlpapi.lib;normaliz.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <Target Name="BuildConsoleCurl" BeforeTargets="ClCompile" Condition="'$(DesignTimeBuild)'!='true'">
+    <Exec Command="cmake -S &quot;$(MSBuildThisFileDirectory)curl&quot; -B &quot;$(NeoCurlBuild)&quot; -G &quot;Visual Studio 18 2026&quot; -A $(NeoCurlArch) -T $(PlatformToolset)" />
+    <Exec Command="cmake --build &quot;$(NeoCurlBuild)&quot; --config $(Configuration) --parallel" />
+    <Exec Command="cmake --install &quot;$(NeoCurlBuild)&quot; --config $(Configuration) --prefix &quot;$(NeoCurlInstall)&quot;" />
+  </Target>
+</Project>

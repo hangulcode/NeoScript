@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "NeoJson.h"
+#include "NeoHttp.h"
 //==============================================================================
 // NeoScript 공개 API v2 — Runtime / Program / Instance 3-개념 파사드
 //------------------------------------------------------------------------------
@@ -711,6 +712,8 @@ struct ILoader
 
 struct RuntimeDesc
 {
+    // 전송은 VM 작업 스레드에서 호출된다. 런타임 종료까지 공유 소유한다.
+    std::shared_ptr<IHttpTransport> httpTransport;
     ILoader* loader = nullptr;                    // import 해석(선택, Runtime별). nativeLoader 가 있으면 그쪽 우선.
     // [프로세스-전역] print/error 는 내부 VM 의 단일 전역 훅이다 — Runtime별이 아니다.
     // 최초 생성된 Runtime 의 printFn/errorFn 이 프로세스 전체에 적용된다(이후 Runtime 값은 무시).

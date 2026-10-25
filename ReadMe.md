@@ -141,9 +141,13 @@ that use the bundled JSON implementation. See [JSON API and build notes](docs/JS
 
 Redistributed copies must retain the applicable copyright and license notices.
 
-HTTP requests use the locally adapted [elnormous/HTTPRequest](https://github.com/elnormous/HTTPRequest)
-under the [Unlicense](ThirdParty/HTTPRequest/UNLICENSE). Its provenance and license are also
-recorded in `THIRD_PARTY_NOTICES.txt`.
+The core has no HTTP/TLS library dependency. Hosts provide `IHttpTransport` through
+`RuntimeDesc::httpTransport`; the console connects [libcurl](https://curl.se/libcurl/) for HTTP/HTTPS.
+The Windows console build downloads pinned libcurl 8.23.0 (SHA-256 verified) using a CMake release supporting Visual Studio 2026,
+links it statically, and uses Schannel with the Windows certificate store. Core-only builds do not
+fetch curl. See [transport integration](docs/Embedding.md#http-and-https-transport).
+Include `THIRD_PARTY_NOTICES.txt` when distributing the console.
+String regular expressions use the C++11 standard library; see [the API](docs/API.md#6-string-methods).
 
 ### VS Code extension
 	- Extension source: Tools/vscode-neo-script

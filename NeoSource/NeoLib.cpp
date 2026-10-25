@@ -11,6 +11,8 @@
 #include <new>
 #include <sstream>
 #include <stdexcept>
+#include <regex>
+#include <iterator>
 
 #include "NeoVMInternal.h"
 #include "NeoVMWorker.h"
@@ -214,6 +216,83 @@ struct neo_libs
 		pN->ReturnValue(result.c_str());
 		return true;
 	}
+	// 정규식 치환이 문자열 상한을 넘기기 전에 출력을 중단한다.
+	struct RegexOutput
+	{
+		typedef std::output_iterator_tag iterator_category;
+		typedef void value_type;
+		typedef void difference_type;
+		typedef void pointer;
+		typedef void reference;
+		std::string* output;
+		explicit RegexOutput(std::string& text) : output(&text) {}
+		RegexOutput& operator*() { return *this; }
+		RegexOutput& operator++() { return *this; }
+		RegexOutput operator++(int) { return *this; }
+		RegexOutput& operator=(char c)
+		{
+			CheckRuntimeStringGrowth(output->size(), 1);
+			output->push_back(c);
+			return *this;
+		}
+	};
+
+	static bool StringRegex(CNeoVMWorker* pN, VarInfo* pVar, short args, int operation)
+	{
+		const int required = operation == 2 ? 2 : 1;
+		if (pVar->GetType() != VAR_STRING || (args != required && args != required + 1)) return false;
+		for (int i = 1; i <= required; ++i)
+			if (pN->GetStack(i)->GetType() != VAR_STRING) return false;
+		if (args > required && pN->GetStack(args)->GetType() != VAR_BOOL) return false;
+		// 표준 정규식 엔진 내부는 VM 실행 예산으로 중단할 수 없다.
+		if (pN->IsSynchronousExecutionLimited())
+		{
+			pN->SetError("regular expressions are not allowed during time-limited execution");
+			return false;
+		}
+		try
+		{
+			std::regex expression;
+			expression.imbue(std::locale::classic());
+			auto flags = std::regex_constants::ECMAScript;
+			if (args > required && pN->GetStack(args)->_bl) flags |= std::regex_constants::icase;
+			expression.assign(pN->GetStack(1)->_str->_str, flags);
+			// 반환 슬롯이 수신자와 겹칠 수 있으므로 결과 문자열을 먼저 완성한다.
+			const std::string& source = pVar->_str->_str;
+			if (operation == 0)
+				pN->ReturnValue(std::regex_match(source, expression));
+			else if (operation == 1)
+			{
+				std::smatch match;
+				if (!std::regex_search(source, match, expression)) pN->ReturnValue();
+				else
+				{
+					std::vector<std::string> captures;
+					for (size_t i = 0; i < match.size(); ++i) captures.push_back(match[i].str());
+					ListInfo* list = pN->GetVM()->ListAlloc();
+					pN->Var_SetList(pN->GetStack(0), list);
+					for (const auto& capture : captures) list->InsertLast(capture);
+				}
+			}
+			else
+			{
+				std::string output;
+				std::regex_replace(RegexOutput(output), source.begin(), source.end(), expression,
+					pN->GetStack(2)->_str->_str);
+				pN->ReturnValue(output.c_str());
+			}
+			return true;
+		}
+		catch (const std::regex_error&)
+		{
+			pN->SetError("invalid regular expression or regex complexity limit exceeded");
+			return false;
+		}
+	}
+	static bool Str_regexMatch(CNeoVMWorker* pN, VarInfo* pVar, short args) { return StringRegex(pN, pVar, args, 0); }
+	static bool Str_regexSearch(CNeoVMWorker* pN, VarInfo* pVar, short args) { return StringRegex(pN, pVar, args, 1); }
+	static bool Str_regexReplace(CNeoVMWorker* pN, VarInfo* pVar, short args) { return StringRegex(pN, pVar, args, 2); }
+
 	static bool Str_split(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (pVar->GetType() != VAR_STRING) return false;
@@ -1651,7 +1730,9 @@ struct neo_libs
 		AsyncInfo* pAsync = pVar->_async;
 		if (pAsync->_state != ASYNC_PENDING)
 		{
-			pN->ReturnValue(pAsync->_state == ASYNC_COMPLETED);
+			const bool completed = pAsync->_state == ASYNC_COMPLETED;
+			if (completed) pN->JumpAsyncMsg();
+			pN->ReturnValue(completed);
 			return true;
 		}
 
@@ -2425,6 +2506,9 @@ void CNeoVM::RegObjLibrary()
 	g_sNeoFunLib_String.Add("rtrim", &neo_libs::Str_rtrim);
 	g_sNeoFunLib_String.Add("replace", &neo_libs::Str_replace);
 	g_sNeoFunLib_String.Add("replaceAll", &neo_libs::Str_replaceAll);
+	g_sNeoFunLib_String.Add("regexMatch", &neo_libs::Str_regexMatch);
+	g_sNeoFunLib_String.Add("regexSearch", &neo_libs::Str_regexSearch);
+	g_sNeoFunLib_String.Add("regexReplace", &neo_libs::Str_regexReplace);
 	g_sNeoFunLib_String.Add("split", &neo_libs::Str_split);
 	g_sNeoFunLib_String.Add("format", &neo_libs::Str_format);
 

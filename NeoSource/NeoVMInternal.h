@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include <thread>
+#include <atomic>
 #include <cstring>
 #include <time.h>
 
@@ -590,7 +591,7 @@ struct AsyncInfo : AllocBase
 	VarInfo		_callback;
 	int			_timeout;
 
-	ASYNC_STATE _state;
+	std::atomic<ASYNC_STATE> _state;
 	ASYNC_COMMAND _type;
 	bool		_success;
 	std::string _resultValue;
@@ -708,6 +709,7 @@ NEOS_FORCEINLINE VarInfo* MapInfo::FindInt(int key)
 
 class CNeoVM final
 {
+	friend struct NeoVMSystem;
 //	friend					CNeoVMWorker;
 	friend					MapInfo;
 	friend					ListInfo;
@@ -776,7 +778,8 @@ private:
 	std::unordered_map<u32, CNeoVMWorker*> _sVMWorkers;
 	std::thread*	_job = nullptr;
 	NeoThreadSafeQueue<AsyncInfo*> _job_queue;
-	bool						_job_end = false;
+	std::atomic<bool> _job_end{false};
+	std::shared_ptr<IHttpTransport> _httpTransport;
 	NeoThreadSafeQueue<AsyncInfo*> _job_completed;
 	SNeoVMAllocStats m_sAllocStats;
 	SNeoVMAllocStats m_sPublishedAllocStats;

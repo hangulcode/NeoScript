@@ -18,14 +18,14 @@ var async;
 
 // Get url1
 async = system.aysnc_create();
-async.get(5000, "http://example.com/", Result);
+async.get(5000, "https://example.com/", Result);
 if(false == async.wait())
 	print("Time Out : " .. (system.clock() - tm));
 async.close();
 
 // Get url2
 async = system.aysnc_create();
-async.get(5000, "http://jsonplaceholder.typicode.com/users", Result);
+async.get(5000, "https://jsonplaceholder.typicode.com/users", Result);
 if(false == async.wait())
 	print("Time Out : " .. (system.clock() - tm));
 async.close();
@@ -33,7 +33,7 @@ async.close();
 // Post
 async = system.aysnc_create();
 async.add_header("Content-Type", "application/x-www-form-urlencoded");
-async.post(5000, "http://www.microsoft.com",  "sl=foo&s2=bar", Result);
+async.post(5000, "https://www.microsoft.com",  "sl=foo&s2=bar", Result);
 if(false == async.wait())
 	print("Time Out : " .. (system.clock() - tm));
 async.close();

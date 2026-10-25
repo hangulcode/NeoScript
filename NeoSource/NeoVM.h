@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "NeoConfig.h"
+#include "NeoHttp.h"
 #include "NeoNumeric.h"
 #include "NeoVMHash.h"
 #include <memory>
@@ -847,7 +848,7 @@ struct NeoVMSystem
 		const void* identityType = nullptr, const void* identityObject = nullptr,
 		const std::shared_ptr<void>& payloadOwner = {});
 
-	static CNeoVM* 	CreateVM();
+	static CNeoVM* 	CreateVM(const std::shared_ptr<IHttpTransport>& transport = {});
 	static void		ReleaseVM(CNeoVM* pVM);
 	static bool		Compile(CNArchive& arw, const NeoCompilerParam& param);
 

@@ -319,8 +319,19 @@ smaller limit described in section 2.1. Compiled string literals have separate i
 | `s.rtrim()` | `string` | trailing spaces |
 | `s.replace(find: string, to: string)` | `string` | **first occurrence only**; no match returns the original text |
 | `s.replaceAll(find: string, to: string)` | `string` | all non-overlapping literal matches, left to right; no match or empty `find` returns the original text |
+| `s.regexMatch(pattern: string [, ignoreCase: bool])` | `bool` | whole-string ECMAScript match; case-sensitive by default |
+| `s.regexSearch(pattern: string [, ignoreCase: bool])` | `list` or `null` | first match: element 0 is the full match, subsequent elements are capture groups; unmatched optional groups are empty strings |
+| `s.regexReplace(pattern: string, replacement: string [, ignoreCase: bool])` | `string` | replaces every non-overlapping match; `$&` is the full match, `$1` etc. are captures, `$$` is a literal dollar |
 | `s.split(sep: string)` | `list` | multi-character separators work; always returns at least one element; pass a non-empty separator |
 | `s.format(...)` | `string` | uses `s` as the pattern; see section 2.1 |
+
+Regex methods use C++11 `std::regex` with ECMAScript grammar and the classic locale. Patterns
+are compiled per call. They operate on UTF-8 **bytes**, not Unicode code points: literal UTF-8 text
+matches, but `.`, character classes, and case folding are not Unicode-aware. Use doubled backslashes
+in script strings (`"\\d+"`). Empty matches are supported and replacement always advances.
+Invalid patterns, wrong argument types, and regex complexity errors are runtime errors.
+The native regex engine cannot yield or obey a VM execution budget: regex calls are rejected during
+time-limited execution, like collection sorting. Without a limit, complex patterns can take a long time.
 
 These methods return a new value and do not modify `s`. `replaceAll` never searches text
 inserted by the replacement. For compatibility, `replace("", x)` still prepends `x` once;
@@ -477,11 +488,17 @@ Create the object with `system.aysnc_create()`.
 
 - The callback signature is `fun(ok: bool, result: string)`. On failure `result` carries the error
   text.
-- `get` / `post` require the object to be in the `READY` state - freshly created, or after `close`.
+- `get` / `post` require the object to be in the `READY` state - freshly created. `close()` is currently a no-op; create a new object for each request.
 - `get`, `post`, and `wait` are all rejected inside a nested native -> script call
   (`RTE_NESTED_NOT_ALLOWED`), together with `sleep` and `yield`. See *Synchronous native-to-script
   callbacks* in `ReadMe.md`.
-- HTTP transport is Windows-only in the current worker-thread implementation.
+- The core delegates transport to the host's `IHttpTransport`; it contains no HTTP/TLS implementation.
+  Without a transport, the callback receives `false, "HTTP transport is not configured"`.
+- The console connects libcurl and accepts `http://` and `https://`, with certificate and hostname
+  verification enabled. It returns the response body for all HTTP status codes (including 4xx/5xx);
+  `ok` describes transport success, not HTTP status. Redirects are not followed automatically.
+- Host callbacks execute on the VM thread after the background transport completes. Runtime destruction
+  waits for an in-flight transport call; host implementations must honor the request timeout.
 
 ---
 

@@ -21,7 +21,7 @@
     <ClCompile Include="..\NeoSource\NeoVMWorker.cpp"><Filter>Source Files</Filter></ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\NeoSource\HttpRequest.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="..\NeoSource\NeoHttp.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="..\NeoSource\Neo.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="..\NeoSource\NeoArchive.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="..\NeoSource\NeoCompileLimits.h"><Filter>Header Files</Filter></ClInclude>

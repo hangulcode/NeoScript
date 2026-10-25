@@ -9,17 +9,15 @@
 #include "UTFString.h"
 #include "NeoStringLimits.h"
 
-#ifdef _WIN32
-#include "HttpRequest.h"
-#pragma comment(lib, "ws2_32.lib")
-#endif
 
 namespace NeoScript
 {
 
-CNeoVM* 	NeoVMSystem::CreateVM()
+CNeoVM* 	NeoVMSystem::CreateVM(const std::shared_ptr<IHttpTransport>& transport)
 {
-	return new CNeoVM();
+	CNeoVM* vm = new CNeoVM();
+	vm->_httpTransport = transport;
+	return vm;
 }
 void		NeoVMSystem::ReleaseVM(CNeoVM* pVM)
 {
@@ -1918,89 +1916,49 @@ static void threadFunction(CNeoVM* p)
 }
 void CNeoVM::ThreadFunction()
 {
-	AsyncInfo* p;
-	while(false == _job_end)
+	for (;;)
 	{
-		if(false == _job_queue.TryPop(p))
-			continue;
-
-#ifdef _WIN32
-		switch(p->_type)
+		AsyncInfo* p = nullptr;
+		_job_queue.WaitAndPop(p);
+		if (!p || _job_end.load()) break;
+		try
 		{
-		case ASYNC_GET:
-			try
-			{
-				http::Request request{p->_request};
-
-				//const auto response = request.send("GET");
-				const auto response = request.send("GET", "", p->_headers, std::chrono::milliseconds{ p->_timeout });
-
-				p->_success = true;
-				p->_resultValue = std::string{ response.body.begin(), response.body.end() };
-			}
-			catch (const std::exception& e)
-			{
-				p->_success = false;
-				p->_resultValue = e.what();
-			}
-			break;
-		case ASYNC_POST: // POST request with form data
-			try
-			{
-				http::Request request{p->_request};
-
-				//const auto response = request.send("POST", p->_body, {{"Content-Type", "application/x-www-form-urlencoded"}});
-				const auto response = request.send("POST", p->_body, p->_headers, std::chrono::milliseconds{ p->_timeout });
-
-				p->_success = true;
-				p->_resultValue = std::string{ response.body.begin(), response.body.end() };
-			}
-			catch (const std::exception& e)
-			{
-				p->_success = false;
-				p->_resultValue = e.what();
-			}
-			break;
-		case ASYNC_POST_JSON: // POST request with a JSON body
-			try
-			{
-				http::Request request{p->_request};
-
-				const auto response = request.send("POST", p->_body, { {"Content-Type", "application/json"} });
-
-				p->_success = true;
-				p->_resultValue = std::string{ response.body.begin(), response.body.end() };
-			}
-			catch (const std::exception& e)
-			{
-				p->_success = false;
-				p->_resultValue = e.what();
-			}
-			break;
+			if (!_httpTransport)
+				throw std::runtime_error("HTTP transport is not configured");
+			HttpRequest request;
+			request.method = p->_type == ASYNC_GET ? "GET" : "POST";
+			request.url = p->_request;
+			request.body = p->_body;
+			request.headers = p->_headers;
+			request.timeoutMs = p->_timeout;
+			if (p->_type == ASYNC_POST_JSON)
+				request.headers.push_back(std::make_pair("Content-Type", "application/json"));
+			HttpResponse response = _httpTransport->Send(request);
+			p->_success = response.success;
+			p->_resultValue = response.success ? std::move(response.body) : std::move(response.error);
 		}
-#endif
-		p->_state = ASYNC_COMPLETED;
-		_job_completed.Push(p);
-		p->_event.set();
+		catch (const std::exception& e)
+		{
+			p->_success = false;
+			p->_resultValue = e.what();
+		}
+		catch (...)
+		{
+			p->_success = false;
+			p->_resultValue = "HTTP transport failed";
+		}
+		// 소비자가 객체를 반납하기 전에 상태와 이벤트를 큐 잠금 안에서 기록한다.
+		_job_completed.PushAndPublish(p, [p] {
+			p->_state = ASYNC_COMPLETED;
+			p->_event.set();
+		});
 	}
 }
 
 void CNeoVM::AddHttp_Request(AsyncInfo* p)
 {
-	if(nullptr == _job)
-	{
-#ifdef _WIN32
-		WSAData wsaData;
-		int code = WSAStartup(MAKEWORD(2, 2), &wsaData);
-		if (code != 0)
-		{
-			fprintf(stderr, "shite. %d\n", code);
-			return;
-		}
-#endif //_WIN32
+	if (nullptr == _job)
 		_job = new std::thread(threadFunction, this);
-	}
-
 	_job_queue.Push(p);
 }
 
@@ -2113,6 +2071,7 @@ CNeoVM::~CNeoVM()
 	_job_end = true;
 	if(nullptr != _job)
 	{
+		_job_queue.Push(nullptr);
 		_job->join();
 		delete _job;
 		_job = nullptr;

@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.21)
 
 project(NeoScript LANGUAGES CXX C)
 
@@ -55,7 +55,6 @@ target_compile_features(neoscript PUBLIC cxx_std_11)
 
 if(WIN32)
     target_compile_definitions(neoscript PRIVATE WIN_PRJ)
-    target_link_libraries(neoscript PUBLIC ws2_32)
 endif()
 
 # Flat-C shared library.  Unity resolves DllImport("NeoScript") to NeoScript.dll
@@ -79,7 +78,6 @@ if(NEOSCRIPT_BUILD_SHARED)
 
     if(WIN32)
         target_compile_definitions(NeoScriptShared PRIVATE WIN_PRJ)
-        target_link_libraries(NeoScriptShared PUBLIC ws2_32)
     else()
         # Export only what NS_API marks.  Unity loads many shared objects into one
         # process; leaking the whole C++ surface invites symbol collisions.
@@ -157,6 +155,11 @@ if(NEOSCRIPT_BUILD_SMOKE)
     target_link_libraries(neoscript_c_abi_smoke PRIVATE neoscript Threads::Threads)
 
     enable_testing()
+    add_executable(neoscript_http_regex_regression Tests/http_regex_regression.cpp)
+    target_link_libraries(neoscript_http_regex_regression PRIVATE neoscript Threads::Threads)
+    add_test(NAME neoscript_http_regex_regression COMMAND neoscript_http_regex_regression)
+    set_tests_properties(neoscript_http_regex_regression PROPERTIES TIMEOUT 30)
+
     add_executable(neoscript_json_regression Tests/json_regression.cpp)
     target_link_libraries(neoscript_json_regression PRIVATE neoscript Threads::Threads)
     if(MSVC)

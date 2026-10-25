@@ -1,4 +1,5 @@
 ﻿#include "stdafx.h"
+#include "HttpTransport.h"
 #include "console.h"
 #include "../../NeoSource/Neo.h"
 #include "../../NeoSource/NeoScript.h"   // v2 public API (RunFile 등이 사용; Neo.h 와 공존)
@@ -156,6 +157,7 @@ static void PrintSampleList()
 	printf("regression\n");
 	printf("literal_totype\n");
 	printf("cycle\n");
+	printf("regex\n");
 }
 
 static std::string s_path = "../../TestScript/";
@@ -180,6 +182,8 @@ static int RunSample(INeoLoader* pLoader, const std::string& key)
 	if (key == "16" || key == "regression") return SAMPLE_etc(pLoader, s_path + "compiler_regression.ns", nullptr);
 	if (key == "17" || key == "literal_totype") return SAMPLE_etc(pLoader, s_path + "literal_totype.ns", nullptr);
 	if (key == "18" || key == "cycle") return SAMPLE_cycle_ref(pLoader, s_path + "cycle_ref.ns");
+
+	if (key == "19" || key == "regex") return SAMPLE_etc(pLoader, s_path + "regex.ns", nullptr);
 
 	printf("unknown sample: %s\n", key.c_str());
 	return -1;
@@ -215,6 +219,7 @@ static int RunFile(CNeoLoader* pLoader, const std::string& filename, bool putASM
 	}
 
 	RuntimeDesc rd;
+	rd.httpTransport = CreateConsoleHttpTransport();
 	// print 핸들러 미설정: 임의 스크립트를 그대로 실행하므로 엔진 내장 io_print 에 맡긴다.
 	// (1인자 print 는 개행, 2인자 print(x,"") 는 개행 없이 이어붙임 — printFn 을 걸면 이 구분 소실)
 	rd.nativeLoader = pLoader;                 // import 해석
@@ -276,6 +281,7 @@ static int RunBenchCase(const char* name, const char* source, const char* functi
 
 	auto compileStart = std::chrono::steady_clock::now();
 	RuntimeDesc rd;
+	rd.httpTransport = CreateConsoleHttpTransport();
 	rd.printFn = [](StringView s) { printf("%.*s\n", (int)s.size(), s.data()); };
 	rd.nativeLoader = nativeLoader;                 // import math 해석
 	IRuntime* rt = CreateRuntime(rd);
@@ -564,6 +570,7 @@ struct V2DebugSmokeListener : IDebugListener
 static int RunPoolTrim(INeoLoader* pLoader)
 {
 	RuntimeDesc rd;
+	rd.httpTransport = CreateConsoleHttpTransport();
 	rd.nativeLoader = pLoader;
 	rd.printFn = [](StringView s) { printf("%.*s\n", (int)s.size(), s.data()); };
 	IRuntime* rt = CreateRuntime(rd);
@@ -687,6 +694,7 @@ static int RunPoolTrim(INeoLoader* pLoader)
 static int RunDebugSmoke()
 {
 	RuntimeDesc rd;
+	rd.httpTransport = CreateConsoleHttpTransport();
 	// import 를 쓰는 케이스가 있어 loader 를 붙인다(없으면 모듈 해석이 실패한다).
 	CNeoLoader debugSmokeLoader;
 	rd.nativeLoader = &debugSmokeLoader;
@@ -1194,6 +1202,7 @@ static int RunCompilerErrorRegression()
 	};
 
 	RuntimeDesc rd;
+	rd.httpTransport = CreateConsoleHttpTransport();
 	// import 를 쓰는 케이스가 있어 로더를 붙인다(libPath 기본값 ../../Lib/).
 	CNeoLoader regressionLoader;
 	rd.nativeLoader = &regressionLoader;
@@ -1722,6 +1731,7 @@ public:
 		}
 
 		RuntimeDesc rd;
+	rd.httpTransport = CreateConsoleHttpTransport();
 		rd.nativeLoader = loader;                 // import 해석
 		runtime = CreateRuntime(rd);
 		runtime->FreezeBindings();
@@ -2606,6 +2616,7 @@ int main(int argc, char* argv[])
 		printf("%d regression\n", idx++);
 		printf("%d literal_totype\n", idx++);
 		printf("%d cycle\n", idx++);
+		printf("%d regex\n", idx++);
 
 		printf("\nESC press to exit\n");
 		printf("press the number and enter ...\n");

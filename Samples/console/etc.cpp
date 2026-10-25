@@ -1,4 +1,5 @@
 ﻿#include "stdafx.h"
+#include "HttpTransport.h"
 #include "../../NeoSource/NeoScript.h"   // v2 public API
 #include "../../NeoSource/Neo.h"         // INeoLoader
 
@@ -15,6 +16,7 @@ int SAMPLE_etc(INeoLoader* pLoader, std::string filename, const char* pFunctionN
 	}
 
 	RuntimeDesc rd;
+	rd.httpTransport = CreateConsoleHttpTransport();
 	// print 핸들러를 걸지 않는다(원본 동작 유지): 엔진 내장 io_print 의 네이티브 경로가
 	// 1인자 print 는 개행 추가, 2인자 print(x, "") 는 개행 없이 이어붙인다. printFn 을 걸면
 	// io_print 가 인자수와 무관하게 문자열만 넘겨 이 구분이 사라진다(contailer.ns 가 2인자 사용).

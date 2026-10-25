@@ -596,3 +596,41 @@ operand, function, branch, and switch-table bounds. Truncated sections, invalid 
 and unsupported internal opcodes are rejected. Per-function writable stack capacity includes
 outgoing call slots and is checked before argument preparation, including coroutine entry.
 This validation does not change the serialized image format.
+
+## HTTP and HTTPS transport
+
+`NeoHttp.h` defines `HttpRequest`, `HttpResponse`, and `IHttpTransport`. The core neither links
+libcurl nor owns sockets/TLS. Configure each runtime before creating instances:
+
+```cpp
+NeoScript::RuntimeDesc desc;
+desc.httpTransport = std::make_shared<MyHttpTransport>();
+auto runtime = NeoScript::CreateRuntime(desc);
+```
+
+Implement `HttpResponse Send(const HttpRequest&)`: return `success=true` and `body` after a
+completed transfer, or `success=false` and `error`. A thrown exception becomes a failed script
+callback. Requests contain the method, URL, body, headers, and timeout in milliseconds.
+The legacy API accepts the same shared pointer in `NeoVMSystem::CreateVM(transport)`.
+A missing transport completes requests with an explicit failure; no network implementation is
+selected implicitly. Existing hosts must configure a transport to retain networking.
+
+The runtime keeps shared ownership until its worker thread has stopped. `Send` runs synchronously
+on that background thread, never on the script thread. It must not call the VM; return owned response
+strings instead. If one transport is shared across runtimes, it must tolerate concurrent `Send` calls.
+Each runtime serializes its own requests. Honor `timeoutMs` (the legacy script timeout `-1` is
+represented by `INT_MAX` milliseconds). Shutdown waits for the current `Send`; queued work is discarded.
+The C ABI does not currently expose transport registration.
+
+`Samples/console/HttpTransport.cpp` is the portable libcurl adapter. The Windows console project
+builds static libcurl through `BuildConfig/ConsoleCurl.targets`; its cached source and libraries live
+under `Build/curl-<Platform>`. A CMake release supporting Visual Studio 2026 (tested with 4.3.2) and network access are needed
+on the first build.
+Both architectures and Debug/Release use matching static CRT settings. HTTPS uses Schannel's native
+certificate store; no extra TLS DLL or CA bundle is shipped. Peer and hostname verification remain on.
+HTTP error status codes still count as completed transfers; redirects are not followed.
+The adapter can also be compiled by another host against libcurl 7.85+ built with HTTPS support.
+Non-Windows builds use that libcurl installation's TLS backend and CA configuration.
+
+Core-only CMake and Visual Studio builds do not download or link libcurl. Redistribute the curl
+copyright notice in `THIRD_PARTY_NOTICES.txt` with console binaries.

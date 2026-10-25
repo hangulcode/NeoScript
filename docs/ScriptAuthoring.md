@@ -1,4 +1,4 @@
-# NeoScript Script Authoring Guide
+﻿# NeoScript Script Authoring Guide
 
 > **Line-limit exception: only this document (`docs/ScriptAuthoring.md`) is exempt from line limits.**
 > The limits on other documents, including `AGENTS.md`, still apply.
@@ -674,6 +674,39 @@ The total includes all conversions and literal text; checks occur before large c
 `%s` precision may span the int range because it truncates an existing string, but actual output remains subject to the byte limit.
 These are `format` expansion limits, separate from compiled-image limits and other string-operation limits.
 See the [format API](API.md#21-string-formatting) for supported formats.
+
+### Regular expressions
+
+Run the complete [regex sample](../TestScript/regex.ns) with `console.exe --run regex` from
+`Samples/console`, or select `19 regex` from the interactive menu.
+
+```cpp
+print("item42".regexMatch("[a-z]+[0-9]+"));
+var parts = "item42".regexSearch("([a-z]+)([0-9]+)");
+print(parts[1]);                         // item
+print("item42".regexReplace("[0-9]+", "X")); // itemX
+print("ABC".regexMatch("abc", true));    // Ignore case
+```
+
+These methods need no import. `regexSearch` returns `null` if there is no match. Syntax is
+C++11 ECMAScript; double backslashes in string literals. Regex operates on UTF-8 bytes, so a
+literal Korean word can match but `.` and case folding are not Unicode-aware. Invalid patterns
+raise runtime errors. Regex is synchronous and is rejected when the host enables execution limits.
+
+### HTTP and HTTPS requests
+
+```cpp
+import system;
+fun Completed(var ok, var body) { print(ok); print(body); }
+var request = system.aysnc_create();
+request.get(5000, "https://example.com/", Completed);
+request.wait();
+```
+
+Keep the existing `aysnc_create` spelling. The console supplies libcurl with HTTPS certificate
+verification; embedding hosts must provide a transport. Missing transports report failure to the
+callback. `wait()` completion and transport success do not imply an HTTP 2xx status. See the
+[async API](API.md#9-async-methods) for headers and POST requests.
 
 <a id="closures"></a>
 ## 8. Function values and anonymous-function captures
