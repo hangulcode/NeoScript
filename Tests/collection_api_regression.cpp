@@ -126,6 +126,50 @@ int main() {
             R"ns(var a=[1,2];var sum=0;foreach(var v in a){a.reserve(100);sum+=v;}return sum==3;)ns",
             R"ns(var a=[];var b={};var c=system.set([]);var d=system.array(0,0);a.clear();b.clear();c.clear();d.clear();d.fill(1);return a.clone()!=a && b.clone()!=b && c.clone()!=c && d.clone()!=d && d.find(0)==-1;)ns"
         }) Run(runtime, std::string("import system;import math;export fun Probe(){") + body + "}", debug, image);
+        for (const char* body : {
+            R"ns(var a=[1,2,null];var alias=a;var n=a.pop();return n==null && a.pop()==2 && alias.len()==1 && a[0]==1;)ns",
+            R"ns(var a=[1,2,3,4];var alias=a;return a.removeSwap(1)==2 && alias.len()==3 && a[0]==1 && a[1]==4 && a[2]==3;)ns",
+            R"ns(var a=[1];return a.removeSwap(0)==1 && a.len()==0;)ns",
+            R"ns(var a=[1,2];return a.removeSwap(1)==2 && a.len()==1 && a[0]==1;)ns",
+            R"ns(var a=[];a.append(a);var b=a.pop();return b==a && a.len()==0;)ns",
+            R"ns(var a=[];a.append(a);a.append(3);var b=a.removeSwap(0);return b==a && a.len()==1 && a[0]==3;)ns",
+            R"ns(var a=[];a.append(3);a.append(a);return a.removeSwap(0)==3 && a[0]==a;)ns",
+            R"ns(var x=[1];var a=[x,x];var b=a.removeSwap(0);b[0]=9;return a.len()==1 && a[0][0]==9 && b==x;)ns",
+            R"ns(var v=math.Vector2(1,2);var a=[v,v];var b=a.removeSwap(0);b[0]=9;return a[0][0]==1 && v[0]==1;)ns",
+            R"ns(var a=[1];a=a.pop();var b=[[2],3];b=b.removeSwap(0);return a==1 && b[0]==2;)ns",
+            R"ns(var m={};m[1]=false;return m.contains(1) && !m.contains(1.0) && !m.remove(1.0) && m.remove(1) && !m.remove(1);)ns",
+            R"ns(var m={};m[null]=3;m[true]=4;return m.contains(null) && m.contains(true) && m.remove(null) && !m.contains(null) && m.len()==1;)ns",
+            R"ns(var m={"a":1};var alias=m;return m.remove("a") && alias.len()==0 && !m.contains("a");)ns",
+            R"ns(var m={};m[m]=m;return m.contains(m) && m.remove(m) && m.len()==0;)ns",
+            R"ns(var key=[];var m={};m[key]=1;return m.contains(key) && !m.contains([]) && m.remove(key);)ns",
+            R"ns(var m={};m[math.Vector2(1,2)]=3;return m.contains(math.Vector2(1,2)) && m.remove(math.Vector2(1,2)) && m.len()==0;)ns",
+            R"ns(var m={"ab":1};return m.contains("a".."b") && m.remove("a".."b");)ns",
+            R"ns(var m={"a":1};foreach(var k in m){if(m.remove("missing"))return false;}return m.len()==1;)ns",
+            R"ns(var s=system.set([]);var a=s.values();return type(a)=="list" && a.len()==0;)ns",
+            R"ns(var s=system.set([1,2,2,null]);var a=s.values();a.clear();return s.len()==3 && s.values().contains(null);)ns",
+            R"ns(var child=[1];var s=system.set([child]);var a=s.values();a[0][0]=7;return child[0]==7 && s.contains(child);)ns",
+            R"ns(var s=system.set([math.Vector2(1,2)]);var a=s.values();a[0][0]=7;return s.contains(math.Vector2(1,2)) && !s.contains(a[0]);)ns",
+            R"ns(var s=system.set([]);s.add(s);var a=s.values();s.clear();return a[0]==s && a[0].len()==0;)ns",
+            R"ns(var s=system.set([1,2]);var count=0;foreach(var v in s){count+=s.values().len();}return count==4;)ns",
+            R"ns(var s=system.set([1]);s=s.values();return s.len()==1 && s[0]==1;)ns"
+        }) Run(runtime, std::string("import system;import math;export fun Probe(){")+body+"}",debug,image);
+        for (int size = 1; size <= 12; ++size) for (int index = 0; index < size; ++index)
+            Run(runtime, std::string("export fun Probe(){var a=[];for(var i in 0,")+std::to_string(size)+
+                "){a.append(i);}var k="+std::to_string(index)+";var n=a.len();var r=a.removeSwap(k);"
+                "if(r!=k || a.len()!=n-1)return false;for(var j in 0,a.len()){"
+                "var expected=j;if(j==k)expected=n-1;if(a[j]!=expected)return false;}return true;}",debug,image);
+        Run(runtime, "export fun Probe(){return [].pop();}", debug,image,"cannot pop an empty list");
+        for (const char* index : {"-1","2","2147483647","-2147483648"})
+            Run(runtime,std::string("export fun Probe(){var a=[1,2];return a.removeSwap(")+index+");}",debug,image,"index out of range");
+        for (const char* body : {
+            "var a=[1,2];foreach(var v in a){a.pop();}",
+            "var a=[1,2];foreach(var v in a){a.removeSwap(0);}",
+            "var m={1:2};foreach(var k in m){m.remove(k);}"
+        }) Run(runtime,std::string("export fun Probe(){")+body+"return true;}",debug,image,"collection was modified during foreach");
+        for (const char* expr : {"[1].pop(0)", "[1].removeSwap()", "[1].removeSwap(0.0)", "[1].removeSwap(true)",
+            "[1].removeSwap(0,1)", "{}.contains()", "{}.contains(1,2)", "{}.remove()", "{}.remove(1,2)",
+            "system.set([]).values(1)"})
+            Run(runtime,std::string("import system;export fun Probe(){return ")+expr+";}",debug,image,"");
         Run(runtime, "import system;export fun Probe(){var m={};var s=system.set([]);"
             "for(var round in 0,8){for(var i in 0,257){m[i]=i;s.add(i);}var mc=m.clone();var sc=s.clone();"
             "m.clear();s.clear();if(mc.len()!=257 || sc.len()!=257)return false;"

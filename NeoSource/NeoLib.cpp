@@ -591,6 +591,35 @@ struct neo_libs
 		pN->ReturnValue(pVar->_set->Find(pN->GetStack(1)));
 		return true;
 	}
+	static bool Set_values(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_SET || args != 0) return false;
+		HeldValue receiver(pN, pVar);
+		SetInfo* source = receiver.value._set;
+		ListInfo* dest = pN->GetVM()->ListAlloc();
+		pN->Var_SetList(pN->GetStack(0), dest);
+		dest->Resize(source->GetCount());
+		int index = 0;
+		for (CollectionIterator it = source->FirstNode(); it._pSetNode; source->NextNode(it))
+			dest->SetValue(index++, &it._pSetNode->data->key);
+		return true;
+	}
+	static bool Map_contains(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_MAP || args != 1) return false;
+		pN->ReturnValue(pVar->_tbl->Find(pN->GetStack(1)) != nullptr);
+		return true;
+	}
+	static bool Map_remove(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_MAP || args != 1) return false;
+		HeldValue receiver(pN, pVar), key(pN, pN->GetStack(1));
+		MapInfo* map = receiver.value._tbl;
+		const int before = map->GetCount();
+		map->Remove(&key.value);
+		pN->ReturnValue(map->GetCount() != before);
+		return true;
+	}
 	static bool Collection_clone(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 0) return false;
@@ -750,23 +779,48 @@ struct neo_libs
 		pN->ReturnValue();
 		return true;
 	}
-	static bool List_remove(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	static bool ListRemoveAt(CNeoVMWorker* pN, VarInfo* pVar, int offset, bool swapLast)
 	{
-		if (pVar->GetType() != VAR_LIST || args != 1) return false;
-		VarInfo* index = pN->GetStack(1);
-		if (index->GetType() != VAR_INT) return false;
-		const int offset = index->_int;
 		HeldValue receiver(pN, pVar);
-		VarInfo* item = receiver.value._lst->GetValue(offset);
+		ListInfo* list = receiver.value._lst;
+		VarInfo* item = list->GetValue(offset);
 		if (item == nullptr)
 		{
 			pN->SetError("list remove index out of range");
 			return false;
 		}
+		// 삭제할 값과 수신자를 보존해 자기 참조와 반환 슬롯 중첩을 처리한다.
 		HeldValue removed(pN, item);
-		receiver.value._lst->Remove(offset);
+		if (swapLast)
+		{
+			const int last = list->GetCount() - 1;
+			if (offset != last) list->SetValue(offset, list->GetValue(last));
+			list->Resize(last);
+		}
+		else list->Remove(offset);
 		pN->ReturnValue(&removed.value);
 		return true;
+	}
+	static bool List_remove(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_LIST || args != 1 || pN->GetStack(1)->GetType() != VAR_INT) return false;
+		return ListRemoveAt(pN, pVar, pN->read<int>(1), false);
+	}
+	static bool List_removeSwap(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_LIST || args != 1 || pN->GetStack(1)->GetType() != VAR_INT) return false;
+		return ListRemoveAt(pN, pVar, pN->read<int>(1), true);
+	}
+	static bool List_pop(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_LIST || args != 0) return false;
+		const int count = pVar->_lst->GetCount();
+		if (count == 0)
+		{
+			pN->SetError("cannot pop an empty list");
+			return false;
+		}
+		return ListRemoveAt(pN, pVar, count - 1, false);
 	}
 	static bool List_sort(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
@@ -2714,6 +2768,8 @@ void CNeoVM::RegObjLibrary()
 	g_sNeoFunLib_List.Add("len", &neo_libs::List_len);
 	g_sNeoFunLib_List.Add("clear", &neo_libs::Collection_clear);
 	g_sNeoFunLib_List.Add("clone", &neo_libs::Collection_clone);
+	g_sNeoFunLib_List.Add("removeSwap", &neo_libs::List_removeSwap);
+	g_sNeoFunLib_List.Add("pop", &neo_libs::List_pop);
 	g_sNeoFunLib_List.Add("find", &neo_libs::Sequence_find);
 	g_sNeoFunLib_List.Add("contains", &neo_libs::Sequence_contains);
 	g_sNeoFunLib_List.Add("reserve", &neo_libs::Sequence_reserve);
@@ -2739,6 +2795,8 @@ void CNeoVM::RegObjLibrary()
 	g_sNeoFunLib_Map.Add("len", &neo_libs::map_len);
 	g_sNeoFunLib_Map.Add("clear", &neo_libs::Collection_clear);
 	g_sNeoFunLib_Map.Add("clone", &neo_libs::Collection_clone);
+	g_sNeoFunLib_Map.Add("remove", &neo_libs::Map_remove);
+	g_sNeoFunLib_Map.Add("contains", &neo_libs::Map_contains);
 	g_sNeoFunLib_Map.Add("reserve", &neo_libs::map_reserve);
 	g_sNeoFunLib_Map.Add("sort", &neo_libs::map_sort);
 	g_sNeoFunLib_Map.Add("keys", &neo_libs::map_keys);
@@ -2748,6 +2806,7 @@ void CNeoVM::RegObjLibrary()
 	g_sNeoFunLib_Set.Add("len", &neo_libs::Set_len);
 	g_sNeoFunLib_Set.Add("clear", &neo_libs::Collection_clear);
 	g_sNeoFunLib_Set.Add("clone", &neo_libs::Collection_clone);
+	g_sNeoFunLib_Set.Add("values", &neo_libs::Set_values);
 	g_sNeoFunLib_Set.Add("add", &neo_libs::Set_add);
 	g_sNeoFunLib_Set.Add("remove", &neo_libs::Set_remove);
 	g_sNeoFunLib_Set.Add("contains", &neo_libs::Set_contains);

@@ -357,6 +357,8 @@ string APIs cannot preserve an embedded NUL. `"\\u0041"` keeps the backslash-u t
 | `l.append(value, index: int)` | `void` | inserts **at** `index` - note the value comes first |
 | `l.insert(index: int, value)` | `void` | inserts before index; `0 <= index <= l.len()` |
 | `l.remove(index: int)` | `var` | returns the removed value, shifts the tail left; `0 <= index < l.len()` |
+| `l.pop()` | `var` | removes and returns the last element; empty lists are runtime errors |
+| `l.removeSwap(index: int)` | `var` | removes and returns the indexed element, moves the last element into its place; `0 <= index < l.len()` |
 | `l.sort(cmp: function)` | `void` | stable in-place sort; `cmp(a,b)` returns bool: true when a belongs before b |
 | `l.find(value)` | `int` | first matching index, or -1; uses script `==` |
 | `l.contains(value)` | `bool` | whether `find(value)` succeeds |
@@ -378,7 +380,11 @@ that element's value. This differs from assigning `null` to a map entry, which r
 
 Invalid insert/remove indices and non-integer indices are runtime errors. Aliases observe the
 same list changes. Removal preserves references in the returned value, including nested containers.
-Insertion, removal and sorting during foreach invalidate the active iterator.
+Insertion, removal (including `pop` and `removeSwap`) and sorting during foreach invalidate the active iterator.
+`removeSwap` does not preserve order and moves at most one element, unlike `remove`, which shifts
+the remaining tail. Removing the last element requires no replacement. Both `pop` and `removeSwap`
+retain capacity and return the removed value with its normal reference/vector value semantics.
+A null element can be returned normally; an empty `pop` is a distinct runtime error.
 
 Sort accepts named functions and capturing lambdas with two arguments. Equal elements keep
 their original order. The comparator must return bool and must not modify the list or its elements.
@@ -448,6 +454,8 @@ when searched; `fill(1.5)` stores `1` under normal numeric assignment rules.
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
 | `m.len()` | `int` | |
+| `m.contains(key)` | `bool` | checks key presence using the existing map key equality rules |
+| `m.remove(key)` | `bool` | true if an entry was removed, false if absent |
 | `m.clear()` | `void` | removes all entries while retaining capacity |
 | `m.clone()` | `map` | new map with shallow-copied keys and values; iteration order is unspecified |
 | `m.reserve(n: int)` | `void` | pre-sizes the bucket array |
@@ -470,6 +478,9 @@ when searched; `fill(1.5)` stores `1` under normal numeric assignment rules.
   in `ReadMe.md`.
 
 Access with `m["key"]` or `m.key`. Assigning to a missing key inserts it.
+`remove(key)` is the explicit equivalent of deleting via `m[key] = null`, with a boolean result.
+Removing an existing key invalidates an active foreach iterator; removing a missing key does not.
+`contains` does not modify the map or coerce numeric key types.
 
 Reference keys (list, map, set, array, function, closure, coroutine, runtime module, async,
 and host object) use the same identity rule as `==`/`!=`. A container's contents do not
@@ -505,6 +516,11 @@ Build a set with `system.set(list)`; duplicates collapse.
 | `s.contains(value)` | `bool` | membership under set key equality |
 | `s.clear()` | `void` | removes all elements while retaining capacity |
 | `s.clone()` | `set` | new set with shallow-copied elements; iteration order is unspecified |
+| `s.values()` | `list` | new list of all elements, in unspecified order; shallow copies |
+
+`values()` does not modify the set and may be called during foreach. Changing the returned list
+structure does not change the set. Nested containers remain shared; returned vectors use copy-on-write,
+so changing one does not change a stored set key.
 
 Adding a new element, removing an existing element, or clearing a nonempty set invalidates
 an active foreach iterator. Duplicate adds and missing removes leave it valid.

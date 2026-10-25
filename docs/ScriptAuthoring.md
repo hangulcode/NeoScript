@@ -423,6 +423,16 @@ vector value equality, and identity for nested containers. `reserve(n)` increase
 changing the length; n must be a nonnegative integer.
 `remove` returns the removed value, shifts later elements, and reduces the length. Assigning `null` keeps the slot.
 Insertion positions range from 0 to length; removal positions range from 0 to length-1. Invalid types or ranges are errors.
+`pop()` removes and returns the last element; it raises an error on an empty list, while a stored null
+is a normal return value. `removeSwap(index)` removes and returns the selected element and moves the
+last element into that position. Use it when order is unimportant: only one element is moved instead
+of shifting the tail. Both methods preserve capacity, affect aliases, and invalidate active foreach iterators.
+
+```cpp
+var active = [10, 20, 30, 40];
+print(active.removeSwap(1));       // 20; active is now [10, 40, 30]
+print(active.pop());               // 30; active is now [10, 40]
+```
 
 ```cpp
 var items = [3, 1, 2];
@@ -469,6 +479,9 @@ print(t.fun);                       // 3
 - The order returned by `m.keys()` and `m.values()` is not insertion order.
   Do not make game logic or saved output depend on it.
 - `m.reserve(n)` reserves capacity in advance.
+- `m.contains(key)` checks membership without changing the map; keys keep their existing equality rules.
+- `m.remove(key)` deletes an entry and returns true, or returns false if absent. Successful removal
+  invalidates active foreach iterators. Removing a missing key leaves iterators valid.
 - Vector keys compare by **component count and exact component values**, not by storage address.
   After `m[math.Vector3(1,2,3)] = "a";`, a newly created Vector3 with the same values can look up, overwrite, or remove the entry.
   Vector2 and Vector3 differ; `+0.0` and `-0.0` are equal. Sets also merge equal vectors.
@@ -595,6 +608,9 @@ Use `unique.add(value)`, `unique.remove(value)`, and `unique.contains(value)` fo
 Set keys remain type-sensitive: integer `1` and float `1.0` are different elements.
 Adding or removing elements during foreach raises an error on the next iteration;
 duplicate adds and missing removes do not change the collection.
+`unique.values()` returns a new list in unspecified order. Clearing or rearranging that list leaves
+the set unchanged. Nested containers remain shared, while modifying a returned vector does not change
+the vector key stored in the set. Calling `values()` during foreach does not invalidate its iterator.
 
 ### Clearing, shallow copies, and array filling
 
