@@ -170,23 +170,23 @@ struct Decoder {
         double number = yyjson_get_num(value);
         if (yyjson_is_sint(value)) {
             int64_t n = yyjson_get_sint(value);
-            if (n >= INT32_MIN && n <= INT32_MAX) { worker.Var_SetInt(&out, static_cast<int32_t>(n)); return true; }
+            worker.Var_SetInt(&out, n); return true;
         } else if (yyjson_is_uint(value)) {
             uint64_t n = yyjson_get_uint(value);
-            if (n <= INT32_MAX) { worker.Var_SetInt(&out, static_cast<int32_t>(n)); return true; }
+            if (n <= uint64_t(INT64_MAX)) { worker.Var_SetInt(&out, static_cast<int64_t>(n)); return true; }
         } else if (yyjson_is_raw(value)) {
             const std::string token(yyjson_get_raw(value), yyjson_get_len(value));
             integer = token.find_first_of(".eE") == std::string::npos;
-            if (integer && strict) return result.Fail(path, "integer outside int32 range");
+            if (integer && strict) return result.Fail(path, "integer outside int64 range");
             yyjson_val numeric; yyjson_read_err error;
             if (!yyjson_read_number(token.c_str(), &numeric, 0, nullptr, &error))
                 return result.Fail(path, "number outside float32 range");
             number = yyjson_get_num(&numeric);
         }
-        if (integer && strict) return result.Fail(path, "integer outside int32 range");
+        if (integer && strict) return result.Fail(path, "integer outside int64 range");
         if (!std::isfinite(number) || std::fabs(number) > (std::numeric_limits<float>::max)())
             return result.Fail(path, "number outside float32 range");
-        if (integer) result.warnings.push_back(path + ": integer outside int32 range converted to float32");
+        if (integer) result.warnings.push_back(path + ": integer outside int64 range converted to float32");
         worker.Var_SetFloat(&out, static_cast<float>(number)); return true;
     }
     bool Value(yyjson_val* value, VarInfo& out, const std::string& path, int depth) {

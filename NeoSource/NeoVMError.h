@@ -59,7 +59,7 @@ namespace NeoScript
 	X(RTE_DEFAULT_VALUE,           "unknown default value") \
 	X(RTE_INTEGER_DIV_ZERO,        "integer division by zero") \
 	X(RTE_INTEGER_DIV_OVERFLOW,    "integer division overflow") \
-	X(RTE_INTEGER_SHIFT_RANGE,     "shift count must be between 0 and 31")
+	X(RTE_INTEGER_SHIFT_RANGE,     "shift count must be between 0 and 63")
 
 enum ENeoRuntimeError
 {

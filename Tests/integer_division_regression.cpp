@@ -69,7 +69,7 @@ int main() {
     for (bool debug : {false, true}) for (bool image : {false, true}) {
         for (const std::string op : {"/", "%"}) {
             for (bool overflow : {false, true}) {
-                const std::string a = overflow ? "-2147483648" : "7";
+                const std::string a = overflow ? "-9223372036854775808" : "7";
                 const std::string b = overflow ? "-1" : "0";
                 const char* reason = overflow ? "integer division overflow" : "integer division by zero";
                 for (const std::string target : {"x", "list[0]", "map.k", "array[0]", "nested[0][0]", "mapped.k[0]"}) {
@@ -103,10 +103,10 @@ int main() {
             }
             // Boundary-adjacent operands, signs, and both literal and runtime evaluation.
             struct Pair { const char* a; const char* b; const char* div; const char* mod; };
-            for (const Pair& p : {Pair{"-2147483648","1","-2147483648","0"},
-                Pair{"-2147483648","2","-1073741824","0"},
-                Pair{"-2147483647","-1","2147483647","0"},
-                Pair{"2147483647","-1","-2147483647","0"},
+            for (const Pair& p : {Pair{"-9223372036854775808","1","-9223372036854775808","0"},
+                Pair{"-9223372036854775808","2","-4611686018427387904","0"},
+                Pair{"-9223372036854775807","-1","9223372036854775807","0"},
+                Pair{"9223372036854775807","-1","-9223372036854775807","0"},
                 Pair{"-7","3","-2","-1"}, Pair{"7","-3","-2","1"}, Pair{"0","-1","0","0"}}) {
                 const std::string expected = op == "/" ? p.div : p.mod;
                 const std::string expression = std::string(p.a) + " " + op + " " + p.b;

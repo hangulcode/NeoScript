@@ -7,8 +7,8 @@ import system;
 const REG_CONST = 6 * 7;
 const REG_MASK = 0x10 | 0x04;
 const REG_SOURCE_LINE = __LINE__;
-const REG_HEX_MAX = 0xffffffff;   // 32-bit two's complement -> -1
-const REG_HEX_MIN = 0x80000000;   // -2147483648
+const REG_HEX_MAX = 0xffffffffffffffff;   // 64-bit two's complement -> -1
+const REG_HEX_MIN = 0x8000000000000000;   // -9223372036854775808
 const REG_EXP = 1.2e3;            // exponent literal via const/define path
 
 var regressionTotal = 0;
@@ -880,9 +880,9 @@ fun TestSwitch()
 
 fun TestNumberLiterals()
 {
-    // Hex integer literals: parsed as exact int32 bit patterns (not via double).
-    Check(0xffffffff == -1, __LINE__);
-    Check(0x80000000 == -2147483648, __LINE__);
+    // Hex integer literals: parsed as exact int64 bit patterns (not via double).
+    Check(0xffffffffffffffff == -1, __LINE__);
+    Check(0x8000000000000000 == -9223372036854775808, __LINE__);
     Check(0x7fffffff == 2147483647, __LINE__);
     Check(0xff == 255, __LINE__);
     Check(0x100 == 256, __LINE__);
@@ -892,7 +892,7 @@ fun TestNumberLiterals()
     Check((0xf0 | 0x0f) == 0xff, __LINE__);
     // Hex literals through the const/define path.
     Check(REG_HEX_MAX == -1, __LINE__);
-    Check(REG_HEX_MIN == -2147483648, __LINE__);
+    Check(REG_HEX_MIN == -9223372036854775808, __LINE__);
 
     // Exponent float literals with exact representable values.
     Check(1e0 == 1.0, __LINE__);

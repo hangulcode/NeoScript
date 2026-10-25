@@ -1178,7 +1178,7 @@ NS_API int32_t NS_CALL NsIsRunning(NsRuntime* rt, NsInstance inst)
     return (rt != nullptr && rt->rt != nullptr && rt->rt->IsRunning(ToInstance(inst))) ? 1 : 0;
 }
 
-NS_API int32_t NS_CALL NsGetGlobalInt(NsRuntime* rt, NsInstance inst, const char* name, int32_t len, int32_t* out)
+NS_API int32_t NS_CALL NsGetGlobalInt(NsRuntime* rt, NsInstance inst, const char* name, int32_t len, int64_t* out)
 {
     if (rt == nullptr || rt->rt == nullptr || out == nullptr)
         return 0;
@@ -1203,7 +1203,7 @@ NS_API int32_t NS_CALL NsGetGlobalString(NsRuntime* rt, NsInstance inst, const c
     return 1;
 }
 
-NS_API int32_t NS_CALL NsSetGlobalInt(NsRuntime* rt, NsInstance inst, const char* name, int32_t len, int32_t v)
+NS_API int32_t NS_CALL NsSetGlobalInt(NsRuntime* rt, NsInstance inst, const char* name, int32_t len, int64_t v)
 {
     if (rt == nullptr || rt->rt == nullptr)
         return 0;
@@ -1262,7 +1262,7 @@ NS_API void NS_CALL NsCallEnd(NsCall* call)
     delete call;
 }
 
-NS_API void NS_CALL NsCallArgInt(NsCall* call, int32_t v)
+NS_API void NS_CALL NsCallArgInt(NsCall* call, int64_t v)
 {
     if (call != nullptr) call->invocation.argInt(v);
 }
@@ -1395,7 +1395,7 @@ NS_API int32_t NS_CALL NsCallRetType(NsCall* call)
     return call != nullptr ? (int32_t)call->invocation.retType() : NS_TYPE_NONE;
 }
 
-NS_API int32_t NS_CALL NsCallRetInt(NsCall* call)
+NS_API int64_t NS_CALL NsCallRetInt(NsCall* call)
 {
     return call != nullptr ? call->invocation.retInt() : 0;
 }
@@ -1502,7 +1502,7 @@ NS_API int32_t NS_CALL NsCtxArgType(NsContext* ctx, int32_t i)
     return (int32_t)Deref(ctx)->argType((std::size_t)i);
 }
 
-NS_API int32_t NS_CALL NsCtxArgInt(NsContext* ctx, int32_t i)
+NS_API int64_t NS_CALL NsCtxArgInt(NsContext* ctx, int32_t i)
 {
     return (ctx != nullptr && i >= 0) ? Deref(ctx)->argInt((std::size_t)i) : 0;
 }
@@ -1657,7 +1657,7 @@ NS_API NsFunction* NS_CALL NsCtxArgFunction(NsContext* ctx, int32_t i)
     return fn;
 }
 
-NS_API void NS_CALL NsCtxRetInt(NsContext* ctx, int32_t v)
+NS_API void NS_CALL NsCtxRetInt(NsContext* ctx, int64_t v)
 {
     if (ctx != nullptr) Deref(ctx)->retInt(v);
 }
@@ -1731,7 +1731,7 @@ NS_API void NS_CALL NsCtxFail(NsContext* ctx, int32_t code, const char* msg, int
 //==============================================================================
 // 컬렉션 빌더
 //==============================================================================
-NS_API void NS_CALL NsMapSetInt(NsMapBuilder* m, const char* k, int32_t klen, int32_t v)
+NS_API void NS_CALL NsMapSetInt(NsMapBuilder* m, const char* k, int32_t klen, int64_t v)
 {
     if (m != nullptr) Deref(m)->setInt(SV(k, klen), v);
 }
@@ -1796,7 +1796,7 @@ NS_API void NS_CALL NsListPushNull(NsListBuilder* l)
     if (l) Deref(l)->pushNull();
 }
 
-NS_API void NS_CALL NsListPushInt(NsListBuilder* l, int32_t v)
+NS_API void NS_CALL NsListPushInt(NsListBuilder* l, int64_t v)
 {
     if (l != nullptr) Deref(l)->pushInt(v);
 }
@@ -1831,7 +1831,7 @@ NS_API void NS_CALL NsListPushObject(NsListBuilder* l, NsObjectType t, void* use
     Deref(l)->pushObject(resolved, userData);
 }
 
-NS_API void NS_CALL NsListSetInt(NsListBuilder* l, int32_t index, int32_t v)
+NS_API void NS_CALL NsListSetInt(NsListBuilder* l, int32_t index, int64_t v)
 {
     if (l != nullptr) Deref(l)->setInt(index, v);
 }
@@ -1913,7 +1913,7 @@ NS_API int32_t NS_CALL NsMapType(NsMapReader* m, const char* k, int32_t klen)
     return m != nullptr ? (int32_t)Deref(m)->type(SV(k, klen)) : NS_TYPE_NONE;
 }
 
-NS_API int32_t NS_CALL NsMapGetInt(NsMapReader* m, const char* k, int32_t klen, int32_t* out)
+NS_API int32_t NS_CALL NsMapGetInt(NsMapReader* m, const char* k, int32_t klen, int64_t* out)
 {
     if (m == nullptr || out == nullptr)
         return 0;
@@ -2011,7 +2011,7 @@ NS_API int32_t NS_CALL NsListRdType(NsListReader* l, int32_t index)
     return l != nullptr ? (int32_t)Deref(l)->type(index) : NS_TYPE_NONE;
 }
 
-NS_API int32_t NS_CALL NsListRdGetInt(NsListReader* l, int32_t index, int32_t* out)
+NS_API int32_t NS_CALL NsListRdGetInt(NsListReader* l, int32_t index, int64_t* out)
 {
     if (l == nullptr || out == nullptr)
         return 0;
@@ -2099,7 +2099,7 @@ NS_API uint8_t* NS_CALL NsArrayBoolBits(NsArrayView* a)
     return a != nullptr ? Deref(a)->boolBits() : nullptr;
 }
 
-NS_API int32_t* NS_CALL NsArrayInts(NsArrayView* a)
+NS_API int64_t* NS_CALL NsArrayInts(NsArrayView* a)
 {
     return a != nullptr ? Deref(a)->ints() : nullptr;
 }

@@ -228,7 +228,7 @@ namespace NeoScript
         // 그냥 `var` 로 선언한 전역은 여기서 찾지 못한다.
         //----------------------------------------------------------------------
 
-        public bool TryGetInt(string name, out int value)
+        public bool TryGetInt(string name, out long value)
         {
             ThrowIfDead();
             NeoUtf8.Frame frame = NeoUtf8.Push();
@@ -271,7 +271,7 @@ namespace NeoScript
             finally { NeoUtf8.Pop(frame); }
         }
 
-        public bool SetInt(string name, int value)
+        public bool SetInt(string name, long value)
         {
             ThrowIfDead();
             NeoUtf8.Frame frame = NeoUtf8.Push();

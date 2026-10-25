@@ -43,7 +43,7 @@ int main() {
         Script(runtime, std::string("return system.jsonEncode({\"a\":[") + expr + "]})==null && system.jsonError().find(\"$.a[0]\")>=0;", std::string("reject ") + expr);
     Script(runtime, R"(return system.jsonDecode("null")==null && system.jsonError()=="" && system.jsonEncode(null)=="null";)", "successful null root");
     Script(runtime, R"(system.jsonDecode("{"); var error=system.jsonError(); var a=system.jsonDecode("[1,1.0,1e0,-2147483648,2147483647]"); return error!="" && system.jsonError()=="" && type(a[0])=="int" && type(a[1])=="float" && type(a[2])=="float" && a[3]==-2147483648 && a[4]==2147483647;)", "numeric tokens and clearing error");
-    for (const char* token : {"2147483648", "-2147483649", "18446744073709551616", "9999999999999999999999999999999999999999999999", "1e9999", "3.5e38"})
+    for (const char* token : {"9223372036854775808", "-9223372036854775809", "18446744073709551616", "9999999999999999999999999999999999999999999999", "1e9999", "3.5e38"})
         Script(runtime, std::string("return system.jsonDecode(\"{\\\"a\\\":[") + token + "]}\")==null && system.jsonError().find(\"$.a[0]\")>=0;", token);
     Script(runtime, R"(var a=0; var i=0; while(i<64) { a=[a]; i++; } var s=system.jsonEncode(a); if(s==null || system.jsonDecode(s)==null) return false; return system.jsonEncode([a])==null && system.jsonDecode("["..s.."]")==null;)", "depth 64 and 65");
     Script(runtime, R"(return system.jsonDecode("{\"a\":\"\\u0000\"}")==null && system.jsonError().find("$.a")>=0;)", "NUL rejection");

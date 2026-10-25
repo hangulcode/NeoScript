@@ -132,7 +132,7 @@ static int32_t NS_CALL OnMethod(void* user, int32_t slot, NsContext* ctx,
             NsListReader* list = NsCtxArgList(ctx, 1);
             const NsStr* keys = NULL;
             int32_t count = 0, unsupported = 0, i;
-            Check(sizeof(NsJsonResult) == 48, "JSON result ABI layout");
+            Check(sizeof(NsJsonResult) == (sizeof(void*) == 8 ? 48 : 36), "JSON result ABI layout");
             Check(NsCtxArgToJson(ctx, 0, 1, &first), "encode JSON through C ABI");
             Check(SameStr(first.text.data, first.text.len, "{\"a\":1,\"b\":100.0}"), "sorted JSON with real type");
             for (i = 0; i < 40; ++i) NsCtxArgToJson(ctx, 1, 0, &next);
@@ -144,8 +144,8 @@ static int32_t NS_CALL OnMethod(void* user, int32_t slot, NsContext* ctx,
             Check(NsListRdIsNull(list, 0) && !NsListRdIsNull(list, 99), "list null versus invalid index");
             Check(NsCtxArgIsNativeObject(ctx, 2) && NsCtxArgObjectUserData(ctx, 2) == NULL, "native object recognized with null userdata");
             Check(!NsCtxArgToJson(ctx, 2, 0, &next) && next.error.len > 0, "native object JSON rejected");
-            Check(!NsCtxRetJson(ctx, "2147483648", 10, 1, 0, &next) && next.error.len > 0, "strict integer error");
-            Check(NsCtxRetJson(ctx, "2147483648", 10, 0, 0, &next) && next.warningCount == 1, "permissive integer warning");
+            Check(!NsCtxRetJson(ctx, "9223372036854775808", 19, 1, 0, &next) && next.error.len > 0, "strict integer error");
+            Check(NsCtxRetJson(ctx, "9223372036854775808", 19, 0, 0, &next) && next.warningCount == 1, "permissive integer warning");
             Check(!NsCtxRetJson(ctx, "[]", 2, 1, 1, &next), "map-only decode rejects list");
             Check(!NsCtxRetJson(ctx, NULL, 3, 1, 0, &next), "invalid JSON buffer rejected");
             Check(!NsCtxArgToJson(ctx, -1, 0, &next), "negative JSON index rejected");
@@ -193,7 +193,7 @@ static int32_t NS_CALL OnMethod(void* user, int32_t slot, NsContext* ctx,
             int32_t count = NsListRdCount(list);
             for (i = 0; i < count; ++i)
             {
-                int32_t v = 0;
+                int64_t v = 0;
                 if (NsListRdGetInt(list, i, &v))
                     total += v;
             }
@@ -241,7 +241,7 @@ static int32_t NS_CALL OnProperty(void* user, int32_t slot, NsContext* ctx,
 /* Collection return read inside the callback, where the reader is alive. */
 typedef struct HarvestedMap
 {
-    int32_t gold;
+    int64_t gold;
     int32_t haveGold;
     char    name[32];
     int32_t haveName;
@@ -463,7 +463,7 @@ int main(void)
 
     /* --- globals --- */
     {
-        int32_t counter = 0;
+        int64_t counter = 0;
         Check(NsGetGlobalInt(rt, instance, "counter", 7, &counter) == 1 && counter == 10,
               "global read before call == 10");
         call = NsCallBeginName(rt, instance, "Bump", 4);
@@ -547,6 +547,32 @@ int main(void)
                 NsDestroyProgram(rt, loaded);
             }
         }
+    }
+
+    /* 64비트 인자, 결과, 전역 값이 C 경계에서 잘리지 않는지 확인한다. */
+    {
+        const int64_t values[] = { INT64_MIN, INT64_MAX, INT64_C(5000000000), -INT64_C(5000000000) };
+        size_t n;
+        for (n = 0; n < sizeof(values) / sizeof(values[0]); ++n)
+        {
+            int64_t read = 0;
+            call = NsCallBegin(rt, instance, addFn);
+            NsCallArgInt(call, values[n]);
+            NsCallArgInt(call, 0);
+            Check(NsCallInvokeR(call, &result) == NS_RUN_COMPLETED && result.i == values[n], "wide integer call");
+            NsCallEnd(call);
+            call = NsCallBegin(rt, instance, addFn);
+            NsCallArgInt(call, values[n]);
+            NsCallArgInt(call, 0);
+            Check(NsCallInvoke(call) == NS_RUN_COMPLETED && NsCallRetInt(call) == values[n], "wide borrowed integer result");
+            NsCallEnd(call);
+            Check(NsSetGlobalInt(rt, instance, "counter", 7, values[n]) &&
+                NsGetGlobalInt(rt, instance, "counter", 7, &read) && read == values[n], "wide integer global");
+        }
+        call = NsCallBeginName(rt, instance, "HostDouble", 10);
+        NsCallArgInt(call, INT64_C(5000000000));
+        Check(NsCallInvokeR(call, &result) == NS_RUN_COMPLETED && result.i == INT64_C(10000000000), "wide native callback");
+        NsCallEnd(call);
     }
 
     /* --- teardown --- */

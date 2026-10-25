@@ -230,13 +230,13 @@ public:
     void reserve(int count);
     void resize(int count);
     int  count() const;
-    void pushInt(int32_t v);
+    void pushInt(int64_t v);
     void pushFloat(float v);
     void pushBool(bool v);
     void pushNull();
     void pushString(StringView v);
     void pushVec3(float x, float y, float z);
-    void setInt(int index, int32_t v);
+    void setInt(int index, int64_t v);
     void setFloat(int index, float v);
     void setString(int index, StringView v);
     MapBuilder  pushMap();       // 중첩 map 원소
@@ -253,7 +253,7 @@ private:
 class MapBuilder
 {
 public:
-    void setInt(StringView key, int32_t v);
+    void setInt(StringView key, int64_t v);
     void setFloat(StringView key, float v);
     void setBool(StringView key, bool v);
     void setString(StringView key, StringView v);
@@ -280,7 +280,8 @@ public:
     // 실제 null과 네이티브 객체를 VM 타입으로 판별한다. 없는 키는 둘 다 false다.
     bool isNull(StringView key) const;
     bool isNativeObject(StringView key) const;
-    bool getInt(StringView key, int32_t& out) const;
+    bool getInt(StringView key, int64_t& out) const;
+    bool getInt(StringView key, int32_t& out) const { int64_t v; if (!getInt(key, v) || v < INT32_MIN || v > INT32_MAX) return false; out = static_cast<int32_t>(v); return true; }
     bool getFloat(StringView key, float& out) const;
     bool getBool(StringView key, bool& out) const;
     bool getString(StringView key, StringView& out) const;  // zero-copy VM 문자열 뷰
@@ -303,7 +304,8 @@ public:
     // 실제 null과 네이티브 객체를 VM 타입으로 판별한다. 없는 원소는 둘 다 false다.
     bool isNull(int index) const;
     bool isNativeObject(int index) const;
-    bool getInt(int index, int32_t& out) const;
+    bool getInt(int index, int64_t& out) const;
+    bool getInt(int index, int32_t& out) const { int64_t v; if (!getInt(index, v) || v < INT32_MIN || v > INT32_MAX) return false; out = static_cast<int32_t>(v); return true; }
     bool getFloat(int index, float& out) const;
     bool getBool(int index, bool& out) const;
     bool getString(int index, StringView& out) const;
@@ -331,7 +333,7 @@ public:
     ArrayElementType elementType() const;
     int count() const;
     uint8_t* boolBits() const;  // nullptr unless elementType()==Bool
-    int32_t* ints() const;      // nullptr unless elementType()==Int
+    int64_t* ints() const;      // nullptr unless elementType()==Int
     float* floats() const;      // nullptr unless elementType()==Float
     int vectorDimension() const; // 2/3/4 for vector arrays; 0 otherwise
     bool getVec(int index, float out[4]) const; // copies one value, unused components are zero
@@ -363,7 +365,7 @@ public:
     ValueType   argType(std::size_t i) const;
     // userData가 null이어도 기존 네이티브 객체 타입이면 true다.
     bool        argIsNativeObject(std::size_t i) const;
-    int32_t     argInt(std::size_t i) const;
+    int64_t     argInt(std::size_t i) const;
     float       argFloat(std::size_t i) const;
     bool        argBool(std::size_t i) const;
     StringView  argString(std::size_t i) const;   // VM 문자열 뷰(호출 중 유효)
@@ -382,7 +384,7 @@ public:
     void*       argObjectUserData(std::size_t i) const;
 
     // 반환 쓰기 (VM 반환 슬롯 직접)
-    void        retInt(int32_t v);
+    void        retInt(int64_t v);
     void        retFloat(float v);
     void        retBool(bool v);
     void        retString(StringView v);
@@ -519,7 +521,7 @@ struct CallResult
     RunStatus status = RunStatus::Failed;
     bool       ok()       const noexcept { return status == RunStatus::Completed; }
     ValueType  type()     const noexcept { return m_type; }
-    int32_t    asInt()    const noexcept { return m_i; }
+    int64_t    asInt()    const noexcept { return m_i; }
     float      asFloat()  const noexcept { return m_f[0]; }
     bool       asBool()   const noexcept { return m_i != 0; }
     StringView asString() const noexcept { return StringView(m_s.c_str(), m_s.size()); } // CallResult 살아있는 동안 유효
@@ -527,7 +529,7 @@ struct CallResult
 private:
     friend struct NeoScriptInternal;
     ValueType   m_type = ValueType::None;
-    int32_t     m_i = 0;
+    int64_t     m_i = 0;
     float       m_f[4] = { 0, 0, 0, 0 };
     std::string m_s;
 };
@@ -544,7 +546,7 @@ public:
     explicit operator bool() const noexcept; // 아직 실행하지 않은 유효한 일회 호출이면 true
 
     // 인자 push (호출 순서대로)
-    Invocation& argInt(int32_t v);
+    Invocation& argInt(int64_t v);
     Invocation& argFloat(float v);
     Invocation& argBool(bool v);
     Invocation& argString(StringView v);
@@ -579,7 +581,7 @@ public:
     // ⚠️ 이 뷰들은 인스턴스의 공유 반환 컨텍스트를 라이브로 읽는다. 같은 인스턴스에 다시 Call 하면
     //    무효화된다. 값을 나중에 쓰거나 여러 개를 동시에 보관하려면 위 invokeR/invokeReadMap 을 쓸 것.
     ValueType  retType() const;
-    int32_t    retInt() const;
+    int64_t    retInt() const;
     float      retFloat() const;
     bool       retBool() const;
     StringView retString() const;   // zero-copy VM 문자열 뷰
@@ -812,10 +814,11 @@ public:
     virtual bool IsRunning(InstanceHandle instance) const = 0;
 
     //--- 전역변수 (타입드 in-place) ---
-    virtual bool GetGlobalInt(InstanceHandle instance, StringView name, int32_t& out) const = 0;
+    virtual bool GetGlobalInt(InstanceHandle instance, StringView name, int64_t& out) const = 0;
+    bool GetGlobalInt(InstanceHandle instance, StringView name, int32_t& out) const { int64_t v; if (!GetGlobalInt(instance, name, v) || v < INT32_MIN || v > INT32_MAX) return false; out = static_cast<int32_t>(v); return true; }
     virtual bool GetGlobalFloat(InstanceHandle instance, StringView name, float& out) const = 0;
     virtual bool GetGlobalString(InstanceHandle instance, StringView name, StringView& out) const = 0;
-    virtual bool SetGlobalInt(InstanceHandle instance, StringView name, int32_t v) = 0;
+    virtual bool SetGlobalInt(InstanceHandle instance, StringView name, int64_t v) = 0;
     virtual bool SetGlobalFloat(InstanceHandle instance, StringView name, float v) = 0;
     virtual bool SetGlobalString(InstanceHandle instance, StringView name, StringView v) = 0;
 

@@ -79,7 +79,7 @@ bool ListInfo::SetValue(int idx, VarInfo* pValue)
 	_pVM->Move(&_Bucket[idx], pValue);
 	return true;
 }
-bool ListInfo::SetValue(int idx, int v)
+bool ListInfo::SetValue(int idx, NS_INT v)
 {
 	if (idx < 0 || idx >= _itemCount)
 		return false;

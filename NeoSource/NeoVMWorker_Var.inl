@@ -113,7 +113,7 @@ NEOS_FORCEINLINE void INeoVMWorker::Var_Release(VarInfo* d)
 	}
 	Var_ReleaseAlloc(d);
 }
-NEOS_FORCEINLINE void INeoVMWorker::Var_SetInt(VarInfo* d, int v)
+NEOS_FORCEINLINE void INeoVMWorker::Var_SetInt(VarInfo* d, NS_INT v)
 {
 	if (d->IsAllocType())
 		Var_Release(d);
@@ -250,7 +250,7 @@ inline bool INeoVMWorker::GetArg_StlString(int idx, std::string& r)
 	}
 	return false;
 }
-inline bool INeoVMWorker::GetArg_Int(int idx, int& r)
+inline bool INeoVMWorker::GetArg_Int(int idx, NS_INT& r)
 {
 	VarInfo* p = GetStackVar(idx);
 	if (p == nullptr) return false;

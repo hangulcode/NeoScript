@@ -366,7 +366,7 @@ void MapInfo::Insert(VarInfo* pKey, VarInfo* pValue)
 	}
 }
 
-void MapInfo::Insert(VarInfo* pKey, int v)
+void MapInfo::Insert(VarInfo* pKey, NS_INT v)
 {
 	VarInfo* pDest = Insert(pKey);
 	if (pDest == NULL) return;
@@ -375,7 +375,7 @@ void MapInfo::Insert(VarInfo* pKey, int v)
 	pDest->_int = v;
 }
 
-void MapInfo::Insert(int Key, VarInfo* pValue)
+void MapInfo::Insert(NS_INT Key, VarInfo* pValue)
 {
 	VarInfo var;
 	var.SetType(VAR_INT);
@@ -383,7 +383,7 @@ void MapInfo::Insert(int Key, VarInfo* pValue)
 	Insert(&var, pValue);
 }
 
-void MapInfo::Insert(int Key, int v)
+void MapInfo::Insert(NS_INT Key, NS_INT v)
 {
 	VarInfo var;
 	var.SetType(VAR_INT);

@@ -71,7 +71,7 @@ namespace NeoScript.Tests
                 using (NeoProgram program = runtime.Compile("import system; export fun F() { return system.jsonDecode(system.jsonEncode(7)); }", "probe.ns"))
                 using (NeoInstance instance = program.CreateInstance())
                 {
-                    int value = instance.Call("F").InvokeInt();
+                    long value = instance.Call("F").InvokeInt();
                     if (value != 7)
                         throw new Exception($"{what}: probe returned {value}, expected 7");
                 }

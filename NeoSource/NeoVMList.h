@@ -56,7 +56,8 @@ struct ListInfo : AllocBase
 	bool GetValue(int idx, VarInfo* pValue);
 	VarInfo* GetValue(int idx);
 	bool SetValue(int idx, VarInfo* pValue);
-	bool SetValue(int idx, int v);
+	bool SetValue(int idx, NS_INT v);
+	bool SetValue(int idx, int v) { return SetValue(idx, NS_INT(v)); }
 	bool SetValue(int idx, NS_FLOAT v);
 
 	bool Insert(int idx, VarInfo* pValue);

@@ -259,16 +259,16 @@ static void NumericCases(IRuntime* runtime, bool debug, bool image)
         debug, image);
     Run(runtime, "saturating integer conversion", R"NS(
 export fun Probe(){var zero=0.0;var inf=1.0/zero;var nan=zero/zero;
- return toint(inf)==2147483647 && toint(-inf)==-2147483648 && toint(nan)==0
-  && toint(3000000000.0)==2147483647 && toint(-3000000000.0)==-2147483648
+ return toint(inf)==9223372036854775807 && toint(-inf)==-9223372036854775808 && toint(nan)==0
+  && toint(3000000000.0)==3000000000 && toint(-3000000000.0)==-3000000000
   && toint(2147483520.0)==2147483520 && toint(-2147483648.0)==-2147483648
   && toint(1.9)==1 && toint(-1.9)==-1 && toint(-0.0)==0;}
 )NS", debug, image);
     Run(runtime, "range numeric conversion", R"NS(
 export fun Probe(){var sum=0;for(var i in 0.9,3.9,1.9)sum+=i;
  var negative=0;for(var i in -3.9,0.9,1.9)negative+=i;
- var high=0;for(var i in 2147483646,3000000000.0)high+=1;
- var low=0;for(var i in -3000000000.0,-2147483647)low+=1;
+ var high=0;for(var i in 9223372036854775806,1e30)high+=1;
+ var low=0;for(var i in -1e30,-9223372036854775807)low+=1;
  var empty=0;for(var i in 3000000000.0,3000000000.0)empty+=1;
  var zero=0.0;var hugeStep=0;for(var i in 0,3,1.0/zero)hugeStep+=1;
  return sum==3 && negative==-6 && high==1 && low==1 && empty==0 && hugeStep==1;}

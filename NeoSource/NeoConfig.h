@@ -2,6 +2,8 @@
 
 #include <cstring>
 #include <cmath>
+#include <cstdint>
+#include <limits>
 
 namespace NeoScript
 {
@@ -17,6 +19,11 @@ typedef int				s32;
 // 반드시 float 로 설정
 #define NS_SINGLE_PRECISION
 typedef float		NS_FLOAT;
+// 스크립트 정수는 64비트이며 명령어·슬롯·컬렉션 개수는 32비트를 유지한다.
+using NS_INT = int64_t;
+using NS_UINT = uint64_t;
+static constexpr NS_INT NS_INT_MIN = (std::numeric_limits<NS_INT>::min)();
+static constexpr NS_INT NS_INT_MAX = (std::numeric_limits<NS_INT>::max)();
 
 // NOP_MOVF 는 SVMOperation 의 n23(정확히 4 byte)에 float 비트를 직접 담는다.
 // NS_FLOAT 를 double 로 바꾸면 이 값도 컴파일 타임에 false 가 되어, 컴파일러는
@@ -83,7 +90,8 @@ struct debug_info
 // 0131: retain every foreach source on entry; regenerate previously compiled loops.
 // 0132: preserve signed-zero constants; rebuild images with previously merged zeros.
 // 0133: initialize locals and enforce ordered operands and deferred assignment paths.
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('3' << 8) | ('3'))
+// 0134: 정수 값과 직렬화된 정수 상수를 64비트로 확장한다.
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('3' << 8) | ('4'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline

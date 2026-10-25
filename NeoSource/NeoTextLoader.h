@@ -276,12 +276,12 @@ bool	StringToDouble(double& r, const char *p);
 bool	StringToDoubleLow(double& r, const char *p);
 
 // 숫자 리터럴 파싱 결과: 정수/실수를 명시적으로 구분한다. 정수 리터럴은 double 을 거치지 않고
-// int32 로 정확히 파싱하므로 0xffffffff → -1 처럼 32비트 비트패턴이 보존된다.
+// int64로 정확히 파싱하므로 0xffffffffffffffff는 -1로 보존된다.
 struct ParsedNumber
 {
 	enum class Type { Int, Float };
 	Type    type;
-	int32_t intValue;    // type == Int 일 때 유효(정확한 32비트 값). Float values store zero here.
+	NS_INT intValue;    // type == Int 일 때 유효(정확한 64비트 값). Float values store zero here.
 	double  floatValue;  // 항상 채움(정수 리터럴의 크기 = (double)magnitude). Float 일 때 실제 값.
 };
 // 토큰 문자열을 ParsedNumber 로 파싱. 잘못된 형식이면 false.

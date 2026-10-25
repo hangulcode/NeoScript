@@ -4,6 +4,7 @@
 
 #include "UTFString.h"
 #include "NeoTextLoader.h"
+#include "NeoNumeric.h"
 #include <sstream>
 #include <locale>
 #include <clocale>
@@ -400,8 +401,8 @@ bool StringToDouble(double& r, const char* p) {
 
 #endif
 
-// 정수/실수를 명시적으로 구분해 파싱. 정수는 double 을 거치지 않고 int32 로 정확히 만든다.
-// (0xffffffff → uint32 4294967295 → int32 재해석 -1. 예전 (int)(double) 은 범위초과 시 INT_MIN 이었음.)
+// 정수와 실수를 구분하고 정수는 double을 거치지 않아 64비트 전체를 정확히 보존한다.
+// 16진수는 64비트 비트패턴으로 해석하므로 0xffffffffffffffff는 -1이다.
 bool StringToNumber(ParsedNumber& out, const char* p, bool allowMinMagnitude)
 {
 	const char* orig = p;
@@ -431,16 +432,15 @@ bool StringToNumber(ParsedNumber& out, const char* p, bool allowMinMagnitude)
 			return false;
 		for (const char* digit = p + 2; digit != q; ++digit)
 		{
-			if (uval > (UINT32_MAX - hexValue(*digit)) / 16u) return false;
+			if (uval > (UINT64_MAX - hexValue(*digit)) / 16u) return false;
 			uval = uval * 16u + hexValue(*digit);
 		}
 
-		uint32_t u32 = (uint32_t)uval;              // 32비트로 절단 후 int32 비트패턴
+		uint64_t bits = uval;             // 부호 처리는 64비트 비트패턴에서 수행한다.
 		double   mag = (double)uval;
 		out.type = ParsedNumber::Type::Int;
-		// Apply the sign before converting the uint32 bit pattern to int32.
-		// Signed negation would overflow for -0x80000000.
-		out.intValue   = (int32_t)(negative ? 0u - u32 : u32);
+		// 최소 정수의 부호 반전도 unsigned 산술로 처리한다.
+		out.intValue   = NeoIntFromBits(negative ? 0ull - bits : bits);
 		out.floatValue = negative ? -mag : mag;
 		return true;
 	}
@@ -459,9 +459,9 @@ bool StringToNumber(ParsedNumber& out, const char* p, bool allowMinMagnitude)
 		return true;
 	}
 
-	// 10진 정수: int64 누적 후 int32
+	// 10진 정수: unsigned 누적으로 범위를 확인한 뒤 부호를 적용한다.
 	uint64_t ival = 0;
-	const uint64_t maximum = negative || allowMinMagnitude ? uint64_t(INT32_MAX) + 1 : uint64_t(INT32_MAX);
+	const uint64_t maximum = negative || allowMinMagnitude ? uint64_t(NS_INT_MAX) + 1 : uint64_t(NS_INT_MAX);
 	int digits = 0;
 	const char* r = p;
 	while (valid_digit(*r))
@@ -473,8 +473,8 @@ bool StringToNumber(ParsedNumber& out, const char* p, bool allowMinMagnitude)
 		return false;
 
 	out.type = ParsedNumber::Type::Int;
-	const uint32_t bits = (uint32_t)ival;
-	out.intValue   = (int32_t)(negative ? 0u - bits : bits);
+	const uint64_t bits = ival;
+	out.intValue   = NeoIntFromBits(negative ? 0ull - bits : bits);
 	out.floatValue = negative ? -(double)ival : (double)ival;
 	return true;
 }

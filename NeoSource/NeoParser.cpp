@@ -73,7 +73,7 @@ void	SetCompileError(CArchiveRdWC& ar, const char*	lpszString, ...);
 	X(PCE_CONST_INVALID_OP, "Error (%d, %d): invalid operation in const expression near '%s'") \
 	X(PCE_CONST_DIV_ZERO, "Error (%d, %d): division by zero in const expression") \
 	X(PCE_CONST_DIV_OVERFLOW, "Error (%d, %d): integer division overflow in const expression") \
-	X(PCE_CONST_SHIFT_RANGE, "Error (%d, %d): shift count must be between 0 and 31 in const expression") \
+	X(PCE_CONST_SHIFT_RANGE, "Error (%d, %d): shift count must be between 0 and 63 in const expression") \
 	X(PCE_CASE_OUTSIDE_SWITCH, "Error (%d, %d): 'case' / 'default' can only be used inside a switch") \
 	X(PCE_SWITCH_DUPLICATE_CASE, "Error (%d, %d): duplicate case value in switch") \
 	X(PCE_SWITCH_DUPLICATE_DEFAULT, "Error (%d, %d): 'default' appears more than once in switch") \
@@ -158,7 +158,7 @@ struct SOperand
 	// 자리에서는 상수 풀을 거치지 않고 MOVI/MOVF 로 바로 실을 수 있다.
 	LiteralKind _literalKind;
 	NS_FLOAT _floatLiteral;
-	int _intLiteral;
+	NS_INT _intLiteral;
 	bool _readOnly = false;
     // A completed indexed assignment is still an lvalue, but its next value
     // consumer uses the captured component rather than rereading the owner.
@@ -209,7 +209,7 @@ struct SOperand
 		_floatLiteral = 0;
 		_intLiteral = 0;
 	}
-	void SetIntLiteral(int var, int value)
+	void SetIntLiteral(int var, NS_INT value)
 	{
 		_iVar = var;
 		_iArrayIndex = INVALID_ERROR_PARSEJOB;
@@ -394,7 +394,10 @@ static bool TryPushImmediate(CArchiveRdWC& ar, SFunctions& funs, int dest, const
 	const bool canReclaim = funs.CanPopLastStatic(source._iVar);
 
 	if (source.IsIntLiteral())
-		funs._cur->Push_MOVI(ar, dest, source._intLiteral, iDebugLine);
+	{
+		if (source._intLiteral < INT32_MIN || source._intLiteral > INT32_MAX) return false;
+		funs._cur->Push_MOVI(ar, dest, (int)source._intLiteral, iDebugLine);
+	}
 	else if (funs._cur->Push_MOVF(ar, dest, source._floatLiteral, iDebugLine) == false)
 		return false;   // double 빌드: 상수 풀 경유로 되돌아간다(슬롯은 그대로 둔다)
 
@@ -426,7 +429,7 @@ static bool TryFoldLiteralBinOp(SOperand& a, eNOperation op, const SOperand& b, 
 
 	const bool bothInt = (aInt && bInt);
 	bool resultIsInt = bothInt;
-	int      ri = 0;
+	NS_INT   ri = 0;
 	NS_FLOAT rf = 0;
 
 	// int op float 도 VM 과 같이 float 산술로 맞춘다.
@@ -436,18 +439,18 @@ static bool TryFoldLiteralBinOp(SOperand& a, eNOperation op, const SOperand& b, 
 	switch (op)
 	{
 	case NOP_ADD3:
-		if (bothInt) ri = a._intLiteral + b._intLiteral; else rf = fx + fy;
+		if (bothInt) ri = NeoIntAdd(a._intLiteral, b._intLiteral); else rf = fx + fy;
 		break;
 	case NOP_SUB3:
-		if (bothInt) ri = a._intLiteral - b._intLiteral; else rf = fx - fy;
+		if (bothInt) ri = NeoIntSub(a._intLiteral, b._intLiteral); else rf = fx - fy;
 		break;
 	case NOP_MUL3:
-		if (bothInt) ri = a._intLiteral * b._intLiteral; else rf = fx * fy;
+		if (bothInt) ri = NeoIntMul(a._intLiteral, b._intLiteral); else rf = fx * fy;
 		break;
 	case NOP_DIV3:
 		if (bothInt)
 		{
-			if (b._intLiteral == 0 || (a._intLiteral == INT_MIN && b._intLiteral == -1))
+			if (b._intLiteral == 0 || (a._intLiteral == NS_INT_MIN && b._intLiteral == -1))
 				return false;   // 런타임 예외로 남긴다
 			ri = a._intLiteral / b._intLiteral;
 		}
@@ -457,17 +460,17 @@ static bool TryFoldLiteralBinOp(SOperand& a, eNOperation op, const SOperand& b, 
 	// 기존과 같은 타입 에러가 런타임에 나게 둔다.
 	case NOP_PERSENT3:
 		if (bothInt == false || b._intLiteral == 0 ||
-			(a._intLiteral == INT_MIN && b._intLiteral == -1))
+			(a._intLiteral == NS_INT_MIN && b._intLiteral == -1))
 			return false;
 		ri = a._intLiteral % b._intLiteral;
 		break;
 	case NOP_LSHIFT3:
-		if (bothInt == false || static_cast<unsigned int>(b._intLiteral) >= 32) return false;
-		ri = NeoShiftLeft32(a._intLiteral, b._intLiteral);
+		if (bothInt == false || static_cast<NS_UINT>(b._intLiteral) >= 64) return false;
+		ri = NeoShiftLeft(a._intLiteral, b._intLiteral);
 		break;
 	case NOP_RSHIFT3:
-		if (bothInt == false || static_cast<unsigned int>(b._intLiteral) >= 32) return false;
-		ri = NeoShiftRight32(a._intLiteral, b._intLiteral);
+		if (bothInt == false || static_cast<NS_UINT>(b._intLiteral) >= 64) return false;
+		ri = NeoShiftRight(a._intLiteral, b._intLiteral);
 		break;
 	case NOP_XOR3:
 		if (bothInt == false) return false;
@@ -1936,11 +1939,10 @@ bool IsTempVar(int iVar)
 }
 // (구 IsFloatNumberToken 제거: 정수/실수 판정은 StringToNumber → ParsedNumber.type 으로 통합됨)
 
-// Parsed integers already carry the int32 bit pattern (including 0x80000000).
-// Preserve that established wrap rule without negating INT_MIN in signed C++.
-static int NegateParsedInteger(int value)
+// 파싱된 정수의 64비트 비트패턴을 유지하면서 최소 정수의 부호 반전을 처리한다.
+static NS_INT NegateParsedInteger(NS_INT value)
 {
-	return value == INT_MIN ? value : -value;
+	return value == NS_INT_MIN ? value : -value;
 }
 
 // This Function No Error Because Try Only
@@ -1957,20 +1959,20 @@ TK_TYPE Try_ParseIntNum(int& iResultInt, CArchiveRdWC& ar, SFunctions& funs, SVa
 	if (true == StringToNumber(num, tk1.c_str()))
 	{
 		u16 c = ar.GetData(false);
-		if (c == '.' || num.type == ParsedNumber::Type::Float)
+		if (c == '.' || num.type == ParsedNumber::Type::Float || num.intValue < INT32_MIN || num.intValue > INT32_MAX)
 		{
 			ar.PushToken(tkType1, tk1);
 			return TK_NONE; // float or double is not int
 		}
 		else
 		{
-			int inum = num.intValue;   // 정수 리터럴은 int32 로 정확히 파싱됨(0xffffffff→-1)
+			NS_INT inum = num.intValue;   // 정수 리터럴의 64비트 값을 보존한다.
 			if (tkTypePre == TK_MINUS)
 				inum = NegateParsedInteger(inum);
 #if 0
 			if (IsShort(inum))
 			{
-				iResultInt = inum;
+				iResultInt = static_cast<int>(inum);
 				tkType2 = GetToken(ar, tk2);
 				if (tkType2 == tkTypeEnd1 || tkType2 == tkTypeEnd2 || tkType2 == tkTypeEnd3)
 					return tkType2;
@@ -1979,7 +1981,7 @@ TK_TYPE Try_ParseIntNum(int& iResultInt, CArchiveRdWC& ar, SFunctions& funs, SVa
 				return tkType2;
 			}
 #endif
-			iResultInt = inum;
+			iResultInt = static_cast<int>(inum);
 			tkType2 = GetToken(ar, tk2);
 			if (tkType2 == tkTypeEnd1 || tkType2 == tkTypeEnd2 || tkType2 == tkTypeEnd3)
 				return tkType2;
@@ -2275,7 +2277,7 @@ bool ParseNum(SOperand& iResultStack, TK_TYPE tkTypePre, std::string& tk1, CArch
 		}
 		else
 		{
-			int inum = num.intValue;   // 정수 리터럴은 int32 로 정확히(0xffffffff→-1)
+			NS_INT inum = num.intValue;   // 정수 리터럴의 64비트 값을 보존한다.
 			if (tkTypePre == TK_MINUS)
 				inum = NegateParsedInteger(inum);
 			int staticVar = funs.AddStaticInt(inum);
@@ -5027,7 +5029,7 @@ bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport,
 struct SConstValue
 {
 	NeoCompileDefineTokenType type = NEO_DEFINE_TOKEN_NULL;
-	int i = 0;
+	NS_INT i = 0;
 	double f = 0;
 	std::string s;
 
@@ -5092,7 +5094,7 @@ static bool ParseConstPrimary(SConstValue& out, CArchiveRdWC& ar, SFunctions& fu
 			isFloat = true;
 		}
 		if (isFloat) { out.type = NEO_DEFINE_TOKEN_FLOAT; out.f = fval; }
-		else         { out.type = NEO_DEFINE_TOKEN_INT;   out.i = num.intValue; } // 정수 리터럴은 int32 로 정확히(0xffffffff→-1)
+		else         { out.type = NEO_DEFINE_TOKEN_INT;   out.i = num.intValue; } // 정수 리터럴의 64비트 값을 보존한다.
 		return true;
 	}
 	case TK_TRUE:  out.type = NEO_DEFINE_TOKEN_TRUE;  return true;
@@ -5185,7 +5187,7 @@ static bool EvalConstBinOp(SConstValue& a, TK_TYPE op, const SConstValue& b, CAr
 	case TK_MINUS:
 	case TK_MUL:
 		if (bothInt)
-			a.i = (op == TK_PLUS) ? (a.i + b.i) : (op == TK_MINUS) ? (a.i - b.i) : (a.i * b.i);
+			a.i = (op == TK_PLUS) ? (NeoIntAdd(a.i, b.i)) : (op == TK_MINUS) ? (NeoIntSub(a.i, b.i)) : (NeoIntMul(a.i, b.i));
 		else
 		{
 			double x = a.Num(), y = b.Num();
@@ -5207,7 +5209,7 @@ static bool EvalConstBinOp(SConstValue& a, TK_TYPE op, const SConstValue& b, CAr
 		}
 		if (bothInt)
 		{
-			if (a.i == INT_MIN && b.i == -1)
+			if (a.i == NS_INT_MIN && b.i == -1)
 			{
 				SetParserCompileError(ar, PCE_CONST_DIV_OVERFLOW);
 				return false;
@@ -5227,7 +5229,7 @@ static bool EvalConstBinOp(SConstValue& a, TK_TYPE op, const SConstValue& b, CAr
 			SetParserCompileError(ar, PCE_CONST_INVALID_OP, GetTokenString(op).c_str());
 			return false;
 		}
-		if ((op == TK_LSHIFT || op == TK_RSHIFT) && static_cast<unsigned int>(b.i) >= 32)
+		if ((op == TK_LSHIFT || op == TK_RSHIFT) && static_cast<NS_UINT>(b.i) >= 64)
 		{
 			SetParserCompileError(ar, PCE_CONST_SHIFT_RANGE);
 			return false;
@@ -5235,8 +5237,8 @@ static bool EvalConstBinOp(SConstValue& a, TK_TYPE op, const SConstValue& b, CAr
 		switch (op)
 		{
 		case TK_XOR:    a.i ^= b.i;  break;
-		case TK_LSHIFT: a.i = NeoShiftLeft32(a.i, b.i); break;
-		case TK_RSHIFT: a.i = NeoShiftRight32(a.i, b.i); break;
+		case TK_LSHIFT: a.i = NeoShiftLeft(a.i, b.i); break;
+		case TK_RSHIFT: a.i = NeoShiftRight(a.i, b.i); break;
 		case TK_AND:    a.i &= b.i;  break;
 		default:        a.i |= b.i;  break;
 		}

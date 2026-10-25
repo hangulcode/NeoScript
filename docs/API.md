@@ -65,7 +65,7 @@ callback. Selectors may follow their results: `tostring(5).len()` is valid.
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
 | `tostring(x)` | `string` | Same conversion `print` uses. Function values, including captured lambdas, produce `"function"`; null produces `"null"`. |
-| `toint(x)` | `int` | Truncates a float toward zero, clamps to `-2147483648..2147483647`, and maps NaN to `0`; also parses a numeric string. |
+| `toint(x)` | `int` | Truncates a float toward zero, clamps to `-9223372036854775808..9223372036854775807`, and maps NaN to `0`; also parses a numeric string. |
 | `tofloat(x)` | `float` | Parses a numeric string. |
 | `tosize(x)` | `int` | string: UTF-8 character count. list/map/set/array: element count. Vector2/3/4/Quaternion: component count. Anything else: `0`. |
 | `type(x)` | `string` | Exact strings in section 11. |
@@ -252,7 +252,7 @@ Use `import system;` before calling these functions.
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
 | `system.jsonEncode(value, sortKeys = false)` | `string\|null` | UTF-8 JSON; optional recursive key sorting. Failure returns null; see `jsonError()` and [JSON rules](JSON.md) |
-| `system.jsonDecode(text: string)` | `var` | Strict int32/float32 JSON conversion; any supported root. Failure returns null |
+| `system.jsonDecode(text: string)` | `var` | Strict int64/float32 JSON conversion; any supported root. Failure returns null |
 | `system.jsonError()` | `string` | Last JSON conversion error in this execution instance, including data path; empty on success |
 | `system.time()` | `int` | Unix seconds |
 | `system.date(format: string, time: int)` | `string` | Local-time formatting; UTF-8 output limited to 79 bytes; invalid formats or oversized output raise an error |
@@ -268,8 +268,10 @@ caller and aborts it, and there is no success/failure return value. The name is 
 The call is synchronous: `yield`, `sleep`, or another suspension from that module raises an error.
 
 `system.date` preserves UTF-8 literals and converts localized names to UTF-8. Empty format returns `""`.
-Its timestamp retains the unsigned 32-bit interpretation: a negative int denotes seconds above `2147483647`,
-not a date before 1970. Supported `strftime` directives and modifiers depend on the platform;
+Positive timestamps accept signed 64-bit Unix seconds, up to `253402300799` (the end of year 9999),
+subject to platform `time_t` limits. For compatibility, negative values in the former signed 32-bit
+range retain their unsigned 32-bit interpretation, rather than representing dates before 1970.
+Other negative values and unsupported timestamps are rejected. Supported `strftime` directives and modifiers depend on the platform;
 unsupported or incomplete directives are rejected before calling the C library.
 
 A module value returned by `system.load` has no callable members; `system.pcall(m)` running the
@@ -425,7 +427,7 @@ each value; `foreach(var index, value in a)` is rejected.
   `system.array(math.Quaternion(w,x,y,z), n)` creates a Vector4 array with the same w,x,y,z order; there is no automatic
   conversion to a host quaternion layout. Resizing uses the vector initial value captured at creation.
 - int and float arrays convert between those two numeric types on assignment. Float to int truncates
-  toward zero, clamps to the int32 range, and maps NaN to zero, matching `toint`. Bool arrays accept only bool values.
+  toward zero, clamps to the int64 range, and maps NaN to zero, matching `toint`. Bool arrays accept only bool values.
 - `a.append(value)` appends exactly one value. `a.resize(size)` changes the length; newly grown
   elements receive the initial value passed to `system.array`, while shrinking drops the tail.
   A negative size becomes zero, matching `list.resize`.
@@ -595,7 +597,7 @@ detach on modification. Internal references do not escape the write or become sc
 Native vector properties still call their getter and setter once per successful component write.
 WREF precedes an ordinary collection write. Stored vectors consume both atomically; other values
 use normal write dispatch. Native vector properties retain a resumable getter/setter boundary.
-There is no separate vector write-back opcode. Regenerate images older than bytecode version 0133 to apply local initialization, ordered operand evaluation, deferred assignment paths, and the earlier signed-zero and foreach fixes.
+There is no separate vector write-back opcode. Regenerate images older than bytecode version 0134 for 64-bit integers, local initialization, ordered operand evaluation, deferred assignment paths, and the earlier signed-zero and foreach fixes.
 A selector immediately following an indexed assignment keeps the assigned slot writable:
 `(a[0][0] = math.Vector3(1,2,3))[1] = 9` updates `a[0][0]` to `(1,9,3)`.
 Reading that result into a local still makes an independent vector value via copy-on-write.
@@ -657,15 +659,16 @@ produced, so `!= null` is the presence test to use.
   `invalid function call 'Method'`. Native property failures identify `read` or `write` and
   the property name. Names remain available without debug info; explicit host error messages
   and error codes are preserved. Calling a non-callable value reports its type.
+- Script `int` values are signed 64-bit. Addition, subtraction, multiplication, negation, and increment/decrement wrap to the low 64 bits.
 - **`/` on two ints truncates toward zero.** Use `tofloat` when you want a real quotient.
-  Integer `/`, `%`, `/=`, and `%=` report a runtime error for a zero divisor or `INT_MIN` with
+  Integer `/`, `%`, `/=`, and `%=` report a runtime error for a zero divisor or `INT64_MIN` with
   divisor `-1`, without modifying the destination. The same invalid operations in `const` or
   `case` expressions are compile errors. Ordinary literal expressions retain runtime errors.
   Floating-point division retains IEEE infinity/NaN behavior. Ordered comparisons (`<`, `<=`, `>`, `>=`)
   involving NaN are false in expressions and branches; negation and short-circuit operators preserve that result.
-- `<<`, `>>`, `<<=`, and `>>=` require integer operands and a shift count in `0..31`.
+- `<<`, `>>`, `<<=`, and `>>=` require integer operands and a shift count in `0..63`.
   An invalid count is a runtime error before changing the destination; `const` and `case` expressions reject it at compile time.
-  Left shifts retain the low 32 bits, and right shifts extend the sign bit, including for negative operands.
+  Left shifts retain the low 64 bits, and right shifts extend the sign bit, including for negative operands.
 - **`..` concatenates, `+` adds.** `1 .. 2` is `"12"`.
 - **`elif` is removed**; use `else if`.
 - **Lambdas capture by value.** Read *Captured anonymous functions* in `ReadMe.md` before relying on

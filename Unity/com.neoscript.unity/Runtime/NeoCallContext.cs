@@ -29,7 +29,7 @@ namespace NeoScript
         //----------------------------------------------------------------------
         // 인자 읽기 — VM 슬롯 직접 읽기라 복사가 없다
         //----------------------------------------------------------------------
-        public int ArgInt(int index) => NeoNative.NsCtxArgInt(_ctx, index);
+        public long ArgInt(int index) => NeoNative.NsCtxArgInt(_ctx, index);
         public float ArgFloat(int index) => NeoNative.NsCtxArgFloat(_ctx, index);
         public bool ArgBool(int index) => NeoNative.NsCtxArgBool(_ctx, index) != 0;
 
@@ -122,7 +122,7 @@ namespace NeoScript
         //----------------------------------------------------------------------
         // 반환 쓰기
         //----------------------------------------------------------------------
-        public void Return(int value) => NeoNative.NsCtxRetInt(_ctx, value);
+        public void Return(long value) => NeoNative.NsCtxRetInt(_ctx, value);
         public void Return(float value) => NeoNative.NsCtxRetFloat(_ctx, value);
         public void Return(bool value) => NeoNative.NsCtxRetBool(_ctx, value ? 1 : 0);
         public void Return(Vector2 value) => NeoNative.NsCtxRetVec2(_ctx, value.x, value.y);

@@ -65,7 +65,7 @@ int SAMPLE_callback(INeoLoader* pLoader, std::string filename)
 		if (rt->TakeLastError(err))
 			printf("Error - VM Call : %.*s\n(Elapse:%d)\n", (int)err.size(), err.data(), (int)(t2 - t1));
 		else if (st == RunStatus::Completed)
-			printf("Sum %d + %d = %d\n(Elapse:%d)\n", 100, 200, call.retInt(), (int)(t2 - t1));
+			printf("Sum %d + %d = %lld\n(Elapse:%d)\n", 100, 200, (long long)call.retInt(), (int)(t2 - t1));
 	}
 	rt->DestroyInstance(inst);
 	rt->DestroyProgram(cr.program);

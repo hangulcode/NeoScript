@@ -409,7 +409,7 @@ void SetInfo::Insert(std::string& key)
 		_pVM->FreeString(&var);
 }
 
-void SetInfo::Insert(int key)
+void SetInfo::Insert(NS_INT key)
 {
 	VarInfo var;
 	var.SetType(VAR_INT);

@@ -19,19 +19,19 @@
 
 namespace NeoScript
 {
-// Callers validate count in [0, 31]. Keep VM and constant folding identical:
-// left shifts retain the low 32 bits; right shifts extend the sign bit.
-inline int NeoShiftLeft32(int value, int count)
+// 호출자가 시프트 수를 0..63으로 검증한다. VM과 상수 계산은 같은 규칙을 쓴다.
+// 왼쪽 시프트는 하위 64비트를 유지하고 오른쪽 시프트는 부호를 확장한다.
+inline NS_INT NeoShiftLeft(NS_INT value, NS_INT count)
 {
-	const u32 bits = static_cast<u32>(value) << count;
-	int result;
-	static_assert(sizeof(result) == sizeof(bits), "NeoScript integers must be 32 bits");
+	const NS_UINT bits = static_cast<NS_UINT>(value) << count;
+	NS_INT result;
+	static_assert(sizeof(result) == sizeof(bits), "NeoScript integer and unsigned payload widths must match");
 	std::memcpy(&result, &bits, sizeof(result));
 	return result;
 }
-inline int NeoShiftRight32(int value, int count)
+inline NS_INT NeoShiftRight(NS_INT value, NS_INT count)
 {
-	return value < 0 ? -1 - static_cast<int>((~static_cast<u32>(value)) >> count) : value >> count;
+	return value < 0 ? -1 - static_cast<NS_INT>((~static_cast<NS_UINT>(value)) >> count) : value >> count;
 }
 
 // ==와 맵/set 키가 참조의 동일성 규칙을 공유한다. 내용 비교나 재귀 순회는 하지 않는다.
@@ -690,7 +690,7 @@ NEOS_FORCEINLINE VarInfo* MapInfo::FindString(StringInfo* pKeyStr)
 // MapInfo::Find -> GetHashCode(타입 switch) -> 일반 탐색으로
 // 아웃오브라인 호출 4단을 타게 된다(실측: 문자열 키의 1.8배).
 // 해시는 GetHashCode(VarInfo*) 의 VAR_INT 경로와 같아야 한다.
-NEOS_FORCEINLINE VarInfo* MapInfo::FindInt(int key)
+NEOS_FORCEINLINE VarInfo* MapInfo::FindInt(NS_INT key)
 {
 	if (_BucketCapa <= 0)
 		return NULL;

@@ -5,11 +5,11 @@
 
 #if UINTPTR_MAX == UINT64_MAX
 static_assert(sizeof(NsStr)==16 && sizeof(NsError)==48 && sizeof(NsJsonResult)==48, "64-bit string layouts");
-static_assert(sizeof(NsCallResult)==48 && sizeof(NsRuntimeDesc)==64 && sizeof(NsObjectDesc)==40, "64-bit call layouts");
+static_assert(sizeof(NsCallResult)==56 && sizeof(NsRuntimeDesc)==64 && sizeof(NsObjectDesc)==40, "64-bit call layouts");
 static_assert(sizeof(NsDefine)==40 && sizeof(NsCompileDesc)==80 && sizeof(NsInstanceDesc)==16, "64-bit descriptors");
 #else
 static_assert(sizeof(NsStr)==12 && sizeof(NsError)==40 && sizeof(NsJsonResult)==36, "32-bit string layouts");
-static_assert(sizeof(NsCallResult)==44 && sizeof(NsRuntimeDesc)==40 && sizeof(NsObjectDesc)==32, "32-bit call layouts");
+static_assert(sizeof(NsCallResult)==48 && sizeof(NsRuntimeDesc)==40 && sizeof(NsObjectDesc)==32, "32-bit call layouts");
 static_assert(sizeof(NsDefine)==32 && sizeof(NsCompileDesc)==64 && sizeof(NsInstanceDesc)==12, "32-bit descriptors");
 #endif
 static_assert(sizeof(NsAllocStats)==64, "allocation statistics layout");
@@ -105,11 +105,11 @@ static int InvokeInt(NsRuntime* rt,NsInstance inst,const char* name)
 }
 static bool MapInt(NsMapReader* map,const char* key,int expected)
 {
-    int32_t value=-999;return NsMapGetInt(map,key,static_cast<int32_t>(std::strlen(key)),&value)!=0 && value==expected;
+    int64_t value=-999;return NsMapGetInt(map,key,static_cast<int32_t>(std::strlen(key)),&value)!=0 && value==expected;
 }
 static bool ArrayInt(NsArrayView* a,int expected)
 {
-    int32_t* data=NsArrayInts(a);return NsArrayCount(a)==2 && data!=nullptr && data[0]==expected;
+    int64_t* data=NsArrayInts(a);return NsArrayCount(a)==2 && data!=nullptr && data[0]==expected;
 }
 static void Readers(Host& host,NsProgram program,bool closeFirst)
 {

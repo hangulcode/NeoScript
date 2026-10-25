@@ -1125,7 +1125,7 @@ static int RunDebugSmoke()
 		CompileResult cr = rt->Compile(cd);
 		if (!cr.program) return fail("[short-circuit] compile failed");
 		InstanceHandle inst = rt->CreateInstance(cr.program);
-		int shortCircuitResult = 0; bool shortCircuitReturn = false; int foreachIndexedResult = 0;
+		int64_t shortCircuitResult = 0; bool shortCircuitReturn = false; int64_t foreachIndexedResult = 0;
 		{ Invocation c = rt->Call(inst, "ShortCircuitTest");   c.invoke(); shortCircuitResult = c.retInt(); }
 		{ Invocation c = rt->Call(inst, "ShortCircuitReturn"); c.invoke(); shortCircuitReturn = c.retBool(); }
 		{ Invocation c = rt->Call(inst, "ForeachIndexed");     c.invoke(); foreachIndexedResult = c.retInt(); }
@@ -1133,8 +1133,8 @@ static int RunDebugSmoke()
 		bool hadErr = rt->TakeLastError(emsg);
 		if (hadErr || shortCircuitResult != 7 || shortCircuitReturn == false || foreachIndexedResult != 7)
 		{
-			printf("[short-circuit] invalid result=%d return=%d foreach=%d err=%.*s\n",
-				shortCircuitResult, shortCircuitReturn ? 1 : 0, foreachIndexedResult, (int)emsg.size(), emsg.data());
+			printf("[short-circuit] invalid result=%lld return=%d foreach=%lld err=%.*s\n",
+				(long long)shortCircuitResult, shortCircuitReturn ? 1 : 0, (long long)foreachIndexedResult, (int)emsg.size(), emsg.data());
 			DestroyRuntime(rt); return -1;
 		}
 		rt->DestroyInstance(inst);

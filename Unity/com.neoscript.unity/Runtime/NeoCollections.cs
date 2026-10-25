@@ -16,7 +16,7 @@ namespace NeoScript
         internal NeoMapBuilder(IntPtr handle) { _handle = handle; }
         public bool IsValid => _handle != IntPtr.Zero;
 
-        public void Set(string key, int value)
+        public void Set(string key, long value)
         {
             var frame = NeoUtf8.Push();
             try { int n = NeoUtf8.Encode(key, out int o); fixed (byte* b = NeoUtf8.Buffer) NeoNative.NsMapSetInt(_handle, b + o, n, value); }
@@ -93,7 +93,7 @@ namespace NeoScript
         public void Resize(int count) => NeoNative.NsListResize(_handle, count);
 
         public void PushNull() => NeoNative.NsListPushNull(_handle);
-        public void Push(int value) => NeoNative.NsListPushInt(_handle, value);
+        public void Push(long value) => NeoNative.NsListPushInt(_handle, value);
         public void Push(float value) => NeoNative.NsListPushFloat(_handle, value);
         public void Push(bool value) => NeoNative.NsListPushBool(_handle, value ? 1 : 0);
         public void Push(Vector3 value) => NeoNative.NsListPushVec3(_handle, value.x, value.y, value.z);
@@ -106,7 +106,7 @@ namespace NeoScript
             finally { NeoUtf8.Pop(frame); }
         }
 
-        public void Set(int index, int value) => NeoNative.NsListSetInt(_handle, index, value);
+        public void Set(int index, long value) => NeoNative.NsListSetInt(_handle, index, value);
         public void Set(int index, float value) => NeoNative.NsListSetFloat(_handle, index, value);
 
         public void Set(int index, string value)
@@ -169,7 +169,7 @@ namespace NeoScript
             finally { NeoUtf8.Pop(frame); }
         }
 
-        public bool TryGet(string key, out int value)
+        public bool TryGet(string key, out long value)
         {
             var frame = NeoUtf8.Push();
             try { int n = NeoUtf8.Encode(key, out int o); fixed (byte* b = NeoUtf8.Buffer) return NeoNative.NsMapGetInt(_handle, b + o, n, out value) != 0; }
@@ -232,7 +232,7 @@ namespace NeoScript
             finally { NeoUtf8.Pop(frame); }
         }
 
-        public int GetInt(string key, int fallback = 0) => TryGet(key, out int v) ? v : fallback;
+        public long GetInt(string key, long fallback = 0) => TryGet(key, out long v) ? v : fallback;
         public float GetFloat(string key, float fallback = 0f) => TryGet(key, out float v) ? v : fallback;
         public bool GetBool(string key, bool fallback = false) => TryGet(key, out bool v) ? v : fallback;
         public string GetString(string key, string fallback = null) => TryGet(key, out string v) ? v : fallback;
@@ -273,7 +273,7 @@ namespace NeoScript
         public int Count => NeoNative.NsListRdCount(_handle);
         public NeoValueType TypeOf(int index) => (NeoValueType)NeoNative.NsListRdType(_handle, index);
 
-        public bool TryGet(int index, out int value) => NeoNative.NsListRdGetInt(_handle, index, out value) != 0;
+        public bool TryGet(int index, out long value) => NeoNative.NsListRdGetInt(_handle, index, out value) != 0;
         public bool TryGet(int index, out float value) => NeoNative.NsListRdGetFloat(_handle, index, out value) != 0;
 
         public bool TryGet(int index, out bool value)
@@ -298,7 +298,7 @@ namespace NeoScript
             return true;
         }
 
-        public int GetInt(int index, int fallback = 0) => TryGet(index, out int v) ? v : fallback;
+        public long GetInt(int index, long fallback = 0) => TryGet(index, out long v) ? v : fallback;
         public float GetFloat(int index, float fallback = 0f) => TryGet(index, out float v) ? v : fallback;
         public string GetString(int index, string fallback = null) => TryGet(index, out string v) ? v : fallback;
 
@@ -321,12 +321,12 @@ namespace NeoScript
         public int Count => NeoNative.NsArrayCount(_handle);
 
         /// <summary>int 원소. ElementType 이 Int 가 아니면 비어 있다.</summary>
-        public Span<int> Ints
+        public Span<long> Ints
         {
             get
             {
-                int* p = NeoNative.NsArrayInts(_handle);
-                return p == null ? Span<int>.Empty : new Span<int>(p, Count);
+                long* p = NeoNative.NsArrayInts(_handle);
+                return p == null ? Span<long>.Empty : new Span<long>(p, Count);
             }
         }
 

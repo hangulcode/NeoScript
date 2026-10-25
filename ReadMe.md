@@ -247,6 +247,19 @@ The VS Code debugger currently supports:
   float precision at 1,024, and the full result at 1 MiB. See [API.md](docs/API.md#21-string-formatting).
 
 ### Numeric precision
+The default `int` type is a signed **64-bit integer**, from `-9223372036854775808` to
+`9223372036854775807`. Integer addition, subtraction, multiplication, negation, and
+increment/decrement wrap to the low 64 bits. Shift counts must be in `0..63`. Integer
+division or remainder by zero, and `INT64_MIN / -1` or `INT64_MIN % -1`, are errors.
+
+Host integer values use C++/C `int64_t` and C# `long`; integer arrays use eight bytes per
+element. On 64-bit targets the general value slot remains 16 bytes; on 32-bit targets it
+grows from 8 to 16 bytes (or 12 with four-byte integer alignment). Rebuild native hosts
+and Unity plugins for **C ABI 6**, and regenerate cached
+bytecode for image format **0134**. Container lengths, indices, and host handles keep
+their existing widths and limits. Mixing an int with a float uses float32 arithmetic,
+so large integers can lose precision.
+
 The scalar float type `NS_FLOAT` is **`float` (32-bit)**, matching the game engine's native
 `float3`/`float4` layout. This lets vector value types (Vec2/Vec3/Vec4/Quaternion) be stored
 inline and marshalled to the engine without per-component conversion.

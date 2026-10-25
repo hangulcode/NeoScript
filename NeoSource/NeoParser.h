@@ -866,7 +866,7 @@ struct SFunctionLayer
 struct SSwitchCaseCompile
 {
 	VAR_TYPE	_type = VAR_NONE;   // VAR_BOOL / VAR_INT / VAR_STRING (float 는 허용 안 함)
-	int			_int = 0;
+	NS_INT		_int = 0;
 	bool		_bl = false;
 	std::string	_str;
 	int			_jumpOffset = 0;    // NOP_SWITCH 다음 op 기준 상대 op offset
@@ -899,7 +899,7 @@ struct SFunctions
 	std::vector<VarInfo>				_staticVars;
 	// 숫자 상수의 중복 제거 색인: NS_FLOAT 비트 / int 값 → 풀 인덱스. 선형 탐색은 리터럴 수의 제곱으로 느려졌다.
 	std::unordered_map<u32, int>	_floatConstants;
-	std::unordered_map<int, int>		_intConstants;
+	std::unordered_map<NS_INT, int>		_intConstants;
 	// String slots are never reclaimed by numeric immediate folding. Keep their
 	// lookup separate so large text pools do not require a quadratic scan.
 	std::unordered_map<std::string, int> _stringConstants;
@@ -1074,7 +1074,7 @@ struct SFunctions
 			(int64_t)INT_MAX - COMPILE_EXTENDED_STATIC_BEGIN + 1);
 		return StaticCompileIndex((int)_staticVars.size());
 	}
-	int	AddStaticInt(int num)
+	int	AddStaticInt(NS_INT num)
 	{
 		auto found = _intConstants.find(num);
 		if (found != _intConstants.end())
@@ -1089,7 +1089,7 @@ struct SFunctions
 		MarkLastStaticOrigin();
 		return idx;
 	}
-	bool GetStaticNum(int var, int* value)
+	bool GetStaticNum(int var, NS_INT* value)
 	{
 		for (int i = (int)_staticVars.size() - 1; i >= 0; i--)
 		{
@@ -1103,7 +1103,7 @@ struct SFunctions
 				}
 				if (VAR_FLOAT == v2.GetType())
 				{
-					*value = (int)v2._float;
+					*value = NeoFloatToInt(v2._float);
 					return true;
 				}
 			}

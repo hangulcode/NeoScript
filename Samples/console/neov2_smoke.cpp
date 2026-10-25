@@ -78,7 +78,7 @@ static bool HostMethod(CallContext& ctx, StringView method)
         ArrayView array;
         if (!ctx.argAsArray(0, array) || array.elementType() != ArrayElementType::Int || array.count() != 3)
             return false;
-        int32_t* values = array.ints();
+        int64_t* values = array.ints();
         if (!values)
             return false;
         values[1] = 20; // zero-copy write into the script array
@@ -281,7 +281,7 @@ int NeoScriptV2Smoke()
             AllocStats arrayStatsLive;
             GetAllocStats(arrayStatsLive);
             Check(arrayStatsLive.arrays == arrayStatsBefore.arrays + 1 &&
-                arrayStatsLive.bufferBytes == arrayStatsBefore.bufferBytes + 4 * (int)sizeof(int32_t),
+                arrayStatsLive.bufferBytes == arrayStatsBefore.bufferBytes + 4 * (int)sizeof(int64_t),
                 "array allocation stats count live payload bytes in the shared buffer total");
         }
         AllocStats arrayStatsReleased;
@@ -295,13 +295,13 @@ int NeoScriptV2Smoke()
         ArrayView ints;
         Check(intCall.retArray(ints) && ints.elementType() == ArrayElementType::Int && ints.count() == 4,
             "retArray exposes int type and count");
-        int32_t* intData = ints.ints();
+        int64_t* intData = ints.ints();
         Check(intData && intData[0] == 3 && intData[2] == 9 && ints.floats() == nullptr,
             "retArray exposes contiguous int storage only for the matching accessor");
 
         bool readArray = false;
         Check(rt->Call(arrayInstance, "makeInts").invokeReadArray([&](ArrayView values) {
-            int32_t* p = values.ints();
+            int64_t* p = values.ints();
             readArray = p && values.count() == 4 && p[2] == 9;
         }) == RunStatus::Completed && readArray,
             "invokeReadArray keeps zero-copy storage valid for callback scope");

@@ -125,7 +125,7 @@ export fun Update(var dt)
                     "the script should have moved the transform");
                 Assert.AreEqual(1, bridge.Logs, "Unity.Log should have been called once");
 
-                Assert.IsTrue(instance.TryGetInt("ticks", out int ticks), "ticks should be readable");
+                Assert.IsTrue(instance.TryGetInt("ticks", out long ticks), "ticks should be readable");
                 Assert.AreEqual(frames, ticks, "the script should have ticked once per frame");
             }
             finally

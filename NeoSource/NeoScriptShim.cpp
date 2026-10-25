@@ -526,7 +526,7 @@ struct NeoScriptInternal
     static ObjectType  objType(void* i)     { ObjectType t; t.m_impl = i; return t; }
     static void*       objImpl(ObjectType t) { return t.m_impl; }
     // CallResult 저장(invokeR 이 스칼라 반환을 값으로 스냅샷).
-    static void setResult(CallResult& r, ValueType t, int32_t i, const float* f4, StringView s)
+    static void setResult(CallResult& r, ValueType t, int64_t i, const float* f4, StringView s)
     {
         r.m_type = t; r.m_i = i;
         if (f4) { r.m_f[0]=f4[0]; r.m_f[1]=f4[1]; r.m_f[2]=f4[2]; r.m_f[3]=f4[3]; }
@@ -608,10 +608,10 @@ public:
     bool StartSliced(InstanceHandle instance, StringView functionName, int32_t timeoutMs, uint32_t budget) override;
     RunStatus UpdateSliced(InstanceHandle instance) override;
     bool IsRunning(InstanceHandle instance) const override;
-    bool GetGlobalInt(InstanceHandle instance, StringView name, int32_t& out) const override;
+    bool GetGlobalInt(InstanceHandle instance, StringView name, int64_t& out) const override;
     bool GetGlobalFloat(InstanceHandle instance, StringView name, float& out) const override;
     bool GetGlobalString(InstanceHandle instance, StringView name, StringView& out) const override;
-    bool SetGlobalInt(InstanceHandle instance, StringView name, int32_t v) override;
+    bool SetGlobalInt(InstanceHandle instance, StringView name, int64_t v) override;
     bool SetGlobalFloat(InstanceHandle instance, StringView name, float v) override;
     bool SetGlobalString(InstanceHandle instance, StringView name, StringView v) override;
 
@@ -1410,7 +1410,7 @@ bool RuntimeImpl::IsRunning(InstanceHandle h) const
     return inst && inst->worker->GetExecutionState() != NeoExecutionState::Idle;
 }
 
-bool RuntimeImpl::GetGlobalInt(InstanceHandle h, StringView name, int32_t& out) const
+bool RuntimeImpl::GetGlobalInt(InstanceHandle h, StringView name, int64_t& out) const
 {
     InstanceRec* inst = resolveInstance(h);
     if (!inst) return false;
@@ -1434,7 +1434,7 @@ bool RuntimeImpl::GetGlobalString(InstanceHandle h, StringView name, StringView&
     if (!v || v->GetType() != VAR_STRING) return false;
     out = StringView(v->_str->_str); return true;
 }
-bool RuntimeImpl::SetGlobalInt(InstanceHandle h, StringView name, int32_t vv)
+bool RuntimeImpl::SetGlobalInt(InstanceHandle h, StringView name, int64_t vv)
 {
     InstanceRec* inst = resolveInstance(h);
     if (!inst) return false;
@@ -1602,7 +1602,7 @@ InstanceHandle CallContext::instance() const { return Ctx(m_impl)->instance; }
 std::size_t CallContext::argCount() const { return static_cast<std::size_t>(Ctx(m_impl)->argCount); }
 ValueType CallContext::argType(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); VarInfo* v=CtxArgVar(c,i); return v?VarTypeToValueType(v):ValueType::None; }
 bool CallContext::argIsNativeObject(std::size_t i) const { VarInfo* v=CtxArgVar(Ctx(m_impl),i); return v && v->GetType()==VAR_FP_NATIVE; }
-int32_t CallContext::argInt(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); VarInfo* v=CtxArgVar(c,i); return v ? c->worker->PopInt(v) : 0; }
+int64_t CallContext::argInt(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); VarInfo* v=CtxArgVar(c,i); return v ? c->worker->PopInt(v) : 0; }
 float CallContext::argFloat(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); VarInfo* v=CtxArgVar(c,i); return v ? static_cast<float>(c->worker->PopFloat(v)) : 0.0f; }
 bool CallContext::argBool(std::size_t i) const { CallContextImpl* c=Ctx(m_impl); VarInfo* v=CtxArgVar(c,i); return v && c->worker->PopBool(v); }
 StringView CallContext::argString(std::size_t i) const
@@ -1689,7 +1689,7 @@ bool CallContext::retJson(StringView text, JsonResult& result, bool strictIntege
         *CtxRetVar(c), result, strictIntegers, requireMap)) return true;
     retNull(); return false;
 }
-void CallContext::retInt(int32_t v) { CallContextImpl* c=Ctx(m_impl); c->worker->Var_SetInt(CtxRetVar(c), v); }
+void CallContext::retInt(int64_t v) { CallContextImpl* c=Ctx(m_impl); c->worker->Var_SetInt(CtxRetVar(c), v); }
 void CallContext::retFloat(float v) { CallContextImpl* c=Ctx(m_impl); c->worker->Var_SetFloat(CtxRetVar(c), v); }
 void CallContext::retBool(bool v) { CallContextImpl* c=Ctx(m_impl); c->worker->Var_SetBool(CtxRetVar(c), v); }
 void CallContext::retString(StringView v) { CallContextImpl* c=Ctx(m_impl); SetVarString(c->worker, CtxRetVar(c), v); }
@@ -1736,7 +1736,7 @@ void CallContext::fail(int32_t code, StringView message)
 // 해제돼도 영원히 회수되지 않는다. 스칼라(int/float/bool)는 alloc 타입이 아니라 해당 없음.
 // (Resource.LoadJson 처럼 키가 수만 개인 경로에서 그대로 수만 개 누수로 드러났다.)
 //==============================================================================
-void MapBuilder::setInt(StringView key, int32_t v)    { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetInt(&it, v);   b->map->Insert(std::string(key.data(),key.size()), &it); }
+void MapBuilder::setInt(StringView key, int64_t v)    { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetInt(&it, v);   b->map->Insert(std::string(key.data(),key.size()), &it); }
 void MapBuilder::setFloat(StringView key, float v)    { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetFloat(&it, v); b->map->Insert(std::string(key.data(),key.size()), &it); }
 void MapBuilder::setBool(StringView key, bool v)      { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetBool(&it, v);  b->map->Insert(std::string(key.data(),key.size()), &it); }
 void MapBuilder::setString(StringView key, StringView v) { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; SetVarString(b->w, &it, v); b->map->Insert(std::string(key.data(),key.size()), &it); b->w->Var_Release(&it); }
@@ -1762,13 +1762,13 @@ void MapBuilder::setObject(StringView key, ObjectType type, void* userData) {
 void ListBuilder::reserve(int count) { static_cast<ListBuilderImpl*>(m_impl)->list->Reserve(count); }
 void ListBuilder::resize(int count)  { static_cast<ListBuilderImpl*>(m_impl)->list->Resize(count); }
 int  ListBuilder::count() const      { return static_cast<ListBuilderImpl*>(m_impl)->list->GetCount(); }
-void ListBuilder::pushInt(int32_t v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetInt(&it, v);   b->list->InsertLast(&it); }
+void ListBuilder::pushInt(int64_t v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetInt(&it, v);   b->list->InsertLast(&it); }
 void ListBuilder::pushFloat(float v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetFloat(&it, v); b->list->InsertLast(&it); }
 void ListBuilder::pushBool(bool v)      { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetBool(&it, v);  b->list->InsertLast(&it); }
 void ListBuilder::pushNull() { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->list->InsertLast(&it); }
 void ListBuilder::pushString(StringView v) { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; SetVarString(b->w, &it, v); b->list->InsertLast(&it); b->w->Var_Release(&it); }
 void ListBuilder::pushVec3(float x, float y, float z) { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetVec3(&it, x, y, z); b->list->InsertLast(&it); b->w->Var_Release(&it); }
-void ListBuilder::setInt(int index, int32_t v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetInt(&it, v);   b->list->SetValue(index, &it); }
+void ListBuilder::setInt(int index, int64_t v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetInt(&it, v);   b->list->SetValue(index, &it); }
 void ListBuilder::setFloat(int index, float v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetFloat(&it, v); b->list->SetValue(index, &it); }
 void ListBuilder::setString(int index, StringView v) { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; SetVarString(b->w, &it, v); b->list->SetValue(index, &it); b->w->Var_Release(&it); }
 MapBuilder ListBuilder::pushMap()  { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); int idx=b->list->GetCount(); b->list->Resize(idx+1); VarInfo* slot=b->list->GetValue(idx); b->w->ResetVarType(slot, VAR_MAP); b->list->MarkContainerChild(); b->ctx->mapB.push_back(MapBuilderImpl{ b->w, slot->_tbl, b->ctx }); return NeoScriptInternal::mapB(&b->ctx->mapB.back()); }
@@ -1821,7 +1821,7 @@ bool MapReader::has(StringView key) const { const MapReaderImpl* r=static_cast<c
 ValueType MapReader::type(StringView key) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); return v?VarTypeToValueType(v):ValueType::None; }
 bool MapReader::isNull(StringView key) const { VarInfo* v=MapFind(static_cast<const MapReaderImpl*>(m_impl),key); return v && v->GetType()==VAR_NONE; }
 bool MapReader::isNativeObject(StringView key) const { VarInfo* v=MapFind(static_cast<const MapReaderImpl*>(m_impl),key); return v && v->GetType()==VAR_FP_NATIVE; }
-bool MapReader::getInt(StringView key, int32_t& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v) return false; out=r->w->PopInt(v); return true; }
+bool MapReader::getInt(StringView key, int64_t& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v) return false; out=r->w->PopInt(v); return true; }
 bool MapReader::getFloat(StringView key, float& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v) return false; out=static_cast<float>(r->w->PopFloat(v)); return true; }
 bool MapReader::getBool(StringView key, bool& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v) return false; out=r->w->PopBool(v); return true; }
 bool MapReader::getString(StringView key, StringView& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v||v->GetType()!=VAR_STRING) return false; out=StringView(v->_str->_str); return true; }
@@ -1834,7 +1834,7 @@ int ListReader::count() const { return static_cast<const ListReaderImpl*>(m_impl
 ValueType ListReader::type(int index) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); return v?VarTypeToValueType(v):ValueType::None; }
 bool ListReader::isNull(int index) const { VarInfo* v=static_cast<const ListReaderImpl*>(m_impl)->list->GetValue(index); return v && v->GetType()==VAR_NONE; }
 bool ListReader::isNativeObject(int index) const { VarInfo* v=static_cast<const ListReaderImpl*>(m_impl)->list->GetValue(index); return v && v->GetType()==VAR_FP_NATIVE; }
-bool ListReader::getInt(int index, int32_t& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v) return false; out=r->w->PopInt(v); return true; }
+bool ListReader::getInt(int index, int64_t& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v) return false; out=r->w->PopInt(v); return true; }
 bool ListReader::getFloat(int index, float& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v) return false; out=static_cast<float>(r->w->PopFloat(v)); return true; }
 bool ListReader::getBool(int index, bool& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v) return false; out=r->w->PopBool(v); return true; }
 bool ListReader::getString(int index, StringView& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v||v->GetType()!=VAR_STRING) return false; out=StringView(v->_str->_str); return true; }
@@ -1860,7 +1860,7 @@ ArrayElementType ArrayView::elementType() const
 }
 int ArrayView::count() const { const ArrayInfo* a=static_cast<const ArrayInfo*>(m_impl); return a?a->_count:0; }
 uint8_t* ArrayView::boolBits() const { ArrayInfo* a=const_cast<ArrayInfo*>(static_cast<const ArrayInfo*>(m_impl)); return a&&a->_elementType==NeoArrayElementType::Bool?a->BoolBits():nullptr; }
-int32_t* ArrayView::ints() const { ArrayInfo* a=const_cast<ArrayInfo*>(static_cast<const ArrayInfo*>(m_impl)); return a&&a->_elementType==NeoArrayElementType::Int?reinterpret_cast<int32_t*>(a->IntData()):nullptr; }
+int64_t* ArrayView::ints() const { ArrayInfo* a=const_cast<ArrayInfo*>(static_cast<const ArrayInfo*>(m_impl)); return a&&a->_elementType==NeoArrayElementType::Int?reinterpret_cast<int64_t*>(a->IntData()):nullptr; }
 float* ArrayView::floats() const { ArrayInfo* a=const_cast<ArrayInfo*>(static_cast<const ArrayInfo*>(m_impl)); return a&&a->_elementType==NeoArrayElementType::Float?reinterpret_cast<float*>(a->FloatData()):nullptr; }
 int ArrayView::vectorDimension() const { const ArrayInfo* a=static_cast<const ArrayInfo*>(m_impl); return a?a->VectorDimension():0; }
 bool ArrayView::getVec(int index, float out[4]) const
@@ -1922,7 +1922,7 @@ Invocation& Invocation::operator=(Invocation&& o) noexcept
 }
 Invocation::~Invocation() { InvFinish(m_impl, m_seq); }
 
-Invocation& Invocation::argInt(int32_t v)    { if (InvArmed(m_impl, m_seq)){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetInt(&i->callArgs.back(), v); } return *this; }
+Invocation& Invocation::argInt(int64_t v)    { if (InvArmed(m_impl, m_seq)){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetInt(&i->callArgs.back(), v); } return *this; }
 Invocation& Invocation::argFloat(float v)    { if (InvArmed(m_impl, m_seq)){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetFloat(&i->callArgs.back(), v); } return *this; }
 Invocation& Invocation::argBool(bool v)      { if (InvArmed(m_impl, m_seq)){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetBool(&i->callArgs.back(), v); } return *this; }
 Invocation& Invocation::argString(StringView v) { if (InvArmed(m_impl, m_seq)){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); SetVarString(i->worker, &i->callArgs.back(), v); } return *this; }
@@ -2055,7 +2055,7 @@ const Error& Invocation::error() const
 }
 
 ValueType Invocation::retType() const { VarInfo* v=InvReturn(m_impl,m_seq); return v?VarTypeToValueType(v):ValueType::None; }
-int32_t Invocation::retInt() const { VarInfo* v=InvReturn(m_impl,m_seq); return v?Inv(m_impl)->worker->PopInt(v):0; }
+int64_t Invocation::retInt() const { VarInfo* v=InvReturn(m_impl,m_seq); return v?Inv(m_impl)->worker->PopInt(v):0; }
 float Invocation::retFloat() const { VarInfo* v=InvReturn(m_impl,m_seq); return v?static_cast<float>(Inv(m_impl)->worker->PopFloat(v)):0.0f; }
 bool Invocation::retBool() const { VarInfo* v=InvReturn(m_impl,m_seq); return v && Inv(m_impl)->worker->PopBool(v); }
 StringView Invocation::retString() const {
@@ -2104,7 +2104,7 @@ CallResult Invocation::invokeR()
                 NeoScriptInternal::setResult(r, vt, 0, nullptr, StringView(rv->_str->_str));
             else
             {
-                float f4[4] = { 0, 0, 0, 0 }; int32_t iv = 0;
+                float f4[4] = { 0, 0, 0, 0 }; int64_t iv = 0;
                 switch (vt)
                 {
                 case ValueType::Bool:  iv = i->worker->PopBool(rv) ? 1 : 0; f4[0] = static_cast<float>(iv); break;

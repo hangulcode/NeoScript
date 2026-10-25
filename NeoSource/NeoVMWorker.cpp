@@ -165,7 +165,7 @@ int CNeoVMWorker::Sleep(int iTimeout, VarInfo* v1)
 	switch (v1->GetType())
 	{
 	case VAR_INT:
-		iSleepTick = v1->_int;
+		iSleepTick = NeoNarrowInt(v1->_int);
 		break;
 	case VAR_FLOAT:
 		iSleepTick = (int)v1->_float;
@@ -207,12 +207,14 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 	switch (v1->GetType())
 	{
 	case VAR_INT:
-#ifdef _WIN32
-		snprintf(ch, _countof(ch), "%d", v1->_int);
-#else
-		sprintf(ch, "%d", v1->_int);
-#endif
-		return ch;
+	{
+		char* end = ch + sizeof(ch);
+		char* begin = end;
+		NS_UINT magnitude = v1->_int < 0 ? NS_UINT(0) - NS_UINT(v1->_int) : NS_UINT(v1->_int);
+		do { *--begin = char('0' + magnitude % 10); magnitude /= 10; } while (magnitude);
+		if (v1->_int < 0) *--begin = '-';
+		return std::string(begin, end);
+	}
 	case VAR_FLOAT:
 		
 #ifdef _WIN32
@@ -261,7 +263,7 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 	}
 	return "null";
 }
-int CNeoVMWorker::ToInt(VarInfo* v1)
+NS_INT CNeoVMWorker::ToInt(VarInfo* v1)
 {
 	switch (v1->GetType())
 	{
@@ -274,7 +276,7 @@ int CNeoVMWorker::ToInt(VarInfo* v1)
 	case VAR_NONE:
 		return -1;
 	case VAR_STRING:
-		return ::atoi(v1->_str->_str.c_str());
+		return std::strtoll(v1->_str->_str.c_str(), nullptr, 10);
 	case VAR_FP_NATIVE:
 		return -1;
 	case VAR_ARRAY:
@@ -1513,7 +1515,7 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, NeoDebugSn
 	{
 	case VAR_INT:
 		out.type = "int";
-		snprintf(buf, sizeof(buf), "%d", pVar->_int);
+		snprintf(buf, sizeof(buf), "%lld", (long long)pVar->_int);
 		out.value = buf;
 		break;
 	case VAR_FLOAT:
@@ -2890,7 +2892,7 @@ bool CNeoVMWorker::ArrayModify(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue, eN
 	}
 
 	ArrayInfo* array = pClt->_array;
-	const int index = pKey->_int;
+	const NS_INT index = pKey->_int;
 	if (array->IsValidIndex(index) == false)
 	{
 		SetError(RTE_ARRAY_INDEX_WRITE);
@@ -2898,7 +2900,7 @@ bool CNeoVMWorker::ArrayModify(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue, eN
 	}
 
 	VarInfo value;
-	ArrayReadValue(this, array, index, &value);
+	ArrayReadValue(this, array, static_cast<int>(index), &value);
 	switch (op)
 	{
 	case NOP_TABLE_ADD2:     Add2(&value, pValue); break;
@@ -2912,7 +2914,7 @@ bool CNeoVMWorker::ArrayModify(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue, eN
 		return false;
 	}
 
-	const bool written = ArrayWriteValue(array, index, &value);
+	const bool written = ArrayWriteValue(array, static_cast<int>(index), &value);
 	if (!written)
 		SetErrorFormat(RTE_ARRAY_VALUE_TYPE, GetDataType(value.GetType()).c_str(), GetArrayElementTypeName(array->_elementType));
 	Var_Release(&value);

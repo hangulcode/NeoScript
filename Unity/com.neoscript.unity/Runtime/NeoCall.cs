@@ -19,7 +19,7 @@ namespace NeoScript
     {
         public readonly NeoRunStatus Status;
         public readonly NeoValueType Type;
-        private readonly int _int;
+        private readonly long _int;
         private readonly float _f0, _f1, _f2, _f3;
         private readonly string _string;
         private readonly string _error;
@@ -42,7 +42,7 @@ namespace NeoScript
         /// <summary>실패했을 때의 사유. 성공이면 null.</summary>
         public string Error => _error;
 
-        public int AsInt => _int;
+        public long AsInt => _int;
         public bool AsBool => _int != 0;
         public float AsFloat => _f0;
         public string AsString => _string ?? string.Empty;
@@ -72,7 +72,7 @@ namespace NeoScript
         //----------------------------------------------------------------------
         // 인자
         //----------------------------------------------------------------------
-        public NeoCall Arg(int value) { NeoNative.NsCallArgInt(_call, value); return this; }
+        public NeoCall Arg(long value) { NeoNative.NsCallArgInt(_call, value); return this; }
         public NeoCall Arg(float value) { NeoNative.NsCallArgFloat(_call, value); return this; }
         public NeoCall Arg(bool value) { NeoNative.NsCallArgBool(_call, value ? 1 : 0); return this; }
         public NeoCall Arg(Vector3 value) { NeoNative.NsCallArgVec3(_call, value.x, value.y, value.z); return this; }
@@ -136,7 +136,7 @@ namespace NeoScript
                 throw r.ToException("call");
         }
 
-        public int InvokeInt()
+        public long InvokeInt()
         {
             NeoResult r = Invoke();
             if (!r.Ok) throw r.ToException("call");

@@ -206,8 +206,8 @@ int main()
                 if (!ok)
                 {
                     ++failed;
-                    std::fprintf(stderr, "%s(c=%d, inner=%d, alt=%d, debug=%d): g=%d, expected %d\n",
-                        functions[i], c, inner, alt, debug, state.retInt(), expectedState[i]);
+                    std::fprintf(stderr, "%s(c=%d, inner=%d, alt=%d, debug=%d): g=%lld, expected %d\n",
+                        functions[i], c, inner, alt, debug, (long long)state.retInt(), expectedState[i]);
                 }
             }
         }

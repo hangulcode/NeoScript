@@ -67,14 +67,14 @@ struct MapInfo : AllocBase
 	void Insert(const std::string& pKey, VarInfo* pValue);
 	bool Insert(const std::string& pKey, NS_FLOAT value);
 	void Insert(VarInfo* pKey, VarInfo* pValue);
-	void Insert(VarInfo* pKey, int v);
-	void Insert(int Key, VarInfo* pValue);
-	void Insert(int Key, int v);
+	void Insert(VarInfo* pKey, NS_INT v);
+	void Insert(NS_INT Key, VarInfo* pValue);
+	void Insert(NS_INT Key, NS_INT v);
 	void Remove(VarInfo* pKey);
 	VarInfo* Find(VarInfo *pKey);
 	VarInfo* Find(const std::string& key);
 	VarInfo* FindString(StringInfo* pKeyStr); // 문자열 키 전용 fast path (NeoVMInternal.h 에 인라인 정의)
-	VarInfo* FindInt(int key);                // 정수 키 전용 fast path (NeoVMInternal.h 에 인라인 정의)
+	VarInfo* FindInt(NS_INT key);                // 정수 키 전용 fast path (NeoVMInternal.h 에 인라인 정의)
 
 	CollectionIterator FirstNode();
 	bool NextNode(CollectionIterator&);

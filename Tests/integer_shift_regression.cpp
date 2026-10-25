@@ -66,22 +66,17 @@ static void Run(IRuntime* runtime, const std::string& source, const char* reason
 int main() {
     auto runtime = CreateRuntime();
     runtime->FreezeBindings();
-    const char* reason = "shift count must be between 0 and 31";
+    const char* reason = "shift count must be between 0 and 63";
     for (bool debug : {false, true}) for (bool image : {false, true}) {
         for (const std::string op : {"<<", ">>"}) {
             // An independent int64 arithmetic oracle covers every legal count,
             // sign extension, discarded high bits, and both integer boundaries.
-            for (int a : {-2147483647-1, -2147483647, -3, -1, 0, 1, 3, 2147483647}) {
-                for (int count = 0; count < 32; ++count) {
-                    const int64_t scale = int64_t(1) << count;
-                    int64_t expected;
-                    if (op == "<<") {
-                        expected = (int64_t(a) * scale) % 4294967296LL;
-                        if (expected < 0) expected += 4294967296LL;
-                        if (expected > 2147483647LL) expected -= 4294967296LL;
-                    } else {
-                        expected = a >= 0 ? int64_t(a) / scale : -((-int64_t(a) + scale - 1) / scale);
-                    }
+            for (int64_t a : {INT64_MIN, INT64_MIN+1, int64_t(-3), int64_t(-1), int64_t(0), int64_t(1), int64_t(3), INT64_MAX}) {
+                for (int count = 0; count < 64; ++count) {
+                    uint64_t bits = static_cast<uint64_t>(a);
+                    if (op == "<<") bits <<= count;
+                    else { bits >>= count; if (a < 0 && count != 0) bits |= (~uint64_t(0)) << (64-count); }
+                    const int64_t expected = bits <= uint64_t(INT64_MAX) ? int64_t(bits) : -1 - int64_t(~bits);
                     const std::string lhs = std::to_string(a), rhs = std::to_string(count);
                     const std::string expression = "(" + lhs + ") " + op + " " + rhs;
                     Run(runtime, "const C=" + expression + ";export fun Probe(){var a=" + lhs + ";var b=" + rhs +
@@ -90,7 +85,7 @@ int main() {
                         nullptr, debug, image);
                 }
             }
-            for (const std::string count : {"-2147483648", "-33", "-1", "32", "33", "2147483647"}) {
+            for (const std::string count : {"-2147483648", "-33", "-1", "64", "65", "2147483647"}) {
                 for (const std::string target : {"x", "list[0]", "map.k", "array[0]", "nested[0][0]", "mapped.k[0]"}) {
                     const std::string prefix = "import system;var x=7;var b=" + count +
                         ";var list=[x];var map={\"k\":x};var array=system.array(x,1);"

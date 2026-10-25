@@ -20,7 +20,7 @@ static u32 SwitchKeyHash(const ProgramSwitchKey& k)
 {
 	switch (k._type)
 	{
-	case VAR_INT:    return (u32)k._int;
+	case VAR_INT:    return HashIntegerKey(k._int);
 	case VAR_BOOL:   return k._bl ? 1u : 0u;
 	case VAR_STRING: return GetHashCode(k._str);
 	default:         return 0u;
@@ -57,7 +57,7 @@ int ProgramSwitchTable::Find(VarInfo* pKey) const
 	u32 h;
 	switch (t)
 	{
-	case VAR_INT:    h = (u32)pKey->_int; break;
+	case VAR_INT:    h = HashIntegerKey(pKey->_int); break;
 	case VAR_BOOL:   h = pKey->_bl ? 1u : 0u; break;
 	case VAR_STRING: h = pKey->_str->GetHash(); break;
 	default: return defaultOffset;
@@ -1498,7 +1498,7 @@ static std::string StaticConstToString(const SStaticConst& c)
 	switch (c._type)
 	{
 	case VAR_INT:
-		snprintf(ch, sizeof(ch), "%d", c._int);
+		snprintf(ch, sizeof(ch), "%lld", (long long)c._int);
 		break;
 	case VAR_FLOAT:
 #ifdef NS_SINGLE_PRECISION

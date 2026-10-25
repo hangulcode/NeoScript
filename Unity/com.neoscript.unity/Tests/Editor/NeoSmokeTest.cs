@@ -23,7 +23,7 @@ namespace NeoScript.Tests
     internal sealed class HostObject : INeoObject, INeoProperties
     {
         internal readonly List<string> Received = new List<string>();
-        internal int Version = 7;
+        internal long Version = 7;
         internal NeoJsonResult JsonResult;
         internal bool JsonOk;
         internal Vector3 Position = new Vector3(1, 2, 3);
@@ -55,7 +55,7 @@ namespace NeoScript.Tests
             if (method.Is("VectorArray"))
             {
                 var a = ctx.ArgArray(0);
-                int dim = ctx.ArgInt(1);
+                int dim = checked((int)ctx.ArgInt(1));
                 bool ok = a.VectorDimension == dim && a.Count == 2 &&
                     (int)a.ElementType == (int)NeoArrayElementType.Vector2 + dim - 2 &&
                     a.Floats.IsEmpty && a.Ints.IsEmpty;
@@ -141,7 +141,7 @@ namespace NeoScript.Tests
             if (method.Is("SumList"))
             {
                 NeoListReader list = ctx.ArgList(0);
-                int total = 0;
+                long total = 0;
                 for (int i = 0; i < list.Count; ++i)
                     total += list.GetInt(i);
                 ctx.Return(total);
@@ -297,6 +297,15 @@ export fun Update(var dt)
                 Check(instance.Call("Add").Arg(20).Arg(22).InvokeInt() == 42, "Add(20, 22) == 42");
                 Check(instance.Call("Greet").Arg("neo").InvokeString() == "hi neo", "Greet(\"neo\")");
 
+                // 32비트를 넘는 인자·반환값·전역 값이 관리 경계에서도 그대로 유지된다.
+                foreach (long wide in new[] { long.MinValue, long.MaxValue, 5000000000L, -5000000000L })
+                {
+                    Check(instance.Call("Add").Arg(wide).Arg(0).InvokeInt() == wide, "wide call argument/result");
+                    Check(instance.SetInt("counter", wide) && instance.TryGetInt("counter", out long read) && read == wide, "wide global");
+                }
+                Check(instance.SetInt("counter", 10), "restore global after wide tests");
+                Check(instance.Call("HostDouble").Arg(5000000000L).InvokeInt() == 10000000000L, "wide native callback");
+
                 // --- 캐싱한 함수 핸들 ---
                 using (NeoFunction add = program.FindFunction("Add"))
                 {
@@ -334,7 +343,7 @@ export fun Update(var dt)
                     "Vector4 argument and return keep raw component order");
 
                 // --- 컬렉션 반환 ---
-                int gold = 0;
+                long gold = 0;
                 string chest = null;
                 instance.Call("Loot").InvokeReadMap(map =>
                 {
@@ -345,7 +354,7 @@ export fun Update(var dt)
                 Check(chest == "chest", "map return: name == chest");
 
                 // --- 전역 변수 (export var 만 보인다) ---
-                Check(instance.TryGetInt("counter", out int counter) && counter == 10, "global read == 10");
+                Check(instance.TryGetInt("counter", out long counter) && counter == 10, "global read == 10");
                 instance.Call("Bump").InvokeInt();
                 Check(instance.TryGetInt("counter", out counter) && counter == 11, "global sees script write");
                 Check(instance.SetInt("counter", 200), "global write accepted");
@@ -444,9 +453,9 @@ fun Later() { return 7; }
                 Check(instance.Call("Decode").Arg("\uFEFF100.0").Invoke().Type == NeoValueType.Float, "BOM and real type preserved");
                 Check(instance.Call("Decode").Arg("100").InvokeInt() == 100, "integer decode");
                 Check(instance.Call("Decode").Arg("null").Invoke().Type == NeoValueType.None && host.JsonOk, "valid root null");
-                Check(instance.Call("Decode").Arg("2147483648").Invoke().Type == NeoValueType.None &&
+                Check(instance.Call("Decode").Arg("9223372036854775808").Invoke().Type == NeoValueType.None &&
                     !host.JsonOk && host.JsonResult.Error.StartsWith("$:"), "strict integer failure path");
-                Check(instance.Call("DecodeRelaxed").Arg("2147483648").Invoke().Type == NeoValueType.Float &&
+                Check(instance.Call("DecodeRelaxed").Arg("9223372036854775808").Invoke().Type == NeoValueType.Float &&
                     host.JsonOk && host.JsonResult.Warnings.Length == 1, "permissive integer warning");
                 NeoJsonResult saved = host.JsonResult;
                 instance.Call("Decode").Arg("{\"a\":[\"\\u0000\"]}").Invoke();

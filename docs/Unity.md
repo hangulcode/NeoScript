@@ -23,11 +23,16 @@ into every engine build that nothing in that build calls.
 ## Updating from an older checkout
 
 Close Unity, update the UPM sources, then rebuild the native plugin for each
-target platform. The current binding requires **C ABI 5**; an older DLL is
+target platform. The current binding requires **C ABI 6**; an older DLL is
 rejected at runtime construction with an ABI mismatch. This is the native
 binding revision, not a package or bytecode version. Recompile cached bytecode
 with the current core; old images may be rejected by its image-version check.
-ABI 5 adds `NsRuntimeTryDestroy` and `NsTryDestroyInstance`, which the managed
+ABI 6 uses C# `long` for script integer arguments, results, globals, and collection values,
+and `Span<long>` for integer arrays. `NsCallResult` is 56 bytes on 64-bit targets and
+48 bytes on 32-bit targets. Rebuild native plugins together with the managed package.
+Collection lengths, indices, handles, and statuses retain their existing widths.
+
+ABI 5 added `NsRuntimeTryDestroy` and `NsTryDestroyInstance`, which the managed
 binding uses to reject unsafe disposal without releasing its managed handles.
 Existing C ABI structure layouts are unchanged. Update the package and plugin together.
 
@@ -425,13 +430,13 @@ value on failure. A successfully decoded JSON `null` also returns null, so
 check the flag to distinguish it from failure. `NeoJsonResult.Error` and
 `Warnings` are managed copies and remain valid after the callback returns.
 
-Decode defaults to strict int32 integers and accepts any supported root value.
+Decode defaults to strict int64 integers and accepts any supported root value.
 `requireMap: true` restricts the root to a map. `strictIntegers: false` allows
-out-of-int32 integers to become finite float32 values with warnings. Float32
+out-of-int64 integers to become finite float32 values with warnings. Float32
 values retain real notation (`100.0`) when encoded. Encoding optionally sorts
 map keys; lists keep their order.
 
-Only null, bool, int32, float32, strings, string-key maps and lists are
+Only null, bool, int64, float32, strings, string-key maps and lists are
 supported. Native objects, vectors, functions, sets, dense arrays, cycles,
 invalid text and nesting beyond 64 containers fail with a full path such as
 `$.items[2].position`. Map nulls are omitted; list nulls are preserved. See

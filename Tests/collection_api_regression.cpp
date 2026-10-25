@@ -72,7 +72,7 @@ static void CheckCapacity() {
     vm.ArrayReserve(array._array, 100);
     SNeoVMAllocStats stats;
     vm.GetAllocStats(stats);
-    Check(stats.bufferBytes == 100 * sizeof(int), "reserve updates array allocation accounting");
+    Check(stats.bufferBytes == 100 * sizeof(int64_t), "reserve updates array allocation accounting");
     map._tbl->Insert(&initial, &initial); set._set->Insert(&initial); list._lst->InsertLast(&initial);
     const int mapCapacity = map._tbl->_BucketCapa, setCapacity = set._set->_BucketCapa;
     map._tbl->Clear(); set._set->Clear(); list._lst->Resize(0); vm.ArrayResize(array._array, 0);

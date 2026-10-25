@@ -284,6 +284,10 @@ if(NEOSCRIPT_BUILD_SMOKE)
     add_test(NAME neoscript_ci_smoke COMMAND neoscript_ci_smoke)
     add_test(NAME neoscript_c_abi_smoke COMMAND neoscript_c_abi_smoke)
 
+    add_executable(neoscript_int64_regression Tests/int64_regression.cpp)
+    target_link_libraries(neoscript_int64_regression PRIVATE neoscript Threads::Threads)
+    add_test(NAME neoscript_int64_regression COMMAND neoscript_int64_regression)
+
     add_executable(neoscript_control_flow_regression Tests/control_flow_regression.cpp)
     target_link_libraries(neoscript_control_flow_regression PRIVATE neoscript Threads::Threads)
     add_test(NAME neoscript_control_flow_regression COMMAND neoscript_control_flow_regression)

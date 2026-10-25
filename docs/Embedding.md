@@ -525,9 +525,17 @@ result before it can return to Script A, so Script B does not own a resumable ex
 
 ### Compiled image capacity
 
-The current image format is **0133**. Recompile older cached images: this format includes local
-initialization, ordered operand evaluation, and deferred assignment paths. Host lifecycle and
-load-validation fixes retain format 0133.
+The current image format is **0134**, with signed 64-bit integer constants and values.
+Recompile older cached images; they are rejected rather than interpreted using the new layout.
+`MOVI` retains a signed 32-bit immediate, sign-extended to 64 bits. Larger integer literals
+use the constant pool, with `LOADK` when needed; instructions remain eight bytes.
+
+Public scalar integer arguments, results, globals, map/list values, and integer array
+elements use `int64_t`. C# exposes them as `long` through C ABI 6. Rebuild hosts and plugins
+together. Counts, indices, function IDs, statuses, and timeout parameters retain their
+existing widths. C++ map/list/global integer readers also accept an `int32_t&` output:
+these checked compatibility overloads return false without changing the output if the value
+is outside the 32-bit range. Prefer `int64_t` for complete script integer values.
 
 Indexed null assignment uses the ordinary assignment instruction; lists keep their positions
 and maps remove the key at runtime. Instructions remain eight bytes. `LOADK` sits beside the

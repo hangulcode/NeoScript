@@ -496,7 +496,7 @@ std::string GetValueString(VarInfo& vi, std::map<int, std::string>* pFunTable = 
 	switch (vi.GetType())
 	{
 	case VAR_INT:
-		snprintf(ch, _countof(ch), "%d", vi._int);
+		snprintf(ch, _countof(ch), "%lld", (long long)vi._int);
 		break;
 	case VAR_FLOAT:
 		snprintf(ch, _countof(ch), FLOAT_FORMAT, vi._float); // double ?
@@ -931,7 +931,7 @@ bool Write(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SVars& vars)
 		switch (vi.GetType())
 		{
 		case VAR_INT:
-			ar << vi._int;
+			ar.Write((void*)&vi._int, sizeof(vi._int));
 			break;
 		case VAR_FLOAT:
 			ar << vi._float; // double

@@ -328,7 +328,7 @@ struct VarInfo
 private:
 	VAR_TYPE	_type;
 	// VAR_VEC 의 성분 수(1~4). _type 뒤 정렬 패딩을 쓰므로 VarInfo 크기를
-	// 늘리지 않는다(x64 7바이트, Win32 3바이트 패딩). 설정은 VecStoreFor() 한 곳뿐이고,
+	// 늘리지 않는다. 정수 유니온의 정렬 패딩을 쓰며 설정은 VecStoreFor() 한 곳뿐이고,
 	// 복사는 Move_DestNoRelease 가 _vec 과 함께 옮긴다.
 	u8			_vecCount;
 	NEOS_FORCEINLINE void SetType(VAR_TYPE t) { _type = t; }
@@ -359,7 +359,7 @@ public:
 		SetInfo* _set;
 		FunctionPtr* _funPtr; // C Native
 		FunctionPropertyInfo* _fpNative; // VAR_FP_NATIVE
-		int			_int;
+		NS_INT			_int;
 		NS_FLOAT	_float;
 		int			_fun_index;
 		INeoVMWorker* _module;
@@ -373,7 +373,7 @@ public:
 
 	NEOS_FORCEINLINE VarInfo() { _type = VAR_NONE; }
 	NEOS_FORCEINLINE VarInfo(VAR_TYPE t) { _type = t; }
-	NEOS_FORCEINLINE VarInfo(int v) { _type = VAR_INT; _int = v; }
+	NEOS_FORCEINLINE VarInfo(NS_INT v) { _type = VAR_INT; _int = v; }
 
 	NEOS_FORCEINLINE VAR_TYPE GetType() const { return _type; }
 	// 풀 객체 + refcount 를 쓰는 타입인가. 대입/해제 때 참조 카운트를 만져야 하는지 판정.
@@ -432,10 +432,8 @@ public:
 	bool GetQuat(float out[4]); // wxyz
 };
 
-// 유니온 최대 멤버가 포인터(8바이트)라 x64는 16바이트, Win32는 12바이트다.
-// 벡터를 인라인(float[4])하던 시절엔 24/20바이트였다 — 이 8바이트가 스택·리스트·맵노드
-// 전부에 곱해져서 실측으로 map_str 12%, particles 13% 를 먹었다.
-static_assert(sizeof(VarInfo) == (sizeof(void*) == 8 ? 16 : 8), "Unexpected VarInfo size");
+// 64비트 정수 유니온과 타입 영역을 포함한다. 정렬이 8바이트면 16, 4바이트면 12바이트다.
+static_assert(sizeof(VarInfo) == sizeof(NS_INT) + alignof(VarInfo), "Unexpected VarInfo size");
 
 enum NeoDebugStopReason
 {
@@ -551,7 +549,7 @@ public:
 	virtual void Var_Move(VarInfo* v1, VarInfo* v2) =0;
 
 
-	void PushInt(int v)
+	void PushInt(NS_INT v)
 	{
 		VarInfo d;
 		d.SetType(VAR_INT);
@@ -575,7 +573,7 @@ public:
 	}
 	void PushNeoFunction(NeoFunction v);
 
-	int PopInt(VarInfo* V)
+	NS_INT PopInt(VarInfo* V)
 	{
 		switch (V->GetType())
 		{
@@ -627,7 +625,7 @@ public:
 	}
 
 	bool GetArg_StlString(int idx, std::string &r);
-	bool GetArg_Int(int idx, int& r);
+	bool GetArg_Int(int idx, NS_INT& r);
 	bool GetArg_Float(int idx, NS_FLOAT& r);
 	bool GetArg_Bool(int idx, bool &r);
 
@@ -643,8 +641,8 @@ public:
 	inline void push(char* ret) { PushString(ret); }
 	inline void push(const char* ret) { PushString(ret); }
 	inline void push(bool ret) { PushBool(ret); }
-	inline void push(long long ret) { PushInt((int)ret); }
-	inline void push(unsigned long long ret) { PushInt((int)ret); }
+	inline void push(long long ret) { PushInt((NS_INT)ret); }
+	inline void push(unsigned long long ret) { PushInt((NS_INT)ret); }
 	inline void push(NeoFunction ret) { PushNeoFunction(ret); }
 
 	inline void		_read(VarInfo* V, std::string*& r) { r = (std::string*)PopStlString(V); }
@@ -656,7 +654,7 @@ public:
 	inline void		_read(VarInfo* V, unsigned short& r) { r = (unsigned short)PopInt(V); }
 	inline void		_read(VarInfo* V, long& r) { r = (long)PopInt(V); }
 	inline void		_read(VarInfo* V, unsigned long& r) { r = (unsigned long)PopInt(V); }
-	inline void		_read(VarInfo* V, int& r) { r = (int)PopInt(V); }
+	inline void		_read(VarInfo* V, int& r) { r = NeoNarrowInt(PopInt(V)); }
 	inline void		_read(VarInfo* V, unsigned int& r) { r = (unsigned int)PopInt(V); }
 	inline void		_read(VarInfo* V, NS_FLOAT& r) { r = (NS_FLOAT)PopFloat(V); }
 	inline void		_read(VarInfo* V, bool& r) { r = PopBool(V); }
@@ -666,7 +664,7 @@ public:
 	inline void		_read(VarInfo* V, VarInfo*& r) { r = V; }
 	inline void		_read(VarInfo* V, NeoFunction& r) { r = PopNeoFunction(V); }
 
-	void Var_SetInt(VarInfo* d, int v);
+	void Var_SetInt(VarInfo* d, NS_INT v);
 	void Var_SetFloat(VarInfo* d, NS_FLOAT v);
 	void Var_SetBool(VarInfo* d, bool v);
 	// 벡터 저장소 확보. 대상이 이미 단독 소유 벡터면 재사용하고, 아니면 풀에서 새로 받는다.
@@ -702,8 +700,8 @@ public:
 	inline void	ReturnValue(unsigned int p) { Var_SetInt(GetReturnVar(), p); }
 	inline void	ReturnValue(NS_FLOAT p) { Var_SetFloat(GetReturnVar(), p); }
 	inline void	ReturnValue(bool p) { Var_SetBool(GetReturnVar(), p); }
-	inline void	ReturnValue(long long p) { Var_SetInt(GetReturnVar(), (int)p); }
-	inline void	ReturnValue(unsigned long long p) { Var_SetInt(GetReturnVar(), (int)p); }
+	inline void	ReturnValue(long long p) { Var_SetInt(GetReturnVar(), (NS_INT)p); }
+	inline void	ReturnValue(unsigned long long p) { Var_SetInt(GetReturnVar(), (NS_INT)p); }
 	inline void	ReturnValue(CoroutineInfo* p) { Var_SetCoroutine(GetReturnVar(), p); }
 	inline void	ReturnValue(AsyncInfo* p) { Var_SetAsync(GetReturnVar(), p); }
 

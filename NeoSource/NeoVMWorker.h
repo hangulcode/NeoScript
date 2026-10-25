@@ -380,8 +380,9 @@ private:
 	void Add2(VarInfo* r, VarInfo* v2);
 	void Sub2(VarInfo* r, VarInfo* v2);
 	void Mul2(VarInfo* r, VarInfo* v2);
-	bool CheckIntegerDivision(int dividend, int divisor);
-	bool CheckShiftCount(int count);
+	bool CheckIntegerDivision(NS_INT dividend, NS_INT divisor);
+	bool CheckIntegerDivisionOverflow(NS_INT dividend);
+	bool CheckShiftCount(NS_INT count);
 	void Div2(VarInfo* r, VarInfo* v2);
 	void Per2(VarInfo* r, VarInfo* v2);
 	void LSh2(VarInfo* r, VarInfo* v2);
@@ -431,7 +432,7 @@ private:
 	NEOS_NOINLINE bool CompareGRRare(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic);
 	NEOS_NOINLINE bool CompareGERare(VarInfo* v1, VarInfo* v2, bool reverseDiagnostic);
 	bool For(VarInfo* v1);
-	bool ForRare(VarInfo* v1, int step);   // step != 1 (일반 양수 스텝·역방향·0) — For 의 인라인 본문을 step==1 로만 유지
+	bool ForRare(VarInfo* v1, NS_INT step);   // step != 1 (일반 양수 스텝·역방향·0) — For 의 인라인 본문을 step==1 로만 유지
 	// bTwoVar: foreach(var k, v in ...) 형태(컴파일러가 op argFlag 로 전달).
 	// list 는 2변수 순회를 지원하지 않으므로 런타임에 여기서 에러를 낸다.
 	bool ForEach(VarInfo* v1, VarInfo* v2, bool bTwoVar);
@@ -455,7 +456,7 @@ private:
 	bool PropertyNative(FunctionPtrNative functionPtrNative, void* pUserData, StringInfo* pStr, VarInfo* pRet, bool get);
 
 	static std::string ToString(VarInfo* v1);
-	int ToInt(VarInfo* v1);
+	NS_INT ToInt(VarInfo* v1);
 	NS_FLOAT ToFloat(VarInfo* v1);
 	int ToSize(VarInfo* v1);
 	VarInfo* GetType(VarInfo* v1);
@@ -464,8 +465,8 @@ private:
 	void CommitRefVector(VarInfo* value);
 	void CltInsertRare(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
 	void CltInsert(VarInfo *pClt, int array, VarInfo *v);
-	void CltInsert(VarInfo *pClt, VarInfo *pArray, int v);
-	void CltInsert(VarInfo *pClt, int key, int v);
+	void CltInsert(VarInfo *pClt, VarInfo *pArray, NS_INT v);
+	void CltInsert(VarInfo *pClt, NS_INT key, NS_INT v);
 	void CltRead(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
 	void CltReadRare(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
 	bool ArrayModify(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue, eNOperation op);

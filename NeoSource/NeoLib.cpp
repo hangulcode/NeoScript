@@ -94,7 +94,7 @@ struct neo_libs
         if (pVar->GetType() != VAR_STRING || args != 1) return false;
         VarInfo* index = pN->GetStack(1);
         if (index->GetType() != VAR_INT) return false;
-        pN->ReturnValue(utf_string::CodePointAt(pVar->_str->_str, index->_int));
+        pN->ReturnValue(utf_string::CodePointAt(pVar->_str->_str, NeoNarrowInt(index->_int)));
         return true;
     }
 	static bool Str_find(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -759,7 +759,7 @@ struct neo_libs
 		{
 			VarInfo* pIndex = pN->GetStack(2);
 			if (pIndex->GetType() != VAR_INT) return false;
-			if (false == pVar->_lst->Insert(pIndex->_int, pN->GetStack(1)))
+			if (false == pVar->_lst->Insert(NeoNarrowInt(pIndex->_int), pN->GetStack(1)))
 				return false;
 			pN->ReturnValue();
 			return true;
@@ -771,7 +771,7 @@ struct neo_libs
 		if (pVar->GetType() != VAR_LIST || args != 2) return false;
 		VarInfo* index = pN->GetStack(1);
 		if (index->GetType() != VAR_INT) return false;
-		if (!pVar->_lst->Insert(index->_int, pN->GetStack(2)))
+		if (!pVar->_lst->Insert(NeoNarrowInt(index->_int), pN->GetStack(2)))
 		{
 			pN->SetError("list insert index out of range");
 			return false;
@@ -1672,7 +1672,7 @@ struct neo_libs
 		if (args != 1 || pN->GetStack(1)->GetType() != VAR_INT) return false;
 
 		// Keep the exact unsigned 32-bit overflow behavior used by native gameplay code.
-		std::uint32_t value = static_cast<std::uint32_t>(pN->read<int>(1));
+		std::uint32_t value = static_cast<std::uint32_t>(pN->read<NS_INT>(1));
 		value ^= value >> 16;
 		value *= 0x7feb352du;
 		value ^= value >> 15;
@@ -1684,7 +1684,7 @@ struct neo_libs
 	static int MathColorByte(NS_FLOAT value)
 	{
 		// 색 채널의 NaN은 0으로 변환하고, 나머지는 기존 0..1 제한과 소수부 버림을 유지한다.
-		return NeoFloatToInt(MathClamp01Value(value) * (NS_FLOAT)255.0);
+		return static_cast<int>(NeoFloatToInt(MathClamp01Value(value) * (NS_FLOAT)255.0));
 	}
 	static bool Math_ColorRGB(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
@@ -1885,7 +1885,7 @@ struct neo_libs
 			return false;
 
 		pAsync->_type = ASYNC_GET;
-		pAsync->_timeout = v1->_int;
+		pAsync->_timeout = NeoNarrowInt(v1->_int);
 		pAsync->_request = v2->_str->_str;
 		pAsync->_fun_index = (v3->GetType() == VAR_FUN) ? v3->_fun_index : v3->_closure->_funIndex;
 		pN->Move(&pAsync->_callback, v3);
@@ -1930,7 +1930,7 @@ struct neo_libs
 			return false;
 
 		pAsync->_type = ASYNC_POST;
-		pAsync->_timeout = v1->_int;
+		pAsync->_timeout = NeoNarrowInt(v1->_int);
 		pAsync->_request = v2->_str->_str;
 		pAsync->_body = v3->_str->_str;
 		pAsync->_fun_index = (v4->GetType() == VAR_FUN) ? v4->_fun_index : v4->_closure->_funIndex;
@@ -2106,8 +2106,12 @@ struct neo_libs
 		VarInfo* pArg2 = pN->GetStack(2);
 		if (pArg1->GetType() != VAR_STRING || pArg2->GetType() != VAR_INT) return false;
 
-		// Retain the existing unsigned 32-bit timestamp interpretation.
-		const std::time_t currentTime = static_cast<u32>(pArg2->_int);
+		// 기존 음수 int32 타임스탬프의 unsigned 해석을 유지하고 양수 범위는 확장한다.
+		NS_INT timestamp = pArg2->_int;
+		if (timestamp < 0 && timestamp >= INT32_MIN) timestamp = static_cast<uint32_t>(timestamp);
+		if (timestamp < 0 || timestamp > 253402300799LL) return false;
+		if (sizeof(std::time_t) < 8 && timestamp > INT32_MAX) return false;
+		const std::time_t currentTime = static_cast<std::time_t>(timestamp);
 		std::tm timeinfo;
 #ifdef _WIN32
 		if (localtime_s(&timeinfo, &currentTime) != 0) return false;
@@ -2136,7 +2140,7 @@ struct neo_libs
 
 		VarInfo* initialValue = pN->GetStack(1);
 		VarInfo* sizeValue = pN->GetStack(2);
-		if (sizeValue->GetType() != VAR_INT || sizeValue->_int < 0)
+		if (sizeValue->GetType() != VAR_INT || sizeValue->_int < 0 || sizeValue->_int > INT_MAX)
 			return false;
 
 		NeoArrayElementType elementType;
@@ -2157,7 +2161,7 @@ struct neo_libs
 		default:        return false;
 		}
 
-		ArrayInfo* array = pN->GetVM()->ArrayAlloc(elementType, sizeValue->_int, *initialValue);
+		ArrayInfo* array = pN->GetVM()->ArrayAlloc(elementType, static_cast<int>(sizeValue->_int), *initialValue);
 		if (array == nullptr)
 			return false;
 		pN->Var_SetArray(pN->GetStack(0), array);

@@ -61,7 +61,7 @@ NEOS_FORCEINLINE bool ArrayWriteValue(ArrayInfo* array, int index, VarInfo* valu
 // 상수로 넘기고 이 함수가 인라인되면 switch 는 사라진다. 성분은 float 라 %= 는 스칼라 float 와 같이 오류.
 NEOS_FORCEINLINE bool CNeoVMWorker::VecComponentOp(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue, eNOperation op)
 {
-	if (pKey->GetType() != VAR_INT || (unsigned)pKey->_int >= (unsigned)pClt->VectorComponentCount())
+	if (pKey->GetType() != VAR_INT || (NS_UINT)pKey->_int >= (unsigned)pClt->VectorComponentCount())
 	{
 		SetError(RTE_VECTOR_INDEX_WRITE);
 		return false;
@@ -97,7 +97,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 		if (pKey->GetType() == VAR_INT)
 		{
 			ListInfo* lst = pClt->_lst;
-			unsigned idx = (unsigned)pKey->_int;
+			NS_UINT idx = (NS_UINT)pKey->_int;
 			if (idx < (unsigned)lst->_itemCount)
 			{
 				if (pValue->IsContainerType())
@@ -137,7 +137,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 		// v[i] = x. 공유 중이면 VecWritable 이 복제한다(값 의미론).
 		if (pKey->GetType() == VAR_INT && pValue->IsNumber())
 		{
-			unsigned idx = (unsigned)pKey->_int;
+			NS_UINT idx = (NS_UINT)pKey->_int;
 			if (idx < (unsigned)pClt->VectorComponentCount())
 			{
 				VecWritable(pClt)->v[idx] = (float)pValue->GetFloatNumber();
@@ -154,13 +154,13 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 			return;
 		}
 		ArrayInfo* array = pClt->_array;
-		const int index = pKey->_int;
+		const NS_INT index = pKey->_int;
 		if (array->IsValidIndex(index) == false)
 		{
 			SetError(RTE_ARRAY_INDEX_WRITE);
 			return;
 		}
-		if (ArrayWriteValue(array, index, pValue))
+		if (ArrayWriteValue(array, static_cast<int>(index), pValue))
 			return;
 		SetErrorFormat(RTE_ARRAY_VALUE_TYPE, GetDataType(pValue->GetType()).c_str(), GetArrayElementTypeName(array->_elementType));
 		return;
@@ -185,7 +185,7 @@ NEOS_NOINLINE void CNeoVMWorker::CltInsertRare(VarInfo* pClt, VarInfo* pKey, Var
 		// 이 VarInfo 인스턴스에만 반영되게 한다 — 값 의미론 유지.
 		if (pKey->GetType() == VAR_INT && pValue->IsNumber())
 		{
-			unsigned idx = (unsigned)pKey->_int;
+			NS_UINT idx = (NS_UINT)pKey->_int;
 			if (idx < (unsigned)pClt->VectorComponentCount())
 			{
 				GetVM()->VecCopyOnWrite(pClt)->v[idx] = (float)pValue->GetFloatNumber();
@@ -213,13 +213,13 @@ NEOS_NOINLINE void CNeoVMWorker::CltInsertRare(VarInfo* pClt, VarInfo* pKey, Var
 			return;
 		}
 		ArrayInfo* array = pClt->_array;
-		const int index = pKey->_int;
+		const NS_INT index = pKey->_int;
 		if (array->IsValidIndex(index) == false)
 		{
 			SetError(RTE_ARRAY_INDEX_WRITE);
 			return;
 		}
-		if (ArrayWriteValue(array, index, pValue))
+		if (ArrayWriteValue(array, static_cast<int>(index), pValue))
 			return;
 		SetErrorFormat(RTE_ARRAY_VALUE_TYPE, GetDataType(pValue->GetType()).c_str(), GetArrayElementTypeName(array->_elementType));
 		return;
@@ -240,7 +240,7 @@ NEOS_NOINLINE void CNeoVMWorker::CltInsertRare(VarInfo* pClt, VarInfo* pKey, Var
 		if (pKey->GetType() == VAR_INT)
 		{
 			// fast path: CltRead 와 동일한 이유로 버킷에 직접 쓴다.
-			unsigned idx = (unsigned)pKey->_int;
+			NS_UINT idx = (NS_UINT)pKey->_int;
 			if (idx < (unsigned)lst->_itemCount)
 			{
 				if (pValue->IsContainerType())
@@ -276,7 +276,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, int key, VarInfo* v
 		pClt->_tbl->Insert(key, v);
 		return;
 	case VAR_LIST:
-		pClt->_lst->SetValue(key, v);
+		pClt->_lst->SetValue(NeoNarrowInt(key), v);
 		return;
 	default:
 		break;
@@ -284,7 +284,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, int key, VarInfo* v
 	SetErrorFormat(RTE_INDEX_WRITE, GetDataType(pClt->GetType()).c_str());
 }
 
-NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, int v)
+NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, NS_INT v)
 {
 	switch (pClt->GetType())
 	{
@@ -292,14 +292,14 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, int 
 		pClt->_tbl->Insert(pKey, v);
 		return;
 	case VAR_LIST:
-		pClt->_lst->SetValue(pKey->_int, v);
+		pClt->_lst->SetValue(NeoNarrowInt(pKey->_int), v);
 		return;
 	default:
 		break;
 	}
 	SetErrorFormat(RTE_INDEX_WRITE, GetDataType(pClt->GetType()).c_str());
 }
-NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, int key, int v)
+NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, NS_INT key, NS_INT v)
 {
 	switch (pClt->GetType())
 	{
@@ -307,7 +307,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, int key, int v)
 		pClt->_tbl->Insert(key, v);
 		return;
 	case VAR_LIST:
-		pClt->_lst->SetValue(key, v);
+		pClt->_lst->SetValue(NeoNarrowInt(key), v);
 		return;
 	default:
 		break;
@@ -324,7 +324,7 @@ NEOS_FORCEINLINE VarInfo* CNeoVMWorker::GetTableItem(VarInfo* pClt, VarInfo* pKe
 	{
 		if (pKey->GetType() == VAR_INT)
 		{
-			return pClt->_lst->GetValue(pKey->_int);
+			return pClt->_lst->GetValue(NeoNarrowInt(pKey->_int));
 		}
 		else
 		{
@@ -369,7 +369,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 		if (pKey->GetType() == VAR_INT)
 		{
 			ListInfo* lst = pClt->_lst;
-			unsigned idx = (unsigned)pKey->_int;
+			NS_UINT idx = (NS_UINT)pKey->_int;
 			if (idx < (unsigned)lst->_itemCount)
 			{
 				Move(pValue, &lst->_Bucket[idx]);
@@ -398,7 +398,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 		// v[i] 읽기. 범위 밖이거나 정수 인덱스가 아니면 그대로 떨어뜨려 rare 가 에러를 낸다.
 		if (pKey->GetType() == VAR_INT)
 		{
-			unsigned idx = (unsigned)pKey->_int;
+			NS_UINT idx = (NS_UINT)pKey->_int;
 			if (idx < (unsigned)pClt->VectorComponentCount())
 			{
 				Var_SetFloat(pValue, pClt->_vec->v[idx]);
@@ -414,7 +414,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 			return;
 		}
 		ArrayInfo* array = pClt->_array;
-		const int index = pKey->_int;
+		const NS_INT index = pKey->_int;
 		if (array->IsValidIndex(index) == false)
 		{
 			SetError(RTE_ARRAY_INDEX_READ);
@@ -427,7 +427,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 		else if (array->_elementType == NeoArrayElementType::Float && pValue->GetType() == VAR_FLOAT)
 			pValue->_float = array->FloatData()[index];
 		else
-			ArrayReadValue(this, array, index, pValue);
+			ArrayReadValue(this, array, static_cast<int>(index), pValue);
 		return;
 	}
 	CltReadRare(pClt, pKey, pValue);
@@ -441,7 +441,7 @@ NEOS_NOINLINE void CNeoVMWorker::CltReadRare(VarInfo* pClt, VarInfo* pKey, VarIn
 	case VAR_VEC:
 		if (pKey->GetType() == VAR_INT)
 		{
-			unsigned idx = (unsigned)pKey->_int;
+			NS_UINT idx = (NS_UINT)pKey->_int;
 			if (idx < (unsigned)pClt->VectorComponentCount())
 			{
 				Var_SetFloat(pValue, pClt->_vec->v[idx]);
@@ -469,13 +469,13 @@ NEOS_NOINLINE void CNeoVMWorker::CltReadRare(VarInfo* pClt, VarInfo* pKey, VarIn
 			return;
 		}
 		ArrayInfo* array = pClt->_array;
-		const int index = pKey->_int;
+		const NS_INT index = pKey->_int;
 		if (array->IsValidIndex(index) == false)
 		{
 			SetError(RTE_ARRAY_INDEX_READ);
 			return;
 		}
-		ArrayReadValue(this, array, index, pValue);
+		ArrayReadValue(this, array, static_cast<int>(index), pValue);
 		return;
 	}
 	case VAR_MAP:
@@ -499,7 +499,7 @@ NEOS_NOINLINE void CNeoVMWorker::CltReadRare(VarInfo* pClt, VarInfo* pKey, VarIn
 		{
 			// fast path: 함수 호출(ListInfo::GetValue)과 VM 간접참조 없이 버킷을 직접 읽는다.
 			// 음수는 unsigned 로 접히므로 비교 한 번으로 범위 검사가 끝난다.
-			unsigned idx = (unsigned)pKey->_int;
+			NS_UINT idx = (NS_UINT)pKey->_int;
 			if (idx < (unsigned)lst->_itemCount)
 			{
 				Move(pValue, &lst->_Bucket[idx]);
@@ -581,7 +581,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::MoveMinus(VarInfo* v1, VarInfo* v2)
 	switch (v2->GetType())
 	{
 	case VAR_INT:
-		Var_SetInt(v1, -v2->_int);
+		Var_SetInt(v1, NeoIntNeg(v2->_int));
 		return;
 	case VAR_FLOAT:
 		Var_SetFloat(v1, -v2->_float);
@@ -727,7 +727,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Add3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	const VAR_TYPE t2 = v2->GetType();
 	if (t1 == VAR_INT)
 	{
-		if (t2 == VAR_INT)   { Var_SetInt(r, v1->_int + v2->_int); return; }
+		if (t2 == VAR_INT)   { Var_SetInt(r, NeoIntAdd(v1->_int, v2->_int)); return; }
 		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_int + v2->_float); return; }
 	}
 	else if (t1 == VAR_FLOAT)
@@ -773,7 +773,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Sub3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	const VAR_TYPE t2 = v2->GetType();
 	if (t1 == VAR_INT)
 	{
-		if (t2 == VAR_INT)   { Var_SetInt(r, v1->_int - v2->_int); return; }
+		if (t2 == VAR_INT)   { Var_SetInt(r, NeoIntSub(v1->_int, v2->_int)); return; }
 		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_int - v2->_float); return; }
 	}
 	else if (t1 == VAR_FLOAT)
@@ -813,7 +813,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Mul3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	const VAR_TYPE t2 = v2->GetType();
 	if (t1 == VAR_INT)
 	{
-		if (t2 == VAR_INT)   { Var_SetInt(r, v1->_int * v2->_int); return; }
+		if (t2 == VAR_INT)   { Var_SetInt(r, NeoIntMul(v1->_int, v2->_int)); return; }
 		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_int * v2->_float); return; }
 	}
 	else if (t1 == VAR_FLOAT)
@@ -843,14 +843,20 @@ NEOS_NOINLINE void CNeoVMWorker::Mul3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	}
 	SetErrorOperator("*", v1, v2);
 }
-NEOS_FORCEINLINE bool CNeoVMWorker::CheckIntegerDivision(int dividend, int divisor)
+NEOS_FORCEINLINE bool CNeoVMWorker::CheckIntegerDivision(NS_INT dividend, NS_INT divisor)
 {
 	if (divisor == 0)
 	{
 		SetError(RTE_INTEGER_DIV_ZERO);
 		return false;
 	}
-	if (divisor == -1 && dividend == INT_MIN)
+	return divisor != -1 || CheckIntegerDivisionOverflow(dividend);
+}
+
+// 드문 오버플로 검사를 분리하여 최소 정수 상수가 전체 디스패치의 레지스터를 점유하지 않게 한다.
+NEOS_NOINLINE bool CNeoVMWorker::CheckIntegerDivisionOverflow(NS_INT dividend)
+{
+	if (dividend == NS_INT_MIN)
 	{
 		SetError(RTE_INTEGER_DIV_OVERFLOW);
 		return false;
@@ -917,45 +923,45 @@ NEOS_FORCEINLINE void CNeoVMWorker::Per3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	}
 	SetErrorOperator("%", v1, v2);
 }
-NEOS_FORCEINLINE bool CNeoVMWorker::CheckShiftCount(int count)
+NEOS_FORCEINLINE bool CNeoVMWorker::CheckShiftCount(NS_INT count)
 {
-	if (static_cast<unsigned int>(count) < 32) return true;
+	if (static_cast<NS_UINT>(count) < 64) return true;
 	SetError(RTE_INTEGER_SHIFT_RANGE);
 	return false;
 }
-// int<<int(count 0..31) 만 인라인한다. 오류·비정수 경로는 *Rare 로 분리해 디스패치 루프를 키우지 않는다.
+// int<<int(count 0..63) 만 인라인한다. 오류·비정수 경로는 *Rare 로 분리해 디스패치 루프를 키우지 않는다.
 NEOS_FORCEINLINE void CNeoVMWorker::LSh3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
-	if (v1->GetType() == VAR_INT && v2->GetType() == VAR_INT && static_cast<unsigned int>(v2->_int) < 32)
+	if (v1->GetType() == VAR_INT && v2->GetType() == VAR_INT && static_cast<NS_UINT>(v2->_int) < 64)
 	{
-		Var_SetInt(r, NeoShiftLeft32(v1->_int, v2->_int));
+		Var_SetInt(r, NeoShiftLeft(v1->_int, v2->_int));
 		return;
 	}
 	LSh3Rare(r, v1, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::RSh3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
-	if (v1->GetType() == VAR_INT && v2->GetType() == VAR_INT && static_cast<unsigned int>(v2->_int) < 32)
+	if (v1->GetType() == VAR_INT && v2->GetType() == VAR_INT && static_cast<NS_UINT>(v2->_int) < 64)
 	{
-		Var_SetInt(r, NeoShiftRight32(v1->_int, v2->_int));
+		Var_SetInt(r, NeoShiftRight(v1->_int, v2->_int));
 		return;
 	}
 	RSh3Rare(r, v1, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::LSh2(VarInfo* r, VarInfo* v2)
 {
-	if (r->GetType() == VAR_INT && v2->GetType() == VAR_INT && static_cast<unsigned int>(v2->_int) < 32)
+	if (r->GetType() == VAR_INT && v2->GetType() == VAR_INT && static_cast<NS_UINT>(v2->_int) < 64)
 	{
-		r->_int = NeoShiftLeft32(r->_int, v2->_int);
+		r->_int = NeoShiftLeft(r->_int, v2->_int);
 		return;
 	}
 	LSh2Rare(r, v2);
 }
 NEOS_FORCEINLINE void CNeoVMWorker::RSh2(VarInfo* r, VarInfo* v2)
 {
-	if (r->GetType() == VAR_INT && v2->GetType() == VAR_INT && static_cast<unsigned int>(v2->_int) < 32)
+	if (r->GetType() == VAR_INT && v2->GetType() == VAR_INT && static_cast<NS_UINT>(v2->_int) < 64)
 	{
-		r->_int = NeoShiftRight32(r->_int, v2->_int);
+		r->_int = NeoShiftRight(r->_int, v2->_int);
 		return;
 	}
 	RSh2Rare(r, v2);
@@ -968,7 +974,7 @@ NEOS_NOINLINE void CNeoVMWorker::LSh3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		if (v2->GetType() == VAR_INT)
 		{
 			if (CheckShiftCount(v2->_int))
-				Var_SetInt(r, NeoShiftLeft32(v1->_int, v2->_int));
+				Var_SetInt(r, NeoShiftLeft(v1->_int, v2->_int));
 			return;
 		}
 		break;
@@ -995,7 +1001,7 @@ NEOS_NOINLINE void CNeoVMWorker::RSh3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		if (v2->GetType() == VAR_INT)
 		{
 			if (CheckShiftCount(v2->_int))
-				Var_SetInt(r, NeoShiftRight32(v1->_int, v2->_int));
+				Var_SetInt(r, NeoShiftRight(v1->_int, v2->_int));
 			return;
 		}
 		break;
@@ -1093,7 +1099,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Inc(VarInfo* v1)
 	switch (v1->GetType())
 	{
 	case VAR_INT:
-		++v1->_int;
+		v1->_int = NeoIntAdd(v1->_int, 1);
 		return;
 	case VAR_FLOAT:
 		++v1->_float;
@@ -1108,7 +1114,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Dec(VarInfo* v1)
 	switch (v1->GetType())
 	{
 	case VAR_INT:
-		--v1->_int;
+		v1->_int = NeoIntSub(v1->_int, 1);
 		return;
 	case VAR_FLOAT:
 		--v1->_float;
@@ -1230,7 +1236,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Add2(VarInfo* r, VarInfo* v2)
 	const VAR_TYPE t2 = v2->GetType();
 	if (t1 == VAR_INT)
 	{
-		if (t2 == VAR_INT)   { r->_int += v2->_int; return; }
+		if (t2 == VAR_INT)   { r->_int = NeoIntAdd(r->_int, v2->_int); return; }
 		if (t2 == VAR_FLOAT) { r->SetType(VAR_FLOAT); r->_float = (NS_FLOAT)r->_int + v2->_float; return; }
 	}
 	else if (t1 == VAR_FLOAT)
@@ -1267,7 +1273,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Sub2(VarInfo* r, VarInfo* v2)
 	const VAR_TYPE t2 = v2->GetType();
 	if (t1 == VAR_INT)
 	{
-		if (t2 == VAR_INT)   { r->_int -= v2->_int; return; }
+		if (t2 == VAR_INT)   { r->_int = NeoIntSub(r->_int, v2->_int); return; }
 		if (t2 == VAR_FLOAT) { r->SetType(VAR_FLOAT); r->_float = (NS_FLOAT)r->_int - v2->_float; return; }
 	}
 	else if (t1 == VAR_FLOAT)
@@ -1298,7 +1304,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::Mul2(VarInfo* r, VarInfo* v2)
 	const VAR_TYPE t2 = v2->GetType();
 	if (t1 == VAR_INT)
 	{
-		if (t2 == VAR_INT)   { r->_int *= v2->_int; return; }
+		if (t2 == VAR_INT)   { r->_int = NeoIntMul(r->_int, v2->_int); return; }
 		if (t2 == VAR_FLOAT) { r->SetType(VAR_FLOAT); r->_float = (NS_FLOAT)r->_int * v2->_float; return; }
 	}
 	else if (t1 == VAR_FLOAT)
@@ -1388,7 +1394,7 @@ NEOS_NOINLINE void CNeoVMWorker::LSh2Rare(VarInfo* r, VarInfo* v2)
 		if (v2->GetType() == VAR_INT)
 		{
 			if (CheckShiftCount(v2->_int))
-				r->_int = NeoShiftLeft32(r->_int, v2->_int);
+				r->_int = NeoShiftLeft(r->_int, v2->_int);
 			return;
 		}
 		break;
@@ -1411,7 +1417,7 @@ NEOS_NOINLINE void CNeoVMWorker::RSh2Rare(VarInfo* r, VarInfo* v2)
 		if (v2->GetType() == VAR_INT)
 		{
 			if (CheckShiftCount(v2->_int))
-				r->_int = NeoShiftRight32(r->_int, v2->_int);
+				r->_int = NeoShiftRight(r->_int, v2->_int);
 			return;
 		}
 		break;
@@ -1508,7 +1514,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::For(VarInfo* pCur)
 	// step 의 부호로 비교 방향을 정한다(begin/end/step 이 런타임 값일 수 있어 컴파일 타임 확정 불가).
 	// 압도적 다수인 step>0 만 여기서 처리하고, 음수/0 은 ForRare 로 분리한다 —
 	// 에러 처리까지 이 인라인 함수에 넣으면 코드가 커져 for 를 쓰는 모든 루프가 느려진다(실측 10~29%).
-	const int step = pCur[3]._int;
+	const NS_INT step = pCur[3]._int;
 	if (step == 1)
 	{
 		if (pCur->_int >= pCur[2]._int) return false;
@@ -1520,7 +1526,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::For(VarInfo* pCur)
 	return ForRare(pCur, step);
 }
 // 드문 경로: step<0(역방향) 과 step==0(에러). 인라인하지 않아 For 의 hot path 를 작게 유지한다.
-NEOS_NOINLINE bool CNeoVMWorker::ForRare(VarInfo* pCur, int step)
+NEOS_NOINLINE bool CNeoVMWorker::ForRare(VarInfo* pCur, NS_INT step)
 {
 	if (step == 0)
 	{
@@ -1531,16 +1537,16 @@ NEOS_NOINLINE bool CNeoVMWorker::ForRare(VarInfo* pCur, int step)
 	{
 		if (pCur->_int < pCur[2]._int)
 		{
-			const int64_t next = static_cast<int64_t>(pCur[1]._int) + step;
-			pCur[1]._int = next >= pCur[2]._int ? pCur[2]._int : static_cast<int>(next);
+			const NS_INT next = pCur[1]._int > NS_INT_MAX - step ? NS_INT_MAX : pCur[1]._int + step;
+			pCur[1]._int = next >= pCur[2]._int ? pCur[2]._int : next;
 			return true;
 		}
 		return false;
 	}
 	if (pCur->_int > pCur[2]._int)           // 역방향은 비교 방향이 반대
 	{
-		const int64_t next = static_cast<int64_t>(pCur[1]._int) + step;
-		pCur[1]._int = next <= pCur[2]._int ? pCur[2]._int : static_cast<int>(next);
+		const NS_INT next = pCur[1]._int < NS_INT_MIN - step ? NS_INT_MIN : pCur[1]._int + step;
+		pCur[1]._int = next <= pCur[2]._int ? pCur[2]._int : next;
 		return true;
 	}
 	return false;

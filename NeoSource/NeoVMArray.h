@@ -25,7 +25,7 @@ struct ArrayInfo : AllocBase
 	union
 	{
 		bool _initialBool;
-		int _initialInt;
+		NS_INT _initialInt;
 		NS_FLOAT _initialFloat;
 	};
 
@@ -35,9 +35,9 @@ struct ArrayInfo : AllocBase
 	ArrayInfo* _liveNext = nullptr;
 	ArrayInfo* _livePrev = nullptr;
 
-	NEOS_FORCEINLINE bool IsValidIndex(int index) const
+	NEOS_FORCEINLINE bool IsValidIndex(NS_INT index) const
 	{
-		return (unsigned)index < (unsigned)_count;
+		return (NS_UINT)index < (NS_UINT)_count;
 	}
 
 	NEOS_FORCEINLINE int VectorDimension() const
@@ -56,7 +56,7 @@ struct ArrayInfo : AllocBase
 		switch (_elementType)
 		{
 		case NeoArrayElementType::Bool:  return ((size_t)_capacity + 7) >> 3;
-		case NeoArrayElementType::Int:   return (size_t)_capacity * sizeof(int);
+		case NeoArrayElementType::Int:   return (size_t)_capacity * sizeof(NS_INT);
 		case NeoArrayElementType::Float: return (size_t)_capacity * sizeof(NS_FLOAT);
 		case NeoArrayElementType::Vector2:
 		case NeoArrayElementType::Vector3:
@@ -67,8 +67,8 @@ struct ArrayInfo : AllocBase
 
 	NEOS_FORCEINLINE u8* BoolBits() { return static_cast<u8*>(_data); }
 	NEOS_FORCEINLINE const u8* BoolBits() const { return static_cast<const u8*>(_data); }
-	NEOS_FORCEINLINE int* IntData() { return static_cast<int*>(_data); }
-	NEOS_FORCEINLINE const int* IntData() const { return static_cast<const int*>(_data); }
+	NEOS_FORCEINLINE NS_INT* IntData() { return static_cast<NS_INT*>(_data); }
+	NEOS_FORCEINLINE const NS_INT* IntData() const { return static_cast<const NS_INT*>(_data); }
 	NEOS_FORCEINLINE NS_FLOAT* FloatData() { return static_cast<NS_FLOAT*>(_data); }
 	NEOS_FORCEINLINE const NS_FLOAT* FloatData() const { return static_cast<const NS_FLOAT*>(_data); }
 
@@ -196,9 +196,9 @@ struct ArrayInfo : AllocBase
 		}
 		case NeoArrayElementType::Int:
 		{
-			int* replacement = new int[capacity];
+			NS_INT* replacement = new NS_INT[capacity];
 			if (_count > 0)
-				memcpy(replacement, IntData(), sizeof(int) * (size_t)_count);
+				memcpy(replacement, IntData(), sizeof(NS_INT) * (size_t)_count);
 			delete[] IntData();
 			_data = replacement;
 			break;
@@ -270,7 +270,7 @@ struct ArrayInfo : AllocBase
 			_data = new u8[((size_t)count + 7) >> 3];
 			return true;
 		case NeoArrayElementType::Int:
-			_data = new int[count];
+			_data = new NS_INT[count];
 			return true;
 		case NeoArrayElementType::Float:
 			_data = new NS_FLOAT[count];

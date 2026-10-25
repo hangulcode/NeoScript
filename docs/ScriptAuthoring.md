@@ -16,7 +16,7 @@ When looking for a feature, consult both the examples here and the [full API ref
 | Variable declaration order | Declare global and local variables and `const` before use, including uses inside function bodies. |
 | Module access | Only `public` functions, constants, and variables are accessible as `alias.F()`, `alias.NAME`, and `alias.value`. `export` exposes declarations to the C++ host, not to other modules. |
 | Conditions | Conditions in `if` and `while` must be `bool`. Numbers and strings are not automatically treated as true. |
-| Numbers | `int` is a 32-bit integer; `float` is a 32-bit floating-point number. `/` between integers performs integer division. |
+| Numbers | `int` is a signed 64-bit integer; `float` is a 32-bit floating-point number. `/` between integers performs integer division. |
 | Indices | Lists, dense arrays, and vectors use zero-based indices. Strings do not support `s[i]`. |
 | Strings | Concatenate with `..`, extract with `sub(start, count)`, and check for `-1` when `find` fails. |
 | Assigning `null` | Keeps the slot in a list; removes the key from a map. |
@@ -86,20 +86,22 @@ print("count=" .. count);            // count=2
 print((count > 0) && (count < capacity)); // true
 ```
 
+- Hex literals use 64-bit bit patterns: `0xffffffff` is `4294967295`, and `0xffffffffffffffff` is `-1`.
+- Integer addition, subtraction, multiplication, negation, and increment/decrement wrap to the low 64 bits.
 - `%` and `%=` require integer operands. Floating-point `%` is also rejected in `const` and `case` expressions; use `math.fmod(x, y)` at run time.
 - Integer `/`, `%`, `/=`, and `%=` fail with a runtime error when the divisor is zero or
-  the operands are `-2147483648` and `-1`. The destination is unchanged on failure.
+  the operands are `-9223372036854775808` and `-1`. The destination is unchanged on failure.
   In `const` and `case` expressions, these are compile errors. Floating-point division
   continues to produce infinity/NaN for zero divisors. Ordered comparisons with NaN are false in both expressions and branches.
   Unary `!` accepts boolean literals directly (`!true`, `!false`).
-- Bit shifts require two integer operands and a count in `0..31`; invalid counts are runtime errors
+- Bit shifts require two integer operands and a count in `0..63`; invalid counts are runtime errors
   (`const` and `case` expressions report compile errors). Failed compound shifts leave the destination unchanged.
-  Left shifts retain the low 32 bits; right shifts extend the sign bit.
+  Left shifts retain the low 64 bits; right shifts extend the sign bit.
 - For floating-point division, convert one operand with `tofloat` **before dividing**.
   `tofloat(count / capacity)` only converts the already-truncated result.
 - `float` is single precision. Converting a large integer ID to float and back may change its value.
-  Float-to-int conversion truncates toward zero, clamps overflow/infinity to the int32 endpoints,
-  and converts NaN to zero. Integer literals outside int32 are compile errors.
+  Float-to-int conversion truncates toward zero, clamps overflow/infinity to the int64 endpoints,
+  and converts NaN to zero. Decimal integer literals outside int64 are compile errors.
   `const` floating-point expressions deliberately calculate in double precision before runtime
   float32 conversion: `(16777216.0 + 1.0) - 16777216.0` is `1` as a const expression but `0`
   when evaluated step by step at run time. Non-finite const results are compile errors.
@@ -341,7 +343,7 @@ print(sumAgain);                   // 60
   Do not use `for (var i = 0; i < n; i++)` in the current default build.
 - The start is inclusive and the end is exclusive. To traverse a list backward, use `len()-1` to `-1`.
 - The step can be a runtime value. A direction inconsistent with the range runs zero iterations; a zero step is a runtime error. An increment beyond the integer boundary ends the range without wrapping.
-- Numeric range bounds and steps are converted to int32 before iteration. Fractional parts are
+- Numeric range bounds and steps are converted to int64 before iteration. Fractional parts are
   truncated toward zero, so a step of `0.5` becomes zero and raises an error. Prefer integer inputs.
 - A single `foreach` variable over a list, dense array, or set holds the **value**, not the index.
   Use a range `for` when you need an index.
@@ -900,7 +902,7 @@ print(math.MoveToward(0.0, 10.0, 2.0)); // 2
   by `Get()`. Plain root or index variables are read for the write.
   List/map/vector-array writes may use a temporary internal reference; normal reads and assignment results
   remain values. Copies still stay independent, and native properties retain their getter/setter behavior.
-  WREF pairs with an ordinary write and handles vector write-back; rebuild older compiled scripts and caches for bytecode version 0133 (also required for signed-zero constants, foreach source retention, checked shift folding, and corrected NaN branch behavior).
+  WREF pairs with an ordinary write and handles vector write-back; rebuild older compiled scripts and caches for bytecode version 0134 (64-bit integers; also required for signed-zero constants, foreach source retention, checked shift folding, and corrected NaN branch behavior).
 - A selector immediately after an indexed assignment can still modify the assigned vector:
   `(a[0][0] = math.Vector3(1,2,3))[1] = 9` stores `(1,9,3)` in `a[0][0]`.
   Assigning the result to a separate local instead keeps ordinary vector copy semantics.
@@ -988,7 +990,7 @@ if (system.jsonError() != "") print(system.jsonError());
 ```
 
 - Integers and floats are written distinctly, as `1` and `1.0`. Even `0.1` round-trips to the same float32 value.
-- Numbers without a decimal point or exponent decode as int32; those with either decode as float32. Out-of-range numbers fail. A UTF-8 BOM is accepted on input.
+- Numbers without a decimal point or exponent decode as int64; those with either decode as float32. Out-of-range numbers fail. A UTF-8 BOM is accepted on input.
 - Supported values are string-keyed maps, lists, strings, int, float, bool, and null. The root need not be a map.
 - Null map values omit the key; null list values keep their positions. Shared references decode as independent values.
 - `system.array`, sets, vectors, functions, host objects, cycles, NaN/infinity, invalid UTF-8, and NUL are rejected.

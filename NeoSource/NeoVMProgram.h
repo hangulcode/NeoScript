@@ -60,7 +60,7 @@ struct SFunctionTable
 struct SStaticConst
 {
 	VAR_TYPE	_type = VAR_NONE;
-	int			_int = 0;
+	NS_INT			_int = 0;
 	NS_FLOAT	_float = 0;
 	bool		_bl = false;
 	std::string	_str;   // VAR_STRING 전용
@@ -73,7 +73,7 @@ struct SStaticConst
 struct ProgramSwitchKey
 {
 	VAR_TYPE	_type = VAR_NONE;   // VAR_BOOL / VAR_INT / VAR_STRING
-	int			_int = 0;
+	NS_INT			_int = 0;
 	bool		_bl = false;
 	std::string	_str;               // VAR_STRING 전용 (UTF-8 바이트 그대로)
 };

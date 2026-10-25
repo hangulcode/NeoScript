@@ -349,8 +349,8 @@ static void BuildCases()
     Add("control", "scalar postfix values",
         "export fun Test(){var n=8;var a=[n++];var b={\"x\":n--};return a[0]==8 && b.x==9 && n==8;}");
     Add("limits", "minimum integer",
-        "const MIN=-2147483648;export fun Test(){var a=[-2147483648];var m={(-2147483648):1};return type(MIN)==\"int\" "
-        "&& MIN==a[0] && MIN==(-2147483647-1) && m[MIN]==1 && -0x80000000==MIN && -0xffffffff==1;}");
+        "const MIN=-9223372036854775808;export fun Test(){var a=[-9223372036854775808];var m={(-9223372036854775808):1};return type(MIN)==\"int\" "
+        "&& MIN==a[0] && MIN==(-9223372036854775807-1) && m[MIN]==1 && -0x8000000000000000==MIN && -0xffffffffffffffff==1;}");
 
     // Many constants exercise LOADK and writeback's parent/key operands.
     std::string large = "import math;";

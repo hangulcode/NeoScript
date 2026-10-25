@@ -210,7 +210,7 @@ export fun Text() {
         const float inf = std::numeric_limits<float>::infinity();
         const float inputs[] = {0, -0.0f, 1.75f, -1.75f, 2147483520.0f, 2147483648.0f,
             -2147483648.0f, -2147483904.0f, inf, -inf, std::numeric_limits<float>::quiet_NaN()};
-        const int expected[] = {0, 0, 1, -1, 2147483520, INT_MAX, INT_MIN, INT_MIN, INT_MAX, INT_MIN, 0};
+        const int64_t expected[] = {0, 0, 1, -1, 2147483520LL, 2147483648LL, -2147483648LL, -2147483904LL, INT64_MAX, INT64_MIN, 0};
         for (size_t n = 0; n < sizeof(inputs) / sizeof(inputs[0]); ++n)
         {
             auto call = runtime->Call(instance, "Converted");
