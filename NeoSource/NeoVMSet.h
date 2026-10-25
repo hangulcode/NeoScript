@@ -53,6 +53,7 @@ struct SetInfo : AllocBase
 	SetInfo* _livePrev;
 
 	void Free();
+	void Clear();
 
 	void Reserve(int sz);
 	bool Insert(VarInfo* pKey);

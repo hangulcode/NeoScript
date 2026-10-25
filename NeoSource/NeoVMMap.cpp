@@ -51,6 +51,21 @@ MapData* MapInfo::AllocNodeData()
 	return data;
 }
 
+void MapInfo::Clear()
+{
+	if (_itemCount == 0) return;
+	++_mutationVersion;
+	_itemCount = 0;
+	_lastFree = _BucketCapa - 1;
+	// 버킷 용량은 유지하고, 해제 전에 노드를 분리해 순환 참조를 안전하게 끊는다.
+	for (int i = 0; i < _BucketCapa; ++i)
+	{
+		MapData* data = _Bucket[i].data;
+		ClearNode(_Bucket[i]);
+		FreeNodeData(data);
+	}
+}
+
 void MapInfo::FreeNodeData(MapData* data)
 {
 	if (data == NULL)

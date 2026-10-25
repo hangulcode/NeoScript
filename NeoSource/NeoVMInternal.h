@@ -866,6 +866,7 @@ public:
 	void FreeList(ListInfo* tbl);
 	ArrayInfo* ArrayAlloc(NeoArrayElementType elementType, int count, const VarInfo& initialValue);
 	bool ArrayResize(ArrayInfo* array, int count);
+	void ArrayReserve(ArrayInfo* array, int capacity);
 	void FreeArray(ArrayInfo* array);
 
 	SetInfo* SetAlloc();

@@ -60,6 +60,7 @@ struct MapInfo : AllocBase
 	MapInfo* _livePrev;
 
 	void Free();
+	void Clear();
 
 	void Reserve(int sz);
 	VarInfo* Insert(VarInfo* pKey);

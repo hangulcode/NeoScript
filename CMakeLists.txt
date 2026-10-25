@@ -176,6 +176,11 @@ if(NEOSCRIPT_BUILD_SMOKE)
     add_test(NAME neoscript_integer_shift_regression COMMAND neoscript_integer_shift_regression)
     set_tests_properties(neoscript_integer_shift_regression PROPERTIES TIMEOUT 30)
 
+    add_executable(neoscript_collection_api_regression Tests/collection_api_regression.cpp)
+    target_link_libraries(neoscript_collection_api_regression PRIVATE neoscript Threads::Threads)
+    add_test(NAME neoscript_collection_api_regression COMMAND neoscript_collection_api_regression)
+    set_tests_properties(neoscript_collection_api_regression PROPERTIES TIMEOUT 30)
+
     add_executable(neoscript_runtime_edge_regression Tests/runtime_edge_regression.cpp)
     target_link_libraries(neoscript_runtime_edge_regression PRIVATE neoscript Threads::Threads)
     add_test(NAME neoscript_runtime_edge_regression COMMAND neoscript_runtime_edge_regression)

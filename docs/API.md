@@ -1,4 +1,4 @@
-﻿# NeoScript Script API Reference
+# NeoScript Script API Reference
 
 Everything a `.ns` script can call: keyword intrinsics, the three built-in modules
 (`math` / `system` / `coroutine`), and the method sets of `string` / `list` / `array` / `map` / `set` / `async`.
@@ -340,7 +340,7 @@ Empty input and `sub(s.len(), count)` return an empty substring. Wrong argument 
 or types are still errors.
 
 Strings are **not** indexable. `s[0]` raises `cannot read by index from string`.
-An empty `split` separator currently prevents the search loop from advancing; reject it before calling.
+An empty `split` separator raises `split separator must not be empty` before a result list is allocated.
 
 String literals support `\uXXXX` with exactly four hex digits. A high-surrogate escape must be
 followed by a low-surrogate escape, e.g. `"\uD83D\uDE00"` is one emoji. Both quote styles work.
@@ -358,8 +358,19 @@ string APIs cannot preserve an embedded NUL. `"\\u0041"` keeps the backslash-u t
 | `l.insert(index: int, value)` | `void` | inserts before index; `0 <= index <= l.len()` |
 | `l.remove(index: int)` | `var` | returns the removed value, shifts the tail left; `0 <= index < l.len()` |
 | `l.sort(cmp: function)` | `void` | stable in-place sort; `cmp(a,b)` returns bool: true when a belongs before b |
+| `l.find(value)` | `int` | first matching index, or -1; uses script `==` |
+| `l.contains(value)` | `bool` | whether `find(value)` succeeds |
+| `l.reserve(n: int)` | `void` | reserves capacity without changing length; negative n is an error |
+| `l.clear()` | `void` | removes all elements while retaining capacity; aliases observe the change |
+| `l.clone()` | `list` | new list with shallow-copied elements |
 
-There is no `find` or `clear` on lists. Use `l.resize(0)` to clear.
+Search does not coerce values to the container's element type. Numeric int/float equality,
+NaN, vector value equality, and reference identity follow script `==`.
+`clone()` creates independent outer storage; nested collections stay shared and vectors retain
+copy-on-write value semantics. A self-reference in the source still points to the source in its clone.
+These shallow-copy rules also apply to arrays, maps and sets. `clear()` on any collection retains
+its allocated capacity and invalidates an active foreach iterator if the collection was nonempty.
+Calling `clear()` on an empty collection does nothing.
 Index with `l[i]`; `l[i] = v` only works for an index that already exists, so grow with
 `resize`/`append` first.
 Assigning `l[i] = null` keeps the list length and all other indices unchanged; it replaces only
@@ -417,11 +428,28 @@ each value; `foreach(var index, value in a)` is rejected.
   element is allowed. Bool storage is bit-packed, an implementation detail that does not change
   script indexing.
 
+| Additional array method | Returns | Notes |
+| :--- | :--- | :--- |
+| `a.find(value)` | `int` | first matching index, or -1; script `==`, without assignment conversion |
+| `a.contains(value)` | `bool` | whether `find(value)` succeeds |
+| `a.reserve(n: int)` | `void` | reserves capacity without changing length; negative n is an error |
+| `a.clear()` | `void` | removes all elements, retaining capacity and the creation initializer |
+| `a.clone()` | `array` | independent storage, same element type, values and creation initializer |
+| `a.fill(value)` | `void` | overwrites existing elements using the usual array assignment conversion |
+
+`fill` validates the value even for an empty array; a type error leaves the array unchanged.
+It does not change the length or the creation initializer used by subsequent `resize` growth.
+List/array `reserve` and array `fill` do not invalidate foreach iterators. A clone need not retain
+unused reserved capacity. For example, an int array containing `1` matches `1.0`, but not `1.5`,
+when searched; `fill(1.5)` stores `1` under normal numeric assignment rules.
+
 ## 8. `map` methods
 
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
 | `m.len()` | `int` | |
+| `m.clear()` | `void` | removes all entries while retaining capacity |
+| `m.clone()` | `map` | new map with shallow-copied keys and values; iteration order is unspecified |
 | `m.reserve(n: int)` | `void` | pre-sizes the bucket array |
 | `m.keys()` | `list` | **order is unspecified** (bucket order), not insertion order |
 | `m.values()` | `list` | same order as `keys()` |
@@ -468,8 +496,20 @@ print(s.len());                 // 3
 foreach (var v in s) print(v);  // iteration works
 ```
 
-Build a set with `system.set(list)`; duplicates collapse. There are no `add`, `remove`, or
-`contains` methods; `len()` is its only registered method.
+Build a set with `system.set(list)`; duplicates collapse.
+
+| Signature | Returns | Notes |
+| :--- | :--- | :--- |
+| `s.add(value)` | `bool` | true if inserted, false if already present |
+| `s.remove(value)` | `bool` | true if removed, false if absent |
+| `s.contains(value)` | `bool` | membership under set key equality |
+| `s.clear()` | `void` | removes all elements while retaining capacity |
+| `s.clone()` | `set` | new set with shallow-copied elements; iteration order is unspecified |
+
+Adding a new element, removing an existing element, or clearing a nonempty set invalidates
+an active foreach iterator. Duplicate adds and missing removes leave it valid.
+Set membership preserves type-sensitive key equality: `1` and `1.0` are distinct, unlike
+list/array search. Null is a valid set element.
 Reference elements use the identity rules described for map keys above; two references to
 one host object or container collapse, while separate containers with equal contents remain distinct.
 Vector elements follow the value-key rules above, so equal vectors collapse even with separate storage.

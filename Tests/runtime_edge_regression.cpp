@@ -60,6 +60,22 @@ int main() {
     auto runtime = CreateRuntime();
     runtime->FreezeBindings();
     for (bool debug : {false, true}) for (bool image : {false, true}) {
+        for (const char* source : {
+            R"ns(export fun Probe(){return "abc".split("");})ns",
+            R"ns(export fun Probe(){return "".split("");})ns",
+            R"ns(export fun Probe(){var sep="";var text="abc";return text.split(sep);})ns"
+        }) Run(runtime, source, debug, image, "split separator must not be empty");
+        for (const char* body : {
+            R"ns(var a="a,b".split(",");return a.len()==2 && a[0]=="a" && a[1]=="b";)ns",
+            R"ns(var a="".split(",");return a.len()==1 && a[0]=="";)ns",
+            R"ns(var a="abc".split(";");return a.len()==1 && a[0]=="abc";)ns",
+            R"ns(var a="a::b::".split("::");return a.len()==3 && a[0]=="a" && a[1]=="b" && a[2]=="";)ns",
+            R"ns(var a=",,".split(",");return a.len()==3 && a[0]=="" && a[1]=="" && a[2]=="";)ns",
+            R"ns(var a="aaaaa".split("aa");return a.len()==3 && a[0]=="" && a[1]=="" && a[2]=="a";)ns",
+            R"ns(var a="abc".split("abcdef");return a.len()==1 && a[0]=="abc";)ns",
+            R"ns(var a="abc".split("abc");return a.len()==2 && a[0]=="" && a[1]=="";)ns",
+            R"ns(var a="\uD55C::\uAE00".split("::");return a.len()==2 && a[0]=="\uD55C" && a[1]=="\uAE00";)ns"
+        }) Run(runtime, std::string("export fun Probe(){") + body + "}", debug, image);
         Run(runtime, "export fun Probe(){var a=8;var b=2;var c=a/b;a/=b;"
             "var d=a/* separate */ /b;return c==4 && a==4 && d==2 && !false && !!true && !!!false;}", debug, image);
         Run(runtime, "const N=8;export fun Probe(){var n=N/2;var/*name*/a=4;"

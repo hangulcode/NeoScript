@@ -1,4 +1,4 @@
-﻿# NeoScript Script Authoring Guide
+# NeoScript Script Authoring Guide
 
 > **Line-limit exception: only this document (`docs/ScriptAuthoring.md`) is exempt from line limits.**
 > The limits on other documents, including `AGENTS.md`, still apply.
@@ -417,7 +417,10 @@ print(items.len());                 // 0
 
 Index assignment requires an existing slot. Grow the list with `append` or `resize` first.
 Insert with `insert(position, value)` or the existing `append(value, position)`, remove with `remove(position)`,
-and empty with `resize(0)`. There are no `find` or `clear` methods.
+and empty with `clear()` or `resize(0)`. `find(value)` returns the first matching index or -1;
+`contains(value)` returns bool. Both use script `==`, including mixed int/float comparison,
+vector value equality, and identity for nested containers. `reserve(n)` increases capacity without
+changing the length; n must be a nonnegative integer.
 `remove` returns the removed value, shifts later elements, and reduces the length. Assigning `null` keeps the slot.
 Insertion positions range from 0 to length; removal positions range from 0 to length-1. Invalid types or ranges are errors.
 
@@ -587,8 +590,47 @@ print(sum);                        // 6
 ```
 
 Read a set's size with `unique.len()` or `tosize(unique)`.
-There are no `add`, `remove`, or `contains` methods; calling a missing method is a runtime error.
-For frequent membership checks, additions, or removals, consider a map with `true` values.
+Use `unique.add(value)`, `unique.remove(value)`, and `unique.contains(value)` for membership.
+`add` returns true only for a new element; `remove` returns true only when an element existed.
+Set keys remain type-sensitive: integer `1` and float `1.0` are different elements.
+Adding or removing elements during foreach raises an error on the next iteration;
+duplicate adds and missing removes do not change the collection.
+
+### Clearing, shallow copies, and array filling
+
+All four collection types provide `clear()` and `clone()`. Clearing changes the existing storage,
+so aliases see an empty collection; capacity is retained. Clearing a nonempty collection during
+foreach invalidates that iterator. Cloning creates independent outer storage; nested collections
+remain shared and vectors keep their copy-on-write value behavior. Self-references still point
+to the original collection. Clones do not promise the source's spare capacity or map/set iteration order.
+
+```cpp
+var source = [[1], 2];
+var copy = source.clone();
+copy[1] = 9;
+copy[0][0] = 7;
+print(source[1]);                  // 2
+print(source[0][0]);               // 7: nested list is shared
+copy.clear();
+print(source.len());               // 2
+```
+
+Dense arrays also support `find`, `contains`, `reserve`, and `fill`:
+
+```cpp
+import system;
+var ids = system.array(3, 2);
+ids.reserve(100);                  // Length stays 2
+ids.fill(7.9);                     // Int assignment stores 7
+print(ids.find(7.0));              // 0: numeric equality
+print(ids.contains(7.9));          // false: search does not truncate
+ids.resize(3);
+print(ids[2]);                     // 3: original initializer is unchanged
+```
+
+`fill` validates its value before changing any elements, even on an empty array. It uses the
+same type rules as indexed assignment and never changes length. List/array `reserve` and
+array `fill` are allowed during foreach; changes to length remain errors.
 
 <a id="strings"></a>
 ## 7. Strings: use the built-in search, substring, and replacement methods
@@ -601,7 +643,7 @@ For frequent membership checks, additions, or removals, consider a map with `tru
 | Search | `s.find(text)` | First position; `-1` if absent; `0` for an empty search string |
 | Replace first | `s.replace(find, to)` | Replaces the first match; returns the original if absent |
 | Replace all | `s.replaceAll(find, to)` | Replaces all non-overlapping matches; returns the original if absent |
-| Split | `s.split(separator)` | Supports multi-character separators. **Do not pass an empty separator** |
+| Split | `s.split(separator)` | Supports multi-character separators. An empty separator raises a runtime error |
 | Case conversion | `s.upper()` / `s.lower()` | ASCII only |
 | Trim | `s.trim()` / `ltrim()` / `rtrim()` | Removes only spaces (` `), not tabs or newlines |
 | Formatting | `format(pattern, ...)` / `pattern.format(...)` | Integers, floats, and strings with width and precision |
@@ -644,7 +686,7 @@ print(fields.split("::")[1]);          // right
 String methods return results without changing the original variable.
 Assign the result, as in `text = text.replaceAll(...)`, to retain the change.
 Search and replacement use **exact string matching**, not regular expressions or Lua patterns.
-The current implementation cannot make progress on `split("")`; reject empty separators before calling it.
+`split("")` raises `split separator must not be empty`, even when the input string is empty.
 Incorrect argument counts or types are not automatically corrected.
 
 Strings support the escapes `\n`, `\r`, `\t`, `\"`, `\'`, and `\\`.

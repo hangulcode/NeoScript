@@ -300,7 +300,13 @@ struct neo_libs
 
 		VarInfo *pFind = pN->GetStack(1);
 		if (pFind->GetType() != VAR_STRING) return false;
-		std::string& findstr = pFind->_str->_str;
+		const std::string& findstr = pFind->_str->_str;
+		// 빈 구분자는 검색 위치가 전진하지 않으므로 결과 리스트를 만들기 전에 거절한다.
+		if (findstr.empty())
+		{
+			pN->SetError("split separator must not be empty");
+			return false;
+		}
 		std::string str = pVar->_str->_str;
 
 		VarInfo* pRet = pN->GetStack(0);
@@ -465,6 +471,196 @@ struct neo_libs
 	}
 
 
+	static bool Collection_clear(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 0) return false;
+		HeldValue receiver(pN, pVar);
+		switch (receiver.value.GetType())
+		{
+		case VAR_ARRAY: pN->GetVM()->ArrayResize(receiver.value._array, 0); break;
+		case VAR_MAP: receiver.value._tbl->Clear(); break;
+		case VAR_LIST: receiver.value._lst->Resize(0); break;
+		case VAR_SET: receiver.value._set->Clear(); break;
+		default: return false;
+		}
+		pN->ReturnValue();
+		return true;
+	}
+	static bool Sequence_reserve(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1 || pN->GetStack(1)->GetType() != VAR_INT) return false;
+		const int capacity = pN->read<int>(1);
+		if (capacity < 0)
+		{
+			pN->SetError("reserve capacity must not be negative");
+			return false;
+		}
+		if (pVar->GetType() == VAR_LIST) pVar->_lst->Reserve(capacity);
+		else if (pVar->GetType() == VAR_ARRAY) pN->GetVM()->ArrayReserve(pVar->_array, capacity);
+		else return false;
+		pN->ReturnValue();
+		return true;
+	}
+	static bool CollectionValueEquals(CNeoVMWorker* pN, VarInfo* a, VarInfo* b)
+	{
+		// 검색은 대입 변환 없이 스크립트 == 규칙을 따른다. 정수끼리는 정밀도를 잃지 않는다.
+		if (a->GetType() == VAR_INT && b->GetType() == VAR_INT) return a->_int == b->_int;
+		if (a->IsNumber() && b->IsNumber()) return a->GetFloatNumber() == b->GetFloatNumber();
+		return pN->CompareEQRare(a, b);
+	}
+	static int SequenceFind(CNeoVMWorker* pN, VarInfo* pVar, VarInfo* value)
+	{
+		if (pVar->GetType() == VAR_LIST)
+		{
+			ListInfo* list = pVar->_lst;
+			for (int i = 0; i < list->GetCount(); ++i)
+				if (CollectionValueEquals(pN, list->GetValue(i), value)) return i;
+		}
+		else
+		{
+			ArrayInfo* array = pVar->_array;
+			VarInfo item;
+			for (int i = 0; i < array->_count; ++i)
+			{
+				VarInfo* candidate = &item;
+				switch (array->_elementType)
+				{
+				case NeoArrayElementType::Bool: item = VarInfo(VAR_BOOL); item._bl = array->GetBool(i); break;
+				case NeoArrayElementType::Int: item = VarInfo(VAR_INT); item._int = array->IntData()[i]; break;
+				case NeoArrayElementType::Float: item = VarInfo(VAR_FLOAT); item._float = array->FloatData()[i]; break;
+				case NeoArrayElementType::Vector2:
+				case NeoArrayElementType::Vector3:
+				case NeoArrayElementType::Vector4: candidate = array->VectorValues() + i; break;
+				}
+				if (CollectionValueEquals(pN, candidate, value)) return i;
+			}
+		}
+		return -1;
+	}
+	static bool Sequence_find(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1 || (pVar->GetType() != VAR_LIST && pVar->GetType() != VAR_ARRAY)) return false;
+		pN->ReturnValue(SequenceFind(pN, pVar, pN->GetStack(1)));
+		return true;
+	}
+	static bool Sequence_contains(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 1 || (pVar->GetType() != VAR_LIST && pVar->GetType() != VAR_ARRAY)) return false;
+		pN->ReturnValue(SequenceFind(pN, pVar, pN->GetStack(1)) >= 0);
+		return true;
+	}
+	static bool Array_fill(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_ARRAY || args != 1) return false;
+		ArrayInfo* array = pVar->_array;
+		VarInfo* value = pN->GetStack(1);
+		if (!array->CanAssignValue(value))
+		{
+			pN->SetErrorFormat(RTE_ARRAY_VALUE_TYPE, GetDataType(value->GetType()).c_str(), GetArrayElementTypeName(array->_elementType));
+			return false;
+		}
+		HeldValue held(pN, value);
+		// 기존 원소만 바꾸며, resize가 사용할 생성 시 초기값은 보존한다.
+		for (int i = 0; i < array->_count; ++i) array->AssignValue(i, &held.value);
+		pN->ReturnValue();
+		return true;
+	}
+	static bool Set_add(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_SET || args != 1) return false;
+		HeldValue receiver(pN, pVar);
+		SetInfo* set = receiver.value._set;
+		const int before = set->GetCount();
+		if (!set->Insert(pN->GetStack(1))) return false;
+		pN->ReturnValue(set->GetCount() != before);
+		return true;
+	}
+	static bool Set_remove(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_SET || args != 1) return false;
+		HeldValue receiver(pN, pVar), key(pN, pN->GetStack(1));
+		SetInfo* set = receiver.value._set;
+		const int before = set->GetCount();
+		set->Remove(&key.value);
+		pN->ReturnValue(set->GetCount() != before);
+		return true;
+	}
+	static bool Set_contains(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (pVar->GetType() != VAR_SET || args != 1) return false;
+		pN->ReturnValue(pVar->_set->Find(pN->GetStack(1)));
+		return true;
+	}
+	static bool Collection_clone(CNeoVMWorker* pN, VarInfo* pVar, short args)
+	{
+		if (args != 0) return false;
+		// 반환 슬롯과 수신자가 겹쳐도 원본은 유지한다. 중첩 컨테이너는 얕게 공유한다.
+		HeldValue receiver(pN, pVar);
+		CNeoVM* vm = pN->GetVM();
+		switch (receiver.value.GetType())
+		{
+		case VAR_ARRAY:
+		{
+			ArrayInfo* source = receiver.value._array;
+			VarInfo initial;
+			switch (source->_elementType)
+			{
+			case NeoArrayElementType::Bool: initial = VarInfo(VAR_BOOL); initial._bl = source->_initialBool; break;
+			case NeoArrayElementType::Int: initial = VarInfo(VAR_INT); initial._int = source->_initialInt; break;
+			case NeoArrayElementType::Float: initial = VarInfo(VAR_FLOAT); initial._float = source->_initialFloat; break;
+			case NeoArrayElementType::Vector2:
+			case NeoArrayElementType::Vector3:
+			case NeoArrayElementType::Vector4: initial = source->_initialVector; break;
+			}
+			ArrayInfo* dest = vm->ArrayAlloc(source->_elementType, source->_count, initial);
+			if (dest == nullptr) return false;
+			pN->Var_SetArray(pN->GetStack(0), dest);
+			if (source->VectorDimension() != 0)
+			{
+				for (int i = 0; i < source->_count; ++i) dest->AssignValue(i, source->VectorValues() + i);
+			}
+			else if (source->_count != 0) memcpy(dest->_data, source->_data, dest->BufferBytes());
+			break;
+		}
+		case VAR_MAP:
+		{
+			MapInfo* source = receiver.value._tbl;
+			MapInfo* dest = vm->TableAlloc();
+			pN->Var_SetTable(pN->GetStack(0), dest);
+			dest->Reserve(source->GetCount());
+			for (CollectionIterator it = source->FirstNode(); it._pTableNode; source->NextNode(it))
+			{
+				MapData* data = it._pTableNode->data;
+				VarInfo* slot = dest->Insert(&data->key);
+				if (slot == nullptr) return false;
+				if (data->value.IsContainerType()) dest->MarkContainerChild();
+				vm->Move(slot, &data->value);
+			}
+			break;
+		}
+		case VAR_LIST:
+		{
+			ListInfo* source = receiver.value._lst;
+			ListInfo* dest = vm->ListAlloc();
+			pN->Var_SetList(pN->GetStack(0), dest);
+			dest->Resize(source->GetCount());
+			for (int i = 0; i < source->GetCount(); ++i) dest->SetValue(i, source->GetValue(i));
+			break;
+		}
+		case VAR_SET:
+		{
+			SetInfo* source = receiver.value._set;
+			SetInfo* dest = vm->SetAlloc();
+			pN->Var_SetSet(pN->GetStack(0), dest);
+			dest->Reserve(source->GetCount());
+			for (CollectionIterator it = source->FirstNode(); it._pSetNode; source->NextNode(it))
+				if (!dest->Insert(&it._pSetNode->data->key)) return false;
+			break;
+		}
+		default: return false;
+		}
+		return true;
+	}
 	static bool List_resize(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (pVar->GetType() != VAR_LIST) return false;
@@ -2516,6 +2712,11 @@ void CNeoVM::RegObjLibrary()
 	_funLib_List = NeoVMSystem::RegisterNative(Fun_List);
 	g_sNeoFunLib_List.Add("resize", &neo_libs::List_resize);
 	g_sNeoFunLib_List.Add("len", &neo_libs::List_len);
+	g_sNeoFunLib_List.Add("clear", &neo_libs::Collection_clear);
+	g_sNeoFunLib_List.Add("clone", &neo_libs::Collection_clone);
+	g_sNeoFunLib_List.Add("find", &neo_libs::Sequence_find);
+	g_sNeoFunLib_List.Add("contains", &neo_libs::Sequence_contains);
+	g_sNeoFunLib_List.Add("reserve", &neo_libs::Sequence_reserve);
 	g_sNeoFunLib_List.Add("append", &neo_libs::List_append);
 	g_sNeoFunLib_List.Add("insert", &neo_libs::List_insert);
 	g_sNeoFunLib_List.Add("remove", &neo_libs::List_remove);
@@ -2524,12 +2725,20 @@ void CNeoVM::RegObjLibrary()
 	// Array Lib
 	_funLib_Array = NeoVMSystem::RegisterNative(Fun_Array);
 	g_sNeoFunLib_Array.Add("len", &neo_libs::Array_len);
+	g_sNeoFunLib_Array.Add("clear", &neo_libs::Collection_clear);
+	g_sNeoFunLib_Array.Add("clone", &neo_libs::Collection_clone);
+	g_sNeoFunLib_Array.Add("find", &neo_libs::Sequence_find);
+	g_sNeoFunLib_Array.Add("contains", &neo_libs::Sequence_contains);
+	g_sNeoFunLib_Array.Add("reserve", &neo_libs::Sequence_reserve);
+	g_sNeoFunLib_Array.Add("fill", &neo_libs::Array_fill);
 	g_sNeoFunLib_Array.Add("resize", &neo_libs::Array_resize);
 	g_sNeoFunLib_Array.Add("append", &neo_libs::Array_append);
 
 	// Map Lib
 	_funLib_Map = NeoVMSystem::RegisterNative(Fun_Map);
 	g_sNeoFunLib_Map.Add("len", &neo_libs::map_len);
+	g_sNeoFunLib_Map.Add("clear", &neo_libs::Collection_clear);
+	g_sNeoFunLib_Map.Add("clone", &neo_libs::Collection_clone);
 	g_sNeoFunLib_Map.Add("reserve", &neo_libs::map_reserve);
 	g_sNeoFunLib_Map.Add("sort", &neo_libs::map_sort);
 	g_sNeoFunLib_Map.Add("keys", &neo_libs::map_keys);
@@ -2537,6 +2746,11 @@ void CNeoVM::RegObjLibrary()
 
 	_funLib_Set = NeoVMSystem::RegisterNative(Fun_Set);
 	g_sNeoFunLib_Set.Add("len", &neo_libs::Set_len);
+	g_sNeoFunLib_Set.Add("clear", &neo_libs::Collection_clear);
+	g_sNeoFunLib_Set.Add("clone", &neo_libs::Collection_clone);
+	g_sNeoFunLib_Set.Add("add", &neo_libs::Set_add);
+	g_sNeoFunLib_Set.Add("remove", &neo_libs::Set_remove);
+	g_sNeoFunLib_Set.Add("contains", &neo_libs::Set_contains);
 
 	// Async Lib
 	_funLib_Async = NeoVMSystem::RegisterNative(Fun_Async);

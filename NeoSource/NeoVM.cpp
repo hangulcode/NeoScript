@@ -983,6 +983,12 @@ bool CNeoVM::ArrayResize(ArrayInfo* array, int count)
 	m_sAllocStats.bufferBytes += (long long)array->BufferBytes() - oldBytes;
 	return changed;
 }
+void CNeoVM::ArrayReserve(ArrayInfo* array, int capacity)
+{
+	const long long oldBytes = (long long)array->BufferBytes();
+	array->Reserve(capacity);
+	m_sAllocStats.bufferBytes += (long long)array->BufferBytes() - oldBytes;
+}
 void CNeoVM::FreeArray(ArrayInfo* array)
 {
 	if (array == nullptr)
