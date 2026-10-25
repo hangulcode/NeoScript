@@ -244,6 +244,11 @@ struct neo_libs
 		for (int i = 1; i <= required; ++i)
 			if (pN->GetStack(i)->GetType() != VAR_STRING) return false;
 		if (args > required && pN->GetStack(args)->GetType() != VAR_BOOL) return false;
+		if (pN->GetStack(1)->_str->_str.size() > pN->GetVM()->_maxRegexPatternBytes)
+		{
+			pN->SetError("regular expression pattern exceeds the host byte limit");
+			return false;
+		}
 		// 표준 정규식 엔진 내부는 VM 실행 예산으로 중단할 수 없다.
 		if (pN->IsSynchronousExecutionLimited())
 		{
@@ -1889,7 +1894,6 @@ struct neo_libs
 		pAsync->_request = v2->_str->_str;
 		pAsync->_fun_index = (v3->GetType() == VAR_FUN) ? v3->_fun_index : v3->_closure->_funIndex;
 		pN->Move(&pAsync->_callback, v3);
-		if (pAsync->_timeout == -1) pAsync->_timeout = 0x7fffffff;
 
 		pAsync->_ownerWorkerId = pN->GetWorkerID();
 		++pN->_asyncPendingCount;
@@ -1935,7 +1939,6 @@ struct neo_libs
 		pAsync->_body = v3->_str->_str;
 		pAsync->_fun_index = (v4->GetType() == VAR_FUN) ? v4->_fun_index : v4->_closure->_funIndex;
 		pN->Move(&pAsync->_callback, v4);
-		if (pAsync->_timeout == -1) pAsync->_timeout = 0x7fffffff;
 
 		pAsync->_ownerWorkerId = pN->GetWorkerID();
 		++pN->_asyncPendingCount;

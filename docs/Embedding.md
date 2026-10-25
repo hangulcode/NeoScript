@@ -626,9 +626,20 @@ selected implicitly. Existing hosts must configure a transport to retain network
 The runtime keeps shared ownership until its worker thread has stopped. `Send` runs synchronously
 on that background thread, never on the script thread. It must not call the VM; return owned response
 strings instead. If one transport is shared across runtimes, it must tolerate concurrent `Send` calls.
-Each runtime serializes its own requests. Honor `timeoutMs` (the legacy script timeout `-1` is
-represented by `INT_MAX` milliseconds). Shutdown waits for the current `Send`; queued work is discarded.
+Each runtime serializes its own requests. Honor `timeoutMs`: `-1` means no time limit, while `0`
+means an immediate timeout. Each request carries its own cancellation signal. Check
+`request.IsCancelled()` before starting and periodically during blocking operations; cancellation
+must stop the transfer and return promptly, even with an unlimited timeout. Runtime shutdown signals
+cancellation, discards queued work, and joins the worker before freeing its state. A transport that
+ignores cancellation can still delay shutdown. Cancellation never targets another runtime's requests,
+even when the transport object is shared.
 The C ABI does not currently expose transport registration.
+
+Regex patterns default to a maximum of 16,384 UTF-8 bytes. Set `RuntimeDesc::maxRegexPatternBytes`
+before `CreateRuntime` to change this limit; zero permits only empty patterns. The legacy equivalent
+is the second argument to `NeoVMSystem::CreateVM(transport, maxRegexPatternBytes)`. The limit is
+checked before compiling each pattern, including patterns constructed at runtime. It limits pattern
+size, not matching time; short patterns can still take a long time on large or difficult input.
 
 `Samples/console/HttpTransport.cpp` is the portable libcurl adapter. The Windows console project
 builds static libcurl through `BuildConfig/ConsoleCurl.targets`; its cached source and libraries live

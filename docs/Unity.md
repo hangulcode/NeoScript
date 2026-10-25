@@ -345,8 +345,10 @@ bind their calls into our copy, leaving two libc++ instances on one heap. After
 both, the `.so` exports its `Ns*` C entry points and nothing else, and needs
 only `libc`, `libm` and `libdl`.
 
-Using async (`system.async` / http) makes the VM spin up a background thread. If
-a script never uses it, no thread is created.
+HTTP requests use a host-supplied transport. The stock C ABI and Unity binding do not currently
+expose transport registration, so HTTP callbacks report `HTTP transport is not configured`.
+The console supplies its own libcurl adapter; C++ hosts can register an `IHttpTransport`.
+The VM starts a background thread only when an HTTP request is submitted.
 
 ## Rebuilding the native plugin
 

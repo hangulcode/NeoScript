@@ -2415,7 +2415,8 @@ VarInfo* CNeoVMWorker::testCall(int iFID, VarInfo* args, int argc)
 //	_read(&(*m_pVarStack)[_iSP_Vars], *r);
 	VarInfo* r = &(*m_pVarStack_Base)[_iSP_Vars];
 
-	SetCodePtr(save_Code);
+	// 실패한 자식 호출의 오류 트랩은 호스트가 실패를 삼켜도 유지한다.
+	SetCodePtr(ok ? save_Code : 0);
 	_iSP_Vars = save_iSP_Vars;
 	_iSP_VarsMax = save__iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);
@@ -2470,7 +2471,8 @@ VarInfo* CNeoVMWorker::testCall(VarInfo* function, VarInfo* args, int argc)
 	if (!ok) UnwindActiveClosures();
 
 	VarInfo* result = &(*m_pVarStack_Base)[_iSP_Vars];
-	SetCodePtr(save_Code);
+	// 실패한 자식 호출의 오류 트랩은 호스트가 실패를 삼켜도 유지한다.
+	SetCodePtr(ok ? save_Code : 0);
 	_iSP_Vars = save_iSP_Vars;
 	_iSP_VarsMax = save__iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);

@@ -2495,7 +2495,29 @@ void activateVirtualTerminal()
 }
 #endif
 
-int main(int argc, char* argv[])
+static int ConsoleMain(int argc, char* argv[]);
+
+int wmain(int argc, wchar_t* nativeArgs[])
+{
+    std::vector<std::string> args;
+    args.reserve(argc);
+    for (int i = 0; i < argc; ++i)
+    {
+        const int count = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+            nativeArgs[i], -1, nullptr, 0, nullptr, nullptr);
+        if (count == 0) { std::fprintf(stderr, "Invalid Unicode command line\n"); return 1; }
+        std::string value(count, '\0');
+        if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, nativeArgs[i], -1,
+            &value[0], count, nullptr, nullptr)) return 1;
+        args.push_back(std::move(value));
+    }
+    std::vector<char*> argv;
+    for (auto& arg : args) argv.push_back(&arg[0]);
+    argv.push_back(nullptr);
+    return ConsoleMain(argc, argv.data());
+}
+
+static int ConsoleMain(int argc, char* argv[])
 {
 #ifdef _WIN32
 	activateVirtualTerminal();

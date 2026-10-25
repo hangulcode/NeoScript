@@ -780,6 +780,9 @@ private:
 	NeoThreadSafeQueue<AsyncInfo*> _job_queue;
 	std::atomic<bool> _job_end{false};
 	std::shared_ptr<IHttpTransport> _httpTransport;
+	std::mutex _httpCancellationMutex;
+	std::shared_ptr<std::atomic<bool> > _httpCancellation;
+	size_t _maxRegexPatternBytes = 16 * 1024;
 	NeoThreadSafeQueue<AsyncInfo*> _job_completed;
 	SNeoVMAllocStats m_sAllocStats;
 	SNeoVMAllocStats m_sPublishedAllocStats;

@@ -27,6 +27,11 @@ size_t Receive(char* data, size_t size, size_t count, void* user)
     return bytes;
 }
 
+int Progress(void* user, curl_off_t, curl_off_t, curl_off_t, curl_off_t)
+{
+    return static_cast<const NeoScript::HttpRequest*>(user)->IsCancelled() ? 1 : 0;
+}
+
 void Check(CURLcode code)
 {
     if (code != CURLE_OK) throw std::runtime_error(curl_easy_strerror(code));
@@ -42,8 +47,9 @@ public:
         NeoScript::HttpResponse result;
         try
         {
-            if (input.url.find('\0') != std::string::npos || input.timeoutMs < 0)
+            if (input.url.find('\0') != std::string::npos || input.timeoutMs < -1)
                 throw std::runtime_error("Invalid HTTP URL or timeout");
+            if (input.IsCancelled()) throw std::runtime_error("HTTP request cancelled");
             std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> handle(curl_easy_init(), curl_easy_cleanup);
             if (!handle) throw std::runtime_error("libcurl handle allocation failed");
             std::unique_ptr<curl_slist, decltype(&curl_slist_free_all)> headers(nullptr, curl_slist_free_all);
@@ -64,7 +70,11 @@ public:
             Check(curl_easy_setopt(handle.get(), CURLOPT_URL, input.url.c_str()));
             Check(curl_easy_setopt(handle.get(), CURLOPT_PROTOCOLS_STR, "http,https"));
             Check(curl_easy_setopt(handle.get(), CURLOPT_NOSIGNAL, 1L));
-            Check(curl_easy_setopt(handle.get(), CURLOPT_TIMEOUT_MS, long(input.timeoutMs == 0 ? 1 : input.timeoutMs)));
+            Check(curl_easy_setopt(handle.get(), CURLOPT_TIMEOUT_MS,
+                input.timeoutMs == -1 ? 0L : long(input.timeoutMs == 0 ? 1 : input.timeoutMs)));
+            Check(curl_easy_setopt(handle.get(), CURLOPT_NOPROGRESS, 0L));
+            Check(curl_easy_setopt(handle.get(), CURLOPT_XFERINFOFUNCTION, Progress));
+            Check(curl_easy_setopt(handle.get(), CURLOPT_XFERINFODATA, &input));
             Check(curl_easy_setopt(handle.get(), CURLOPT_SSL_VERIFYPEER, 1L));
             Check(curl_easy_setopt(handle.get(), CURLOPT_SSL_VERIFYHOST, 2L));
             Check(curl_easy_setopt(handle.get(), CURLOPT_WRITEFUNCTION, Receive));
@@ -78,6 +88,7 @@ public:
             }
             else if (input.method != "GET") throw std::runtime_error("Unsupported HTTP method");
             const CURLcode code = curl_easy_perform(handle.get());
+            if (input.IsCancelled()) throw std::runtime_error("HTTP request cancelled");
             if (code != CURLE_OK) throw std::runtime_error(error[0] ? error : curl_easy_strerror(code));
             result.success = true;
         }

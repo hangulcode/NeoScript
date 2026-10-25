@@ -382,9 +382,74 @@ static void RunFacade(bool debug, bool image)
     Check(SameObjects(before, after), "property temporary objects released" + mode);
 }
 
+struct FailedCallState
+{
+    int child = -1;
+    int calls = 0;
+    bool closure = false;
+    bool swallowed = false;
+};
+
+static bool SwallowFailure(INeoVMWorker* base, void* data, const VMString*, VarInfo* value, bool get)
+{
+    if (!get) return false;
+    auto& state = *static_cast<FailedCallState*>(data);
+    auto* worker = static_cast<CNeoVMWorker*>(base);
+    ++state.calls;
+    VarInfo* result = state.closure ? worker->testCall(base->GetVar("Callback"), nullptr, 0)
+                                   : worker->testCall(state.child, nullptr, 0);
+    state.swallowed = result == nullptr;
+    // 호스트가 실패를 삼키고 성공을 반환해도 바깥 스크립트를 재개하면 안 된다.
+    worker->Var_SetInt(value, 1);
+    return true;
+}
+
+static void FailedTestCall(bool debug, bool closure)
+{
+    const std::string source =
+        "export var After=0; export var Callback;"
+        "export fun Child(){var z=0; return 1/z;}"
+        "export fun Setup(){var z=0; Callback=fun(){return 1/z;};}"
+        "fun Inner(){for(var i in 0,100){var value=Host.Value;} After=1;}"
+        "export fun Outer(){Inner(); After=2;}"
+        "export fun Recover(){return 7;}";
+    auto pool = NeoExecContextPool_Create();
+    NeoLoadVMParam load; load.execPool = pool;
+    NeoCompilerParam compile(source.c_str(), (int)source.size());
+    const NeoGlobalSymbol symbol = { "Host", true };
+    const NeoGlobalSymbolTable globals = { &symbol, 1 };
+    compile.globalSymbols = &globals;
+    compile.debug = debug;
+    std::string error; compile.err = &error;
+    auto vm = NeoVMSystem::CompileAndLoadVM(compile, &load);
+    Check(vm != nullptr, "testCall failure compile: " + error);
+    if (vm)
+    {
+        INeoVMWorker* worker = vm->GetMainWorker();
+        FailedCallState state; state.child = worker->FindFunction("Child"); state.closure = closure;
+        auto* host = worker->GetVar("Host");
+        const bool bound = host && worker->ResetVarType(host, VAR_FP_NATIVE) &&
+            NeoVMSystem::RegisterTableCallBack(host, &state, nullptr, SwallowFailure);
+        Check(bound, "testCall failure bind");
+        if (bound)
+        {
+            Check(worker->ExecuteN(0) == NEOEXEC_COMPLETED, "testCall failure init");
+            Check(worker->ExecuteN(worker->FindFunction("Setup")) == NEOEXEC_COMPLETED, "testCall closure setup");
+            Check(worker->ExecuteN(worker->FindFunction("Outer")) == NEOEXEC_ERROR, "swallowed testCall still fails outer execution");
+            Check(state.swallowed && state.calls == 1, "failed testCall never repeats host call");
+            Check(worker->GetVar("After")->_int == 0, "failed testCall skips caller continuation");
+            Check(std::string(vm->GetLastErrorMsg()).find("division by zero") != std::string::npos, "original error retained");
+            Check(worker->ExecuteN(worker->FindFunction("Recover")) == NEOEXEC_COMPLETED, "worker reusable after testCall failure");
+        }
+        NeoVMSystem::ReleaseVM(vm);
+    }
+    NeoExecContextPool_Destroy(pool);
+}
+
 int main()
 {
     NeoVMSystem::Initialize();
+    for (bool debug : {false, true}) for (bool closure : {false, true}) FailedTestCall(debug, closure);
     for (bool debug : {false, true})
         for (bool setter : {false, true})
             for (bool global : {false, true}) InspectRepeatedFrames(debug, setter, global);

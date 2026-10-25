@@ -751,7 +751,9 @@ print("ABC".regexMatch("abc", true));    // Ignore case
 These methods need no import. `regexSearch` returns `null` if there is no match. Syntax is
 C++11 ECMAScript; double backslashes in string literals. Regex operates on UTF-8 bytes, so a
 literal Korean word can match but `.` and case folding are not Unicode-aware. Invalid patterns
-raise runtime errors. Regex is synchronous and is rejected when the host enables execution limits.
+raise runtime errors. Patterns are limited to 16,384 UTF-8 bytes by default, including patterns built
+at runtime; the host can configure the limit. Oversized patterns fail before compilation. This is not
+a matching-time guarantee. Regex is synchronous and is rejected when the host enables execution limits.
 
 ### HTTP and HTTPS requests
 
@@ -766,7 +768,8 @@ request.wait();
 Keep the existing `aysnc_create` spelling. The console supplies libcurl with HTTPS certificate
 verification; embedding hosts must provide a transport. Missing transports report failure to the
 callback. `wait()` completion and transport success do not imply an HTTP 2xx status. See the
-[async API](API.md#9-async-methods) for headers and POST requests.
+[async API](API.md#9-async-methods) for headers and POST requests. A timeout of `-1` means no time
+limit, but runtime shutdown still requests cancellation. Custom transports must observe this signal.
 
 <a id="closures"></a>
 ## 8. Function values and anonymous-function captures

@@ -846,7 +846,7 @@ struct NeoVMSystem
 		const void* identityType = nullptr, const void* identityObject = nullptr,
 		const std::shared_ptr<void>& payloadOwner = {});
 
-	static CNeoVM* 	CreateVM(const std::shared_ptr<IHttpTransport>& transport = {});
+	static CNeoVM* 	CreateVM(const std::shared_ptr<IHttpTransport>& transport = {}, size_t maxRegexPatternBytes = 16 * 1024);
 	static void		ReleaseVM(CNeoVM* pVM);
 	static bool		Compile(CNArchive& arw, const NeoCompilerParam& param);
 

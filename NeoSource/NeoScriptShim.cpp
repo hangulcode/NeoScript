@@ -691,7 +691,7 @@ RuntimeImpl::RuntimeImpl(const RuntimeDesc& desc) : m_desc(desc), m_identity(++g
         if (m_desc.printFn) { g_userPrint = m_desc.printFn; NeoVMSystem::m_pFunPrint = &PrintTrampoline; }
         if (m_desc.errorFn) { g_userError = m_desc.errorFn; NeoVMSystem::m_pFunError = &ErrorTrampoline; }
     });
-    m_vm = NeoVMSystem::CreateVM(m_desc.httpTransport);
+    m_vm = NeoVMSystem::CreateVM(m_desc.httpTransport, m_desc.maxRegexPatternBytes);
     m_pool = NeoExecContextPool_Create();
 }
 

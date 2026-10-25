@@ -13,10 +13,11 @@
 namespace NeoScript
 {
 
-CNeoVM* 	NeoVMSystem::CreateVM(const std::shared_ptr<IHttpTransport>& transport)
+CNeoVM* 	NeoVMSystem::CreateVM(const std::shared_ptr<IHttpTransport>& transport, size_t maxRegexPatternBytes)
 {
 	CNeoVM* vm = new CNeoVM();
 	vm->_httpTransport = transport;
+	vm->_maxRegexPatternBytes = maxRegexPatternBytes;
 	return vm;
 }
 void		NeoVMSystem::ReleaseVM(CNeoVM* pVM)
@@ -1937,6 +1938,13 @@ void CNeoVM::ThreadFunction()
 			request.body = p->_body;
 			request.headers = p->_headers;
 			request.timeoutMs = p->_timeout;
+			{
+				// 요청 등록과 종료 취소를 같은 잠금으로 보호해 시작 직전의 종료도 놓치지 않는다.
+				std::lock_guard<std::mutex> lock(_httpCancellationMutex);
+				if (_job_end.load()) break;
+				_httpCancellation = std::make_shared<std::atomic<bool> >(false);
+				request.cancellation = _httpCancellation;
+			}
 			if (p->_type == ASYNC_POST_JSON)
 				request.headers.push_back(std::make_pair("Content-Type", "application/json"));
 			HttpResponse response = _httpTransport->Send(request);
@@ -1952,6 +1960,10 @@ void CNeoVM::ThreadFunction()
 		{
 			p->_success = false;
 			p->_resultValue = "HTTP transport failed";
+		}
+		{
+			std::lock_guard<std::mutex> lock(_httpCancellationMutex);
+			_httpCancellation.reset();
 		}
 		// 소비자가 객체를 반납하기 전에 상태와 이벤트를 큐 잠금 안에서 기록한다.
 		_job_completed.PushAndPublish(p, [p] {
@@ -2075,6 +2087,10 @@ CNeoVM::~CNeoVM()
 	// 모든 컨테이너를 강제 제거한다.
 	_isTearingDown = true;
 	_job_end = true;
+	{
+		std::lock_guard<std::mutex> lock(_httpCancellationMutex);
+		if (_httpCancellation) _httpCancellation->store(true);
+	}
 	if(nullptr != _job)
 	{
 		_job_queue.Push(nullptr);

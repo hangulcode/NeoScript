@@ -332,6 +332,9 @@ are compiled per call. They operate on UTF-8 **bytes**, not Unicode code points:
 matches, but `.`, character classes, and case folding are not Unicode-aware. Use doubled backslashes
 in script strings (`"\\d+"`). Empty matches are supported and replacement always advances.
 Invalid patterns, wrong argument types, and regex complexity errors are runtime errors.
+Patterns exceeding the host's byte limit (16,384 UTF-8 bytes by default) fail before regex compilation.
+The C++ host can configure `RuntimeDesc::maxRegexPatternBytes`; zero allows only empty patterns.
+This size limit does not guarantee a bound on matching time.
 The native regex engine cannot yield or obey a VM execution budget: regex calls are rejected during
 time-limited execution, like collection sorting. Without a limit, complex patterns can take a long time.
 
@@ -556,7 +559,9 @@ Create the object with `system.aysnc_create()`.
   verification enabled. It returns the response body for all HTTP status codes (including 4xx/5xx);
   `ok` describes transport success, not HTTP status. Redirects are not followed automatically.
 - Host callbacks execute on the VM thread after the background transport completes. Runtime destruction
-  waits for an in-flight transport call; host implementations must honor the request timeout.
+  cancels the in-flight request and waits for its transport to return. Host implementations must honor
+  both the request timeout and `HttpRequest::IsCancelled()`. A timeout of `-1` does not disable shutdown
+  cancellation. Queued requests are discarded without callbacks during runtime destruction.
 
 ---
 

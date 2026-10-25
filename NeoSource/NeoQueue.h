@@ -94,6 +94,11 @@ public:
     bool wait(int ms)
     {
         std::unique_lock<std::mutex> lock(_mutex);
+        if (ms == -1)
+        {
+            _cv.wait(lock, [this] { return _signaled; });
+            return true;
+        }
         return _cv.wait_for(lock, std::chrono::milliseconds(ms), [this] { return _signaled; });
     }
 private:
