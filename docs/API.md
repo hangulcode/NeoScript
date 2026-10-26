@@ -434,7 +434,8 @@ Patterns exceeding the host's byte limit (16,384 UTF-8 bytes by default) fail be
 The C++ host can configure `RuntimeDesc::maxRegexPatternBytes`; zero allows only empty patterns.
 Pattern nesting is limited to 128 and compiled patterns to 1 MiB. Each operation also has a work
 budget of 1,000,000 units plus 32 units per input byte, where a unit is one pattern step or one input
-byte advanced since the previous step (text re-read after backtracking counts again), a backtracking
+byte advanced since the previous step (text re-read after backtracking counts again, and a
+backreference is charged the length of the longest live capture before it is compared), a backtracking
 limit of 1,000,000, and an 8 MiB match heap limit. Limit errors name the exhausted limit (work,
 backtracking, depth or memory). Patterns containing backtracking control verbs such as `(*COMMIT)`
 are matched without start-up optimizations so the verbs keep their PCRE2 semantics. Repeated groups are bounded by the heap limit rather than a fixed nesting depth, so

@@ -203,6 +203,10 @@ int main()
     // 같은 시작 위치에서 입력을 다시 읽는 전방 탐색 반복도 전진량으로 과금된다. 10회는 예산 안, 100회는 초과.
     Script(runtime, R"ns(export fun Test(){var s="a";for(var i in 0,15)s=s..s; return s.regex_match("^(?:(?=a*)){10}a*$");})ns");
     Script(runtime, R"ns(export fun Test(){var s="a";for(var i in 0,15)s=s..s; return s.regex_match("^(?:(?=a*)){100}a*$");})ns", false, -1, "work limit");
+    // 실패하는 긴 역참조 비교는 위치를 전진시키지 않으므로 캡처 길이를 미리 과금해 예산에 걸리게 한다.
+    // 수량자로 반복한 단언은 PCRE2 가 한 번으로 접으므로 단언을 직접 나열해 비교를 실제로 반복시킨다.
+    Script(runtime, R"ns(export fun Test(){var s="a";for(var i in 0,16)s=s..s; s=s.sub(0,s.len()-1).."b"; var p="^(a{32768})";for(var i in 0,1000)p=p.."(?!\1)"; return s.regex_match(p..".*$");})ns", false, -1, "work limit");
+    Script(runtime, R"ns(export fun Test(){var t="";for(var i in 0,2000)t=t.."word word, "; return t.regex_search("(\w+)\s+\1")!=null && t.regex_replace("(\w+)\s+\1","$1").len()<t.len();})ns");
     // 패턴 안의 깊이 지시는 깊이 한도 메시지로 알린다.
     Script(runtime, R"ns(export fun Test(){return "ab".regex_match("(*LIMIT_DEPTH=1)(ab)*");})ns", false, -1, "depth limit");
     // 입력 길이에 비례하는 예산이라 큰 입력의 선형 검색·치환은 통과한다.

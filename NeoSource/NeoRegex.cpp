@@ -29,7 +29,29 @@ struct WorkBudget
     uint64_t remaining;
     PCRE2_SIZE startMatch;
     PCRE2_SIZE lastPosition;
+    const std::string* pattern;
 };
+
+// 역참조(, \g{n}, \k<name>, (?P=name))는 콜아웃 없이 캡처 길이만큼 비교하고, 실패하면 위치도
+// 전진하지 않는다. 다음 항목이 역참조이면 그 비교 비용의 상한인 가장 긴 캡처 길이를 미리 과금한다.
+bool NextItemIsBackReference(const std::string& pattern, PCRE2_SIZE position, PCRE2_SIZE length)
+{
+    if (length < 2 || position > pattern.size() || length > pattern.size() - position) return false;
+    const char* item = pattern.data() + position;
+    if (item[0] == '\\') return (item[1] >= '1' && item[1] <= '9') || item[1] == 'g' || item[1] == 'k';
+    return length >= 4 && item[0] == '(' && item[1] == '?' && item[2] == 'P' && item[3] == '=';
+}
+
+uint64_t LongestCapture(const pcre2_callout_block* block)
+{
+    uint64_t longest = 0;
+    for (uint32_t i = 1; i < block->capture_top; ++i)
+    {
+        const PCRE2_SIZE begin = block->offset_vector[i * 2], end = block->offset_vector[i * 2 + 1];
+        if (begin != PCRE2_UNSET && end != PCRE2_UNSET && end > begin && end - begin > longest) longest = end - begin;
+    }
+    return longest;
+}
 
 int CountWork(pcre2_callout_block* block, void* data)
 {
@@ -43,6 +65,8 @@ int CountWork(pcre2_callout_block* block, void* data)
     if (block->current_position > budget.lastPosition)
         cost += block->current_position - budget.lastPosition;
     budget.lastPosition = block->current_position;
+    if (NextItemIsBackReference(*budget.pattern, block->pattern_position, block->next_item_length))
+        cost += LongestCapture(block);
     if (budget.remaining < cost)
     {
         budget.remaining = 0;
@@ -170,7 +194,7 @@ RegexResult RegexEngine::Run(const std::string& subject, const std::string& patt
     std::unique_ptr<pcre2_match_data, DataFree> data(pcre2_match_data_create_from_pattern(code, nullptr));
     if (!context || !data) throw std::bad_alloc();
     // 콜아웃은 예산 계산에만 쓴다. 시작 최적화 여부는 Compile 에서 패턴별로 정한다.
-    WorkBudget budget = { WorkLimit + WorkPerByte * static_cast<uint64_t>(subject.size()), static_cast<PCRE2_SIZE>(-1), 0 };
+    WorkBudget budget = { WorkLimit + WorkPerByte * static_cast<uint64_t>(subject.size()), static_cast<PCRE2_SIZE>(-1), 0, &pattern };
     pcre2_set_callout(context.get(), CountWork, &budget);
     pcre2_set_match_limit(context.get(), WorkLimit);
     // 매칭 프레임은 힙에 쌓이므로 깊이는 힙 한도가 묶는다. 고정 깊이 한도는 반복 그룹의
