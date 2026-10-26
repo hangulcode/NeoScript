@@ -437,6 +437,96 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 	CltReadRare(pClt, pKey, pValue);
 }
 
+// 숫자만 빌려 읽는다. 산술 결과가 소유 컨테이너를 해제할 수 있으므로 숫자 페이로드는 먼저 복사한다.
+NEOS_FORCEINLINE bool CNeoVMWorker::ReadNumericElement(VarInfo* owner, VarInfo* key, VarInfo& value)
+{
+    VarInfo* found = nullptr;
+    const VAR_TYPE type = owner->GetType();
+    if (type == VAR_MAP)
+    {
+        if (key->GetType() == VAR_STRING) found = owner->_tbl->FindString(key->_str);
+        else if (key->GetType() == VAR_INT) found = owner->_tbl->FindInt(key->_int);
+    }
+    else if (type == VAR_LIST && key->GetType() == VAR_INT)
+    {
+        if ((NS_UINT)key->_int < (NS_UINT)owner->_lst->_itemCount)
+            found = &owner->_lst->_Bucket[key->_int];
+    }
+    else if (type == VAR_ARRAY && key->GetType() == VAR_INT)
+    {
+        ArrayInfo* array = owner->_array;
+        const NS_INT index = key->_int;
+        if (!array->IsValidIndex(index)) return false;
+        switch (array->_elementType)
+        {
+        case NeoArrayElementType::Int:
+            value.SetType(VAR_INT); value._int = array->IntData()[index]; return true;
+        case NeoArrayElementType::Float:
+            value.SetType(VAR_FLOAT); value._float = array->FloatData()[index]; return true;
+        case NeoArrayElementType::Int32:
+            value.SetType(VAR_INT); value._int = array->Int32Data()[index]; return true;
+        case NeoArrayElementType::Float32:
+            value.SetType(VAR_FLOAT); value._float = array->Float32Data()[index]; return true;
+        default: return false;
+        }
+    }
+    if (!found || !found->IsNumber()) return false;
+    value = *found;
+    return true;
+}
+
+// 로더가 검증한 두 명령을 하나의 실행 단위로 처리한다. 일반 값은 원래 읽기/산술 의미론을 쓴다.
+// getter가 실행을 전환하거나 실제 중단하면 스택 슬롯에 값을 남기고 후속 산술은 재개 때 처리한다.
+NEOS_FORCEINLINE void CNeoVMWorker::ReadApply(const SVMOperation& read)
+{
+    VarInfo value;
+    VarInfo* owner = GetVarPtrF1(read);
+    VarInfo* key = GetVarPtr2(read);
+    VarInfo* temp = GetVarPtr3(read);
+    const SVMOperation& tail = *_pCodeCurrent;
+    const int arity = ReadApplyArity(tail.op);
+    VarInfo* dest = GetVarPtrF1(tail);
+    VarInfo* left = arity == 2 ? dest : GetVarPtr2(tail);
+    VarInfo* right = arity == 2 ? GetVarPtr2(tail) : GetVarPtr3(tail);
+    if ((left == temp || left->IsNumber()) && (right == temp || right->IsNumber()) &&
+        ReadNumericElement(owner, key, value))
+    {
+        if (left == temp) left = &value;
+        if (right == temp) right = &value;
+        // 생략한 임시 슬롯의 이전 소유 값도 일반 READ와 같은 시점에 해제한다.
+        Var_Release(temp);
+    }
+    else
+    {
+        const CoroutineInfo* context = m_pCur;
+        const auto* stack = m_pVarStack_Base;
+        CltRead(owner, key, temp);
+        if (m_pCur != context || m_pVarStack_Base != stack || _pCodeCurrent != &tail || IsSuspended())
+            return;
+        // getter가 전역값을 변경할 수 있으므로 실제 산술 피연산자는 읽기를 마친 뒤 다시 구한다.
+        dest = GetVarPtrF1(tail);
+        left = arity == 2 ? dest : GetVarPtr2(tail);
+        right = arity == 2 ? GetVarPtr2(tail) : GetVarPtr3(tail);
+    }
+    GetOP(); // 산술 오류의 IP는 원래 두 번째 명령을 가리킨다.
+    switch (tail.op)
+    {
+    case NOP_ADD2:
+    case NOP_ADD2_L: Add2(dest, right); break;
+    case NOP_SUB2: Sub2(dest, right); break;
+    case NOP_MUL2: Mul2(dest, right); break;
+    case NOP_DIV2: Div2(dest, right); break;
+    case NOP_ADD3:
+    case NOP_ADD3_L: Add3(dest, left, right); break;
+    case NOP_SUB3:
+    case NOP_SUB3_L: Sub3(dest, left, right); break;
+    case NOP_MUL3:
+    case NOP_MUL3_L: Mul3(dest, left, right); break;
+    case NOP_DIV3: Div3(dest, left, right); break;
+    default: break; // 허용 목록과 로더 검증으로 도달하지 않는다.
+    }
+}
+
 NEOS_NOINLINE void CNeoVMWorker::CltReadRare(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue)
 {
 	VarInfo* pFind;

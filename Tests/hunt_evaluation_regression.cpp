@@ -1,4 +1,4 @@
-#include "NeoScript.h"
+﻿#include "NeoScript.h"
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -103,7 +103,24 @@ static std::vector<Case> Cases()
         {"nested assignment target result", "var a=[[math.Vector2(1,2)]];var b=math.Vector2(3,4);",
             "(a[0][0]=b)[0]=7;return a[0][0][0]==7 && a[0][0][1]==4 && b[0]==3;"},
         {"two variable path replacements", "var old=[[1]];var holder=old;fun Change(){holder=[[9]];return 5;}",
-            "var r=(holder[0][0]=Change());return r==5 && holder[0][0]==5 && old[0][0]==1;"}
+            "var r=(holder[0][0]=Change());return r==5 && holder[0][0]==5 && old[0][0]==1;"},
+        // dest op= clt[key] 융합 명령: 분리된 READ + 산술과 같은 값·타입 규칙을 지켜야 한다.
+        {"read-assign fusion int", "var m={\"a\":3};var l=[4,5];",
+            "var s=1;s+=m.a;s+=l[1];s-=m[\"a\"];s*=l[0];s/=2;return s==12;"},
+        {"read-assign fusion float", "var m={\"f\":0.5,\"i\":2};",
+            "var s=1;s+=m.f;s*=m.i;s/=m.f;return s==6.0 && type(s)==\"float\";"},
+        {"read-assign fusion string", "var m={\"s\":\"b\"};var l=[\"c\"];",
+            "var s=\"a\";s+=m.s;s+=l[0];return s==\"abc\";"},
+        {"read-assign fusion nested path", "var m={\"a\":{\"b\":2}};var l=[[1,2],[3]];",
+            "var s=0;s+=m.a.b;s+=l[0][1];s+=l[1][0];return s==7;"},
+        {"read-assign fusion global dest", "var g=10;var m={\"k\":5};fun F(){g-=m.k;g*=m.k;return g;}",
+            "return F()==25 && g==25;"},
+        {"read-assign fusion vector and array", "var v=math.Vector3(1,2,3);var a=system.array(0,2);var f=system.array(0.5,1);",
+            "a[1]=7;var s=10;s+=v[2];s+=a[1];s*=f[0];return s==10.0;"},
+        {"read-assign fusion int key and call key", "var m={};m[7]=4;fun K(){return 7;}",
+            "var s=1;s+=m[7];s+=m[K()];return s==9;"},
+        {"read-assign fusion element value then alias", "var m={\"a\":1};var alias=m;",
+            "var s=0;s+=alias.a;m.a=5;s+=alias[\"a\"];return s==6 && m.a==5;"}
     };
     // Parentheses must not change when the owner is resolved or when keys run.
     for (int depth = 0; depth < 5; ++depth)

@@ -469,6 +469,8 @@ private:
 	void CltInsert(VarInfo *pClt, NS_INT key, NS_INT v);
 	void CltRead(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
 	void CltReadRare(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
+	bool ReadNumericElement(VarInfo* owner, VarInfo* key, VarInfo& value);
+	void ReadApply(const SVMOperation& read);
 	void SetArrayAssignError(ArrayInfo* array, VarInfo* value);
 	bool ArrayModify(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue, eNOperation op);
 	bool VecComponentOp(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue, eNOperation op);

@@ -653,6 +653,8 @@ bool CNeoVMWorker::CheckDebugStop(int iOPIndex)
 {
     if (m_eDebugRunMode == DBG_PAUSED) return true;
     if (!IsDebugInfo() || iOPIndex < 0 || iOPIndex >= static_cast<int>(DebugData().size())) return false;
+    // READ_APPLY 뒤 산술은 쌍의 내부다. getter에서 재개되어도 이 경계에는 정지하지 않는다.
+    if (_pProgram->IsReadApplyTail(static_cast<size_t>(iOPIndex))) return false;
     const debug_info& info = DebugData()[iOPIndex];
     const int file = info._fileseq, line = info._lineseq;
     if (line <= 0) return false;
@@ -1404,8 +1406,11 @@ void CNeoVMWorker::DebugGetExecutableLines(std::vector<int>& lines)
 		return;
 
 	std::set<int> uniqueLines;
-	for (const debug_info& info : DebugData())
-	{
+    const std::vector<debug_info>& data = DebugData();
+    for (size_t i = 0; i < data.size(); ++i)
+    {
+        if (_pProgram->IsReadApplyTail(i)) continue;
+        const debug_info& info = data[i];
 		if (info._lineseq > 0)
 			uniqueLines.insert(info._lineseq);
 	}
@@ -1422,6 +1427,7 @@ void CNeoVMWorker::DebugGetExecutableLocations(std::vector<NeoDebugLocation>& lo
 	const std::vector<debug_info>& dbg = DebugData();
 	for (int i = 0; i < (int)dbg.size(); ++i)
 	{
+        if (_pProgram->IsReadApplyTail(static_cast<size_t>(i))) continue;
 		const debug_info& info = dbg[i];
 		if (info._lineseq <= 0)
 			continue;
@@ -2205,6 +2211,7 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 
 		case NOP_CLT_WRITE_REF: handle_CLT_WRITE_REF(OP); break;
 		case NOP_CLT_READ_RESULT: handle_CLT_READ_RESULT(OP); break;
+        case NOP_READ_APPLY:    ReadApply(OP); break;
 		case NOP_NONE:          handle_NONE(OP); break;
 		case NOP_ERROR:
 			handle_ERROR(OP);

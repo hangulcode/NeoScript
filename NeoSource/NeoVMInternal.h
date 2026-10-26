@@ -293,11 +293,35 @@ enum eNOperation : OpType
 	// a native vector getter may suspend before the write and its setter.
 	NOP_CLT_WRITE_REF,
 	NOP_CLT_READ_RESULT, // completed-assignment value consumer
+	// 다음의 일반 산술 명령과 짝을 이루는 읽기. 두 슬롯 모두 정상 명령으로 유지한다.
+	NOP_READ_APPLY,
 	NOP_NONE,
 	NOP_ERROR,
 
 	NOP_MAX,
 }; // Operation length
+
+// READ_APPLY의 허용 목록. 컴파일러와 로더, 실행기가 같은 분류를 사용한다.
+// 새 연산은 의미론과 실행기 처리를 검증한 뒤 여기에 추가한다.
+inline int ReadApplyArity(eNOperation op)
+{
+    switch (op)
+    {
+    case NOP_ADD2:
+    case NOP_ADD2_L:
+    case NOP_SUB2:
+    case NOP_MUL2:
+    case NOP_DIV2: return 2;
+    case NOP_ADD3:
+    case NOP_ADD3_L:
+    case NOP_SUB3:
+    case NOP_SUB3_L:
+    case NOP_MUL3:
+    case NOP_MUL3_L:
+    case NOP_DIV3: return 3;
+    default: return 0;
+    }
+}
 
 enum eYield_Type : s16
 {

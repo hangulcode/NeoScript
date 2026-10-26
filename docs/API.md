@@ -730,7 +730,12 @@ WREF precedes an ordinary collection write. Stored vectors consume both atomical
 use normal write dispatch. Native vector properties retain a resumable getter/setter boundary.
 Scalar floats and ordinary dense float array elements use double; `array32` explicitly selects narrower storage. Vector2/3/4 and Quaternion components and operations remain float32; component writes narrow and reads widen.
 
-There is no separate vector write-back opcode. Regenerate images older than bytecode version 0137 for exact float32 immediates widened to double and to preserve assignments before return, 64-bit integers, local initialization, ordered operand evaluation, deferred assignment paths, and the earlier signed-zero and foreach fixes.
+A collection read followed by arithmetic may execute as a `READ_APPLY` pair. Supported
+ordinary and compound `+`, `-`, `*`, `/` retain their existing type rules and operand order.
+The pair is one instruction-budget unit and has no internal breakpoint or step boundary;
+native getter suspension or execution transfer preserves the pending arithmetic for resumption.
+
+There is no separate vector write-back opcode. Regenerate images older than bytecode version 0139 for validated READ_APPLY/arithmetic pairs, exact float32 immediates widened to double and to preserve assignments before return, 64-bit integers, local initialization, ordered operand evaluation, deferred assignment paths, and the earlier signed-zero and foreach fixes.
 A selector immediately following an indexed assignment keeps the assigned slot writable:
 `(a[0][0] = math.Vector3(1,2,3))[1] = 9` updates `a[0][0]` to `(1,9,3)`.
 Reading that result into a local still makes an independent vector value via copy-on-write.

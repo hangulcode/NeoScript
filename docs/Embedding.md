@@ -1,4 +1,4 @@
-﻿# Embedding NeoScript in a C++ host
+# Embedding NeoScript in a C++ host
 
 For a complete buildable project, start with the
 [mini game host](../Samples/minigame/README.md). It registers native objects,
@@ -527,10 +527,19 @@ result before it can return to Script A, so Script B does not own a resumable ex
 
 ### Compiled image capacity
 
-The current image format is **0137**, storing scalar floating-point constants as double and retaining signed 64-bit integer values.
+The current image format is **0139**, adding validated `READ_APPLY`/arithmetic pairs, storing scalar floating-point constants as double and retaining signed 64-bit integer values.
 Recompile older cached images; they are rejected rather than interpreted using the new layout.
 `MOVI` retains a signed 32-bit immediate, sign-extended to 64 bits. Larger integer literals
 use the constant pool, with `LOADK` when needed; instructions remain eight bytes.
+`READ_APPLY` pairs a collection read with an immediately following ordinary arithmetic
+instruction. The initial allowlist covers `+`, `-`, `*`, `/` and their compound assignments;
+operand order and the distinction between ordinary and compound arithmetic are preserved.
+Both slots remain eight-byte instructions, but the pair executes as one budget unit.
+Breakpoints and stepping stop before or after the pair, never at its second slot; error
+reports still identify the failing read or arithmetic slot. Native getters that fail,
+suspend, or transfer execution do not force the pending arithmetic to run: it remains
+an ordinary instruction for normal resumption and is then budgeted separately.
+The loader validates the consumer and rejects branches into the second slot.
 
 Public scalar integer arguments, results, globals, map/list values, and integer array
 elements use `int64_t`. C# exposes them as `long` through C ABI 7. Rebuild hosts and plugins

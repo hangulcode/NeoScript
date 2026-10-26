@@ -267,7 +267,7 @@ Host integer values use C++/C `int64_t` and C# `long`; integer arrays use eight 
 element. On 64-bit targets the general value slot remains 16 bytes; on 32-bit targets it
 grows from 8 to 16 bytes (or 12 with four-byte integer alignment). Rebuild native hosts
 and Unity plugins for **C ABI 7**, and regenerate cached
-bytecode for image format **0137**. Container lengths, indices, and host handles keep
+bytecode for image format **0139**. Container lengths, indices, and host handles keep
 their existing widths and limits. Mixing an int with a float uses float64 arithmetic,
 so large integers can lose precision.
 

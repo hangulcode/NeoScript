@@ -447,6 +447,7 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		}
 		case NOP_CLT_WRITE_REF:
 		case NOP_CLT_READ_RESULT:
+		case NOP_READ_APPLY:
             argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
             argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
             argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);

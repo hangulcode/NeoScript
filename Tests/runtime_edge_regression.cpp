@@ -1,4 +1,4 @@
-#include "NeoScript.h"
+﻿#include "NeoScript.h"
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -69,6 +69,11 @@ int main() {
         Run(runtime, "export fun Probe(){sleep(4294967296);return true;}", debug, image, "sleep");
         Run(runtime, "export fun Probe(){sleep(2147483648.0);return true;}", debug, image, "sleep");
         Run(runtime, "export fun Probe(){sleep(-9223372036854775808);return true;}", debug, image);
+        // dest op= clt[key] 융합 명령의 오류 경로는 분리된 READ + 산술과 같은 오류를 내야 한다.
+        Run(runtime, "export fun Probe(){var m={};var s=1;s+=m[\"missing\"];return true;}", debug, image, "invalid operator");
+        Run(runtime, "export fun Probe(){var l=[0];var s=1;s/=l[0];return true;}", debug, image, "division by zero");
+        Run(runtime, "export fun Probe(){var l=[1];var s=1;s+=l[5];return true;}", debug, image, "index");
+        Run(runtime, "import system;export fun Probe(){var a=system.array(0,1);var s=1;s+=a[\"x\"];return true;}", debug, image, "index");
         for (const char* source : {
             R"ns(export fun Probe(){return "abc".split("");})ns",
             R"ns(export fun Probe(){return "".split("");})ns",
