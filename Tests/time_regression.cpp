@@ -1,6 +1,7 @@
 ﻿#include "NeoScript.h"
 #include "NeoTime.h"
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -127,6 +128,91 @@ static void Semantics(IRuntime* runtime, bool debug, bool image)
     )ns", debug, image);
 }
 
+static void ExtendedSemantics(IRuntime* runtime, bool debug, bool image)
+{
+    Script(runtime, R"ns(
+        if(system.utc_time_ms(1970,1,1,0,0,0,0)!=0)return false;
+        if(system.utc_time_ms(1969,12,31,23,59,59,999)!=-1)return false;
+        if(system.utc_time_ms(1900,1,1,0,0,0,0)!=-2208988800000)return false;
+        if(system.utc_time_ms(9999,12,31,23,59,59,999)!=253402300799999)return false;
+        if(system.utc_time_ms(2000,2,29,0,0,0,123)!=951782400123)return false;
+        var p=system.utc_parts(-1);
+        if(p.year!=1969 || p.month!=12 || p.day!=31 || p.hour!=23 || p.minute!=59 ||
+            p.second!=59 || p.millisecond!=999 || p.weekday!=3 || p.day_of_year!=365)return false;
+        if(system.utc_parts(0).weekday!=4 || system.utc_parts(0).day_of_year!=1)return false;
+        p=system.utc_parts(951782400123);if(p.day_of_year!=60 || p.weekday!=2)return false;
+        p.year=1900;if(system.utc_parts(951782400123).year!=2000)return false;
+        var values=[-2208988800000,-1001,-1000,-999,-1,0,1,999,1000,951782400123,4107542400000,253402300799999];
+        foreach(var ms in values){
+            var text=system.utc_format_ms(ms);if(text.len()!=24 || system.utc_parse_ms(text)!=ms)return false;
+            var c=system.utc_parts(ms);
+            if(system.utc_time_ms(c.year,c.month,c.day,c.hour,c.minute,c.second,c.millisecond)!=ms)return false;
+        }
+        if(system.utc_parse_ms("1970-01-01T00:00:00Z")!=0)return false;
+        if(system.utc_parse_ms("1970-01-01T00:00:00.1Z")!=100)return false;
+        if(system.utc_parse_ms("1970-01-01T00:00:00.12Z")!=120)return false;
+        return system.utc_parse_ms("1969-12-31T23:59:59.999Z")==-1;
+    )ns", debug, image);
+    Script(runtime, R"ns(
+        if(system.time_span_seconds(2).total_milliseconds()!=2000)return false;
+        if(system.time_span_seconds(1.2345).total_milliseconds()!=1235)return false;
+        if(system.time_span_seconds(-1.2345).total_milliseconds()!=-1235)return false;
+        if(system.time_span_seconds(0.0005).total_milliseconds()!=1)return false;
+        if(system.time_span_seconds(-0.0005).total_milliseconds()!=-1)return false;
+        if(system.time_span_seconds(0.00049).total_milliseconds()!=0)return false;
+        if(system.time_span_seconds(-0.0).total_milliseconds()!=0)return false;
+        if(system.time_span_seconds(9223372036854775).total_milliseconds()!=9223372036854775000)return false;
+        return system.time_span_seconds(-9223372036854775).total_milliseconds()==-9223372036854775000;
+    )ns", debug, image);
+    for (const char* fields : {"1899,12,31,0,0,0,0", "10000,1,1,0,0,0,0", "1900,2,29,0,0,0,0",
+        "2100,2,29,0,0,0,0", "2026,4,31,0,0,0,0", "2026,0,1,0,0,0,0", "2026,13,1,0,0,0,0",
+        "2026,1,0,0,0,0,0", "2026,1,1,24,0,0,0", "2026,1,1,0,60,0,0", "2026,1,1,0,0,60,0",
+        "2026,1,1,0,0,0,1000", "2026,1,1,-1,0,0,0", "2026,1,1,0,0,0,-1", "9223372036854775807,1,1,0,0,0,0"})
+        Script(runtime, std::string("return system.utc_time_ms(") + fields + ");", debug, image, "invalid UTC calendar");
+    for (const char* value : {"-2208988800001", "253402300800000", "-9223372036854775808", "9223372036854775807"})
+        for (const char* fn : {"utc_parts", "utc_format_ms"})
+            Script(runtime, std::string("return system.") + fn + "(" + value + ");", debug, image, "outside years");
+    for (const char* text : {"", "Z", "2026", "2026-10-26", "2026-10-26T12:34:56", "2026-10-26T12:34:56.Z",
+        "2026-10-26T12:34:56.1234Z", "2026-10-26T12:34:56+09:00", "2026-10-26T12:34:56Z ",
+        "2026-10-26 12:34:56Z", "2026-10-26t12:34:56z", "1900-02-29T00:00:00Z", "2026-10-26T12:34:60Z",
+        "2026-10-26T12:34:56.aZ", "2026-10-26T12:34:56.1aZ", "2026-10-26T12:34:56.12aZ", "202x-10-26T12:34:56Z",
+        "2026-1x-26T12:34:56Z", "2026-10-2xT12:34:56Z", "2026-10-26T1x:34:56Z", "2026-10-26T12:3x:56Z",
+        "2026-10-26T12:34:5xZ", "0000-01-01T00:00:00Z"})
+        Script(runtime, std::string("return system.utc_parse_ms(\"") + text + "\");", debug, image, "invalid UTC timestamp");
+    for (const char* value : {"1.0/0.0", "-1.0/0.0", "0.0/0.0", "1e300", "-1e300", "9223372036854776.0"})
+        Script(runtime, std::string("return system.time_span_seconds(") + value + ");", debug, image, "finite int64");
+    for (const char* value : {"9223372036854776", "-9223372036854776"})
+        Script(runtime, std::string("return system.time_span_seconds(") + value + ");", debug, image, "overflow int64");
+    for (const char* expression : {"system.utc_time_ms(2026,1,1,0,0,0,0.0)",
+        "system.utc_parts(0.0)", "system.utc_parse_ms(0)", "system.utc_format_ms(true)", "system.time_span_seconds(true)",
+        "system.stopwatch().stop(1)", "system.stopwatch().elapsed_us(1)", "system.stopwatch().elapsed_seconds(1)"})
+        Script(runtime, std::string("return ") + expression + ";", debug, image, "");
+    for (const char* arguments : {"2026,1,1,0,0,0", "2026,1,1,0,0,0,0,0"})
+    {
+        CompileDesc desc;
+        const std::string source = std::string("import system; system.utc_time_ms(") + arguments + ");";
+        desc.source = source;
+        desc.sourceName = "time_arity.ns";
+        desc.includeDebugInfo = debug;
+        Error error;
+        if (image)
+        {
+            std::vector<uint8_t> bytes;
+            error = runtime->CompileToBytecode(desc, bytes);
+        }
+        else
+        {
+            auto result = runtime->Compile(desc);
+            error = result.error;
+            if (result.program) runtime->DestroyProgram(result.program);
+        }
+        Check(!error.ok() && error.message.find("argument count mismatch") != std::string::npos,
+            "UTC constructor rejects missing or extra arguments");
+        if (error.ok() || error.message.find("argument count mismatch") == std::string::npos)
+            std::fprintf(stderr, "arity: debug=%d image=%d args=%s error=%s\n", debug, image, arguments, error.message.c_str());
+    }
+}
+
 static int64_t ReadInt(IRuntime* runtime, InstanceHandle instance, const char* name)
 {
     auto call = runtime->Call(instance, name);
@@ -143,6 +229,12 @@ static void Clocks(IRuntime* runtime, bool debug, bool image)
         export fun Elapsed(){return watch.elapsed_ms();}
         export fun Snapshot(){return watch.elapsed().total_milliseconds();}
         export fun Restart(){alias.restart();return watch.elapsed_ms();}
+        export fun Microseconds(){return watch.elapsed_us();}
+        export fun Fractional(){return watch.elapsed_seconds();}
+        export fun Stop(){alias.stop();return watch.elapsed_us();}
+        export fun Start(){alias.start();return watch.is_running();}
+        export fun Reset(){alias.reset();return !watch.is_running() && watch.elapsed_us()==0 && watch.elapsed_ms()==0 && watch.elapsed_seconds()==0.0;}
+        export fun Running(){return watch.is_running();}
     )ns", debug, image);
     if (!program) return;
     auto instance = runtime->CreateInstance(program);
@@ -167,6 +259,30 @@ static void Clocks(IRuntime* runtime, bool debug, bool image)
     Check(restarted >= 0 && restarted <= std::chrono::duration_cast<std::chrono::milliseconds>(restartAfter-restartBefore).count(),
         "restart through alias resets stopwatch");
     Check(ReadInt(runtime,instance,"Elapsed") >= restarted,"elapsed monotonic after restart");
+    const int64_t stopped = ReadInt(runtime,instance,"Stop");
+    Check(stopped >= restarted * 1000, "microseconds retain submillisecond units");
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    Check(ReadInt(runtime,instance,"Microseconds")==stopped && ReadInt(runtime,instance,"Stop")==stopped, "stop is idempotent and excludes idle time");
+    Check(ReadInt(runtime,instance,"Elapsed")==stopped/1000 && ReadInt(runtime,instance,"Snapshot")==stopped/1000, "stopped time units agree");
+    {
+        auto call=runtime->Call(instance,"Fractional");
+        Check(call.invoke()==RunStatus::Completed && call.retType()==ValueType::Float, "fractional elapsed seconds type");
+        const double micros=call.retFloat()*1000000.0;
+        Check(micros>=stopped-0.000001 && micros<stopped+1.000001, "seconds preserve native clock precision");
+    }
+    for(const char* name : {"Start","Start","Running"})
+    {
+        auto call=runtime->Call(instance,name);Check(call.invoke()==RunStatus::Completed && call.retBool(), "resume and running state");
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    Check(ReadInt(runtime,instance,"Stop")>=stopped+4000, "resume accumulates previous elapsed time");
+    {
+        auto call=runtime->Call(instance,"Reset");Check(call.invoke()==RunStatus::Completed && call.retBool(), "reset clears and stops through alias");
+    }
+    Check(ReadInt(runtime,instance,"Restart")>=0, "restart from stopped state");
+    {
+        auto call=runtime->Call(instance,"Running");Check(call.invoke()==RunStatus::Completed && call.retBool(), "restart starts counting");
+    }
     runtime->DestroyInstance(instance); runtime->DestroyProgram(program);
 }
 
@@ -197,7 +313,9 @@ static void Builtins(IRuntime* runtime)
     runtime->GetBuiltins(builtins);
     for (const char* entry : {"system.time_ms", "system.utc_date", "system.time_span", "system.time_span_ms", "system.stopwatch",
         "time_span.total_milliseconds", "time_span.total_seconds", "time_span.parts", "time_span.format", "time_span.add",
-        "time_span.subtract", "time_span.compare", "stopwatch.elapsed", "stopwatch.elapsed_ms", "stopwatch.restart"})
+        "time_span.subtract", "time_span.compare", "stopwatch.elapsed", "stopwatch.elapsed_ms", "stopwatch.restart",
+        "system.utc_time_ms", "system.utc_parts", "system.utc_format_ms", "system.utc_parse_ms", "system.time_span_seconds",
+        "stopwatch.elapsed_us", "stopwatch.elapsed_seconds", "stopwatch.start", "stopwatch.stop", "stopwatch.reset", "stopwatch.is_running"})
     {
         bool found = false;
         for (const auto& info : builtins)
@@ -219,6 +337,7 @@ int main()
     for (bool debug : {false,true}) for (bool image : {false,true})
     {
         Semantics(runtime,debug,image);
+        ExtendedSemantics(runtime,debug,image);
         Clocks(runtime,debug,image);
     }
     CalendarReference();

@@ -2767,6 +2767,11 @@ static void AddGlobalLibFun()
 	AddSystemFun("time_span", &TimeLibrary::TimeSpan, "time_span", "int days", "int hours", "int minutes", "int seconds", "int milliseconds");
 	AddSystemFun("time_span_ms", &TimeLibrary::TimeSpanMilliseconds, "time_span", "int milliseconds");
 	AddSystemFun("stopwatch", &TimeLibrary::Stopwatch, "stopwatch");
+	AddSystemFun("utc_time_ms", &TimeLibrary::UtcTimeMilliseconds, "int", "int year", "int month", "int day", "int hour", "int minute", "int second", "int millisecond");
+	AddSystemFun("utc_parts", &TimeLibrary::UtcParts, "map", "int time_ms");
+	AddSystemFun("utc_format_ms", &TimeLibrary::UtcFormatMilliseconds, "string", "int time_ms");
+	AddSystemFun("utc_parse_ms", &TimeLibrary::UtcParseMilliseconds, "int", "string text");
+	AddSystemFun("time_span_seconds", &TimeLibrary::TimeSpanSeconds, "time_span", "float seconds");
 
 	g_sCurrentSystem.clear();
 }

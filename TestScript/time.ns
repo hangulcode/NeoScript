@@ -6,6 +6,14 @@ print("Unix milliseconds: " .. system.time_ms());
 print("UTC: " .. system.utc_date("%Y-%m-%dT%H:%M:%SZ", system.time()));
 print("Before epoch: " .. system.utc_date("%Y-%m-%d %H:%M:%S %Z", -1));
 
+// UTC 날짜와 문자열은 밀리초 정밀도로 서로 변환한다.
+var event_ms = system.utc_time_ms(2026, 10, 26, 12, 30, 0, 125);
+var event_text = system.utc_format_ms(event_ms);
+print("UTC milliseconds: " .. event_text);
+print("UTC round trip: " .. (system.utc_parse_ms(event_text) == event_ms));
+print("UTC parts: " .. system.jsonEncode(system.utc_parts(event_ms), true));
+print("Before epoch millisecond: " .. system.utc_format_ms(-1));
+
 // 기간은 정수 밀리초를 보관하고 더하기와 빼기는 새 기간을 반환한다.
 var duration = system.time_span(1, 2, 3, 4, 5);
 var longer = duration.add(system.time_span_ms(995));
@@ -15,6 +23,7 @@ print("Difference: " .. longer.subtract(duration).total_milliseconds());
 print("Compare: " .. duration.compare(longer));
 var parts = system.time_span_ms(-90250).parts();
 print("Negative parts: " .. system.jsonEncode(parts, true));
+print("Fractional seconds: " .. system.time_span_seconds(1.2345).format());
 
 // 실제 경과 시간은 시스템 시계가 조정돼도 역행하지 않는 Stopwatch로 잰다.
 var watch = system.stopwatch();
@@ -23,5 +32,12 @@ for (var i in 0, 1000) total += i;
 print("Sum: " .. total);
 print("Elapsed milliseconds: " .. watch.elapsed_ms());
 print("Elapsed duration: " .. watch.elapsed().format());
+// 정지 구간은 누적하지 않으며, 초기화하면 0에서 정지한 상태가 된다.
+watch.stop();
+print("Stopped microseconds: " .. watch.elapsed_us());
+print("Stopped seconds: " .. watch.elapsed_seconds());
+watch.start();
+watch.reset();
+print("Running after reset: " .. watch.is_running());
 watch.restart();
 print("Restarted: " .. watch.elapsed_ms());
