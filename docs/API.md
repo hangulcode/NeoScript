@@ -525,7 +525,8 @@ containers are rejected. The ordinary `system.array` retains int64/double storag
 - Int32 reads widen to int64. Writes, `append`, and `fill` accept only int values in
   `-2147483648..2147483647`; they fail before changing the destination otherwise.
 - Float32 reads widen to double. Writes accept int/float and round to float32.
-  Finite values outside float32 range become signed infinity; underflow may produce
+  Magnitudes above `FLT_MAX` but below `2^128 - 2^103` round to signed `FLT_MAX`;
+  at that midpoint or beyond they become signed infinity. Underflow may produce
   subnormal values or signed zero. NaN, infinity, and signed zero are retained.
 - Compound operations calculate using ordinary scalar semantics, then apply these
   storage checks/conversions. Use `toint` explicitly before assigning a float to int32.

@@ -561,7 +561,8 @@ print(weights32[0] == 16777216.0);
 Integer initializers choose int32; float initializers choose float32. Other types are
 errors. Reads return ordinary int64/double scalars. Int32 writes require an integer in
 `-2147483648..2147483647`; overflow or a noninteger value fails without changing the
-array. Float32 writes round int/float values; values beyond its finite range become
+array. Float32 writes round int/float values. Magnitudes just above `FLT_MAX`, such as
+`3.4028235e38`, still round to `FLT_MAX`; at `2^128 - 2^103` or above they become
 signed infinity. Arithmetic uses the usual scalar precision before storing the result.
 The storage type remains fixed through `append`, `fill`, `resize`, and `clone`.
 `system.array(0, n)` and `system.array(0.0, n)` still use int64 and double respectively.

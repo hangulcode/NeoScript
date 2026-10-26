@@ -82,10 +82,12 @@ struct ArrayInfo : AllocBase
 	NEOS_FORCEINLINE const float* Float32Data() const { return static_cast<const float*>(_data); }
 	static float NarrowFloat32(NS_FLOAT value)
 	{
-		// 범위를 넘는 유한 값도 플랫폼에 의존하지 않고 부호 있는 무한대로 저장한다.
-		const NS_FLOAT limit = (std::numeric_limits<float>::max)();
-		if (value > limit) return std::numeric_limits<float>::infinity();
-		if (value < -limit) return -std::numeric_limits<float>::infinity();
+		// 최근접 반올림의 오버플로 경계는 2^128 - 2^103이며, 경계 자체는 무한대가 된다.
+		// FLT_MAX와 경계 사이에서는 범위 밖 캐스트 없이 FLT_MAX를 직접 반환한다.
+		const float limit = (std::numeric_limits<float>::max)();
+		const NS_FLOAT overflow = 3.40282356779733661637539395458142568448e38;
+		if (value > limit) return value < overflow ? limit : std::numeric_limits<float>::infinity();
+		if (value < -limit) return value > -overflow ? -limit : -std::numeric_limits<float>::infinity();
 		return static_cast<float>(value);
 	}
 	bool Int32OutOfRange(const VarInfo* value) const

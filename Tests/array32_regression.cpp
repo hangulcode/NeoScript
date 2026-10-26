@@ -2,6 +2,7 @@
 #include "NeoVMInternal.h"
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -71,8 +72,29 @@ static void Run(IRuntime* rt, bool debug, bool image, const std::string& body,
     AllocStats after; GetAllocStats(after);
     Check(after.arrays == before.arrays && after.bufferBytes == before.bufferBytes, "array storage released");
 }
+static void Float32Boundaries()
+{
+    const double maximum = (std::numeric_limits<float>::max)();
+    const double midpoint = std::ldexp(1.0, 128) - std::ldexp(1.0, 103);
+    const double below = std::nextafter(midpoint, 0.0);
+    const double above = std::nextafter(midpoint, std::numeric_limits<double>::infinity());
+    for (double sign : {1.0, -1.0})
+    {
+        for (double value : {maximum, std::nextafter(maximum, midpoint), 3.4028235e38, below})
+            Check(ArrayInfo::NarrowFloat32(sign * value) == sign * maximum, "float32 upper finite rounding interval");
+        for (double value : {midpoint, above, 1e300, std::numeric_limits<double>::infinity()})
+        {
+            const float result = ArrayInfo::NarrowFloat32(sign * value);
+            Check(std::isinf(result) && std::signbit(result) == (sign < 0), "float32 midpoint overflows with sign");
+        }
+    }
+    for (double value : {0.0, -0.0})
+        Check(ArrayInfo::NarrowFloat32(value) == 0 && std::signbit(ArrayInfo::NarrowFloat32(value)) == std::signbit(value), "float32 signed zero preserved");
+    Check(std::isnan(ArrayInfo::NarrowFloat32(std::numeric_limits<double>::quiet_NaN())), "float32 NaN preserved");
+}
 int main()
 {
+    Float32Boundaries();
     auto rt = CreateRuntime(); NativeObjectDesc host; host.name = "Host"; host.method = Host;
     Check(rt->RegisterObject(host), "register host"); rt->FreezeBindings();
     for (bool debug : {false, true}) for (bool image : {false, true})
@@ -100,6 +122,23 @@ int main()
             "var a=system.array32(0,0);a.reserve(0);a.fill(2);a.resize(-1);return type(a)==\"array\" && tosize(a)==0;"
         };
         for (const char* body : cases) Run(rt, debug, image, body);
+        Run(rt, debug, image, R"ns(
+            var maximum=3.4028234663852886e38;var infinity=1.0/0.0;
+            var values=[maximum,tofloat("3.4028235e38"),3.4028235677973362e38,3.4028235677973366e38,3.402823567797337e38,1e300];
+            var expected=[maximum,maximum,maximum,infinity,infinity,infinity];
+            foreach(var sign in [1.0,-1.0])for(var i in 0,values.len()){
+                var value=sign*values[i];var want=sign*expected[i];
+                var a=system.array32(value,1);if(a[0]!=want)return false;
+                a[0]=a[0];if(a[0]!=want)return false;
+                a.resize(3);var copy=a.clone();if(copy[2]!=want)return false;
+                a[0]=0.0;a[0]+=value;if(a[0]!=want)return false;
+                a.fill(value);a.append(value);if(a[1]!=want || a[3]!=want)return false;
+            }
+            var a=system.array32(maximum,1);
+            a[0]=tofloat(math.tostr(a[0]));if(a[0]!=maximum)return false;
+            a[0]=tofloat("3.4028235e38");if(a[0]!=maximum)return false;
+            a[0]=tofloat("-3.4028235e38");return a[0]==-maximum;
+        )ns");
         for (const char* value : {"true", "null", "\"x\"", "[]", "{}", "math.Vector2(0,0)", "math.Vector3(0,0,0)", "math.Vector4(0,0,0,0)"})
             Run(rt, debug, image, std::string("system.array32(") + value + ",0);return true;", "array32 initial");
         for (const char* value : {"2147483648", "-2147483649", "9223372036854775807"})
