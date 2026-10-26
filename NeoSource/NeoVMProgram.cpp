@@ -928,19 +928,9 @@ bool CNeoVMProgram::PatchLocalOps(std::string* err)
 		// n1 만
 		case NOP_MOVI:         if (f & L1) to = NOP_MOVI_L;                         break;
 		case NOP_MOVF:
-			if (NEOS_CAN_EMBED_FLOAT_IMMEDIATE == false)
-			{
-				SetLoadError(err, "NOP_MOVF requires 4-byte NS_FLOAT");
-				return false;
-			}
 			if (f & L1) to = NOP_MOVF_L;
 			break;
 		case NOP_MOVF_L:
-			if (NEOS_CAN_EMBED_FLOAT_IMMEDIATE == false)
-			{
-				SetLoadError(err, "NOP_MOVF requires 4-byte NS_FLOAT");
-				return false;
-			}
 			break;
 		case NOP_LIST_ALLOC:   if (f & L1) to = NOP_LIST_ALLOC_L;                   break;
 		case NOP_CHANGE_INT:   if (f & L1) to = NOP_CHANGE_INT_L;                   break;
@@ -1088,14 +1078,9 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
 	case NOP_MOVF:
 	{
 		byteCount = OpFlagByteChars + 2 * 3;
-		if (NEOS_CAN_EMBED_FLOAT_IMMEDIATE)
-		{
-			NS_FLOAT value = 0;
-			std::memcpy(&value, &v.n23, sizeof(v.n23));
-			outAssembly = FormatAsm("MOVF %s = %g", context.operand(1).c_str(), (double)value);
-		}
-		else
-			outAssembly = FormatAsm("MOVF %s = <invalid precision>", context.operand(1).c_str());
+		float value;
+		std::memcpy(&value, &v.n23, sizeof(value));
+		outAssembly = FormatAsm("MOVF %s = %.17g", context.operand(1).c_str(), static_cast<double>(value));
 		break;
 	}
 	case NOP_LOADK:

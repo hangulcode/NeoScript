@@ -342,7 +342,7 @@ static void MaterializeValue(SOperand& operand, CArchiveRdWC& ar, SFunctions& fu
 }
 
 // 숫자 리터럴을 값만 옮기는 자리(대입/인자 전달)에서는 상수 풀을 거치지 않고
-// 즉값 명령으로 낸다. int 는 NOP_MOVI, float 는 NOP_MOVF.
+// 즉값 명령으로 낸다. int32 범위는 NOP_MOVI, float32로 정확히 표현되는 실수는 NOP_MOVF.
 //
 // ParseNum 이 만들어 둔 상수 풀 항목은, 아무도 참조하지 않는 것이 확실할 때만 되돌린다.
 // 판정은 CanPopLastStatic 이 O(1) 로 한다 — 명령을 내면 코드 오프셋이 달라지므로
@@ -399,7 +399,7 @@ static bool TryPushImmediate(CArchiveRdWC& ar, SFunctions& funs, int dest, const
 		funs._cur->Push_MOVI(ar, dest, (int)source._intLiteral, iDebugLine);
 	}
 	else if (funs._cur->Push_MOVF(ar, dest, source._floatLiteral, iDebugLine) == false)
-		return false;   // double 빌드: 상수 풀 경유로 되돌아간다(슬롯은 그대로 둔다)
+		return false;   // float32로 정확히 표현할 수 없는 double은 상수 풀에 남긴다.
 
 	if (canReclaim)
 		funs.PopLastStatic();

@@ -527,7 +527,7 @@ result before it can return to Script A, so Script B does not own a resumable ex
 
 ### Compiled image capacity
 
-The current image format is **0136**, storing scalar floating-point constants as double and retaining signed 64-bit integer values.
+The current image format is **0137**, storing scalar floating-point constants as double and retaining signed 64-bit integer values.
 Recompile older cached images; they are rejected rather than interpreted using the new layout.
 `MOVI` retains a signed 32-bit immediate, sign-extended to 64 bits. Larger integer literals
 use the constant pool, with `LOADK` when needed; instructions remain eight bytes.
@@ -549,8 +549,11 @@ Scalar float arguments, results, globals, and collection values use `double`; fl
 views expose `double*`. Vector component buffers remain `float*`. C++ map/list/global
 readers also accept `float&` for explicit narrowing compatibility; use `double&` to retain
 all script precision. C ABI 7 adds `NsCallResult.d` for scalars while `f[4]` retains vectors.
-Recompile C++ consumers and rebuild native/managed plugins together. Double literals use
-the constant pool rather than the 32-bit `MOVF` immediate; instruction width is unchanged.
+Recompile C++ consumers and rebuild native/managed plugins together.
+Double literals that round-trip exactly through float32, including the sign of zero,
+may use the 32-bit `MOVF` immediate. Execution widens it to double. Other literals stay
+in the double constant pool; instruction width is unchanged. Rebuild cached images: older
+loaders reject these immediates in double builds.
 
 Indexed null assignment uses the ordinary assignment instruction; lists keep their positions
 and maps remove the key at runtime. Instructions remain eight bytes. `LOADK` sits beside the

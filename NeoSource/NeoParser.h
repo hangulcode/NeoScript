@@ -573,20 +573,19 @@ struct SFunctionInfo
 	}
 	bool	Push_MOVF(CArchiveRdWC& ar, int r, NS_FLOAT v, int iDebugLine = -1)
 	{
-		if (NEOS_CAN_EMBED_FLOAT_IMMEDIATE)
-		{
-			AddDebugData(ar, iDebugLine);
-			_iLastOPOffset = _code->GetBufferOffset();
-
-			OpType optype = GetOpTypeFromOp(NOP_MOVF);
-			_code->Write(&optype, sizeof(optype));
-
-			int bits = 0;
-			std::memcpy(&bits, &v, sizeof(bits));
-			Push_NoFlag(r, bits);
-			return true;
-		}
-		return false;
+		// 범위 밖 캐스트를 피하고, 부호 있는 0까지 원래 double 값과 같을 때만 즉값을 쓴다.
+		const NS_FLOAT limit = (std::numeric_limits<float>::max)();
+		if (!std::isfinite(v) || v < -limit || v > limit) return false;
+		const float immediate = static_cast<float>(v);
+		if (static_cast<NS_FLOAT>(immediate) != v || std::signbit(immediate) != std::signbit(v)) return false;
+		AddDebugData(ar, iDebugLine);
+		_iLastOPOffset = _code->GetBufferOffset();
+		OpType optype = GetOpTypeFromOp(NOP_MOVF);
+		_code->Write(&optype, sizeof(optype));
+		int bits = 0;
+		std::memcpy(&bits, &immediate, sizeof(bits));
+		Push_NoFlag(r, bits);
+		return true;
 	}
 	void	Push_OP1(CArchiveRdWC& ar, eNOperation op, int r)
 	{

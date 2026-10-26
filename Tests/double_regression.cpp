@@ -1,9 +1,12 @@
-#include "NeoScript.h"
+﻿#include "NeoScript.h"
 #include "NeoVMInternal.h"
 #include "NeoVMVector.h"
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <iomanip>
+#include <locale>
+#include <sstream>
 #include <type_traits>
 
 using namespace NeoScript;
@@ -68,12 +71,75 @@ export fun Probe(){
 }
 )ns";
 
+static void FloatImmediates(IRuntime* runtime, bool debug, bool image)
+{
+    struct Case { double value; bool immediate; };
+    const double largest = (std::numeric_limits<float>::max)();
+    const double smallest = std::numeric_limits<float>::denorm_min();
+    const Case cases[] = {
+        {0.0,true}, {-0.0,true}, {0.5,true}, {-1.0,true}, {16777216.0,true},
+        {largest,true}, {-largest,true}, {smallest,true}, {-smallest,true},
+        {0.1,false}, {16777217.0,false}, {std::nextafter(1.0,2.0),false},
+        {std::nextafter(largest,0.0),false}, {std::nextafter(largest,INFINITY),false},
+        {smallest/2,false}, {1e300,false}, {-1e300,false},
+        {std::numeric_limits<double>::denorm_min(),false}
+    };
+    for (const Case& test : cases)
+    {
+        std::ostringstream text;
+        text.imbue(std::locale::classic());
+        text << std::scientific << std::setprecision(17) << test.value;
+        const std::string literal = text.str();
+        // 전역 초기화, 소유 값 덮어쓰기, 인자 전달을 각각 직접 실행과 이미지 로드로 검사한다.
+        const std::string source = "export var stored=" + literal + ";"
+            "export fun Literal(){var local=[1];local=" + literal + ";stored=\"old\";stored=" + literal +
+            ";return Host.Echo(local);} export fun Argument(){return Host.Echo(" + literal + ");}";
+        CompileDesc desc;desc.source=source;desc.sourceName="movf.ns";desc.includeDebugInfo=debug;
+        ProgramHandle program;Error error;
+        if(image){std::vector<uint8_t> bytes;error=runtime->CompileToBytecode(desc,bytes);if(error.ok())program=runtime->LoadProgram(bytes,&error);}
+        else{auto result=runtime->Compile(desc);program=result.program;error=result.error;}
+        Check(bool(program),error.message.c_str());if(!program)continue;
+        std::vector<DebugInstruction> instructions;runtime->GetDebugInstructions(program,instructions);
+        int immediateCount=0;
+        for(const auto& instruction:instructions)
+            if(instruction.assembly.find("MOVF ")==0)
+            {
+                ++immediateCount;
+                const size_t equals=instruction.assembly.find(" = ");
+                Check(equals!=std::string::npos,"MOVF assembly has a numeric operand");
+                if(equals!=std::string::npos)
+                {
+                    std::istringstream value(instruction.assembly.substr(equals+3));value.imbue(std::locale::classic());
+                    double decoded=0;value>>decoded;
+                    Check(!value.fail() && decoded==test.value && std::signbit(decoded)==std::signbit(test.value),"MOVF disassembly preserves value and zero sign");
+                }
+            }
+        Check(test.immediate ? immediateCount>=3 : immediateCount==0,"only exact float32 literals use MOVF");
+        auto instance=runtime->CreateInstance(program);Check(bool(instance),"MOVF instance");
+        if(instance)
+        {
+            double value=0;
+            Check(runtime->GetGlobalFloat(instance,"stored",value) && value==test.value && std::signbit(value)==std::signbit(test.value),"MOVF global initializer");
+            for(const char* function:{"Literal","Argument"})
+            {
+                auto call=runtime->Call(instance,function);
+                Check(call.invoke()==RunStatus::Completed && call.retType()==ValueType::Float && call.retFloat()==test.value &&
+                    std::signbit(call.retFloat())==std::signbit(test.value),"literal assignment and argument preserve double");
+            }
+            Check(runtime->GetGlobalFloat(instance,"stored",value) && value==test.value && std::signbit(value)==std::signbit(test.value),"MOVF global overwrite");
+            runtime->DestroyInstance(instance);
+        }
+        runtime->DestroyProgram(program);
+    }
+}
+
 int main()
 {
     auto runtime=CreateRuntime();NativeObjectDesc desc;desc.name="Host";desc.method=Host;
     Check(runtime->RegisterObject(desc),"register");runtime->FreezeBindings();
     for(bool debug:{false,true})for(bool image:{false,true})
     {
+        FloatImmediates(runtime,debug,image);
         CompileDesc compile;compile.source=source;compile.sourceName="double.ns";compile.includeDebugInfo=debug;
         ProgramHandle program;Error error;
         if(image){std::vector<uint8_t> bytes;error=runtime->CompileToBytecode(compile,bytes);if(error.ok())program=runtime->LoadProgram(bytes,&error);}

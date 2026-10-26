@@ -24,10 +24,9 @@ using NS_UINT = uint64_t;
 static constexpr NS_INT NS_INT_MIN = (std::numeric_limits<NS_INT>::min)();
 static constexpr NS_INT NS_INT_MAX = (std::numeric_limits<NS_INT>::max)();
 
-// NOP_MOVF 는 SVMOperation 의 n23(정확히 4 byte)에 float 비트를 직접 담는다.
-// NS_FLOAT 를 double 로 바꾸면 이 값도 컴파일 타임에 false 가 되어, 컴파일러는
-// 기존 static 상수 + NOP_MOV 경로만 사용한다.
-static constexpr bool NEOS_CAN_EMBED_FLOAT_IMMEDIATE = (sizeof(NS_FLOAT) == 4 && sizeof(int) == 4);
+// MOVF는 32비트 IEEE float 비트를 담고, 실행 시 일반 double 값으로 확장한다.
+static_assert(sizeof(float) == 4 && sizeof(int) == 4 && std::numeric_limits<float>::is_iec559,
+    "MOVF requires 32-bit IEEE float and 32-bit int");
 
 #pragma pack(1)
 struct debug_info
@@ -92,7 +91,8 @@ struct debug_info
 // 0134: 정수 값과 직렬화된 정수 상수를 64비트로 확장한다.
 // 0135: 반환 직전 전역·캡처 대입을 보존하므로 기존 이미지를 다시 컴파일한다.
 // 0136: 실수 상수를 double로 저장하므로 이전 이미지는 다시 컴파일한다.
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('3' << 8) | ('6'))
+// 0137: double 값을 정확히 보존하는 float32 즉값에 MOVF를 사용한다. 구 로더는 이를 거부한다.
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('3' << 8) | ('7'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline
