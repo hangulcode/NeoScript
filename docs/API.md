@@ -432,9 +432,14 @@ in script strings (`"\\d+"`). Empty matches are supported and replacement always
 Invalid patterns, wrong argument types, and regex complexity errors are runtime errors.
 Patterns exceeding the host's byte limit (16,384 UTF-8 bytes by default) fail before regex compilation.
 The C++ host can configure `RuntimeDesc::maxRegexPatternBytes`; zero allows only empty patterns.
-Pattern nesting is limited to 128 and compiled patterns to 1 MiB. Each operation also has a shared
-1,000,000-work-unit budget, match depth 1,000, and an 8 MiB match heap limit. Input/replacement,
-output, and total captured text are each limited to 8 MiB. Limit violations are runtime errors.
+Pattern nesting is limited to 128 and compiled patterns to 1 MiB. Each operation also has a work
+budget of 1,000,000 units plus 32 units per input byte, where a unit is one pattern step or one input
+byte advanced since the previous step (text re-read after backtracking counts again), a backtracking
+limit of 1,000,000, and an 8 MiB match heap limit. Limit errors name the exhausted limit (work,
+backtracking, depth or memory). Patterns containing backtracking control verbs such as `(*COMMIT)`
+are matched without start-up optimizations so the verbs keep their PCRE2 semantics. Repeated groups are bounded by the heap limit rather than a fixed nesting depth, so
+`(ab)*` matches tens of thousands of repetitions. Input/replacement, output, and total captured text
+are each limited to 8 MiB. Limit violations are runtime errors.
 These are resource bounds, not a wall-clock deadline. Empty replacement matches always advance;
 a nonempty match ending at the end of the input does not add a second empty match there.
 The native regex engine cannot yield or obey a VM execution budget: regex calls are rejected during

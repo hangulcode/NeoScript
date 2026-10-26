@@ -156,7 +156,8 @@ static void RegexBounds()
     };
     limited(std::string(8 * 1024 * 1024 + 1, 'a'), "a", "", 1);
     limited("a", std::string(129, '(') + "a" + std::string(129, ')'), "", 0);
-    limited("a", "a", std::string(1000001, 'x'), 2);
+    // 치환 문자열은 예산(1,000,000 + 입력 바이트당 32)으로 묶이며 입력이 1바이트라 2백만 자는 초과한다.
+    limited("a", "a", std::string(2000001, 'x'), 2);
     const std::string binary("a\0b", 3);
     Check(engine.Run(binary, "b", "c", 2, false).text == std::string("a\0c", 3), "regex embedded NUL output");
     Check(engine.Run("abc", "b", "$$:$&:$`:$'", 2, false).text == "a$:b:a:cc", "replacement special tokens");
@@ -190,8 +191,25 @@ int main()
         R"ns("abc".regex_replace("z", "x")=="abc")ns"
     }) Script(runtime, std::string("export fun Test(){return ") + expression + ";}");
     // 플랫폼별 재귀 스택 대신 제한된 PCRE2 인터프리터를 사용하는지 검사한다.
-    Script(runtime, R"ns(export fun Test(){var s="";for(var i in 0,20000)s=s.."a"; return s.regex_search("(a|b)*c")==null;})ns", false, -1, "limit");
-    Script(runtime, R"ns(export fun Test(){return "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!".regex_match("(a*)*b");})ns", false, -1, "limit");
+    // 필수 문자 'c' 가 없으면 시작 최적화가 시도 자체를 건너뛰어 즉시 불일치로 끝난다.
+    Script(runtime, R"ns(export fun Test(){var s="";for(var i in 0,20000)s=s.."a"; return s.regex_search("(a|b)*c")==null;})ns");
+    // 시작 위치마다 끝까지 훑는 제곱 시간은 전진 바이트 과금으로 예산에 걸린다.
+    Script(runtime, R"ns(export fun Test(){var s="";for(var i in 0,20000)s=s.."a"; s=s.."cy"; return s.regex_search("[ab]*c(?=x)")==null;})ns", false, -1, "limit");
+    // 반복 그룹은 고정 깊이 한도가 아니라 힙 한도에만 묶인다.
+    Script(runtime, R"ns(export fun Test(){var s="";for(var i in 0,2000)s=s.."ab"; return s.regex_match("(ab)*") && s.regex_match("(?:ab)*") && s.regex_search("(ab)+$")!=null;})ns");
+    Script(runtime, R"ns(export fun Test(){var s="";for(var i in 0,2000)s=s.."a,"; return s.regex_match("([^,]*,)+");})ns");
+    // 제어 구문은 시작 최적화 없이 매칭해 첫 위치의 (*COMMIT) 이 이후 시도를 막는 의미를 지킨다.
+    Script(runtime, R"ns(export fun Test(){return "DEFABC".regex_search("(*COMMIT)ABC")==null && "DEFABC".regex_replace("(*COMMIT)ABC","X")=="DEFABC" && "ABC".regex_search("(*COMMIT)ABC")!=null;})ns");
+    // 같은 시작 위치에서 입력을 다시 읽는 전방 탐색 반복도 전진량으로 과금된다. 10회는 예산 안, 100회는 초과.
+    Script(runtime, R"ns(export fun Test(){var s="a";for(var i in 0,15)s=s..s; return s.regex_match("^(?:(?=a*)){10}a*$");})ns");
+    Script(runtime, R"ns(export fun Test(){var s="a";for(var i in 0,15)s=s..s; return s.regex_match("^(?:(?=a*)){100}a*$");})ns", false, -1, "work limit");
+    // 패턴 안의 깊이 지시는 깊이 한도 메시지로 알린다.
+    Script(runtime, R"ns(export fun Test(){return "ab".regex_match("(*LIMIT_DEPTH=1)(ab)*");})ns", false, -1, "depth limit");
+    // 입력 길이에 비례하는 예산이라 큰 입력의 선형 검색·치환은 통과한다.
+    Script(runtime, R"ns(export fun Test(){var s="a";for(var i in 0,20)s=s..s; return s.regex_search("c")==null && s.regex_replace("a","b").len()==s.len();})ns");
+    // 필수 문자 'b' 가 있어야 시작 최적화를 지나 지수 백트래킹에 들어가고, 거기서 한도에 걸린다.
+    Script(runtime, R"ns(export fun Test(){return "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!b".regex_match("(a*)*b");})ns", false, -1, "limit");
+    Script(runtime, R"ns(export fun Test(){return !"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!".regex_match("(a*)*b");})ns");
     Script(runtime, R"ns(export fun Test(){return "aaa".regex_replace("a*","-")=="-";})ns");
     Script(runtime, R"ns(export fun Test(){return "ab".regex_match("a|ab") && "aa".regex_match("(a)\\1");})ns");
     Script(runtime, R"ns(export fun Test(){for(var i in 0,40){var p="a"..i; if(!p.regex_match(p))return false;} return "A".regex_match("a",true) && !"A".regex_match("a");})ns");

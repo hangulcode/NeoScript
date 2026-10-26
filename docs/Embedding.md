@@ -661,7 +661,7 @@ Regex patterns default to a maximum of 16,384 UTF-8 bytes. Set `RuntimeDesc::max
 before `CreateRuntime` to change this limit; zero permits only empty patterns. The legacy equivalent
 is the second argument to `NeoVMSystem::CreateVM(transport, maxRegexPatternBytes)`. The limit is
 checked before compiling each pattern, including patterns constructed at runtime. It limits pattern
-size. PCRE2 additionally enforces work, depth, heap and text limits, and caches compiled patterns;
+size. PCRE2 additionally enforces work, backtracking, heap and text limits, and caches compiled patterns;
 see the [regex limits and syntax](API.md#6-string-methods). These resource limits do not promise a
 wall-clock deadline; regex remains unavailable inside time-limited VM invocations.
 

@@ -774,7 +774,7 @@ PCRE2 with JavaScript-style character escapes; double backslashes in string lite
 literal Korean word can match but `.` and case folding are not Unicode-aware. Invalid patterns
 raise runtime errors. Patterns are limited to 16,384 UTF-8 bytes by default, including patterns built
 at runtime; the host can configure the limit. Oversized patterns fail before compilation. This is not
-a wall-clock guarantee: matching also has work, depth, memory and 8 MiB text limits. Regex is synchronous and is rejected when the host enables execution limits.
+a wall-clock guarantee: matching also has work, backtracking, memory and 8 MiB text limits. Regex is synchronous and is rejected when the host enables execution limits.
 
 ### HTTP and HTTPS requests
 
