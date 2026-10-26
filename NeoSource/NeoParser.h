@@ -898,7 +898,7 @@ struct SFunctions
 	SFunctionInfo*						_cur = nullptr;
 	std::vector<VarInfo>				_staticVars;
 	// 숫자 상수의 중복 제거 색인: NS_FLOAT 비트 / int 값 → 풀 인덱스. 선형 탐색은 리터럴 수의 제곱으로 느려졌다.
-	std::unordered_map<u32, int>	_floatConstants;
+	std::unordered_map<uint64_t, int>	_floatConstants;
 	std::unordered_map<NS_INT, int>		_intConstants;
 	// String slots are never reclaimed by numeric immediate folding. Keep their
 	// lookup separate so large text pools do not require a quadratic scan.
@@ -1049,7 +1049,7 @@ struct SFunctions
 		const VarInfo& v = _staticVars.back();
 		if (v.GetType() == VAR_FLOAT)
 		{
-			u32 bits = 0;
+			uint64_t bits = 0;
 			std::memcpy(&bits, &v._float, sizeof(bits));
 			auto it = _floatConstants.find(bits);
 			if (it != _floatConstants.end() && it->second == (int)_staticVars.size() - 1) _floatConstants.erase(it);
@@ -1115,9 +1115,9 @@ struct SFunctions
 	{
 		// NS_FLOAT 로 바꾼 뒤 비트로 찾는다. double 과 float 을 그대로 비교하면 0.001 처럼 정확히
 		// 표현되지 않는 값은 절대 같지 않아 리터럴마다 새 상수가 생겼다. 비트 비교라 +0.0/-0.0 은 구분된다.
-		static_assert(sizeof(NS_FLOAT) == sizeof(u32), "NS_FLOAT must be 32-bit");
+		static_assert(sizeof(NS_FLOAT) == sizeof(uint64_t), "NS_FLOAT must be 64-bit");
 		const NS_FLOAT f = (NS_FLOAT)num;
-		u32 bits = 0;
+		uint64_t bits = 0;
 		std::memcpy(&bits, &f, sizeof(bits));
 		auto found = _floatConstants.find(bits);
 		if (found != _floatConstants.end())

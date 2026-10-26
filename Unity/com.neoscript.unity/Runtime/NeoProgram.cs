@@ -241,7 +241,7 @@ namespace NeoScript
             finally { NeoUtf8.Pop(frame); }
         }
 
-        public bool TryGetFloat(string name, out float value)
+        public bool TryGetFloat(string name, out double value)
         {
             ThrowIfDead();
             NeoUtf8.Frame frame = NeoUtf8.Push();
@@ -284,7 +284,7 @@ namespace NeoScript
             finally { NeoUtf8.Pop(frame); }
         }
 
-        public bool SetFloat(string name, float value)
+        public bool SetFloat(string name, double value)
         {
             ThrowIfDead();
             NeoUtf8.Frame frame = NeoUtf8.Push();

@@ -120,7 +120,7 @@ int main() {
         Run(runtime, "import math;export fun Probe(){var p=math.Repeat(100000000.0,3.0);"
             "var q=math.Repeat(1000000000000000.0,3.0);var r=math.Repeat(-1000000000000000.0,3.0);"
             "var a=math.WrapAngle(1000000000000000.0);var b=math.WrapAngle(-1000000000000000.0);"
-            "return p==1.0 && q==2.0 && r==1.0 && a>-3.141593 && a<=3.141593 && b>-3.141593 && b<=3.141593;}", debug, image);
+            "return p==1.0 && q==1.0 && r==2.0 && a>-3.141593 && a<=3.141593 && b>-3.141593 && b<=3.141593;}", debug, image);
         for (const char* value : {"-100.0", "100.0", "-0.0", "0.0"})
             Run(runtime, std::string("import math;export fun Probe(){var r=math.Repeat(") + value +
                 ",2.5);return r==0.0 && (1.0 / r)>0.0 && tostring(r)==\"0\";}", debug, image);

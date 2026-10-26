@@ -23,18 +23,21 @@ into every engine build that nothing in that build calls.
 ## Updating from an older checkout
 
 Close Unity, update the UPM sources, then rebuild the native plugin for each
-target platform. The current binding requires **C ABI 6**; an older DLL is
+target platform. The current binding requires **C ABI 7**; an older DLL is
 rejected at runtime construction with an ABI mismatch. This is the native
 binding revision, not a package or bytecode version. Recompile cached bytecode
 with the current core; old images may be rejected by its image-version check.
-ABI 6 uses C# `long` for script integer arguments, results, globals, and collection values,
-and `Span<long>` for integer arrays. `NsCallResult` is 56 bytes on 64-bit targets and
-48 bytes on 32-bit targets. Rebuild native plugins together with the managed package.
+ABI 7 uses C# `long` for script integers and `double` for scalar floats, including
+arguments, results, globals, and collection values. Array views use `Span<long>` and
+`Span<double>`. Vector components and Unity vector types remain float32.
+`NsCallResult.d` stores scalar results; `f[4]` stores vectors. Its size is 64 bytes on
+Windows x64/x86 and ARM with eight-byte double alignment. Rebuild native plugins
+together with the managed package. Explicitly narrow scalar results for Unity float fields.
 Collection lengths, indices, handles, and statuses retain their existing widths.
 
 ABI 5 added `NsRuntimeTryDestroy` and `NsTryDestroyInstance`, which the managed
 binding uses to reject unsafe disposal without releasing its managed handles.
-ABI 5 preserved ABI 4 structure layouts; ABI 6 changed integer payloads and `NsCallResult` as described above. Update the package and plugin together.
+ABI 5 preserved ABI 4 structure layouts; ABI 6 changed integer payloads; ABI 7 changes scalar floats and `NsCallResult` as described above. Update the package and plugin together.
 
 The binding now exposes the shared JSON codec, collection null/native-object
 checks, storage identity and string-key enumeration. See the examples below.
@@ -365,7 +368,7 @@ using (var runtime = new NeoRuntime(new NeoRuntimeOptions { HttpTransport = tran
 
 A missing transport still reports `HTTP transport is not configured`. The new registration entry
 point requires rebuilding the native plugin, even though the unchanged descriptor layouts remain
-ABI 6. The VM starts a background thread only when an HTTP request is submitted.
+ABI 7. The VM starts a background thread only when an HTTP request is submitted.
 
 ## Rebuilding the native plugin
 
@@ -451,11 +454,11 @@ check the flag to distinguish it from failure. `NeoJsonResult.Error` and
 
 Decode defaults to strict int64 integers and accepts any supported root value.
 `requireMap: true` restricts the root to a map. `strictIntegers: false` allows
-out-of-int64 integers to become finite float32 values with warnings. Float32
+out-of-int64 integers to become finite float64 values with warnings. Float64
 values retain real notation (`100.0`) when encoded. Encoding optionally sorts
 map keys; lists keep their order.
 
-Only null, bool, int64, float32, strings, string-key maps and lists are
+Only null, bool, int64, float64, strings, string-key maps and lists are
 supported. Native objects, vectors, functions, sets, dense arrays, cycles,
 invalid text and nesting beyond 64 containers fail with a full path such as
 `$.items[2].position`. Map nulls are omitted; list nulls are preserved. See
@@ -488,7 +491,11 @@ if (positions.TryGet(0, out Vector3 position))
 ```
 
 `VectorComponents` and `NsArrayVectorData` were removed in C ABI 4; rebuild the native plugin
-with the matching managed bindings. `Floats` remains exclusive to scalar float arrays.
+with the matching managed bindings. `Floats` remains exclusive to double arrays.
+`system.array32` exposes `NeoArrayElementType.Int32` or `.Float32`, with `Ints32`
+(`Span<int>`) and `Floats32` (`Span<float>`) respectively. Nonmatching accessors return
+empty spans. The spans are borrowed and must not outlive the callback or survive a
+script resize. Native plugins must include `NsArrayInts32` and `NsArrayFloats32`.
 The view is borrowed for the existing callback scope; copied Vector2/3/4 values can be retained.
 
 C++ uses `ArrayView::getVec(index, out4)` and `setVec(index, components, dimension)`;

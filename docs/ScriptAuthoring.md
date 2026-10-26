@@ -1,4 +1,4 @@
-# NeoScript Script Authoring Guide
+﻿# NeoScript Script Authoring Guide
 
 > **Line-limit exception: only this document (`docs/ScriptAuthoring.md`) is exempt from line limits.**
 > The limits on other documents, including `AGENTS.md`, still apply.
@@ -16,7 +16,7 @@ When looking for a feature, consult both the examples here and the [full API ref
 | Variable declaration order | Declare global and local variables and `const` before use, including uses inside function bodies. |
 | Module access | Only `public` functions, constants, and variables are accessible as `alias.F()`, `alias.NAME`, and `alias.value`. `export` exposes declarations to the C++ host, not to other modules. |
 | Conditions | Conditions in `if` and `while` must be `bool`. Numbers and strings are not automatically treated as true. |
-| Numbers | `int` is a signed 64-bit integer; `float` is a 32-bit floating-point number. `/` between integers performs integer division. |
+| Numbers | `int` is a signed 64-bit integer; `float` is a 64-bit floating-point number. `/` between integers performs integer division. |
 | Indices | Lists, dense arrays, and vectors use zero-based indices. Strings do not support `s[i]`. |
 | Strings | Concatenate with `..`, extract with `sub(start, count)`, and check for `-1` when `find` fails. |
 | Assigning `null` | Keeps the slot in a list; removes the key from a map. |
@@ -99,12 +99,13 @@ print((count > 0) && (count < capacity)); // true
   Left shifts retain the low 64 bits; right shifts extend the sign bit.
 - For floating-point division, convert one operand with `tofloat` **before dividing**.
   `tofloat(count / capacity)` only converts the already-truncated result.
-- `float` is single precision. Converting a large integer ID to float and back may change its value.
+- `float` is double precision. Integers through magnitude 2^53 are exactly representable; larger integer IDs may lose precision on conversion.
   Float-to-int conversion truncates toward zero, clamps overflow/infinity to the int64 endpoints,
   and converts NaN to zero. Decimal integer literals outside int64 are compile errors.
-  `const` floating-point expressions deliberately calculate in double precision before runtime
-  float32 conversion: `(16777216.0 + 1.0) - 16777216.0` is `1` as a const expression but `0`
-  when evaluated step by step at run time. Non-finite const results are compile errors.
+  `const` floating-point expressions and runtime scalar operations both use double precision:
+  `(16777216.0 + 1.0) - 16777216.0` is `1` in either case. Non-finite const results are compile errors.
+  Dense float arrays also store double. Vector2/3/4 and Quaternion keep float32 components
+  and vector arithmetic: writes and construction narrow; component reads widen to double.
   Constants, assignments, and container values preserve signed zero. `0.0 == -0.0` is true,
   but `1.0 / 0.0` is positive infinity and `1.0 / -0.0` is negative infinity.
   The two zeros still identify the same map key.
@@ -546,6 +547,25 @@ so keys `1` and `1.0` are separate even though `1 == 1.0` is true.
 
 ### Dense arrays: numbers, flags, and vectors
 
+For four-byte numeric storage, use `system.array32`:
+
+```cpp
+import system;
+var ids32 = system.array32(0, 1000);
+var weights32 = system.array32(0.0, 1000);
+ids32[0] = 2147483647;
+weights32[0] = 16777217.0;
+print(weights32[0] == 16777216.0);
+```
+
+Integer initializers choose int32; float initializers choose float32. Other types are
+errors. Reads return ordinary int64/double scalars. Int32 writes require an integer in
+`-2147483648..2147483647`; overflow or a noninteger value fails without changing the
+array. Float32 writes round int/float values; values beyond its finite range become
+signed infinity. Arithmetic uses the usual scalar precision before storing the result.
+The storage type remains fixed through `append`, `fill`, `resize`, and `clone`.
+`system.array(0, n)` and `system.array(0.0, n)` still use int64 and double respectively.
+
 ```cpp
 import system;
 
@@ -905,7 +925,7 @@ print(math.MoveToward(0.0, 10.0, 2.0)); // 2
   by `Get()`. Plain root or index variables are read for the write.
   List/map/vector-array writes may use a temporary internal reference; normal reads and assignment results
   remain values. Copies still stay independent, and native properties retain their getter/setter behavior.
-  WREF pairs with an ordinary write and handles vector write-back; rebuild older compiled scripts and caches for bytecode version 0135 (64-bit integers; also required for signed-zero constants, foreach source retention, checked shift folding, and corrected NaN branch behavior).
+  WREF pairs with an ordinary write and handles vector write-back; rebuild older compiled scripts and caches for bytecode version 0136 (double scalar constants and 64-bit integers; also required for signed-zero constants, foreach source retention, checked shift folding, and corrected NaN branch behavior).
 - A selector immediately after an indexed assignment can still modify the assigned vector:
   `(a[0][0] = math.Vector3(1,2,3))[1] = 9` stores `(1,9,3)` in `a[0][0]`.
   Assigning the result to a separate local instead keeps ordinary vector copy semantics.
@@ -1001,7 +1021,7 @@ watch.restart();
 represent dates before 1970. The supported UTC range is 1900 through 9999; `%z` and `%Z` always
 produce `+0000` and `UTC`. Output is limited to 79 UTF-8 bytes, as with local `date`.
 
-TimeSpan stores exact signed int64 milliseconds. `total_seconds()` is only an approximate float32
+TimeSpan stores exact signed int64 milliseconds. `total_seconds()` is only an approximate float64
 conversion. All five component arguments are required integers and each conversion/sum must fit
 int64; overflows raise errors. Components may exceed their usual ranges or have mixed signs.
 `parts()` returns a fresh map with `sign`, `days`, `hours`, `minutes`, `seconds`, and `milliseconds`;
@@ -1031,8 +1051,8 @@ var copy = system.jsonDecode(text);
 if (system.jsonError() != "") print(system.jsonError());
 ```
 
-- Integers and floats are written distinctly, as `1` and `1.0`. Even `0.1` round-trips to the same float32 value.
-- Numbers without a decimal point or exponent decode as int64; those with either decode as float32. Out-of-range numbers fail. A UTF-8 BOM is accepted on input.
+- Integers and floats are written distinctly, as `1` and `1.0`. Even `0.1` round-trips to the same float64 value.
+- Numbers without a decimal point or exponent decode as int64; those with either decode as float64. Out-of-range numbers fail. A UTF-8 BOM is accepted on input.
 - Supported values are string-keyed maps, lists, strings, int, float, bool, and null. The root need not be a map.
 - Null map values omit the key; null list values keep their positions. Shared references decode as independent values.
 - `system.array`, sets, vectors, functions, host objects, cycles, NaN/infinity, invalid UTF-8, and NUL are rejected.

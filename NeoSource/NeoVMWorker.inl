@@ -29,7 +29,9 @@ NEOS_FORCEINLINE void CNeoVMWorker::MoveF(VarInfo* v1, int bits)
 		Var_ReleaseAlloc(v1);
 
 	v1->SetType(VAR_FLOAT);
-	std::memcpy(&v1->_float, &bits, sizeof(bits));
+	float immediate;
+	std::memcpy(&immediate, &bits, sizeof(immediate));
+	v1->_float = static_cast<NS_FLOAT>(immediate);
 }
 
 NEOS_NOINLINE void ArrayReadValue(CNeoVMWorker* worker, ArrayInfo* array, int index, VarInfo* out)
@@ -44,6 +46,8 @@ NEOS_NOINLINE void ArrayReadValue(CNeoVMWorker* worker, ArrayInfo* array, int in
 	case NeoArrayElementType::Vector4:
 		array->ReadVector(index, out);
 		break;
+	case NeoArrayElementType::Int32: worker->Var_SetInt(out, array->Int32Data()[index]); break;
+	case NeoArrayElementType::Float32: worker->Var_SetFloat(out, array->Float32Data()[index]); break;
 	}
 }
 
@@ -162,7 +166,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 		}
 		if (ArrayWriteValue(array, static_cast<int>(index), pValue))
 			return;
-		SetErrorFormat(RTE_ARRAY_VALUE_TYPE, GetDataType(pValue->GetType()).c_str(), GetArrayElementTypeName(array->_elementType));
+		SetArrayAssignError(array, pValue);
 		return;
 	}
 	CltInsertRare(pClt, pKey, pValue);
@@ -221,7 +225,7 @@ NEOS_NOINLINE void CNeoVMWorker::CltInsertRare(VarInfo* pClt, VarInfo* pKey, Var
 		}
 		if (ArrayWriteValue(array, static_cast<int>(index), pValue))
 			return;
-		SetErrorFormat(RTE_ARRAY_VALUE_TYPE, GetDataType(pValue->GetType()).c_str(), GetArrayElementTypeName(array->_elementType));
+		SetArrayAssignError(array, pValue);
 		return;
 	}
 	case VAR_MAP:

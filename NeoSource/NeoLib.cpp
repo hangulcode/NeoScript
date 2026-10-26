@@ -22,7 +22,7 @@
 #include "UTFString.h"
 #include <chrono>
 
-#define MATH_PI				3.14159265358979323846f // Pi
+#define MATH_PI				3.14159265358979323846 // 원주율은 스칼라 정밀도를 따른다.
 NeoScript::NeoVMSystem::IO_Print NeoScript::NeoVMSystem::m_pFunPrint = nullptr;
 NeoScript::NeoVMSystem::IO_Print NeoScript::NeoVMSystem::m_pFunError = nullptr;
 
@@ -512,6 +512,8 @@ struct neo_libs
 				case NeoArrayElementType::Vector2:
 				case NeoArrayElementType::Vector3:
 				case NeoArrayElementType::Vector4: candidate = array->VectorValues() + i; break;
+				case NeoArrayElementType::Int32: item = VarInfo(VAR_INT); item._int = array->Int32Data()[i]; break;
+				case NeoArrayElementType::Float32: item = VarInfo(VAR_FLOAT); item._float = array->Float32Data()[i]; break;
 				}
 				if (CollectionValueEquals(pN, candidate, value)) return i;
 			}
@@ -537,7 +539,7 @@ struct neo_libs
 		VarInfo* value = pN->GetStack(1);
 		if (!array->CanAssignValue(value))
 		{
-			pN->SetErrorFormat(RTE_ARRAY_VALUE_TYPE, GetDataType(value->GetType()).c_str(), GetArrayElementTypeName(array->_elementType));
+			pN->SetArrayAssignError(array, value);
 			return false;
 		}
 		HeldValue held(pN, value);
@@ -621,6 +623,8 @@ struct neo_libs
 			case NeoArrayElementType::Vector2:
 			case NeoArrayElementType::Vector3:
 			case NeoArrayElementType::Vector4: initial = source->_initialVector; break;
+			case NeoArrayElementType::Int32: initial = VarInfo(VAR_INT); initial._int = source->_initialInt; break;
+			case NeoArrayElementType::Float32: initial = VarInfo(VAR_FLOAT); initial._float = source->_initialFloat; break;
 			}
 			ArrayInfo* dest = vm->ArrayAlloc(source->_elementType, source->_count, initial);
 			if (dest == nullptr) return false;
@@ -718,7 +722,7 @@ struct neo_libs
 		VarInfo* value = pN->GetStack(1);
 		if (array->CanAssignValue(value) == false)
 		{
-			pN->SetErrorFormat(RTE_ARRAY_VALUE_TYPE, GetDataType(value->GetType()).c_str(), GetArrayElementTypeName(array->_elementType));
+			pN->SetArrayAssignError(array, value);
 			return false;
 		}
 		if (array->_count == INT32_MAX)
@@ -1171,6 +1175,13 @@ struct neo_libs
 		NS_FLOAT length = pN->read<NS_FLOAT>(2);
 		if (length > 0 && std::isfinite(length) && std::isfinite(x))
 		{
+			// 두 배 주기가 double 범위를 넘으면 유한 입력은 첫 왕복 안에 있다.
+			if (length > (std::numeric_limits<double>::max)() * 0.5)
+			{
+				const double magnitude = ::fabs(x);
+				pN->ReturnValue(magnitude <= length ? magnitude : length - (magnitude - length));
+				return true;
+			}
 			const double period = static_cast<double>(length) * 2.0;
 			const double t = ::fmod(::fabs(static_cast<double>(x)), period);
 			pN->ReturnValue(static_cast<NS_FLOAT>(t <= length ? t : period - t));
@@ -1209,8 +1220,10 @@ struct neo_libs
 			{
 				const double start = NsWrapAngleWide(a);
 				const double delta = NsWrapAngleWide(NsWrapAngleWide(b) - start);
-				// Reduce the product first: even double loses start beside a huge t.
-				pN->ReturnValue(NsAngleResult(start + NsWrapAngleWide(delta * t)));
+				// 곱이 넘칠 때만 매개변수를 한 주기 안으로 줄인다.
+				const double product = delta * t;
+				const double offset = std::isfinite(product) ? product : delta * ::fmod(t, kNsTwoPi / ::fabs(delta));
+				pN->ReturnValue(NsAngleResult(start + NsWrapAngleWide(offset)));
 			}
 		}
 		else
@@ -1298,7 +1311,7 @@ struct neo_libs
 		if (args != 1) return false;
 		float v[3];
 		if (ReadVec3(pN->GetStackVar(1), v) == false) return false;
-		pN->ReturnValue((NS_FLOAT)::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]));
+		pN->ReturnValue(static_cast<NS_FLOAT>(static_cast<float>(::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]))));
 		return true;
 	}
 	static bool Math_Distance3(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -1307,9 +1320,9 @@ struct neo_libs
 		float a[3], b[3];
 		if (ReadVec3(pN->GetStackVar(1), a) == false) return false;
 		if (ReadVec3(pN->GetStackVar(2), b) == false) return false;
-		NS_FLOAT dx = a[0] - b[0];
-		NS_FLOAT dy = a[1] - b[1];
-		NS_FLOAT dz = a[2] - b[2];
+		float dx = a[0] - b[0];
+		float dy = a[1] - b[1];
+		float dz = a[2] - b[2];
 		pN->ReturnValue(::sqrt(dx * dx + dy * dy + dz * dz));
 		return true;
 	}
@@ -1397,14 +1410,14 @@ struct neo_libs
 	// q 는 wxyz. 정규화한 뒤 반환한다 (인자는 건드리지 않는다 — 호출측이 계속 쓸 수 있게).
 	static bool WriteQuat(CNeoVMWorker* pN, float w, float x, float y, float z)
 	{
-		NS_FLOAT lenSq = w * w + x * x + y * y + z * z;
-		if (lenSq < (NS_FLOAT)0.000001)
+		float lenSq = w * w + x * x + y * y + z * z;
+		if (lenSq < (float)0.000001)
 		{
 			pN->Var_SetQuat(pN->GetReturnVar(), 1.0f, 0.0f, 0.0f, 0.0f);
 		}
 		else
 		{
-			float invLen = (float)((NS_FLOAT)1.0 / (NS_FLOAT)::sqrt(lenSq));
+			float invLen = (float)((float)1.0 / (float)::sqrt(lenSq));
 			pN->Var_SetQuat(pN->GetReturnVar(), w * invLen, x * invLen, y * invLen, z * invLen);
 		}
 		return true;
@@ -1416,7 +1429,7 @@ struct neo_libs
 		float a[3], b[3];
 		if (ReadVec3(pN->GetStackVar(1), a) == false) return false;
 		if (ReadVec3(pN->GetStackVar(2), b) == false) return false;
-		NS_FLOAT t = pN->read<NS_FLOAT>(3);
+		float t = static_cast<float>(pN->read<NS_FLOAT>(3));
 
 		return WriteVec3(pN,
 			(float)(a[0] + (b[0] - a[0]) * t),
@@ -1431,9 +1444,9 @@ struct neo_libs
 		if (ReadVec3(pN->GetStackVar(1), a) == false) return false;
 		if (ReadVec3(pN->GetStackVar(2), b) == false) return false;
 
-		NS_FLOAT dx = a[0] - b[0];
-		NS_FLOAT dy = a[1] - b[1];
-		NS_FLOAT dz = a[2] - b[2];
+		float dx = a[0] - b[0];
+		float dy = a[1] - b[1];
+		float dz = a[2] - b[2];
 		pN->ReturnValue(dx * dx + dy * dy + dz * dz);
 		return true;
 	}
@@ -1444,8 +1457,8 @@ struct neo_libs
 		float v[3], fallback[3];
 		if (ReadVec3(pN->GetStackVar(1), v) == false) return false;
 		if (ReadVec3(pN->GetStackVar(2), fallback) == false) return false;
-		NS_FLOAT lenSq = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
-		if (lenSq < (NS_FLOAT)0.00000001)
+		float lenSq = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+		if (lenSq < (float)0.00000001)
 			return WriteVec3(pN, fallback[0], fallback[1], fallback[2]);
 		if (std::isinf(lenSq) && std::isfinite(v[0]) && std::isfinite(v[1]) && std::isfinite(v[2]))
 		{
@@ -1456,7 +1469,7 @@ struct neo_libs
 			return WriteVec3(pN, static_cast<float>(x * invLen), static_cast<float>(y * invLen), static_cast<float>(z * invLen));
 		}
 
-		float invLen = (float)((NS_FLOAT)1.0 / (NS_FLOAT)::sqrt(lenSq));
+		float invLen = (float)((float)1.0 / (float)::sqrt(lenSq));
 		return WriteVec3(pN, v[0] * invLen, v[1] * invLen, v[2] * invLen);
 	}
 	static bool Math_Cross3(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -1482,9 +1495,9 @@ struct neo_libs
 		if (ReadVec3(pN->GetStackVar(2), v) == false) return false;
 		const float qw = q[0], qx = q[1], qy = q[2], qz = q[3];
 		const float x = v[0], y = v[1], z = v[2];
-		NS_FLOAT tx = (NS_FLOAT)2.0 * (qy * z - qz * y);
-		NS_FLOAT ty = (NS_FLOAT)2.0 * (qz * x - qx * z);
-		NS_FLOAT tz = (NS_FLOAT)2.0 * (qx * y - qy * x);
+		float tx = (float)2.0 * (qy * z - qz * y);
+		float ty = (float)2.0 * (qz * x - qx * z);
+		float tz = (float)2.0 * (qx * y - qy * x);
 		return WriteVec3(pN,
 			(float)(x + qw * tx + (qy * tz - qz * ty)),
 			(float)(y + qw * ty + (qz * tx - qx * tz)),
@@ -1493,9 +1506,9 @@ struct neo_libs
 	// v[0..2] 를 제자리 정규화. 길이가 0 에 가까우면 실패(값은 그대로).
 	static bool NormalizeVec3(float v[3])
 	{
-		NS_FLOAT lenSq = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
-		if (lenSq < (NS_FLOAT)0.000001) return false;
-		float invLen = (float)((NS_FLOAT)1.0 / (NS_FLOAT)::sqrt(lenSq));
+		float lenSq = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+		if (lenSq < (float)0.000001) return false;
+		float invLen = (float)((float)1.0 / (float)::sqrt(lenSq));
 		v[0] *= invLen;
 		v[1] *= invLen;
 		v[2] *= invLen;
@@ -1513,42 +1526,42 @@ struct neo_libs
 		if (NormalizeVec3(up) == false) return false;
 		if (NormalizeVec3(fwd) == false) return false;
 
-		NS_FLOAT m00 = right[0], m01 = up[0], m02 = fwd[0];
-		NS_FLOAT m10 = right[1], m11 = up[1], m12 = fwd[1];
-		NS_FLOAT m20 = right[2], m21 = up[2], m22 = fwd[2];
-		NS_FLOAT w, x, y, z;
-		NS_FLOAT trace = m00 + m11 + m22;
-		if (trace > (NS_FLOAT)0.0)
+		float m00 = right[0], m01 = up[0], m02 = fwd[0];
+		float m10 = right[1], m11 = up[1], m12 = fwd[1];
+		float m20 = right[2], m21 = up[2], m22 = fwd[2];
+		float w, x, y, z;
+		float trace = m00 + m11 + m22;
+		if (trace > (float)0.0)
 		{
-			NS_FLOAT s = (NS_FLOAT)::sqrt(trace + (NS_FLOAT)1.0) * (NS_FLOAT)2.0;
-			w = (NS_FLOAT)0.25 * s;
+			float s = (float)::sqrt(trace + (float)1.0) * (float)2.0;
+			w = (float)0.25 * s;
 			x = (m21 - m12) / s;
 			y = (m02 - m20) / s;
 			z = (m10 - m01) / s;
 		}
 		else if (m00 > m11 && m00 > m22)
 		{
-			NS_FLOAT s = (NS_FLOAT)::sqrt((NS_FLOAT)1.0 + m00 - m11 - m22) * (NS_FLOAT)2.0;
+			float s = (float)::sqrt((float)1.0 + m00 - m11 - m22) * (float)2.0;
 			w = (m21 - m12) / s;
-			x = (NS_FLOAT)0.25 * s;
+			x = (float)0.25 * s;
 			y = (m01 + m10) / s;
 			z = (m02 + m20) / s;
 		}
 		else if (m11 > m22)
 		{
-			NS_FLOAT s = (NS_FLOAT)::sqrt((NS_FLOAT)1.0 + m11 - m00 - m22) * (NS_FLOAT)2.0;
+			float s = (float)::sqrt((float)1.0 + m11 - m00 - m22) * (float)2.0;
 			w = (m02 - m20) / s;
 			x = (m01 + m10) / s;
-			y = (NS_FLOAT)0.25 * s;
+			y = (float)0.25 * s;
 			z = (m12 + m21) / s;
 		}
 		else
 		{
-			NS_FLOAT s = (NS_FLOAT)::sqrt((NS_FLOAT)1.0 + m22 - m00 - m11) * (NS_FLOAT)2.0;
+			float s = (float)::sqrt((float)1.0 + m22 - m00 - m11) * (float)2.0;
 			w = (m10 - m01) / s;
 			x = (m02 + m20) / s;
 			y = (m12 + m21) / s;
-			z = (NS_FLOAT)0.25 * s;
+			z = (float)0.25 * s;
 		}
 
 		return WriteQuat(pN, (float)w, (float)x, (float)y, (float)z);
@@ -1560,10 +1573,10 @@ struct neo_libs
 		float a[4], b[4];   // wxyz
 		if (ReadQuat(pN->GetStackVar(1), a) == false) return false;
 		if (ReadQuat(pN->GetStackVar(2), b) == false) return false;
-		NS_FLOAT t = MathClamp01Value(pN->read<NS_FLOAT>(3));
+		float t = static_cast<float>(MathClamp01Value(static_cast<float>(pN->read<NS_FLOAT>(3))));
 
-		NS_FLOAT dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
-		if (dot < (NS_FLOAT)0.0)
+		float dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+		if (dot < (float)0.0)
 		{
 			dot = -dot;
 			b[0] = -b[0];
@@ -1572,26 +1585,26 @@ struct neo_libs
 			b[3] = -b[3];
 		}
 
-		NS_FLOAT scaleA;
-		NS_FLOAT scaleB;
-		if (dot > (NS_FLOAT)0.9995)
+		float scaleA;
+		float scaleB;
+		if (dot > (float)0.9995)
 		{
-			scaleA = (NS_FLOAT)1.0 - t;
+			scaleA = (float)1.0 - t;
 			scaleB = t;
 		}
 		else
 		{
-			NS_FLOAT theta = (NS_FLOAT)::acos(MathClampValue(dot, (NS_FLOAT)-1.0, (NS_FLOAT)1.0));
-			NS_FLOAT sinTheta = (NS_FLOAT)::sin(theta);
-			if (::fabs(sinTheta) < (NS_FLOAT)0.000001)
+			float theta = (float)::acos(MathClampValue(dot, (float)-1.0, (float)1.0));
+			float sinTheta = (float)::sin(theta);
+			if (::fabs(sinTheta) < (float)0.000001)
 			{
-				scaleA = (NS_FLOAT)1.0 - t;
+				scaleA = (float)1.0 - t;
 				scaleB = t;
 			}
 			else
 			{
-				scaleA = (NS_FLOAT)::sin(((NS_FLOAT)1.0 - t) * theta) / sinTheta;
-				scaleB = (NS_FLOAT)::sin(t * theta) / sinTheta;
+				scaleA = (float)::sin(((float)1.0 - t) * theta) / sinTheta;
+				scaleB = (float)::sin(t * theta) / sinTheta;
 			}
 		}
 
@@ -1622,8 +1635,8 @@ struct neo_libs
 	// 실수를 왕복 가능한 문자열로 만든다.
 	//
 	// 보통의 문자열 변환(".." 연결 포함)은 "%g" 라 유효숫자 6자리에서 잘린다. 화면과 로그에는
-	// 그게 읽기 좋지만, 데이터 파일로 내보내면 원래 값을 되찾을 수 없다. float 는 9자리를
-	// 적어야 정확히 왕복하므로 여기서는 "%.9g" 를 쓴다.
+	// 그게 읽기 좋지만, 데이터 파일로 내보내면 원래 값을 되찾을 수 없다. double 은 17자리를
+	// 적어야 정확히 왕복하므로 여기서는 "%.17g" 를 쓴다.
 	//
 	// 필요할 때만 지수 표기로 넘어가고(1.5e-07), 그 형태도 JSON 숫자 문법에 맞으므로
 	// 그대로 파일에 넣어도 된다.
@@ -1632,7 +1645,7 @@ struct neo_libs
 		if (args != 1 || !NumericArg(pN, 1)) return false;
 
 		char ch[64];
-		snprintf(ch, sizeof(ch), "%.9g", (double)pN->read<NS_FLOAT>(1));
+		snprintf(ch, sizeof(ch), "%.17g", (double)pN->read<NS_FLOAT>(1));
 		pN->ReturnValue(ch);
 		return true;
 	}
@@ -2140,6 +2153,28 @@ struct neo_libs
 		if (args != 0) return false;
 
 		pN->ReturnValue(NS_FLOAT((double)clock() / (double)CLOCKS_PER_SEC));
+		return true;
+	}
+	static bool sys_array32(CNeoVMWorker* pN, VarInfo*, short args)
+	{
+		if (args != 2) return false;
+		VarInfo* initial = pN->GetStack(1);
+		VarInfo* size = pN->GetStack(2);
+		if (size->GetType() != VAR_INT || size->_int < 0 || size->_int > INT32_MAX) return false;
+		if (initial->GetType() != VAR_INT && initial->GetType() != VAR_FLOAT)
+		{
+			pN->SetError("array32 initial value must be int or float");
+			return false;
+		}
+		if (initial->GetType() == VAR_INT && (initial->_int < INT32_MIN || initial->_int > INT32_MAX))
+		{
+			pN->SetError("int32 array value out of range");
+			return false;
+		}
+		const NeoArrayElementType type = initial->GetType() == VAR_INT ? NeoArrayElementType::Int32 : NeoArrayElementType::Float32;
+		ArrayInfo* array = pN->GetVM()->ArrayAlloc(type, static_cast<int>(size->_int), *initial);
+		if (!array) return false;
+		pN->Var_SetArray(pN->GetStack(0), array);
 		return true;
 	}
 	static bool sys_array(CNeoVMWorker* pN, VarInfo* pVar, short args)
@@ -2708,6 +2743,7 @@ static void AddGlobalLibFun()
 	AddSystemFun("jsonDecode", &neo_libs::sys_jsonDecode, "var", "string text");
 	AddSystemFun("jsonError", &neo_libs::sys_jsonError, "string");
 	AddSystemFun("array", &neo_libs::sys_array, "array", "var initial", "int size");
+	AddSystemFun("array32", &neo_libs::sys_array32, "array", "var initial", "int size");
 	// 인자 순서는 sys_load 구현 기준: arg1=컴파일할 소스, arg2=청크 이름.
 	// name 은 현재 타입 검사만 하고 사용하지 않는다(진단 메시지/모듈 식별용 예약).
 	AddSystemFun("load", &neo_libs::sys_load, "module", "string source", "string name");

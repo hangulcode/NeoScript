@@ -91,7 +91,7 @@ int main() {
     for (bool debug : {false, true}) for (bool image : {false, true}) {
         for (const char* body : {
             R"ns(var a=[1,2,1];return a.find(1)==0 && a.find(9)==-1 && a.contains(2) && !a.contains("2");)ns",
-            R"ns(var a=[16777217];return !a.contains(16777216) && a.contains(16777216.0) && a.contains(16777217);)ns",
+            R"ns(var a=[16777217];return !a.contains(16777216) && !a.contains(16777216.0) && a.contains(16777217.0) && a.contains(16777217);)ns",
             R"ns(var a=[null,true,"abc"];return a.contains(null) && a.find(true)==1 && !a.contains(1) && a.find("ab".."c")==2;)ns",
             R"ns(var n=0.0 / 0.0;var a=[n,-0.0];return !a.contains(n) && a.find(0.0)==1;)ns",
             R"ns(var a=[];var b=[];var l=[a];return l.contains(a) && !l.contains(b) && ![].contains(null);)ns",
@@ -120,7 +120,7 @@ int main() {
             R"ns(var a=system.array(2,2);a[0]=9;var b=a.clone();b[0]=8;b.resize(3);return a[0]==9 && b[0]==8 && b[2]==2 && a!=b;)ns",
             R"ns(var a=system.array(-0.0,2);a[0]=1.0;var b=a.clone();b.resize(3);return b[0]==1.0 && 1.0 / b[2]<0.0;)ns",
             R"ns(var a=system.array(0.0,2);a.fill(0.0 / 0.0);return a.find(a[0])==-1;)ns",
-            R"ns(var a=system.array(16777217,1);return !a.contains(16777216) && a.contains(16777216.0);)ns",
+            R"ns(var a=system.array(16777217,1);return !a.contains(16777216) && !a.contains(16777216.0) && a.contains(16777217.0);)ns",
             R"ns(var a=system.array(1,2);var alias=a;a.clear();a.append(9);return alias.len()==1 && alias[0]==9;)ns",
             R"ns(var a=system.array(1,2);var sum=0;foreach(var v in a){a.reserve(100);a.fill(2);sum+=v;}return sum==3;)ns",
             R"ns(var a=[1,2];var sum=0;foreach(var v in a){a.reserve(100);sum+=v;}return sum==3;)ns",

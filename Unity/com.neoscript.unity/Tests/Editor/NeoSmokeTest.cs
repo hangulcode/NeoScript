@@ -436,6 +436,8 @@ export fun VectorArrays() {
 export fun VectorData() { return system.array(math.Vector3(1,2,3),2); }
 export fun EmptyVectorData() { return system.array(math.Vector4(1,2,3,4),0); }
 export fun FloatData() { return system.array(1.0,2); }
+export fun Int32Data() { return system.array32(-7,2); }
+export fun Float32Data() { return system.array32(16777217.0,2); }
 export fun Position() { return (Host.position[1] += 4.0); }
 export fun Readonly() { Host.time = 2.0; }
 export fun PublicImport() { util.value += util.STEP; return util.value; }
@@ -483,6 +485,20 @@ fun Later() { return 7; }
                 instance.Call("FloatData").InvokeReadArray(a =>
                     Check(a.VectorDimension == 0 && !a.TryGet(0, out Vector3 _) && !a.TrySet(0, Vector3.zero) && a.Floats.Length == 2,
                         "scalar arrays keep their typed accessors"));
+                instance.Call("Int32Data").InvokeReadArray(a =>
+                {
+                    Check(a.ElementType == NeoArrayElementType.Int32 && a.Ints32.Length == 2 &&
+                        a.Ints32[0] == -7 && a.Ints.IsEmpty && a.Floats32.IsEmpty, "int32 array view");
+                    a.Ints32[1] = int.MaxValue;
+                    Check(a.Ints32[0] == -7 && a.Ints32[1] == int.MaxValue, "int32 write stride");
+                });
+                instance.Call("Float32Data").InvokeReadArray(a =>
+                {
+                    Check(a.ElementType == NeoArrayElementType.Float32 && a.Floats32.Length == 2 &&
+                        a.Floats32[0] == 16777216f && a.Floats.IsEmpty && a.Ints32.IsEmpty, "float32 array view");
+                    a.Floats32[1] = 1.25f;
+                    Check(a.Floats32[0] == 16777216f && a.Floats32[1] == 1.25f, "float32 write stride");
+                });
                 host.PositionGets = host.PositionSets = 0;
                 Check(instance.Call("Position").Invoke().AsFloat == 6f && host.Position == new Vector3(1,6,3) &&
                     host.PositionGets == 1 && host.PositionSets == 1, "component write calls property getter/setter once");

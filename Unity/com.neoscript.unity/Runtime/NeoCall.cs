@@ -21,6 +21,7 @@ namespace NeoScript
         public readonly NeoValueType Type;
         private readonly long _int;
         private readonly float _f0, _f1, _f2, _f3;
+        private readonly double _scalar;
         private readonly string _string;
         private readonly string _error;
 
@@ -30,6 +31,7 @@ namespace NeoScript
             Type = (NeoValueType)raw.type;
             _int = raw.i;
             _f0 = raw.f0;
+            _scalar = raw.d;
             _f1 = raw.f1;
             _f2 = raw.f2;
             _f3 = raw.f3;
@@ -44,7 +46,7 @@ namespace NeoScript
 
         public long AsInt => _int;
         public bool AsBool => _int != 0;
-        public float AsFloat => _f0;
+        public double AsFloat => _scalar;
         public string AsString => _string ?? string.Empty;
         public Vector2 AsVector2 => new Vector2(_f0, _f1);
         public Vector3 AsVector3 => new Vector3(_f0, _f1, _f2);
@@ -73,7 +75,7 @@ namespace NeoScript
         // 인자
         //----------------------------------------------------------------------
         public NeoCall Arg(long value) { NeoNative.NsCallArgInt(_call, value); return this; }
-        public NeoCall Arg(float value) { NeoNative.NsCallArgFloat(_call, value); return this; }
+        public NeoCall Arg(double value) { NeoNative.NsCallArgFloat(_call, value); return this; }
         public NeoCall Arg(bool value) { NeoNative.NsCallArgBool(_call, value ? 1 : 0); return this; }
         public NeoCall Arg(Vector3 value) { NeoNative.NsCallArgVec3(_call, value.x, value.y, value.z); return this; }
 
@@ -143,7 +145,7 @@ namespace NeoScript
             return r.AsInt;
         }
 
-        public float InvokeFloat()
+        public double InvokeFloat()
         {
             NeoResult r = Invoke();
             if (!r.Ok) throw r.ToException("call");

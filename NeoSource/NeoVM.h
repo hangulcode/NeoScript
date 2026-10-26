@@ -263,6 +263,8 @@ enum class NeoArrayElementType : u8
 	Vector2,
 	Vector3,
 	Vector4,
+	Int32,
+	Float32,
 };
 
 // 순환 수집 후보의 intrusive FIFO 링크와 수명 상태. 후보 큐에 없을 때는
@@ -661,6 +663,7 @@ public:
 	inline void		_read(VarInfo* V, int& r) { r = NeoNarrowInt(PopInt(V)); }
 	inline void		_read(VarInfo* V, unsigned int& r) { r = (unsigned int)PopInt(V); }
 	inline void		_read(VarInfo* V, NS_FLOAT& r) { r = (NS_FLOAT)PopFloat(V); }
+	inline void		_read(VarInfo* V, float& r) { r = static_cast<float>(PopFloat(V)); }
 	inline void		_read(VarInfo* V, bool& r) { r = PopBool(V); }
 	inline void		_read(VarInfo* V) {}
 	inline void		_read(VarInfo* V, long long& r) { r = (long long)PopInt(V); }

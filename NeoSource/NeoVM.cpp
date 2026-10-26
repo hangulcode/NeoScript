@@ -969,6 +969,10 @@ ArrayInfo* CNeoVM::ArrayAlloc(NeoArrayElementType elementType, int count, const 
 		case NeoArrayElementType::Vector4:
 			array->SetInitialRange(0, count);
 			break;
+		case NeoArrayElementType::Int32:
+		case NeoArrayElementType::Float32:
+			array->SetInitialRange(0, count);
+			break;
 		}
 	}
 

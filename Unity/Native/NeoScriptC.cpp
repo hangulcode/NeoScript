@@ -69,6 +69,8 @@ static_assert((int)ArrayElementType::Float == NS_ELEM_FLOAT, "ArrayElementType d
 static_assert((int)ArrayElementType::Vector2 == NS_ELEM_VECTOR2, "ArrayElementType drift");
 static_assert((int)ArrayElementType::Vector3 == NS_ELEM_VECTOR3, "ArrayElementType drift");
 static_assert((int)ArrayElementType::Vector4 == NS_ELEM_VECTOR4, "ArrayElementType drift");
+static_assert((int)ArrayElementType::Int32 == NS_ELEM_INT32, "ArrayElementType drift");
+static_assert((int)ArrayElementType::Float32 == NS_ELEM_FLOAT32, "ArrayElementType drift");
 
 static_assert((int)DefineKind::Identifier == NS_DEFINE_IDENTIFIER, "DefineKind drift");
 static_assert((int)DefineKind::Int        == NS_DEFINE_INT,        "DefineKind drift");
@@ -1231,7 +1233,7 @@ NS_API int32_t NS_CALL NsGetGlobalInt(NsRuntime* rt, NsInstance inst, const char
     return rt->rt->GetGlobalInt(ToInstance(inst), SV(name, len), *out) ? 1 : 0;
 }
 
-NS_API int32_t NS_CALL NsGetGlobalFloat(NsRuntime* rt, NsInstance inst, const char* name, int32_t len, float* out)
+NS_API int32_t NS_CALL NsGetGlobalFloat(NsRuntime* rt, NsInstance inst, const char* name, int32_t len, double* out)
 {
     if (rt == nullptr || rt->rt == nullptr || out == nullptr)
         return 0;
@@ -1256,7 +1258,7 @@ NS_API int32_t NS_CALL NsSetGlobalInt(NsRuntime* rt, NsInstance inst, const char
     return rt->rt->SetGlobalInt(ToInstance(inst), SV(name, len), v) ? 1 : 0;
 }
 
-NS_API int32_t NS_CALL NsSetGlobalFloat(NsRuntime* rt, NsInstance inst, const char* name, int32_t len, float v)
+NS_API int32_t NS_CALL NsSetGlobalFloat(NsRuntime* rt, NsInstance inst, const char* name, int32_t len, double v)
 {
     if (rt == nullptr || rt->rt == nullptr)
         return 0;
@@ -1313,7 +1315,7 @@ NS_API void NS_CALL NsCallArgInt(NsCall* call, int64_t v)
     if (call != nullptr) call->invocation.argInt(v);
 }
 
-NS_API void NS_CALL NsCallArgFloat(NsCall* call, float v)
+NS_API void NS_CALL NsCallArgFloat(NsCall* call, double v)
 {
     if (call != nullptr) call->invocation.argFloat(v);
 }
@@ -1374,6 +1376,7 @@ NS_API int32_t NS_CALL NsCallInvokeR(NsCall* call, NsCallResult* out)
         out->i      = r.asInt();
         out->_pad   = 0;
         r.asVec(out->f);
+        out->d = r.asFloat();
         out->str = ToNsStr(r.asString());
     }
     return (int32_t)r.status;
@@ -1446,7 +1449,7 @@ NS_API int64_t NS_CALL NsCallRetInt(NsCall* call)
     return call != nullptr ? call->invocation.retInt() : 0;
 }
 
-NS_API float NS_CALL NsCallRetFloat(NsCall* call)
+NS_API double NS_CALL NsCallRetFloat(NsCall* call)
 {
     return call != nullptr ? call->invocation.retFloat() : 0.0f;
 }
@@ -1553,7 +1556,7 @@ NS_API int64_t NS_CALL NsCtxArgInt(NsContext* ctx, int32_t i)
     return (ctx != nullptr && i >= 0) ? Deref(ctx)->argInt((std::size_t)i) : 0;
 }
 
-NS_API float NS_CALL NsCtxArgFloat(NsContext* ctx, int32_t i)
+NS_API double NS_CALL NsCtxArgFloat(NsContext* ctx, int32_t i)
 {
     return (ctx != nullptr && i >= 0) ? Deref(ctx)->argFloat((std::size_t)i) : 0.0f;
 }
@@ -1708,7 +1711,7 @@ NS_API void NS_CALL NsCtxRetInt(NsContext* ctx, int64_t v)
     if (ctx != nullptr) Deref(ctx)->retInt(v);
 }
 
-NS_API void NS_CALL NsCtxRetFloat(NsContext* ctx, float v)
+NS_API void NS_CALL NsCtxRetFloat(NsContext* ctx, double v)
 {
     if (ctx != nullptr) Deref(ctx)->retFloat(v);
 }
@@ -1782,7 +1785,7 @@ NS_API void NS_CALL NsMapSetInt(NsMapBuilder* m, const char* k, int32_t klen, in
     if (m != nullptr) Deref(m)->setInt(SV(k, klen), v);
 }
 
-NS_API void NS_CALL NsMapSetFloat(NsMapBuilder* m, const char* k, int32_t klen, float v)
+NS_API void NS_CALL NsMapSetFloat(NsMapBuilder* m, const char* k, int32_t klen, double v)
 {
     if (m != nullptr) Deref(m)->setFloat(SV(k, klen), v);
 }
@@ -1847,7 +1850,7 @@ NS_API void NS_CALL NsListPushInt(NsListBuilder* l, int64_t v)
     if (l != nullptr) Deref(l)->pushInt(v);
 }
 
-NS_API void NS_CALL NsListPushFloat(NsListBuilder* l, float v)
+NS_API void NS_CALL NsListPushFloat(NsListBuilder* l, double v)
 {
     if (l != nullptr) Deref(l)->pushFloat(v);
 }
@@ -1882,7 +1885,7 @@ NS_API void NS_CALL NsListSetInt(NsListBuilder* l, int32_t index, int64_t v)
     if (l != nullptr) Deref(l)->setInt(index, v);
 }
 
-NS_API void NS_CALL NsListSetFloat(NsListBuilder* l, int32_t index, float v)
+NS_API void NS_CALL NsListSetFloat(NsListBuilder* l, int32_t index, double v)
 {
     if (l != nullptr) Deref(l)->setFloat(index, v);
 }
@@ -1966,7 +1969,7 @@ NS_API int32_t NS_CALL NsMapGetInt(NsMapReader* m, const char* k, int32_t klen, 
     return Deref(m)->getInt(SV(k, klen), *out) ? 1 : 0;
 }
 
-NS_API int32_t NS_CALL NsMapGetFloat(NsMapReader* m, const char* k, int32_t klen, float* out)
+NS_API int32_t NS_CALL NsMapGetFloat(NsMapReader* m, const char* k, int32_t klen, double* out)
 {
     if (m == nullptr || out == nullptr)
         return 0;
@@ -2064,7 +2067,7 @@ NS_API int32_t NS_CALL NsListRdGetInt(NsListReader* l, int32_t index, int64_t* o
     return Deref(l)->getInt(index, *out) ? 1 : 0;
 }
 
-NS_API int32_t NS_CALL NsListRdGetFloat(NsListReader* l, int32_t index, float* out)
+NS_API int32_t NS_CALL NsListRdGetFloat(NsListReader* l, int32_t index, double* out)
 {
     if (l == nullptr || out == nullptr)
         return 0;
@@ -2150,9 +2153,19 @@ NS_API int64_t* NS_CALL NsArrayInts(NsArrayView* a)
     return a != nullptr ? Deref(a)->ints() : nullptr;
 }
 
-NS_API float* NS_CALL NsArrayFloats(NsArrayView* a)
+NS_API double* NS_CALL NsArrayFloats(NsArrayView* a)
 {
     return a != nullptr ? Deref(a)->floats() : nullptr;
+}
+
+NS_API int32_t* NS_CALL NsArrayInts32(NsArrayView* a)
+{
+    return a != nullptr ? Deref(a)->ints32() : nullptr;
+}
+
+NS_API float* NS_CALL NsArrayFloats32(NsArrayView* a)
+{
+    return a != nullptr ? Deref(a)->floats32() : nullptr;
 }
 
 NS_API int32_t NS_CALL NsArrayVectorDimension(NsArrayView* a)

@@ -3,7 +3,7 @@
 #include <climits>
 #include "NeoConfig.h"
 #if defined(_M_X64) || defined(_M_IX86) || defined(__x86_64__) || defined(__i386__)
-#include <xmmintrin.h>
+#include <emmintrin.h>
 #endif
 
 namespace NeoScript
@@ -37,6 +37,13 @@ inline NS_INT NeoFloatToInt(float value)
 	if (r != NS_INT_MIN) return r;
 	if (value != value) return 0;
 	return value > 0.0f ? NS_INT_MAX : NS_INT_MIN;
+}
+inline NS_INT NeoFloatToInt(double value)
+{
+	const NS_INT r = _mm_cvttsd_si64(_mm_set_sd(value));
+	if (r != NS_INT_MIN) return r;
+	if (value != value) return 0;
+	return value > 0.0 ? NS_INT_MAX : NS_INT_MIN;
 }
 #endif
 }

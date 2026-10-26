@@ -16,9 +16,8 @@ typedef short			s16;
 typedef unsigned int	u32;
 typedef int				s32;
 
-// 반드시 float 로 설정
-#define NS_SINGLE_PRECISION
-typedef float		NS_FLOAT;
+// 일반 실수와 실수 배열은 double, 벡터 성분은 별도의 float 저장소를 쓴다.
+typedef double		NS_FLOAT;
 // 스크립트 정수는 64비트이며 명령어·슬롯·컬렉션 개수는 32비트를 유지한다.
 using NS_INT = int64_t;
 using NS_UINT = uint64_t;
@@ -92,7 +91,8 @@ struct debug_info
 // 0133: initialize locals and enforce ordered operands and deferred assignment paths.
 // 0134: 정수 값과 직렬화된 정수 상수를 64비트로 확장한다.
 // 0135: 반환 직전 전역·캡처 대입을 보존하므로 기존 이미지를 다시 컴파일한다.
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('3' << 8) | ('5'))
+// 0136: 실수 상수를 double로 저장하므로 이전 이미지는 다시 컴파일한다.
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('3' << 8) | ('6'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline

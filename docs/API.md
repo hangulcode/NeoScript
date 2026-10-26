@@ -27,12 +27,12 @@ Every signature and behavioural note below was verified by running it through
 
 - `name(arg: type, ...) -> ret`. `void` means the call evaluates to `null`.
 - A declaration without an initializer (`var value;`) starts as `null` whenever it executes; see the [declaration rules](ScriptAuthoring.md#basics).
-- `float` is `NS_FLOAT` (single precision). An `int` passed to a `float` parameter is converted
+- `float` is `NS_FLOAT` (double precision). An `int` passed to a `float` parameter is converted
   silently; the result is still `float`.
 - Floating-point constants and stored values preserve the sign of zero. `0.0 == -0.0`
   is true and both zeros identify the same map key; their floating-point reciprocals
   are positive and negative infinity, respectively.
-- `const` floating-point expressions calculate in double precision, then become float32 values when used at run time. Their rounding can differ from a sequence of runtime float32 operations. Non-finite constant-expression results are compile errors.
+- `const` floating-point expressions and runtime scalar arithmetic both use double precision. Non-finite constant-expression results are compile errors.
 - `%` requires integer operands in runtime, `const`, and `case` expressions. Use `math.fmod` for floating-point remainders at run time.
 - **Arity is exact.** A wrong argument count or type raises the runtime error
   `invalid function call`. There are no optional parameters except where an entry says so.
@@ -233,7 +233,7 @@ These accept vector **value types** only. A `list` of three numbers is rejected.
 | `math.Hash32(value: int)` | `int` | 32-bit integer mix; the result is the signed reinterpretation, so it is often negative |
 | `math.ColorRGB(r: float, g: float, b: float)` | `int` | components are **0.0-1.0**, clamped. Packs `0xFFBBGGRR` (alpha forced to 255) |
 | `math.ColorARGB(a: float, r: float, g: float, b: float)` | `int` | components are **0.0-1.0**, clamped. Packs `0xAABBGGRR` |
-| `math.tostr(value: float)` | `string` | `%.9g`, round-trippable float text. `"" .. 0.1` gives `0.1`; `math.tostr(0.1)` gives `0.100000001` |
+| `math.tostr(value: float)` | `string` | `%.17g`, round-trippable double text. `"" .. 0.1` gives `0.1`; `math.tostr(0.1)` gives `0.10000000000000001` |
 
 Color conversion treats NaN components as `0`, clamps negative infinity to `0` and positive
 infinity to `1`, then truncates each scaled component to a byte. `ColorRGB` always keeps alpha
@@ -252,7 +252,7 @@ Use `import system;` before calling these functions.
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
 | `system.jsonEncode(value, sortKeys = false)` | `string\|null` | UTF-8 JSON; optional recursive key sorting. Failure returns null; see `jsonError()` and [JSON rules](JSON.md) |
-| `system.jsonDecode(text: string)` | `var` | Strict int64/float32 JSON conversion; any supported root. Failure returns null |
+| `system.jsonDecode(text: string)` | `var` | Strict int64/float64 JSON conversion; any supported root. Failure returns null |
 | `system.jsonError()` | `string` | Last JSON conversion error in this execution instance, including data path; empty on success |
 | `system.time()` | `int` | Unix seconds |
 | `system.time_ms()` | `int` | Unix milliseconds as an exact int64 value; wall clock, subject to clock corrections |
@@ -262,6 +262,7 @@ Use `import system;` before calling these functions.
 | `system.stopwatch()` | `stopwatch` | Starts a monotonic elapsed-time measurement immediately |
 | `system.time_span(days: int, hours: int, minutes: int, seconds: int, milliseconds: int)` | `time_span` | Immutable duration; signed components are summed in milliseconds with checked int64 arithmetic |
 | `system.time_span_ms(milliseconds: int)` | `time_span` | Immutable duration from signed int64 milliseconds, including both endpoints |
+| `system.array32(initial: int\|float, size: int)` | `array` | Four-byte int32/float32 elements; integer vs floating initializer selects storage. Other initial types are errors |
 | `system.array(initial: bool\|int\|float\|Vector2\|Vector3\|Vector4, size: int)` | `array` | Dense typed array. `initial` chooses the element type and fills the initial elements; `size` must be non-negative |
 | `system.load(source: string, name: string)` | `module` | Compiles `source` at run time. `name` is type-checked but unused. A compile failure raises `invalid function call`; it does not return `null` |
 | `system.pcall(m: module)` | `void` | Runs the module's top-level code |
@@ -297,7 +298,7 @@ chunk's top level is the only thing you can do with one. To call named functions
 | Method | Returns | Notes |
 | :--- | :--- | :--- |
 | `span.total_milliseconds()` | `int` | Exact signed int64 milliseconds |
-| `span.total_seconds()` | `float` | Approximate float32 seconds; large durations lose precision |
+| `span.total_seconds()` | `float` | Approximate float64 seconds; large durations lose precision |
 | `span.parts()` | `map` | Fresh map: `sign` (-1, 0, 1), non-negative `days`, `hours` (0..23), `minutes` (0..59), `seconds` (0..59), `milliseconds` (0..999) |
 | `span.format()` | `string` | Locale-independent `[-]d.hh:mm:ss.mmm`, with a day field even when zero |
 | `span.add(other: time_span)` | `time_span` | New duration; int64 overflow raises a runtime error |
@@ -479,6 +480,23 @@ var flags = system.array(false, 1024);
 var ids = system.array(0, 1024);
 var weights = system.array(0.0, 1024);
 ```
+
+`system.array32(0, size)` creates an int32 array; `system.array32(0.0, size)` creates
+float32 storage. Both are ordinary `array` values and use four bytes per element.
+Only int/float initializers are allowed, even for size zero. The size must be an integer
+in `0..2147483647`. Storage type is fixed at creation; bool, strings, null, vectors, and
+containers are rejected. The ordinary `system.array` retains int64/double storage.
+
+- Int32 reads widen to int64. Writes, `append`, and `fill` accept only int values in
+  `-2147483648..2147483647`; they fail before changing the destination otherwise.
+- Float32 reads widen to double. Writes accept int/float and round to float32.
+  Finite values outside float32 range become signed infinity; underflow may produce
+  subnormal values or signed zero. NaN, infinity, and signed zero are retained.
+- Compound operations calculate using ordinary scalar semantics, then apply these
+  storage checks/conversions. Use `toint` explicitly before assigning a float to int32.
+- `clone`, `resize`, `reserve`, `clear`, `find`, `contains`, `append`, `fill`, aliasing,
+  and `foreach` follow the same rules as other arrays. Resize retains the rounded
+  creation initializer. Search compares widened stored values without rounding the query.
 
 `system.array(initial, size)` creates an `array` whose element type is selected by the first
 argument. Arrays are reference values like List: assignment shares the same storage. `a.len()` and
@@ -668,7 +686,9 @@ detach on modification. Internal references do not escape the write or become sc
 Native vector properties still call their getter and setter once per successful component write.
 WREF precedes an ordinary collection write. Stored vectors consume both atomically; other values
 use normal write dispatch. Native vector properties retain a resumable getter/setter boundary.
-There is no separate vector write-back opcode. Regenerate images older than bytecode version 0135 to preserve assignments before return, 64-bit integers, local initialization, ordered operand evaluation, deferred assignment paths, and the earlier signed-zero and foreach fixes.
+Scalar floats and ordinary dense float array elements use double; `array32` explicitly selects narrower storage. Vector2/3/4 and Quaternion components and operations remain float32; component writes narrow and reads widen.
+
+There is no separate vector write-back opcode. Regenerate images older than bytecode version 0136 to preserve assignments before return, 64-bit integers, local initialization, ordered operand evaluation, deferred assignment paths, and the earlier signed-zero and foreach fixes.
 A selector immediately following an indexed assignment keeps the assigned slot writable:
 `(a[0][0] = math.Vector3(1,2,3))[1] = 9` updates `a[0][0]` to `(1,9,3)`.
 Reading that result into a local still makes an independent vector value via copy-on-write.

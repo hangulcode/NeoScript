@@ -185,6 +185,8 @@ enum class ArrayElementType : uint8_t
     Vector2,
     Vector3,
     Vector4,
+    Int32,
+    Float32,
 };
 
 struct Error
@@ -233,13 +235,13 @@ public:
     void resize(int count);
     int  count() const;
     void pushInt(int64_t v);
-    void pushFloat(float v);
+    void pushFloat(double v);
     void pushBool(bool v);
     void pushNull();
     void pushString(StringView v);
     void pushVec3(float x, float y, float z);
     void setInt(int index, int64_t v);
-    void setFloat(int index, float v);
+    void setFloat(int index, double v);
     void setString(int index, StringView v);
     MapBuilder  pushMap();       // 중첩 map 원소
     ListBuilder pushList();      // 중첩 list 원소
@@ -256,7 +258,7 @@ class MapBuilder
 {
 public:
     void setInt(StringView key, int64_t v);
-    void setFloat(StringView key, float v);
+    void setFloat(StringView key, double v);
     void setBool(StringView key, bool v);
     void setString(StringView key, StringView v);
     void setVec3(StringView key, float x, float y, float z);
@@ -284,7 +286,8 @@ public:
     bool isNativeObject(StringView key) const;
     bool getInt(StringView key, int64_t& out) const;
     bool getInt(StringView key, int32_t& out) const { int64_t v; if (!getInt(key, v) || v < INT32_MIN || v > INT32_MAX) return false; out = static_cast<int32_t>(v); return true; }
-    bool getFloat(StringView key, float& out) const;
+    bool getFloat(StringView key, double& out) const;
+    bool getFloat(StringView key, float& out) const { double value; if (!getFloat(key, value)) return false; out = static_cast<float>(value); return true; }
     bool getBool(StringView key, bool& out) const;
     bool getString(StringView key, StringView& out) const;  // zero-copy VM 문자열 뷰
     bool getVec(StringView key, float out[4]) const;   // 항상 4개를 채운다(Vec2 면 out[2..3]=0)
@@ -308,7 +311,8 @@ public:
     bool isNativeObject(int index) const;
     bool getInt(int index, int64_t& out) const;
     bool getInt(int index, int32_t& out) const { int64_t v; if (!getInt(index, v) || v < INT32_MIN || v > INT32_MAX) return false; out = static_cast<int32_t>(v); return true; }
-    bool getFloat(int index, float& out) const;
+    bool getFloat(int index, double& out) const;
+    bool getFloat(int index, float& out) const { double value; if (!getFloat(index, value)) return false; out = static_cast<float>(value); return true; }
     bool getBool(int index, bool& out) const;
     bool getString(int index, StringView& out) const;
     bool getVec(int index, float out[4]) const;
@@ -336,7 +340,9 @@ public:
     int count() const;
     uint8_t* boolBits() const;  // nullptr unless elementType()==Bool
     int64_t* ints() const;      // nullptr unless elementType()==Int
-    float* floats() const;      // nullptr unless elementType()==Float
+    double* floats() const;      // nullptr unless elementType()==Float
+    int32_t* ints32() const; // Int32 배열만 반환한다.
+    float* floats32() const; // Float32 배열만 반환한다.
     int vectorDimension() const; // 2/3/4 for vector arrays; 0 otherwise
     bool getVec(int index, float out[4]) const; // copies one value, unused components are zero
     bool setVec(int index, const float* components, int dimension) const; // exact dimension; COW write
@@ -368,7 +374,7 @@ public:
     // userData가 null이어도 기존 네이티브 객체 타입이면 true다.
     bool        argIsNativeObject(std::size_t i) const;
     int64_t     argInt(std::size_t i) const;
-    float       argFloat(std::size_t i) const;
+    double       argFloat(std::size_t i) const;
     bool        argBool(std::size_t i) const;
     StringView  argString(std::size_t i) const;   // VM 문자열 뷰(호출 중 유효)
     void        argVec(std::size_t i, float out[4]) const;
@@ -387,7 +393,7 @@ public:
 
     // 반환 쓰기 (VM 반환 슬롯 직접)
     void        retInt(int64_t v);
-    void        retFloat(float v);
+    void        retFloat(double v);
     void        retBool(bool v);
     void        retString(StringView v);
     void        retVec2(float x, float y);
@@ -525,7 +531,7 @@ struct CallResult
     bool       ok()       const noexcept { return status == RunStatus::Completed; }
     ValueType  type()     const noexcept { return m_type; }
     int64_t    asInt()    const noexcept { return m_i; }
-    float      asFloat()  const noexcept { return m_f[0]; }
+    double      asFloat()  const noexcept { return m_scalar; }
     bool       asBool()   const noexcept { return m_i != 0; }
     StringView asString() const noexcept { return StringView(m_s.c_str(), m_s.size()); } // CallResult 살아있는 동안 유효
     void       asVec(float out[4]) const noexcept { out[0]=m_f[0]; out[1]=m_f[1]; out[2]=m_f[2]; out[3]=m_f[3]; }
@@ -533,6 +539,7 @@ private:
     friend struct NeoScriptInternal;
     ValueType   m_type = ValueType::None;
     int64_t     m_i = 0;
+    double      m_scalar = 0;
     float       m_f[4] = { 0, 0, 0, 0 };
     std::string m_s;
 };
@@ -550,7 +557,7 @@ public:
 
     // 인자 push (호출 순서대로)
     Invocation& argInt(int64_t v);
-    Invocation& argFloat(float v);
+    Invocation& argFloat(double v);
     Invocation& argBool(bool v);
     Invocation& argString(StringView v);
     Invocation& argVec3(float x, float y, float z);
@@ -585,7 +592,7 @@ public:
     //    무효화된다. 값을 나중에 쓰거나 여러 개를 동시에 보관하려면 위 invokeR/invokeReadMap 을 쓸 것.
     ValueType  retType() const;
     int64_t    retInt() const;
-    float      retFloat() const;
+    double      retFloat() const;
     bool       retBool() const;
     StringView retString() const;   // zero-copy VM 문자열 뷰
     void       retVec(float out[4]) const;   // 항상 4개를 채운다(Vec2 면 out[2..3]=0, 벡터가 아니면 전부 0)
@@ -821,10 +828,11 @@ public:
     //--- 전역변수 (타입드 in-place) ---
     virtual bool GetGlobalInt(InstanceHandle instance, StringView name, int64_t& out) const = 0;
     bool GetGlobalInt(InstanceHandle instance, StringView name, int32_t& out) const { int64_t v; if (!GetGlobalInt(instance, name, v) || v < INT32_MIN || v > INT32_MAX) return false; out = static_cast<int32_t>(v); return true; }
-    virtual bool GetGlobalFloat(InstanceHandle instance, StringView name, float& out) const = 0;
+    virtual bool GetGlobalFloat(InstanceHandle instance, StringView name, double& out) const = 0;
+    bool GetGlobalFloat(InstanceHandle instance, StringView name, float& out) const { double value; if (!GetGlobalFloat(instance, name, value)) return false; out = static_cast<float>(value); return true; }
     virtual bool GetGlobalString(InstanceHandle instance, StringView name, StringView& out) const = 0;
     virtual bool SetGlobalInt(InstanceHandle instance, StringView name, int64_t v) = 0;
-    virtual bool SetGlobalFloat(InstanceHandle instance, StringView name, float v) = 0;
+    virtual bool SetGlobalFloat(InstanceHandle instance, StringView name, double v) = 0;
     virtual bool SetGlobalString(InstanceHandle instance, StringView name, StringView v) = 0;
 
     // [비동기 네이티브는 지원하지 않는다] 네이티브 호출은 항상 동기 완료다. 스크립트가 오래 걸리는

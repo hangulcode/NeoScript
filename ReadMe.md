@@ -266,20 +266,20 @@ division or remainder by zero, and `INT64_MIN / -1` or `INT64_MIN % -1`, are err
 Host integer values use C++/C `int64_t` and C# `long`; integer arrays use eight bytes per
 element. On 64-bit targets the general value slot remains 16 bytes; on 32-bit targets it
 grows from 8 to 16 bytes (or 12 with four-byte integer alignment). Rebuild native hosts
-and Unity plugins for **C ABI 6**, and regenerate cached
-bytecode for image format **0135**. Container lengths, indices, and host handles keep
-their existing widths and limits. Mixing an int with a float uses float32 arithmetic,
+and Unity plugins for **C ABI 7**, and regenerate cached
+bytecode for image format **0136**. Container lengths, indices, and host handles keep
+their existing widths and limits. Mixing an int with a float uses float64 arithmetic,
 so large integers can lose precision.
 
-The scalar float type `NS_FLOAT` is **`float` (32-bit)**, matching the game engine's native
-`float3`/`float4` layout. This lets vector value types (Vec2/Vec3/Vec4/Quaternion) be stored
-inline and marshalled to the engine without per-component conversion.
+NeoScript uses **double (64-bit)** scalar `float` values and ordinary dense float
+arrays (eight bytes per element). General value slots retain their int64-era size.
+Vector2/3/4 and Quaternion components and vector arithmetic remain **float32**.
+Constructing or writing a vector narrows scalar values; reading a component widens it
+to double. Vector arrays retain the same vector value and copy-on-write representation.
 
-Precision is **not configurable** — there is no double-precision build. Scripts that need more
-than 24 bits of mantissa must keep the value in an `int`, or split it. (Earlier versions had a
-build switch for `double`; it was removed rather than carried as an untested second layout,
-since `sizeof(VarInfo)` and therefore the var stack, every list, and both halves of every map
-entry (`MapData`) all depend on it.)
+Host scalar APIs use C++/C `double` and C# `double`; float array views expose `double*`
+and `Span<double>`. Vector buffers remain `float*` and Unity vectors remain unchanged.
+Rebuild consumers: this changes the scalar host API and native ABI.
 
 ### Integer arithmetic follows C, not the scripting-language convention
 `int / int` yields an `int`, so `1 / 100` is `0`. Division promotes to float only when at
@@ -329,6 +329,11 @@ var moved = position + direction * 2.0;
   Arithmetic between different component counts is still rejected.
 
 ### Dense arrays
+`system.array32(initial, size)` provides four-byte int32 or float32 storage; only numeric
+initializers are accepted. Reads widen to the usual int64/double scalar values. Int32
+writes require integers in `-2147483648..2147483647`; float32 writes round numeric values.
+Use `system.array` for ordinary int64/double arrays or bool/vector elements.
+
 `system.array(initial, size)` creates a reference array for bool, int, float, or Vector2/3/4 data.
 The type of `initial` selects the element type and fills the initial elements:
 
@@ -373,8 +378,7 @@ Scripts can declare their own compile-time constants with `const`.
 Like host defines, a `const` is resolved during tokenization: it creates no runtime
 variable, costs nothing at runtime, and participates in constant folding.
 Because the name is replaced at compile time, a `const` can never be modified.
-Floating-point constant expressions use double precision during folding, then convert to float32
-when used by the VM; rounding can differ from runtime float32 arithmetic. Non-finite const results
+Floating-point constant expressions and runtime scalar arithmetic both use double precision. Non-finite const results
 are compile errors. See [evaluation and numeric rules](docs/ScriptAuthoring.md#basics).
 
 ```cpp
@@ -487,7 +491,7 @@ compiler cases) and `console.exe --v2smoke` (host API, closure lifetime, leak co
 	- null: represents no value; uninitialized variables are null
 	- bool: stores true or false
 	- int: stores a 4-byte integer
-	- float: stores a 4-byte single-precision float (`NS_FLOAT` is `typedef float`).
+	- float: stores an 8-byte double-precision float (`NS_FLOAT` is `typedef double`).
 	  `type()` reports "float"; there is no double type
 	- string: stores UTF-8 text; length and index positions count characters, not bytes
 	- list: an array-like container

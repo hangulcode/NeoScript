@@ -100,10 +100,6 @@ struct Encoder {
         case VAR_FLOAT: {
             if (!std::isfinite(v._float)) return Fail(path, "non-finite float");
             auto* number = yyjson_mut_real(doc, v._float);
-            // The shortest spelling of FLT_MAX rounds above its exact value.
-            // Keep its exact double spelling to preserve strict range checks.
-            if (number && std::fabs(v._float) < (std::numeric_limits<float>::max)())
-                yyjson_mut_set_fp_to_float(number, true);
             return number;
         }
         case VAR_BOOL: return yyjson_mut_bool(doc, v._bl);
@@ -180,14 +176,14 @@ struct Decoder {
             if (integer && strict) return result.Fail(path, "integer outside int64 range");
             yyjson_val numeric; yyjson_read_err error;
             if (!yyjson_read_number(token.c_str(), &numeric, 0, nullptr, &error))
-                return result.Fail(path, "number outside float32 range");
+                return result.Fail(path, "number outside float64 range");
             number = yyjson_get_num(&numeric);
         }
         if (integer && strict) return result.Fail(path, "integer outside int64 range");
-        if (!std::isfinite(number) || std::fabs(number) > (std::numeric_limits<float>::max)())
-            return result.Fail(path, "number outside float32 range");
-        if (integer) result.warnings.push_back(path + ": integer outside int64 range converted to float32");
-        worker.Var_SetFloat(&out, static_cast<float>(number)); return true;
+        if (!std::isfinite(number) || std::fabs(number) > (std::numeric_limits<NS_FLOAT>::max)())
+            return result.Fail(path, "number outside float64 range");
+        if (integer) result.warnings.push_back(path + ": integer outside int64 range converted to float64");
+        worker.Var_SetFloat(&out, static_cast<NS_FLOAT>(number)); return true;
     }
     bool Value(yyjson_val* value, VarInfo& out, const std::string& path, int depth) {
         if (yyjson_is_null(value)) return true;

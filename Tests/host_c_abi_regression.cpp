@@ -9,11 +9,11 @@
 
 #if UINTPTR_MAX == UINT64_MAX
 static_assert(sizeof(NsStr)==16 && sizeof(NsError)==48 && sizeof(NsJsonResult)==48, "64-bit string layouts");
-static_assert(sizeof(NsCallResult)==56 && sizeof(NsRuntimeDesc)==64 && sizeof(NsObjectDesc)==40, "64-bit call layouts");
+static_assert(sizeof(NsCallResult)==64 && sizeof(NsRuntimeDesc)==64 && sizeof(NsObjectDesc)==40, "64-bit call layouts");
 static_assert(sizeof(NsDefine)==40 && sizeof(NsCompileDesc)==80 && sizeof(NsInstanceDesc)==16, "64-bit descriptors");
 #else
 static_assert(sizeof(NsStr)==12 && sizeof(NsError)==40 && sizeof(NsJsonResult)==36, "32-bit string layouts");
-static_assert(sizeof(NsCallResult)==48 && sizeof(NsRuntimeDesc)==40 && sizeof(NsObjectDesc)==32, "32-bit call layouts");
+static_assert(sizeof(NsCallResult)==64 && sizeof(NsRuntimeDesc)==40 && sizeof(NsObjectDesc)==32, "32-bit call layouts");
 static_assert(sizeof(NsDefine)==32 && sizeof(NsCompileDesc)==64 && sizeof(NsInstanceDesc)==12, "32-bit descriptors");
 #endif
 static_assert(sizeof(NsAllocStats)==64, "allocation statistics layout");
@@ -80,6 +80,7 @@ static const char* source=
     "export fun Map(var n){return {\"who\":n,\"child\":{\"n\":n},\"list\":[{\"n\":n}],\"array\":system.array(n,2)};}"
     "export fun List(var n){return [{\"n\":n},[{\"n\":n}],system.array(n,2)];}"
     "export fun Array(var n){return system.array(n,2);}"
+    "export fun Array32(var n){return system.array32(n,2);}"
     "export fun Number(){return 42;}export fun Dispose(){return Host.Dispose()+1;}"
     "export fun ReadOther(){return Host.ReadOther();}"
     "export fun IsObject(){return object!=null;}export fun Value(){return object.Value();}"
@@ -87,7 +88,8 @@ static const char* source=
     "export fun ArgObject(var v){return v!=null;}"
     "export fun RetObject(){return Host.Object()!=null;}"
     "export fun BuiltObjects(){var m=Host.Objects();return m.obj!=null && m.list[0]!=null && m.list[1].n==9;}"
-    "export fun Quaternion(){return math.Quaternion(1,2,3,4);}";
+    "export fun Quaternion(){return math.Quaternion(1,2,3,4);}"
+    "export fun EchoFloat(var x){return x;}";
 static NsProgram Compile(NsRuntime* rt,bool debug,bool image)
 {
     NsCompileDesc desc={};desc.structSize=sizeof(desc);desc.source=Str(source);desc.sourceName=Str("host-c-abi.ns");desc.includeDebugInfo=debug;
@@ -201,6 +203,22 @@ static void Run(bool debug,bool image)
     Check(InvokeInt(host.rt,host.instance,"Value")==77,"refused disposal preserves binding cache");
     call=Begin(host.rt,host.instance,"Quaternion");Check(NsCallInvokeR(call,&result)==NS_RUN_COMPLETED,"raw quaternion call");
     Check(result.f[0]==1 && result.f[1]==2 && result.f[2]==3 && result.f[3]==4,"C ABI retains quaternion script order");NsCallEnd(call);
+    const double precise=1.0000000000009094947017729282379150390625;
+    call=Begin(host.rt,host.instance,"EchoFloat");NsCallArgFloat(call,precise);
+    Check(NsCallInvoke(call)==NS_RUN_COMPLETED && NsCallRetFloat(call)==precise,"C ABI double argument and result");NsCallEnd(call);
+    call=Begin(host.rt,host.instance,"EchoFloat");NsCallArgFloat(call,precise);
+    Check(NsCallInvokeR(call,&result)==NS_RUN_COMPLETED && result.d==precise,"C ABI double snapshot");NsCallEnd(call);
+    call=Begin(host.rt,host.instance,"Array32");NsCallArgInt(call,-7);
+    Check(NsCallInvoke(call)==NS_RUN_COMPLETED,"C ABI int32 array call");
+    NsArrayView* a32=NsCallRetArray(call);int32_t* ints32=NsArrayInts32(a32);
+    Check(NsArrayElementType(a32)==NS_ELEM_INT32 && NsArrayCount(a32)==2 && ints32 && ints32[0]==-7 && ints32[1]==-7 && !NsArrayInts(a32) && !NsArrayFloats32(a32),"C ABI int32 view");
+    if(ints32){ints32[1]=INT32_MAX;Check(ints32[0]==-7 && ints32[1]==INT32_MAX,"int32 pointer stride");}NsCallEnd(call);
+    call=Begin(host.rt,host.instance,"Array32");NsCallArgFloat(call,16777217.0);
+    Check(NsCallInvoke(call)==NS_RUN_COMPLETED,"C ABI float32 array call");
+    a32=NsCallRetArray(call);float* floats32=NsArrayFloats32(a32);
+    Check(NsArrayElementType(a32)==NS_ELEM_FLOAT32 && floats32 && floats32[0]==16777216.0f && floats32[1]==16777216.0f && !NsArrayFloats(a32) && !NsArrayInts32(a32),"C ABI float32 view");
+    if(floats32){floats32[1]=1.25f;Check(floats32[0]==16777216.0f && floats32[1]==1.25f,"float32 pointer stride");}NsCallEnd(call);
+    Check(!NsArrayInts32(nullptr) && !NsArrayFloats32(nullptr),"empty narrow views");
     Readers(host,program,false);Readers(host,program,true);
     Check(NsTryDestroyInstance(host.rt,host.instance)!=0,"instance disposal allowed after calls end");
     NsDestroyProgram(host.rt,program);Check(NsRuntimeTryDestroy(host.rt)!=0,"runtime disposal allowed after calls end");

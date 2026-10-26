@@ -527,17 +527,30 @@ result before it can return to Script A, so Script B does not own a resumable ex
 
 ### Compiled image capacity
 
-The current image format is **0135**, preserving assignments immediately before return and signed 64-bit integer constants and values.
+The current image format is **0136**, storing scalar floating-point constants as double and retaining signed 64-bit integer values.
 Recompile older cached images; they are rejected rather than interpreted using the new layout.
 `MOVI` retains a signed 32-bit immediate, sign-extended to 64 bits. Larger integer literals
 use the constant pool, with `LOADK` when needed; instructions remain eight bytes.
 
 Public scalar integer arguments, results, globals, map/list values, and integer array
-elements use `int64_t`. C# exposes them as `long` through C ABI 6. Rebuild hosts and plugins
+elements use `int64_t`. C# exposes them as `long` through C ABI 7. Rebuild hosts and plugins
 together. Counts, indices, function IDs, statuses, and timeout parameters retain their
 existing widths. C++ map/list/global integer readers also accept an `int32_t&` output:
 these checked compatibility overloads return false without changing the output if the value
 is outside the 32-bit range. Prefer `int64_t` for complete script integer values.
+
+`system.array32` exposes distinct `ArrayElementType::Int32` and `Float32` values.
+`ArrayView::ints32()` returns `int32_t*`; `floats32()` returns `float*`. The ordinary
+`ints()`/`floats()` accessors return null for these narrow arrays, and narrow accessors
+return null for other element types. C hosts use `NS_ELEM_INT32`/`NS_ELEM_FLOAT32`
+and `NsArrayInts32`/`NsArrayFloats32`. Pointer lifetime rules are unchanged.
+
+Scalar float arguments, results, globals, and collection values use `double`; float array
+views expose `double*`. Vector component buffers remain `float*`. C++ map/list/global
+readers also accept `float&` for explicit narrowing compatibility; use `double&` to retain
+all script precision. C ABI 7 adds `NsCallResult.d` for scalars while `f[4]` retains vectors.
+Recompile C++ consumers and rebuild native/managed plugins together. Double literals use
+the constant pool rather than the 32-bit `MOVF` immediate; instruction width is unchanged.
 
 Indexed null assignment uses the ordinary assignment instruction; lists keep their positions
 and maps remove the key at runtime. Instructions remain eight bytes. `LOADK` sits beside the

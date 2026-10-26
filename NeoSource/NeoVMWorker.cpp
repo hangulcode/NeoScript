@@ -1592,7 +1592,7 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, NeoDebugSn
 				case NeoArrayElementType::Vector3:
 				case NeoArrayElementType::Vector4:
 				{
-					const NS_FLOAT* v = array->VectorValues()[i]._vec->v;
+					const float* v = array->VectorValues()[i]._vec->v;
 					child.type = GetArrayElementTypeName(array->_elementType);
 					const int n = array->VectorDimension();
 					if (n == 2) snprintf(buf, sizeof(buf), "(%g, %g)", v[0], v[1]);
@@ -1601,6 +1601,15 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, NeoDebugSn
 					child.value = buf;
 					break;
 				}
+				case NeoArrayElementType::Int32:
+					child.type = "int";
+					child.value = std::to_string(array->Int32Data()[i]);
+					break;
+				case NeoArrayElementType::Float32:
+					child.type = "float";
+					snprintf(buf, sizeof(buf), "%g", (double)array->Float32Data()[i]);
+					child.value = buf;
+					break;
 				}
 				out.children.push_back(std::move(child));
 			}
@@ -2880,6 +2889,12 @@ bool CNeoVMWorker::ChangeNumber(VarInfo* p)
 }
 
 
+void CNeoVMWorker::SetArrayAssignError(ArrayInfo* array, VarInfo* value)
+{
+	if (array->Int32OutOfRange(value)) SetError("int32 array value out of range");
+	else SetErrorFormat(RTE_ARRAY_VALUE_TYPE, GetDataType(value->GetType()).c_str(), GetArrayElementTypeName(array->_elementType));
+}
+
 bool CNeoVMWorker::ArrayModify(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue, eNOperation op)
 {
 	if (pClt->GetType() != VAR_ARRAY || pKey->GetType() != VAR_INT)
@@ -2913,7 +2928,7 @@ bool CNeoVMWorker::ArrayModify(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue, eN
 
 	const bool written = ArrayWriteValue(array, static_cast<int>(index), &value);
 	if (!written)
-		SetErrorFormat(RTE_ARRAY_VALUE_TYPE, GetDataType(value.GetType()).c_str(), GetArrayElementTypeName(array->_elementType));
+		SetArrayAssignError(array, &value);
 	Var_Release(&value);
 	return written;
 }

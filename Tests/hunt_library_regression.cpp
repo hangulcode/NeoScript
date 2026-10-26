@@ -237,8 +237,8 @@ static void FractContracts(IRuntime* runtime, bool debug, bool image) {
             double integral = 0;
             double fraction = std::modf(static_cast<double>(value), &integral);
             if (fraction < 0) fraction += 1;
-            const float expected = fraction >= 1 ? std::nextafter(1.0f,0.0f) :
-                std::fmin(static_cast<float>(fraction), std::nextafter(1.0f,0.0f));
+            const double expected = fraction >= 1 ? std::nextafter(1.0,0.0) :
+                std::fmin(fraction, std::nextafter(1.0,0.0));
             Check(result.ok() && result.type() == ValueType::Float && result.asFloat() >= 0 && result.asFloat() < 1,
                 "fract finite range");
             Check(result.asFloat() == expected, "fract independent modf value");

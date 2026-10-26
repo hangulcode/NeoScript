@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include "NeoVMVector.h"
 #include "NeoNumeric.h"
 
@@ -61,6 +62,8 @@ struct ArrayInfo : AllocBase
 		case NeoArrayElementType::Vector2:
 		case NeoArrayElementType::Vector3:
 		case NeoArrayElementType::Vector4: return (size_t)_capacity * sizeof(VarInfo);
+		case NeoArrayElementType::Int32: return (size_t)_capacity * sizeof(int32_t);
+		case NeoArrayElementType::Float32: return (size_t)_capacity * sizeof(float);
 		}
 		return 0;
 	}
@@ -71,6 +74,25 @@ struct ArrayInfo : AllocBase
 	NEOS_FORCEINLINE const NS_INT* IntData() const { return static_cast<const NS_INT*>(_data); }
 	NEOS_FORCEINLINE NS_FLOAT* FloatData() { return static_cast<NS_FLOAT*>(_data); }
 	NEOS_FORCEINLINE const NS_FLOAT* FloatData() const { return static_cast<const NS_FLOAT*>(_data); }
+
+	// 32비트 배열도 읽을 때는 일반 int64/double 값으로 확장한다.
+	NEOS_FORCEINLINE int32_t* Int32Data() { return static_cast<int32_t*>(_data); }
+	NEOS_FORCEINLINE const int32_t* Int32Data() const { return static_cast<const int32_t*>(_data); }
+	NEOS_FORCEINLINE float* Float32Data() { return static_cast<float*>(_data); }
+	NEOS_FORCEINLINE const float* Float32Data() const { return static_cast<const float*>(_data); }
+	static float NarrowFloat32(NS_FLOAT value)
+	{
+		// 범위를 넘는 유한 값도 플랫폼에 의존하지 않고 부호 있는 무한대로 저장한다.
+		const NS_FLOAT limit = (std::numeric_limits<float>::max)();
+		if (value > limit) return std::numeric_limits<float>::infinity();
+		if (value < -limit) return -std::numeric_limits<float>::infinity();
+		return static_cast<float>(value);
+	}
+	bool Int32OutOfRange(const VarInfo* value) const
+	{
+		return _elementType == NeoArrayElementType::Int32 && value->GetType() == VAR_INT &&
+			(value->_int < INT32_MIN || value->_int > INT32_MAX);
+	}
 
 	NEOS_FORCEINLINE VarInfo* VectorValues() { return static_cast<VarInfo*>(_data); }
 	NEOS_FORCEINLINE const VarInfo* VectorValues() const { return static_cast<const VarInfo*>(_data); }
@@ -139,6 +161,14 @@ struct ArrayInfo : AllocBase
 			if (!CanAssignValue(value)) return false;
 			AssignVector(index, value);
 			return true;
+		case NeoArrayElementType::Int32:
+			if (!CanAssignValue(value)) return false;
+			Int32Data()[index] = static_cast<int32_t>(value->_int);
+			return true;
+		case NeoArrayElementType::Float32:
+			if (!value->IsNumber()) return false;
+			Float32Data()[index] = NarrowFloat32(value->GetFloatNumber());
+			return true;
 		}
 		return false;
 	}
@@ -156,6 +186,10 @@ struct ArrayInfo : AllocBase
 		case NeoArrayElementType::Vector3:
 		case NeoArrayElementType::Vector4:
 			return value->IsVector() && value->VectorComponentCount() == VectorDimension();
+		case NeoArrayElementType::Int32:
+			return value->GetType() == VAR_INT && !Int32OutOfRange(value);
+		case NeoArrayElementType::Float32:
+			return value->IsNumber();
 		}
 		return false;
 	}
@@ -172,6 +206,8 @@ struct ArrayInfo : AllocBase
 		case NeoArrayElementType::Vector4:
 			RetainInitialVector(value);
 			break;
+		case NeoArrayElementType::Int32: _initialInt = value._int; break;
+		case NeoArrayElementType::Float32: _initialFloat = NarrowFloat32(value._float); break;
 		}
 	}
 
@@ -221,6 +257,22 @@ struct ArrayInfo : AllocBase
 				memcpy(replacement, VectorValues(), sizeof(VarInfo) * (size_t)_count);
 			// Transfer owned references, without retaining or releasing them.
 			delete[] VectorValues();
+			_data = replacement;
+			break;
+		}
+		case NeoArrayElementType::Int32:
+		{
+			int32_t* replacement = new int32_t[capacity];
+			if (_count > 0) memcpy(replacement, Int32Data(), sizeof(int32_t) * (size_t)_count);
+			delete[] Int32Data();
+			_data = replacement;
+			break;
+		}
+		case NeoArrayElementType::Float32:
+		{
+			float* replacement = new float[capacity];
+			if (_count > 0) memcpy(replacement, Float32Data(), sizeof(float) * (size_t)_count);
+			delete[] Float32Data();
 			_data = replacement;
 			break;
 		}
@@ -280,6 +332,8 @@ struct ArrayInfo : AllocBase
 		case NeoArrayElementType::Vector4:
 			_data = new VarInfo[count];
 			return true;
+		case NeoArrayElementType::Int32: _data = new int32_t[count]; return true;
+		case NeoArrayElementType::Float32: _data = new float[count]; return true;
 		}
 		return false;
 	}
@@ -297,6 +351,8 @@ struct ArrayInfo : AllocBase
 			FreeVectors();
 			delete[] VectorValues();
 			break;
+		case NeoArrayElementType::Int32: delete[] Int32Data(); break;
+		case NeoArrayElementType::Float32: delete[] Float32Data(); break;
 		}
 		_data = nullptr;
 		_count = 0;
@@ -337,6 +393,12 @@ private:
 			for (int i = begin; i < end; ++i)
 				AssignVector(i, &_initialVector);
 			break;
+		case NeoArrayElementType::Int32:
+			for (int i = begin; i < end; ++i) Int32Data()[i] = static_cast<int32_t>(_initialInt);
+			break;
+		case NeoArrayElementType::Float32:
+			for (int i = begin; i < end; ++i) Float32Data()[i] = static_cast<float>(_initialFloat);
+			break;
 		}
 	}
 	void AssignVector(int index, VarInfo* value);
@@ -355,6 +417,8 @@ inline const char* GetArrayElementTypeName(NeoArrayElementType type)
 	case NeoArrayElementType::Vector2: return "Vector2";
 	case NeoArrayElementType::Vector3: return "Vector3";
 	case NeoArrayElementType::Vector4: return "Vector4";
+	case NeoArrayElementType::Int32: return "int32";
+	case NeoArrayElementType::Float32: return "float32";
 	}
 	return "unknown";
 }

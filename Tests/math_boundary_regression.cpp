@@ -1,4 +1,4 @@
-#include "NeoScript.h"
+﻿#include "NeoScript.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -11,21 +11,21 @@
 using namespace NeoScript;
 
 static int checks = 0, failures = 0;
-static constexpr float pi = 3.14159265358979323846f;
-static constexpr float tau = 6.28318530717958647692f;
+static constexpr double pi = 3.14159265358979323846;
+static constexpr double tau = 6.28318530717958647692;
 
 static void Check(bool ok, const std::string& label) {
     ++checks;
     if (!ok && ++failures <= 24) std::fprintf(stderr, "FAIL %s\n", label.c_str());
 }
 
-static std::string Label(const char* name, float a, float b = 0, float c = 0) {
+static std::string Label(const char* name, double a, double b = 0, double c = 0) {
     char values[160];
     std::snprintf(values, sizeof(values), "%s(%.9g,%.9g,%.9g)", name, a, b, c);
     return values;
 }
 
-// The mathematical period is the language's binary32 tau, not double pi.
+// 수학적 주기는 스칼라 double의 tau이며 독립적인 remainder로 검증한다.
 // remainder independently reduces to the nearest multiple rather than using
 // the implementation's signed fmod correction.
 static double Angle(double value) {
@@ -33,8 +33,8 @@ static double Angle(double value) {
     return result <= -static_cast<double>(pi) ? result + tau : result;
 }
 
-static float AngleFloat(double value) {
-    float result = static_cast<float>(Angle(value));
+static double AngleFloat(double value) {
+    double result = Angle(value);
     return result <= -pi ? pi : result;
 }
 
@@ -43,17 +43,17 @@ static bool Near(float actual, double expected) {
         std::max(2e-6, std::fabs(expected) * 2e-6);
 }
 
-static float Scalar(IRuntime* runtime, InstanceHandle instance, const char* name,
-    std::initializer_list<float> args) {
+static double Scalar(IRuntime* runtime, InstanceHandle instance, const char* name,
+    std::initializer_list<double> args) {
     auto call = runtime->Call(instance, name);
-    for (float value : args) call.argFloat(value);
+    for (double value : args) call.argFloat(value);
     const auto status = call.invoke();
     Check(status == RunStatus::Completed && call.retType() == ValueType::Float,
         std::string("invoke ") + name + ": " + call.error().message);
     return status == RunStatus::Completed ? call.retFloat() : std::numeric_limits<float>::quiet_NaN();
 }
 
-static void CheckAngle(float actual, float expected, const std::string& label) {
+static void CheckAngle(double actual, double expected, const std::string& label) {
     Check(std::isfinite(actual) && actual > -pi && actual <= pi, label + " range");
     // Equivalent values near the branch cut are compared by angular distance.
     Check(std::isfinite(actual) && std::fabs(Angle(static_cast<double>(actual) - expected)) <= 3e-6,
@@ -99,34 +99,34 @@ static void NormalizeCases(IRuntime* runtime, InstanceHandle instance) {
 }
 
 static void AngleCases(IRuntime* runtime, InstanceHandle instance) {
-    const float maximum = std::numeric_limits<float>::max();
-    const float starts[] = {-maximum, -3e38f, -1e20f, -1e8f, -1000, -tau,
-        -pi, std::nextafter(-pi, 0.0f), -1, 0, 1, std::nextafter(pi, 0.0f), pi,
-        std::nextafter(pi, maximum), tau, 1000, 1e8f, 1e20f, 3e38f, maximum};
-    const float targets[] = {-3e38f, -1e8f, -pi, -1, -std::numeric_limits<float>::denorm_min(),
-        0, std::numeric_limits<float>::denorm_min(), 1, pi, 1e8f, 3e38f};
-    for (float from : starts) for (float to : targets) {
+    const double maximum = static_cast<double>(std::numeric_limits<float>::max());
+    const double starts[] = {-maximum, -3e38, -1e20, -1e8, -1000, -tau,
+        -pi, std::nextafter(-pi, 0.0), -1, 0, 1, std::nextafter(pi, 0.0), pi,
+        std::nextafter(pi, maximum), tau, 1000, 1e8, 1e20, 3e38, maximum};
+    const double targets[] = {-3e38, -1e8, -pi, -1, -std::numeric_limits<double>::denorm_min(),
+        0, std::numeric_limits<double>::denorm_min(), 1, pi, 1e8, 3e38};
+    for (double from : starts) for (double to : targets) {
         const double start = Angle(from), finish = Angle(to);
         const double delta = Angle(finish - start);
         CheckAngle(Scalar(runtime, instance, "Delta", {from, to}), AngleFloat(delta), Label("Delta", from, to));
-        for (float t : {-0.5f, 0.0f, 0.25f, 0.5f, 1.0f, 1.5f}) {
-            const float expected = t == 0 ? AngleFloat(from) : t == 1 ? AngleFloat(to) : AngleFloat(start + delta * t);
-            const float actual = Scalar(runtime, instance, "Lerp", {from, to, t});
+        for (double t : {-0.5, 0.0, 0.25, 0.5, 1.0, 1.5}) {
+            const double expected = t == 0 ? AngleFloat(from) : t == 1 ? AngleFloat(to) : AngleFloat(start + delta * t);
+            const double actual = Scalar(runtime, instance, "Lerp", {from, to, t});
             const std::string label = Label("Lerp", from, to, t);
             CheckAngle(actual, expected, label);
             if (t == 0 || t == 1) Check(actual == expected, label + " exact endpoint");
         }
-        for (float step : {0.0f, 0.125f, 4.0f, maximum}) {
-            const float expected = std::fabs(delta) <= step ? AngleFloat(to) :
+        for (double step : {0.0, 0.125, 4.0, maximum}) {
+            const double expected = std::fabs(delta) <= step ? AngleFloat(to) :
                 AngleFloat(start + std::copysign(static_cast<double>(step), delta));
-            const float actual = Scalar(runtime, instance, "Move", {from, to, step});
+            const double actual = Scalar(runtime, instance, "Move", {from, to, step});
             CheckAngle(actual, expected, Label("Move", from, to, step));
             if (step >= pi) Check(actual == AngleFloat(to), "Move reaches exact wrapped target");
         }
     }
     // Reducing the interpolation product before addition preserves the start
     // even when the finite interpolation parameter is enormous.
-    for (float t : {-maximum, -1e20f, 1e20f, maximum})
+    for (double t : {-maximum, -1e20, 1e20, maximum})
         CheckAngle(Scalar(runtime, instance, "Lerp", {1, 3, t}),
             AngleFloat(1.0 + Angle(2.0 * t)), Label("Lerp huge parameter", 1, 3, t));
 }
