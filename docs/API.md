@@ -730,12 +730,16 @@ WREF precedes an ordinary collection write. Stored vectors consume both atomical
 use normal write dispatch. Native vector properties retain a resumable getter/setter boundary.
 Scalar floats and ordinary dense float array elements use double; `array32` explicitly selects narrower storage. Vector2/3/4 and Quaternion components and operations remain float32; component writes narrow and reads widen.
 
-A collection read followed by arithmetic may execute as a `READ_APPLY` pair. Supported
-ordinary and compound `+`, `-`, `*`, `/` retain their existing type rules and operand order.
-The pair is one instruction-budget unit and has no internal breakpoint or step boundary;
-native getter suspension or execution transfer preserves the pending arithmetic for resumption.
+A compound assignment whose right side is a collection element, `x op= c[k]` for `+`, `-`,
+`*`, and `/`, compiles to one 8-byte instruction (`READ_ADD`, `READ_SUB`, `READ_MUL`, or
+`READ_DIV`) instead of a read into a temporary followed by the arithmetic. Any key expression
+qualifies, including string keys and host properties. The arithmetic keeps its type rules,
+evaluation order, and error messages. The instruction is one instruction-budget unit; a host
+getter's pause or coroutine-transfer request takes effect after the arithmetic. Other shapes
+such as `x = c[k] + y` or `e[i] = c[k] + y` stay as separate instructions: measured on this VM,
+fusing them costs more than the dispatch they save.
 
-There is no separate vector write-back opcode. Regenerate images older than bytecode version 0139 for validated READ_APPLY/arithmetic pairs, exact float32 immediates widened to double and to preserve assignments before return, 64-bit integers, local initialization, ordered operand evaluation, deferred assignment paths, and the earlier signed-zero and foreach fixes.
+There is no separate vector write-back opcode. Regenerate images older than bytecode version 0142 for the fused compound-assignment read opcodes, exact float32 immediates widened to double and to preserve assignments before return, 64-bit integers, local initialization, ordered operand evaluation, deferred assignment paths, and the earlier signed-zero and foreach fixes.
 A selector immediately following an indexed assignment keeps the assigned slot writable:
 `(a[0][0] = math.Vector3(1,2,3))[1] = 9` updates `a[0][0]` to `(1,9,3)`.
 Reading that result into a local still makes an independent vector value via copy-on-write.

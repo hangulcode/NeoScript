@@ -453,7 +453,9 @@ private:
 
 	bool CallNative(FunctionPtrNative functionPtrNative, void* pUserData, StringInfo *pStr, int n3, VarInfo* pRet = nullptr);
 	bool CallDefaultNativeByIndex(int nativeIndex, int n3, VarInfo* pRet = nullptr);
-	bool PropertyNative(FunctionPtrNative functionPtrNative, void* pUserData, StringInfo* pStr, VarInfo* pRet, bool get);
+	bool PropertyNative(FunctionPtrNative functionPtrNative, void* pUserData, StringInfo* pStr, VarInfo* pRet, bool get,
+        int* deferredTransferFrame = nullptr);
+    bool FinishPropertyTransfer(int argSP_Vars);
 
 	static std::string ToString(VarInfo* v1);
 	NS_INT ToInt(VarInfo* v1);
@@ -469,8 +471,14 @@ private:
 	void CltInsert(VarInfo *pClt, NS_INT key, NS_INT v);
 	void CltRead(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
 	void CltReadRare(VarInfo *pClt, VarInfo *pArray, VarInfo *pValue);
-	bool ReadNumericElement(VarInfo* owner, VarInfo* key, VarInfo& value);
-	void ReadApply(const SVMOperation& read);
+	// READ_ADD/SUB/MUL/DIV: dest op= clt[key]. 빠른 경로는 디스패치 루프에 인라인되고 나머지는 ReadArithRare 로 간다.
+	// 산술 종류는 템플릿 인자라 호출 지점마다 접힌다.
+	template<eNOperation OPK> NEOS_FORCEINLINE void ReadArith(const SVMOperation& OP);
+	NEOS_NOINLINE void ReadArithRare(const SVMOperation& OP, eNOperation op);
+	bool ReadElementForArith(VarInfo* clt, VarInfo* key, VarInfo* value, int* deferredTransferFrame);
+	VarInfo* FindCollectionSlot(VarInfo* owner, VarInfo* key);
+	bool ReadArrayOrVectorElement(VarInfo* owner, VarInfo* key, VarInfo& value);
+	void ReadArith2(VarInfo* r, VarInfo* v, eNOperation op);
 	void SetArrayAssignError(ArrayInfo* array, VarInfo* value);
 	bool ArrayModify(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue, eNOperation op);
 	bool VecComponentOp(VarInfo* pClt, VarInfo* pKey, VarInfo* pValue, eNOperation op);

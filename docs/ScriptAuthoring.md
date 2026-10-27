@@ -926,11 +926,12 @@ print(math.MoveToward(0.0, 10.0, 2.0)); // 2
   by `Get()`. Plain root or index variables are read for the write.
   List/map/vector-array writes may use a temporary internal reference; normal reads and assignment results
   remain values. Copies still stay independent, and native properties retain their getter/setter behavior.
-  WREF pairs with an ordinary write and handles vector write-back; rebuild older compiled scripts and caches for bytecode version 0139 (validated READ_APPLY/arithmetic pairs, exact float32 immediates widened to double, double scalar constants and 64-bit integers; also required for signed-zero constants, foreach source retention, checked shift folding, and corrected NaN branch behavior).
-- A collection read and its immediate arithmetic consumer can execute as one `READ_APPLY` pair.
-  Debugger stepping and breakpoints do not stop between the two slots. Ordinary arithmetic and
-  compound assignments keep their distinct type rules; native getters still preserve suspension
-  and execution-transfer behavior.
+  WREF pairs with an ordinary write and handles vector write-back; rebuild older compiled scripts and caches for bytecode version 0142 (fused compound-assignment read opcodes, exact float32 immediates widened to double, double scalar constants and 64-bit integers; also required for signed-zero constants, foreach source retention, checked shift folding, and corrected NaN branch behavior).
+- A compound assignment from a collection element, `x += c[k]` (also `-=`, `*=`, `/=`), executes
+  as one `READ_ADD`/`READ_SUB`/`READ_MUL`/`READ_DIV` instruction. Any key expression qualifies,
+  including string keys and host properties. Arithmetic keeps its type and evaluation rules and
+  error messages; a host getter's pause or coroutine transfer takes effect after the instruction
+  completes. `x = c[k] + y` and element stores stay as separate instructions.
 - A selector immediately after an indexed assignment can still modify the assigned vector:
   `(a[0][0] = math.Vector3(1,2,3))[1] = 9` stores `(1,9,3)` in `a[0][0]`.
   Assigning the result to a separate local instead keeps ordinary vector copy semantics.

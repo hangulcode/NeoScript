@@ -162,10 +162,6 @@ public:
 			delete this;
 	}
 
-    // 쌍의 두 번째 슬롯은 오류 위치로는 남기되 중단점과 스텝의 경계에서는 제외한다.
-    bool IsReadApplyTail(size_t index) const
-    { return index > 0 && index < code.size() && code[index - 1].op == NOP_READ_APPLY; }
-
 	NEOS_FORCEINLINE bool IsDebugInfo() const { return (header._dwFlag & NEO_HEADER_FLAG_DEBUG) != 0; }
 	NEOS_FORCEINLINE const u8* GetCodeBegin() const { return (const u8*)code.data(); }
 	NEOS_FORCEINLINE int GetCodeSize() const { return (int)(code.size() * sizeof(SVMOperation)); }

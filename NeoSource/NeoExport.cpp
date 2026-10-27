@@ -447,11 +447,13 @@ void WriteFun(CArchiveRdWC& arText, CNArchive& ar, SFunctions& funs, SFunctionIn
 		}
 		case NOP_CLT_WRITE_REF:
 		case NOP_CLT_READ_RESULT:
-		case NOP_READ_APPLY:
+		case NOP_READ_ADD:
+		case NOP_READ_SUB:
+		case NOP_READ_MUL:
+		case NOP_READ_DIV:
             argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 1);
             argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 2);
             argFlag |= ChangeIndex(staticCount, localCount, curFunStatkSize, v, 3);
-            argFlag |= GetArgIndexToCode(argFlag, &v.n1, &v.n2, &v.n3);
             break;
 		case NOP_ERROR:
 			break;

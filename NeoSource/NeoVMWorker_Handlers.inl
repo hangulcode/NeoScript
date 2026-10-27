@@ -564,6 +564,13 @@ NEOS_FORCEINLINE void handle_CLT_WRITE_REF(const SVMOperation& OP) {
 
 // Only emitted for a completed indexed assignment. A float temporary is a
 // captured vector component; other temporaries still hold their parent value.
+// READ_ADD/SUB/MUL/DIV: n3 op= n1[n2]. n1 = 컨테이너, n2 = 키, n3 = 대입 대상.
+// 본문은 ReadArith 템플릿이 정의된 NeoVMWorker.inl 에 둔다(다른 번역 단위가 미정의 템플릿을 보지 않게).
+NEOS_FORCEINLINE bool handle_READ_ADD(const SVMOperation& OP);
+NEOS_FORCEINLINE bool handle_READ_SUB(const SVMOperation& OP);
+NEOS_FORCEINLINE bool handle_READ_MUL(const SVMOperation& OP);
+NEOS_FORCEINLINE bool handle_READ_DIV(const SVMOperation& OP);
+
 NEOS_FORCEINLINE void handle_CLT_READ_RESULT(const SVMOperation& OP) {
     VarInfo* value = GetVarPtrF1(OP);
     if (value->GetType() == VAR_FLOAT) Move(GetVarPtr3(OP), value);

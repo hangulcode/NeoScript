@@ -43,6 +43,8 @@ inline bool IsCompileConstant(int index)
 #endif
 
 bool IsTempVar(int iVar);
+// 테스트·실험용 스위치. false 면 READ_* 융합 명령을 내지 않고 분리된 READ + 산술을 낸다.
+extern bool g_neoFuseCollectionReads;
 
 eNOperation	GetOpTypeFromOp(eNOperation op);
 eNOperation GetTableOpTypeFromOp(eNOperation op);

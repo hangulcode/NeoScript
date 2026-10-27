@@ -289,19 +289,16 @@ static void ReadElement(SOperand& operand, int dest, CArchiveRdWC& ar, SFunction
         operand.IsHaveShort(), operand._assignedResult ? NOP_CLT_READ_RESULT : NOP_CLT_READ);
 }
 
-// 현재 식에서 만든 인접한 읽기 임시값만 소비한다. 스냅샷 위치는 옮기지 않고 사용자 변수는 제외한다.
-static void PairReadApply(SFunctionInfo& fun, int begin)
+bool g_neoFuseCollectionReads = true;
+
+// 복합 대입(x op= clt[key])에서 융합할 수 있는 산술이면 READ_* opcode 를, 아니면 NOP_NONE 을 돌려준다.
+static eNOperation ReadArithOpcode(eNOperation op)
 {
-    const int tailOffset = fun._code->GetBufferOffset() - sizeof(SVMOperation);
-    const int readOffset = tailOffset - sizeof(SVMOperation);
-    if (readOffset < begin || fun._jumpTargetOffsets.count(tailOffset)) return;
-    SVMOperation* read = fun.GetOPPointer(readOffset);
-    const SVMOperation& tail = *fun.GetOPPointer(tailOffset);
-    const int arity = ReadApplyArity(tail.op);
-    if (!arity || read->op != NOP_CLT_READ || !IsTempVar(read->n3)) return;
-    if (tail.n2 != read->n3 && (arity != 3 || tail.n3 != read->n3)) return;
-    if (arity == 2 && tail.n1 == read->n3) return;
-    read->op = NOP_READ_APPLY;
+	if (op == NOP_ADD2) return NOP_READ_ADD;
+	if (op == NOP_SUB2) return NOP_READ_SUB;
+	if (op == NOP_MUL2) return NOP_READ_MUL;
+	if (op == NOP_DIV2) return NOP_READ_DIV;
+	return NOP_NONE;
 }
 
 static void WriteElement(SOperand& operand, eNOperation op, int value, bool immediate,
@@ -825,7 +822,10 @@ int InitDefaultTokenString()
 	OP_STR1(NOP_JMP_RANGE_OUTSIDE_L, 3);
 	OP_STR1(NOP_CLT_WRITE_REF, 3);
 	OP_STR1(NOP_CLT_READ_RESULT, 3);
-	OP_STR1(NOP_READ_APPLY, 3);
+	OP_STR1(NOP_READ_ADD, 3);
+	OP_STR1(NOP_READ_SUB, 3);
+	OP_STR1(NOP_READ_MUL, 3);
+	OP_STR1(NOP_READ_DIV, 3);
 
 	if (blError)
 	{
@@ -3220,7 +3220,6 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
     else
         exprEffects = ScanExpressionEffects(ar, tkEnd1, tkEnd2, tkEnd3, tkEnd4, tkEnd5, tkEnd6);
     funs._presetExprEffects = -1;
-    const int expressionBegin = funs._cur->_code->GetBufferOffset();
     auto reduce = [&](int maximumPriority) -> bool
     {
 	while (operators.empty() == false)
@@ -3271,6 +3270,13 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			}
 			else if (op == NOP_MOV && !a.IsArray() && b.IsArray())
 				ReadElement(b, a._iVar, ar, funs); // retain READ-to-destination fusion
+			else if (g_neoFuseCollectionReads && !a.IsArray() && b.IsArray() && !b._assignedResult &&
+				ReadArithOpcode(op) != NOP_NONE)
+			{
+				// x op= clt[key]: 원소 읽기를 임시 슬롯에 실체화하지 않고 READ_* 한 명령으로 낸다.
+				ResolveContainer(b, ar, funs);
+				funs._cur->Push_TableRead(ar, b._iVar, b._iArrayIndex, a._iVar, b.IsHaveShort(), ReadArithOpcode(op));
+			}
 			else
 			{
 				MaterializeValue(b, ar, funs); // complete the RHS before resolving the destination
@@ -3279,7 +3285,6 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				else if (op != NOP_MOV || (!TryStoreVectorConstructor(funs, a._iVar, b) &&
 					!TryPushImmediate(ar, funs, a._iVar, b)))
 					funs._cur->Push_OP2(ar, op, a._iVar, b._iVar, b.IsShort());
-				if (!a.IsArray()) PairReadApply(*funs._cur, expressionBegin);
 			}
 		}
 		else
@@ -3288,7 +3293,6 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 			MaterializeValue(b, ar, funs);
 			const int iTempOffset2 = funs._cur->AllocLocalTempVar();
 			funs._cur->Push_OP(ar, op, iTempOffset2, a._iVar, b._iVar, a.IsShort(), b.IsShort());
-			PairReadApply(*funs._cur, expressionBegin);
 			operands[iFindOffset] = iTempOffset2;
 		}
 		RemoveAt<SOperand>(operands, iFindOffset + 1);

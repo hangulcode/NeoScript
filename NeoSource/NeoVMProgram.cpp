@@ -797,7 +797,12 @@ bool CNeoVMProgram::VerifyCode(const std::vector<int>& owners, std::string* err)
         case NOP_JMP_RANGE_OUTSIDE: slots = 2; jump = true; break;
         case NOP_CLT_WRITE_REF: slots = 7; writes = 5; break;
         case NOP_CLT_READ_RESULT: slots = 7; writes = 4; break;
-        case NOP_READ_APPLY: slots = 7; writes = 4; break;
+        case NOP_READ_ADD:
+        case NOP_READ_SUB:
+        case NOP_READ_MUL:
+        case NOP_READ_DIV:
+            if (op.argFlag & ~(L1 | L2 | L3)) return reject("Invalid read-arith flags");
+            slots = 7; writes = 4; break;
         case NOP_NONE: break;
         case NOP_ERROR: terminal = true; break;
         default: return reject("Invalid saved instruction opcode");
@@ -818,24 +823,9 @@ bool CNeoVMProgram::VerifyCode(const std::vector<int>& owners, std::string* err)
             } else if ((writes & (1u << n)) ? !IsGlobalVariable(value) : !IsGlobalOperand(value))
                 return reject("Invalid global operand");
         }
-        if (op.op == NOP_READ_APPLY)
-        {
-            if (i + 1 >= code.size() || owners[i + 1] != owners[i])
-                return reject("Incomplete read-apply pair");
-            const SVMOperation& tail = code[i + 1];
-            const int arity = ReadApplyArity(tail.op);
-            // 후속 명령은 일반 명령이다. 로컬 임시값을 실제로 소비하는 허용 연산만 짝지을 수 있다.
-            const bool second = (tail.argFlag & L2) && tail.n2 == op.n3;
-            const bool third = arity == 3 && (tail.argFlag & L3) && tail.n3 == op.n3;
-            if (!arity || !(op.argFlag & L3) || (op.argFlag & ~(L1 | L2 | L3)) ||
-                (tail.argFlag & ~(L1 | L2 | L3)) || (!second && !third) ||
-                (arity == 2 && (tail.argFlag & L1) && tail.n1 == op.n3))
-                return reject("Invalid read-apply pair");
-        }
         auto validJump = [&](int offset) {
             const int64_t target = (int64_t)i + 1 + offset;
             if (target < 2 || target >= (int64_t)code.size() || owners[(size_t)target] != owners[i]) return false;
-            if (code[(size_t)target - 1].op == NOP_READ_APPLY) return false;
             const auto targetOp = code[(size_t)target].op;
             const bool writeTail = targetOp == NOP_CLT_MOV || (targetOp >= NOP_TABLE_ADD2 && targetOp <= NOP_TABLE_PERSENT2);
             return !(writeTail && (code[(size_t)target].argFlag & NEOS_OP_REF_WRITE));
@@ -1475,10 +1465,17 @@ bool FormatDebugOperation(const DebugInstructionFormatContext& context, std::str
         byteCount = OpFlagByteChars + 2 * 3;
         outAssembly = FormatAsm("RRES %s = %s.%s", context.operand(3).c_str(), context.operand(1).c_str(), context.operand(2).c_str());
         break;
-    case NOP_READ_APPLY:
-        byteCount = OpFlagByteChars + 2 * 3;
-        outAssembly = FormatAsm("READ_APPLY %s = %s.%s", context.operand(3).c_str(), context.operand(1).c_str(), context.operand(2).c_str());
-        break;
+	case NOP_READ_ADD:
+	case NOP_READ_SUB:
+	case NOP_READ_MUL:
+	case NOP_READ_DIV:
+	{
+		static const char* signs[] = { "+=", "-=", "*=", "/=" };
+		byteCount = OpFlagByteChars + 2 * 3;
+		outAssembly = FormatAsm("READ %s %s %s.%s", context.operand(3).c_str(), signs[v.op - NOP_READ_ADD],
+			context.operand(1).c_str(), context.operand(2).c_str());
+		break;
+	}
 	case NOP_ERROR:
 		outAssembly = FormatAsm("Begin");
 		break;

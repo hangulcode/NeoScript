@@ -293,35 +293,20 @@ enum eNOperation : OpType
 	// a native vector getter may suspend before the write and its setter.
 	NOP_CLT_WRITE_REF,
 	NOP_CLT_READ_RESULT, // completed-assignment value consumer
-	// 다음의 일반 산술 명령과 짝을 이루는 읽기. 두 슬롯 모두 정상 명령으로 유지한다.
-	NOP_READ_APPLY,
+	// dest op= clt[key]. READ 가 임시 슬롯에 복사하고 산술 명령이 다시 읽는 두 단계를 한 명령으로 합친다.
+	// n1 = 컨테이너, n2 = 키, n3 = dest(읽고 쓴다). 산술 종류는 opcode 다. 로컬 전용(_L) 변형은 두지 않는다.
+	// 3-피연산자 형태(x = a[i] op b[j])와 저장 형태는 측정 결과 분리 명령보다 느려 두지 않는다(ReadMe Methodology).
+	NOP_READ_ADD,
+	NOP_READ_SUB,
+	NOP_READ_MUL,
+	NOP_READ_DIV,
 	NOP_NONE,
 	NOP_ERROR,
 
 	NOP_MAX,
 }; // Operation length
 
-// READ_APPLY의 허용 목록. 컴파일러와 로더, 실행기가 같은 분류를 사용한다.
-// 새 연산은 의미론과 실행기 처리를 검증한 뒤 여기에 추가한다.
-inline int ReadApplyArity(eNOperation op)
-{
-    switch (op)
-    {
-    case NOP_ADD2:
-    case NOP_ADD2_L:
-    case NOP_SUB2:
-    case NOP_MUL2:
-    case NOP_DIV2: return 2;
-    case NOP_ADD3:
-    case NOP_ADD3_L:
-    case NOP_SUB3:
-    case NOP_SUB3_L:
-    case NOP_MUL3:
-    case NOP_MUL3_L:
-    case NOP_DIV3: return 3;
-    default: return 0;
-    }
-}
+inline bool IsReadArithOp(eNOperation op) { return op >= NOP_READ_ADD && op <= NOP_READ_DIV; }
 
 enum eYield_Type : s16
 {

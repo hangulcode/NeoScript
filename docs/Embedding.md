@@ -527,19 +527,20 @@ result before it can return to Script A, so Script B does not own a resumable ex
 
 ### Compiled image capacity
 
-The current image format is **0139**, adding validated `READ_APPLY`/arithmetic pairs, storing scalar floating-point constants as double and retaining signed 64-bit integer values.
+The current image format is **0142**, adding the fused compound-assignment read opcodes (`READ_ADD/SUB/MUL/DIV`), storing scalar floating-point constants as double and retaining signed 64-bit integer values.
 Recompile older cached images; they are rejected rather than interpreted using the new layout.
 `MOVI` retains a signed 32-bit immediate, sign-extended to 64 bits. Larger integer literals
 use the constant pool, with `LOADK` when needed; instructions remain eight bytes.
-`READ_APPLY` pairs a collection read with an immediately following ordinary arithmetic
-instruction. The initial allowlist covers `+`, `-`, `*`, `/` and their compound assignments;
-operand order and the distinction between ordinary and compound arithmetic are preserved.
-Both slots remain eight-byte instructions, but the pair executes as one budget unit.
-Breakpoints and stepping stop before or after the pair, never at its second slot; error
-reports still identify the failing read or arithmetic slot. Native getters that fail,
-suspend, or transfer execution do not force the pending arithmetic to run: it remains
-an ordinary instruction for normal resumption and is then budgeted separately.
-The loader validates the consumer and rejects branches into the second slot.
+`READ_ADD`, `READ_SUB`, `READ_MUL`, and `READ_DIV` implement `n3 op= n1[n2]` in one 8-byte
+instruction: `n1` is the collection, `n2` the key, and `n3` the variable that is read and
+written. They use the ordinary operand flags; the upper flag bits must be zero. Numeric map and
+list elements run inline in the dispatch loop, numeric array elements and vector components
+through a local copy, and every other element type, missing key, host getter, or error through a
+slow path that reproduces the separate READ and arithmetic instructions, including their error
+messages. A host getter's pause or coroutine-transfer request takes effect after the
+arithmetic. Three-operand and store shapes (`x = a[i] op b[j]`, `e[i] = a[k] op y`) are not
+fused: measured on this VM, either as an out-of-line call or inlined into the dispatch loop they
+ran slower than the separate instructions. Recompile images older than format 0142.
 
 Public scalar integer arguments, results, globals, map/list values, and integer array
 elements use `int64_t`. C# exposes them as `long` through C ABI 7. Rebuild hosts and plugins
