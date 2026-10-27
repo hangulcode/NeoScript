@@ -525,15 +525,21 @@ NEOS_FORCEINLINE bool CNeoVMWorker::handle_READ_DIV(const SVMOperation& OP) { Re
 // 코루틴 전환은 명령을 끝낸 뒤 처리한다. 읽기 뒤에는 중첩 실행으로 스택이 재할당됐을 수 있어 dest 포인터를 다시 구한다.
 NEOS_NOINLINE void CNeoVMWorker::ReadArithRare(const SVMOperation& OP, eNOperation op)
 {
-	VarInfo value;
-	int deferredTransferFrame = -1;
-	if (ReadElementForArith(GetVarPtrF1(OP), GetVarPtr2(OP), &value, &deferredTransferFrame))
+	// 읽은 값은 VM 스택 슬롯이 아니라 지역 값이라 오류 정리가 모른다. 호스트 getter 가 값을 넣은 뒤
+	// C++ 예외를 던지거나 산술이 예외를 내도 해제되도록 소멸자에서 놓는다.
+	struct ElementHolder
 	{
-		ReadArith2(GetVarPtr3(OP), &value, op);
-		if (deferredTransferFrame >= 0 && !IsErrorTrap())
-			FinishPropertyTransfer(deferredTransferFrame);
-	}
-	Var_Release(&value);
+		CNeoVMWorker* worker;
+		VarInfo value;
+		explicit ElementHolder(CNeoVMWorker* w) : worker(w) {}
+		~ElementHolder() { worker->Var_Release(&value); }
+	} holder(this);
+	int deferredTransferFrame = -1;
+	if (!ReadElementForArith(GetVarPtrF1(OP), GetVarPtr2(OP), &holder.value, &deferredTransferFrame))
+		return;
+	ReadArith2(GetVarPtr3(OP), &holder.value, op);
+	if (deferredTransferFrame >= 0 && !IsErrorTrap())
+		FinishPropertyTransfer(deferredTransferFrame);
 }
 
 // 느린 경로의 원소 읽기. 호스트 속성은 getter 를 직접 불러 코루틴 전환을 미루고, 나머지는 일반 읽기다.

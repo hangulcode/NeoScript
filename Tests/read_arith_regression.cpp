@@ -376,19 +376,24 @@ struct FaultListener : INeoVMDebugListener
         }
     }
 };
-static bool FailingGetter(INeoVMWorker* base, void* data, const VMString*, VarInfo*, bool)
+static bool FailingGetter(INeoVMWorker* base, void* data, const VMString*, VarInfo* out, bool)
 {
     const int mode = *static_cast<int*>(data);
     auto* worker = static_cast<CNeoVMWorker*>(base);
     if (mode == 4)
         return worker->testCall(base->FindFunction("Child"), nullptr, 0) != nullptr;
-    if (mode == 5) throw std::runtime_error("getter exception");
+    if (mode == 5 || mode == 6)
+    {
+        // mode 6: 값을 넣은 뒤 던진다. 융합 명령이 지역에 들고 있던 값이 예외 뒤에도 해제돼야 한다.
+        if (mode == 6) base->Var_SetString(out, "leaked-through-exception");
+        throw std::runtime_error("getter exception");
+    }
     worker->SetError("fused getter failure");
     return false;
 }
 static void FaultBoundaries(IRuntime* runtime)
 {
-    for (int mode = 0; mode < 6; ++mode)
+    for (int mode = 0; mode < 7; ++mode)
     {
         const std::string rhs = mode >= 3 ? "Host.Value" : mode == 0 ? "values[5]" : "values[0]";
         const std::string values = mode == 2 ? "[\"bad\"]" : "[0]";
@@ -405,6 +410,7 @@ static void FaultBoundaries(IRuntime* runtime)
         auto program = NeoVMSystem::CreateProgram(image.data(), static_cast<int>(image.size()), &error);
         Check(program != nullptr, "fault image: " + error);
         if (!program) continue;
+        AllocStats before; GetAllocStats(before);
         auto pool = NeoExecContextPool_Create();
         auto vm = NeoVMSystem::CreateVM(); NeoLoadVMParam load; load.execPool = pool;
         auto worker = vm->LoadVM(&load, program, true, false, 100);
@@ -452,6 +458,11 @@ static void FaultBoundaries(IRuntime* runtime)
             worker->DebugSetListener(nullptr);
         }
         NeoVMSystem::ReleaseVM(vm); NeoExecContextPool_Destroy(pool); program->Release();
+        // 예외로 끝난 실행이 스크립트 객체(문자열·리스트)를 남기면 안 된다.
+        AllocStats after; GetAllocStats(after);
+        Check(after.strings == before.strings && after.lists == before.lists,
+            "no script object leaks after fault mode=" + std::to_string(mode) +
+            " strings " + std::to_string(before.strings) + "->" + std::to_string(after.strings));
     }
 }
 
