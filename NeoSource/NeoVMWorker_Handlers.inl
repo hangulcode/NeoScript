@@ -29,7 +29,7 @@ NEOS_NOINLINE bool handle_STR_ADD_L(const SVMOperation& OP) {
     return false;
 }
 
-NEOS_FORCEINLINE bool handle_TOSTRING(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_TOSTRING(const SVMOperation& OP) {
     Var_SetStringA(GetVarPtrF1(OP), ToString(GetVarPtr2(OP)));
     return false;
 }
@@ -51,12 +51,12 @@ NEOS_FORCEINLINE bool handle_TOFLOAT(const SVMOperation& OP) {
     return false;
 }
 
-NEOS_FORCEINLINE bool handle_TOSIZE(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_TOSIZE(const SVMOperation& OP) {
     Var_SetInt(GetVarPtrF1(OP), ToSize(GetVarPtr2(OP)));
     return false;
 }
 
-NEOS_FORCEINLINE bool handle_GETTYPE(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_GETTYPE(const SVMOperation& OP) {
     Move(GetVarPtrF1(OP), GetType(GetVarPtr2(OP)));
     return false;
 }
@@ -111,12 +111,12 @@ NEOS_FORCEINLINE void set_script_function_value(VarInfo* dst, int functionIndex)
     set_script_closure_value(dst, functionIndex);
 }
 
-NEOS_FORCEINLINE bool handle_FMOV1(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_FMOV1(const SVMOperation& OP) {
     set_script_function_value(GetVarPtrF1(OP), OP.n2);
     return false;
 }
 
-NEOS_FORCEINLINE bool handle_FMOV2(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_FMOV2(const SVMOperation& OP) {
     VarInfo fun;
     set_script_function_value(&fun, OP.n3);
     CltInsert(GetVarPtrF1(OP), GetVarPtr2(OP), &fun);
@@ -370,7 +370,7 @@ NEOS_FORCEINLINE bool handle_RETURN_L(const SVMOperation& OP) {
     return handle_RETURN_impl(GetVarPtr_L(OP.n1));
 }
 
-NEOS_FORCEINLINE bool handle_TABLE_ALLOC(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_TABLE_ALLOC(const SVMOperation& OP) {
     Var_SetTable(GetVarPtrF1(OP), GetVM()->TableAlloc(OP.n23));
     return false;
 }
@@ -528,7 +528,7 @@ NEOS_NOINLINE void WriteStoredVector(VarInfo* target, VarInfo* temp) {
 
 // Stored vectors consume the validated pair atomically. Other values leave the
 // ordinary write to normal dispatch, including after a suspended native getter.
-NEOS_FORCEINLINE void handle_CLT_WRITE_REF(const SVMOperation& OP) {
+NEOS_NOINLINE void handle_CLT_WRITE_REF(const SVMOperation& OP) {
     VarInfo* temp = GetVarPtr3(OP);
     VarInfo* owner = GetVarPtrF1(OP);
     VarInfo* key = GetVarPtr2(OP);
@@ -571,23 +571,23 @@ NEOS_FORCEINLINE bool handle_READ_SUB(const SVMOperation& OP);
 NEOS_FORCEINLINE bool handle_READ_MUL(const SVMOperation& OP);
 NEOS_FORCEINLINE bool handle_READ_DIV(const SVMOperation& OP);
 
-NEOS_FORCEINLINE void handle_CLT_READ_RESULT(const SVMOperation& OP) {
+NEOS_NOINLINE void handle_CLT_READ_RESULT(const SVMOperation& OP) {
     VarInfo* value = GetVarPtrF1(OP);
     if (value->GetType() == VAR_FLOAT) Move(GetVarPtr3(OP), value);
     else CltRead(value, GetVarPtr2(OP), GetVarPtr3(OP));
 }
 
-NEOS_FORCEINLINE bool handle_LIST_ALLOC(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_LIST_ALLOC(const SVMOperation& OP) {
     Var_SetList(GetVarPtrF1(OP), GetVM()->ListAlloc(OP.n23));
     return false;
 }
 
-NEOS_FORCEINLINE bool handle_LIST_ALLOC_L(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_LIST_ALLOC_L(const SVMOperation& OP) {
     Var_SetList(GetVarPtr_L(OP.n1), GetVM()->ListAlloc(OP.n23));
     return false;
 }
 
-NEOS_FORCEINLINE bool handle_VERIFY_TYPE(const SVMOperation& OP) {
+NEOS_NOINLINE bool handle_VERIFY_TYPE(const SVMOperation& OP) {
     VerifyType(GetVarPtrF1(OP), (VAR_TYPE)OP.n2);
     return false;
 }
@@ -765,3 +765,37 @@ NEOS_NOINLINE bool handle_ERROR(const SVMOperation& OP) {
 
     return true; // Exit RunInternal
 }
+
+// 실행 빈도가 낮은 opcode 의 핸들러. 디스패치 루프(RunInternal)는 타임아웃×디버그로 네 벌 생성되고 한 벌이
+// 50 KB 를 넘어 uop 캐시를 벗어나므로, 드문 핸들러는 본문을 밖으로 빼 핫 루프를 작게 유지한다.
+// 선정 근거: 벤치·smoke 의 동적 opcode 계측과 게임 프로젝트 스크립트 101개의 정적 opcode 빈도(둘 다 0.1% 미만인 것만).
+NEOS_NOINLINE void handle_LOADK_cold(const SVMOperation& OP) { Move(GetVarPtrF1(OP), m_pVarGlobal_Pointer + OP.n23); }
+NEOS_NOINLINE void handle_LOG_NOT_cold(const SVMOperation& OP) { Var_SetBool(GetVarPtrF1(OP), !GetVarPtr2(OP)->IsTrue()); }
+NEOS_NOINLINE void handle_SUB2_cold(const SVMOperation& OP) { Sub2(GetVarPtrF1(OP), GetVarPtr2(OP)); }
+NEOS_NOINLINE void handle_MUL2_cold(const SVMOperation& OP) { Mul2(GetVarPtrF1(OP), GetVarPtr2(OP)); }
+NEOS_NOINLINE void handle_DIV2_cold(const SVMOperation& OP) { Div2(GetVarPtrF1(OP), GetVarPtr2(OP)); }
+NEOS_NOINLINE void handle_PERSENT2_cold(const SVMOperation& OP) { Per2(GetVarPtrF1(OP), GetVarPtr2(OP)); }
+NEOS_NOINLINE void handle_LSHIFT2_cold(const SVMOperation& OP) { LSh2(GetVarPtrF1(OP), GetVarPtr2(OP)); }
+NEOS_NOINLINE void handle_RSHIFT2_cold(const SVMOperation& OP) { RSh2(GetVarPtrF1(OP), GetVarPtr2(OP)); }
+NEOS_NOINLINE void handle_AND2_cold(const SVMOperation& OP) { And2(GetVarPtrF1(OP), GetVarPtr2(OP)); }
+NEOS_NOINLINE void handle_OR2_cold(const SVMOperation& OP) { Or2(GetVarPtrF1(OP), GetVarPtr2(OP)); }
+NEOS_NOINLINE void handle_XOR2_cold(const SVMOperation& OP) { Xor2(GetVarPtrF1(OP), GetVarPtr2(OP)); }
+NEOS_NOINLINE void handle_LSHIFT3_cold(const SVMOperation& OP) { LSh3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); }
+NEOS_NOINLINE void handle_RSHIFT3_cold(const SVMOperation& OP) { RSh3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); }
+NEOS_NOINLINE void handle_AND3_cold(const SVMOperation& OP) { And3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); }
+NEOS_NOINLINE void handle_OR3_cold(const SVMOperation& OP) { Or3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); }
+NEOS_NOINLINE void handle_XOR3_cold(const SVMOperation& OP) { Xor3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); }
+NEOS_NOINLINE void handle_GREAT_cold(const SVMOperation& OP) { Var_SetBool(GetVarPtrF1(OP), CompareGR(GetVarPtr2(OP), GetVarPtr3(OP))); }
+NEOS_NOINLINE void handle_GREAT_EQ_cold(const SVMOperation& OP) { Var_SetBool(GetVarPtrF1(OP), CompareGE(GetVarPtr2(OP), GetVarPtr3(OP))); }
+NEOS_NOINLINE void handle_LESS_cold(const SVMOperation& OP) { Var_SetBool(GetVarPtrF1(OP), CompareGR(GetVarPtr3(OP), GetVarPtr2(OP), true)); }
+NEOS_NOINLINE void handle_LESS_EQ_cold(const SVMOperation& OP) { Var_SetBool(GetVarPtrF1(OP), CompareGE(GetVarPtr3(OP), GetVarPtr2(OP), true)); }
+NEOS_NOINLINE void handle_EQUAL2_cold(const SVMOperation& OP) { Var_SetBool(GetVarPtrF1(OP), CompareEQ(GetVarPtr2(OP), GetVarPtr3(OP))); }
+NEOS_NOINLINE void handle_NEQUAL_cold(const SVMOperation& OP) { Var_SetBool(GetVarPtrF1(OP), !CompareEQ(GetVarPtr2(OP), GetVarPtr3(OP))); }
+NEOS_NOINLINE void handle_AND_cold(const SVMOperation& OP) { And(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); }
+NEOS_NOINLINE void handle_OR_cold(const SVMOperation& OP) { Or(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); }
+NEOS_NOINLINE void handle_LOG_AND_cold(const SVMOperation& OP) { Var_SetBool(GetVarPtrF1(OP), GetVarPtr3(OP)->IsTrue() && GetVarPtr2(OP)->IsTrue()); }
+NEOS_NOINLINE void handle_LOG_OR_cold(const SVMOperation& OP) { Var_SetBool(GetVarPtrF1(OP), GetVarPtr2(OP)->IsTrue() || GetVarPtr3(OP)->IsTrue()); }
+NEOS_NOINLINE void handle_JMP_AND_cold(const SVMOperation& OP) { if (GetVarPtr2(OP)->IsTrue() && GetVarPtr3(OP)->IsTrue()) SetCodeIncPtr(OP.n1); }
+NEOS_NOINLINE void handle_JMP_OR_cold(const SVMOperation& OP) { if (GetVarPtr2(OP)->IsTrue() || GetVarPtr3(OP)->IsTrue()) SetCodeIncPtr(OP.n1); }
+NEOS_NOINLINE void handle_JMP_NAND_cold(const SVMOperation& OP) { if (false == (GetVarPtr2(OP)->IsTrue() && GetVarPtr3(OP)->IsTrue())) SetCodeIncPtr(OP.n1); }
+NEOS_NOINLINE void handle_JMP_NOR_cold(const SVMOperation& OP) { if (false == (GetVarPtr2(OP)->IsTrue() || GetVarPtr3(OP)->IsTrue())) SetCodeIncPtr(OP.n1); }
