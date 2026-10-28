@@ -424,12 +424,12 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 			SetError(RTE_ARRAY_INDEX_READ);
 			return;
 		}
-		// Keep repeated scalar reads small; conversion and ownership changes
-		// use the shared slow path without expanding the dispatch loop.
-		if (array->_elementType == NeoArrayElementType::Int && pValue->GetType() == VAR_INT)
-			pValue->_int = array->IntData()[index];
-		else if (array->_elementType == NeoArrayElementType::Float && pValue->GetType() == VAR_FLOAT)
-			pValue->_float = array->FloatData()[index];
+		// 숫자는 목적지의 이전 타입과 무관하게 직접 저장하고, 참조 해제만 드문 경로로 보낸다.
+		// 원소 값을 먼저 읽으므로 목적지가 배열 자체를 덮어써도 해제된 저장소를 읽지 않는다.
+		if (array->_elementType == NeoArrayElementType::Int)
+			StoreNumberInt(pValue, array->IntData()[index]);
+		else if (array->_elementType == NeoArrayElementType::Float)
+			StoreNumberFloat(pValue, array->FloatData()[index]);
 		else
 			ArrayReadValue(this, array, static_cast<int>(index), pValue);
 		return;

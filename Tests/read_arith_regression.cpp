@@ -144,6 +144,10 @@ static void Matrix(IRuntime* runtime, bool debug)
     Compare(runtime, "", "var l=[1];l+=l[0];return tostring(l[0])..\":\"..tostring(l.len());", debug);
     Compare(runtime, "", "var c=[1];var r=1;r+=c[0];r*=c[0];r-=c[0];r/=c[0];return math.tostr(r);", debug, true, "1");
     Compare(runtime, "", "var c=[1];var e=[0];e[0]+=c[0];e[0]=e[0]+c[0];return tostring(e[0]);", debug, false, "2");
+    // 배열 자신을 덮어쓸 때 원소를 먼저 읽고, 재사용 슬롯의 이전 타입도 올바르게 바꾼다.
+    Compare(runtime, "", "var a=system.array(7,1);a=a[0];return type(a)..\":\"..tostring(a);", debug, false, "int:7");
+    Compare(runtime, "", "var a=system.array(-0.0,1);a=a[0];return type(a)..\":\"..math.tostr(1.0/a);", debug, false, "float:-inf");
+    Compare(runtime, "", "var a=system.array(2.5,1);var x=0;var s=0.0;for(var i in 0,100){x=i;x=a[0];s+=x;x=\"old\";x=a[0];s+=x;}return math.tostr(s);", debug, false, "500");
     for (const char* body : {
         "var c={};var r=1;r+=c.missing;return \"bad\";",
         "var c=[0];var r=1;r/=c[0];return \"bad\";",
