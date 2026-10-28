@@ -542,6 +542,8 @@ NEOS_NOINLINE void handle_CLT_WRITE_REF(const SVMOperation& OP) {
             kt == VAR_INT ? owner->_tbl->FindInt(key->_int) : owner->_tbl->Find(key);
     }
     else if (owner->GetType() == VAR_ARRAY && owner->_array->VectorDimension()) {
+        // 벡터 배열 원소는 성분 버퍼라 빌릴 VarInfo 가 없다. 여기서는 쓰기 진단만 먼저 내고, 아래
+        // CltRead 가 temp 에 복사한 뒤 뒤따르는 쓰기(REF_WRITE)가 CommitRefVector 로 배열에 되쓴다.
         if (key->GetType() != VAR_INT) {
             SetError(RTE_ARRAY_INDEX_TYPE);
             return;
@@ -550,7 +552,6 @@ NEOS_NOINLINE void handle_CLT_WRITE_REF(const SVMOperation& OP) {
             SetError(RTE_ARRAY_INDEX_WRITE);
             return;
         }
-        target = &owner->_array->VectorValues()[key->_int];
     }
 
     if (target) {

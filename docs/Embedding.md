@@ -193,7 +193,7 @@ packed least-significant-bit first: bit `i` is
 For Vector2/3/4 arrays, `vectorDimension()` returns 2/3/4 and `count()` counts vectors.
 `getVec(index, out4)` copies one value into four floats, zeroing unused components.
 `setVec(index, components, dimension)` writes one value and requires the exact array dimension;
-shared vectors detach before modification. Both return false for invalid indices, pointers or
+elements are plain float components, so nothing is shared or detached. Both return false for invalid indices, pointers or
 non-vector arrays. There is no writable float buffer for vector arrays: `vectorData()` was removed.
 Scalar arrays return dimension zero; `floats()` remains exclusive to scalar float arrays.
 Quaternion arrays retain script w,x,y,z component order. The view is still borrowed, but the

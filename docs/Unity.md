@@ -479,10 +479,11 @@ visibility. The Android build script verifies this before deploying the plugin.
 ## Vector arrays
 
 `system.array(math.Vector3(0,0,0), count)` and the Vector2/Vector4 equivalents store
-ordinary vector values with copy-on-write semantics. `NeoArrayView` exposes `ElementType`,
+float components in one contiguous buffer, 16 bytes per element. `NeoArrayView` exposes `ElementType`,
 `Count`, `VectorDimension` (2/3/4), and `TryGet(index, out Vector2/3/4)` /
 `TrySet(index, Vector2/3/4)`. Both return false for an invalid index or a dimension mismatch.
-Reads copy a value to Unity; writes detach shared vector storage so saved script values remain unchanged.
+Reads copy the components to Unity and writes copy them back; script values read from the array
+earlier are not affected by either.
 
 ```csharp
 var positions = ctx.ArgArray(0);

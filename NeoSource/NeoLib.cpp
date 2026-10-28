@@ -511,7 +511,17 @@ struct neo_libs
 				case NeoArrayElementType::Float: item = VarInfo(VAR_FLOAT); item._float = array->FloatData()[i]; break;
 				case NeoArrayElementType::Vector2:
 				case NeoArrayElementType::Vector3:
-				case NeoArrayElementType::Vector4: candidate = array->VectorValues() + i; break;
+				case NeoArrayElementType::Vector4:
+				{
+					// 성분 버퍼를 VectorValuesEqual 과 같은 규칙(성분 수 일치, float 정확 비교)으로 비교한다.
+					const int dim = array->VectorDimension();
+					if (!value->IsVector() || value->VectorComponentCount() != dim) return -1;
+					const float* e = array->VectorAt(i);
+					bool equal = true;
+					for (int j = 0; j < dim; ++j) if (e[j] != value->_vec->v[j]) { equal = false; break; }
+					if (equal) return i;
+					continue;
+				}
 				case NeoArrayElementType::Int32: item = VarInfo(VAR_INT); item._int = array->Int32Data()[i]; break;
 				case NeoArrayElementType::Float32: item = VarInfo(VAR_FLOAT); item._float = array->Float32Data()[i]; break;
 				}
@@ -622,18 +632,15 @@ struct neo_libs
 			case NeoArrayElementType::Float: initial = VarInfo(VAR_FLOAT); initial._float = source->_initialFloat; break;
 			case NeoArrayElementType::Vector2:
 			case NeoArrayElementType::Vector3:
-			case NeoArrayElementType::Vector4: initial = source->_initialVector; break;
+			case NeoArrayElementType::Vector4: break; // 성분 버퍼는 아래서 통째로 복사하고 생성 값은 따로 넘긴다
 			case NeoArrayElementType::Int32: initial = VarInfo(VAR_INT); initial._int = source->_initialInt; break;
 			case NeoArrayElementType::Float32: initial = VarInfo(VAR_FLOAT); initial._float = source->_initialFloat; break;
 			}
 			ArrayInfo* dest = vm->ArrayAlloc(source->_elementType, source->_count, initial);
 			if (dest == nullptr) return false;
 			pN->Var_SetArray(pN->GetStack(0), dest);
-			if (source->VectorDimension() != 0)
-			{
-				for (int i = 0; i < source->_count; ++i) dest->AssignValue(i, source->VectorValues() + i);
-			}
-			else if (source->_count != 0) memcpy(dest->_data, source->_data, dest->BufferBytes());
+			if (source->VectorDimension() != 0) dest->SetInitialVector(source->InitialVector());
+			if (source->_count != 0) memcpy(dest->_data, source->_data, dest->BufferBytes());
 			break;
 		}
 		case VAR_MAP:

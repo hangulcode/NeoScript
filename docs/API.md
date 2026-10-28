@@ -551,8 +551,11 @@ each value; `foreach(var index, value in a)` is rejected.
   values: modifying a copied local vector does not modify the array. `a[i][j]` component assignment,
   `+=`, `-=`, `*=`, `/=`, `++`, and `--` write back to the array. Whole-vector compound assignment
   is unsupported; use `a[i] = a[i] + delta`. Array length counts vectors, not float components.
-- Vector elements retain ordinary `VAR_VEC` values, sharing storage until a write requires a copy
-  (the same copy-on-write semantics as vectors in lists). Shrinking releases removed values.
+- Vector elements are stored as float components in one contiguous buffer (16 bytes per element
+  regardless of dimension), never as shared vector storage. Reading `a[i]` copies the components
+  into the destination value, reusing its storage when that value is not shared, so repeated reads
+  in a loop allocate nothing; writing copies the components back. Values obtained from the array are
+  therefore independent of later element writes.
   `system.array(math.Quaternion(w,x,y,z), n)` creates a Vector4 array with the same w,x,y,z order; there is no automatic
   conversion to a host quaternion layout. Resizing uses the vector initial value captured at creation.
 - int and float arrays convert between those two numeric types on assignment. Float to int truncates

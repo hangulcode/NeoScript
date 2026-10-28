@@ -1873,7 +1873,7 @@ bool ArrayView::getVec(int index, float out[4]) const
     if (!out) return false;
     std::fill_n(out, 4, 0.0f);
     if (!a || !a->VectorDimension() || !a->IsValidIndex(index)) return false;
-    std::copy_n(a->VectorValues()[index]._vec->v, a->VectorDimension(), out);
+    std::copy_n(a->VectorAt(index), a->VectorDimension(), out);
     return true;
 }
 bool ArrayView::setVec(int index, const float* components, int dimension) const

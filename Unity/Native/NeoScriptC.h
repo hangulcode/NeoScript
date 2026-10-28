@@ -537,7 +537,7 @@ NS_API int32_t  NS_CALL NsArrayCount(NsArrayView* a);
 NS_API uint8_t* NS_CALL NsArrayBoolBits(NsArrayView* a);
 NS_API int64_t* NS_CALL NsArrayInts(NsArrayView* a);
 NS_API double*   NS_CALL NsArrayFloats(NsArrayView* a);
-/* Vector access copies values, preserving script copy-on-write semantics.
+/* Vector access copies components; the array never shares storage with script values.
  * GetVec writes four floats (unused components are zero). SetVec reads exactly
  * dimension floats; dimension must match the array. Both return 0 on invalid
  * views, indices, pointers or element types. Quaternion order remains w,x,y,z. */

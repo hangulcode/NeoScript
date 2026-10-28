@@ -275,7 +275,7 @@ NeoScript uses **double (64-bit)** scalar `float` values and ordinary dense floa
 arrays (eight bytes per element). General value slots retain their int64-era size.
 Vector2/3/4 and Quaternion components and vector arithmetic remain **float32**.
 Constructing or writing a vector narrows scalar values; reading a component widens it
-to double. Vector arrays retain the same vector value and copy-on-write representation.
+to double. Vector arrays store float32 components directly.
 
 Host scalar APIs use C++/C `double` and C# `double`; float array views expose `double*`
 and `Span<double>`. Vector buffers remain `float*` and Unity vectors remain unchanged.
@@ -355,8 +355,9 @@ var weights = system.array(0.0, 1024);   // float array
   `++`, and `--` write through to the stored component. Whole-vector compound assignments remain
   unsupported; use `a[i] = a[i] + delta` for vector addition.
 - For example, `system.array(math.Vector3(0, 0, 0), 1000)` stores 1000 vectors (requires `import math;`).
-  Each element is an ordinary `VAR_VEC` value, with the same copy-on-write rules as vectors in lists.
-  Reads share vector storage; a write detaches a shared value. `resize` fills new elements with
+  Elements are float components in one contiguous buffer (16 bytes each), not shared vector values.
+  A read copies the components into the destination value, reusing its storage when it is not
+  shared, and a write copies them back. `resize` fills new elements with
   the vector value captured when the array was created.
 - `a.append(value)` adds one value at the tail. `a.resize(size)` changes the length; growth fills
   new elements with the `initial` value used to create the array, and shrinking drops the tail.

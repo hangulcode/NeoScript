@@ -609,10 +609,12 @@ Vector2, Vector3, and Vector4 arrays require values of the exact component count
 `append`. `len()` and `tosize` count vectors. `foreach` yields vector values, so modifying the loop
 variable does not update the array. Component writes (`positions[i][j]`) do update it, using the
 same evaluation order as other container component writes. Whole-vector compound assignment is
-unsupported; use `positions[i] = positions[i] + delta`. Internally, each element is an ordinary
-`VAR_VEC` value. Reads share the existing vector; modifying a shared value copies it first, just
-like vectors stored in lists. Shrinking the array releases the removed elements. The creation
-value is retained separately so later growth restores that value even after element writes.
+unsupported; use `positions[i] = positions[i] + delta`. Internally, elements are float components
+in one contiguous buffer rather than shared vector values. Reading an element copies its
+components into the destination (reusing the destination's storage when it is not shared, so
+loops that read elements allocate nothing), and writing copies them back; a value read earlier is
+never changed by a later element write. The creation value is kept separately so later growth
+restores that value even after element writes.
 
 ### Sets: remove duplicates and iterate
 

@@ -10,9 +10,10 @@
 namespace NeoScript
 {
 
-// Typed storage for bool/int/float/Vector2/3/4. Vector elements are VAR_VEC values
-// with the same reference counting and copy-on-write semantics as list elements.
-// Only leaf vectors can be retained, so arrays cannot participate in cycles.
+// Typed storage for bool/int/float/Vector2/3/4. 벡터 원소는 VecInfo 를 공유하지 않고 성분 float 를
+// 원소당 4개(16 B) 고정 stride 로 저장한다: 읽기는 dest 의 저장소로, 쓰기는 버퍼로 16 B 를 한 번에
+// 옮기므로 성분 수에 따른 분기·가변 길이 복사가 없다. 원소가 스크립트 값과 별칭이 되지 않으며 배열은
+// refcount 를 갖지 않는다. 배열은 순환에 참여할 수 없다.
 // The raw pool recycles only this header, so Allocate/Free always own the
 // lifetime of the separately allocated payload.
 struct ArrayInfo : AllocBase
@@ -30,7 +31,7 @@ struct ArrayInfo : AllocBase
 		NS_FLOAT _initialFloat;
 	};
 
-	VarInfo _initialVector; // retained creation value used by resize
+	float _initialVec[4];   // 벡터 원소 타입의 생성 값(성분). resize 로 늘어난 원소를 채운다
 
 	// Lets VM shutdown release payloads still referenced by host/script values.
 	ArrayInfo* _liveNext = nullptr;
@@ -40,6 +41,8 @@ struct ArrayInfo : AllocBase
 	{
 		return (NS_UINT)index < (NS_UINT)_count;
 	}
+
+	enum { kVectorStride = 4 };   // 벡터 원소 하나가 차지하는 float 수(성분 수와 무관)
 
 	NEOS_FORCEINLINE int VectorDimension() const
 	{
@@ -61,7 +64,7 @@ struct ArrayInfo : AllocBase
 		case NeoArrayElementType::Float: return (size_t)_capacity * sizeof(NS_FLOAT);
 		case NeoArrayElementType::Vector2:
 		case NeoArrayElementType::Vector3:
-		case NeoArrayElementType::Vector4: return (size_t)_capacity * sizeof(VarInfo);
+		case NeoArrayElementType::Vector4: return (size_t)_capacity * kVectorStride * sizeof(float);
 		case NeoArrayElementType::Int32: return (size_t)_capacity * sizeof(int32_t);
 		case NeoArrayElementType::Float32: return (size_t)_capacity * sizeof(float);
 		}
@@ -96,10 +99,35 @@ struct ArrayInfo : AllocBase
 			(value->_int < INT32_MIN || value->_int > INT32_MAX);
 	}
 
-	NEOS_FORCEINLINE VarInfo* VectorValues() { return static_cast<VarInfo*>(_data); }
-	NEOS_FORCEINLINE const VarInfo* VectorValues() const { return static_cast<const VarInfo*>(_data); }
-	void ReadVector(int index, VarInfo* out);
-	bool SetVectorComponents(int index, const float* components, int dimension);
+	// 원소 i 의 성분 = VectorAt(i)[0..dim). dim 뒤의 패딩은 의미 없는 값이다(비교·출력은 dim 까지만 본다).
+	NEOS_FORCEINLINE float* VectorData() { return static_cast<float*>(_data); }
+	NEOS_FORCEINLINE const float* VectorData() const { return static_cast<const float*>(_data); }
+	NEOS_FORCEINLINE float* VectorAt(int index) { return VectorData() + (size_t)index * kVectorStride; }
+	NEOS_FORCEINLINE const float* VectorAt(int index) const { return VectorData() + (size_t)index * kVectorStride; }
+	const float* InitialVector() const { return _initialVec; }
+	void SetInitialVector(const float* components) { memcpy(_initialVec, components, sizeof(_initialVec)); }
+	// 원소를 out 으로 복사한다. out 이 단독 소유 벡터면 그 저장소를 재사용하므로 루프 안의 반복 읽기는
+	// 16 B 이동 하나다. 그 외(첫 읽기, 공유된 dest, 다른 타입)는 ReadVectorRare 가 해제·할당을 맡는다.
+	NEOS_FORCEINLINE void ReadVector(int index, VarInfo* out)
+	{
+		if (out->IsVector() && out->_vec->_refCount <= 1)
+		{
+			memcpy(out->_vec->v, VectorAt(index), kVectorStride * sizeof(float));
+			out->SetVecType(VectorDimension());
+			return;
+		}
+		ReadVectorRare(index, out);
+	}
+	void ReadVectorRare(int index, VarInfo* out);
+	bool SetVectorComponents(int index, const float* components, int dimension)
+	{
+		if (!components || !IsValidIndex(index) || !VectorDimension() || dimension != VectorDimension())
+			return false;
+		float copy[kVectorStride] = {};
+		memcpy(copy, components, (size_t)dimension * sizeof(float));
+		memcpy(VectorAt(index), copy, sizeof(copy));
+		return true;
+	}
 
 	NEOS_FORCEINLINE bool GetBool(int index) const
 	{
@@ -206,8 +234,14 @@ struct ArrayInfo : AllocBase
 		case NeoArrayElementType::Vector2:
 		case NeoArrayElementType::Vector3:
 		case NeoArrayElementType::Vector4:
-			RetainInitialVector(value);
+		{
+			// 복제(clone)는 VAR_NONE 으로 만들고 성분을 SetInitialVector 로 따로 넘기므로 벡터가 아니면 0 이다.
+			VarInfo v = value;
+			memset(_initialVec, 0, sizeof(_initialVec));
+			if (v.IsVector())
+				memcpy(_initialVec, v._vec->v, sizeof(_initialVec));
 			break;
+		}
 		case NeoArrayElementType::Int32: _initialInt = value._int; break;
 		case NeoArrayElementType::Float32: _initialFloat = NarrowFloat32(value._float); break;
 		}
@@ -254,11 +288,10 @@ struct ArrayInfo : AllocBase
 		case NeoArrayElementType::Vector3:
 		case NeoArrayElementType::Vector4:
 		{
-			VarInfo* replacement = new VarInfo[capacity];
+			float* replacement = new float[(size_t)capacity * kVectorStride];
 			if (_count > 0)
-				memcpy(replacement, VectorValues(), sizeof(VarInfo) * (size_t)_count);
-			// Transfer owned references, without retaining or releasing them.
-			delete[] VectorValues();
+				memcpy(replacement, VectorData(), sizeof(float) * kVectorStride * (size_t)_count);
+			delete[] VectorData();
 			_data = replacement;
 			break;
 		}
@@ -298,8 +331,6 @@ struct ArrayInfo : AllocBase
 		}
 		if (count > oldCount)
 			SetInitialRange(oldCount, count);
-		else if (VectorDimension())
-			ReleaseVectorRange(count, oldCount);
 		_count = count;
 		++_mutationVersion;
 		return true;
@@ -314,7 +345,7 @@ struct ArrayInfo : AllocBase
 		_capacity = count;
 		_elementType = elementType;
 		_mutationVersion = 0;
-		_initialVector = VarInfo();
+		memset(_initialVec, 0, sizeof(_initialVec));
 		if (count == 0)
 			return true;
 
@@ -332,7 +363,7 @@ struct ArrayInfo : AllocBase
 		case NeoArrayElementType::Vector2:
 		case NeoArrayElementType::Vector3:
 		case NeoArrayElementType::Vector4:
-			_data = new VarInfo[count];
+			_data = new float[(size_t)count * kVectorStride];
 			return true;
 		case NeoArrayElementType::Int32: _data = new int32_t[count]; return true;
 		case NeoArrayElementType::Float32: _data = new float[count]; return true;
@@ -349,10 +380,7 @@ struct ArrayInfo : AllocBase
 		case NeoArrayElementType::Float: delete[] FloatData(); break;
 		case NeoArrayElementType::Vector2:
 		case NeoArrayElementType::Vector3:
-		case NeoArrayElementType::Vector4:
-			FreeVectors();
-			delete[] VectorValues();
-			break;
+		case NeoArrayElementType::Vector4: delete[] VectorData(); break;
 		case NeoArrayElementType::Int32: delete[] Int32Data(); break;
 		case NeoArrayElementType::Float32: delete[] Float32Data(); break;
 		}
@@ -393,7 +421,7 @@ private:
 		case NeoArrayElementType::Vector3:
 		case NeoArrayElementType::Vector4:
 			for (int i = begin; i < end; ++i)
-				AssignVector(i, &_initialVector);
+				memcpy(VectorAt(i), _initialVec, sizeof(_initialVec));
 			break;
 		case NeoArrayElementType::Int32:
 			for (int i = begin; i < end; ++i) Int32Data()[i] = static_cast<int32_t>(_initialInt);
@@ -403,10 +431,11 @@ private:
 			break;
 		}
 	}
-	void AssignVector(int index, VarInfo* value);
-	void RetainInitialVector(const VarInfo& value);
-	void ReleaseVectorRange(int begin, int end);
-	void FreeVectors();
+	// 값 벡터의 성분을 원소 자리에 16 B 로 복사한다. 공유가 생기지 않으므로 호출측 벡터는 단독 소유를 유지한다.
+	NEOS_FORCEINLINE void AssignVector(int index, const VarInfo* value)
+	{
+		memcpy(VectorAt(index), value->_vec->v, kVectorStride * sizeof(float));
+	}
 };
 
 inline const char* GetArrayElementTypeName(NeoArrayElementType type)

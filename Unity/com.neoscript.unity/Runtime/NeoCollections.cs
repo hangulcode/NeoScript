@@ -388,7 +388,7 @@ namespace NeoScript
             return ok;
         }
 
-        /// <summary>Write one vector with copy-on-write; returns false for a wrong dimension or index.
+        /// <summary>Write one vector's components into the array; returns false for a wrong dimension or index.
         /// Vector4 preserves script component order, including Quaternion w,x,y,z values.</summary>
         public bool TrySet(int index, Vector2 value)
         {
