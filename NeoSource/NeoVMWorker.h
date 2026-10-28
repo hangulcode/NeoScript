@@ -377,6 +377,11 @@ public:
 private:
 	void MoveMinus(VarInfo* v1, VarInfo* v2);
 
+	// 산술 결과 저장. 대입 대상이 숫자/none 이면 바로 쓰고, 참조형이면 분리 함수에서 놓는다.
+	// 해제 코드를 핫 경로에 인라인하면 MSVC 가 저장 블록을 멀리 흩어 놓아 실수 산술이 느려졌다(dumpbin 확인).
+	void StoreNumberInt(VarInfo* r, NS_INT v);
+	void StoreNumberFloat(VarInfo* r, NS_FLOAT v);
+	NEOS_NOINLINE void ReleaseBeforeNumber(VarInfo* r);
 	void Add2(VarInfo* r, VarInfo* v2);
 	void Sub2(VarInfo* r, VarInfo* v2);
 	void Mul2(VarInfo* r, VarInfo* v2);

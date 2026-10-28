@@ -851,21 +851,42 @@ NEOS_FORCEINLINE bool CNeoVMWorker::VecArith(VarInfo* r, VarInfo* v1, VarInfo* v
 		p->v[i] = tmp[i];
 	return true;
 }
+static_assert(VAR_INT == 0 && VAR_FLOAT == 1, "arithmetic fast paths assume VAR_INT == 0 and VAR_FLOAT == 1");
+
+NEOS_FORCEINLINE void CNeoVMWorker::StoreNumberInt(VarInfo* r, NS_INT v)
+{
+	if (r->IsAllocType()) ReleaseBeforeNumber(r);
+	r->SetType(VAR_INT);
+	r->_int = v;
+}
+NEOS_FORCEINLINE void CNeoVMWorker::StoreNumberFloat(VarInfo* r, NS_FLOAT v)
+{
+	if (r->IsAllocType()) ReleaseBeforeNumber(r);
+	r->SetType(VAR_FLOAT);
+	r->_float = v;
+}
+// 산술 결과가 참조형 값을 덮어쓰는 드문 경우만 여기로 온다. 핫 경로에서 해제 코드를 떼어 두는 것이 목적이다.
+NEOS_NOINLINE void CNeoVMWorker::ReleaseBeforeNumber(VarInfo* r)
+{
+	Var_ReleaseAlloc(r);
+}
+
+// 정수·실수 조합을 fall-through 직선 코드로 둔다. VAR_INT=0, VAR_FLOAT=1 이라 (t1|t2)==0 이면 정수끼리,
+// (t1|t2)<=1 이면 숫자끼리다. 문자열/벡터/메타/에러는 Add3Rare 로 분리 — 디스패치 루프에 인라인되므로 본문 크기가 성능이다.
 NEOS_FORCEINLINE void CNeoVMWorker::Add3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
-	// 실사용의 대부분인 INT/FLOAT 조합만 인라인한다. 문자열/벡터/메타/에러는 Add3Rare 로 분리 —
-	// 이 함수는 VM 디스패치 루프에 인라인되므로 본문 크기가 곧 전체 성능이다(For 에서 실측).
-	const VAR_TYPE t1 = v1->GetType();
-	const VAR_TYPE t2 = v2->GetType();
-	if (t1 == VAR_INT)
+	const unsigned t1 = v1->GetType(), t2 = v2->GetType();
+	if ((t1 | t2) == VAR_INT)
 	{
-		if (t2 == VAR_INT)   { Var_SetInt(r, NeoIntAdd(v1->_int, v2->_int)); return; }
-		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_int + v2->_float); return; }
+		StoreNumberInt(r, NeoIntAdd(v1->_int, v2->_int));
+		return;
 	}
-	else if (t1 == VAR_FLOAT)
+	if ((t1 | t2) <= VAR_FLOAT)
 	{
-		if (t2 == VAR_INT)   { Var_SetFloat(r, v1->_float + v2->_int); return; }
-		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_float + v2->_float); return; }
+		const NS_FLOAT a = t1 == VAR_INT ? (NS_FLOAT)v1->_int : v1->_float;
+		const NS_FLOAT b = t2 == VAR_INT ? (NS_FLOAT)v2->_int : v2->_float;
+		StoreNumberFloat(r, a + b);
+		return;
 	}
 	Add3Rare(r, v1, v2);
 }
@@ -897,21 +918,22 @@ NEOS_NOINLINE void CNeoVMWorker::Add3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	}
 	SetErrorOperator("+", v1, v2);
 }
+// 정수·실수 조합을 fall-through 직선 코드로 둔다. VAR_INT=0, VAR_FLOAT=1 이라 (t1|t2)==0 이면 정수끼리,
+// (t1|t2)<=1 이면 숫자끼리다. 문자열/벡터/메타/에러는 Sub3Rare 로 분리 — 디스패치 루프에 인라인되므로 본문 크기가 성능이다.
 NEOS_FORCEINLINE void CNeoVMWorker::Sub3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
-	// 실사용의 대부분인 INT/FLOAT 조합만 인라인한다. 문자열/벡터/메타/에러는 Sub3Rare 로 분리 —
-	// 이 함수는 VM 디스패치 루프에 인라인되므로 본문 크기가 곧 전체 성능이다(For 에서 실측).
-	const VAR_TYPE t1 = v1->GetType();
-	const VAR_TYPE t2 = v2->GetType();
-	if (t1 == VAR_INT)
+	const unsigned t1 = v1->GetType(), t2 = v2->GetType();
+	if ((t1 | t2) == VAR_INT)
 	{
-		if (t2 == VAR_INT)   { Var_SetInt(r, NeoIntSub(v1->_int, v2->_int)); return; }
-		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_int - v2->_float); return; }
+		StoreNumberInt(r, NeoIntSub(v1->_int, v2->_int));
+		return;
 	}
-	else if (t1 == VAR_FLOAT)
+	if ((t1 | t2) <= VAR_FLOAT)
 	{
-		if (t2 == VAR_INT)   { Var_SetFloat(r, v1->_float - v2->_int); return; }
-		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_float - v2->_float); return; }
+		const NS_FLOAT a = t1 == VAR_INT ? (NS_FLOAT)v1->_int : v1->_float;
+		const NS_FLOAT b = t2 == VAR_INT ? (NS_FLOAT)v2->_int : v2->_float;
+		StoreNumberFloat(r, a - b);
+		return;
 	}
 	Sub3Rare(r, v1, v2);
 }
@@ -937,21 +959,22 @@ NEOS_NOINLINE void CNeoVMWorker::Sub3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	}
 	SetErrorOperator("-", v1, v2);
 }
+// 정수·실수 조합을 fall-through 직선 코드로 둔다. VAR_INT=0, VAR_FLOAT=1 이라 (t1|t2)==0 이면 정수끼리,
+// (t1|t2)<=1 이면 숫자끼리다. 문자열/벡터/메타/에러는 Mul3Rare 로 분리 — 디스패치 루프에 인라인되므로 본문 크기가 성능이다.
 NEOS_FORCEINLINE void CNeoVMWorker::Mul3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
-	// 실사용의 대부분인 INT/FLOAT 조합만 인라인한다. 문자열/벡터/메타/에러는 Mul3Rare 로 분리 —
-	// 이 함수는 VM 디스패치 루프에 인라인되므로 본문 크기가 곧 전체 성능이다(For 에서 실측).
-	const VAR_TYPE t1 = v1->GetType();
-	const VAR_TYPE t2 = v2->GetType();
-	if (t1 == VAR_INT)
+	const unsigned t1 = v1->GetType(), t2 = v2->GetType();
+	if ((t1 | t2) == VAR_INT)
 	{
-		if (t2 == VAR_INT)   { Var_SetInt(r, NeoIntMul(v1->_int, v2->_int)); return; }
-		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_int * v2->_float); return; }
+		StoreNumberInt(r, NeoIntMul(v1->_int, v2->_int));
+		return;
 	}
-	else if (t1 == VAR_FLOAT)
+	if ((t1 | t2) <= VAR_FLOAT)
 	{
-		if (t2 == VAR_INT)   { Var_SetFloat(r, v1->_float * v2->_int); return; }
-		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_float * v2->_float); return; }
+		const NS_FLOAT a = t1 == VAR_INT ? (NS_FLOAT)v1->_int : v1->_float;
+		const NS_FLOAT b = t2 == VAR_INT ? (NS_FLOAT)v2->_int : v2->_float;
+		StoreNumberFloat(r, a * b);
+		return;
 	}
 	Mul3Rare(r, v1, v2);
 }
@@ -996,26 +1019,23 @@ NEOS_NOINLINE bool CNeoVMWorker::CheckIntegerDivisionOverflow(NS_INT dividend)
 	return true;
 }
 
+// 정수·실수 조합을 fall-through 직선 코드로 둔다. VAR_INT=0, VAR_FLOAT=1 이라 (t1|t2)==0 이면 정수끼리,
+// (t1|t2)<=1 이면 숫자끼리다. 문자열/벡터/메타/에러는 Div3Rare 로 분리 — 디스패치 루프에 인라인되므로 본문 크기가 성능이다.
 NEOS_FORCEINLINE void CNeoVMWorker::Div3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
-	// 실사용의 대부분인 INT/FLOAT 조합만 인라인한다. 문자열/벡터/메타/에러는 Div3Rare 로 분리 —
-	// 이 함수는 VM 디스패치 루프에 인라인되므로 본문 크기가 곧 전체 성능이다(For 에서 실측).
-	const VAR_TYPE t1 = v1->GetType();
-	const VAR_TYPE t2 = v2->GetType();
-	if (t1 == VAR_INT)
+	const unsigned t1 = v1->GetType(), t2 = v2->GetType();
+	if ((t1 | t2) == VAR_INT)
 	{
-		if (t2 == VAR_INT)
-		{
-			if (CheckIntegerDivision(v1->_int, v2->_int))
-				Var_SetInt(r, v1->_int / v2->_int);
-			return;
-		}
-		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_int / v2->_float); return; }
+		if (CheckIntegerDivision(v1->_int, v2->_int))
+			StoreNumberInt(r, v1->_int / v2->_int);
+		return;
 	}
-	else if (t1 == VAR_FLOAT)
+	if ((t1 | t2) <= VAR_FLOAT)
 	{
-		if (t2 == VAR_INT)   { Var_SetFloat(r, v1->_float / v2->_int); return; }
-		if (t2 == VAR_FLOAT) { Var_SetFloat(r, v1->_float / v2->_float); return; }
+		const NS_FLOAT a = t1 == VAR_INT ? (NS_FLOAT)v1->_int : v1->_float;
+		const NS_FLOAT b = t2 == VAR_INT ? (NS_FLOAT)v2->_int : v2->_float;
+		StoreNumberFloat(r, a / b);
+		return;
 	}
 	Div3Rare(r, v1, v2);
 }
@@ -1360,21 +1380,22 @@ NEOS_NOINLINE bool CNeoVMWorker::CompareGERare(VarInfo* v1, VarInfo* v2, bool re
 	return false;
 }
 
+// 대입 대상은 이미 숫자라 해제가 없다. 3-피연산자와 같은 이유로 정수·실수 경로를 직선 코드로 둔다.
 NEOS_FORCEINLINE void CNeoVMWorker::Add2(VarInfo* r, VarInfo* v2)
 {
-	// INT/FLOAT 조합만 인라인. 문자열/메타/에러는 Add2Rare 로 — 이 함수는 VM 디스패치
-	// 루프에 인라인되므로 본문 크기가 곧 전체 성능이다(For/Add3 에서 실측).
-	const VAR_TYPE t1 = r->GetType();
-	const VAR_TYPE t2 = v2->GetType();
-	if (t1 == VAR_INT)
+	const unsigned t1 = r->GetType(), t2 = v2->GetType();
+	if ((t1 | t2) == VAR_INT)
 	{
-		if (t2 == VAR_INT)   { r->_int = NeoIntAdd(r->_int, v2->_int); return; }
-		if (t2 == VAR_FLOAT) { r->SetType(VAR_FLOAT); r->_float = (NS_FLOAT)r->_int + v2->_float; return; }
+		r->_int = NeoIntAdd(r->_int, v2->_int);
+		return;
 	}
-	else if (t1 == VAR_FLOAT)
+	if ((t1 | t2) <= VAR_FLOAT)
 	{
-		if (t2 == VAR_INT)   { r->_float += v2->_int; return; }
-		if (t2 == VAR_FLOAT) { r->_float += v2->_float; return; }
+		const NS_FLOAT a = t1 == VAR_INT ? (NS_FLOAT)r->_int : r->_float;
+		const NS_FLOAT b = t2 == VAR_INT ? (NS_FLOAT)v2->_int : v2->_float;
+		r->SetType(VAR_FLOAT);
+		r->_float = a + b;
+		return;
 	}
 	Add2Rare(r, v2);
 }
@@ -1397,21 +1418,22 @@ NEOS_NOINLINE void CNeoVMWorker::Add2Rare(VarInfo* r, VarInfo* v2)
 	}
 	SetErrorOperator("+=", r, v2);
 }
+// 대입 대상은 이미 숫자라 해제가 없다. 3-피연산자와 같은 이유로 정수·실수 경로를 직선 코드로 둔다.
 NEOS_FORCEINLINE void CNeoVMWorker::Sub2(VarInfo* r, VarInfo* v2)
 {
-	// INT/FLOAT 조합만 인라인. 문자열/메타/에러는 Sub2Rare 로 — 이 함수는 VM 디스패치
-	// 루프에 인라인되므로 본문 크기가 곧 전체 성능이다(For/Add3 에서 실측).
-	const VAR_TYPE t1 = r->GetType();
-	const VAR_TYPE t2 = v2->GetType();
-	if (t1 == VAR_INT)
+	const unsigned t1 = r->GetType(), t2 = v2->GetType();
+	if ((t1 | t2) == VAR_INT)
 	{
-		if (t2 == VAR_INT)   { r->_int = NeoIntSub(r->_int, v2->_int); return; }
-		if (t2 == VAR_FLOAT) { r->SetType(VAR_FLOAT); r->_float = (NS_FLOAT)r->_int - v2->_float; return; }
+		r->_int = NeoIntSub(r->_int, v2->_int);
+		return;
 	}
-	else if (t1 == VAR_FLOAT)
+	if ((t1 | t2) <= VAR_FLOAT)
 	{
-		if (t2 == VAR_INT)   { r->_float -= v2->_int; return; }
-		if (t2 == VAR_FLOAT) { r->_float -= v2->_float; return; }
+		const NS_FLOAT a = t1 == VAR_INT ? (NS_FLOAT)r->_int : r->_float;
+		const NS_FLOAT b = t2 == VAR_INT ? (NS_FLOAT)v2->_int : v2->_float;
+		r->SetType(VAR_FLOAT);
+		r->_float = a - b;
+		return;
 	}
 	Sub2Rare(r, v2);
 }
@@ -1428,21 +1450,22 @@ NEOS_NOINLINE void CNeoVMWorker::Sub2Rare(VarInfo* r, VarInfo* v2)
 	}
 	SetErrorOperator("-=", r, v2);
 }
+// 대입 대상은 이미 숫자라 해제가 없다. 3-피연산자와 같은 이유로 정수·실수 경로를 직선 코드로 둔다.
 NEOS_FORCEINLINE void CNeoVMWorker::Mul2(VarInfo* r, VarInfo* v2)
 {
-	// INT/FLOAT 조합만 인라인. 문자열/메타/에러는 Mul2Rare 로 — 이 함수는 VM 디스패치
-	// 루프에 인라인되므로 본문 크기가 곧 전체 성능이다(For/Add3 에서 실측).
-	const VAR_TYPE t1 = r->GetType();
-	const VAR_TYPE t2 = v2->GetType();
-	if (t1 == VAR_INT)
+	const unsigned t1 = r->GetType(), t2 = v2->GetType();
+	if ((t1 | t2) == VAR_INT)
 	{
-		if (t2 == VAR_INT)   { r->_int = NeoIntMul(r->_int, v2->_int); return; }
-		if (t2 == VAR_FLOAT) { r->SetType(VAR_FLOAT); r->_float = (NS_FLOAT)r->_int * v2->_float; return; }
+		r->_int = NeoIntMul(r->_int, v2->_int);
+		return;
 	}
-	else if (t1 == VAR_FLOAT)
+	if ((t1 | t2) <= VAR_FLOAT)
 	{
-		if (t2 == VAR_INT)   { r->_float *= v2->_int; return; }
-		if (t2 == VAR_FLOAT) { r->_float *= v2->_float; return; }
+		const NS_FLOAT a = t1 == VAR_INT ? (NS_FLOAT)r->_int : r->_float;
+		const NS_FLOAT b = t2 == VAR_INT ? (NS_FLOAT)v2->_int : v2->_float;
+		r->SetType(VAR_FLOAT);
+		r->_float = a * b;
+		return;
 	}
 	Mul2Rare(r, v2);
 }
@@ -1459,26 +1482,23 @@ NEOS_NOINLINE void CNeoVMWorker::Mul2Rare(VarInfo* r, VarInfo* v2)
 	}
 	SetErrorOperator("*=", r, v2);
 }
+// 대입 대상은 이미 숫자라 해제가 없다. 3-피연산자와 같은 이유로 정수·실수 경로를 직선 코드로 둔다.
 NEOS_FORCEINLINE void CNeoVMWorker::Div2(VarInfo* r, VarInfo* v2)
 {
-	// INT/FLOAT 조합만 인라인. 문자열/메타/에러는 Div2Rare 로 — 이 함수는 VM 디스패치
-	// 루프에 인라인되므로 본문 크기가 곧 전체 성능이다(For/Add3 에서 실측).
-	const VAR_TYPE t1 = r->GetType();
-	const VAR_TYPE t2 = v2->GetType();
-	if (t1 == VAR_INT)
+	const unsigned t1 = r->GetType(), t2 = v2->GetType();
+	if ((t1 | t2) == VAR_INT)
 	{
-		if (t2 == VAR_INT)
-		{
-			if (CheckIntegerDivision(r->_int, v2->_int))
-				r->_int /= v2->_int;
-			return;
-		}
-		if (t2 == VAR_FLOAT) { r->SetType(VAR_FLOAT); r->_float = (NS_FLOAT)r->_int / v2->_float; return; }
+		if (CheckIntegerDivision(r->_int, v2->_int))
+			r->_int /= v2->_int;
+		return;
 	}
-	else if (t1 == VAR_FLOAT)
+	if ((t1 | t2) <= VAR_FLOAT)
 	{
-		if (t2 == VAR_INT)   { r->_float /= v2->_int; return; }
-		if (t2 == VAR_FLOAT) { r->_float /= v2->_float; return; }
+		const NS_FLOAT a = t1 == VAR_INT ? (NS_FLOAT)r->_int : r->_float;
+		const NS_FLOAT b = t2 == VAR_INT ? (NS_FLOAT)v2->_int : v2->_float;
+		r->SetType(VAR_FLOAT);
+		r->_float = a / b;
+		return;
 	}
 	Div2Rare(r, v2);
 }
