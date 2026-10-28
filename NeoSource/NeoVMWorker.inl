@@ -837,15 +837,15 @@ NEOS_FORCEINLINE bool CNeoVMWorker::VecArith(VarInfo* r, VarInfo* v1, VarInfo* v
 		float bx, by, bz;
 		if (v2->GetType() == VAR_VEC && v2->_vecCount == n)
 		{
-			bx = v2->_vecXY[0]; by = v2->_vecXY[1]; bz = v2->_vecZ;
+			bx = v2->_vecX; by = v2->_vecYZ[0]; bz = v2->_vecYZ[1];
 		}
 		else if ((op == 2 || op == 3) && v2->IsNumber())
 			bx = by = bz = (float)v2->GetFloatNumber();
 		else
 			return false;
-		const float x = VectorArithmeticComponent(v1->_vecXY[0], bx, op);
-		const float y = VectorArithmeticComponent(v1->_vecXY[1], by, op);
-		const float z = n == 3 ? VectorArithmeticComponent(v1->_vecZ, bz, op) : 0.0f;
+		const float x = VectorArithmeticComponent(v1->_vecX, bx, op);
+		const float y = VectorArithmeticComponent(v1->_vecYZ[0], by, op);
+		const float z = n == 3 ? VectorArithmeticComponent(v1->_vecYZ[1], bz, op) : 0.0f;
 		// 결과를 먼저 계산하므로 r이 어느 입력과 같아도 안전하게 덮어쓸 수 있다.
 		if (r->IsAllocType()) Var_Release(r);
 		r->SetInlineVec(n, x, y, z);

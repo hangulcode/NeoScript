@@ -33,7 +33,11 @@ NEOS_FORCEINLINE VecInfo* INeoVMWorker::Vec4StoreFor(VarInfo* d)
 NEOS_FORCEINLINE float& INeoVMWorker::WritableVectorComponent(VarInfo* d, int index)
 {
 	if (d->GetType() == VAR_VEC)
-		return index == 2 ? d->_vecZ : d->_vecXY[index];
+	{
+		// 읽기와 같은 연속 배치를 사용하되 실제 성분의 참조를 반환한다.
+		unsigned char* bytes = reinterpret_cast<unsigned char*>(d);
+		return *reinterpret_cast<float*>(bytes + 4 + sizeof(float) * index);
+	}
 	VecInfo* p = d->_vec;
 	return (p->_refCount <= 1 ? p : _pVM->VecCopyOnWrite(d))->v[index];
 }

@@ -8,6 +8,38 @@ static void Check(bool ok, const char* message) {
     ++checks;
     if (!ok) { ++failures; std::fprintf(stderr, "FAIL: %s\n", message); }
 }
+static void InlineVectorLayout(INeoVMWorker* worker) {
+    // 성분의 비트 패턴과 연속 배치를 함께 확인하고 짧은 복사의 양쪽 경계를 지킨다.
+    const u32 bits[3] = {0x80000000u, 0x7fc12345u, 0x7f800000u};
+    float values[3];
+    std::memcpy(values, bits, sizeof(values));
+    for (int dim : {2, 3}) {
+        VarInfo value;
+        if (dim == 2) worker->Var_SetVec2(&value, values[0], values[1]);
+        else worker->Var_SetVec3(&value, values[0], values[1], values[2]);
+        const unsigned char* bytes = reinterpret_cast<const unsigned char*>(&value);
+        Check(sizeof(value) == 16 && reinterpret_cast<const unsigned char*>(value._vecYZ) == bytes + 8,
+            "inline vector keeps a 16-byte slot with yz at offset 8");
+        Check(std::memcmp(bytes + 4, bits, dim * sizeof(float)) == 0,
+            "inline vector stores contiguous xyz bits at offset 4");
+        float output[5] = {11, 22, 33, 44, 55};
+        value.CopyVectorComponents(output + 1);
+        Check(std::memcmp(output + 1, bits, dim * sizeof(float)) == 0,
+            "component copy preserves signed zero and non-finite bits");
+        Check(output[0] == 11 && output[4] == 55 && (dim == 3 || output[3] == 44),
+            "component copy preserves surrounding lanes");
+        for (int i = 0; i < dim; ++i) {
+            const float component = value.VectorComponent(i);
+            Check(std::memcmp(&component, bits + i, sizeof(float)) == 0,
+                "indexed read preserves component bits");
+            worker->WritableVectorComponent(&value, i) = float(i + 10);
+        }
+        for (int i = 0; i < dim; ++i)
+            Check(value.VectorComponent(i) == float(i + 10), "indexed write changes the selected component");
+        Check(value.GetType() == VAR_VEC && value.VectorComponentCount() == dim,
+            "indexed writes preserve vector metadata");
+    }
+}
 // Native getters can transfer control before the component update; setters can
 // do so after it. Exercise both boundaries without relying on private VM state.
 struct PropertyState {
@@ -137,6 +169,7 @@ export fun Bad(){items[0][9]+=1;}
         Check(vm != nullptr, error.c_str());
         if (!vm) { NeoExecContextPool_Destroy(pool); continue; }
         INeoVMWorker* worker = vm->GetMainWorker();
+        InlineVectorLayout(worker);
         auto item = worker->GetVar("items")->_lst->GetValue(0);
         auto member = worker->GetVar("map")->_tbl->Find("v");
         auto array = worker->GetVar("array")->_array;

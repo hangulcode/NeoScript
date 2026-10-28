@@ -17,15 +17,23 @@ struct VecInfo : AllocBase
 
 NEOS_FORCEINLINE float VarInfo::VectorComponent(int index) const
 {
-	return GetType() == VAR_VEC ? (index == 2 ? _vecZ : _vecXY[index]) : _vec->v[index];
+	if (GetType() == VAR_VEC)
+	{
+		// 별도 float 멤버 사이의 포인터 산술 대신 객체 안에서 성분 주소를 계산한다.
+		const unsigned char* bytes = reinterpret_cast<const unsigned char*>(this);
+		return *reinterpret_cast<const float*>(bytes + 4 + sizeof(float) * index);
+	}
+	return _vec->v[index];
 }
 NEOS_FORCEINLINE void VarInfo::CopyVectorComponents(float* out) const
 {
 	// 호출자가 요청한 유효 성분만 쓴다. 남는 출력 레인은 보존한다.
 	if (GetType() == VAR_VEC)
 	{
-		out[0] = _vecXY[0]; out[1] = _vecXY[1];
-		if (_vecCount == 3) out[2] = _vecZ;
+		// 별도 멤버를 float 배열로 색인하지 않고 전체 객체의 바이트 표현에서 복사한다.
+		const unsigned char* bytes = reinterpret_cast<const unsigned char*>(this);
+		std::memcpy(out, bytes + sizeof(_type) + sizeof(_vecCount) + sizeof(_unused),
+			sizeof(float) * _vecCount);
 	}
 	else
 		std::memmove(out, _vec->v, sizeof(float) * 4);

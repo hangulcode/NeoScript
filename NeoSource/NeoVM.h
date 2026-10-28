@@ -323,15 +323,16 @@ struct VarInfo
 {
 private:
 	VAR_TYPE	_type;
-	// 앞쪽 8바이트에 타입·성분 수·z, 뒤쪽 8바이트에 x/y 또는 일반 값을 둔다.
+	// 타입·성분 수·빈 2바이트 뒤에 x, union에 y/z를 두어 성분을 연속 배치한다.
 	// float[3]을 기존 union에 넣으면 정렬 때문에 슬롯이 24바이트가 되므로 분리한다.
 	u8 _vecCount;
-	float _vecZ;
+	u8 _unused[2];
+	float _vecX;
 	NEOS_FORCEINLINE void SetType(VAR_TYPE t) { _type = t; }
 	NEOS_FORCEINLINE void SetVecType(int count) { _type = count == 4 ? VAR_VEC4 : VAR_VEC; _vecCount = (u8)count; }
 	NEOS_FORCEINLINE void SetInlineVec(int count, float x, float y, float z)
 	{
-		SetVecType(count); _vecXY[0] = x; _vecXY[1] = y; _vecZ = z;
+		SetVecType(count); _vecX = x; _vecYZ[0] = y; _vecYZ[1] = z;
 	}
 
 	NEOS_FORCEINLINE void ClearType()
@@ -368,7 +369,7 @@ public:
 		ClosureInfo*	_closure;
 		CollectionIterator	_it;
 		VecInfo*	_vec; // VAR_VEC4 전용 공유 저장소
-		float _vecXY[2]; // VAR_VEC의 x/y. z는 타입 영역 뒤에 둔다.
+		float _vecYZ[2]; // VAR_VEC의 y/z. x는 타입 영역 뒤에 둔다.
 		ArrayInfo*	_array; // VAR_ARRAY 밀집 원시 배열
 		VarInfo* _ref; // VAR_REF: never stored in script values
 	};
