@@ -123,9 +123,8 @@ struct ArrayInfo : AllocBase
 	{
 		if (!components || !IsValidIndex(index) || !VectorDimension() || dimension != VectorDimension())
 			return false;
-		float copy[kVectorStride] = {};
-		memcpy(copy, components, (size_t)dimension * sizeof(float));
-		memcpy(VectorAt(index), copy, sizeof(copy));
+		// 원본과 대상이 겹쳐도 필요한 성분만 옮긴다. 배열의 패딩은 노출하지 않는다.
+		memmove(VectorAt(index), components, (size_t)dimension * sizeof(float));
 		return true;
 	}
 

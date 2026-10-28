@@ -2186,4 +2186,27 @@ NS_API int32_t NS_CALL NsArraySetVec(NsArrayView* a, int32_t index, const float*
     catch (...) { return 0; }
 }
 
+
+// 성분 수를 지정한 경계는 실패 시 출력/목적지를 그대로 둔다.
+NS_API int32_t NS_CALL NsCallArgVec(NsCall* call, const float* p, int32_t n)
+{ try { return call && call->invocation.argVec(p,n); } catch (...) { return 0; } }
+NS_API int32_t NS_CALL NsCallRetVecN(NsCall* call, float* out, int32_t n)
+{ return call && call->invocation.retVec(out,n); }
+NS_API int32_t NS_CALL NsCtxArgVecN(NsContext* ctx, int32_t i, float* out, int32_t n)
+{ return ctx && i >= 0 && Deref(ctx)->argVec(static_cast<size_t>(i),out,n); }
+NS_API int32_t NS_CALL NsCtxRetVec(NsContext* ctx, const float* p, int32_t n)
+{ try { return ctx && Deref(ctx)->retVec(p,n); } catch (...) { return 0; } }
+NS_API int32_t NS_CALL NsMapSetVec(NsMapBuilder* m, const char* k, int32_t len, const float* p, int32_t n)
+{ try { return m && len >= 0 && (k || !len) && Deref(m)->setVec(SV(k,len),p,n); } catch (...) { return 0; } }
+NS_API int32_t NS_CALL NsListPushVec(NsListBuilder* l, const float* p, int32_t n)
+{ try { return l && Deref(l)->pushVec(p,n); } catch (...) { return 0; } }
+NS_API int32_t NS_CALL NsListSetVec(NsListBuilder* l, int32_t index, const float* p, int32_t n)
+{ try { return l && Deref(l)->setVec(index,p,n); } catch (...) { return 0; } }
+NS_API int32_t NS_CALL NsMapGetVecN(NsMapReader* m, const char* k, int32_t len, float* out, int32_t n)
+{ return m && len >= 0 && (k || !len) && Deref(m)->getVec(SV(k,len),out,n); }
+NS_API int32_t NS_CALL NsListRdGetVecN(NsListReader* l, int32_t index, float* out, int32_t n)
+{ return l && Deref(l)->getVec(index,out,n); }
+NS_API int32_t NS_CALL NsArrayGetVecN(NsArrayView* a, int32_t index, float* out, int32_t n)
+{ return a && Deref(a)->getVec(index,out,n); }
+
 } // extern "C"

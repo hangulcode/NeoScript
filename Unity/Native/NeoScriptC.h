@@ -53,7 +53,7 @@ extern "C" {
 // ABI 버전. 구조체 레이아웃이나 함수 시그니처가 바뀌면 올린다. 바인딩(C#)은 기동 시
 // NsGetAbiVersion() 으로 확인해서 어긋나면 바로 실패시킬 것 — 조용한 메모리 깨짐보다 낫다.
 //------------------------------------------------------------------------------
-#define NS_ABI_VERSION 7
+#define NS_ABI_VERSION 8
 
 // 한 프로세스에서 등록할 수 있는 네이티브 객체 타입 수. 디스패처가 컨텍스트 없는
 // 함수 포인터라 슬롯마다 고정 썽크가 필요해서 상한이 있다.
@@ -403,6 +403,10 @@ NS_API void NS_CALL NsCallArgInt(NsCall* call, int64_t v);
 NS_API void NS_CALL NsCallArgFloat(NsCall* call, double v);
 NS_API void NS_CALL NsCallArgBool(NsCall* call, int32_t v);
 NS_API void NS_CALL NsCallArgString(NsCall* call, const char* v, int32_t len);
+/* 지정한 2~4개 성분만 복사한다. 읽기는 원본 성분이 그 이상이어야 하며 실패하면
+ * 출력을 바꾸지 않는다. 쓰기는 지정한 차원을 만들되, 배열 쓰기는 배열 차원과
+ * 정확히 일치해야 한다. 쿼터니온 순서는 w,x,y,z이며 기존 무차원 읽기는 네 성분을 쓴다. */
+NS_API int32_t NS_CALL NsCallArgVec(NsCall* call, const float* components, int32_t dimension);
 NS_API void NS_CALL NsCallArgVec3(NsCall* call, float x, float y, float z);
 NS_API void NS_CALL NsCallArgObject(NsCall* call, NsObjectType type, void* userData);
 NS_API void NS_CALL NsCallTimeout(NsCall* call, int32_t ms);
@@ -422,6 +426,7 @@ NS_API int64_t NS_CALL NsCallRetInt(NsCall* call);
 NS_API double   NS_CALL NsCallRetFloat(NsCall* call);
 NS_API int32_t NS_CALL NsCallRetBool(NsCall* call);
 NS_API void    NS_CALL NsCallRetString(NsCall* call, NsStr* out);
+NS_API int32_t NS_CALL NsCallRetVecN(NsCall* call, float* out, int32_t dimension);
 NS_API void    NS_CALL NsCallRetVec(NsCall* call, float* out4);
 NS_API NsMapReader*  NS_CALL NsCallRetMap(NsCall* call);
 NS_API NsListReader* NS_CALL NsCallRetList(NsCall* call);
@@ -441,6 +446,7 @@ NS_API int64_t NS_CALL NsCtxArgInt(NsContext* ctx, int32_t i);
 NS_API double   NS_CALL NsCtxArgFloat(NsContext* ctx, int32_t i);
 NS_API int32_t NS_CALL NsCtxArgBool(NsContext* ctx, int32_t i);
 NS_API void    NS_CALL NsCtxArgString(NsContext* ctx, int32_t i, NsStr* out);
+NS_API int32_t NS_CALL NsCtxArgVecN(NsContext* ctx, int32_t i, float* out, int32_t dimension);
 NS_API void    NS_CALL NsCtxArgVec(NsContext* ctx, int32_t i, float* out4);
 NS_API NsMapReader*  NS_CALL NsCtxArgMap(NsContext* ctx, int32_t i);
 NS_API NsListReader* NS_CALL NsCtxArgList(NsContext* ctx, int32_t i);
@@ -459,6 +465,7 @@ NS_API void NS_CALL NsCtxRetInt(NsContext* ctx, int64_t v);
 NS_API void NS_CALL NsCtxRetFloat(NsContext* ctx, double v);
 NS_API void NS_CALL NsCtxRetBool(NsContext* ctx, int32_t v);
 NS_API void NS_CALL NsCtxRetString(NsContext* ctx, const char* v, int32_t len);
+NS_API int32_t NS_CALL NsCtxRetVec(NsContext* ctx, const float* components, int32_t dimension);
 NS_API void NS_CALL NsCtxRetVec2(NsContext* ctx, float x, float y);
 NS_API void NS_CALL NsCtxRetVec3(NsContext* ctx, float x, float y, float z);
 NS_API void NS_CALL NsCtxRetVec4(NsContext* ctx, float x, float y, float z, float w);
@@ -478,6 +485,7 @@ NS_API void NS_CALL NsMapSetInt(NsMapBuilder* m, const char* k, int32_t klen, in
 NS_API void NS_CALL NsMapSetFloat(NsMapBuilder* m, const char* k, int32_t klen, double v);
 NS_API void NS_CALL NsMapSetBool(NsMapBuilder* m, const char* k, int32_t klen, int32_t v);
 NS_API void NS_CALL NsMapSetString(NsMapBuilder* m, const char* k, int32_t klen, const char* v, int32_t vlen);
+NS_API int32_t NS_CALL NsMapSetVec(NsMapBuilder* m, const char* k, int32_t klen, const float* components, int32_t dimension);
 NS_API void NS_CALL NsMapSetVec3(NsMapBuilder* m, const char* k, int32_t klen, float x, float y, float z);
 NS_API void NS_CALL NsMapSetObject(NsMapBuilder* m, const char* k, int32_t klen, NsObjectType t, void* userData);
 NS_API NsMapBuilder*  NS_CALL NsMapSetMap(NsMapBuilder* m, const char* k, int32_t klen);
@@ -491,6 +499,8 @@ NS_API void    NS_CALL NsListPushInt(NsListBuilder* l, int64_t v);
 NS_API void    NS_CALL NsListPushFloat(NsListBuilder* l, double v);
 NS_API void    NS_CALL NsListPushBool(NsListBuilder* l, int32_t v);
 NS_API void    NS_CALL NsListPushString(NsListBuilder* l, const char* v, int32_t len);
+NS_API int32_t NS_CALL NsListPushVec(NsListBuilder* l, const float* components, int32_t dimension);
+NS_API int32_t NS_CALL NsListSetVec(NsListBuilder* l, int32_t index, const float* components, int32_t dimension);
 NS_API void    NS_CALL NsListPushVec3(NsListBuilder* l, float x, float y, float z);
 NS_API void    NS_CALL NsListPushObject(NsListBuilder* l, NsObjectType t, void* userData);
 NS_API void    NS_CALL NsListSetInt(NsListBuilder* l, int32_t index, int64_t v);
@@ -513,6 +523,7 @@ NS_API int32_t NS_CALL NsMapGetInt(NsMapReader* m, const char* k, int32_t klen, 
 NS_API int32_t NS_CALL NsMapGetFloat(NsMapReader* m, const char* k, int32_t klen, double* out);
 NS_API int32_t NS_CALL NsMapGetBool(NsMapReader* m, const char* k, int32_t klen, int32_t* out);
 NS_API int32_t NS_CALL NsMapGetString(NsMapReader* m, const char* k, int32_t klen, NsStr* out);
+NS_API int32_t NS_CALL NsMapGetVecN(NsMapReader* m, const char* k, int32_t klen, float* out, int32_t dimension);
 NS_API int32_t NS_CALL NsMapGetVec(NsMapReader* m, const char* k, int32_t klen, float* out4);
 NS_API NsMapReader*  NS_CALL NsMapGetMap(NsMapReader* m, const char* k, int32_t klen);
 NS_API NsListReader* NS_CALL NsMapGetList(NsMapReader* m, const char* k, int32_t klen);
@@ -527,6 +538,7 @@ NS_API int32_t NS_CALL NsListRdGetInt(NsListReader* l, int32_t index, int64_t* o
 NS_API int32_t NS_CALL NsListRdGetFloat(NsListReader* l, int32_t index, double* out);
 NS_API int32_t NS_CALL NsListRdGetBool(NsListReader* l, int32_t index, int32_t* out);
 NS_API int32_t NS_CALL NsListRdGetString(NsListReader* l, int32_t index, NsStr* out);
+NS_API int32_t NS_CALL NsListRdGetVecN(NsListReader* l, int32_t index, float* out, int32_t dimension);
 NS_API int32_t NS_CALL NsListRdGetVec(NsListReader* l, int32_t index, float* out4);
 NS_API NsMapReader*  NS_CALL NsListRdGetMap(NsListReader* l, int32_t index);
 NS_API NsListReader* NS_CALL NsListRdGetList(NsListReader* l, int32_t index);
@@ -544,6 +556,7 @@ NS_API double*   NS_CALL NsArrayFloats(NsArrayView* a);
 NS_API int32_t* NS_CALL NsArrayInts32(NsArrayView* a);
 NS_API float* NS_CALL NsArrayFloats32(NsArrayView* a);
 NS_API int32_t NS_CALL NsArrayVectorDimension(NsArrayView* a);
+NS_API int32_t NS_CALL NsArrayGetVecN(NsArrayView* a, int32_t index, float* out, int32_t dimension);
 NS_API int32_t NS_CALL NsArrayGetVec(NsArrayView* a, int32_t index, float* out4);
 NS_API int32_t NS_CALL NsArraySetVec(NsArrayView* a, int32_t index, const float* components, int32_t dimension);
 

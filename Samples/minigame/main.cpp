@@ -159,8 +159,8 @@ static bool ObjectProperty(CallContext& ctx, StringView property, bool isGet)
     {
         if (ctx.argType(0) != ValueType::Vec3)
             return Fail(ctx, "GameObject.Position requires a Vector3, not a list");
-        float xyz[4]{};
-        ctx.argVec(0, xyz);
+        float xyz[3];
+        if (!ctx.argVec(0, xyz, 3)) return false;
         for (int i = 0; i < 3; ++i)
         {
             if (!std::isfinite(xyz[i]))

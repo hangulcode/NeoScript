@@ -239,7 +239,13 @@ public:
     void pushBool(bool v);
     void pushNull();
     void pushString(StringView v);
+    void pushVec2(float x, float y);
     void pushVec3(float x, float y, float z);
+    void pushVec4(float x, float y, float z, float w);
+    bool pushVec(const float* components, int dimension);
+    bool pushQuat(const float wxyz[4]) { return pushVec(wxyz, 4); }
+    bool setVec(int index, const float* components, int dimension);
+    bool setQuat(int index, const float wxyz[4]) { return setVec(index, wxyz, 4); }
     void setInt(int index, int64_t v);
     void setFloat(int index, double v);
     void setString(int index, StringView v);
@@ -261,7 +267,11 @@ public:
     void setFloat(StringView key, double v);
     void setBool(StringView key, bool v);
     void setString(StringView key, StringView v);
+    void setVec2(StringView key, float x, float y);
     void setVec3(StringView key, float x, float y, float z);
+    void setVec4(StringView key, float x, float y, float z, float w);
+    bool setVec(StringView key, const float* components, int dimension);
+    bool setQuat(StringView key, const float wxyz[4]) { return setVec(key, wxyz, 4); }
     MapBuilder  setMap(StringView key);   // 중첩 map
     ListBuilder setList(StringView key);  // 중첩 list
     // 바인딩된 네이티브 객체를 값으로. type=RegisterObject 타입(공유 디스패처),
@@ -291,6 +301,8 @@ public:
     bool getBool(StringView key, bool& out) const;
     bool getString(StringView key, StringView& out) const;  // zero-copy VM 문자열 뷰
     bool getVec(StringView key, float out[4]) const;   // 항상 4개를 채운다(Vec2 면 out[2..3]=0)
+    bool getVec(StringView key, float* out, int dimension) const;
+    bool getQuat(StringView key, float out[4]) const { return getVec(key, out, 4); }
     bool getMap(StringView key, MapReader& out) const;
     bool getList(StringView key, ListReader& out) const;
     bool getArray(StringView key, ArrayView& out) const;
@@ -316,6 +328,8 @@ public:
     bool getBool(int index, bool& out) const;
     bool getString(int index, StringView& out) const;
     bool getVec(int index, float out[4]) const;
+    bool getVec(int index, float* out, int dimension) const;
+    bool getQuat(int index, float out[4]) const { return getVec(index, out, 4); }
     bool getMap(int index, MapReader& out) const;
     bool getList(int index, ListReader& out) const;
     bool getArray(int index, ArrayView& out) const;
@@ -345,7 +359,10 @@ public:
     float* floats32() const; // Float32 배열만 반환한다.
     int vectorDimension() const; // 2/3/4 for vector arrays; 0 otherwise
     bool getVec(int index, float out[4]) const; // copies one value, unused components are zero
-    bool setVec(int index, const float* components, int dimension) const; // exact dimension; COW write
+    bool getVec(int index, float* out, int dimension) const;
+    bool getQuat(int index, float out[4]) const { return getVec(index, out, 4); }
+    bool setVec(int index, const float* components, int dimension) const; // 고정 배열 차원과 정확히 일치해야 한다.
+    bool setQuat(int index, const float wxyz[4]) const { return setVec(index, wxyz, 4); }
 
 private:
     friend class CallContext; friend class Invocation; friend struct NeoScriptInternal;
@@ -378,6 +395,9 @@ public:
     bool        argBool(std::size_t i) const;
     StringView  argString(std::size_t i) const;   // VM 문자열 뷰(호출 중 유효)
     void        argVec(std::size_t i, float out[4]) const;
+    // 요청한 2~4개만 읽는다. 부족한 차원·잘못된 타입·포인터면 false이며 출력은 그대로다.
+    bool        argVec(std::size_t i, float* out, int dimension) const;
+    bool        argQuat(std::size_t i, float wxyz[4]) const { return argVec(i, wxyz, 4); }
     bool        argAsMap(std::size_t i, MapReader& out) const;
     bool        argAsList(std::size_t i, ListReader& out) const;
     bool        argAsArray(std::size_t i, ArrayView& out) const;
@@ -396,6 +416,8 @@ public:
     void        retFloat(double v);
     void        retBool(bool v);
     void        retString(StringView v);
+    bool        retVec(const float* components, int dimension);
+    bool        retQuat(const float wxyz[4]) { return retVec(wxyz, 4); }
     void        retVec2(float x, float y);
     void        retVec3(float x, float y, float z);
     void        retVec4(float x, float y, float z, float w);
@@ -534,6 +556,8 @@ struct CallResult
     double      asFloat()  const noexcept { return m_scalar; }
     bool       asBool()   const noexcept { return m_i != 0; }
     StringView asString() const noexcept { return StringView(m_s.c_str(), m_s.size()); } // CallResult 살아있는 동안 유효
+    bool       asVec(float* out, int dimension) const noexcept;
+    bool       asQuat(float out[4]) const noexcept { return asVec(out, 4); }
     void       asVec(float out[4]) const noexcept { out[0]=m_f[0]; out[1]=m_f[1]; out[2]=m_f[2]; out[3]=m_f[3]; }
 private:
     friend struct NeoScriptInternal;
@@ -560,7 +584,11 @@ public:
     Invocation& argFloat(double v);
     Invocation& argBool(bool v);
     Invocation& argString(StringView v);
+    Invocation& argVec2(float x, float y);
     Invocation& argVec3(float x, float y, float z);
+    Invocation& argVec4(float x, float y, float z, float w);
+    bool argVec(const float* components, int dimension);
+    bool argQuat(const float wxyz[4]) { return argVec(wxyz, 4); }
     // 바인딩된 네이티브 객체(GameObject 등)를 인자로 전달. type=RegisterObject 타입, userData=인스턴스(eventID 등).
     // 스크립트 콜백에 GameObject 를 넘길 때 사용(구 neo_globalinterface2 로 arg 바인딩하던 것의 v2 대체).
     Invocation& argObject(ObjectType type, void* userData);
@@ -595,6 +623,8 @@ public:
     double      retFloat() const;
     bool       retBool() const;
     StringView retString() const;   // zero-copy VM 문자열 뷰
+    bool       retVec(float* out, int dimension) const;
+    bool       retQuat(float wxyz[4]) const { return retVec(wxyz, 4); }
     void       retVec(float out[4]) const;   // 항상 4개를 채운다(Vec2 면 out[2..3]=0, 벡터가 아니면 전부 0)
     bool       retMap(MapReader& out) const;
     bool       retList(ListReader& out) const;

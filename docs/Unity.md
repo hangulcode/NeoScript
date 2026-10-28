@@ -23,10 +23,12 @@ into every engine build that nothing in that build calls.
 ## Updating from an older checkout
 
 Close Unity, update the UPM sources, then rebuild the native plugin for each
-target platform. The current binding requires **C ABI 7**; an older DLL is
+target platform. The current binding requires **C ABI 8**; an older DLL is
 rejected at runtime construction with an ABI mismatch. This is the native
 binding revision, not a package or bytecode version. Recompile cached bytecode
 with the current core; old images may be rejected by its image-version check.
+ABI 8 adds sized vector reads/writes and quaternion collection/call helpers without changing ABI 7 structure layouts. See [Sized native vector access](native-vector-api.md) for short-vector rejection and compatibility.
+
 ABI 7 uses C# `long` for script integers and `double` for scalar floats, including
 arguments, results, globals, and collection values. Array views use `Span<long>` and
 `Span<double>`. Vector components and Unity vector types remain float32.

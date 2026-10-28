@@ -9,6 +9,8 @@ The public host API (`NeoScript.h`) and the internal engine surface behind it.
 For the language see [../ReadMe.md](../ReadMe.md); for script-callable functions
 see [API.md](API.md).
 
+For dimension-aware Vec2/3/4 and quaternion marshaling, see [Sized native vector access](native-vector-api.md).
+
 ## Windows static linking
 
 Add `Windows/NeoScript.vcxproj` to the host solution and add a project reference

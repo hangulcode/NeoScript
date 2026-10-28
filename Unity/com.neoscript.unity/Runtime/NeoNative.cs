@@ -230,7 +230,7 @@ namespace NeoScript
         public const string Lib = "NeoScript";
 #endif
 
-        public const int AbiVersion = 7;
+        public const int AbiVersion = 8;
         public const int MaxObjectSlots = 64;
 
         private const CallingConvention Cdecl = CallingConvention.Cdecl;
@@ -309,6 +309,17 @@ namespace NeoScript
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern void NsCallArgFloat(IntPtr call, double v);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern void NsCallArgBool(IntPtr call, int v);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern void NsCallArgString(IntPtr call, byte* v, int len);
+
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsCallArgVec(IntPtr call, float* components, int dimension);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsCallRetVecN(IntPtr call, float* output, int dimension);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsCtxArgVecN(IntPtr ctx, int index, float* output, int dimension);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsCtxRetVec(IntPtr ctx, float* components, int dimension);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsMapSetVec(IntPtr map, byte* key, int length, float* components, int dimension);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsListPushVec(IntPtr list, float* components, int dimension);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsListSetVec(IntPtr list, int index, float* components, int dimension);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsMapGetVecN(IntPtr map, byte* key, int length, float* output, int dimension);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsListRdGetVecN(IntPtr list, int index, float* output, int dimension);
+        [DllImport(Lib, CallingConvention = Cdecl)] public static extern int NsArrayGetVecN(IntPtr array, int index, float* output, int dimension);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern void NsCallArgVec3(IntPtr call, float x, float y, float z);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern void NsCallArgObject(IntPtr call, uint type, IntPtr userData);
         [DllImport(Lib, CallingConvention = Cdecl)] public static extern void NsCallTimeout(IntPtr call, int ms);

@@ -39,32 +39,60 @@ namespace NeoScript
             return NeoUtf8.ToString(text);
         }
 
+        public bool TryArgVector2(int index, out Vector2 value)
+        {
+            float* v = stackalloc float[2];
+            bool ok = NeoNative.NsCtxArgVecN(_ctx, index, v, 2) != 0;
+            value = ok ? new Vector2(v[0], v[1]) : default;
+            return ok;
+        }
         public Vector2 ArgVector2(int index)
         {
-            float* v = stackalloc float[4];
-            NeoNative.NsCtxArgVec(_ctx, index, v);
-            return new Vector2(v[0], v[1]);
+            if (!TryArgVector2(index, out Vector2 value))
+                throw new ArgumentException("Vector argument requires at least 2 components", nameof(index));
+            return value;
         }
 
+        public bool TryArgVector3(int index, out Vector3 value)
+        {
+            float* v = stackalloc float[3];
+            bool ok = NeoNative.NsCtxArgVecN(_ctx, index, v, 3) != 0;
+            value = ok ? new Vector3(v[0], v[1], v[2]) : default;
+            return ok;
+        }
         public Vector3 ArgVector3(int index)
         {
-            float* v = stackalloc float[4];
-            NeoNative.NsCtxArgVec(_ctx, index, v);
-            return new Vector3(v[0], v[1], v[2]);
+            if (!TryArgVector3(index, out Vector3 value))
+                throw new ArgumentException("Vector argument requires at least 3 components", nameof(index));
+            return value;
         }
 
+        public bool TryArgVector4(int index, out Vector4 value)
+        {
+            float* v = stackalloc float[4];
+            bool ok = NeoNative.NsCtxArgVecN(_ctx, index, v, 4) != 0;
+            value = ok ? new Vector4(v[0], v[1], v[2], v[3]) : default;
+            return ok;
+        }
         public Vector4 ArgVector4(int index)
         {
-            float* v = stackalloc float[4];
-            NeoNative.NsCtxArgVec(_ctx, index, v);
-            return new Vector4(v[0], v[1], v[2], v[3]);
+            if (!TryArgVector4(index, out Vector4 value))
+                throw new ArgumentException("Vector argument requires at least 4 components", nameof(index));
+            return value;
         }
 
-        public Quaternion ArgQuaternion(int index)
+        public bool TryArgQuaternion(int index, out Quaternion value)
         {
             float* v = stackalloc float[4];
-            NeoNative.NsCtxArgVec(_ctx, index, v);
-            return new Quaternion(v[1], v[2], v[3], v[0]);
+            bool ok = NeoNative.NsCtxArgVecN(_ctx, index, v, 4) != 0;
+            value = ok ? new Quaternion(v[1], v[2], v[3], v[0]) : default;
+            return ok;
+        }
+        public Quaternion ArgQuaternion(int index)
+        {
+            if (!TryArgQuaternion(index, out Quaternion value))
+                throw new ArgumentException("Vector argument requires at least 4 components", nameof(index));
+            return value;
         }
 
         /// <summary>map 인자. 유효하지 않으면 IsValid==false.</summary>

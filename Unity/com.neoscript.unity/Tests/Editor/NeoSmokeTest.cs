@@ -265,6 +265,8 @@ export fun Update(var dt)
                 CheckPluginImport();
                 NeoHttpRegression.Run();
                 Check(true, "Managed HTTP transport regression");
+                NeoVectorApiTest.Run();
+                Check(true, "Sized vector API and quaternion regression");
 
                 runtime = new NeoRuntime(new NeoRuntimeOptions
                 {

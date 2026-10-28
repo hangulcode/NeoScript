@@ -79,6 +79,25 @@ namespace NeoScript
         public NeoCall Arg(bool value) { NeoNative.NsCallArgBool(_call, value ? 1 : 0); return this; }
         public NeoCall Arg(Vector3 value) { NeoNative.NsCallArgVec3(_call, value.x, value.y, value.z); return this; }
 
+        public unsafe NeoCall Arg(Vector2 value)
+        {
+            float* data = stackalloc float[2]; data[0] = value.x; data[1] = value.y;
+            if (NeoNative.NsCallArgVec(_call, data, 2) == 0) throw new InvalidOperationException("Call is not accepting arguments");
+            return this;
+        }
+        public unsafe NeoCall Arg(Vector4 value)
+        {
+            float* data = stackalloc float[4]; data[0] = value.x; data[1] = value.y; data[2] = value.z; data[3] = value.w;
+            if (NeoNative.NsCallArgVec(_call, data, 4) == 0) throw new InvalidOperationException("Call is not accepting arguments");
+            return this;
+        }
+        public unsafe NeoCall Arg(Quaternion value)
+        {
+            float* data = stackalloc float[4]; data[0] = value.w; data[1] = value.x; data[2] = value.y; data[3] = value.z;
+            if (NeoNative.NsCallArgVec(_call, data, 4) == 0) throw new InvalidOperationException("Call is not accepting arguments");
+            return this;
+        }
+
         public unsafe NeoCall Arg(string value)
         {
             NeoUtf8.Frame frame = NeoUtf8.Push();
@@ -164,6 +183,27 @@ namespace NeoScript
             NeoResult r = Invoke();
             if (!r.Ok) throw r.ToException("call");
             return r.AsString;
+        }
+
+        public Vector2 InvokeVector2()
+        {
+            NeoResult r = Invoke();
+            if (!r.Ok) throw r.ToException("call");
+            return r.AsVector2;
+        }
+
+        public Vector4 InvokeVector4()
+        {
+            NeoResult r = Invoke();
+            if (!r.Ok) throw r.ToException("call");
+            return r.AsVector4;
+        }
+
+        public Quaternion InvokeQuaternion()
+        {
+            NeoResult r = Invoke();
+            if (!r.Ok) throw r.ToException("call");
+            return r.AsQuaternion;
         }
 
         public Vector3 InvokeVector3()

@@ -58,6 +58,22 @@ namespace NeoScript
             finally { NeoUtf8.Pop(frame); }
         }
 
+        private void SetVector(string key, float* data, int dimension)
+        {
+            var frame = NeoUtf8.Push();
+            try {
+                int n = NeoUtf8.Encode(key, out int o);
+                fixed (byte* b = NeoUtf8.Buffer)
+                    if (NeoNative.NsMapSetVec(_handle, b + o, n, data, dimension) == 0) throw new InvalidOperationException("Invalid map builder");
+            } finally { NeoUtf8.Pop(frame); }
+        }
+        public void Set(string key, Vector2 value)
+        { float* data=stackalloc float[2]; data[0]=value.x; data[1]=value.y; SetVector(key,data,2); }
+        public void Set(string key, Vector4 value)
+        { float* data=stackalloc float[4]; data[0]=value.x; data[1]=value.y; data[2]=value.z; data[3]=value.w; SetVector(key,data,4); }
+        public void Set(string key, Quaternion value)
+        { float* data=stackalloc float[4]; data[0]=value.w; data[1]=value.x; data[2]=value.y; data[3]=value.z; SetVector(key,data,4); }
+
         /// <summary>바인딩된 네이티브 객체를 값으로 넣는다.</summary>
         public void SetObject(string key, uint objectType, IntPtr userData)
         {
@@ -97,6 +113,20 @@ namespace NeoScript
         public void Push(double value) => NeoNative.NsListPushFloat(_handle, value);
         public void Push(bool value) => NeoNative.NsListPushBool(_handle, value ? 1 : 0);
         public void Push(Vector3 value) => NeoNative.NsListPushVec3(_handle, value.x, value.y, value.z);
+        public void Push(Vector2 value)
+        { float* data=stackalloc float[2]; data[0]=value.x; data[1]=value.y; if(NeoNative.NsListPushVec(_handle,data,2)==0)throw new InvalidOperationException("Invalid list builder"); }
+        public bool TrySet(int index, Vector2 value)
+        { float* data=stackalloc float[2]; data[0]=value.x; data[1]=value.y; return NeoNative.NsListSetVec(_handle,index,data,2)!=0; }
+        public bool TrySet(int index, Vector3 value)
+        { float* data=stackalloc float[3]; data[0]=value.x; data[1]=value.y; data[2]=value.z; return NeoNative.NsListSetVec(_handle,index,data,3)!=0; }
+        public void Push(Vector4 value)
+        { float* data=stackalloc float[4]; data[0]=value.x; data[1]=value.y; data[2]=value.z; data[3]=value.w; if(NeoNative.NsListPushVec(_handle,data,4)==0)throw new InvalidOperationException("Invalid list builder"); }
+        public bool TrySet(int index, Vector4 value)
+        { float* data=stackalloc float[4]; data[0]=value.x; data[1]=value.y; data[2]=value.z; data[3]=value.w; return NeoNative.NsListSetVec(_handle,index,data,4)!=0; }
+        public void Push(Quaternion value)
+        { float* data=stackalloc float[4]; data[0]=value.w; data[1]=value.x; data[2]=value.y; data[3]=value.z; if(NeoNative.NsListPushVec(_handle,data,4)==0)throw new InvalidOperationException("Invalid list builder"); }
+        public bool TrySet(int index, Quaternion value)
+        { float* data=stackalloc float[4]; data[0]=value.w; data[1]=value.x; data[2]=value.y; data[3]=value.z; return NeoNative.NsListSetVec(_handle,index,data,4)!=0; }
         public void PushObject(uint objectType, IntPtr userData) => NeoNative.NsListPushObject(_handle, objectType, userData);
 
         public void Push(string value)
@@ -216,20 +246,41 @@ namespace NeoScript
             finally { NeoUtf8.Pop(frame); }
         }
 
+        public bool TryGet(string key, out Vector2 value)
+        {
+            var frame=NeoUtf8.Push();
+            try {
+                int n=NeoUtf8.Encode(key,out int o); float* v=stackalloc float[2]; int ok;
+                fixed(byte* b=NeoUtf8.Buffer) ok=NeoNative.NsMapGetVecN(_handle,b+o,n,v,2);
+                value=ok!=0?new Vector2(v[0],v[1]):default;return ok!=0;
+            } finally {NeoUtf8.Pop(frame);}
+        }
         public bool TryGet(string key, out Vector3 value)
         {
-            var frame = NeoUtf8.Push();
-            try
-            {
-                int n = NeoUtf8.Encode(key, out int o);
-                float* v = stackalloc float[4];
-                int ok;
-                fixed (byte* b = NeoUtf8.Buffer)
-                    ok = NeoNative.NsMapGetVec(_handle, b + o, n, v);
-                value = ok != 0 ? new Vector3(v[0], v[1], v[2]) : default;
-                return ok != 0;
-            }
-            finally { NeoUtf8.Pop(frame); }
+            var frame=NeoUtf8.Push();
+            try {
+                int n=NeoUtf8.Encode(key,out int o); float* v=stackalloc float[3]; int ok;
+                fixed(byte* b=NeoUtf8.Buffer) ok=NeoNative.NsMapGetVecN(_handle,b+o,n,v,3);
+                value=ok!=0?new Vector3(v[0],v[1],v[2]):default;return ok!=0;
+            } finally {NeoUtf8.Pop(frame);}
+        }
+        public bool TryGet(string key, out Vector4 value)
+        {
+            var frame=NeoUtf8.Push();
+            try {
+                int n=NeoUtf8.Encode(key,out int o); float* v=stackalloc float[4]; int ok;
+                fixed(byte* b=NeoUtf8.Buffer) ok=NeoNative.NsMapGetVecN(_handle,b+o,n,v,4);
+                value=ok!=0?new Vector4(v[0],v[1],v[2],v[3]):default;return ok!=0;
+            } finally {NeoUtf8.Pop(frame);}
+        }
+        public bool TryGet(string key, out Quaternion value)
+        {
+            var frame=NeoUtf8.Push();
+            try {
+                int n=NeoUtf8.Encode(key,out int o); float* v=stackalloc float[4]; int ok;
+                fixed(byte* b=NeoUtf8.Buffer) ok=NeoNative.NsMapGetVecN(_handle,b+o,n,v,4);
+                value=ok!=0?new Quaternion(v[1],v[2],v[3],v[0]):default;return ok!=0;
+            } finally {NeoUtf8.Pop(frame);}
         }
 
         public long GetInt(string key, long fallback = 0) => TryGet(key, out long v) ? v : fallback;
@@ -290,14 +341,6 @@ namespace NeoScript
             return true;
         }
 
-        public bool TryGet(int index, out Vector3 value)
-        {
-            float* v = stackalloc float[4];
-            if (NeoNative.NsListRdGetVec(_handle, index, v) == 0) { value = default; return false; }
-            value = new Vector3(v[0], v[1], v[2]);
-            return true;
-        }
-
         public long GetInt(int index, long fallback = 0) => TryGet(index, out long v) ? v : fallback;
         public double GetFloat(int index, double fallback = 0f) => TryGet(index, out double v) ? v : fallback;
         public string GetString(int index, string fallback = null) => TryGet(index, out string v) ? v : fallback;
@@ -305,6 +348,14 @@ namespace NeoScript
         public NeoMapReader GetMap(int index) => new NeoMapReader(NeoNative.NsListRdGetMap(_handle, index));
         public NeoListReader GetList(int index) => new NeoListReader(NeoNative.NsListRdGetList(_handle, index));
         public NeoArrayView GetArray(int index) => new NeoArrayView(NeoNative.NsListRdGetArray(_handle, index));
+        public bool TryGet(int index, out Vector2 value)
+        {float* v=stackalloc float[2];bool ok=NeoNative.NsListRdGetVecN(_handle,index,v,2)!=0;value=ok?new Vector2(v[0],v[1]):default;return ok;}
+        public bool TryGet(int index, out Vector3 value)
+        {float* v=stackalloc float[3];bool ok=NeoNative.NsListRdGetVecN(_handle,index,v,3)!=0;value=ok?new Vector3(v[0],v[1],v[2]):default;return ok;}
+        public bool TryGet(int index, out Vector4 value)
+        {float* v=stackalloc float[4];bool ok=NeoNative.NsListRdGetVecN(_handle,index,v,4)!=0;value=ok?new Vector4(v[0],v[1],v[2],v[3]):default;return ok;}
+        public bool TryGet(int index, out Quaternion value)
+        {float* v=stackalloc float[4];bool ok=NeoNative.NsListRdGetVecN(_handle,index,v,4)!=0;value=ok?new Quaternion(v[1],v[2],v[3],v[0]):default;return ok;}
     }
 
     /// <summary>
@@ -366,16 +417,16 @@ namespace NeoScript
         /// <summary>Read a vector value. The array dimension must match the requested type.</summary>
         public bool TryGet(int index, out Vector2 value)
         {
-            float* data = stackalloc float[4];
-            bool ok = VectorDimension == 2 && NeoNative.NsArrayGetVec(_handle, index, data) != 0;
+            float* data = stackalloc float[2];
+            bool ok = VectorDimension == 2 && NeoNative.NsArrayGetVecN(_handle, index, data, 2) != 0;
             value = ok ? new Vector2(data[0], data[1]) : default;
             return ok;
         }
 
         public bool TryGet(int index, out Vector3 value)
         {
-            float* data = stackalloc float[4];
-            bool ok = VectorDimension == 3 && NeoNative.NsArrayGetVec(_handle, index, data) != 0;
+            float* data = stackalloc float[3];
+            bool ok = VectorDimension == 3 && NeoNative.NsArrayGetVecN(_handle, index, data, 3) != 0;
             value = ok ? new Vector3(data[0], data[1], data[2]) : default;
             return ok;
         }
@@ -383,7 +434,7 @@ namespace NeoScript
         public bool TryGet(int index, out Vector4 value)
         {
             float* data = stackalloc float[4];
-            bool ok = VectorDimension == 4 && NeoNative.NsArrayGetVec(_handle, index, data) != 0;
+            bool ok = VectorDimension == 4 && NeoNative.NsArrayGetVecN(_handle, index, data, 4) != 0;
             value = ok ? new Vector4(data[0], data[1], data[2], data[3]) : default;
             return ok;
         }
@@ -411,6 +462,16 @@ namespace NeoScript
             return NeoNative.NsArraySetVec(_handle, index, data, 4) != 0;
         }
 
+        public bool TryGet(int index, out Quaternion value)
+        {
+            float* data=stackalloc float[4];bool ok=VectorDimension==4&&NeoNative.NsArrayGetVecN(_handle,index,data,4)!=0;
+            value=ok?new Quaternion(data[1],data[2],data[3],data[0]):default;return ok;
+        }
+        public bool TrySet(int index, Quaternion value)
+        {
+            float* data=stackalloc float[4];data[0]=value.w;data[1]=value.x;data[2]=value.y;data[3]=value.z;
+            return NeoNative.NsArraySetVec(_handle,index,data,4)!=0;
+        }
         /// <summary>bool 원소는 비트로 채워져 있다. 하위 비트가 먼저다.</summary>
         public bool GetBool(int index)
         {

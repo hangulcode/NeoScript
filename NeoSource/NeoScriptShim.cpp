@@ -29,6 +29,7 @@
 
 namespace NeoScript
 {
+static bool ReadVecN(const VarInfo*, float*, int);
 class RuntimeImpl; // 전방선언 (ObjectBinding 이 참조)
 
 namespace
@@ -526,10 +527,10 @@ struct NeoScriptInternal
     static ObjectType  objType(void* i)     { ObjectType t; t.m_impl = i; return t; }
     static void*       objImpl(ObjectType t) { return t.m_impl; }
     // CallResult 저장(invokeR 이 스칼라 반환을 값으로 스냅샷).
-    static void setResult(CallResult& r, ValueType t, int64_t i, const float* f4, StringView s, double scalar = 0)
+    static void setResult(CallResult& r, ValueType t, int64_t i, const VarInfo* vector, StringView s, double scalar = 0)
     {
         r.m_type = t; r.m_i = i; r.m_scalar = scalar;
-        if (f4) { r.m_f[0]=f4[0]; r.m_f[1]=f4[1]; r.m_f[2]=f4[2]; r.m_f[3]=f4[3]; }
+        if (vector) ReadVecN(vector,r.m_f,vector->VectorComponentCount());
         if (s.data()) r.m_s.assign(s.data(), s.size());
     }
 };
@@ -1579,9 +1580,29 @@ static VarInfo* CtxRetVar(CallContextImpl* c)
     if (c->propertyVar && !c->propertyIsArg) return c->propertyVar;
     return c->worker->GetReturnVar();
 }
-// GetVecN 은 실제 성분 수만 쓴다. 공개 API의 float[4] 계약만 여기서 남는 레인을 0으로 채운다.
-// 공개 API 가 float[4] 만 주고 유효 성분 수를 알려주지 않으니 Vec2 라도 out[2..3] 이
-// 정의돼 있어야 한다 — 안 그러면 호출자 스택 쓰레기가 값처럼 읽힌다.
+// 성분 수를 지정하지 않은 기존 API만 네 성분과 남는 레인의 0 채움을 보장한다.
+// 성분 수를 먼저 검사한다. 실패 시 출력과 미사용 레인은 건드리지 않는다.
+static bool ReadVecN(const VarInfo* v, float* out, int dimension)
+{
+    if (!out || dimension < 2 || dimension > 4 || !v || v->VectorComponentCount() < dimension) return false;
+    switch (dimension) {
+    case 2: std::memmove(out, v->_vec->v, 2 * sizeof(float)); break;
+    case 3: std::memmove(out, v->_vec->v, 3 * sizeof(float)); break;
+    case 4: std::memmove(out, v->_vec->v, 4 * sizeof(float)); break;
+    }
+    return true;
+}
+static bool WriteVecN(INeoVMWorker* worker, VarInfo* value, const float* data, int dimension)
+{
+    if (!worker || !value || !data || dimension < 2 || dimension > 4) return false;
+    // 인자를 먼저 읽으므로 쓰기 대상의 이전 저장소가 해제되어도 입력이 유효하다.
+    switch (dimension) {
+    case 2: worker->Var_SetVec2(value, data[0], data[1]); break;
+    case 3: worker->Var_SetVec3(value, data[0], data[1], data[2]); break;
+    case 4: worker->Var_SetVec4(value, data[0], data[1], data[2], data[3]); break;
+    }
+    return true;
+}
 static void ReadVec(VarInfo* v, float out[4])
 {
     if (!v || v->GetType() != VAR_VEC) { out[0] = out[1] = out[2] = out[3] = 0.0f; return; }
@@ -1614,6 +1635,7 @@ StringView CallContext::argString(std::size_t i) const
     const char* s=c->worker->PopString(v); return StringView(s?s:"");
 }
 void CallContext::argVec(std::size_t i, float out[4]) const { CallContextImpl* c=Ctx(m_impl); ReadVec(CtxArgVar(c,i), out); }
+bool CallContext::argVec(std::size_t i, float* out, int dimension) const { return m_impl && ReadVecN(CtxArgVar(Ctx(m_impl),i), out, dimension); }
 FunctionHandle CallContext::argFunction(std::size_t i) const
 {
     // 일반 함수는 기존처럼 정수 function index만 든다. 캡처 람다는 ClosureInfo를
@@ -1693,6 +1715,11 @@ void CallContext::retInt(int64_t v) { CallContextImpl* c=Ctx(m_impl); c->worker-
 void CallContext::retFloat(double v) { CallContextImpl* c=Ctx(m_impl); c->worker->Var_SetFloat(CtxRetVar(c), v); }
 void CallContext::retBool(bool v) { CallContextImpl* c=Ctx(m_impl); c->worker->Var_SetBool(CtxRetVar(c), v); }
 void CallContext::retString(StringView v) { CallContextImpl* c=Ctx(m_impl); SetVarString(c->worker, CtxRetVar(c), v); }
+bool CallContext::retVec(const float* data, int dimension)
+{
+    if (!m_impl || !data || dimension < 2 || dimension > 4) return false;
+    CallContextImpl* c=Ctx(m_impl); return WriteVecN(c->worker, CtxRetVar(c), data, dimension);
+}
 void CallContext::retVec2(float x, float y) { CallContextImpl* c=Ctx(m_impl); c->worker->Var_SetVec2(CtxRetVar(c), x, y); }
 void CallContext::retInstanceGlobal(InstanceHandle instance, StringView name)
 {
@@ -1736,11 +1763,19 @@ void CallContext::fail(int32_t code, StringView message)
 // 해제돼도 영원히 회수되지 않는다. 스칼라(int/float/bool)는 alloc 타입이 아니라 해당 없음.
 // (Resource.LoadJson 처럼 키가 수만 개인 경로에서 그대로 수만 개 누수로 드러났다.)
 //==============================================================================
+static NEOS_FORCEINLINE VarInfo* MapInsertKey(MapBuilderImpl* b, StringView key);
 void MapBuilder::setInt(StringView key, int64_t v)    { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetInt(&it, v);   b->map->Insert(std::string(key.data(),key.size()), &it); }
 void MapBuilder::setFloat(StringView key, double v)    { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetFloat(&it, v); b->map->Insert(std::string(key.data(),key.size()), &it); }
 void MapBuilder::setBool(StringView key, bool v)      { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetBool(&it, v);  b->map->Insert(std::string(key.data(),key.size()), &it); }
 void MapBuilder::setString(StringView key, StringView v) { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; SetVarString(b->w, &it, v); b->map->Insert(std::string(key.data(),key.size()), &it); b->w->Var_Release(&it); }
-void MapBuilder::setVec3(StringView key, float x, float y, float z) { MapBuilderImpl* b=static_cast<MapBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetVec3(&it, x, y, z); b->map->Insert(std::string(key.data(),key.size()), &it); b->w->Var_Release(&it); }
+void MapBuilder::setVec2(StringView key, float x, float y) { auto* b=static_cast<MapBuilderImpl*>(m_impl); if (auto* slot=MapInsertKey(b,key)) b->w->Var_SetVec2(slot,x,y); }
+void MapBuilder::setVec3(StringView key, float x, float y, float z) { auto* b=static_cast<MapBuilderImpl*>(m_impl); if (auto* slot=MapInsertKey(b,key)) b->w->Var_SetVec3(slot,x,y,z); }
+void MapBuilder::setVec4(StringView key, float x, float y, float z, float w) { auto* b=static_cast<MapBuilderImpl*>(m_impl); if (auto* slot=MapInsertKey(b,key)) b->w->Var_SetVec4(slot,x,y,z,w); }
+bool MapBuilder::setVec(StringView key, const float* data, int dimension)
+{
+    if (!m_impl || !data || dimension < 2 || dimension > 4) return false;
+    auto* b=static_cast<MapBuilderImpl*>(m_impl); return WriteVecN(b->w,MapInsertKey(b,key),data,dimension);
+}
 static NEOS_FORCEINLINE VarInfo* MapInsertKey(MapBuilderImpl* b, StringView key)
 {
     VarInfo k; b->w->Var_SetStringA(&k, std::string(key.data(), key.size()));
@@ -1767,6 +1802,20 @@ void ListBuilder::pushFloat(double v)    { ListBuilderImpl* b=static_cast<ListBu
 void ListBuilder::pushBool(bool v)      { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetBool(&it, v);  b->list->InsertLast(&it); }
 void ListBuilder::pushNull() { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->list->InsertLast(&it); }
 void ListBuilder::pushString(StringView v) { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; SetVarString(b->w, &it, v); b->list->InsertLast(&it); b->w->Var_Release(&it); }
+bool ListBuilder::pushVec(const float* data, int dimension)
+{
+    if (!m_impl || !data || dimension < 2 || dimension > 4) return false;
+    auto* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo value;
+    WriteVecN(b->w,&value,data,dimension); const bool ok=b->list->InsertLast(&value); b->w->Var_Release(&value); return ok;
+}
+bool ListBuilder::setVec(int index, const float* data, int dimension)
+{
+    if (!m_impl || !data || dimension < 2 || dimension > 4) return false;
+    auto* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo* value=b->list->GetValue(index);
+    return value && WriteVecN(b->w,value,data,dimension);
+}
+void ListBuilder::pushVec2(float x, float y) { auto* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo value; b->w->Var_SetVec2(&value,x,y); b->list->InsertLast(&value); b->w->Var_Release(&value); }
+void ListBuilder::pushVec4(float x, float y, float z, float w) { auto* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo value; b->w->Var_SetVec4(&value,x,y,z,w); b->list->InsertLast(&value); b->w->Var_Release(&value); }
 void ListBuilder::pushVec3(float x, float y, float z) { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetVec3(&it, x, y, z); b->list->InsertLast(&it); b->w->Var_Release(&it); }
 void ListBuilder::setInt(int index, int64_t v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetInt(&it, v);   b->list->SetValue(index, &it); }
 void ListBuilder::setFloat(int index, double v)    { ListBuilderImpl* b=static_cast<ListBuilderImpl*>(m_impl); VarInfo it; b->w->Var_SetFloat(&it, v); b->list->SetValue(index, &it); }
@@ -1826,6 +1875,7 @@ bool MapReader::getFloat(StringView key, double& out) const { const MapReaderImp
 bool MapReader::getBool(StringView key, bool& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v) return false; out=r->w->PopBool(v); return true; }
 bool MapReader::getString(StringView key, StringView& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v||v->GetType()!=VAR_STRING) return false; out=StringView(v->_str->_str); return true; }
 bool MapReader::getVec(StringView key, float out[4]) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v) return false; ReadVec(v,out); return v->IsVector(); }
+bool MapReader::getVec(StringView key, float* out, int dimension) const { return m_impl && ReadVecN(MapFind(static_cast<const MapReaderImpl*>(m_impl),key),out,dimension); }
 bool MapReader::getMap(StringView key, MapReader& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v||v->GetType()!=VAR_MAP||!v->_tbl) return false; r->mpool->push_back(MapReaderImpl{r->w,v->_tbl,r->mpool,r->lpool}); out=NeoScriptInternal::mapR(&r->mpool->back()); return true; }
 bool MapReader::getList(StringView key, ListReader& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v||v->GetType()!=VAR_LIST||!v->_lst) return false; r->lpool->push_back(ListReaderImpl{r->w,v->_lst,r->mpool,r->lpool}); out=NeoScriptInternal::listR(&r->lpool->back()); return true; }
 bool MapReader::getArray(StringView key, ArrayView& out) const { const MapReaderImpl* r=static_cast<const MapReaderImpl*>(m_impl); VarInfo* v=MapFind(r,key); if(!v||v->GetType()!=VAR_ARRAY||!v->_array) return false; out=NeoScriptInternal::arrayV(v->_array); return true; }
@@ -1839,6 +1889,7 @@ bool ListReader::getFloat(int index, double& out) const { const ListReaderImpl* 
 bool ListReader::getBool(int index, bool& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v) return false; out=r->w->PopBool(v); return true; }
 bool ListReader::getString(int index, StringView& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v||v->GetType()!=VAR_STRING) return false; out=StringView(v->_str->_str); return true; }
 bool ListReader::getVec(int index, float out[4]) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v) return false; ReadVec(v,out); return v->IsVector(); }
+bool ListReader::getVec(int index, float* out, int dimension) const { return m_impl && ReadVecN(static_cast<const ListReaderImpl*>(m_impl)->list->GetValue(index),out,dimension); }
 bool ListReader::getMap(int index, MapReader& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v||v->GetType()!=VAR_MAP||!v->_tbl) return false; r->mpool->push_back(MapReaderImpl{r->w,v->_tbl,r->mpool,r->lpool}); out=NeoScriptInternal::mapR(&r->mpool->back()); return true; }
 bool ListReader::getList(int index, ListReader& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v||v->GetType()!=VAR_LIST||!v->_lst) return false; r->lpool->push_back(ListReaderImpl{r->w,v->_lst,r->mpool,r->lpool}); out=NeoScriptInternal::listR(&r->lpool->back()); return true; }
 bool ListReader::getArray(int index, ArrayView& out) const { const ListReaderImpl* r=static_cast<const ListReaderImpl*>(m_impl); VarInfo* v=r->list->GetValue(index); if(!v||v->GetType()!=VAR_ARRAY||!v->_array) return false; out=NeoScriptInternal::arrayV(v->_array); return true; }
@@ -1875,6 +1926,12 @@ bool ArrayView::getVec(int index, float out[4]) const
     if (!a || !a->VectorDimension() || !a->IsValidIndex(index)) return false;
     std::copy_n(a->VectorAt(index), a->VectorDimension(), out);
     return true;
+}
+bool ArrayView::getVec(int index, float* out, int dimension) const
+{
+    auto* a=static_cast<const ArrayInfo*>(m_impl);
+    if (!out || dimension < 2 || dimension > 4 || !a || a->VectorDimension() < dimension || !a->IsValidIndex(index)) return false;
+    std::memmove(out,a->VectorAt(index),size_t(dimension)*sizeof(float)); return true;
 }
 bool ArrayView::setVec(int index, const float* components, int dimension) const
 {
@@ -1930,6 +1987,13 @@ Invocation& Invocation::argInt(int64_t v)    { if (InvArmed(m_impl, m_seq)){ Ins
 Invocation& Invocation::argFloat(double v)    { if (InvArmed(m_impl, m_seq)){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetFloat(&i->callArgs.back(), v); } return *this; }
 Invocation& Invocation::argBool(bool v)      { if (InvArmed(m_impl, m_seq)){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetBool(&i->callArgs.back(), v); } return *this; }
 Invocation& Invocation::argString(StringView v) { if (InvArmed(m_impl, m_seq)){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); SetVarString(i->worker, &i->callArgs.back(), v); } return *this; }
+bool Invocation::argVec(const float* data, int dimension)
+{
+    if (!InvArmed(m_impl,m_seq) || !data || dimension < 2 || dimension > 4) return false;
+    auto* i=Inv(m_impl); i->callArgs.emplace_back(); return WriteVecN(i->worker,&i->callArgs.back(),data,dimension);
+}
+Invocation& Invocation::argVec2(float x, float y) { if (InvArmed(m_impl,m_seq)) { auto* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetVec2(&i->callArgs.back(),x,y); } return *this; }
+Invocation& Invocation::argVec4(float x, float y, float z, float w) { if (InvArmed(m_impl,m_seq)) { auto* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetVec4(&i->callArgs.back(),x,y,z,w); } return *this; }
 Invocation& Invocation::argVec3(float x, float y, float z) { if (InvArmed(m_impl, m_seq)){ InstanceRec* i=Inv(m_impl); i->callArgs.emplace_back(); i->worker->Var_SetVec3(&i->callArgs.back(), x, y, z); } return *this; }
 Invocation& Invocation::argObject(ObjectType type, void* userData)
 {
@@ -2069,6 +2133,7 @@ StringView Invocation::retString() const {
     const char* text=Inv(m_impl)->worker->PopString(v); return StringView(text?text:"");
 }
 void Invocation::retVec(float out[4]) const { ReadVec(InvReturn(m_impl,m_seq), out); }
+bool Invocation::retVec(float* out, int dimension) const { return ReadVecN(InvReturn(m_impl,m_seq),out,dimension); }
 bool Invocation::retMap(MapReader& out) const
 {
     if(!m_impl) return false; InstanceRec* i=Inv(m_impl); VarInfo* rv=InvReturn(m_impl,m_seq);
@@ -2091,6 +2156,13 @@ bool Invocation::retArray(ArrayView& out) const
 }
 
 // 안전 반환: 스칼라를 값으로 스냅샷 → 컨텍스트 즉시 반납(리더 안 남김). Invocation 수명/다음 Call 과 무관.
+bool CallResult::asVec(float* out, int dimension) const noexcept
+{
+    const int actual=m_type==ValueType::Vec2?2:m_type==ValueType::Vec3?3:m_type==ValueType::Vec4?4:0;
+    if (!out || dimension < 2 || dimension > 4 || actual < dimension) return false;
+    std::memmove(out,m_f,size_t(dimension)*sizeof(float)); return true;
+}
+
 CallResult Invocation::invokeR()
 {
     CallResult r;
@@ -2108,16 +2180,16 @@ CallResult Invocation::invokeR()
                 NeoScriptInternal::setResult(r, vt, 0, nullptr, StringView(rv->_str->_str));
             else
             {
-                float f4[4] = { 0, 0, 0, 0 }; int64_t iv = 0; double scalar = 0;
+                const VarInfo* vector = nullptr; int64_t iv = 0; double scalar = 0;
                 switch (vt)
                 {
                 case ValueType::Bool:  iv = i->worker->PopBool(rv) ? 1 : 0; scalar = static_cast<double>(iv); break;
                 case ValueType::Int:   iv = i->worker->PopInt(rv);          scalar = static_cast<double>(iv); break;
                 case ValueType::Float: scalar = i->worker->PopFloat(rv); iv = NeoFloatToInt(scalar); break;
-                case ValueType::Vec2: case ValueType::Vec3: case ValueType::Vec4: ReadVec(rv, f4); scalar = f4[0]; break;
+                case ValueType::Vec2: case ValueType::Vec3: case ValueType::Vec4: vector = rv; scalar = rv->_vec->v[0]; break;
                 default: break; // None/Map/List → 스칼라 없음
                 }
-                NeoScriptInternal::setResult(r, vt, iv, f4, StringView(), scalar);
+                NeoScriptInternal::setResult(r, vt, iv, vector, StringView(), scalar);
             }
         }
         if (i->pendingSeq == m_seq) i->runtime->FlushPendingCall(i);     // 스냅샷 완료 → 컨텍스트 즉시 반납
