@@ -73,13 +73,13 @@ NEOS_FORCEINLINE bool CNeoVMWorker::VecComponentOp(VarInfo* pClt, VarInfo* pKey,
 	if (op == NOP_TABLE_PERSENT2 || pValue->IsNumber() == false)
 	{
 		VarInfo component;
-		Var_SetFloat(&component, pClt->_vec->v[pKey->_int]);
+		Var_SetFloat(&component, pClt->VectorComponent(static_cast<int>(pKey->_int)));
 		SetErrorOperator(op == NOP_TABLE_ADD2 ? "+=" : op == NOP_TABLE_SUB2 ? "-=" : op == NOP_TABLE_MUL2 ? "*=" :
 			op == NOP_TABLE_DIV2 ? "/=" : "%=", &component, pValue);
 		return false;
 	}
 	const float s = (float)pValue->GetFloatNumber();
-	float& c = VecWritable(pClt)->v[pKey->_int];
+	float& c = WritableVectorComponent(pClt, static_cast<int>(pKey->_int));
 	switch (op)
 	{
 	case NOP_TABLE_ADD2: c += s; break;
@@ -136,15 +136,15 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 			return;
 		}
 	}
-	else if (t == VAR_VEC)
+	else if (pClt->IsVector())
 	{
-		// v[i] = x. 공유 중이면 VecWritable 이 복제한다(값 의미론).
+		// v[i] = x. 인라인 성분은 직접 쓰고 공유 중인 4성분 저장소만 복제한다.
 		if (pKey->GetType() == VAR_INT && pValue->IsNumber())
 		{
 			NS_UINT idx = (NS_UINT)pKey->_int;
 			if (idx < (unsigned)pClt->VectorComponentCount())
 			{
-				VecWritable(pClt)->v[idx] = (float)pValue->GetFloatNumber();
+				WritableVectorComponent(pClt, static_cast<int>(idx)) = (float)pValue->GetFloatNumber();
 				if (write && (write->argFlag & NEOS_OP_REF_WRITE)) CommitRefVector(pClt);
 				return;
 			}
@@ -185,14 +185,14 @@ NEOS_NOINLINE void CNeoVMWorker::CltInsertRare(VarInfo* pClt, VarInfo* pKey, Var
 	switch (pClt->GetType())
 	{
 	case VAR_VEC:
-		// 가변 성분 쓰기: v[i] = x. 저장소를 공유 중이면 여기서 복제해서(copy-on-write)
-		// 이 VarInfo 인스턴스에만 반영되게 한다 — 값 의미론 유지.
+	case VAR_VEC4:
+		// 가변 성분 쓰기: 인라인 값은 직접 수정하고 4성분 벡터만 COW로 분리한다.
 		if (pKey->GetType() == VAR_INT && pValue->IsNumber())
 		{
 			NS_UINT idx = (NS_UINT)pKey->_int;
 			if (idx < (unsigned)pClt->VectorComponentCount())
 			{
-				GetVM()->VecCopyOnWrite(pClt)->v[idx] = (float)pValue->GetFloatNumber();
+				WritableVectorComponent(pClt, static_cast<int>(idx)) = (float)pValue->GetFloatNumber();
 				return;
 			}
 		}
@@ -397,7 +397,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 			return;
 		}
 	}
-	else if (t == VAR_VEC)
+	else if (pClt->IsVector())
 	{
 		// v[i] 읽기. 범위 밖이거나 정수 인덱스가 아니면 그대로 떨어뜨려 rare 가 에러를 낸다.
 		if (pKey->GetType() == VAR_INT)
@@ -405,7 +405,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltRead(VarInfo* pClt, VarInfo* pKey, VarInf
 			NS_UINT idx = (NS_UINT)pKey->_int;
 			if (idx < (unsigned)pClt->VectorComponentCount())
 			{
-				Var_SetFloat(pValue, pClt->_vec->v[idx]);
+				Var_SetFloat(pValue, pClt->VectorComponent(static_cast<int>(idx)));
 				return;
 			}
 		}
@@ -470,9 +470,9 @@ NEOS_FORCEINLINE bool CNeoVMWorker::ReadArrayOrVectorElement(VarInfo* owner, Var
 		default: return false;
 		}
 	}
-	if (type == VAR_VEC && (NS_UINT)key->_int < (unsigned)owner->VectorComponentCount())
+	if (owner->IsVector() && (NS_UINT)key->_int < (unsigned)owner->VectorComponentCount())
 	{
-		value.SetType(VAR_FLOAT); value._float = owner->_vec->v[key->_int];
+		value.SetType(VAR_FLOAT); value._float = owner->VectorComponent(static_cast<int>(key->_int));
 		return true;
 	}
 	return false;
@@ -571,12 +571,13 @@ NEOS_NOINLINE void CNeoVMWorker::CltReadRare(VarInfo* pClt, VarInfo* pKey, VarIn
 	switch (pClt->GetType())
 	{
 	case VAR_VEC:
+	case VAR_VEC4:
 		if (pKey->GetType() == VAR_INT)
 		{
 			NS_UINT idx = (NS_UINT)pKey->_int;
 			if (idx < (unsigned)pClt->VectorComponentCount())
 			{
-				Var_SetFloat(pValue, pClt->_vec->v[idx]);
+				Var_SetFloat(pValue, pClt->VectorComponent(static_cast<int>(idx)));
 				return;
 			}
 		}
@@ -820,35 +821,52 @@ NEOS_FORCEINLINE void CNeoVMWorker::Or(VarInfo* r, VarInfo* v1, VarInfo* v2)
 	}
 	SetErrorOperator("|", v1, v2);
 }
+NEOS_FORCEINLINE float VectorArithmeticComponent(float a, float b, int op)
+{
+	return op == 0 ? a + b : op == 1 ? a - b : op == 2 ? a * b : a / b;
+}
+
 NEOS_FORCEINLINE bool CNeoVMWorker::VecArith(VarInfo* r, VarInfo* v1, VarInfo* v2, int op)
 {
 	// 쿼터니언은 별도 타입이 아니다 — 4성분 벡터의 성분별 연산으로 동작하며,
 	// 회전 의미를 원하면 사용자가 math.RotateVectorByQuat 를 쓴다.
-	const int n = v1->VectorComponentCount();
-	float tmp[4];
-	// 성분 수가 같아야 성분별 연산이다(vec2 + vec3 는 거부).
-	if (v2->IsVector() && v2->VectorComponentCount() == n)
+	// 저장 방식은 연산 진입 시 한 번만 구분한다. 성분마다 포인터/인라인을 분기하지 않는다.
+	if (v1->GetType() == VAR_VEC)
 	{
-		// Vec op Vec : 성분별
-		for (int i = 0; i < n; i++)
+		const int n = v1->_vecCount;
+		float bx, by, bz;
+		if (v2->GetType() == VAR_VEC && v2->_vecCount == n)
 		{
-			float a = v1->_vec->v[i], b = v2->_vec->v[i];
-			tmp[i] = (op == 0) ? a + b : (op == 1) ? a - b : (op == 2) ? a * b : a / b;
+			bx = v2->_vecXY[0]; by = v2->_vecXY[1]; bz = v2->_vecZ;
 		}
+		else if ((op == 2 || op == 3) && v2->IsNumber())
+			bx = by = bz = (float)v2->GetFloatNumber();
+		else
+			return false;
+		const float x = VectorArithmeticComponent(v1->_vecXY[0], bx, op);
+		const float y = VectorArithmeticComponent(v1->_vecXY[1], by, op);
+		const float z = n == 3 ? VectorArithmeticComponent(v1->_vecZ, bz, op) : 0.0f;
+		// 결과를 먼저 계산하므로 r이 어느 입력과 같아도 안전하게 덮어쓸 수 있다.
+		if (r->IsAllocType()) Var_Release(r);
+		r->SetInlineVec(n, x, y, z);
+		return true;
+	}
+	float tmp[4];
+	if (v2->GetType() == VAR_VEC4)
+	{
+		for (int i = 0; i < 4; ++i)
+			tmp[i] = VectorArithmeticComponent(v1->_vec->v[i], v2->_vec->v[i], op);
 	}
 	else if ((op == 2 || op == 3) && v2->IsNumber())
 	{
-		// Vec * scalar, Vec / scalar
-		float s = (float)v2->GetFloatNumber();
-		for (int i = 0; i < n; i++)
-			tmp[i] = (op == 2) ? v1->_vec->v[i] * s : v1->_vec->v[i] / s;
+		const float s = (float)v2->GetFloatNumber();
+		for (int i = 0; i < 4; ++i)
+			tmp[i] = VectorArithmeticComponent(v1->_vec->v[i], s, op);
 	}
 	else
 		return false;
-	// tmp 로 먼저 계산했으므로 r == v1 (a = a + b) 도 안전
-	VecInfo* p = VecStoreFor(r, n);
-	for (int i = 0; i < n; i++)
-		p->v[i] = tmp[i];
+	VecInfo* p = Vec4StoreFor(r);
+	std::memcpy(p->v, tmp, sizeof(tmp));
 	return true;
 }
 static_assert(VAR_INT == 0 && VAR_FLOAT == 1, "arithmetic fast paths assume VAR_INT == 0 and VAR_FLOAT == 1");
@@ -896,6 +914,9 @@ NEOS_NOINLINE void CNeoVMWorker::Add3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
 	{
+	case VAR_VEC:
+		if (VecArith(r, v1, v2, 0)) return;
+		break;
 	case VAR_STRING:
 		if (v2->GetType() == VAR_STRING)
 		{
@@ -904,7 +925,7 @@ NEOS_NOINLINE void CNeoVMWorker::Add3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 			return;
 		}
 		break;
-	case VAR_VEC:
+	case VAR_VEC4:
 		if (VecArith(r, v1, v2, 0)) return;
 		break;
 	case VAR_LIST:
@@ -943,9 +964,12 @@ NEOS_NOINLINE void CNeoVMWorker::Sub3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
 	{
+	case VAR_VEC:
+		if (VecArith(r, v1, v2, 1)) return;
+		break;
 	case VAR_STRING:
 		break;
-	case VAR_VEC:
+	case VAR_VEC4:
 		if (VecArith(r, v1, v2, 1)) return;
 		break;
 	case VAR_LIST:
@@ -984,9 +1008,12 @@ NEOS_NOINLINE void CNeoVMWorker::Mul3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
 	{
+	case VAR_VEC:
+		if (VecArith(r, v1, v2, 2)) return;
+		break;
 	case VAR_STRING:
 		break;
-	case VAR_VEC:
+	case VAR_VEC4:
 		if (VecArith(r, v1, v2, 2)) return;
 		break;
 	case VAR_LIST:
@@ -1045,9 +1072,12 @@ NEOS_NOINLINE void CNeoVMWorker::Div3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	switch (v1->GetType())
 	{
+	case VAR_VEC:
+		if (VecArith(r, v1, v2, 3)) return;
+		break;
 	case VAR_STRING:
 		break;
-	case VAR_VEC:
+	case VAR_VEC4:
 		if (VecArith(r, v1, v2, 3)) return;
 		break;
 	case VAR_LIST:
@@ -1310,11 +1340,13 @@ NEOS_NOINLINE bool CNeoVMWorker::CompareEQRare(VarInfo* v1, VarInfo* v2)
 		if (v2->GetType() == VAR_NONE)
 			return true;
 		break;
+	case VAR_VEC:
+		return VectorValuesEqual(v1, v2);
 	case VAR_STRING:
 		if (v2->GetType() == VAR_STRING)
 			return v1->_str->_str == v2->_str->_str;
 		break;
-	case VAR_VEC:
+	case VAR_VEC4:
 		return VectorValuesEqual(v1, v2);
 	default:
 		return ReferenceEquals(v1, v2);

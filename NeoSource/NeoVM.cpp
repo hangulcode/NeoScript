@@ -111,7 +111,7 @@ void CNeoVM::Var_ReleaseInternal(VarInfo* d)
 			FreeString(d);
 		d->_str = NULL;
 		break;
-	case VAR_VEC:
+	case VAR_VEC4:
 		if (--d->_vec->_refCount <= 0)
 			FreeVec(d->_vec);
 		d->_vec = NULL;
@@ -276,26 +276,26 @@ bool VarInfo::SetListIndexer(VMHash<int>* pIndexer)
 // 성공/실패 모두 요청한 성분까지만 쓴다 — 남는 레인은 호출자 몫이다.
 bool VarInfo::GetVec2(float out[2])
 {
-	if (IsVector() && VectorComponentCount() >= 2) { out[0] = _vec->v[0]; out[1] = _vec->v[1]; return true; }
+	if (IsVector() && VectorComponentCount() >= 2) { out[0] = VectorComponent(0); out[1] = VectorComponent(1); return true; }
 	out[0] = out[1] = 0.0f;
 	return false;
 }
 bool VarInfo::GetVec3(float out[3])
 {
-	if (IsVector() && VectorComponentCount() >= 3) { out[0] = _vec->v[0]; out[1] = _vec->v[1]; out[2] = _vec->v[2]; return true; }
+	if (IsVector() && VectorComponentCount() >= 3) { out[0] = VectorComponent(0); out[1] = VectorComponent(1); out[2] = VectorComponent(2); return true; }
 	out[0] = out[1] = out[2] = 0.0f;
 	return false;
 }
 bool VarInfo::GetVec4(float out[4])
 {
-	if (IsVector() && VectorComponentCount() >= 4) { out[0] = _vec->v[0]; out[1] = _vec->v[1]; out[2] = _vec->v[2]; out[3] = _vec->v[3]; return true; }
+	if (IsVector() && VectorComponentCount() >= 4) { out[0] = VectorComponent(0); out[1] = VectorComponent(1); out[2] = VectorComponent(2); out[3] = VectorComponent(3); return true; }
 	out[0] = out[1] = out[2] = out[3] = 0.0f;
 	return false;
 }
 bool VarInfo::GetQuat(float out[4])
 {
 	// wxyz 순서 (엔진 컨벤션). 저장이 v[0]=w,[1]=x,[2]=y,[3]=z 라 GetVec4 와 복사 순서는 같다.
-	if (IsVector() && VectorComponentCount() >= 4) { out[0] = _vec->v[0]; out[1] = _vec->v[1]; out[2] = _vec->v[2]; out[3] = _vec->v[3]; return true; }
+	if (IsVector() && VectorComponentCount() >= 4) { out[0] = VectorComponent(0); out[1] = VectorComponent(1); out[2] = VectorComponent(2); out[3] = VectorComponent(3); return true; }
 	out[0] = out[1] = out[2] = out[3] = 0.0f;
 	return false;
 }
@@ -887,21 +887,44 @@ void CNeoVM::FreeVec(VecInfo* p)
 	--m_sAllocStats.vectors;
 	m_sPool_Vec.Confer(p);
 }
-// 벡터 원소 읽기의 드문 경로(ReadVector 가 저장소를 재사용하지 못할 때). 성분을 먼저 지역에 옮긴다 —
-// out 이 이 배열의 마지막 참조일 수 있어(a = a[0]) out 을 해제한 뒤에는 배열을 다시 건드리지 않는다.
+// 4성분만 공유 저장소를 보유한다. 나머지 벡터는 일반 값 복사다.
+void ArrayInfo::AssignVectorRare(int index, VarInfo* value)
+{
+	_pVM->Move(&VectorValues()[index], value);
+}
+void ArrayInfo::RetainInitialVector(const VarInfo& value)
+{
+	_initialVector = value;
+	if (_initialVector.GetType() == VAR_VEC4) ++_initialVector._vec->_refCount;
+}
+void ArrayInfo::ReleaseVectorRange(int begin, int end)
+{
+	for (int i = begin; i < end; ++i) _pVM->Var_Release(&VectorValues()[i]);
+}
+void ArrayInfo::FreeVectors()
+{
+	ReleaseVectorRange(0, _count);
+	_pVM->Var_Release(&_initialVector);
+}
 void ArrayInfo::ReadVectorRare(int index, VarInfo* out)
 {
-	CNeoVM* vm = _pVM;
-	const int n = VectorDimension();
-	float tmp[kVectorStride];
-	memcpy(tmp, VectorAt(index), sizeof(tmp));
-	if (out->IsAllocType())
-		vm->Var_Release(out);
-	VecInfo* p = vm->VecAlloc();
-	p->_refCount = 1;
-	out->SetVecType(n);
-	out->_vec = p;
-	memcpy(p->v, tmp, sizeof(tmp));
+	// a = a[0]이면 out 해제와 동시에 이 배열도 파괴된다. 먼저 원소 소유권을 확보한다.
+	VarInfo value = VectorValues()[index];
+	if (value.GetType() == VAR_VEC4) ++value._vec->_refCount;
+	_pVM->Var_Release(out);
+	*out = value;
+}
+bool ArrayInfo::SetVectorComponents(int index, const float* components, int dimension)
+{
+	if (!components || !IsValidIndex(index) || !VectorDimension() || dimension != VectorDimension())
+		return false;
+	// 입력이 기존 원소의 일부를 가리켜도 COW나 덮어쓰기 전에 읽기를 끝낸다.
+	float copy[4] = {};
+	std::memcpy(copy, components, dimension * sizeof(float));
+	VarInfo* value = &VectorValues()[index];
+	if (dimension < 4) value->SetInlineVec(dimension, copy[0], copy[1], copy[2]);
+	else std::memcpy(_pVM->VecCopyOnWrite(value)->v, copy, sizeof(copy));
+	return true;
 }
 ArrayInfo* CNeoVM::ArrayAlloc(NeoArrayElementType elementType, int count, const VarInfo& initialValue)
 {

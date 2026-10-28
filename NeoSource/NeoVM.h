@@ -144,6 +144,8 @@ enum VAR_TYPE : u8
 	VAR_FUN_NATIVE,
 	// Non-owning temporary, confined to the atomic chained-write handler.
 	VAR_REF,
+	// 2·3성분 벡터는 슬롯 안에 직접 보관하는 비할당 값이다.
+	VAR_VEC,
 
 	// =====================================================================
 	// 여기부터 alloc 타입 — IsAllocType() == (_type >= VAR_STRING)
@@ -163,16 +165,8 @@ enum VAR_TYPE : u8
 	// 순환 참조의 당사자가 될 수 없고, 해제가 다른 객체로 내려가지 않는다.
 	VAR_STRING,
 
-	// 벡터 값타입 (alloc: VecInfo 를 풀에서 받아 refcount 로 공유).
-	// alloc 구간에 두는 이유 — 성분 4개를 VarInfo 유니온에 인라인하면 VarInfo 가
-	// 16→24바이트가 되어 스택/리스트/맵 엔트리(MapData) 전체가 50% 커진다(실측: map_str
-	// -12%, particles -13%). 값 의미론은 copy-on-write 로 보존한다(VecCopyOnWrite).
-	//
-	// 성분 수(1~4)는 타입이 아니라 VarInfo::_vecCount 가 들고 있다. 쿼터니언도 별도 타입이
-	// 아니다 — 저장은 4성분이고 wxyz 해석은 사용자 규약이라 VM 이 구분할 이유가 없다.
-	//
-	// 성분은 float 뿐이라 리프다.
-	VAR_VEC,
+	// 4성분 벡터·쿼터니언만 풀 저장소를 공유하고 쓰기 시 복제한다.
+	VAR_VEC4,
 
 	// 네이티브 Function/Property 객체. map 저장소를 갖지 않는 독립 alloc 타입이다.
 	// _pUserData 는 호스트 소유의 불투명 포인터라 VM 관점에서는 리프다.
@@ -212,7 +206,7 @@ enum VAR_TYPE : u8
 // 순전히 열거 순서라서, 주석만 두면 다음 사람이 구간 사이에 새 타입을 끼워 넣는다.
 // 새 타입은 반드시 해당 구간의 **끝**에 추가할 것.
 static_assert(VAR_ARRAY + 1 == VAR_MAP, "VAR_TYPE: 리프 alloc 구간 바로 뒤에 컨테이너 구간이 와야 한다");
-static_assert(VAR_REF + 1 == VAR_STRING, "VAR_REF must remain non-owning");
+static_assert(VAR_VEC + 1 == VAR_STRING, "VAR_VEC must remain non-owning");
 static_assert(VAR_MAP < VAR_CLOSURE, "VAR_TYPE: 컨테이너 구간이 열거 맨 뒤여야 한다");
 
 struct SNeoVMAllocStats
@@ -254,7 +248,7 @@ struct MapNode;
 struct SetNode;
 struct VecInfo;
 
-// system.array의 원소 형식. bool은 비트, int/float은 원시 배열, 벡터는 VAR_VEC 값으로 저장한다.
+// system.array의 원소 형식. bool은 비트, int/float은 원시 배열, 벡터는 VarInfo 원소로 저장한다.
 enum class NeoArrayElementType : u8
 {
 	Bool,
@@ -329,12 +323,17 @@ struct VarInfo
 {
 private:
 	VAR_TYPE	_type;
-	// VAR_VEC 의 성분 수(1~4). _type 뒤 정렬 패딩을 쓰므로 VarInfo 크기를
-	// 늘리지 않는다. 정수 유니온의 정렬 패딩을 쓰며 설정은 VecStoreFor() 한 곳뿐이고,
-	// 복사는 Move_DestNoRelease 가 _vec 과 함께 옮긴다.
-	u8			_vecCount;
+	// 앞쪽 8바이트에 타입·성분 수·z, 뒤쪽 8바이트에 x/y 또는 일반 값을 둔다.
+	// float[3]을 기존 union에 넣으면 정렬 때문에 슬롯이 24바이트가 되므로 분리한다.
+	u8 _vecCount;
+	float _vecZ;
 	NEOS_FORCEINLINE void SetType(VAR_TYPE t) { _type = t; }
-	NEOS_FORCEINLINE void SetVecType(int count) { _type = VAR_VEC; _vecCount = (u8)count; }
+	NEOS_FORCEINLINE void SetVecType(int count) { _type = count == 4 ? VAR_VEC4 : VAR_VEC; _vecCount = (u8)count; }
+	NEOS_FORCEINLINE void SetInlineVec(int count, float x, float y, float z)
+	{
+		SetVecType(count); _vecXY[0] = x; _vecXY[1] = y; _vecZ = z;
+	}
+
 	NEOS_FORCEINLINE void ClearType()
 	{
 		_type = VAR_NONE;
@@ -368,7 +367,8 @@ public:
 		AsyncInfo*	_async;
 		ClosureInfo*	_closure;
 		CollectionIterator	_it;
-		VecInfo*	_vec; // VAR_VEC 성분(유효 성분 수는 _vecCount)
+		VecInfo*	_vec; // VAR_VEC4 전용 공유 저장소
+		float _vecXY[2]; // VAR_VEC의 x/y. z는 타입 영역 뒤에 둔다.
 		ArrayInfo*	_array; // VAR_ARRAY 밀집 원시 배열
 		VarInfo* _ref; // VAR_REF: never stored in script values
 	};
@@ -400,15 +400,17 @@ public:
 	{
 		return (VAR_INT == _type || VAR_FLOAT == _type);
 	}
-	NEOS_FORCEINLINE bool IsVector()
+	NEOS_FORCEINLINE bool IsVector() const
 	{
-		return (_type == VAR_VEC);
+		return (_type == VAR_VEC || _type == VAR_VEC4);
 	}
-	// VAR_VEC 일 때만 유효. 다른 타입에서는 값이 의미 없으므로 IsVector() 로 먼저 거른다.
+	// 벡터가 아니면 0. 내부 저장 방식과 무관하게 같은 성분 수를 돌려준다.
 	NEOS_FORCEINLINE int VectorComponentCount() const
 	{
-		return (_type == VAR_VEC) ? _vecCount : 0;
+		return IsVector() ? _vecCount : 0;
 	}
+	NEOS_FORCEINLINE float VectorComponent(int index) const;
+	NEOS_FORCEINLINE void CopyVectorComponents(float* out) const;
 	NEOS_FORCEINLINE NS_FLOAT GetFloatNumber()
 	{
 		if (VAR_INT == _type) return (NS_FLOAT)_int;
@@ -425,7 +427,7 @@ public:
 
 	// 벡터 Get (호스트/엔진용). VAR_VEC* 전용 — 리스트 폴백 없음.
 	// Quaternion 은 엔진 컨벤션대로 wxyz 순서, Vector4 는 xyzw.
-	// Set 은 여기 없다: 벡터가 alloc 타입이라 저장소를 만들려면 VM(풀)이 필요하다.
+	// Set 은 이전 값 해제와 4성분 저장소 할당을 위해 VM을 경유한다.
 	// 세팅은 INeoVMWorker::Var_SetVec2/3/4/Quat 를 쓴다.
 	// 성공/실패 모두 해당 성분 수만 쓴다. 남는 레인은 호출자 몫이다.
 	bool GetVec2(float out[2]);
@@ -434,8 +436,8 @@ public:
 	bool GetQuat(float out[4]); // wxyz
 };
 
-// 64비트 정수 유니온과 타입 영역을 포함한다. 정렬이 8바이트면 16, 4바이트면 12바이트다.
-static_assert(sizeof(VarInfo) == sizeof(NS_INT) + alignof(VarInfo), "Unexpected VarInfo size");
+// 모든 플랫폼에서 타입 영역 8바이트 + 값 영역 8바이트를 유지한다.
+static_assert(sizeof(VarInfo) == 16, "VarInfo must remain 16 bytes");
 
 enum NeoDebugStopReason
 {
@@ -674,10 +676,11 @@ public:
 	void Var_SetInt(VarInfo* d, NS_INT v);
 	void Var_SetFloat(VarInfo* d, NS_FLOAT v);
 	void Var_SetBool(VarInfo* d, bool v);
-	// 벡터 저장소 확보. 대상이 이미 단독 소유 벡터면 재사용하고, 아니면 풀에서 새로 받는다.
-	VecInfo*	VecStoreFor(VarInfo* d, int count);
-	VecInfo*	VecWritable(VarInfo* d);
-	// 각 setter는 실제 성분 수만 받거나 저장한다. VecInfo의 남는 레인은 건드리지 않는다.
+	// 4성분 저장소는 단독 소유일 때 재사용한다. 2·3성분은 StoreVector가 직접 저장한다.
+	VecInfo*	Vec4StoreFor(VarInfo* d);
+	void StoreVector(VarInfo* d, int count, float x, float y, float z, float w);
+	float&	WritableVectorComponent(VarInfo* d, int index);
+	// 외부 setter의 인자 수와 벡터 성분 수는 기존과 같다.
 	void Var_SetVec2(VarInfo* d, float x, float y);
 	void Var_SetVec3(VarInfo* d, float x, float y, float z);
 	void Var_SetVec4(VarInfo* d, float x, float y, float z, float w);

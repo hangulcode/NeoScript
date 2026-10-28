@@ -609,11 +609,10 @@ Vector2, Vector3, and Vector4 arrays require values of the exact component count
 `append`. `len()` and `tosize` count vectors. `foreach` yields vector values, so modifying the loop
 variable does not update the array. Component writes (`positions[i][j]`) do update it, using the
 same evaluation order as other container component writes. Whole-vector compound assignment is
-unsupported; use `positions[i] = positions[i] + delta`. Internally, elements are float components
-in one contiguous buffer rather than shared vector values. Reading an element copies its
-components into the destination (reusing the destination's storage when it is not shared, so
-loops that read elements allocate nothing), and writing copies them back; a value read earlier is
-never changed by a later element write. The creation value is kept separately so later growth
+unsupported; use `positions[i] = positions[i] + delta`. Internally, elements are ordinary
+16-byte `VarInfo` values. Vector2/3 components live in the slot, while Vector4 uses shared
+storage with copy-on-write. Reads preserve value semantics, just like vectors in lists.
+Shrinking releases removed values. The creation value is retained separately so later growth
 restores that value even after element writes.
 
 ### Sets: remove duplicates and iterate
@@ -642,7 +641,7 @@ the vector key stored in the set. Calling `values()` during foreach does not inv
 All four collection types provide `clear()` and `clone()`. Clearing changes the existing storage,
 so aliases see an empty collection; capacity is retained. Clearing a nonempty collection during
 foreach invalidates that iterator. Cloning creates independent outer storage; nested collections
-remain shared and vectors keep their copy-on-write value behavior. Self-references still point
+remain shared and vectors keep their value-copy behavior. Self-references still point
 to the original collection. Clones do not promise the source's spare capacity or map/set iteration order.
 
 ```cpp
@@ -928,7 +927,7 @@ print(math.MoveToward(0.0, 10.0, 2.0)); // 2
   by `Get()`. Plain root or index variables are read for the write.
   List/map/vector-array writes may use a temporary internal reference; normal reads and assignment results
   remain values. Copies still stay independent, and native properties retain their getter/setter behavior.
-  WREF pairs with an ordinary write and handles vector write-back; rebuild older compiled scripts and caches for bytecode version 0142 (fused compound-assignment read opcodes, exact float32 immediates widened to double, double scalar constants and 64-bit integers; also required for signed-zero constants, foreach source retention, checked shift folding, and corrected NaN branch behavior).
+  WREF pairs with an ordinary write and handles vector write-back; rebuild older compiled scripts and caches for bytecode version 0143 (inline Vector2/3 storage, fused compound-assignment read opcodes, exact float32 immediates widened to double, double scalar constants and 64-bit integers; also required for signed-zero constants, foreach source retention, checked shift folding, and corrected NaN branch behavior).
 - A compound assignment from a collection element, `x += c[k]` (also `-=`, `*=`, `/=`), executes
   as one `READ_ADD`/`READ_SUB`/`READ_MUL`/`READ_DIV` instruction. Any key expression qualifies,
   including string keys and host properties. Arithmetic keeps its type and evaluation rules and

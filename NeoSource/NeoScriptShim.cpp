@@ -482,9 +482,14 @@ static ValueType VarTypeToValueType(VarInfo* v)
     case VAR_NONE:   return ValueType::None;
     case VAR_FUN:
     case VAR_FUN_NATIVE: return ValueType::Function;
+    case VAR_VEC:
+    {
+        const int n = v->VectorComponentCount();
+        return (n <= 2) ? ValueType::Vec2 : (n == 3 ? ValueType::Vec3 : ValueType::Vec4);
+    }
     case VAR_STRING: return ValueType::String;
     // 성분 수가 곧 타입이다. Quat 은 4성분 벡터와 구분하지 않는다(해석은 호출자 규약).
-    case VAR_VEC:
+    case VAR_VEC4:
     {
         const int n = v->VectorComponentCount();
         return (n <= 2) ? ValueType::Vec2 : (n == 3 ? ValueType::Vec3 : ValueType::Vec4);
@@ -1585,11 +1590,10 @@ static VarInfo* CtxRetVar(CallContextImpl* c)
 static bool ReadVecN(const VarInfo* v, float* out, int dimension)
 {
     if (!out || dimension < 2 || dimension > 4 || !v || v->VectorComponentCount() < dimension) return false;
-    switch (dimension) {
-    case 2: std::memmove(out, v->_vec->v, 2 * sizeof(float)); break;
-    case 3: std::memmove(out, v->_vec->v, 3 * sizeof(float)); break;
-    case 4: std::memmove(out, v->_vec->v, 4 * sizeof(float)); break;
-    }
+    // 작은 출력 버퍼에는 요청한 성분만 쓴다. 원본과 출력이 겹쳐도 먼저 값을 확보한다.
+    float components[4];
+    v->CopyVectorComponents(components);
+    std::memmove(out, components, dimension * sizeof(float));
     return true;
 }
 static bool WriteVecN(INeoVMWorker* worker, VarInfo* value, const float* data, int dimension)
@@ -1605,7 +1609,7 @@ static bool WriteVecN(INeoVMWorker* worker, VarInfo* value, const float* data, i
 }
 static void ReadVec(VarInfo* v, float out[4])
 {
-    if (!v || v->GetType() != VAR_VEC) { out[0] = out[1] = out[2] = out[3] = 0.0f; return; }
+    if (!v || !v->IsVector()) { out[0] = out[1] = out[2] = out[3] = 0.0f; return; }
     switch(v->VectorComponentCount())
     {
         case 2: v->GetVec2(out); out[2] = out[3] = 0.0f; return;
@@ -1924,14 +1928,14 @@ bool ArrayView::getVec(int index, float out[4]) const
     if (!out) return false;
     std::fill_n(out, 4, 0.0f);
     if (!a || !a->VectorDimension() || !a->IsValidIndex(index)) return false;
-    std::copy_n(a->VectorAt(index), a->VectorDimension(), out);
+    a->VectorValues()[index].CopyVectorComponents(out);
     return true;
 }
 bool ArrayView::getVec(int index, float* out, int dimension) const
 {
     auto* a=static_cast<const ArrayInfo*>(m_impl);
     if (!out || dimension < 2 || dimension > 4 || !a || a->VectorDimension() < dimension || !a->IsValidIndex(index)) return false;
-    std::memmove(out,a->VectorAt(index),size_t(dimension)*sizeof(float)); return true;
+    return ReadVecN(a->VectorValues() + index, out, dimension);
 }
 bool ArrayView::setVec(int index, const float* components, int dimension) const
 {
@@ -2186,7 +2190,7 @@ CallResult Invocation::invokeR()
                 case ValueType::Bool:  iv = i->worker->PopBool(rv) ? 1 : 0; scalar = static_cast<double>(iv); break;
                 case ValueType::Int:   iv = i->worker->PopInt(rv);          scalar = static_cast<double>(iv); break;
                 case ValueType::Float: scalar = i->worker->PopFloat(rv); iv = NeoFloatToInt(scalar); break;
-                case ValueType::Vec2: case ValueType::Vec3: case ValueType::Vec4: vector = rv; scalar = rv->_vec->v[0]; break;
+                case ValueType::Vec2: case ValueType::Vec3: case ValueType::Vec4: vector = rv; scalar = rv->VectorComponent(0); break;
                 default: break; // None/Map/List → 스칼라 없음
                 }
                 NeoScriptInternal::setResult(r, vt, iv, vector, StringView(), scalar);

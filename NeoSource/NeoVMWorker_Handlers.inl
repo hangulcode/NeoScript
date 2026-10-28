@@ -423,7 +423,7 @@ NEOS_NOINLINE bool handle_TABLE_ADD2(const SVMOperation& OP) {
         ArrayModify(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_ADD2);
         return false;
     }
-    if (pTable->GetType() == VAR_VEC)
+    if (pTable->IsVector())
     {
         if (VecComponentOp(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_ADD2) &&
             (OP.argFlag & NEOS_OP_REF_WRITE)) CommitRefVector(pTable);
@@ -441,7 +441,7 @@ NEOS_NOINLINE bool handle_TABLE_SUB2(const SVMOperation& OP) {
         ArrayModify(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_SUB2);
         return false;
     }
-    if (pTable->GetType() == VAR_VEC)
+    if (pTable->IsVector())
     {
         if (VecComponentOp(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_SUB2) &&
             (OP.argFlag & NEOS_OP_REF_WRITE)) CommitRefVector(pTable);
@@ -459,7 +459,7 @@ NEOS_NOINLINE bool handle_TABLE_MUL2(const SVMOperation& OP) {
         ArrayModify(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_MUL2);
         return false;
     }
-    if (pTable->GetType() == VAR_VEC)
+    if (pTable->IsVector())
     {
         if (VecComponentOp(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_MUL2) &&
             (OP.argFlag & NEOS_OP_REF_WRITE)) CommitRefVector(pTable);
@@ -477,7 +477,7 @@ NEOS_NOINLINE bool handle_TABLE_DIV2(const SVMOperation& OP) {
         ArrayModify(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_DIV2);
         return false;
     }
-    if (pTable->GetType() == VAR_VEC)
+    if (pTable->IsVector())
     {
         if (VecComponentOp(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_DIV2) &&
             (OP.argFlag & NEOS_OP_REF_WRITE)) CommitRefVector(pTable);
@@ -495,7 +495,7 @@ NEOS_NOINLINE bool handle_TABLE_PERSENT2(const SVMOperation& OP) {
         ArrayModify(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_PERSENT2);
         return false;
     }
-    if (pTable->GetType() == VAR_VEC)
+    if (pTable->IsVector())
     {
         if (VecComponentOp(pTable, GetVarPtr2(OP), GetVarPtr3(OP), NOP_TABLE_PERSENT2) &&
             (OP.argFlag & NEOS_OP_REF_WRITE)) CommitRefVector(pTable);
@@ -542,8 +542,7 @@ NEOS_NOINLINE void handle_CLT_WRITE_REF(const SVMOperation& OP) {
             kt == VAR_INT ? owner->_tbl->FindInt(key->_int) : owner->_tbl->Find(key);
     }
     else if (owner->GetType() == VAR_ARRAY && owner->_array->VectorDimension()) {
-        // 벡터 배열 원소는 성분 버퍼라 빌릴 VarInfo 가 없다. 여기서는 쓰기 진단만 먼저 내고, 아래
-        // CltRead 가 temp 에 복사한 뒤 뒤따르는 쓰기(REF_WRITE)가 CommitRefVector 로 배열에 되쓴다.
+        // 배열도 리스트와 같이 원소 VarInfo를 직접 빌려 원자적으로 성분을 수정한다.
         if (key->GetType() != VAR_INT) {
             SetError(RTE_ARRAY_INDEX_TYPE);
             return;
@@ -552,6 +551,7 @@ NEOS_NOINLINE void handle_CLT_WRITE_REF(const SVMOperation& OP) {
             SetError(RTE_ARRAY_INDEX_WRITE);
             return;
         }
+        target = &owner->_array->VectorValues()[key->_int];
     }
 
     if (target) {
@@ -663,7 +663,7 @@ NEOS_NOINLINE bool handle_IDLE(const SVMOperation& OP) {
 
 // 벡터 생성 intrinsic (LoadVM 에서 PTRCALL2(#Vector*) 패치). native 호출 프레임 없이
 // 인자 슬롯(_iSP_VarsMax+1..N)을 직접 읽어 값타입 세팅. n3=결과 슬롯.
-// VecStoreFor 를 인라인으로 옮긴 뒤로는 이 핸들러가 디스패치 루프에 전개되면 그만큼
+// 벡터 저장과 타입 검사를 이 핸들러에서 처리하므로 디스패치 루프에 전개되면 그만큼
 // 루프가 커진다. 생성은 성분 쓰기·산술만큼 자주 돌지 않으므로 루프 밖에 둔다.
 NEOS_NOINLINE bool handle_VEC_MAKE(const SVMOperation& OP) {
     // n2 = 인자 수 = 성분 수. Vector2/3/4/Quaternion 이 모두 이 op 으로 패치되며,
@@ -676,7 +676,7 @@ NEOS_NOINLINE bool handle_VEC_MAKE(const SVMOperation& OP) {
     // 함수 진입에서 인자 영역까지 스택 범위와 해제 상한을 확정한다.
     // 새 벡터를 완성한 뒤 대상에 연결해 인자 오류가 기존 값을 바꾸지 않게 한다.
     VarInfo* args = GetStackFromBase(_iSP_VarsMax + 1);
-    float tmp[4];   // n 개만 쓰고 n 개만 복사한다
+    float tmp[4] = {};   // n 개만 쓰고 n 개만 복사한다
     for (int i = 0; i < n; ++i) {
         if (!args[i].IsNumber()) {
             SetError(RTE_CALL_INVALID);   // 대상은 아직 건드리지 않았다
@@ -685,9 +685,8 @@ NEOS_NOINLINE bool handle_VEC_MAKE(const SVMOperation& OP) {
         tmp[i] = (float)args[i].GetFloatNumber();
     }
     if (OP.argFlag & NEOS_OP_CALL_NORESULT) return false;
-    // 대상이 단독 소유 벡터면 저장소를 재사용한다(루프 안 v = Vector3(...) 가 할당 0). 공유 중이면 VecStoreFor 가 새로 잡는다.
-    VecInfo* p = VecStoreFor(GetVarPtr3(OP), n);
-    for (int i = 0; i < n; ++i) p->v[i] = tmp[i];
+    // 2·3성분은 직접 저장하고, 4성분은 단독 소유 저장소를 재사용한다.
+    StoreVector(GetVarPtr3(OP), n, tmp[0], tmp[1], tmp[2], tmp[3]);
     return false;
 }
 

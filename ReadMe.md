@@ -1,4 +1,4 @@
-﻿<p align="center">
+<p align="center">
   <img src="/docs/img/Neo_Icon.png" alt="NeoScript logo">
 </p>
 
@@ -265,9 +265,9 @@ division or remainder by zero, and `INT64_MIN / -1` or `INT64_MIN % -1`, are err
 
 Host integer values use C++/C `int64_t` and C# `long`; integer arrays use eight bytes per
 element. On 64-bit targets the general value slot remains 16 bytes; on 32-bit targets it
-grows from 8 to 16 bytes (or 12 with four-byte integer alignment). Rebuild native hosts
+is also 16 bytes, including targets with four-byte integer alignment. Rebuild native hosts
 and Unity plugins for **C ABI 7**, and regenerate cached
-bytecode for image format **0142**. Container lengths, indices, and host handles keep
+bytecode for image format **0143**. Container lengths, indices, and host handles keep
 their existing widths and limits. Mixing an int with a float uses float64 arithmetic,
 so large integers can lose precision.
 
@@ -320,8 +320,9 @@ var moved = position + direction * 2.0;
 - The `math` vector and quaternion functions require vector value types, not `[x, y, z]` List
   literals. Full list: [`docs/API.md`](docs/API.md#35-vector-math).
 - Quaternion component order is `w, x, y, z`: `math.Quaternion(w, x, y, z)`.
-- **There is one vector type, not four.** Internally all of these are `VAR_VEC` plus a component
-  count of 1-4; the count lives in unused padding in `VarInfo`, so it costs no memory. A
+- **Vectors retain their component counts and value semantics.** Internally, Vector2/3 use
+  inline `VAR_VEC` values in a 16-byte slot; Vector4 uses `VAR_VEC4` with shared storage
+  and copy-on-write. Vector components remain float32. A
   quaternion is a 4-component vector — the VM does not track "this is a rotation", and `w,x,y,z`
   is a convention between the script and the engine, not a type. Two consequences: `type()`
   reports `"Vector4"` for a quaternion, and `q1 + q2` is a component-wise add rather than an error
@@ -355,9 +356,9 @@ var weights = system.array(0.0, 1024);   // float array
   `++`, and `--` write through to the stored component. Whole-vector compound assignments remain
   unsupported; use `a[i] = a[i] + delta` for vector addition.
 - For example, `system.array(math.Vector3(0, 0, 0), 1000)` stores 1000 vectors (requires `import math;`).
-  Elements are float components in one contiguous buffer (16 bytes each), not shared vector values.
-  A read copies the components into the destination value, reusing its storage when it is not
-  shared, and a write copies them back. `resize` fills new elements with
+  Elements are 16-byte `VarInfo` values. Vector2/3 components live directly in each slot;
+  Vector4 values share reference-counted storage and detach on writes. Reads preserve vector
+  value semantics, just like list elements. `resize` fills new elements with
   the vector value captured when the array was created.
 - `a.append(value)` adds one value at the tail. `a.resize(size)` changes the length; growth fills
   new elements with the `initial` value used to create the array, and shrinking drops the tail.

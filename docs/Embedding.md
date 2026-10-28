@@ -195,7 +195,8 @@ packed least-significant-bit first: bit `i` is
 For Vector2/3/4 arrays, `vectorDimension()` returns 2/3/4 and `count()` counts vectors.
 `getVec(index, out4)` copies one value into four floats, zeroing unused components.
 `setVec(index, components, dimension)` writes one value and requires the exact array dimension;
-elements are plain float components, so nothing is shared or detached. Both return false for invalid indices, pointers or
+elements are `VarInfo` values: Vector2/3 are inline and shared Vector4 values detach before
+modification. Both return false for invalid indices, pointers or
 non-vector arrays. There is no writable float buffer for vector arrays: `vectorData()` was removed.
 Scalar arrays return dimension zero; `floats()` remains exclusive to scalar float arrays.
 Quaternion arrays retain script w,x,y,z component order. The view is still borrowed, but the
@@ -529,7 +530,7 @@ result before it can return to Script A, so Script B does not own a resumable ex
 
 ### Compiled image capacity
 
-The current image format is **0142**, adding the fused compound-assignment read opcodes (`READ_ADD/SUB/MUL/DIV`), storing scalar floating-point constants as double and retaining signed 64-bit integer values.
+The current image format is **0143**, separating inline Vector2/3 from heap-backed Vector4 internally. Rebuild native hosts and regenerate older images. Public C++/C vector APIs and C ABI layouts are unchanged. The format also retains the fused compound-assignment read opcodes (`READ_ADD/SUB/MUL/DIV`), storing scalar floating-point constants as double and retaining signed 64-bit integer values.
 Recompile older cached images; they are rejected rather than interpreted using the new layout.
 `MOVI` retains a signed 32-bit immediate, sign-extended to 64 bits. Larger integer literals
 use the constant pool, with `LOADK` when needed; instructions remain eight bytes.
@@ -542,7 +543,7 @@ slow path that reproduces the separate READ and arithmetic instructions, includi
 messages. A host getter's pause or coroutine-transfer request takes effect after the
 arithmetic. Three-operand and store shapes (`x = a[i] op b[j]`, `e[i] = a[k] op y`) are not
 fused: measured on this VM, either as an out-of-line call or inlined into the dispatch loop they
-ran slower than the separate instructions. Recompile images older than format 0142.
+ran slower than the separate instructions. Recompile images older than format 0143.
 
 Public scalar integer arguments, results, globals, map/list values, and integer array
 elements use `int64_t`. C# exposes them as `long` through C ABI 7. Rebuild hosts and plugins

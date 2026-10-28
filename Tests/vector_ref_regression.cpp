@@ -1,5 +1,4 @@
-// Verify the optimization itself: unique stored vectors must keep their VecInfo,
-// while ordinary value copies must still detach on the first write.
+﻿// 2·3성분의 인라인 값 복사와 4성분의 공유/COW가 같은 스크립트 결과를 내는지 확인한다.
 #include "NeoVMWorker.h"
 #include <cstdio>
 #include <cstring>
@@ -24,7 +23,7 @@ static bool PositionProperty(INeoVMWorker* worker, void* data, const VMString*, 
         if (state.pause) { state.pause = false; worker->DebugPause(); }
     } else {
         ++state.sets;
-        state.x = value->_vec->v[0];
+        state.x = value->VectorComponent(0);
     }
     bool& transfer = get ? state.switchGet : state.switchSet;
     if (transfer) {
@@ -98,7 +97,7 @@ static void NativeWriteBoundaries() {
 }
 int main() {
     NeoVMSystem::Initialize();
-    const char* source = R"(
+    const char* sourceTemplate = R"(
 import math; import system;
 export var items=[math.Vector3(1,2,3)];
 export var map={};map.v=math.Vector3(4,5,6);
@@ -111,10 +110,28 @@ export fun Share(){savedList=items[0];savedMap=map.v;savedArray=array[0];}
 export fun BadArray(){array[0][9]+=1;}
 export fun Bad(){items[0][9]+=1;}
 )";
+    for (int dim : {2, 3, 4}) {
+    std::string source = sourceTemplate;
+    const auto replace = [&source](const std::string& from, const std::string& to) {
+        size_t at = 0;
+        while ((at = source.find(from, at)) != std::string::npos) {
+            source.replace(at, from.size(), to); at += to.size();
+        }
+    };
+    if (dim == 2) {
+        replace("Vector3(1,2,3)", "Vector2(1,2)");
+        replace("Vector3(4,5,6)", "Vector2(4,5)");
+        replace("Vector3(7,8,9)", "Vector2(7,8)");
+        replace("++array[0][2]", "++array[0][1]");
+    } else if (dim == 4) {
+        replace("Vector3(1,2,3)", "Vector4(1,2,3,4)");
+        replace("Vector3(4,5,6)", "Vector4(4,5,6,7)");
+        replace("Vector3(7,8,9)", "Vector4(7,8,9,10)");
+    }
     for (bool debug : {false, true}) {
         auto pool = NeoExecContextPool_Create();
         NeoLoadVMParam load; load.execPool = pool;
-        NeoCompilerParam compile(source, (int)std::strlen(source));
+        NeoCompilerParam compile(source.c_str(), (int)source.size());
         std::string error; compile.err = &error; compile.debug = debug;
         auto vm = NeoVMSystem::CompileAndLoadRunVM(compile, &load);
         Check(vm != nullptr, error.c_str());
@@ -123,38 +140,50 @@ export fun Bad(){items[0][9]+=1;}
         auto item = worker->GetVar("items")->_lst->GetValue(0);
         auto member = worker->GetVar("map")->_tbl->Find("v");
         auto array = worker->GetVar("array")->_array;
-        const float* element = array->VectorAt(0);
-        Check(array->VectorDimension() == 3 && element[0] == 7 && element[1] == 8 && element[2] == 9, "array stores vector components inline");
-        Check(array->VectorAt(1)[0] == 1 && array->VectorAt(1)[1] == 2 && array->VectorAt(1)[2] == 3 &&
-            array->InitialVector()[0] == 1 && array->InitialVector()[2] == 3, "array initializer fills unmodified elements by value");
-        auto a = item->_vec; auto b = member->_vec;
-        Check(a->_refCount == 1 && b->_refCount == 1, "initial vectors uniquely owned");
+        const VarInfo* element = array->VectorValues();
+        Check(array->VectorDimension() == dim && element->VectorComponent(0) == 7 && element->VectorComponent(1) == 8 && (dim < 3 || element->VectorComponent(2) == 9), "array stores vector values");
+        Check(array->VectorValues()[1].VectorComponent(0) == 1 && array->VectorValues()[1].VectorComponent(1) == 2 &&
+            array->_initialVector.VectorComponent(0) == 1 && (dim < 3 || array->_initialVector.VectorComponent(2) == 3), "array initializer fills unmodified elements by value");
+        auto a = dim == 4 ? item->_vec : nullptr;
+        auto b = dim == 4 ? member->_vec : nullptr;
+        Check(dim == 4 ? a->_refCount == 1 && b->_refCount == 1 :
+            item->GetType() == VAR_VEC && !item->IsAllocType() && !member->IsAllocType(), "storage matches vector dimension");
+        SNeoVMAllocStats beforeWrites;
+        vm->GetAllocStats(beforeWrites);
+        Check(dim == 4 || beforeWrites.vectors == 0, "inline vectors need no pool objects");
         Check(worker->ExecuteN(worker->FindFunction("Write")) == NEOEXEC_COMPLETED, "unique writes complete");
-        Check(item->_vec == a && member->_vec == b, "each unique write avoids COW");
-        Check(element[0] == 8, "array component write lands in the buffer");
+        Check(dim != 4 || (item->_vec == a && member->_vec == b), "each unique write avoids COW");
+        Check(element->VectorComponent(0) == 8, "array component write lands in the buffer");
         Check(worker->ExecuteN(worker->FindFunction("Increment")) == NEOEXEC_COMPLETED, "increments complete");
-        Check(item->_vec == a && member->_vec == b, "prefix and postfix increments avoid COW");
-        Check(element[1] == 9 && element[2] == 10, "array increments write through");
-        Check(a->v[0] == 2 && a->v[1] == 3 && b->v[0] == 5 && b->v[1] == 7, "components updated");
+        Check(dim != 4 || (item->_vec == a && member->_vec == b), "prefix and postfix increments avoid COW");
+        Check(dim == 2 ? element->VectorComponent(1) == 10 : element->VectorComponent(1) == 9 && element->VectorComponent(2) == 10, "array increments write through");
+        Check(item->VectorComponent(0) == 2 && item->VectorComponent(1) == 3 && member->VectorComponent(0) == 5 && member->VectorComponent(1) == 7, "components updated");
         Check(worker->ExecuteN(worker->FindFunction("Share")) == NEOEXEC_COMPLETED, "ordinary reads complete");
-        Check(a->_refCount == 2 && b->_refCount == 2, "ordinary reads share value storage");
+        auto savedList = worker->GetVar("savedList");
+        auto savedMap = worker->GetVar("savedMap");
+        Check(dim != 4 || (a->_refCount == 2 && b->_refCount == 2), "four-component reads share value storage");
         auto savedArray = worker->GetVar("savedArray");
-        Check(savedArray->IsVector() && savedArray->_vec->_refCount == 1 && savedArray->_vec->v[0] == 8, "array read copies into uniquely owned storage");
+        Check(savedArray->IsVector() && savedArray->VectorComponent(0) == 8 &&
+            (dim == 4 ? savedArray->_vec == element->_vec && savedArray->_vec->_refCount == 2 : !savedArray->IsAllocType()), "array read copies into value storage");
         Check(worker->ExecuteN(worker->FindFunction("Write")) == NEOEXEC_COMPLETED, "shared writes complete");
-        Check(item->_vec != a && member->_vec != b, "shared writes detach");
-        Check(element[0] == 9 && savedArray->_vec->v[0] == 8, "array write leaves earlier copies unchanged");
-        Check(a->v[0] == 2 && a->v[1] == 3 && b->v[0] == 5 && b->v[1] == 7, "saved values unchanged");
-        a = item->_vec; b = member->_vec;
+        Check(dim != 4 || (item->_vec != a && member->_vec != b), "shared four-component writes detach");
+        Check(element->VectorComponent(0) == 9 && savedArray->VectorComponent(0) == 8, "array write leaves earlier copies unchanged");
+        Check(savedList->VectorComponent(0) == 2 && savedList->VectorComponent(1) == 3 && savedMap->VectorComponent(0) == 5 && savedMap->VectorComponent(1) == 7, "saved values unchanged");
+        if (dim == 4) { a = item->_vec; b = member->_vec; }
         Check(worker->ExecuteN(worker->FindFunction("Write")) == NEOEXEC_COMPLETED, "repeated writes complete");
-        Check(item->_vec == a && member->_vec == b, "detached vectors remain unique on later writes");
-        Check(element[0] == 10, "array repeated writes accumulate");
+        Check(dim != 4 || (item->_vec == a && member->_vec == b), "detached vectors remain unique on later writes");
+        Check(element->VectorComponent(0) == 10, "array repeated writes accumulate");
         Check(worker->ExecuteN(worker->FindFunction("BadArray")) == NEOEXEC_ERROR, "array invalid component fails");
-        Check(element[0] == 10, "array failed component write leaves the element unchanged");
+        Check(element->VectorComponent(0) == 10, "array failed component write leaves the element unchanged");
         Check(worker->ExecuteN(worker->FindFunction("Bad")) == NEOEXEC_ERROR, "invalid component fails");
-        Check(item->_vec == a && a->_refCount == 1, "failed write preserves storage and ownership");
+        Check(dim != 4 || (item->_vec == a && a->_refCount == 1), "failed write preserves storage and ownership");
         Check(worker->ExecuteN(worker->FindFunction("Write")) == NEOEXEC_COMPLETED, "execution recovers after failed borrow");
+        SNeoVMAllocStats afterWrites;
+        vm->GetAllocStats(afterWrites);
+        Check(dim == 4 || afterWrites.vectors == beforeWrites.vectors, "inline writes and copies allocate no vector storage");
         NeoVMSystem::ReleaseVM(vm);
         NeoExecContextPool_Destroy(pool);
+    }
     }
     NativeWriteBoundaries();
     NeoVMSystem::Shutdown();

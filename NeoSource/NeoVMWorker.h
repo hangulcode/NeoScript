@@ -559,7 +559,7 @@ public:
 		case VAR_STRING:
 			++d->_str->_refCount;
 			break;
-		case VAR_VEC:
+		case VAR_VEC4:
 			// 짝인 Var_ReleaseInternal / Move_DestNoRelease 는 처리하는데 여기만 빠져 있었다.
 			// alloc 타입은 하나도 빠짐없이 여기 있어야 한다.
 			++d->_vec->_refCount;

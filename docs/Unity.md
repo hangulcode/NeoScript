@@ -1,4 +1,4 @@
-﻿# NeoScript × Unity
+# NeoScript × Unity
 
 Running the NeoScript VM from Unity. For the language itself see
 [../ReadMe.md](../ReadMe.md), for the functions a script can call see
@@ -481,7 +481,8 @@ visibility. The Android build script verifies this before deploying the plugin.
 ## Vector arrays
 
 `system.array(math.Vector3(0,0,0), count)` and the Vector2/Vector4 equivalents store
-float components in one contiguous buffer, 16 bytes per element. `NeoArrayView` exposes `ElementType`,
+16-byte `VarInfo` values. Vector2/3 store components inline; Vector4 uses copy-on-write
+storage. `NeoArrayView` exposes `ElementType`,
 `Count`, `VectorDimension` (2/3/4), and `TryGet(index, out Vector2/3/4)` /
 `TrySet(index, Vector2/3/4)`. Both return false for an invalid index or a dimension mismatch.
 Reads copy the components to Unity and writes copy them back; script values read from the array

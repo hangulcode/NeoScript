@@ -105,13 +105,14 @@ struct Encoder {
         case VAR_BOOL: return yyjson_mut_bool(doc, v._bl);
         case VAR_NONE: return yyjson_mut_null(doc);
         case VAR_FUN: return Fail(path, "unsupported type: function");
+        case VAR_VEC: return Fail(path, "unsupported type: Vector" + std::to_string(v.VectorComponentCount()));
         case VAR_STRING: {
             const auto& s = v._str->_str;
             if (!ValidString(s.data(), s.size())) return Fail(path, "invalid UTF-8 or NUL in string");
             // Serialization is synchronous, with no callbacks or VM mutation.
             return yyjson_mut_strn(doc, s.data(), s.size());
         }
-        case VAR_VEC: return Fail(path, "unsupported type: Vector" + std::to_string(v.VectorComponentCount()));
+        case VAR_VEC4: return Fail(path, "unsupported type: Vector" + std::to_string(v.VectorComponentCount()));
         case VAR_FP_NATIVE: return Fail(path, "unsupported type: engine object");
         case VAR_ARRAY: return Fail(path, "unsupported type: system.array");
         case VAR_MAP:

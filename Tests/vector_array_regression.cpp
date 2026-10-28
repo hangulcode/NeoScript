@@ -1,4 +1,4 @@
-#include "NeoScript.h"
+﻿#include "NeoScript.h"
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -107,7 +107,8 @@ int main()
                 "return a==b;}";
             const std::string init = std::string("var value=") + expression + ";var a=system.array(value,9);";
             for (const char* destination : {"null", "3", "2.5", "true", "\"old\"", "[1,2]", "{\"x\":1}",
-                "math.Vector2(9,8)", "system.array(0,2)", "system.array(math.Vector3(9,8,7),2)"}) {
+                "math.Vector2(9,8)", "math.Vector3(9,8,7)", "math.Vector4(9,8,7,6)",
+                "system.array(0,2)", "system.array(math.Vector3(9,8,7),2)"}) {
                 Run(runtime, equal + "export fun Test(){" + init + "var out=" + destination +
                     ";for(var i in 0,9){out=a[i];if(!Same(out,value))return false;}"
                     "foreach(var v in a){if(!Same(v,value))return false;}return true;}", debug, image);
@@ -136,6 +137,11 @@ int main()
             Run(runtime, setup + "a[0]=a[0];a[1]=a[0];var p=a[1];a.resize(0);a.resize(1);return p==v && a[0]==v;}", debug, image);
             Run(runtime, "export fun Test(){var a=system.array(" + vector + ",1);a=a[0];a[0]=99;return a[0]==99;}", debug, image);
             Run(runtime, setup + "var p=a[0];a[0][0]+=1;a[0][0]+=1;return p==v && a[1]==v && a[0][0]==3;}", debug, image);
+            // 각 성분 위치가 원본을 바꾸지 않고 사본에만 반영되는지 확인한다.
+            for (int component = 0; component < dim; ++component) {
+                const std::string key = std::to_string(component);
+                Run(runtime, setup + "var p=a[0];p[" + key + "]=42;return p[" + key + "]==42 && a[0]==v;}", debug, image);
+            }
             Run(runtime, setup + "var list=[a[0]];var m={\"p\":a[1]};list[0][0]=8;m.p[0]=9;return a[0]==v && a[1]==v;}", debug, image);
             Run(runtime, setup + "var p=a[1];return p[0]==1 && Host.Edit(a," + std::to_string(dim) + ") && a[0][0]==1 && a[1][0]==20 && p[0]==1;}", debug, image);
             Run(runtime, "export fun Test(){var a=system.array(" + vector + ",0);a.append(" + vector + ");return a.len()==1 && a[0]==" + vector + ";}", debug, image);
@@ -147,6 +153,23 @@ int main()
             Run(runtime, setup + "a[0][" + std::to_string(dim) + "]=1;return true;}", debug, image, "index");
             Run(runtime, setup + "foreach(var p in a){a.append(v);}return true;}", debug, image, "collection was modified");
         }
+        Run(runtime, R"(
+export fun Test(){
+ var v=math.Vector3(1,2,3);var saved=v;var f=fun(){v[2]+=1;return v;};
+ var first=f();var second=f();
+ var a=math.Vector2(-0.0,2);var b=a;var c=math.Vector3(1,2,-0.0);
+ var d=c;c=math.Vector4(4,5,6,7);c=math.Vector2(8,9);c=math.Vector3(10,11,12);
+ return first==math.Vector3(1,2,4) && second==math.Vector3(1,2,5) && saved==math.Vector3(1,2,3)
+ && 1.0/b[0]==-1.0/0.0 && 1.0/d[2]==-1.0/0.0 && c==math.Vector3(10,11,12);
+})", debug, image);
+        Run(runtime, R"(
+export fun Test(){
+ var key=math.Vector3(1,2,3);var m={};m[key]=7;var copied=key;key[2]=9;
+ var list=[math.Vector2(1,2),copied,math.Vector4(1,2,3,4)];
+ list[0]=list[1];list[1]=list[2];list[2]=math.Vector2(5,6);
+ return m[copied]==7 && m[math.Vector3(1,2,3)]==7 && m[key]==null
+ && list[0]==math.Vector3(1,2,3) && list[1]==math.Vector4(1,2,3,4) && list[2]==math.Vector2(5,6);
+})", debug, image);
         Run(runtime, R"(
 export fun Test(){
  var a=system.array(math.Quaternion(1,2,3,4),1);a[0][3]=8;

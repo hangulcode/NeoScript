@@ -225,6 +225,9 @@ Section 10 describes what the resulting values support.
 | `math.quat_slerp(a: Quaternion, b: Quaternion, t: float)` | `Quaternion` | |
 
 These accept vector **value types** only. A `list` of three numbers is rejected.
+Vector2/3 values are stored directly in a 16-byte VM slot. Vector4 and Quaternion use
+shared storage with copy-on-write. This internal difference does not change vector
+assignment, indexing, arithmetic, or the public host APIs.
 
 ### 3.8 Bit, colour, formatting
 
@@ -482,7 +485,7 @@ string APIs cannot preserve an embedded NUL. `"\\u0041"` keeps the backslash-u t
 Search does not coerce values to the container's element type. Numeric int/float equality,
 NaN, vector value equality, and reference identity follow script `==`.
 `clone()` creates independent outer storage; nested collections stay shared and vectors retain
-copy-on-write value semantics. A self-reference in the source still points to the source in its clone.
+vector value semantics. A self-reference in the source still points to the source in its clone.
 These shallow-copy rules also apply to arrays, maps and sets. `clear()` on any collection retains
 its allocated capacity and invalidates an active foreach iterator if the collection was nonempty.
 Calling `clear()` on an empty collection does nothing.
@@ -551,11 +554,10 @@ each value; `foreach(var index, value in a)` is rejected.
   values: modifying a copied local vector does not modify the array. `a[i][j]` component assignment,
   `+=`, `-=`, `*=`, `/=`, `++`, and `--` write back to the array. Whole-vector compound assignment
   is unsupported; use `a[i] = a[i] + delta`. Array length counts vectors, not float components.
-- Vector elements are stored as float components in one contiguous buffer (16 bytes per element
-  regardless of dimension), never as shared vector storage. Reading `a[i]` copies the components
-  into the destination value, reusing its storage when that value is not shared, so repeated reads
-  in a loop allocate nothing; writing copies the components back. Values obtained from the array are
-  therefore independent of later element writes.
+- Vector elements are ordinary 16-byte `VarInfo` values. Vector2/3 store components inline;
+  Vector4 shares reference-counted storage until a write requires a copy. Reads and writes
+  follow the same vector value semantics as list elements. Shrinking releases removed values,
+  and previously read values remain independent of later element writes.
   `system.array(math.Quaternion(w,x,y,z), n)` creates a Vector4 array with the same w,x,y,z order; there is no automatic
   conversion to a host quaternion layout. Resizing uses the vector initial value captured at creation.
 - int and float arrays convert between those two numeric types on assignment. Float to int truncates
@@ -653,7 +655,7 @@ Build a set with `system.set(list)`; duplicates collapse.
 | `s.values()` | `list` | new list of all elements, in unspecified order; shallow copies |
 
 `values()` does not modify the set and may be called during foreach. Changing the returned list
-structure does not change the set. Nested containers remain shared; returned vectors use copy-on-write,
+structure does not change the set. Nested containers remain shared; returned vectors are independent values,
 so changing one does not change a stored set key.
 
 Adding a new element, removing an existing element, or clearing a nonempty set invalidates
@@ -742,10 +744,10 @@ getter's pause or coroutine-transfer request takes effect after the arithmetic. 
 such as `x = c[k] + y` or `e[i] = c[k] + y` stay as separate instructions: measured on this VM,
 fusing them costs more than the dispatch they save.
 
-There is no separate vector write-back opcode. Regenerate images older than bytecode version 0142 for the fused compound-assignment read opcodes, exact float32 immediates widened to double and to preserve assignments before return, 64-bit integers, local initialization, ordered operand evaluation, deferred assignment paths, and the earlier signed-zero and foreach fixes.
+There is no separate vector write-back opcode. Regenerate images older than bytecode version 0143 for the internal vector type split and the fused compound-assignment read opcodes, exact float32 immediates widened to double and to preserve assignments before return, 64-bit integers, local initialization, ordered operand evaluation, deferred assignment paths, and the earlier signed-zero and foreach fixes.
 A selector immediately following an indexed assignment keeps the assigned slot writable:
 `(a[0][0] = math.Vector3(1,2,3))[1] = 9` updates `a[0][0]` to `(1,9,3)`.
-Reading that result into a local still makes an independent vector value via copy-on-write.
+Reading that result into a local still makes an independent vector value.
 
 `Quaternion` stores `w, x, y, z` in that order, so `q[0]` is `w`.
 

@@ -39,6 +39,25 @@ u32 GetHashCode(u8* buffer, int len)
 	return h;
 }
 
+static u32 GetVectorHashCode(const VarInfo* p)
+{
+	// 값으로 같은 벡터는 저장소·부호 있는 0에 관계없이 같은 해시를 갖는다.
+	const int count = p->VectorComponentCount();
+	u32 h = 2166136261u ^ static_cast<u32>(count);
+	for (int i = 0; i < count; ++i)
+	{
+		u32 bits = 0;
+		const float value = p->VectorComponent(i);
+		if (value != 0.0f) memcpy(&bits, &value, sizeof(bits));
+		h = (h ^ bits) * 16777619u;
+	}
+	h ^= h >> 16;
+	h *= 0x7feb352du;
+	h ^= h >> 15;
+	h *= 0x846ca68bu;
+	return h ^ (h >> 16);
+}
+
 u32 GetHashCode(VarInfo* p)
 {
 	switch (p->GetType())
@@ -49,25 +68,9 @@ u32 GetHashCode(VarInfo* p)
 	case VAR_NONE:       return 0;
 	case VAR_FUN:        return (u32)p->_fun_index;
 	case VAR_FUN_NATIVE: return (u32)(uintptr_t)p->_funPtr;
+	case VAR_VEC:       return GetVectorHashCode(p);
 	case VAR_STRING:     return p->_str->GetHash();
-	case VAR_VEC:
-	{
-		// 값으로 같은 벡터는 저장소·부호 있는 0에 관계없이 같은 해시를 갖는다.
-		const int count = p->VectorComponentCount();
-		u32 h = 2166136261u ^ static_cast<u32>(count);
-		for (int i = 0; i < count; ++i)
-		{
-			u32 bits = 0;
-			const float value = p->_vec->v[i];
-			if (value != 0.0f) memcpy(&bits, &value, sizeof(bits));
-			h = (h ^ bits) * 16777619u;
-		}
-		h ^= h >> 16;
-		h *= 0x7feb352du;
-		h ^= h >> 15;
-		h *= 0x846ca68bu;
-		return h ^ (h >> 16);
-	}
+	case VAR_VEC4:      return GetVectorHashCode(p);
 	// 컨테이너 키의 동등성은 저장소 포인터 동일성이다(ReferenceEquals 참조).
 	// 따라서 해시도 포인터 "값" 에서 나와야 한다 — 반드시 &p->_xxx 다.
 	//
@@ -158,9 +161,10 @@ static bool SetKeyEquals(SetNode& node, VarInfo* pKey, u32 hash)
 	case VAR_FLOAT:      return data->key._float == pKey->_float;
 	case VAR_BOOL:       return data->key._bl == pKey->_bl;
 	case VAR_NONE:       return true;
+	case VAR_VEC:       return VectorValuesEqual(&data->key, pKey);
 	case VAR_STRING:
 		return data->key._str == pKey->_str;
-	case VAR_VEC:       return VectorValuesEqual(&data->key, pKey);
+	case VAR_VEC4:       return VectorValuesEqual(&data->key, pKey);
 	default:           return ReferenceEquals(&data->key, pKey);
 	}
 }

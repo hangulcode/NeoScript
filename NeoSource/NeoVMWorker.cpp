@@ -82,22 +82,20 @@ void SVarWrapper::SetString(const char* str) { _vmw->Var_SetString(_var, str); }
 //
 void INeoVMWorker::Var_SetVec2(VarInfo* d, float x, float y)
 {
-	VecInfo* p = VecStoreFor(d, 2);
-	p->v[0] = x; p->v[1] = y;
+	StoreVector(d, 2, x, y, 0, 0);
 }
 void INeoVMWorker::Var_SetVec3(VarInfo* d, float x, float y, float z)
 {
-	VecInfo* p = VecStoreFor(d, 3);
-	p->v[0] = x; p->v[1] = y; p->v[2] = z;
+	StoreVector(d, 3, x, y, z, 0);
 }
 void INeoVMWorker::Var_SetVec4(VarInfo* d, float x, float y, float z, float w)
 {
-	VecInfo* p = VecStoreFor(d, 4);
+	VecInfo* p = Vec4StoreFor(d);
 	p->v[0] = x; p->v[1] = y; p->v[2] = z; p->v[3] = w;
 }
 void INeoVMWorker::Var_SetQuat(VarInfo* d, float w, float x, float y, float z)
 {
-	VecInfo* p = VecStoreFor(d, 4);
+	VecInfo* p = Vec4StoreFor(d);
 	p->v[0] = w; p->v[1] = x; p->v[2] = y; p->v[3] = z;
 }
 
@@ -233,14 +231,22 @@ std::string CNeoVMWorker::ToString(VarInfo* v1)
 	case VAR_FUN:
 	case VAR_FUN_NATIVE:
 		return "function";
-	case VAR_STRING:
-		return v1->_str->_str;
 	case VAR_VEC:
 	{
 		const int n = v1->VectorComponentCount();
-		if (n <= 2)      snprintf(ch, sizeof(ch), "(%g, %g)", v1->_vec->v[0], v1->_vec->v[1]);
-		else if (n == 3) snprintf(ch, sizeof(ch), "(%g, %g, %g)", v1->_vec->v[0], v1->_vec->v[1], v1->_vec->v[2]);
-		else             snprintf(ch, sizeof(ch), "(%g, %g, %g, %g)", v1->_vec->v[0], v1->_vec->v[1], v1->_vec->v[2], v1->_vec->v[3]);
+		if (n <= 2)      snprintf(ch, sizeof(ch), "(%g, %g)", v1->VectorComponent(0), v1->VectorComponent(1));
+		else if (n == 3) snprintf(ch, sizeof(ch), "(%g, %g, %g)", v1->VectorComponent(0), v1->VectorComponent(1), v1->VectorComponent(2));
+		else             snprintf(ch, sizeof(ch), "(%g, %g, %g, %g)", v1->VectorComponent(0), v1->VectorComponent(1), v1->VectorComponent(2), v1->VectorComponent(3));
+		return ch;
+	}
+	case VAR_STRING:
+		return v1->_str->_str;
+	case VAR_VEC4:
+	{
+		const int n = v1->VectorComponentCount();
+		if (n <= 2)      snprintf(ch, sizeof(ch), "(%g, %g)", v1->VectorComponent(0), v1->VectorComponent(1));
+		else if (n == 3) snprintf(ch, sizeof(ch), "(%g, %g, %g)", v1->VectorComponent(0), v1->VectorComponent(1), v1->VectorComponent(2));
+		else             snprintf(ch, sizeof(ch), "(%g, %g, %g, %g)", v1->VectorComponent(0), v1->VectorComponent(1), v1->VectorComponent(2), v1->VectorComponent(3));
 		return ch;
 	}
 	case VAR_FP_NATIVE:
@@ -328,9 +334,11 @@ int CNeoVMWorker::ToSize(VarInfo* v1)
 		return 0;
 	case VAR_NONE:
 		return 0;
+	case VAR_VEC:
+		return v1->VectorComponentCount();
 	case VAR_STRING: // UTF-8 문자 수(string.len()과 동일)
 		return v1->_str->_StringLen;
-	case VAR_VEC:
+	case VAR_VEC4:
 		return v1->VectorComponentCount();
 	case VAR_FP_NATIVE:
 		return 0;
@@ -365,9 +373,14 @@ VarInfo* CNeoVMWorker::GetType(VarInfo* v1)
 		break;
 	case VAR_FUN_NATIVE:
 		return &GetVM()->m_sDefaultValue[NDF_FUNCTION];
+	case VAR_VEC:
+	{
+		const int n = v1->VectorComponentCount();
+		return &GetVM()->m_sDefaultValue[n <= 2 ? NDF_VEC2 : (n == 3 ? NDF_VEC3 : NDF_VEC4)];
+	}
 	case VAR_STRING:
 		return &GetVM()->m_sDefaultValue[NDF_STRING];
-	case VAR_VEC:
+	case VAR_VEC4:
 	{
 		const int n = v1->VectorComponentCount();
 		return &GetVM()->m_sDefaultValue[n <= 2 ? NDF_VEC2 : (n == 3 ? NDF_VEC3 : NDF_VEC4)];
@@ -1539,17 +1552,27 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, NeoDebugSn
 		out.type = "native_function";
 		out.value = "native_function";
 		break;
-	case VAR_STRING:
-		out.type = "string";
-		out.value = pVar->_str ? budget.Text(pVar->_str->_str) : "";
-		break;
 	case VAR_VEC:
 	{
 		const int n = pVar->VectorComponentCount();
 		out.type = (n <= 2) ? "Vector2" : (n == 3 ? "Vector3" : "Vector4");
-		if (n <= 2)      snprintf(buf, sizeof(buf), "(%g, %g)", pVar->_vec->v[0], pVar->_vec->v[1]);
-		else if (n == 3) snprintf(buf, sizeof(buf), "(%g, %g, %g)", pVar->_vec->v[0], pVar->_vec->v[1], pVar->_vec->v[2]);
-		else             snprintf(buf, sizeof(buf), "(%g, %g, %g, %g)", pVar->_vec->v[0], pVar->_vec->v[1], pVar->_vec->v[2], pVar->_vec->v[3]);
+		if (n <= 2)      snprintf(buf, sizeof(buf), "(%g, %g)", pVar->VectorComponent(0), pVar->VectorComponent(1));
+		else if (n == 3) snprintf(buf, sizeof(buf), "(%g, %g, %g)", pVar->VectorComponent(0), pVar->VectorComponent(1), pVar->VectorComponent(2));
+		else             snprintf(buf, sizeof(buf), "(%g, %g, %g, %g)", pVar->VectorComponent(0), pVar->VectorComponent(1), pVar->VectorComponent(2), pVar->VectorComponent(3));
+		out.value = buf;
+		break;
+	}
+	case VAR_STRING:
+		out.type = "string";
+		out.value = pVar->_str ? budget.Text(pVar->_str->_str) : "";
+		break;
+	case VAR_VEC4:
+	{
+		const int n = pVar->VectorComponentCount();
+		out.type = (n <= 2) ? "Vector2" : (n == 3 ? "Vector3" : "Vector4");
+		if (n <= 2)      snprintf(buf, sizeof(buf), "(%g, %g)", pVar->VectorComponent(0), pVar->VectorComponent(1));
+		else if (n == 3) snprintf(buf, sizeof(buf), "(%g, %g, %g)", pVar->VectorComponent(0), pVar->VectorComponent(1), pVar->VectorComponent(2));
+		else             snprintf(buf, sizeof(buf), "(%g, %g, %g, %g)", pVar->VectorComponent(0), pVar->VectorComponent(1), pVar->VectorComponent(2), pVar->VectorComponent(3));
 		out.value = buf;
 		break;
 	}
@@ -1592,7 +1615,8 @@ static void NeoDebugFormatValue(VarInfo* pVar, NeoDebugVariable& out, NeoDebugSn
 				case NeoArrayElementType::Vector3:
 				case NeoArrayElementType::Vector4:
 				{
-					const float* v = array->VectorAt(i);
+					float v[4];
+					array->VectorValues()[i].CopyVectorComponents(v);
 					child.type = GetArrayElementTypeName(array->_elementType);
 					const int n = array->VectorDimension();
 					if (n == 2) snprintf(buf, sizeof(buf), "(%g, %g)", v[0], v[1]);
@@ -2966,9 +2990,12 @@ std::string GetDataType(VAR_TYPE t)
 		return "iterator";
 	case VAR_FUN_NATIVE:
 		return "fun";
+	case VAR_VEC:
+		// 성분 수는 VarInfo 에 있어 타입만으로는 알 수 없다. 에러 메시지용이라 총칭으로 충분하다.
+		return "vector";
 	case VAR_STRING:
 		return "string";
-	case VAR_VEC:
+	case VAR_VEC4:
 		// 성분 수는 VarInfo 에 있어 타입만으로는 알 수 없다. 에러 메시지용이라 총칭으로 충분하다.
 		return "vector";
 	case VAR_FP_NATIVE:

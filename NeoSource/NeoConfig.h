@@ -93,7 +93,8 @@ struct debug_info
 // 0136: 실수 상수를 double로 저장하므로 이전 이미지는 다시 컴파일한다.
 // 0137: double 값을 정확히 보존하는 float32 즉값에 MOVF를 사용한다. 구 로더는 이를 거부한다.
 // 0142: 복합 대입 융합 명령(READ_ADD/SUB/MUL/DIV, dest op= clt[key]). 0138~0141 실험 이미지는 거부한다.
-#define NEO_VER		(('0' << 24) | ('1' << 16) | ('4' << 8) | ('2'))
+// 0143: 2·3성분 벡터를 인라인 VAR_VEC로 분리하여 타입 번호가 바뀐다. 이전 이미지는 다시 만든다.
+#define NEO_VER		(('0' << 24) | ('1' << 16) | ('4' << 8) | ('3'))
 
 #if defined(_MSC_VER) && !defined(_DEBUG)
 #define NEOS_FORCEINLINE __forceinline

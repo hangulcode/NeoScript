@@ -8,32 +8,47 @@
 // (MSVC 는 LTCG 가 TU 경계를 넘어 찾아줘서 가려졌고, g++/ld 에서 undefined reference 로 드러났다)
 // 그래서 이 파일은 NeoVMWorker.h 끝에서 include 한다.
 
-// 대상이 이미 단독 소유(refCount<=1)인 같은 계열 벡터면 그 저장소를 재사용한다.
+// 대상이 이미 단독 소유(refCount<=1)인 4성분 벡터면 그 저장소를 재사용한다.
 // `v = v + d` 처럼 결과를 자기 자신에 되쓰는 패턴에서 할당/해제를 없애기 위한 것이다.
 //
 // 벡터를 쓰는 모든 경로(생성 intrinsic, 성분 쓰기, 산술 결과)가 여기를 지나므로
 // .cpp 의 아웃오브라인 정의로 두면 벡터 연산마다 호출이 하나 붙는다.
-NEOS_FORCEINLINE VecInfo* INeoVMWorker::VecStoreFor(VarInfo* d, int count)
+NEOS_FORCEINLINE VecInfo* INeoVMWorker::Vec4StoreFor(VarInfo* d)
 {
-	if (d->IsVector() && d->_vec->_refCount <= 1)
+	if (d->GetType() == VAR_VEC4 && d->_vec->_refCount <= 1)
 	{
-		d->SetVecType(count);    // 성분 수만 바뀌어도 저장소는 그대로 쓴다
+		d->SetVecType(4);
 		return d->_vec;
 	}
 	if (d->IsAllocType()) Var_Release(d);
 	VecInfo* p = _pVM->VecAlloc();
 	p->_refCount = 1;
-	d->SetVecType(count);
+	d->SetVecType(4);
 	d->_vec = p;
 	return p;
 }
 
 // 성분을 쓰기 직전의 저장소. 단독 소유(refcount 1)면 호출 없이 그대로 쓰고, 공유 중일 때만
-// VecCopyOnWrite 로 복제한다(값 의미론). 성분 쓰기마다 지나는 자리라 VecStoreFor 처럼 인라인.
-NEOS_FORCEINLINE VecInfo* INeoVMWorker::VecWritable(VarInfo* d)
+// VecCopyOnWrite 로 복제한다(값 의미론). 성분 쓰기마다 지나는 자리라 Vec4StoreFor 처럼 인라인.
+NEOS_FORCEINLINE float& INeoVMWorker::WritableVectorComponent(VarInfo* d, int index)
 {
+	if (d->GetType() == VAR_VEC)
+		return index == 2 ? d->_vecZ : d->_vecXY[index];
 	VecInfo* p = d->_vec;
-	return (p->_refCount <= 1) ? p : _pVM->VecCopyOnWrite(d);
+	return (p->_refCount <= 1 ? p : _pVM->VecCopyOnWrite(d))->v[index];
+}
+
+NEOS_FORCEINLINE void INeoVMWorker::StoreVector(VarInfo* d, int count, float x, float y, float z, float w)
+{
+	// 성분을 값 인자로 받아 대상이 입력과 같아도 해제 전에 읽기를 끝낸다.
+	if (count < 4)
+	{
+		if (d->IsAllocType()) Var_Release(d);
+		d->SetInlineVec(count, x, y, z);
+		return;
+	}
+	VecInfo* p = Vec4StoreFor(d);
+	p->v[0] = x; p->v[1] = y; p->v[2] = z; p->v[3] = w;
 }
 
 NEOS_FORCEINLINE bool INeoVMWorker::Var_ReleaseVecFast(VarInfo* d)
@@ -89,10 +104,10 @@ NEOS_FORCEINLINE bool INeoVMWorker::Var_ReleaseArrayFast(VarInfo* d)
 // 참인 가지에서만 해제하므로, Var_Release 로 들어가면 같은 비교를 한 번 더 한다.
 NEOS_FORCEINLINE void INeoVMWorker::Var_ReleaseAlloc(VarInfo* d)
 {
-	// 게임 워크로드는 VAR_VEC 해제가 압도적이다. shared ref만 여기서 끝내고,
+	// 공유 중인 4성분 벡터의 참조 감소만 여기서 끝내고,
 	// 마지막 참조 및 순환 후보는 기존 dispatcher가 모든 부수 처리를 맡는다.
 	const VAR_TYPE type = d->GetType();
-	if (type == VAR_VEC && Var_ReleaseVecFast(d))
+	if (type == VAR_VEC4 && Var_ReleaseVecFast(d))
 		return;
 	if (type == VAR_STRING && Var_ReleaseStringFast(d))
 		return;

@@ -580,7 +580,7 @@ inline bool VectorValuesEqual(VarInfo* a, VarInfo* b)
 	const int count = a->VectorComponentCount();
 	if (count == 0 || count != b->VectorComponentCount()) return false;
 	for (int i = 0; i < count; ++i)
-		if (a->_vec->v[i] != b->_vec->v[i]) return false;
+		if (a->VectorComponent(i) != b->VectorComponent(i)) return false;
 	return true;
 }
 
@@ -647,8 +647,11 @@ NEOS_FORCEINLINE void Move_DestNoRelease(VarInfo* v1, VarInfo* v2)
 	case VAR_NONE: break;
 	case VAR_FUN: v1->_fun_index = v2->_fun_index; break;
 	case VAR_FUN_NATIVE: v1->_funPtr = v2->_funPtr; break;
-	case VAR_STRING: v1->_str = v2->_str; ++v1->_str->_refCount; break;
 	case VAR_VEC:
+		// 인라인 벡터는 참조 조정 없이 슬롯 전체를 값으로 복사한다. 자기 대입도 허용한다.
+		*v1 = *v2; break;
+	case VAR_STRING: v1->_str = v2->_str; ++v1->_str->_refCount; break;
+	case VAR_VEC4:
 		v1->_vec = v2->_vec; v1->_vecCount = v2->_vecCount; ++v1->_vec->_refCount; break;
 	case VAR_FP_NATIVE: v1->_fpNative = v2->_fpNative; ++v1->_fpNative->_refCount; break;
 	case VAR_ARRAY: v1->_array = v2->_array; ++v1->_array->_refCount; break;
@@ -987,7 +990,7 @@ public:
 		}
 
 		const VAR_TYPE type = d->GetType();
-		if (type == VAR_VEC && Var_ReleaseVecFast(d))
+		if (type == VAR_VEC4 && Var_ReleaseVecFast(d))
 			return;
 		if (type == VAR_STRING && Var_ReleaseStringFast(d))
 			return;

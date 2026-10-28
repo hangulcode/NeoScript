@@ -549,10 +549,10 @@ NS_API int32_t  NS_CALL NsArrayCount(NsArrayView* a);
 NS_API uint8_t* NS_CALL NsArrayBoolBits(NsArrayView* a);
 NS_API int64_t* NS_CALL NsArrayInts(NsArrayView* a);
 NS_API double*   NS_CALL NsArrayFloats(NsArrayView* a);
-/* Vector access copies components; the array never shares storage with script values.
- * GetVec writes four floats (unused components are zero). SetVec reads exactly
- * dimension floats; dimension must match the array. Both return 0 on invalid
- * views, indices, pointers or element types. Quaternion order remains w,x,y,z. */
+/* 벡터 접근은 값을 복사한다. 공유 중인 4성분 원소는 쓰기 전에 분리한다.
+ * GetVec는 4개 float를 쓰고 남는 성분은 0으로 채운다. SetVec는 dimension개를 읽는다.
+ * dimension은 배열 차원과 같아야 한다. 잘못된 뷰·인덱스·포인터·원소 타입에는 0을 반환한다.
+ * 쿼터니언 순서는 w,x,y,z를 유지한다. */
 NS_API int32_t* NS_CALL NsArrayInts32(NsArrayView* a);
 NS_API float* NS_CALL NsArrayFloats32(NsArrayView* a);
 NS_API int32_t NS_CALL NsArrayVectorDimension(NsArrayView* a);
