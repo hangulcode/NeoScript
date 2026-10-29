@@ -204,6 +204,16 @@ private:
 		const bool lowerInclusive = (range.flags & NEOS_RANGE_LOWER_INCLUSIVE) != 0;
 		const bool upperInclusive = (range.flags & NEOS_RANGE_UPPER_INCLUSIVE) != 0;
 		const bool upperFirst = (range.flags & NEOS_RANGE_UPPER_FIRST) != 0;
+		// 세 피연산자가 모두 float 이면 CompareGR/GE 의 타입 분기와 중간 에러 검사 없이 _float 를 바로 비교한다
+		// (파티클 류 범위 검사의 거의 전부). 비교식은 아래 일반 경로와 같게 두어 NaN 결과도 같고, float 끼리는
+		// 에러가 없어 upperFirst 순서가 결과에 영향을 주지 않는다. int 변환을 섞으면 선택 코드가 오히려 느려 넣지 않는다.
+		if (test->GetType() == VAR_FLOAT && lower->GetType() == VAR_FLOAT && upper->GetType() == VAR_FLOAT)
+		{
+			const NS_FLOAT v = test->_float, lo = lower->_float, hi = upper->_float;
+			if (negateOutside)
+				return !((lowerInclusive ? lo > v : lo >= v) || (upperInclusive ? v > hi : v >= hi));
+			return (lowerInclusive ? v >= lo : v > lo) && (upperInclusive ? hi >= v : hi > v);
+		}
 		// OR ranges require !(x < lower || x > upper), not x >= lower &&
 		// x <= upper: those differ for unordered (NaN) operands.
 		if (negateOutside)
