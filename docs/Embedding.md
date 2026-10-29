@@ -49,6 +49,21 @@ sequentially to avoid concurrent writes to object and PDB files. The static libr
 contains the C++ API; Unity's C ABI plugin remains a separate build. CMake already
 provides the equivalent `neoscript` static-library target.
 
+## Floating-point environment
+
+Keep each thread executing NeoScript or converting host API values in the default
+round-to-nearest, ties-to-even mode. On x86/x64, this includes the rounding-control
+bits in MXCSR. A native callback that temporarily changes the mode must restore it
+before calling back into NeoScript, using a conversion API, or returning to the VM.
+NeoScript does not inspect, change, or restore the host's rounding mode per conversion.
+
+The documented float32 overflow boundary assumes this mode. The x86/x64 conversion
+instruction follows MXCSR: for example, upward rounding converts `3.4028235e38` to
+infinity, and rounding toward zero converts `1e300` to `FLT_MAX`. Other rounding
+modes are outside the supported numeric contract; their results can differ between
+platforms. Keep the default floating-point exception masks and gradual-underflow
+settings as well when relying on documented infinity, NaN, and subnormal results.
+
 ## Embedding the engine — Host API (`NeoScript.h`)
 The public host API is a **3-concept facade: Runtime / Program / Instance**, declared in `NeoScript.h`.
 It hides the internal VM (`CNeoVM` / `INeoVMWorker`, the execution-context pool, the bytecode image);

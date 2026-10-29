@@ -92,6 +92,49 @@ static void Float32Boundaries()
         Check(ArrayInfo::NarrowFloat32(value) == 0 && std::signbit(ArrayInfo::NarrowFloat32(value)) == std::signbit(value), "float32 signed zero preserved");
     Check(std::isnan(ArrayInfo::NarrowFloat32(std::numeric_limits<double>::quiet_NaN())), "float32 NaN preserved");
 }
+#if defined(_M_X64) || defined(_M_IX86) || defined(__x86_64__) || defined(__i386__)
+// 컴파일러가 상수 변환을 접거나 모드 변경 밖으로 이동하지 못하게 입력을 런타임에 전달한다.
+NEOS_NOINLINE static float NarrowInCurrentMode(double value)
+{
+    return NeoNarrowFloat32(value);
+}
+struct ScopedMxcsr
+{
+    unsigned saved;
+    ScopedMxcsr() : saved(_mm_getcsr()) {}
+    ~ScopedMxcsr() { _mm_setcsr(saved); }
+};
+#endif
+static void Float32Environment()
+{
+#if defined(_M_X64) || defined(_M_IX86) || defined(__x86_64__) || defined(__i386__)
+    const unsigned original = _mm_getcsr();
+    {
+        ScopedMxcsr restore;
+        _MM_SET_ROUNDING_MODE(_MM_ROUND_NEAREST);
+        Float32Boundaries();
+        volatile double nearLimit = 3.4028235e38;
+        volatile double huge = 1e300;
+        const float maximum = (std::numeric_limits<float>::max)();
+        Check(NarrowInCurrentMode(nearLimit) == maximum && std::isinf(NarrowInCurrentMode(huge)),
+            "nearest rounding follows documented overflow boundary");
+        // 다른 모드는 지원 계약 밖이다. 하드웨어 변환이 모드를 강제로 덮어쓰지 않음을 기록한다.
+        for (unsigned mode : {unsigned(_MM_ROUND_UP), unsigned(_MM_ROUND_DOWN), unsigned(_MM_ROUND_TOWARD_ZERO)}) {
+            _MM_SET_ROUNDING_MODE(mode);
+            const float nearResult = NarrowInCurrentMode(nearLimit);
+            const float hugeResult = NarrowInCurrentMode(huge);
+            Check(mode == _MM_ROUND_UP ? std::isinf(nearResult) : nearResult == maximum,
+                "hardware narrowing follows host rounding near FLT_MAX");
+            Check(mode == _MM_ROUND_UP ? std::isinf(hugeResult) : hugeResult == maximum,
+                "hardware narrowing follows host rounding on overflow");
+            Check(_MM_GET_ROUNDING_MODE() == mode, "narrowing does not change host rounding mode");
+        }
+    }
+    Check(_mm_getcsr() == original, "rounding test restores complete host MXCSR");
+#else
+    Float32Boundaries();
+#endif
+}
 static void VectorNarrowingCases(IRuntime* rt, bool debug, bool image)
 {
     // 생성 명령·성분 쓰기·산술이 배열과 같은 축소 경계를 쓰는지 확인한다.
@@ -130,7 +173,7 @@ foreach(var x in values){
 }
 int main()
 {
-    Float32Boundaries();
+    Float32Environment();
     auto rt = CreateRuntime(); NativeObjectDesc host; host.name = "Host"; host.method = Host;
     Check(rt->RegisterObject(host), "register host"); rt->FreezeBindings();
     for (bool debug : {false, true}) for (bool image : {false, true})

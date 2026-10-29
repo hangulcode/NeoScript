@@ -110,6 +110,8 @@ print((count > 0) && (count < capacity)); // true
   narrowing as `array32`: magnitudes between `FLT_MAX` and `2^128 - 2^103` round to signed
   `FLT_MAX`; the midpoint and larger magnitudes become signed infinity. NaN and signed zero
   are preserved. Arithmetic on vector components remains float32.
+  These numeric rules assume the host preserves the default round-to-nearest,
+  ties-to-even mode; see [Floating-point environment](Embedding.md#floating-point-environment).
   Constants, assignments, and container values preserve signed zero. `0.0 == -0.0` is true,
   but `1.0 / 0.0` is positive infinity and `1.0 / -0.0` is negative infinity.
   The two zeros still identify the same map key.

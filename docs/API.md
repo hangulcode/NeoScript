@@ -739,6 +739,9 @@ Vector construction, component writes, scalar operands in vector arithmetic, and
 `read<float>` use the same narrowing rules as `array32`: values above `FLT_MAX` but below
 `2^128 - 2^103` round to `FLT_MAX`, while that midpoint and larger magnitudes become infinity
 with the original sign. NaN and signed zero are preserved. Vector arithmetic remains float32.
+These rules require the host thread's default round-to-nearest, ties-to-even mode;
+see [Floating-point environment](Embedding.md#floating-point-environment). The VM does not
+override a host-selected rounding mode.
 
 A compound assignment whose right side is a collection element, `x op= c[k]` for `+`, `-`,
 `*`, and `/`, compiles to one 8-byte instruction (`READ_ADD`, `READ_SUB`, `READ_MUL`, or

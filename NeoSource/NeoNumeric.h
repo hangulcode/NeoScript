@@ -9,7 +9,8 @@
 
 namespace NeoScript
 {
-// 배열·벡터·호스트 변환은 같은 float32 경계를 사용한다. 범위 밖 값은 캐스팅 전에 처리한다.
+// 배열·벡터·호스트 변환은 최근접·짝수 반올림 모드에서 같은 float32 경계를 사용한다.
+// 호스트는 실행 스레드의 모드를 유지해야 하며, VM은 변환마다 설정을 검사하거나 바꾸지 않는다.
 // float32 범위 밖(|v| > FLT_MAX)만 다루는 드문 경로. 호출 지점이 벡터 산술·성분 쓰기 같은 디스패치 루프의
 // 핫 경로라 본문을 밖으로 빼고, 인라인에는 비교 하나만 남긴다.
 NEOS_NOINLINE inline float NeoNarrowFloat32Rare(NS_FLOAT value)
@@ -24,8 +25,8 @@ NEOS_NOINLINE inline float NeoNarrowFloat32Rare(NS_FLOAT value)
 NEOS_FORCEINLINE float NeoNarrowFloat32(NS_FLOAT value)
 {
 #if defined(_M_X64) || defined(_M_IX86) || defined(__x86_64__) || defined(__i386__)
-	// cvtsd2ss 는 IEEE 최근접 반올림이라 FLT_MAX 와 2^128-2^103 사이는 FLT_MAX 로, 그 이상은 ∞ 로 만들고
-	// NaN 과 부호 있는 0 을 보존한다 — 위 Rare 와 결과가 같고 ISA 가 정의한 동작이므로 비교 없이 한 명령이다.
+	// cvtsd2ss 는 MXCSR의 반올림 모드를 따른다. 기본 최근접·짝수 모드에서만 위 Rare의 경계 규칙과 같다.
+	// 호스트가 다른 모드를 쓰면 범위 밖 값도 FLT_MAX가 될 수 있다. 이 전제 아래 비교 없이 변환한다.
 	return _mm_cvtss_f32(_mm_cvtsd_ss(_mm_setzero_ps(), _mm_set_sd(static_cast<double>(value))));
 #else
 	// 범위 안과 NaN 은 캐스트 결과가 그대로이므로(NaN 은 비교가 거짓) 비교 한 번으로 끝낸다.
