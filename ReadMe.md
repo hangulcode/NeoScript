@@ -450,21 +450,19 @@ Neo's time; `0.88x` means it was slower than Neo).
 
 | Benchmark | What it stresses | Neo (ms) | Lua (ms) | C++ (ms) | Lua vs Neo | C++ vs Neo |
 | :-------- | :--------------- | -------: | -------: | -------: | ---------: | ---------: |
-| `loop_sum`      | integer loop, VM dispatch floor | **171** | 197 |  13.1 | 0.87x | 13.1x |
-| `float_math`    | float mul/add/sub chain         | **160** | 316 |  59.8 | 0.51x |  2.7x |
-| `func_call`     | script function call overhead   | **128** | 161 |   4.4 | 0.80x | 29.4x |
-| `fib_recursive` | recursion, fib(32)              |  **89** |  90 |   6.8 | 0.99x | 13.1x |
-| `array_rw`      | sequential array write + read   |  **42** |  47 |   2.5 | 0.89x | 17.0x |
-| `map_str`       | string-key hash lookup          |  46 |  **40** |  72.7 | 1.15x |  0.6x |
-| `string_ops`    | string build + length           |  **80** | 153 |  13.6 | 0.52x |  5.9x |
-| `particles`     | game-style float + array sim    |  **45** |  50 |   3.5 | 0.90x | 12.7x |
-| **total**       |                                 | **761** | 1054 | 176.3 | 0.72x |  4.3x |
+| `loop_sum`      | integer loop, VM dispatch floor | **159** | 185 |  12.1 | 0.86x | 13.1x |
+| `float_math`    | float mul/add/sub chain         | **203** | 294 |  55.9 | 0.69x |  3.6x |
+| `func_call`     | script function call overhead   | **123** | 151 |   4.1 | 0.81x | 29.9x |
+| `fib_recursive` | recursion, fib(32)              |  **84** |  86 |   6.6 | 0.98x | 12.8x |
+| `array_rw`      | sequential array write + read   |  **39** |  44 |   2.3 | 0.89x | 16.7x |
+| `map_str`       | string-key hash lookup          |  **32** |  37 |  56.4 | 0.86x |  0.6x |
+| `string_ops`    | string build + length           |  **54** | 137 |  13.0 | 0.39x |  4.2x |
+| `particles`     | game-style float + array sim    |  **45** |  47 |   3.3 | 0.96x | 13.7x |
+| **total**       |                                 | **739** |  981 | 153.7 | 0.75x |  4.8x |
 
-- Neo leads on 7 of 8 benchmarks; `map_str` is the one Lua wins, because Lua interns every short
-  string so a table lookup is a pointer compare.
-- `fib_recursive` is where the lead is thinnest — 0.99x here and an exact tie on the median, against
-  0.72x overall. Almost all of its work is call and return, so there is no loop body for Neo's
-  cheaper dispatch to win back.
+- Neo leads on all 8 benchmarks. `particles` has the next-smallest margin after `fib_recursive`.
+- `fib_recursive` is where the lead is thinnest — 0.98x here against 0.75x overall. Almost all of
+  its work is call and return, so there is no loop body for Neo's cheaper dispatch to win back.
 - C++ is a reference ceiling, not a peer. The exception is `map_str`, where
   `std::unordered_map<std::string,…>` is slower than both VMs — the interpreters cache the string
   hash; the C++ map rehashes on every lookup.
@@ -486,7 +484,7 @@ interpreter. Those three rows react and `loop_sum` / `array_rw` do not, which is
 look for before calling something a regression. The durable fix is PGO, since `/LTCG` places blocks
 from heuristics while it has no idea which branches actually run.
 
-All compiler and VM changes are covered by the regression suites: `console.exe --smoke` (2,785
+All compiler and VM changes are covered by the regression suites: `console.exe --smoke` (2,828
 compiler cases) and `console.exe --v2smoke` (host API, closure lifetime, leak counters).
 
 ### var data structure
