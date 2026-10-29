@@ -417,6 +417,7 @@ private:
 	void Div3(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	// 벡터 산술: v1 은 VAR_VEC. op 0=+ 1=- 2=* 3=/. v2 는 성분 수가 같은 벡터(성분별) 또는 스칼라(*,/ 만).
 	bool VecArith(VarInfo* r, VarInfo* v1, VarInfo* v2, int op);
+	bool VecArithInline(VarInfo* r, VarInfo* v1, VarInfo* v2, int op);
 	void Per3(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void LSh3(VarInfo* r, VarInfo* v1, VarInfo* v2);
 	void RSh3(VarInfo* r, VarInfo* v1, VarInfo* v2);

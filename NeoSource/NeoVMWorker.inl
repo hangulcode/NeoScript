@@ -826,31 +826,37 @@ NEOS_FORCEINLINE float VectorArithmeticComponent(float a, float b, int op)
 	return op == 0 ? a + b : op == 1 ? a - b : op == 2 ? a * b : a / b;
 }
 
+// 인라인(2·3성분) 벡터 산술. v1 이 VAR_VEC 일 때만 부른다. Add3/Sub3/Mul3/Div3 의 fast path 와 VecArith 가
+// 공유하며, op 는 호출 지점의 상수라 인라인 뒤 성분 연산의 분기가 접힌다. 4성분은 VecArith 에 남는다.
+// fast path 에 두는 근거: v = v + d 연쇄·누적에서 NOINLINE *Rare 호출을 없애는 이득이 측정상 컸다.
+NEOS_FORCEINLINE bool CNeoVMWorker::VecArithInline(VarInfo* r, VarInfo* v1, VarInfo* v2, int op)
+{
+	const int n = v1->_vecCount;
+	float bx, by, bz;
+	if (v2->GetType() == VAR_VEC && v2->_vecCount == n)
+	{
+		bx = v2->_vecX; by = v2->_vecYZ[0]; bz = v2->_vecYZ[1];
+	}
+	else if ((op == 2 || op == 3) && v2->IsNumber())
+		bx = by = bz = (float)v2->GetFloatNumber();
+	else
+		return false;
+	const float x = VectorArithmeticComponent(v1->_vecX, bx, op);
+	const float y = VectorArithmeticComponent(v1->_vecYZ[0], by, op);
+	const float z = n == 3 ? VectorArithmeticComponent(v1->_vecYZ[1], bz, op) : 0.0f;
+	// 결과를 먼저 계산하므로 r이 어느 입력과 같아도 안전하게 덮어쓸 수 있다.
+	if (r->IsAllocType()) Var_Release(r);
+	r->SetInlineVec(n, x, y, z);
+	return true;
+}
+
 NEOS_FORCEINLINE bool CNeoVMWorker::VecArith(VarInfo* r, VarInfo* v1, VarInfo* v2, int op)
 {
 	// 쿼터니언은 별도 타입이 아니다 — 4성분 벡터의 성분별 연산으로 동작하며,
 	// 회전 의미를 원하면 사용자가 math.RotateVectorByQuat 를 쓴다.
 	// 저장 방식은 연산 진입 시 한 번만 구분한다. 성분마다 포인터/인라인을 분기하지 않는다.
 	if (v1->GetType() == VAR_VEC)
-	{
-		const int n = v1->_vecCount;
-		float bx, by, bz;
-		if (v2->GetType() == VAR_VEC && v2->_vecCount == n)
-		{
-			bx = v2->_vecX; by = v2->_vecYZ[0]; bz = v2->_vecYZ[1];
-		}
-		else if ((op == 2 || op == 3) && v2->IsNumber())
-			bx = by = bz = (float)v2->GetFloatNumber();
-		else
-			return false;
-		const float x = VectorArithmeticComponent(v1->_vecX, bx, op);
-		const float y = VectorArithmeticComponent(v1->_vecYZ[0], by, op);
-		const float z = n == 3 ? VectorArithmeticComponent(v1->_vecYZ[1], bz, op) : 0.0f;
-		// 결과를 먼저 계산하므로 r이 어느 입력과 같아도 안전하게 덮어쓸 수 있다.
-		if (r->IsAllocType()) Var_Release(r);
-		r->SetInlineVec(n, x, y, z);
-		return true;
-	}
+		return VecArithInline(r, v1, v2, op);
 	float tmp[4];
 	if (v2->GetType() == VAR_VEC4)
 	{
@@ -906,6 +912,8 @@ NEOS_FORCEINLINE void CNeoVMWorker::Add3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		StoreNumberFloat(r, a + b);
 		return;
 	}
+	// 인라인 벡터(2·3성분)는 fast path 에서 끝낸다. 실패(성분 수 불일치 등)와 4성분은 rare 로.
+	if (t1 == VAR_VEC && VecArithInline(r, v1, v2, 0)) return;
 	Add3Rare(r, v1, v2);
 }
 
@@ -956,6 +964,8 @@ NEOS_FORCEINLINE void CNeoVMWorker::Sub3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		StoreNumberFloat(r, a - b);
 		return;
 	}
+	// 인라인 벡터(2·3성분)는 fast path 에서 끝낸다. 실패(성분 수 불일치 등)와 4성분은 rare 로.
+	if (t1 == VAR_VEC && VecArithInline(r, v1, v2, 1)) return;
 	Sub3Rare(r, v1, v2);
 }
 
@@ -1000,6 +1010,8 @@ NEOS_FORCEINLINE void CNeoVMWorker::Mul3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		StoreNumberFloat(r, a * b);
 		return;
 	}
+	// 인라인 벡터(2·3성분)는 fast path 에서 끝낸다. 실패(성분 수 불일치 등)와 4성분은 rare 로.
+	if (t1 == VAR_VEC && VecArithInline(r, v1, v2, 2)) return;
 	Mul3Rare(r, v1, v2);
 }
 
@@ -1064,6 +1076,8 @@ NEOS_FORCEINLINE void CNeoVMWorker::Div3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 		StoreNumberFloat(r, a / b);
 		return;
 	}
+	// 인라인 벡터(2·3성분)는 fast path 에서 끝낸다. 실패(성분 수 불일치 등)와 4성분은 rare 로.
+	if (t1 == VAR_VEC && VecArithInline(r, v1, v2, 3)) return;
 	Div3Rare(r, v1, v2);
 }
 
