@@ -702,6 +702,8 @@ certificate store; no extra TLS DLL or CA bundle is shipped. Peer and hostname v
 HTTP error status codes still count as completed transfers; redirects are not followed.
 The adapter can also be compiled by another host against libcurl 7.85+ built with HTTPS support.
 Non-Windows builds use that libcurl installation's TLS backend and CA configuration.
+On Windows, the console initializes libcurl on the first HTTP request, so scripts that do not use
+HTTP avoid network initialization at startup. Concurrent first requests share one initialization.
 
 Core-only CMake and Visual Studio builds do not download or link libcurl. Redistribute the curl
 copyright notice in `THIRD_PARTY_NOTICES.txt` with console binaries.

@@ -160,6 +160,8 @@ struct SOperand
 	NS_FLOAT _floatLiteral;
 	NS_INT _intLiteral;
 	bool _readOnly = false;
+	// 이 피연산자를 보존한 MOV만 추적한다. 다른 값을 만드는 임시는 되돌리지 않는다.
+	int _snapshotOffset = -1;
     // A completed indexed assignment is still an lvalue, but its next value
     // consumer uses the captured component rather than rereading the owner.
     bool _assignedResult = false;
@@ -199,6 +201,7 @@ struct SOperand
 	void Reset()
 	{
 		_readOnly = false;
+		_snapshotOffset = -1;
         _assignedResult = false;
         _pathRoot = INVALID_ERROR_PARSEJOB;
         _pathKeys.clear(); _pathOwners.clear(); _pathResolved = false;
@@ -367,27 +370,56 @@ static void SnapshotValue(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs)
         const int value = funs._cur->AllocLocalTempVar();
         funs._cur->Push_OP2(ar, NOP_MOV, value, operand._iVar, operand.IsShort());
         operand = SOperand(value);
+		operand._snapshotOffset = funs._cur->_iLastOPOffset;
     }
 }
 
-// 바로 앞의 벡터 생성 결과를 단순 변수에 직접 쓴다. 인자 평가는 이미 끝났으며,
+// 보존 이후 실행할 명령이 하나도 없다면 원본을 지금 읽어도 같은 값이다.
+// 모듈의 public 변수 선택자는 호스트 getter와 달리 코드를 내지 않으므로 이 경우에 해당한다.
+// 분기 합류점이나 디버그 빌드의 중단 위치는 그대로 둔다.
+static void ElideImmediateSnapshot(SOperand& operand, CArchiveRdWC& ar, SFunctions& funs)
+{
+	SFunctionInfo& fun = *funs._cur;
+	const int offset = operand._snapshotOffset;
+	const int end = fun._code->GetBufferOffset();
+	if (ar._debug || offset < 0 || offset != fun._iLastOPOffset ||
+		offset + (int)sizeof(SVMOperation) != end || fun.GetLastOP() != NOP_MOV ||
+		fun._jumpTargetOffsets.count(end) != 0)
+		return;
+	const SVMOperation* move = fun.GetOPPointer(offset);
+	if (move->n1 != operand._iVar || move->argFlag != 0)
+		return;
+	const int source = move->n2;
+	fun._code->SetBufferOffset(offset);
+	fun.ClearLastOP();
+	operand = SOperand(source);
+}
+
+// 바로 앞의 스크립트 호출이나 벡터 생성 결과를 단순 변수에 직접 쓴다. 인자 평가는 이미 끝났으며,
 // 임시 결과를 공유하는 MOV와 불필요한 참조 수 변경을 없앤다.
 // 호출 인자 슬롯과 컨테이너/속성 대입은 제외하고, 분기 합류점도 넘지 않는다.
-static bool TryStoreVectorConstructor(SFunctions& funs, int dest, SOperand& source)
+static bool TryStoreCallResult(CArchiveRdWC& ar, SFunctions& funs, int dest, SOperand& source)
 {
     if (source.IsArray() || source.IsFun() || !IsTempVar(source._iVar) ||
         !((dest > 0 && dest < COMPILE_LOCALTMP_VAR_BEGIN) || dest <= COMPILE_GLOBAL_VAR_BEGIN))
         return false;
     SFunctionInfo& fun = *funs._cur;
     const int end = fun._code->GetBufferOffset();
-    if (fun.GetLastOP() != NOP_PTRCALL2 ||
+    const eNOperation kind = fun.GetLastOP();
+    if ((kind != NOP_PTRCALL2 && (kind != NOP_CALL || ar._debug)) ||
         fun._iLastOPOffset + (int)sizeof(SVMOperation) != end ||
         fun._jumpTargetOffsets.count(end) != 0)
         return false;
     SVMOperation* call = fun.GetOPPointer(fun._iLastOPOffset);
-    if (call->n3 != source._iVar || (call->argFlag & NEOS_OP_CALL_NORESULT) ||
-        !IsCompileConstant(call->n1))
+    if (call->n3 != source._iVar || (call->argFlag & NEOS_OP_CALL_NORESULT))
         return false;
+    // RET가 실제로 실행될 때만 대입한다. 오류·일시 정지 중에는 목적지 값을 바꾸지 않는다.
+    if (kind == NOP_CALL)
+    {
+        call->n3 = CompileShort("call destination", dest);
+        return true;
+    }
+    if (!IsCompileConstant(call->n1)) return false;
     const VarInfo& name = funs._staticVars[StaticPoolIndex(call->n1)];
     if (name.GetType() != VAR_STRING ||
         CNeoVM::GetDefaultNativeIntrinsic(CNeoVM::FindDefaultNativeIndex(name._str->_str)) != NOP_VEC_MAKE)
@@ -3282,7 +3314,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 				MaterializeValue(b, ar, funs); // complete the RHS before resolving the destination
 				if (a.IsArray())
 					WriteElement(a, op, b._iVar, b.IsShort(), ar, funs);
-				else if (op != NOP_MOV || (!TryStoreVectorConstructor(funs, a._iVar, b) &&
+				else if (op != NOP_MOV || (!TryStoreCallResult(ar, funs, a._iVar, b) &&
 					!TryPushImmediate(ar, funs, a._iVar, b)))
 					funs._cur->Push_OP2(ar, op, a._iVar, b._iVar, b.IsShort());
 			}
@@ -3291,6 +3323,7 @@ TK_TYPE ParseJob(bool bReqReturn, SOperand& sResultStack, std::vector<SJumpValue
 		{
 			MaterializeValue(a, ar, funs);
 			MaterializeValue(b, ar, funs);
+			ElideImmediateSnapshot(a, ar, funs);
 			const int iTempOffset2 = funs._cur->AllocLocalTempVar();
 			funs._cur->Push_OP(ar, op, iTempOffset2, a._iVar, b._iVar, a.IsShort(), b.IsShort());
 			operands[iFindOffset] = iTempOffset2;
@@ -5041,7 +5074,7 @@ bool ParseVarDef(CArchiveRdWC& ar, SFunctions& funs, SVars& vars, bool blExport,
         funs._cur->Push_OP2(ar, NOP_FMOV1, slot, value._iVar, false);
     else if (value.IsArray())
         ReadElement(value, slot, ar, funs);
-    else if (!TryStoreVectorConstructor(funs, slot, value) && !TryPushImmediate(ar, funs, slot, value))
+    else if (!TryStoreCallResult(ar, funs, slot, value) && !TryPushImmediate(ar, funs, slot, value))
         funs._cur->Push_OP2(ar, NOP_MOV, slot, value._iVar, value.IsShort());
     return true;
 }

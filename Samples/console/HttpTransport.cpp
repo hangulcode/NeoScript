@@ -2,18 +2,33 @@
 #include <curl/curl.h>
 #include <climits>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 
 namespace
 {
 struct CurlGlobal
 {
+    std::once_flag once;
+    bool initialized = false;
     CurlGlobal()
     {
-        if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
-            throw std::runtime_error("libcurl initialization failed");
+#ifndef _WIN32
+        // 외부 libcurl을 쓰는 플랫폼은 초기화의 스레드 안전성을 가정하지 않는다.
+        EnsureInitialized();
+#endif
     }
-    ~CurlGlobal() { curl_global_cleanup(); }
+    void EnsureInitialized()
+    {
+        // Windows 콘솔의 고정 libcurl은 SRWLOCK으로 전역 초기화를 보호한다.
+        // HTTP를 쓰지 않는 실행에서는 Winsock 등의 초기화 비용을 지불하지 않는다.
+        std::call_once(once, [this]() {
+            if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
+                throw std::runtime_error("libcurl initialization failed");
+            initialized = true;
+        });
+    }
+    ~CurlGlobal() { if (initialized) curl_global_cleanup(); }
 };
 
 size_t Receive(char* data, size_t size, size_t count, void* user)
@@ -50,6 +65,7 @@ public:
             if (input.url.find('\0') != std::string::npos || input.timeoutMs < -1)
                 throw std::runtime_error("Invalid HTTP URL or timeout");
             if (input.IsCancelled()) throw std::runtime_error("HTTP request cancelled");
+            global->EnsureInitialized();
             std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> handle(curl_easy_init(), curl_easy_cleanup);
             if (!handle) throw std::runtime_error("libcurl handle allocation failed");
             std::unique_ptr<curl_slist, decltype(&curl_slist_free_all)> headers(nullptr, curl_slist_free_all);
@@ -104,7 +120,7 @@ public:
 
 std::shared_ptr<NeoScript::IHttpTransport> CreateConsoleHttpTransport()
 {
-    // 최초 생성은 VM 작업 스레드를 시작하기 전이다. 모든 전송 객체가 전역 초기화를 공유한다.
+    // 모든 전송 객체가 초기화 상태를 공유하고 마지막 전송이 끝날 때까지 보유한다.
     static const std::shared_ptr<CurlGlobal> global = std::make_shared<CurlGlobal>();
     return std::make_shared<CurlTransport>(global);
 }

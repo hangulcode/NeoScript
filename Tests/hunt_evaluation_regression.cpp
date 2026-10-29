@@ -26,6 +26,18 @@ struct Case { std::string name, globals, body; };
 static std::vector<Case> Cases()
 {
     std::vector<Case> cases = {
+        {"adjacent global snapshot", "var x=3;var y=4;",
+            "x=x+(y);return x==7 && y==4;"},
+        {"direct call result updates global after return", "var x=3;fun Change(){var old=x;x=8;return old;}",
+            "x=Change();return x==3;"},
+        {"direct call result preserves caller argument", "fun Change(var old){return old+4;}",
+            "var x=3;x=Change(x);return x==7;"},
+        {"global snapshot before nested assignment", "var x=3;var y=4;",
+            "var r=x+(x=y);return r==7 && x==4;"},
+        {"global snapshot before short circuit join", "var x=true;",
+            "var r=x==(false || (x=false));return !r && !x;"},
+        {"global snapshot arithmetic precedence", "var x=3;var y=4;",
+            "var r=x+y*(x=5);return r==23 && x==5;"},
         {"global left value", "var hp=100;fun Hit(){hp-=30;return 30;}",
             "var r=hp-Hit();return r==70 && hp==70;"},
         {"argument value", "var x=1;fun G(){x=100;return 0;}fun First(var a,var b){return a;}",
