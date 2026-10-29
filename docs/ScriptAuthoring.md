@@ -870,6 +870,8 @@ see the [capture discussion in the embedding guide](Embedding.md).
 
 Start with `import math;`. Preserve the capitalization in `math.Clamp` and `math.Lerp`.
 Trigonometric functions use lowercase names, such as `math.sin`, `math.cos`, and `math.atan2`.
+Pass numbers to `math.sin` and `math.cos`; strings, bools, and null are not converted implicitly.
+Their scalar results use double precision, while vector components remain float32.
 
 | Purpose | Available functions |
 | --- | --- |

@@ -184,6 +184,34 @@ static void CompatibilityCases(IRuntime* runtime, InstanceHandle instance) {
     Check(std::isnan(result[0]) && result[1] == 0 && result[2] == 0, "Normalize nonfinite compatibility");
 }
 
+static void ScalarMathCases(IRuntime* runtime, InstanceHandle instance) {
+    const double infinity = std::numeric_limits<double>::infinity();
+    const double values[] = {0.0, -0.0, 1.0, -1.0, 0.1, pi, -pi,
+        std::numeric_limits<double>::denorm_min(), 1e20, -1e20, 1e300,
+        infinity, -infinity, std::numeric_limits<double>::quiet_NaN()};
+    for (const char* name : {"Sin", "Cos", "SinValue", "CosValue"}) {
+        const bool sine = name[0] == 'S';
+        for (double value : values) {
+            const double expected = sine ? std::sin(value) : std::cos(value);
+            const double actual = Scalar(runtime, instance, name, {value});
+            Check(std::isnan(expected) ? std::isnan(actual) :
+                actual == expected && std::signbit(actual) == std::signbit(expected),
+                Label(name, value) + " scalar result and zero sign");
+        }
+        for (int64_t value : {int64_t(0), int64_t(-7), int64_t(9007199254740993LL)}) {
+            auto call = runtime->Call(instance, name);
+            const double expected = sine ? std::sin(static_cast<double>(value)) : std::cos(static_cast<double>(value));
+            Check(call.argInt(value).invoke() == RunStatus::Completed &&
+                call.retType() == ValueType::Float && call.retFloat() == expected,
+                std::string(name) + " int64 argument");
+        }
+    }
+    // 결과를 버리는 호출도 인자를 검사하며 다음 호출의 스택과 반환값을 오염시키지 않는다.
+    auto call = runtime->Call(instance, "DiscardMath");
+    Check(call.argFloat(0.0).invoke() == RunStatus::Completed && call.retBool(),
+        "discarded scalar math result preserves later calls");
+}
+
 int main() {
     auto runtime = CreateRuntime();
     runtime->FreezeBindings();
@@ -192,7 +220,12 @@ int main() {
         "export fun Delta(var a,var b){return math.DeltaAngle(a,b);}"
         "export fun Lerp(var a,var b,var t){return math.LerpAngle(a,b,t);}"
         "export fun Move(var a,var b,var step){return math.MoveTowardAngle(a,b,step);}"
-        "export fun Ping(var x,var length){return math.PingPong(x,length);}";
+        "export fun Ping(var x,var length){return math.PingPong(x,length);}"
+        "export fun Sin(var x){var result=[1];result=math.sin(x);return result;}"
+        "export fun Cos(var x){var result=[1];result=math.cos(x);return result;}"
+        "export fun SinValue(var x){var f=Sin;return f(x);}"
+        "export fun CosValue(var x){var f=Cos;return f(x);}"
+        "export fun DiscardMath(var x){math.sin(x);math.cos(x);return math.sin(x)==0.0&&math.cos(x)==1.0;}";
     for (bool debug : {false, true}) for (bool image : {false, true}) {
         CompileDesc desc;
         desc.source = source;
@@ -218,6 +251,7 @@ int main() {
             AngleCases(runtime, instance);
             PingPongCases(runtime, instance);
             CompatibilityCases(runtime, instance);
+            ScalarMathCases(runtime, instance);
             runtime->DestroyInstance(instance);
         }
         runtime->DestroyProgram(program);

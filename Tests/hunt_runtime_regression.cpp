@@ -1,4 +1,4 @@
-#include "NeoScript.h"
+﻿#include "NeoScript.h"
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -247,6 +247,31 @@ static void CollectionErrorCases(IRuntime* runtime, bool debug, bool image)
 
 static void NumericCases(IRuntime* runtime, bool debug, bool image)
 {
+    Run(runtime, "same and mixed numeric arithmetic", R"NS(
+export fun Probe(){var a=8.0;var b=2.0;var i=2;
+ return a+b==10.0 && a-b==6.0 && a*b==16.0 && a/b==4.0
+   && a+i==10.0 && a-i==6.0 && a*i==16.0 && a/i==4.0
+   && i+a==10.0 && i-a==-6.0 && i*a==16.0 && i/a==0.25
+   && type(a+b)=="float" && type(i+i)=="int" && i/i==1;}
+)NS", debug, image);
+    Run(runtime, "numeric conversion fallback and destination ownership", R"NS(
+export var stored=[1,2];
+export fun Probe(){
+ var local="12.75";local=tofloat(local);
+ if(local!=12.75)return false;
+ local=toint(local);if(local!=12)return false;
+ stored=[1,2];stored=tofloat(7);if(stored!=7.0)return false;
+ stored="-12";stored=toint(stored);if(stored!=-12)return false;
+ return toint(true)==1 && toint(false)==0 && toint(null)==-1
+   && tofloat(true)==1.0 && tofloat(false)==0.0 && tofloat(null)==-1.0
+   && toint([])==-1 && tofloat([])==-1.0;
+}
+)NS", debug, image);
+    for (const char* function : {"sin", "cos"})
+        for (const char* value : {"true", "\"0\"", "null", "[1]"})
+            Run(runtime, "scalar math rejects nonnumeric input",
+                std::string("export fun Probe(){math.") + function + "(" + value + ");return false;}",
+                debug, image, function);
     for (const char* expression : {"5.5%2.0", "5.5%2", "5%2.0"})
         Run(runtime, "runtime float remainder rejection",
             std::string("export fun Probe(){return ") + expression + ";}",

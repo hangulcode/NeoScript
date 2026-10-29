@@ -2115,15 +2115,15 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_LOG_NOT:       handle_LOG_NOT_cold(OP); break;
 		case NOP_ADD2:          Add2(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
 		case NOP_ADD2_L:        Add2(GetVarPtr_L(OP.n1), GetVarPtr_L(OP.n2)); break;
-		case NOP_SUB2:          handle_SUB2_cold(OP); break;
-		case NOP_MUL2:          handle_MUL2_cold(OP); break;
-		case NOP_DIV2:          handle_DIV2_cold(OP); break;
+		case NOP_SUB2:          Sub2(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
+		case NOP_MUL2:          Mul2(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
+		case NOP_DIV2:          Div2(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
 		case NOP_PERSENT2:      handle_PERSENT2_cold(OP); break;
-		case NOP_LSHIFT2:       handle_LSHIFT2_cold(OP); break;
-		case NOP_RSHIFT2:       handle_RSHIFT2_cold(OP); break;
-		case NOP_AND2:          handle_AND2_cold(OP); break;
-		case NOP_OR2:           handle_OR2_cold(OP); break;
-		case NOP_XOR2:          handle_XOR2_cold(OP); break;
+		case NOP_LSHIFT2:       LSh2(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
+		case NOP_RSHIFT2:       RSh2(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
+		case NOP_AND2:          And2(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
+		case NOP_OR2:           Or2(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
+		case NOP_XOR2:          Xor2(GetVarPtrF1(OP), GetVarPtr2(OP)); break;
 		case NOP_VAR_CLEAR:     Var_Release(GetVarPtrF1(OP)); break;
 		case NOP_INC:           Inc(GetVarPtrF1(OP)); break;
 		case NOP_DEC:           Dec(GetVarPtrF1(OP)); break;
@@ -2135,11 +2135,11 @@ bool	CNeoVMWorker::RunInternal(int iBreakingCallStack)
 		case NOP_MUL3_L:        Mul3(GetVarPtr_L(OP.n1), GetVarPtr_L(OP.n2), GetVarPtr_L(OP.n3)); break;
 		case NOP_DIV3:          Div3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
 		case NOP_PERSENT3:      Per3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
-		case NOP_LSHIFT3:       handle_LSHIFT3_cold(OP); break;
-		case NOP_RSHIFT3:       handle_RSHIFT3_cold(OP); break;
-		case NOP_AND3:          handle_AND3_cold(OP); break;
-		case NOP_OR3:           handle_OR3_cold(OP); break;
-		case NOP_XOR3:          handle_XOR3_cold(OP); break;
+		case NOP_LSHIFT3:       LSh3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
+		case NOP_RSHIFT3:       RSh3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
+		case NOP_AND3:          And3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
+		case NOP_OR3:           Or3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
+		case NOP_XOR3:          Xor3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); break;
 		case NOP_GREAT:         handle_GREAT_cold(OP); break;
 		case NOP_GREAT_EQ:      handle_GREAT_EQ_cold(OP); break;
 		case NOP_LESS:          handle_LESS_cold(OP); break;
@@ -2729,6 +2729,19 @@ bool CNeoVMWorker::CallDefaultNativeByIndex(int nativeIndex, int n3, VarInfo* pR
 {
 	if (!EnsureStackRange(_iSP_VarsMax, n3))
 		return false;
+    // 인자 슬롯 검증은 유지한다. 등록된 순수 함수의 숫자 인자만 별도 프레임 없이 계산한다.
+    // 잘못된 타입과 인자 수는 기존 호출 경로에서 같은 오류를 낸다.
+    if (n3 == 1)
+    {
+        CNeoVM::ScalarNativeFunction scalar = CNeoVM::GetDefaultNativeScalar(nativeIndex);
+        VarInfo* argument = m_pVarStack_Base->data() + _iSP_VarsMax + 1;
+        if (scalar && argument->IsNumber())
+        {
+            const NS_FLOAT value = scalar(argument->GetFloatNumber());
+            if (pRet) StoreNumberFloat(pRet, value);
+            return true;
+        }
+    }
 	NativeFrameScope frame(*this);
 	_iSP_Vars = _iSP_VarsMax;
 	SetStackPointer(_iSP_Vars);

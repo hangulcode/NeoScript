@@ -2467,6 +2467,7 @@ static VMHash<TYPE_NeoLib> g_sNeoFunLib_Map;
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_Set;
 static VMHash<TYPE_NeoLib> g_sNeoFunLib_Async;
 static std::vector<TYPE_NeoLib> g_sNeoFunLib_DefaultNative;
+static std::vector<CNeoVM::ScalarNativeFunction> g_sNeoFunLib_DefaultScalar;
 static std::vector<u8> g_sNeoFunLib_DefaultIntrinsic; // native index 별 intrinsic opcode (기본 NOP_NONE)
 static std::unordered_map<std::string, int> g_sNeoFunLib_DefaultNativeIndex;
 
@@ -2546,6 +2547,11 @@ static int AddDefaultNativeFun(const std::string& nativeName, TYPE_NeoLib fun)
 
 	int nativeIndex = (int)g_sNeoFunLib_DefaultNative.size();
 	g_sNeoFunLib_DefaultNative.push_back(fun);
+    // 호스트 콜백이나 VM 상태를 사용하지 않는 내장 수학 함수만 직접 계산을 허용한다.
+    CNeoVM::ScalarNativeFunction scalar = nullptr;
+    if (fun == &neo_libs::Math_sin) scalar = static_cast<CNeoVM::ScalarNativeFunction>(&::sin);
+    else if (fun == &neo_libs::Math_cos) scalar = static_cast<CNeoVM::ScalarNativeFunction>(&::cos);
+    g_sNeoFunLib_DefaultScalar.push_back(scalar);
 	g_sNeoFunLib_DefaultIntrinsic.push_back(NOP_NONE);
 	g_sNeoFunLib_DefaultNativeIndex[nativeName] = nativeIndex;
 	g_sNeoFunLib_Default.Add(nativeName, fun);
@@ -2634,6 +2640,11 @@ int CNeoVM::FindDefaultNativeIndex(const std::string& name)
 	return it->second;
 }
 
+CNeoVM::ScalarNativeFunction CNeoVM::GetDefaultNativeScalar(int nativeIndex)
+{
+    return nativeIndex >= 0 && nativeIndex < static_cast<int>(g_sNeoFunLib_DefaultScalar.size())
+        ? g_sNeoFunLib_DefaultScalar[nativeIndex] : nullptr;
+}
 bool CNeoVM::CallDefaultNativeByIndex(int nativeIndex, CNeoVMWorker* pWorker, short args)
 {
 	if (nativeIndex < 0 || nativeIndex >= (int)g_sNeoFunLib_DefaultNative.size())

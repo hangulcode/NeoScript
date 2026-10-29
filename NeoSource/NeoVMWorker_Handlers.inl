@@ -34,20 +34,34 @@ NEOS_NOINLINE bool handle_TOSTRING(const SVMOperation& OP) {
     return false;
 }
 
+// 숫자는 공통 변환의 타입 분기를 피한다. 참조형 목적지는 저장 도우미가 해제하고, 다른 입력 타입은 기존 규칙을 따른다.
+NEOS_FORCEINLINE void ConvertToInt(VarInfo* dst, VarInfo* src) {
+    const VAR_TYPE type = src->GetType();
+    const NS_INT result = type == VAR_INT ? src->_int :
+        type == VAR_FLOAT ? NeoFloatToInt(src->_float) : ToInt(src);
+    StoreNumberInt(dst, result);
+}
+NEOS_FORCEINLINE void ConvertToFloat(VarInfo* dst, VarInfo* src) {
+    const VAR_TYPE type = src->GetType();
+    const NS_FLOAT result = type == VAR_INT ? static_cast<NS_FLOAT>(src->_int) :
+        type == VAR_FLOAT ? src->_float : ToFloat(src);
+    StoreNumberFloat(dst, result);
+}
+
 NEOS_FORCEINLINE bool handle_TOINT(const SVMOperation& OP) {
-    Var_SetInt(GetVarPtrF1(OP), ToInt(GetVarPtr2(OP)));
+    ConvertToInt(GetVarPtrF1(OP), GetVarPtr2(OP));
     return false;
 }
 
 // _L 변형: 오퍼랜드가 전부 로컬인 것이 프로그램 빌드 시(PatchLocalOps) 확정된 op.
 // argFlag 비트 테스트 없이 스택 베이스로 직행한다(test+cmov 제거).
 NEOS_FORCEINLINE bool handle_TOINT_L(const SVMOperation& OP) {
-    Var_SetInt(GetVarPtr_L(OP.n1), ToInt(GetVarPtr_L(OP.n2)));
+    ConvertToInt(GetVarPtr_L(OP.n1), GetVarPtr_L(OP.n2));
     return false;
 }
 
 NEOS_FORCEINLINE bool handle_TOFLOAT(const SVMOperation& OP) {
-    Var_SetFloat(GetVarPtrF1(OP), ToFloat(GetVarPtr2(OP)));
+    ConvertToFloat(GetVarPtrF1(OP), GetVarPtr2(OP));
     return false;
 }
 
@@ -769,22 +783,11 @@ NEOS_NOINLINE bool handle_ERROR(const SVMOperation& OP) {
 // 실행 빈도가 낮은 opcode 의 핸들러. 디스패치 루프(RunInternal)는 타임아웃×디버그로 네 벌 생성되고 한 벌이
 // 50 KB 를 넘어 uop 캐시를 벗어나므로, 드문 핸들러는 본문을 밖으로 빼 핫 루프를 작게 유지한다.
 // 선정 근거: 벤치·smoke 의 동적 opcode 계측과 게임 프로젝트 스크립트 101개의 정적 opcode 빈도(둘 다 0.1% 미만인 것만).
+// 비트·시프트 연산과 2-피연산자 산술은 계측에서는 드물었지만 xorshift 류 난수·해시 코드가 op 마다 호출을
+// 치러 느려졌으므로(실측) 루프 안으로 되돌렸다. 여기 남은 것은 비교→bool, 논리 점프, LOADK 류다.
 NEOS_NOINLINE void handle_LOADK_cold(const SVMOperation& OP) { Move(GetVarPtrF1(OP), m_pVarGlobal_Pointer + OP.n23); }
 NEOS_NOINLINE void handle_LOG_NOT_cold(const SVMOperation& OP) { Var_SetBool(GetVarPtrF1(OP), !GetVarPtr2(OP)->IsTrue()); }
-NEOS_NOINLINE void handle_SUB2_cold(const SVMOperation& OP) { Sub2(GetVarPtrF1(OP), GetVarPtr2(OP)); }
-NEOS_NOINLINE void handle_MUL2_cold(const SVMOperation& OP) { Mul2(GetVarPtrF1(OP), GetVarPtr2(OP)); }
-NEOS_NOINLINE void handle_DIV2_cold(const SVMOperation& OP) { Div2(GetVarPtrF1(OP), GetVarPtr2(OP)); }
 NEOS_NOINLINE void handle_PERSENT2_cold(const SVMOperation& OP) { Per2(GetVarPtrF1(OP), GetVarPtr2(OP)); }
-NEOS_NOINLINE void handle_LSHIFT2_cold(const SVMOperation& OP) { LSh2(GetVarPtrF1(OP), GetVarPtr2(OP)); }
-NEOS_NOINLINE void handle_RSHIFT2_cold(const SVMOperation& OP) { RSh2(GetVarPtrF1(OP), GetVarPtr2(OP)); }
-NEOS_NOINLINE void handle_AND2_cold(const SVMOperation& OP) { And2(GetVarPtrF1(OP), GetVarPtr2(OP)); }
-NEOS_NOINLINE void handle_OR2_cold(const SVMOperation& OP) { Or2(GetVarPtrF1(OP), GetVarPtr2(OP)); }
-NEOS_NOINLINE void handle_XOR2_cold(const SVMOperation& OP) { Xor2(GetVarPtrF1(OP), GetVarPtr2(OP)); }
-NEOS_NOINLINE void handle_LSHIFT3_cold(const SVMOperation& OP) { LSh3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); }
-NEOS_NOINLINE void handle_RSHIFT3_cold(const SVMOperation& OP) { RSh3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); }
-NEOS_NOINLINE void handle_AND3_cold(const SVMOperation& OP) { And3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); }
-NEOS_NOINLINE void handle_OR3_cold(const SVMOperation& OP) { Or3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); }
-NEOS_NOINLINE void handle_XOR3_cold(const SVMOperation& OP) { Xor3(GetVarPtrF1(OP), GetVarPtr2(OP), GetVarPtr3(OP)); }
 NEOS_NOINLINE void handle_GREAT_cold(const SVMOperation& OP) { Var_SetBool(GetVarPtrF1(OP), CompareGR(GetVarPtr2(OP), GetVarPtr3(OP))); }
 NEOS_NOINLINE void handle_GREAT_EQ_cold(const SVMOperation& OP) { Var_SetBool(GetVarPtrF1(OP), CompareGE(GetVarPtr2(OP), GetVarPtr3(OP))); }
 NEOS_NOINLINE void handle_LESS_cold(const SVMOperation& OP) { Var_SetBool(GetVarPtrF1(OP), CompareGR(GetVarPtr3(OP), GetVarPtr2(OP), true)); }

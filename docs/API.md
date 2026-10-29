@@ -126,6 +126,9 @@ independent of compiler image capacity and other runtime string operations.
 
 ### 3.1 Scalar
 
+`math.sin` and `math.cos` accept one `int` or `float` argument and return a double-precision
+`float`. Other argument types are errors, even when the result is discarded.
+
 | Signature | Returns | Notes |
 | :--- | :--- | :--- |
 | `math.abs(x: float)` | `float` | |

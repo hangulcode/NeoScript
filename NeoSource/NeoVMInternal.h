@@ -30,9 +30,12 @@ inline NS_INT NeoShiftLeft(NS_INT value, NS_INT count)
 	std::memcpy(&result, &bits, sizeof(result));
 	return result;
 }
+// 부호 있는 >> 가 산술 시프트인 컴파일러(MSVC·GCC·Clang 전부)에서는 그대로 쓴다. 부호 분기를 없애기 위한 것이며,
+// 음수를 unsigned 로 돌려 맞추던 이전 식과 결과가 같다. 논리 시프트로 구현하는 컴파일러는 아래 검사에서 걸린다.
+static_assert((NS_INT(-1) >> 1) == NS_INT(-1), "NeoShiftRight requires an arithmetic right shift on signed integers");
 inline NS_INT NeoShiftRight(NS_INT value, NS_INT count)
 {
-	return value < 0 ? -1 - static_cast<NS_INT>((~static_cast<NS_UINT>(value)) >> count) : value >> count;
+	return value >> count;
 }
 
 // ==와 맵/set 키가 참조의 동일성 규칙을 공유한다. 내용 비교나 재귀 순회는 하지 않는다.
@@ -1059,6 +1062,8 @@ public:
 	static int FindDefaultNativeIndex(const std::string& name);
 	static int GetDefaultNativeIntrinsic(int nativeIndex);
 	static const char* GetDefaultNativeName(int nativeIndex);
+	typedef NS_FLOAT (*ScalarNativeFunction)(NS_FLOAT);
+	static ScalarNativeFunction GetDefaultNativeScalar(int nativeIndex);
 	static bool CallDefaultNativeByIndex(int nativeIndex, CNeoVMWorker* pWorker, short args);
 	void RegLibrary(VarInfo* pSystem, const char* pLibName);// , SNeoFunLib* pFuns);
 	static void RegObjLibrary();

@@ -900,6 +900,12 @@ NEOS_NOINLINE void CNeoVMWorker::ReleaseBeforeNumber(VarInfo* r)
 NEOS_FORCEINLINE void CNeoVMWorker::Add3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	const unsigned t1 = v1->GetType(), t2 = v2->GetType();
+    // 실수끼리는 정수 변환 분기를 거치지 않고 계산한다.
+    if (t1 == VAR_FLOAT && t2 == VAR_FLOAT)
+    {
+        StoreNumberFloat(r, v1->_float + v2->_float);
+        return;
+    }
 	if ((t1 | t2) == VAR_INT)
 	{
 		StoreNumberInt(r, NeoIntAdd(v1->_int, v2->_int));
@@ -952,6 +958,12 @@ NEOS_NOINLINE void CNeoVMWorker::Add3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 NEOS_FORCEINLINE void CNeoVMWorker::Sub3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	const unsigned t1 = v1->GetType(), t2 = v2->GetType();
+    // 실수끼리는 정수 변환 분기를 거치지 않고 계산한다.
+    if (t1 == VAR_FLOAT && t2 == VAR_FLOAT)
+    {
+        StoreNumberFloat(r, v1->_float - v2->_float);
+        return;
+    }
 	if ((t1 | t2) == VAR_INT)
 	{
 		StoreNumberInt(r, NeoIntSub(v1->_int, v2->_int));
@@ -998,6 +1010,12 @@ NEOS_NOINLINE void CNeoVMWorker::Sub3Rare(VarInfo* r, VarInfo* v1, VarInfo* v2)
 NEOS_FORCEINLINE void CNeoVMWorker::Mul3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	const unsigned t1 = v1->GetType(), t2 = v2->GetType();
+    // 실수끼리는 정수 변환 분기를 거치지 않고 계산한다.
+    if (t1 == VAR_FLOAT && t2 == VAR_FLOAT)
+    {
+        StoreNumberFloat(r, v1->_float * v2->_float);
+        return;
+    }
 	if ((t1 | t2) == VAR_INT)
 	{
 		StoreNumberInt(r, NeoIntMul(v1->_int, v2->_int));
@@ -1063,6 +1081,12 @@ NEOS_NOINLINE bool CNeoVMWorker::CheckIntegerDivisionOverflow(NS_INT dividend)
 NEOS_FORCEINLINE void CNeoVMWorker::Div3(VarInfo* r, VarInfo* v1, VarInfo* v2)
 {
 	const unsigned t1 = v1->GetType(), t2 = v2->GetType();
+    // 실수끼리는 정수 변환 분기를 거치지 않고 계산한다.
+    if (t1 == VAR_FLOAT && t2 == VAR_FLOAT)
+    {
+        StoreNumberFloat(r, v1->_float / v2->_float);
+        return;
+    }
 	if ((t1 | t2) == VAR_INT)
 	{
 		if (CheckIntegerDivision(v1->_int, v2->_int))
