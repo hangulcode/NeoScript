@@ -106,6 +106,10 @@ print((count > 0) && (count < capacity)); // true
   `(16777216.0 + 1.0) - 16777216.0` is `1` in either case. Non-finite const results are compile errors.
   Dense float arrays also store double. Vector2/3/4 and Quaternion keep float32 components
   and vector arithmetic: writes and construction narrow; component reads widen to double.
+  Vector construction, component writes, and scalar vector operands use the same float32
+  narrowing as `array32`: magnitudes between `FLT_MAX` and `2^128 - 2^103` round to signed
+  `FLT_MAX`; the midpoint and larger magnitudes become signed infinity. NaN and signed zero
+  are preserved. Arithmetic on vector components remains float32.
   Constants, assignments, and container values preserve signed zero. `0.0 == -0.0` is true,
   but `1.0 / 0.0` is positive infinity and `1.0 / -0.0` is negative infinity.
   The two zeros still identify the same map key.

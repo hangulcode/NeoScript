@@ -1329,27 +1329,27 @@ struct neo_libs
 	static bool Math_Vector2(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 2 || !NumericArg(pN, 1) || !NumericArg(pN, 2)) return false;
-		pN->Var_SetVec2(pN->GetReturnVar(), (float)pN->read<NS_FLOAT>(1), (float)pN->read<NS_FLOAT>(2));
+		pN->Var_SetVec2(pN->GetReturnVar(), pN->read<float>(1), pN->read<float>(2));
 		return true;
 	}
 	static bool Math_Vector3(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 3 || !NumericArg(pN, 1) || !NumericArg(pN, 2) || !NumericArg(pN, 3)) return false;
-		pN->Var_SetVec3(pN->GetReturnVar(), (float)pN->read<NS_FLOAT>(1), (float)pN->read<NS_FLOAT>(2), (float)pN->read<NS_FLOAT>(3));
+		pN->Var_SetVec3(pN->GetReturnVar(), pN->read<float>(1), pN->read<float>(2), pN->read<float>(3));
 		return true;
 	}
 	static bool Math_Vector4(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 4 || !NumericArg(pN, 1) || !NumericArg(pN, 2) || !NumericArg(pN, 3) || !NumericArg(pN, 4)) return false;
-		pN->Var_SetVec4(pN->GetReturnVar(), (float)pN->read<NS_FLOAT>(1), (float)pN->read<NS_FLOAT>(2),
-			(float)pN->read<NS_FLOAT>(3), (float)pN->read<NS_FLOAT>(4));
+		pN->Var_SetVec4(pN->GetReturnVar(), pN->read<float>(1), pN->read<float>(2),
+			pN->read<float>(3), pN->read<float>(4));
 		return true;
 	}
 	static bool Math_Quaternion(CNeoVMWorker* pN, VarInfo* pVar, short args)
 	{
 		if (args != 4 || !NumericArg(pN, 1) || !NumericArg(pN, 2) || !NumericArg(pN, 3) || !NumericArg(pN, 4)) return false;
-		pN->Var_SetQuat(pN->GetReturnVar(), (float)pN->read<NS_FLOAT>(1), (float)pN->read<NS_FLOAT>(2),
-			(float)pN->read<NS_FLOAT>(3), (float)pN->read<NS_FLOAT>(4));
+		pN->Var_SetQuat(pN->GetReturnVar(), pN->read<float>(1), pN->read<float>(2),
+			pN->read<float>(3), pN->read<float>(4));
 		return true;
 	}
 	static NS_FLOAT MathClamp01Value(NS_FLOAT v)
@@ -1429,7 +1429,7 @@ struct neo_libs
 		float a[3], b[3];
 		if (ReadVec3(pN->GetStackVar(1), a) == false) return false;
 		if (ReadVec3(pN->GetStackVar(2), b) == false) return false;
-		float t = static_cast<float>(pN->read<NS_FLOAT>(3));
+		float t = pN->read<float>(3);
 
 		return WriteVec3(pN,
 			(float)(a[0] + (b[0] - a[0]) * t),
@@ -1573,7 +1573,7 @@ struct neo_libs
 		float a[4], b[4];   // wxyz
 		if (ReadQuat(pN->GetStackVar(1), a) == false) return false;
 		if (ReadQuat(pN->GetStackVar(2), b) == false) return false;
-		float t = static_cast<float>(MathClamp01Value(static_cast<float>(pN->read<NS_FLOAT>(3))));
+		float t = static_cast<float>(MathClamp01Value(pN->read<float>(3)));
 
 		float dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
 		if (dot < (float)0.0)

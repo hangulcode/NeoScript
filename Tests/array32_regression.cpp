@@ -1,4 +1,4 @@
-#include "NeoScript.h"
+﻿#include "NeoScript.h"
 #include "NeoVMInternal.h"
 #include <cmath>
 #include <cstdio>
@@ -92,6 +92,42 @@ static void Float32Boundaries()
         Check(ArrayInfo::NarrowFloat32(value) == 0 && std::signbit(ArrayInfo::NarrowFloat32(value)) == std::signbit(value), "float32 signed zero preserved");
     Check(std::isnan(ArrayInfo::NarrowFloat32(std::numeric_limits<double>::quiet_NaN())), "float32 NaN preserved");
 }
+static void VectorNarrowingCases(IRuntime* rt, bool debug, bool image)
+{
+    // 생성 명령·성분 쓰기·산술이 배열과 같은 축소 경계를 쓰는지 확인한다.
+    for (const char* name : {"Vector2", "Vector3", "Vector4", "Quaternion"})
+    {
+        const int dim = std::string(name) == "Vector2" ? 2 : std::string(name) == "Vector3" ? 3 : 4;
+        const std::string ctor = std::string("math.") + name;
+        std::string arguments = "x", ones = "1.0";
+        for (int i = 1; i < dim; ++i) { arguments += ",x"; ones += ",1.0"; }
+        const std::string body = std::string(R"NS(
+var same=fun(var a,var b){if(a!=a)return b!=b;if(a==0.0 && b==0.0)return 1.0/a==1.0/b;return a==b;};
+var z=0.0;
+var values=[0.0,-0.0,1.0,-1.0,16777217.0,3.4028234663852886e38,3.4028235e38,
+ 3.4028235677973362e38,3.4028235677973366e38,3.402823567797337e38,
+ -3.4028235e38,-3.4028235677973366e38,1e300,-1e300,1.0/z,-1.0/z,z/z,
+ 1.401298464324817e-45,1e-300,-1e-300];
+foreach(var x in values){
+ var expected=system.array32(x,1)[0];
+)NS") + "var direct=" + ctor + "(" + arguments + ");var unit=" + ctor + "(" + ones + ");" + R"NS(
+ var multiplied=unit*x;var divided=unit/x;var inv=system.array32(1.0/expected,1)[0];
+ var list=[unit];var map={"v":unit};var array=system.array(unit,1);
+)NS" + "for(var i in 0," + std::to_string(dim) + "){" + R"NS(
+ if(!same(direct[i],expected))return false;
+ if(!same(multiplied[i],expected) || !same(divided[i],inv))return false;
+ unit[i]=x;list[0][i]=x;map.v[i]=x;array[0][i]=x;
+ if(!same(unit[i],expected) || !same(list[0][i],expected) || !same(map.v[i],expected) || !same(array[0][i],expected))return false;
+ unit[i]=1.0;unit[i]*=x;if(!same(unit[i],expected))return false;
+ unit[i]=1.0;unit[i]/=x;if(!same(unit[i],inv))return false;
+ unit[i]=0.0;unit[i]+=x;if(!same(unit[i],system.array32(0.0+expected,1)[0]))return false;
+ unit[i]=0.0;unit[i]-=x;if(!same(unit[i],system.array32(0.0-expected,1)[0]))return false;
+ if(!same(direct[i],expected))return false;
+ }}return true;
+)NS";
+        Run(rt, debug, image, body);
+    }
+}
 int main()
 {
     Float32Boundaries();
@@ -99,6 +135,7 @@ int main()
     Check(rt->RegisterObject(host), "register host"); rt->FreezeBindings();
     for (bool debug : {false, true}) for (bool image : {false, true})
     {
+        VectorNarrowingCases(rt, debug, image);
         const char* cases[] = {
             "var a=system.array32(-7,3);return Host.Ints(a) && a[0]==-7 && a[1]==2147483647 && a[2]==-7;",
             "var a=system.array32(1.25,3);return Host.Floats(a) && a[0]==1.25 && a[1]==2.5 && a[2]==1.25;",

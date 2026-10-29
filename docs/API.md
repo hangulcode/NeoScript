@@ -735,6 +735,11 @@ WREF precedes an ordinary collection write. Stored vectors consume both atomical
 use normal write dispatch. Native vector properties retain a resumable getter/setter boundary.
 Scalar floats and ordinary dense float array elements use double; `array32` explicitly selects narrower storage. Vector2/3/4 and Quaternion components and operations remain float32; component writes narrow and reads widen.
 
+Vector construction, component writes, scalar operands in vector arithmetic, and legacy C++
+`read<float>` use the same narrowing rules as `array32`: values above `FLT_MAX` but below
+`2^128 - 2^103` round to `FLT_MAX`, while that midpoint and larger magnitudes become infinity
+with the original sign. NaN and signed zero are preserved. Vector arithmetic remains float32.
+
 A compound assignment whose right side is a collection element, `x op= c[k]` for `+`, `-`,
 `*`, and `/`, compiles to one 8-byte instruction (`READ_ADD`, `READ_SUB`, `READ_MUL`, or
 `READ_DIV`) instead of a read into a temporary followed by the arithmetic. Any key expression

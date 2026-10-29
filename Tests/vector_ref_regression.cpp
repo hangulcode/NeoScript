@@ -9,6 +9,19 @@ static void Check(bool ok, const char* message) {
     if (!ok) { ++failures; std::fprintf(stderr, "FAIL: %s\n", message); }
 }
 static void InlineVectorLayout(INeoVMWorker* worker) {
+    // 레거시 C++ 호스트의 float 읽기도 배열·벡터와 같은 경계 규칙을 따른다.
+    for (double input : {3.4028235e38, -3.4028235e38, 3.4028235677973366e38,
+        -3.4028235677973366e38, 1e300, -1e300, 0.0, -0.0,
+        std::numeric_limits<double>::quiet_NaN()}) {
+        VarInfo scalar;
+        worker->Var_SetFloat(&scalar, input);
+        float actual = 0;
+        worker->_read(&scalar, actual);
+        const float expected = NeoNarrowFloat32(input);
+        Check(std::isnan(expected) ? std::isnan(actual) :
+            actual == expected && std::signbit(actual) == std::signbit(expected),
+            "host float read follows shared narrowing rules");
+    }
     // 성분의 비트 패턴과 연속 배치를 함께 확인하고 짧은 복사의 양쪽 경계를 지킨다.
     const u32 bits[3] = {0x80000000u, 0x7fc12345u, 0x7f800000u};
     float values[3];

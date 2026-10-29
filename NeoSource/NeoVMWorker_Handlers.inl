@@ -682,7 +682,7 @@ NEOS_NOINLINE bool handle_VEC_MAKE(const SVMOperation& OP) {
             SetError(RTE_CALL_INVALID);   // 대상은 아직 건드리지 않았다
             return false;
         }
-        tmp[i] = (float)args[i].GetFloatNumber();
+        tmp[i] = NeoNarrowFloat32(args[i].GetFloatNumber());
     }
     if (OP.argFlag & NEOS_OP_CALL_NORESULT) return false;
     // 2·3성분은 직접 저장하고, 4성분은 단독 소유 저장소를 재사용한다.

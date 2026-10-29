@@ -78,7 +78,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::VecComponentOp(VarInfo* pClt, VarInfo* pKey,
 			op == NOP_TABLE_DIV2 ? "/=" : "%=", &component, pValue);
 		return false;
 	}
-	const float s = (float)pValue->GetFloatNumber();
+	const float s = NeoNarrowFloat32(pValue->GetFloatNumber());
 	float& c = WritableVectorComponent(pClt, static_cast<int>(pKey->_int));
 	switch (op)
 	{
@@ -144,7 +144,7 @@ NEOS_FORCEINLINE void CNeoVMWorker::CltInsert(VarInfo* pClt, VarInfo* pKey, VarI
 			NS_UINT idx = (NS_UINT)pKey->_int;
 			if (idx < (unsigned)pClt->VectorComponentCount())
 			{
-				WritableVectorComponent(pClt, static_cast<int>(idx)) = (float)pValue->GetFloatNumber();
+				WritableVectorComponent(pClt, static_cast<int>(idx)) = NeoNarrowFloat32(pValue->GetFloatNumber());
 				if (write && (write->argFlag & NEOS_OP_REF_WRITE)) CommitRefVector(pClt);
 				return;
 			}
@@ -192,7 +192,7 @@ NEOS_NOINLINE void CNeoVMWorker::CltInsertRare(VarInfo* pClt, VarInfo* pKey, Var
 			NS_UINT idx = (NS_UINT)pKey->_int;
 			if (idx < (unsigned)pClt->VectorComponentCount())
 			{
-				WritableVectorComponent(pClt, static_cast<int>(idx)) = (float)pValue->GetFloatNumber();
+				WritableVectorComponent(pClt, static_cast<int>(idx)) = NeoNarrowFloat32(pValue->GetFloatNumber());
 				return;
 			}
 		}
@@ -838,7 +838,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::VecArithInline(VarInfo* r, VarInfo* v1, VarI
 		bx = v2->_vecX; by = v2->_vecYZ[0]; bz = v2->_vecYZ[1];
 	}
 	else if ((op == 2 || op == 3) && v2->IsNumber())
-		bx = by = bz = (float)v2->GetFloatNumber();
+		bx = by = bz = NeoNarrowFloat32(v2->GetFloatNumber());
 	else
 		return false;
 	const float x = VectorArithmeticComponent(v1->_vecX, bx, op);
@@ -865,7 +865,7 @@ NEOS_FORCEINLINE bool CNeoVMWorker::VecArith(VarInfo* r, VarInfo* v1, VarInfo* v
 	}
 	else if ((op == 2 || op == 3) && v2->IsNumber())
 	{
-		const float s = (float)v2->GetFloatNumber();
+		const float s = NeoNarrowFloat32(v2->GetFloatNumber());
 		for (int i = 0; i < 4; ++i)
 			tmp[i] = VectorArithmeticComponent(v1->_vec->v[i], s, op);
 	}
