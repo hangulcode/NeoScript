@@ -123,13 +123,15 @@ struct ArrayInfo : AllocBase
 			byte &= (u8)~bit;
 	}
 
-	// 같은 타입의 int/float 저장만 인라인한다. 변환·bool·벡터 저장은 드물어 아웃라인으로 보낸다
+	// 같은 타입의 int/float 저장과 성분 수가 맞는 인라인 벡터(2·3성분) 저장만 인라인한다. 인라인 벡터는
+	// 슬롯 16 B 복사라 본문이 작다. 변환·bool·4성분 벡터 저장은 드물어 아웃라인으로 보낸다
 	// (디스패치 루프의 인라인 크기가 곧 성능 — CltRead 의 배열 읽기와 같은 분리).
 	NEOS_FORCEINLINE bool AssignValue(int index, VarInfo* value)
 	{
 		const VAR_TYPE vt = value->GetType();
 		if (_elementType == NeoArrayElementType::Int && vt == VAR_INT) { IntData()[index] = value->_int; return true; }
 		if (_elementType == NeoArrayElementType::Float && vt == VAR_FLOAT) { FloatData()[index] = value->_float; return true; }
+		if (vt == VAR_VEC && value->VectorComponentCount() == VectorDimension()) { VectorValues()[index] = *value; return true; }
 		return AssignValueRare(index, value);
 	}
 	NEOS_NOINLINE bool AssignValueRare(int index, VarInfo* value)
