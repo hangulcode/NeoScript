@@ -34,6 +34,34 @@ with Clang/GCC. See Microsoft's [language-standard options](https://learn.micros
 **[API reference](docs/API.md)** ·
 **[Releases](https://github.com/hangulcode/NeoScript/releases)**
 
+## NeoCore: the statically typed sibling
+
+[NeoCore](https://github.com/hangulcode/NeoCore) is a separate scripting-language
+project derived from NeoScript. It keeps the NeoScript VM as its execution backend and
+adds explicit variable types, C-style function declarations, and compile-time checking
+of types, function signatures, and host members, so that errors a script would hit at
+run time are reported when it is compiled.
+
+```cpp
+// NeoScript (.ns): types are resolved while the script runs
+var elapsed = 0.0;
+fun Advance(var dt) { elapsed += dt; return elapsed; }
+
+// NeoCore (.nc): types are declared and checked by the compiler
+float elapsed = 0.0;
+float Advance(float dt) { elapsed += dt; return elapsed; }
+```
+
+- NeoCore sources use `.nc` and are not interchangeable with `.ns` scripts; each
+  repository has its own compiler, samples, and editor tooling.
+- NeoCore is under active development. Its readme describes the implemented subset,
+  the host-binding model, and benchmark results measured against NeoScript.
+- This repository remains the dynamically typed language: choose NeoScript for
+  `var`-based scripts, and NeoCore when you want static types.
+
+**[NeoCore repository](https://github.com/hangulcode/NeoCore)** ·
+**[NeoCore language design and status](https://github.com/hangulcode/NeoCore/blob/master/docs/StaticTyping.md)**
+
 ## Try it: two objects, one script
 
 ![Recorded 3D positions from the native C++ mini game host](docs/img/minigame.png)
