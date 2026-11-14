@@ -168,7 +168,7 @@
     <PostBuildEvent>
       <!-- Copy the release console into GameDesign (sibling repository) so content machines without Visual Studio can run headless tests.
            Skipped when GameDesign is not next to this repository; a failed copy (file in use) only warns. -->
-      <Command>set "NEO_BACKUP=$(ProjectDir)..\..\..\GameDesign\PDev\backup\Tools"
+      <Command>set "NEO_BACKUP=$(ProjectDir)..\..\..\GameDesign\Games\backup\Tools"
 if exist "%NEO_BACKUP%\" (
   copy /Y "$(TargetPath)" "%NEO_BACKUP%\console.exe" &gt;nul
   copy /Y "$(ProjectDir)..\..\THIRD_PARTY_NOTICES.txt" "%NEO_BACKUP%\NEOSCRIPT_THIRD_PARTY_NOTICES.txt" &gt;nul
@@ -178,7 +178,7 @@ if exist "%NEO_BACKUP%\" (
   echo GameDesign backup folder not found - console.exe not copied
 )
 exit /b 0</Command>
-      <Message>Copy console.exe to GameDesign/PDev/backup/Tools</Message>
+      <Message>Copy console.exe to GameDesign/Games/backup/Tools</Message>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
